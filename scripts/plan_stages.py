@@ -15,6 +15,24 @@ Impact 节记录），本模块提供 should_review()/review() API。
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] plan_stages WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import sys
@@ -92,8 +110,8 @@ def check(ws) -> dict:
     if gp.exists():
         try:
             plan_txt = gp.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("check", f"{type(exc).__name__}: {exc}")
     has_model = p.exists() and len(active) >= 2
     if not p.exists():
         violations.append("BIG_BANG_PLAN: " + ARTIFACT + " missing - "

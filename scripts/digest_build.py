@@ -15,6 +15,25 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] digest_build WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -22,8 +41,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="digest_build", action="converge",
                           detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import sys
@@ -281,8 +300,8 @@ def build_digest(ws: Path) -> str:
     try:
         from hypothesis_seeder import seed_from_task_spec
         seed_from_task_spec(ws)
-    except Exception:  # noqa: BLE001 — seeding failure never blocks cold start
-        pass
+    except Exception as exc:  # noqa: BLE001 — seeding failure never blocks cold start
+        warn("build_digest", f"{type(exc).__name__}: {exc}")
     # ---- #110: case-bank priors -> hypothesis layer — FAIL-OPEN ----
     # Same cold-start chain as PQ scaffolding: the per-workspace case bank
     # (runs/case-bank.jsonl) is retrieved by (project_type + protection
@@ -292,8 +311,39 @@ def build_digest(ws: Path) -> str:
     try:
         from hypothesis_seeder import seed_case_candidates
         seed_case_candidates(ws)
-    except Exception:  # noqa: BLE001 — priors never block cold start
-        pass
+    except Exception as exc:  # noqa: BLE001 — priors never block cold start
+        warn("build_digest_2", f"{type(exc).__name__}: {exc}")
+    # ---- issue 252: pay parked candidate strings into the claim economy --
+    # The bridge sweep mints every candidate string still parked in
+    # hypotheses/ as a family arm claim and clears the string (one
+    # representation). Fail-open: a bridge failure must never block the
+    # digest — the strings stay parked and the bridge lint names them.
+    # The lint then runs HERE (the cold-start face) — E1 parked strings /
+    # E2 orphan family files / E2b namespace capture / E3 ledger-derivation
+    # divergence surface on every cold start, not only via the CLI.
+    try:
+        from hypothesis_bridge import (check_bridge_lint,
+                                       mint_pending_candidates)
+        mint_pending_candidates(ws)
+        findings = check_bridge_lint(ws)
+        if findings:
+            try:
+                from kunglao_log import emit
+                emit(ws, actor="digest_build", action="bridge_lint_findings",
+                     detail="; ".join(findings[:10]))
+            except Exception as emit_exc:  # noqa: BLE001 — observability never raises
+                print(f"digest_build: bridge_lint_findings emit also "
+                      f"unavailable ({type(emit_exc).__name__}: {emit_exc})",
+                      file=sys.stderr, flush=True)
+            print(f"digest_build: WARN hypothesis-bridge lint: "
+                  f"{'; '.join(findings[:5])}"
+                  f"{' …' if len(findings) > 5 else ''}",
+                  file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001 — the sweep never blocks cold start
+        print(f"digest_build: WARN hypothesis-bridge sweep skipped "
+              f"({type(exc).__name__}: {exc}) — candidate strings stay "
+              f"parked until the next cold start",
+              file=sys.stderr, flush=True)
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising

@@ -1,5 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] worker_budget_core WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 """worker_budget_core — constants, IO, parsing, claim-register primitives.
 
 #568: extracted from worker_budget.py (was 1847L > 800L limit). This module
@@ -81,7 +99,7 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent
 ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import (priority_ratio as _ratio_rank,
-                                posterior_rng as _posterior_rng,
+                                posterior_seed_state as _posterior_seed_state,
                                 EvidenceView as _EvidenceView)
     from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
@@ -167,9 +185,83 @@ def check_plan_drift(paths):
     return False, f"plan drift detected (rc={r.returncode}): {(r.stderr or r.stdout or '')[:200]}"
 
 
-def check_convergence_health(paths):
+def _stalled_remedy_exemption(ws, claim_id, payload, prompt_text):
+    """#249: the rc=1 STALLED face's remedy exemption — the mirror of the
+    #237 D2 pass-through, single-sourced the same way: the identity
+    predicate lives in hooks/lib_kunglao (load_hooks_lib), and the STALLED
+    STATE comes from the detector module itself
+    (scripts/convergence_health.stalled_state) — this face never
+    re-implements the verdict, it only intersects the dispatch identity
+    with it.
+
+    Fail-CLOSED on every unresolvable input (no target claim, lib outage,
+    detector state unresolvable, predicate error): the exemption may only
+    ever OPEN for the detector's own prescribed remedy; anything else —
+    and everything on infra failure — keeps the legacy block.
+
+    Returns (allowed, note)."""
+    cid = str(claim_id or "").strip()
+    if not cid:
+        return False, "no target claim"
+    try:
+        lib = load_hooks_lib()
+    except Exception:  # noqa: BLE001 — lib outage: legacy block applies
+        return False, "hooks lib unavailable (fail-closed)"
+    try:
+        ensure_scripts_path()
+        import convergence_health as _ch  # scripts/ single source (state)
+        state = _ch.stalled_state(Path(ws))
+    except Exception:  # noqa: BLE001 — unreadable state: fail-closed
+        return False, "detector state unresolvable (fail-closed)"
+    if not state:
+        # rc=1 from the subprocess but no STALLED on re-derive (a ledger
+        # change between the two reads) — do not exempt on drift.
+        return False, "not STALLED on re-derive (fail-closed)"
+    depth = state.get("remedy_depth") or 0
+    try:
+        ok = lib.is_stalled_remedy_dispatch(
+            ws, cid, payload, prompt_text,
+            state.get("stuck_ids"), state.get("flatlined_open_ids"),
+            remedy_depth=depth)
+    except Exception:  # noqa: BLE001 — predicate error: fail-closed
+        return False, "remedy predicate error (fail-closed)"
+    if not ok:
+        return False, "not the prescribed remedy"
+    # Round-2 escalation telemetry: every admitted remedy dispatch appends
+    # an operator-action row (excluded from the trajectory by assess) so
+    # stalled_state can count consecutive cycles — at >= max depth the
+    # follow-through channel closes on the NEXT decision. Fail-open: the
+    # admit must never break because its own telemetry could not be written.
+    try:
+        ensure_scripts_path()
+        from convergence_check import record_operator_action
+        record_operator_action(
+            Path(ws), action="stalled_remedy_admitted",
+            actor="hook:worker_budget", claim_id=cid,
+            reason=f"issue-249 remedy dispatch admitted (depth={depth})")
+    except Exception as exc:  # noqa: BLE001 — telemetry is best-effort,
+        # never silent (the silent-except ratchet counts bare passes): the
+        # depth counter just misses this row, observed on stderr.
+        print(f'[kunglao-agent] remedy admit telemetry skipped: {exc!r}',
+              file=sys.stderr)
+    return True, (f"stuck={state.get('stuck_ids') or []} "
+                  f"flatline_open={len(state.get('flatlined_open_ids') or [])} "
+                  f"depth={depth}")
+
+
+def check_convergence_health(paths, claim_id=None, payload=None,
+                             prompt_text=""):
     """v1.9.29: STALLED/SPINNING gate wired into PreToolUse. FAIL_OPEN on any
-    subprocess/workspace resolution failure."""
+    subprocess/workspace resolution failure.
+
+    #249: at the rc=1 STALLED face the prescribed-remedy dispatch is
+    EXEMPT (mirror of #237 D2): a remedy-declared dispatch of a stuck
+    claim, or of a freshly minted fan-out sub-claim, passes — the gate
+    must not deadlock its own remedy. SPINNING (rc=2) is NEVER exempt and
+    rc=4 keeps the fail-open crash semantics unchanged. Callers that pass
+    no dispatch context (legacy 1-arg calls, tests) keep the exact prior
+    block behavior — the exemption is off without a claim id.
+    """
     ws = paths.get('workspace')
     if not ws:
         return True, ''
@@ -178,6 +270,11 @@ def check_convergence_health(paths):
     if r is None:
         return True, ''
     if r.returncode == 1:
+        allowed, note = _stalled_remedy_exemption(ws, claim_id, payload,
+                                                  prompt_text)
+        if allowed:
+            return True, (f"convergence STALLED - prescribed remedy "
+                          f"dispatch admitted ({note}; issue-249 exemption)")
         return False, "convergence STALLED - diagnose before dispatching"
     if r.returncode == 2:
         return False, "convergence SPINNING - STOP dispatching"
@@ -259,6 +356,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     claims = [c for c in (reg.get('claims') or []) if c.get('id')]
     evidence = _EvidenceView()
     rng = None
+    seed_round = None
     if ws:
         ws_path = Path(ws)
         try:
@@ -266,15 +364,15 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
             blocked_ids = {b['claim_id'] for b in fag.scan_workspace(ws_path)
                            if b.get('state') == 'BLOCKED'}
             claims = [c for c in claims if c.get('id') not in blocked_ids]
-        except Exception:  # pragma: no cover - the audit stays usable, fail-open
-            pass
+        except Exception as exc:  # pragma: no cover - the audit stays usable, fail-open
+            warn("check_priority", f"{type(exc).__name__}: {exc}")
         evidence = _EvidenceView.from_workspace(ws_path)
-        rng = _posterior_rng(ws_path)
+        rng, seed_round = _posterior_seed_state(ws_path)
     # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
     # (frozen without RETRACTED), so THIS caller removes it. Every other
     # terminal-status row is kept: is_open already excludes it from candidacy.
     claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
-    actions = _ratio_rank(claims, deps, evidence, rng=rng)
+    actions = _ratio_rank(claims, deps, evidence, rng=rng, round_no=seed_round)
     authority = 'thompson'
     if not actions:
         return (True, '', False)
@@ -400,8 +498,8 @@ def _parse_worker_line(line: str) -> dict:
     if 'dispatched_at' in entry:
         try:
             entry['dispatched_at'] = int(entry['dispatched_at'])
-        except ValueError:
-            pass
+        except ValueError as exc:
+            warn("_parse_worker_line", f"{type(exc).__name__}: {exc}")
     raw = entry.get('tools', '')
     entry['tools'] = [t.strip() for t in raw.split(',') if t.strip()] if raw else []
     return entry

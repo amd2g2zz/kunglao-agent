@@ -1,6 +1,24 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] worker_budget_gates WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # tests + sinks consume these via module attributes (gates.MAX_WORKERS etc.)
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
@@ -141,6 +159,20 @@ def compare_register_change_proven_gate(
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate.check_inference_blind_scope '
                        f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
+    # #234 target-obstacle ladder gate (review F1 — dual-face policy): the
+    # formal gate lives in claim_migrator; THIS backstop closes the direct
+    # register-edit lane, the exact bypass class this function was built for
+    # (#15/#78). An obstacle-origin claim entering PROVEN additionally needs
+    # its target ladder walked-valid + exhaustion inventory + minted
+    # strategy siblings, else the promotion is rejected like any other
+    # unmet PROVEN requirement (fail closed on a broken gate module, same
+    # REQUIRED posture as the gates above).
+    try:
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from target_ladder import settlement_blocker
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: target_ladder.settlement_blocker '
+                       f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
@@ -179,6 +211,13 @@ def compare_register_change_proven_gate(
                     violations.append(
                         f'{cid} [difficulty {thresholds.get("tier")}]: '
                         f'VERIFIER DEPTH GATE: {d_reason}')
+            # #234 (review F1): the register TEXT this loop already read is
+            # the snapshot settlement_blocker parses — no extra file read,
+            # same parse both faces. Non-obstacle claims are silent (None).
+            blocker = settlement_blocker(facts_dir.parent, cid,
+                                         register_text=register_text)
+            if blocker:
+                violations.append(f'{cid}: {blocker}')
     except ImportError as exc:
         # Infrastructure failure (should not happen after import above, but
         # defensive) — fail closed: code must be complete.
@@ -367,10 +406,10 @@ def record_retry(workspace: str | Path, worker_id: str, claim_id: str) -> int:
     counters[key] = int(counters.get(key, 0)) + 1
     try:
         _write_retry_counter(Path(workspace), counters)
-    except Exception:
+    except Exception as exc:
         # Fail-open: do not propagate — the gate will still pass since
         # the on-disk counter is the source of truth (just possibly stale).
-        pass
+        warn("record_retry", f"{type(exc).__name__}: {exc}")
     return counters[key]
 
 
@@ -579,6 +618,19 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
 # F006-F008 were callgraph INFERENCES written as facts — a mandatory plan
 # forces the inference to be declared in the plan phase, before execution,
 # where the orchestrator can catch it.
+#
+# #239 CONTRACT CHANGE (owner ruling, live field evidence): dispatch-time
+# enforcement INVERTED plan ownership — the cheapest way to unblock the
+# orchestrator's own dispatch was to ghostwrite runs/plan-C<NN>*.md itself.
+# New contract: "Dispatch carries intent, not a plan; planning is the
+# worker's first act of execution."
+#   - the FIRST dispatch of a claim is plan-free (nothing to satisfy at
+#     dispatch time — a ghostwritten plan neither satisfies nor blocks it);
+#   - plan-first gates the worker's EXECUTION LOOP instead: a RE-dispatch
+#     (the claim already has a prior approved dispatch in its approval-point
+#     anchor log) requires the plan reference — the worker-authored plan on
+#     disk (content + provenance, #57 gate 3 below) or the plan path in the
+#     dispatch prompt (reserved for re-dispatch continuity).
 
 # #294: the plan-first gate (#239) only checked file EXISTENCE — an empty-shell
 # template (goal:/preflight:/steps:/fallback: with every field bare, no content)
@@ -613,27 +665,64 @@ def _plan_is_empty_shell(text: str) -> bool:
     return not remaining
 
 
-def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
-    """Issue #239/#294 + #57 gate 3: a claim dispatch REQUIRES its worker
-    plan, WITH CONTENT, AUTHORED IN THE WORKER'S SESSION.
+def _prompt_plan_ref(key: str, prompt: str) -> str | None:
+    """The claim's plan path referenced in a dispatch prompt — the #239
+    plan-naming contract, single source (the granularity gate reads the
+    same face on the re-dispatch-continuity leg)."""
+    m = re.search(
+        rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
+        r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
+        prompt,
+    )
+    return m.group(0) if m else None
 
-    The dispatched claim C-NN must have `runs/plan-C<NN>*.md` on disk
-    (real-world naming is plan-c005.md, claim only, no suffix), OR the
-    dispatch prompt must reference a plan path for THAT claim (timing
-    relaxation: the plan may be written in the same turn, e.g. "write
-    runs/plan-C001-strings.md first, then execute"). A plan path for a
-    DIFFERENT claim in the prompt does NOT relax.
+
+def _plan_contingency_violations(plan_text: str) -> list[str]:
+    """#250: per-step if-fails violations of a plan document.
+
+    Thin re-export of plan_epistemics.lint_plan_contingency, import-guarded
+    fail-open (a broken epistemics module must never hard-block dispatch on
+    a defect it cannot name) — consistent with the gate battery's FAIL_OPEN
+    posture for infrastructure errors."""
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import plan_epistemics
+        return plan_epistemics.lint_plan_contingency(plan_text)
+    except Exception:
+        return []
+
+
+def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
+    """Issue #239 (contract v2, owner ruling) + #57 gate 3: dispatch carries
+    intent, NOT a plan — planning is the worker's first act of execution.
+
+    FIRST dispatch of the claim (no prior approved dispatch recorded in the
+    claim's approval-point anchor log `runs/.dispatch-anchor-<KEY>.jsonl`):
+    PASSES without any pre-existing plan. The gate does not inspect plan
+    files at all on the first dispatch — an orchestrator-ghostwritten plan
+    neither satisfies nor blocks it. The worker's first sanctioned write is
+    its own plan (kunglao-worker.md golden rule #3), carrying its dispatch
+    anchor as provenance.
+
+    RE-dispatch (>=1 prior approved dispatch for the claim — execution beyond
+    the planning round): requires the plan reference for THAT claim:
+      - the on-disk `runs/plan-C<NN>*.md` WITH CONTENT (real-world naming is
+        plan-c005.md, claim only, no suffix) and worker-session provenance
+        (#57 gate 3 plan_author_violation — a plan authored outside the
+        dispatched worker's session does not satisfy plan-first), OR
+      - the plan path referenced in the dispatch prompt (reserved for
+        RE-DISPATCH CONTINUITY — the timing relaxation lives on this leg
+        only). A plan path for a DIFFERENT claim does NOT continue.
 
     #294: an on-disk plan that is an empty-shell template (every field label
-    present but bare — `goal:\\npreflight:\\nsteps:\\nfallback:` with nothing
-    filled in) does NOT satisfy the gate — it is existence without content.
-    The prompt-relaxation path is unaffected (the file may not exist yet).
+    present but bare) does NOT satisfy the re-dispatch leg — it is existence
+    without content.
 
-    #57 gate 3 (plan-author): the on-disk leg additionally requires
-    worker-session evidence when a dispatch anchor has been issued for the
-    claim (see plan_author_violation) — a pre-written (orchestrator-authored)
-    plan does not satisfy 计划本人写. Not armed without an anchor: the
-    pre-#57 posture is unchanged for workspaces that never stamped one.
+    First-dispatch vs re-dispatch is decided ONLY from the approval-point
+    anchor log (what stamp_dispatch_anchor wrote for PRIOR dispatches): the
+    current dispatch's own KUNGLAO_DISPATCH_CONTEXT / context-file nonce is
+    composed pre-dispatch and must never count as a prior dispatch.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -643,52 +732,180 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     if not ws:
         return (True, '')  # FAIL_OPEN — mirrors check_workers_lt_3
     key = cid.replace('-', '')  # C-001 -> C001 (claim key inside plan names)
-    runs = Path(ws) / 'runs'
-    if runs.is_dir():
-        # uppercase + lowercase variants (Windows globs are case-insensitive,
-        # POSIX are not — cover both so the gate is portable)
-        hits = []
-        for pat in (f'plan-{key}.md', f'plan-{key}-*.md',
-                    f'plan-{key.lower()}.md', f'plan-{key.lower()}-*.md'):
-            hits.extend(sorted(runs.glob(pat)))
-        if hits:
-            plan_path = hits[0]
-            try:
-                # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
-                # template cannot smuggle '﻿goal:' past the empty-shell check.
-                plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
-            except OSError:
-                # unreadable (locked / directory shadowing the name) — fail
-                # OPEN with an honest note; a misleading empty-shell reject
-                # would blame the worker for a system error.
-                return (True, f'plan file exists (unreadable, content not '
-                              f'verified): {plan_path.name}')
-            if _plan_is_empty_shell(plan_text):
-                return (False, (
-                    f'{plan_path.name} is an empty-shell template (goal/preflight/'
-                    f'steps/fallback all bare, no content) - fill in the plan '
-                    f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
-                ))
-            # #57 gate 3: plan-author — with a dispatch anchor issued for this
-            # claim, the on-disk plan must carry worker-session evidence
-            # (authored after dispatch). Not armed -> unchanged legacy posture.
-            violation = plan_author_violation(plan_path, plan_text,
-                                              Path(ws), key, prompt)
-            if violation:
-                return (False, violation)
-            return (True, f'plan file exists: {plan_path.name}')
+    # #239 v2: prior approved dispatches ONLY — the approval-point log.
+    if not _anchor_log_ts_list(Path(ws), key):
+        return (True, (f'first dispatch of {cid}: no pre-existing plan '
+                       f'required (dispatch carries intent, not a plan — '
+                       f'planning is the worker\'s first act of execution; '
+                       f'the worker\'s first sanctioned write is '
+                       f'runs/plan-{key}*.md with its dispatch-anchor '
+                       f'provenance line; the plan is required from the '
+                       f'NEXT dispatch on)'))
+    # plan discovery: the #239 plan-naming contract, single source (#241).
+    from claim_granularity import plan_file
+    plan_path = plan_file(ws, cid)
+    if plan_path:
+        try:
+            # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
+            # template cannot smuggle '﻿goal:' past the empty-shell check.
+            plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
+        except OSError:
+            # unreadable (locked / directory shadowing the name) — fail
+            # OPEN with an honest note; a misleading empty-shell reject
+            # would blame the worker for a system error.
+            return (True, f'plan file exists (unreadable, content not '
+                          f'verified): {plan_path.name}')
+        if _plan_is_empty_shell(plan_text):
+            return (False, (
+                f'{plan_path.name} is an empty-shell template (goal/preflight/'
+                f'steps/fallback all bare, no content) - the worker must '
+                f'author its plan (kunglao-worker.md golden rule #3), '
+                f'then re-dispatch'
+            ))
+        # #250: per-step contingency — the plan schema graduates from
+        # one tail hatch to per-step branches. A plan whose ENUMERATED
+        # steps carry no if-fails branch is a linear happy-path pipeline
+        # (every step assumes the previous succeeded). Legacy inline
+        # plans (zero enumerated entries) pass unchanged.
+        contingencies = _plan_contingency_violations(plan_text)
+        if contingencies:
+            return (False, (
+                f'{plan_path.name} is a linear happy-path plan '
+                f'({"; ".join(contingencies[:3])}) - the worker must add '
+                f'a per-step "if-fails: <condition> -> <action>" branch '
+                f'under each enumerated step (issue #250: real RE is a '
+                f'tree; dead-ends are expected structure, not an '
+                f'afterthought)'))
+        # #57 gate 3: plan-author — a re-dispatch's plan must carry
+        # worker-session evidence (authored after a prior dispatch).
+        # Armed here by construction: a re-dispatch implies the anchor
+        # log has rows (see above).
+        violation = plan_author_violation(plan_path, plan_text,
+                                          Path(ws), key, prompt)
+        if violation:
+            return (False, violation)
+        return (True, f'plan file exists: {plan_path.name}')
     if prompt:
-        m = re.search(
-            rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
-            r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
-            prompt,
-        )
-        if m:
-            return (True, f'plan path referenced in dispatch prompt: {m.group(0)}')
-    return (False, (f'no runs/plan-{key}*.md for claim {cid} and the dispatch '
-                    f'prompt does not reference a plan path for it - write the '
-                    f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
-                    f'execute second)'))
+        ref = _prompt_plan_ref(key, prompt)
+        if ref:
+            return (True, f'plan path referenced in dispatch prompt: {ref} '
+                          f'(re-dispatch continuity)')
+    return (False, (f're-dispatch of {cid} beyond the planning round without a '
+                    f'plan reference: no runs/plan-{key}*.md on disk and the '
+                    f'dispatch prompt references no plan path for it - the '
+                    f'plan must be worker-authored (kunglao-worker.md golden '
+                    f'rule #3: the worker\'s first sanctioned write is its own '
+                    f'plan, citing its dispatch anchor; the in-prompt --plan '
+                    f'reference is reserved for re-dispatch continuity)'))
+
+
+# ---------- #241: claim granularity (plan-size / domain-span) ----------
+# wbtest C-005 field evidence: a 12+-step plan hanging on ONE claim — the
+# plan-first gate reads EXISTENCE (+ #294 content + #57 provenance), never
+# SIZE or DOMAIN SPAN. Monolithic claims degrade every downstream channel
+# (spawn-recall = f(dispatch-text domain precision), evidence verification,
+# per-unit settlement, TS pricing granularity). The gate reuses the #234
+# fan-out machinery at CREATION time: scripts/claim_granularity.py holds the
+# pure predicate (granularity_defects) and the split mint
+# (mint_split_claims); this face arms it at the plan-check point of the
+# execution loop — post-#239, on the FIRST dispatch the worker has authored
+# no plan yet, so the gate arms on the approval-point log exactly like the
+# plan-first gate and fires from the NEXT dispatch on.
+
+
+def check_claim_granularity(paths: dict, cid: str | None,
+                            prompt: str = '') -> tuple[bool, str]:
+    """Issue #241: claim granularity discipline — the plan-size / domain-span
+    gate at the plan-check point of the execution loop.
+
+    Post-#239 contract: planning is the worker's first act. On the FIRST
+    dispatch (no prior approved dispatch in the approval-point anchor log)
+    the worker has authored no plan yet and the gate is NOT armed — the
+    same arming discipline as check_worker_plan. From the NEXT dispatch on,
+    the worker-authored plan is READ:
+      - step count > GRANULARITY_MAX_STEPS (8) -> monolithic; padded or
+        trivial steps ("wait"/"check") count toward K — no free passes;
+      - >= 2 distinct mechanism families with >= 2 steps each -> span.
+    Either defect REJECTS with the mechanical split directive naming the
+    mint entrypoint (scripts/claim_granularity.py --split), the parent
+    claim, and the observed domain split (#234 mechanism-family vocabulary
+    where it fits, inference-labelled otherwise). Sub-claims minted by
+    mint_split_claims carry depends_on edges + the domain_family tag and
+    enter the TS rank pool.
+
+    FAIL_OPEN: no claim, no workspace, no plan to inspect (the plan-first
+    gate owns the no-plan rejection — one rejection per gate family),
+    unreadable plan. Arming: the approval-point anchor log ONLY (the
+    current dispatch's own context nonce never counts as a prior dispatch).
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not cid:
+        return (True, 'no target claim')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')  # FAIL_OPEN — mirrors check_worker_plan
+    key = cid.replace('-', '')
+    # arming: prior approved dispatches ONLY — the approval-point log
+    # (identical discipline to check_worker_plan's plan-first arming).
+    if not _anchor_log_ts_list(Path(ws), key):
+        return (True, (f'first dispatch of {cid}: granularity gate not '
+                       f'armed (post-#239 the worker has authored no plan '
+                       f'yet — planning is the worker\'s first act; the '
+                       f'gate fires on the plan the worker authored, from '
+                       f'the NEXT dispatch on)'))
+    from claim_granularity import (GRANULARITY_MAX_STEPS, granularity_defects,
+                                   plan_file, read_plan, split_guidance)
+    plan_path = plan_file(ws, cid)
+    if plan_path is None and prompt:
+        # re-dispatch-continuity leg: the plan path rides the prompt — read
+        # THAT file when it exists (same continuity contract as #239).
+        ref = _prompt_plan_ref(key, prompt)
+        if ref:
+            cand = Path(ws) / 'runs' / ref
+            if cand.exists():
+                plan_path = cand
+    if plan_path is None:
+        # single-rejection rule: the plan-first gate owns the no-plan
+        # rejection; granularity has nothing to measure here.
+        return (True, f'no plan on disk for {cid} — granularity fail-open '
+                      f'(the plan-first gate owns the no-plan rejection)')
+    plan_text = read_plan(plan_path)
+    if plan_text is None:
+        return (True, f'plan file exists (unreadable, granularity not '
+                      f'verified): {plan_path.name}')
+    defects, detail = granularity_defects(plan_text)
+    if not defects:
+        return (True, (f'plan granularity ok: {plan_path.name} '
+                       f'({detail["step_count"]} steps <= '
+                       f'{GRANULARITY_MAX_STEPS}, '
+                       f'{len(detail["groups"])} domain group(s))'))
+    # review round 1 (MEDIUM): a SUPERSEDED parent must not loop on the
+    # generic split directive — --split is a no-op once every unit is
+    # minted (the plan on disk is the OLD parent plan, still monolithic).
+    # The automated frontier already excludes SUPERSEDED; this face catches
+    # the stale/manual re-dispatch and names the successors instead.
+    superseded_by: list[str] | None = None
+    try:
+        reg = yaml.safe_load((Path(ws) / 'claim-register.yaml')
+                             .read_text(encoding='utf-8')) or {}
+        row = next((c for c in (reg.get('claims') or [])
+                    if isinstance(c, dict) and c.get('id') == cid), None)
+        if row and row.get('superseded_by'):
+            sb = row['superseded_by']
+            superseded_by = sb if isinstance(sb, list) else [str(sb)]
+    except (yaml.YAMLError, OSError) as exc:
+        warn("check_claim_granularity", f"{type(exc).__name__}: {exc}")
+    if superseded_by:
+        return (False, (
+            f'GRANULARITY GATE: claim {cid} is already SUPERSEDED '
+            f'(superseded_by: {", ".join(superseded_by)}) - the split '
+            f'already happened. Dispatch the SUB-claims listed above (each '
+            f'under GRANULARITY_MAX_STEPS={GRANULARITY_MAX_STEPS} steps, '
+            f'single-domain); do NOT re-dispatch this parent and do NOT '
+            f'run --split again (idempotent no-op: every unit already '
+            f'minted).'))
+    return (False, split_guidance(cid, plan_path.name, defects, detail))
 
 
 # ---------- #57 gate 3: plan-author (worker-session evidence) ----------
@@ -712,6 +929,9 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
 # dispatch, and the nonce did not exist when it was written). No anchors for
 # the claim -> gate not armed -> legacy posture unchanged (FAIL_OPEN on
 # missing corridor, same arming discipline as the #527 machinery itself).
+# #239 v2: check_worker_plan only consults this gate on a RE-dispatch (the
+# first dispatch is plan-free), and a re-dispatch implies the approval-point
+# log has rows — so the author gate is armed exactly when a plan is required.
 DISPATCH_ANCHOR_LOG = 'runs/.dispatch-anchor-{key}.jsonl'
 _DISPATCH_ANCHOR_LINE_RE = re.compile(r'dispatch-anchor:\s*(\S+)',
                                       re.IGNORECASE)
@@ -748,10 +968,11 @@ def _dispatch_context_file_ts(ws: Path, key: str) -> str | None:
         return None
 
 
-def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
-    """Every dispatch anchor ever issued for this claim (most useful first):
-    the approval-point log, the #527 context file, and the prompt's own
-    context block. Unparseable rows are skipped (not evidence)."""
+def _anchor_log_ts_list(ws: Path, key: str) -> list[str]:
+    """Timestamps from the claim's approval-point anchor log ONLY — the
+    record of PRIOR approved dispatches (stamp_dispatch_anchor runs after
+    the gate battery passes, so a dispatch's own nonce is never in the log
+    while it is being evaluated). Unparseable rows are skipped."""
     out: list[str] = []
     log = Path(ws) / 'runs' / f'.dispatch-anchor-{key}.jsonl'
     if log.is_file():
@@ -766,8 +987,16 @@ def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
                     continue
                 if ts:
                     out.append(str(ts))
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("_anchor_log_ts_list", f"{type(exc).__name__}: {exc}")
+    return out
+
+
+def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
+    """Every dispatch anchor ever issued for this claim (most useful first):
+    the approval-point log, the #527 context file, and the prompt's own
+    context block. Unparseable rows are skipped (not evidence)."""
+    out = _anchor_log_ts_list(ws, key)
     for ts in (_dispatch_context_file_ts(ws, key), _prompt_context_ts(prompt or '')):
         if ts:
             out.append(ts)
@@ -1098,8 +1327,8 @@ def _toolfirst_emit(ws, ev: dict) -> None:
                                'keywords': ev['keywords'],
                                'tool': ev['tool']},
                               ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks the gate
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the gate
+        warn("_toolfirst_emit", f"{type(exc).__name__}: {exc}")
 
 
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
@@ -1227,8 +1456,8 @@ def toolfirst_pass_record(paths: dict, claim_id: str | None,
                                'tool': ev['tool']},
                               ensure_ascii=False))
         emitted = True
-    except Exception:  # noqa: BLE001 — logging never breaks the dispatch
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the dispatch
+        warn("toolfirst_pass_record", f"{type(exc).__name__}: {exc}")
     if ev['mode'] == 'matched' and ev['keywords']:
         set_claim_operation(ws, claim_id, ev['keywords'], ev['tool'])
     return emitted
@@ -1389,15 +1618,27 @@ def check_agent_type(paths: dict, cid: str, prompt: str,
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
 
 
-def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
+def check_zero_output_circuit(workspace: str | Path, cid: str | None = None,
+                              tools: list[str] | None = None) -> tuple[bool, str]:
     """#823 A4 canary graduation: same-type zero-output thrash breaker.
 
     Shadow posture (count + emit only) graduates here: a tripped circuit
-    (ZERO_OUTPUT_N=3 consecutive same-type actions with no belief change)
-    REJECTS the dispatch until a failure_analysis step lands (#634
-    design). Always-on since #51 (the experiment flag is gone); any read
-    failure -> pass (fail-open, matching this gate family's stance: a
-    broken gate must not deadlock the loop).
+    (ZERO_OUTPUT_N=3 consecutive same-family actions with no belief change)
+    REJECTs a dispatch that would REPEAT the tripped (claim, tool-family)
+    - other claims and other tool families pass, so one thrashing claim
+    can never lock the workspace. Always-on since #51 (the experiment
+    flag is gone); any read failure -> pass (fail-open, matching this
+    gate family's stance: a broken gate must not deadlock the loop).
+
+    #256 review round 2 - the gate derives belief FRESHNESS itself: it
+    compares the ledger's stored belief_hash against the CURRENT
+    belief_hash(workspace) and treats a mismatch as a reset. The reset in
+    record_action is only reachable through a successful dispatch, so a
+    gate that trusted the stale ledger deadlocks the loop exactly when
+    the circuit fires (move belief -> still REJECTed). With the freshness
+    check the documented repair ("the streak resets once the workspace
+    belief moves") is true on THIS face, and the REJECT text names the
+    state file as the manual escape hatch.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -1410,18 +1651,44 @@ def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
             state = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return (True, 'no circuit state - zero-output circuit passed')
+        # freshness is derived HERE, not trusted from the ledger: a
+        # belief move since the last record_action makes every stored
+        # streak stale-by-definition (record_action would reset them on
+        # its next call — this face must read the same truth, or the
+        # gate deadlocks the loop it guards).
+        stored_hash = state.get("belief_hash")
+        current_hash = zero_output_fingerprint.belief_hash(Path(workspace))
+        if stored_hash != current_hash:
+            return (True, 'circuit state stale (belief moved since last '
+                    'record) - zero-output circuit passed')
         streaks = state.get("streaks") or {}
-        tripped = {fp: n for fp, n in streaks.items()
+        tripped = {fp for fp, n in streaks.items()
                    if int(n) >= zero_output_fingerprint.ZERO_OUTPUT_N}
         if not tripped:
             return (True, 'no tripped fingerprint - zero-output circuit passed')
+        if not cid or not tools:
+            return (True, 'tripped fingerprint exists but this dispatch '
+                    'carries no claim/tool context - repetition not '
+                    'provable, passed')
+        repeat = next(
+            (t for t in tools
+             if zero_output_fingerprint.fingerprint(
+                 zero_output_fingerprint.tool_family(t), cid) in tripped),
+            None)
+        if repeat is None:
+            return (True, 'tripped fingerprint is a different claim/tool '
+                    f'family - passed for {cid}')
         return (False, (
-            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - '
-            f'{len(tripped)} same-type action fingerprint(s) at >= '
-            f'{zero_output_fingerprint.ZERO_OUTPUT_N} consecutive checkpoints '
-            'with no belief change. Interrupt and run failure_analysis '
-            '(runs/failure-analysis.md) before retrying this action family; '
-            'the streak resets automatically once the workspace belief moves.'
+            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - the '
+            f'dispatch would repeat tripped family {repeat} on claim '
+            f'{cid} at >= {zero_output_fingerprint.ZERO_OUTPUT_N} '
+            'consecutive checkpoints with no belief change. State: '
+            'runs/zero-output-fingerprint.json. Interrupt and run '
+            'failure_analysis (runs/failure-analysis.md); the block '
+            'clears itself once the workspace belief moves '
+            '(facts/_INDEX.md or claim-register.yaml content changes - '
+            'this gate re-checks freshness on every dispatch), or remove '
+            'the state file manually as the last-resort escape hatch.'
         ))
     except Exception:
         return (True, 'zero-output circuit error - fail-open')

@@ -459,6 +459,13 @@ def value_m(ws, now=None) -> dict:
             "blocked": n_blocked, "unattempted": n_unattempted}
 
 
+# The epoch kwarg below is a pure passthrough to kunglao_log.emit — the
+# column IS the tick axis (the convergence ledger's raw snapshot-row
+# count; emit inherits it whenever the kwarg is omitted). This module is
+# exempted from the single-axis producer audit ONLY as this passthrough
+# shape: no second counter or mission-round number may be routed into the
+# column — a value here must be a tick, or absent (then emit stamps the
+# tick anyway). The audit test pins this exemption shape.
 def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
                   hypothesis_ref: str | None = None) -> None:
     """mission 覆盖快照走 #818 schema（version 自动 git SHA）。Never-raises

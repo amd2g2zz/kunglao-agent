@@ -13,6 +13,24 @@ Output contract: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_record WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import os
 import hashlib
@@ -315,6 +333,32 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                                     f"{cited} (references/governance/decision-rights.md "
                                     f"has rows {rows_fmt or '(none)'})"))
 
+    # ---- target-obstacle ladder gate (write-side, the decision-rights R3
+    # shape): an obstacle claim (origin: failure-obstacle) cannot settle
+    # CONFIRMED (PROVEN = "really can't") without its target/attack-surface
+    # ladder walked-valid + a non-empty exhaustion inventory + each
+    # inventory entry's strategy sibling minted (the fan-out). Fail-closed:
+    # a named TARGET LADDER GATE reason, register unmodified. ImportError =
+    # BLOCKED receipt (REQUIRED_FOR_TERMINAL_STATE posture). REFUTED is
+    # deliberately ungated — the path-scoped closure standard requires
+    # refuting obstacles to stay possible.
+    if new_status == "PROVEN":
+        try:
+            from target_ladder import settlement_blocker as _obstacle_gate
+        except Exception as exc:  # ImportError family: gate module broken
+            return (False, f"BLOCKED: {claim_id} PROVEN write requires the "
+                           f"target-obstacle ladder gate; checker "
+                           f"unavailable ({type(exc).__name__}): {exc} — "
+                           f"register not modified (fail closed)")
+        try:
+            blocker = _obstacle_gate(ws, claim_id, register_text=register)
+        except Exception as exc:  # noqa: BLE001 — runtime checker error
+            return (False, f"BLOCKED: {claim_id} target-obstacle ladder "
+                           f"gate raised ({type(exc).__name__}: {exc}) — "
+                           f"register not modified (fail closed)")
+        if blocker:
+            return (False, blocker)
+
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
     # contradiction / inference verdicts.
     # #98 (D6/F15): two-tier exception classification:
@@ -500,8 +544,32 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
         from kunglao_log import emit
         emit(ws, actor=actor, action="claim_migrate", claim=claim_id,
              artifact="claim-register.yaml", detail=effective_status)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("claim_migrator", f"{type(exc).__name__}: {exc}")
+    # ---- issue 252: the family ledger syncs FROM this settlement ----
+    # The register write above is the authority; the family ledger is
+    # derived state. Fail-open but NOT fail-silent (the issue 275 class): a
+    # sync failure emits family_sync_failed + a stderr WARN, and the
+    # bridge lint's E3 divergence face makes a persistent failure
+    # detectable at the next lint/cold-start face.
+    try:
+        from hypothesis_bridge import sync_family_ledger
+        sync_family_ledger(ws)
+    except Exception as exc:  # noqa: BLE001 — derived-state sync is best-effort
+        try:
+            from kunglao_log import emit
+            emit(ws, actor=actor, action="family_sync_failed",
+                 claim=claim_id, artifact="claim-register.yaml",
+                 detail=f"{type(exc).__name__}: {exc}")
+        except Exception as emit_exc:  # noqa: BLE001 — observability never raises
+            print(f"kunglao-record: family_sync_failed emit also unavailable "
+                  f"({type(emit_exc).__name__}: {emit_exc})",
+                  file=sys.stderr, flush=True)
+        print(f"kunglao-record: WARN family-ledger sync failed after "
+              f"{claim_id} -> {effective_status} "
+              f"({type(exc).__name__}: {exc}); the ledger may be stale — "
+              f"run `python scripts/hypothesis_bridge.py {ws} --sync`",
+              file=sys.stderr, flush=True)
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)

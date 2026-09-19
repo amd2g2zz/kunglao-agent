@@ -6,6 +6,101 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.5.post2] - 2026-09-19
+
+The post2 batch: seventeen changes to the strategy-learning pipeline. The
+Thompson rank sampler now seeds replayably from the posterior state and
+round; plans carry if-fails branches and epistemic unknowns; obstacles mint
+alternative claims; a stalled loop routes itself to a decomposition remedy.
+Several built-but-unwired pieces now run for real: no_delta fingerprints,
+settlement ΔH, plan-repair verification, and the progress timeline.
+
+### Added
+
+- **Replayable rank seed `f(posterior_state, round)` (#251)**: the Thompson
+  rank face seeds from sha256(cases + round) — same posteriors and round
+  reproduce the ranking byte-for-byte; a new round re-rolls it; the seed
+  components and rng base are recorded on the `rank_feeds` event, so
+  sampling is auditable without being frozen.
+- **Plan epistemics bookkeeping (#250)**: plan steps carry `if-fails`
+  branches, unknowns mint `boundary_type: epistemic` claims with situational
+  ΔH pricing, facts declare `assumptions: []`, and refutation propagates
+  along semantic edges — a static conclusion can now be retired by the
+  dynamic-registration counterexample that contradicts it — with
+  settle-time coverage checks over open epistemic claims.
+- **Hypothesis-claim bridge (#252)**: seeded arms mint as claims under
+  `competitor_group: hyp-<H-id>`; the hypothesis store is demoted to a
+  family ledger that syncs from claim settlement (no second claim
+  register); a lint guard rejects any path that writes `hypotheses/`
+  without minting claims.
+- **Target-obstacle ladder (#234)**: obstacles resolve through a 3-rung
+  target/attack-surface ladder with mechanism-family rung distinction;
+  each exhausted rung mints a sibling claim (`origin:
+  obstacle-alternative`, `obstacle_for` edge) into the rank pool;
+  `promotion_attempts` increments on dispatch failures with a 3-strike DLQ.
+- **Plan granularity gate (#241)**: dispatch refuses plans above 8 steps or
+  cross-domain without fan-out — oversized plans split into sub-claims with
+  `depends_on` edges and domain capability tags before execution.
+- **STALLED remedy routing (#249)**: convergence STALLED verdicts route to
+  the decomposition operator (mechanical flatline-breaking claim minting)
+  through a remedy-exemption dispatch channel; the full
+  healthy→STALLED→exempt-dispatch→mint→recovery cycle is pinned by tests.
+- **Oracle method-selection split (#248)**: reproduction and replay-evidence
+  admissions are separate verdicts; generation-language intake pins
+  `verification_method: reproduction`; replay-evidence questions reroute to
+  input-contract claims.
+- **Event schema mandatory fields (#255)**: the `AUTO_NULL_FIELDS` envelope
+  fields (duration_ms, arm, epoch, hypothesis_ref, matched_rule) are
+  mechanically populated at emit time with a tick stamp; explicit nulls
+  require `null_reasons`, closing the 382-null rot.
+- **no_delta fingerprint wiring (#256)**: `zero_output_fingerprint.record_action`
+  joins post_check and the production gate list, so a zero-output cycle
+  leaves its own record.
+- **Settlement ΔH live (#257)**: settlement feeds `posteriors.update_evidence`
+  / `update_eliminate`, so ΔH is nonzero and visible after each settlement.
+- **Silent-except ledger and gate (#275)**: every fail-open handler must
+  leave one rate-limited WARN trace; the repo-wide ledger (baseline
+  `silent_except_baseline.yaml`) is empty at release and lint-gated against
+  re-growth.
+- **Progress timeline (#282)**: `progress.txt` gains a ledger-derived
+  complete timeline view — events reconstruct worker lifecycles without
+  relying on hand-maintained narrative lines.
+
+### Fixed
+
+- **Plan-first ownership — the gate stops gating the FIRST dispatch (#239)**:
+  `hooks/worker_budget_gates.check_worker_plan` no longer rejects a claim's
+  first dispatch for a missing `runs/plan-C<NN>*.md` — dispatch carries intent,
+  not a plan; planning is the worker's first act of execution (owner ruling on
+  the #7 regression). A RE-dispatch still requires the plan reference, with
+  worker-session provenance enforced through the #57 dispatch-anchor linkage,
+  so an orchestrator-ghostwritten plan neither satisfies the gate nor is
+  required. The contract is pinned by the `fix-239-plan-first-ownership`
+  openspec change plus RED-first tests, and the worker-budget sink/gate split
+  is folded into the same lane.
+- **Unified negative exits — closed_by citation protocol (#233)**: every
+  non-empty `closed_by` (positive or negative) must now cite a claim id and
+  the cited claim must be terminal; obstacle citations require a path-scoped
+  REFUTED, DEFERRED citations require `wake_condition` + `infeasible_ladder`
+  (task-scoped) — violations fail closed with named INVALID_CLOSURE reasons.
+  Path- vs task-scoped negative semantics are pinned in the
+  `find_death_evidence` docstring and the agent three-state charter; 13
+  RED-first tests added, existing completion tests re-pinned per the
+  documented contract change.
+- **B1o gate defects (#237)**: plan-drift detection credits in-progress
+  dependency chains instead of demanding exact terminal matches; the
+  verifier dispatch path is pass-through (B1o no longer blocks the red-team
+  dispatch it itself requires); and maker≠checker binding is enforced with
+  log-verified dispatch provenance, so a forged verification record is
+  rejected.
+- **Plan-repair verification window (#281)**: repair amendments are verified
+  inside a bounded 3-round window with tamper-evident state, instead of an
+  unbounded, unverified window.
+- **Version bookkeeping (#258)**: pyproject parity with the released
+  v0.1.5.post1, CHANGELOG backfill, and the plugin-manifest semver face
+  contract (`0.1.5.post1` <-> `0.1.5`) restored after the patch1 release
+  divergence.
+
 ## [0.1.5-patch1] - 2026-09-11
 
 The Patch1 train — ten field-run fixes on the v0.1.5 line (released as `v0.1.5-patch1`, version `0.1.5.post1`): the android probe surface (apkid / JVM / memory-gate verdict), one XOR decompiler face, uv-unified environment operations, lane routing for task types beyond binary-RE, the Thompson rank face on the statusline, the macOS memory probe, and the adversarial-review remediation batch.

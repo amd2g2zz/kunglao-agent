@@ -27,6 +27,24 @@ the first module an entry loads and must stay dependency-free.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] _boot WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import os
 import sys
 from pathlib import Path
@@ -43,14 +61,14 @@ def force_utf8() -> None:
     _APPLIED = True
     try:
         os.environ.setdefault("PYTHONUTF8", "1")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        warn("force_utf8", f"{type(exc).__name__}: {exc}")
     for stream in (sys.stdout, sys.stderr):
         try:
             if hasattr(stream, "reconfigure"):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            warn("force_utf8_2", f"{type(exc).__name__}: {exc}")
 
 
 def ensure_utf8_stderr(stream=None) -> bool:

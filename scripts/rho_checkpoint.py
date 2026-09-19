@@ -28,6 +28,24 @@ an extra `value_signals` key (always-on since #51 — the flag is gone).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] rho_checkpoint WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import math
 import sys
@@ -195,8 +213,8 @@ def attach_signals(ws: Path, decision: dict, *, emit: bool = True) -> dict:
         s = yaml.safe_load((Path(ws) / "task_spec.yaml").read_text(encoding="utf-8"))
         if isinstance(s, dict):
             spec = s
-    except (OSError, yaml.YAMLError):
-        pass
+    except (OSError, yaml.YAMLError) as exc:
+        warn("attach_signals", f"{type(exc).__name__}: {exc}")
     depth = str(spec.get("depth") or "unknown").strip().lower()
     budget = float(spec.get("time_budget_minutes") or 0.0)
     family = value_replay.dominant_family(ws)  # same bucket derivation as A1 build_priors
@@ -220,8 +238,8 @@ def attach_signals(ws: Path, decision: dict, *, emit: bool = True) -> dict:
     try:
         import rho_verifier
         rho_verifier.sample_and_pair(ws, emit=emit)
-    except Exception:  # noqa: BLE001 - shadow cage: signals never disturb
-        pass
+    except Exception as exc:  # noqa: BLE001 - shadow cage: signals never disturb
+        warn("attach_signals_2", f"{type(exc).__name__}: {exc}")
     decision["value_signals"] = sig
     # Shadow emit, caged like every other emit in decide()'s call graph
     # (#51: the path is now unconditional, so it must honor the standing
@@ -230,8 +248,8 @@ def attach_signals(ws: Path, decision: dict, *, emit: bool = True) -> dict:
         try:
             kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
                              detail=json.dumps(sig, sort_keys=True))
-        except Exception:  # noqa: BLE001 — shadow cage: signals never disturb
-            pass
+        except Exception as exc:  # noqa: BLE001 — shadow cage: signals never disturb
+            warn("attach_signals_3", f"{type(exc).__name__}: {exc}")
     return decision
 
 

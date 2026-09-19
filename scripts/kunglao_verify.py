@@ -31,6 +31,24 @@ Output contract: schemas/verify-output.json (M3.3 frozen, module-design
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_verify WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -830,6 +848,11 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
     (#863: the one-cycle migration grace flag retired.)
     Output written to runs/verify-<fact_id>-<ts>.json.
     """
+    try:
+        from kunglao_log import monotonic_ms
+        _t0 = monotonic_ms()
+    except Exception:  # noqa: BLE001 — logging must never break verification
+        _t0 = None
     fact = load_fact(ws, fact_id)
     if fact is None:
         raise FileNotFoundError(f"fact {fact_id}.md not found under {ws / 'facts'}")
@@ -949,9 +972,11 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
     # #287 observability: mirror the verdict to the structured event log.
     # Guarded — logging must never break verification.
     try:
-        from kunglao_log import emit, emit_result_digest
+        from kunglao_log import emit, emit_result_digest, monotonic_ms
+        _dur = (max(monotonic_ms() - _t0, 0)
+                if _t0 is not None else None)
         emit(ws, actor="orchestrator", action="verify", claim=claim_id,
-             artifact=fact_id, duration_ms=None,
+             artifact=fact_id, duration_ms=_dur,
              exit=0 if overall == "VERIFIED" else 1,
              detail=(f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}"
                      + (f" | {r0}" if (ok0 and r0) else "")))
@@ -963,8 +988,8 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
                            files_written=[str(vp.relative_to(ws))],
                            claims_touched=[claim_id], verdict=overall,
                            exit=0 if overall == "VERIFIED" else 1)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("verify", f"{type(exc).__name__}: {exc}")
     return out
 
 

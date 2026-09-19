@@ -14,8 +14,12 @@ progressed while the files never caught up")
      in claim-register.yaml (abandoned/decomposed, not removed)
   3. MISSING_DEP_LINK: claim has parent_claim but claim_deps.yaml doesn't
      link it (decomposition not reflected in DAG)
-  4. UNANSWERED_QUESTION: primary_question in task_spec has no PROVEN
-     claim answering it (plan assumes answer that won't come)
+  4. UNANSWERED_QUESTION: primary_question in task_spec with no answering
+     claim — terminal answer = answered (#34 statuses); answering claim at
+     any non-terminal status, or an OPEN claim_deps chain walking to an
+     answerer, is IN-PROGRESS and not drift (#237 D1 liveness fix: mid-run
+     the terminal claim cannot exist yet while sub-question claims are
+     still being worked)
   5. STALE_NEXT_STEP: global_plan.txt "next steps" section references
      claim with terminal status (plan still thinks claim is OPEN)
   6. UNVERIFIED_EVIDENCE (#241): claim is status: PROVEN but has no
@@ -23,7 +27,10 @@ progressed while the files never caught up")
      (facts/F*.md with claim_id frontmatter) carries a low confidence
      tier — the first 5 classes are all "file A vs file B" consistency;
      this one asks whether the STATE FILE itself is wrong (files agree
-     but reality was never verified)
+     but reality was never verified). #237 D3: a record counts only when
+     it survives the #827 content screen AND the unified log corroborates
+     a hook-attributed verifier dispatch for the claim (advisory
+     maker!=checker pin — a process bar, not authenticity; fail-closed)
   7. STALE_PLAN_ON_NEW_EVIDENCE (#497, WARN-only): new evidence (a
      #495 failure_analysis record, a promoted obstacle claim) landed
      AFTER the last plan update while the plan was never re-derived —
@@ -51,12 +58,32 @@ Auto-integration mode (issue #602, --auto flag):
     2  = 1+ non-WARN drift                         -> BLOCKED (hard REJECT)
 """
 from __future__ import annotations
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] plan_drift_detector WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import gate_telemetry as _gt
 from status_defs import TERMINAL
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
 
 import argparse
 import hashlib
+import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -106,6 +133,85 @@ def extract_claim_ids_from_deps(deps_path: Path) -> set:
         for p in (parents or []):
             out.add(p)
     return out
+
+
+# --- D1 (in-progress credit) via the claim_deps dependency chain ----------
+
+def _depends_on_edges(claims: list, deps_path: Path) -> dict:
+    """child -> [ancestors] edge map for the in-progress chain walk.
+
+    Union of the claim_deps.yaml DAG (the MISSING_DEP_LINK owner — depends_on
+    maps child to its parents) and the register's per-claim depends_on
+    fields, so workspaces that never materialized the deps file still credit.
+    """
+    edges: dict = {}
+    deps = _load_yaml(deps_path)
+    for child, parents in ((deps or {}).get("depends_on", {}) or {}).items():
+        edges[str(child)] = [str(p) for p in (parents or [])]
+    for c in claims:
+        cid = c.get("id")
+        if not cid:
+            continue
+        own = edges.setdefault(str(cid), [])
+        for p in (c.get("depends_on") or []):
+            if str(p) not in own:
+                own.append(str(p))
+    return edges
+
+
+def _transitive_ancestors(cid: str, edges: dict) -> set:
+    """All ancestors of cid via the edges map (cycle-safe, visited-set)."""
+    seen: set = set()
+    stack = list(edges.get(cid, []))
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(edges.get(node, []))
+    seen.discard(cid)
+    return seen
+
+
+def question_progress(qid: str, claims: list, deps_path: Path) -> str:
+    """D1: is primary question qid answered, in-flight, or abandoned?
+
+    Returns one of:
+      "terminal"     an answering claim reached a TERMINAL status (the
+                     pre-existing rule; REFUTED/NEGATIVE dead-ends answer
+                     "no" and count);
+      "in-progress"  an answering claim exists at a non-terminal status, OR
+                     an OPEN claim's transitive claim_deps ancestors include
+                     a qid-answering claim — the decomposition chain is
+                     being worked and the answer is pending, not missing
+                     (mid-run the terminal claim cannot exist yet while
+                     sub-question claims are still OPEN);
+      "none"         nothing answers qid and no open chain reaches an
+                     answerer — the plan assumes an answer no claim targets
+                     (the only drift state).
+
+    Because the direct branch credits an answering claim at ANY status, a
+    registered answerer is always credited directly; the chain walk carries
+    the "walk to sub-question claims" semantics for register shapes where
+    the answering claim appears only as a deps ancestor.
+    """
+    answerers = [c for c in claims if c.get("answers_question") == qid]
+    if any((c.get("status") or "").upper() in TERMINAL_STATUSES
+           for c in answerers):
+        return "terminal"
+    if answerers:
+        return "in-progress"
+    edges = _depends_on_edges(claims, deps_path)
+    by_id = {str(c.get("id")): c for c in claims if c.get("id")}
+    for c in claims:
+        if (c.get("status") or "").upper() in TERMINAL_STATUSES:
+            continue
+        cid = str(c.get("id"))
+        for anc in _transitive_ancestors(cid, edges):
+            anc_claim = by_id.get(anc)
+            if anc_claim is not None and anc_claim.get("answers_question") == qid:
+                return "in-progress"
+    return "none"
 
 
 def extract_next_step_claims(plan_path: Path) -> set:
@@ -253,6 +359,101 @@ def extract_low_confidence_claim_ids(facts_dir: Path) -> set:
     return out
 
 
+# --- D3 (verify-record provenance): log corroboration, maker!=checker -----
+
+# Verifier-class agents (the blind_gate VERIFIER_AGENT_MARKERS set;
+# mirrored — scripts/ is the private-API boundary the other direction).
+VERIFIER_AGENT_MARKERS = ("kunglao-redteam", "verdict-scorer")
+
+_DISPATCH_LOG_GLOB = "kunglao-*.jsonl"
+
+
+def _load_dispatch_rows(workspace: Path) -> list:
+    """All parseable unified-log rows under runs/logs/ (raw JSONL read).
+
+    stdlib json over the day files — the detector stays import-light and
+    read-only; corrupt lines are skipped, unreadable files degrade the
+    corroboration set (fail-closed: missing evidence is not evidence).
+    """
+    logs = workspace / "runs" / "logs"
+    if not logs.is_dir():
+        return []
+    rows: list = []
+    for log in sorted(logs.glob(_DISPATCH_LOG_GLOB)):
+        try:
+            lines = log.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
+    return rows
+
+
+def _corroborating_dispatch_claims(rows: list) -> set:
+    """Claim ids whose verify evidence the unified log corroborates.
+
+    A row corroborates claim C iff ALL hold (D3):
+      - action contains 'dispatch' (the dispatch-lifecycle face —
+        a hook WARN/trace row naming an agent is not dispatch evidence);
+      - row claim == C in canonical form (_normalize_cid);
+      - hook-attributed: actor starts with 'hook:' — a self-attested row
+        (actor worker:* / verifier:*) does not corroborate the record.
+        ADVISORY, NOT AUTHENTICITY: `emit()` takes the actor as free text
+        (kunglao_log never gates on validate_actor at runtime) and runs/
+        is a worker-writable surface, so a hand-crafted `hook:`-actor row
+        also corroborates. The pin is a process bar — it raises adversary
+        effort from trivial file creation to deliberate audit-row forgery
+        and catches lazy/accidental self-minting — against exactly the
+        adversary class this card names. Deliberately stricter than the
+        blind_gate contract, which also accepts verifier: actors;
+      - a verifier-class agent is named in the actor or detail.
+
+    Fail-closed on every missing piece: no log, no rows, no match -> the
+    record does not count. The honest path (dispatch the verifier through
+    the gate) writes the corroboration itself. Row-record AUTHENTICITY
+    binding is filed as follow-up (temporal-ordering item extension).
+    """
+    out: set = set()
+    for row in rows:
+        if "dispatch" not in str(row.get("action") or ""):
+            continue
+        actor = str(row.get("actor") or "")
+        if not actor.startswith("hook:"):
+            continue
+        detail = str(row.get("detail") or "")
+        if not any(m in actor or m in detail for m in VERIFIER_AGENT_MARKERS):
+            continue
+        claim = row.get("claim")
+        if claim:
+            out.add(_normalize_cid(str(claim)))
+    return out
+
+
+def corroborated_verified_ids(workspace: Path) -> set:
+    """Claim ids whose verify-redteam record actually counts (D3).
+
+    Intersection of the content screen (:func:`extract_verified_claim_ids`
+    — semantics untouched; write_gate and the anti-template tests
+    pin it) with log-corroborated claim ids. A verify record that no
+    hook-attributed verifier dispatch stands behind is self-minted — the
+    field-incident surface this class closes.
+    """
+    screened = extract_verified_claim_ids(workspace / "runs")
+    if not screened:
+        return set()
+    return screened & _corroborating_dispatch_claims(
+        _load_dispatch_rows(workspace))
+
+
 def find_stale_plan_on_new_evidence(workspace: Path, plan_path, claims: list) -> list:
     """#497: stale-plan-on-new-evidence — the whitelist-inverted drift.
 
@@ -303,8 +504,8 @@ def find_stale_plan_on_new_evidence(workspace: Path, plan_path, claims: list) ->
                             f"update — re-derive {plan_path.name} on the new "
                             "evidence (#497)"),
                 })
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("find_stale_plan_on_new_evidence", f"{type(exc).__name__}: {exc}")
     return warns
 
 
@@ -333,8 +534,186 @@ def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
             emit(workspace, actor="orchestrator",
                  action="stale_plan_on_new_evidence",
                  claim=w.get("claim_id"), detail=w.get("fix"))
-        except Exception:
-            pass
+        except Exception as exc:
+            warn("_emit_stale_plan_warns", f"{type(exc).__name__}: {exc}")
+
+
+# --- issue-281: bounded-window plan-repair verification --------------------
+#
+# The plan-drift REJECT instructs a repair ("update global_plan.txt ...")
+# that, before this face, nothing verified — the same dead-lock class the
+# issue-249 remedy verification closed on the STALLED face ("knows the
+# error but the next step doesn't move"). Mirror of that split: the drift
+# REJECT itself still gates dispatch; this face adds ONLY visibility and
+# escalation around the repair loop (plan_repair_verified closes it, a
+# plan_repair_overdue escalation fires on un-repaired drift).
+
+# The repair window, in DETECTION ROUNDS (named constant per the issue).
+# The counter is FINGERPRINT-INDEPENDENT (review round 1, HIGH): every
+# drift round advances it — a workspace whose drift set ROTATES between
+# disjoint shapes accumulates rounds exactly like one with a stable
+# fingerprint, so rotation can never reset the window. `rounds` reaching a
+# multiple of the window re-escalates (cadence, not once-forever). The
+# sinks drift guidance prose and templates/CLAUDE.md.base.tmpl carry the
+# same number as a literal — cross-face sync pinned by
+# tests/test_plan_repair_verify_281.py (this module is the single source).
+PLAN_REPAIR_WINDOW_ROUNDS = 3
+
+PLAN_REPAIR_STATE_FILE = "runs/plan-repair-state.json"
+PLAN_REPAIR_OPEN = "open"
+PLAN_REPAIR_VERIFIED = "verified"
+PLAN_REPAIR_OVERDUE_ACTION = "plan_repair_overdue"
+PLAN_REPAIR_VERIFIED_ACTION = "plan_repair_verified"
+
+
+def repair_fingerprint(drifts: list) -> dict:
+    """Canonical episode fingerprint: one item per (drift class, claim).
+
+    `TYPE:claim_id` items describe the CURRENT drift shape for telemetry;
+    they are deliberately NOT the verification unit (review round 1:
+    disjointness is not repair) — the window advances on ANY drift round
+    and verified fires only on a genuinely clean round.
+    """
+    return {
+        "items": sorted({f"{d['type']}:{d.get('claim_id')}" for d in drifts}),
+        "classes": sorted({d["type"] for d in drifts}),
+    }
+
+
+def _write_repair_state(state_path: Path, state: dict) -> None:
+    """Fail-open state write (telemetry never breaks the check). tmp +
+    os.replace so a concurrent reader sees the old or the new file, never
+    a torn one (review round 1, LOW)."""
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = state_path.with_name(state_path.name + ".tmp")
+        tmp.write_text(
+            json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8")
+        os.replace(tmp, state_path)
+    except OSError as exc:
+        print(f"[kunglao-agent] plan-repair state write skipped: {exc!r}",
+              file=sys.stderr)
+
+
+def _repair_episode_detail(state: dict) -> dict:
+    fp = state.get("fingerprint") or {}
+    return {"items": fp.get("items") or [], "classes": fp.get("classes") or [],
+            "rounds": state.get("rounds") or 0,
+            "window": PLAN_REPAIR_WINDOW_ROUNDS}
+
+
+def _close_repair_episode(state: dict) -> dict:
+    return {**state, "status": PLAN_REPAIR_VERIFIED, "closed": utc_now()}
+
+
+def _repair_emit(workspace: Path, action: str, detail: dict) -> None:
+    """Fail-open event face (kunglao_record posture — same as the class-7
+    WARN emit above)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action=action,
+             detail=json.dumps(detail, ensure_ascii=False, sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort,
+        # never silent (the annotated form the silent-except ratchet wants)
+        print(f"[kunglao-agent] plan-repair telemetry skipped: {exc!r}",
+              file=sys.stderr)
+
+
+def _plan_repair_tick(workspace: Path, drifts: list) -> dict | None:
+    state_path = Path(workspace) / PLAN_REPAIR_STATE_FILE
+    state = None
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # fail-open, annotated: an unreadable episode never blocks or
+            # crashes the detector — verification skips for this round.
+            print("[kunglao-agent] plan-repair state unreadable - repair "
+                  "verification skipped (fail-open)", file=sys.stderr)
+            return None
+    if not drifts:
+        if not state or state.get("status") != PLAN_REPAIR_OPEN:
+            return None  # no open episode: clean rounds write nothing
+        # verified means REPAIR, not rotation (review round 1, HIGH): the
+        # only face that closes an episode positively is a genuinely
+        # clean round — the plan files actually agree with the register.
+        detail = _repair_episode_detail(state)
+        _repair_emit(workspace, PLAN_REPAIR_VERIFIED_ACTION, detail)
+        print(f"PLAN_REPAIR_VERIFIED: workspace drift-free after "
+              f"{detail['rounds']} drift round(s) - amendment verified "
+              f"(issue-281)")
+        closed = _close_repair_episode(state)
+        _write_repair_state(state_path, closed)
+        return closed
+    fp = repair_fingerprint(drifts)
+    if state and state.get("status") == PLAN_REPAIR_OPEN:
+        rounds = int(state.get("rounds") or 0) + 1
+        # a CHANGED fingerprint supersedes the recorded shape silently —
+        # same episode, no event, the cumulative window does not reset
+        # (the workspace has been drifting continuously either way).
+        state = {**state, "fingerprint": fp, "rounds": rounds,
+                 "updated": utc_now()}
+    else:
+        # first drift round of an episode: open silently (no output
+        # change — the REJECT report is the whole operator face), the
+        # round itself counts (rounds starts at 1).
+        state = {"status": PLAN_REPAIR_OPEN, "fingerprint": fp,
+                 "rounds": 1, "opened": utc_now(), "updated": utc_now()}
+    if state["rounds"] % PLAN_REPAIR_WINDOW_ROUNDS == 0:
+        # escalation cadence: fires at rounds == WINDOW, 2*WINDOW, ... —
+        # once per window of continued drift, never permanently silent
+        # (review round 1, LOW: post-overdue silence), never spam.
+        detail = _repair_episode_detail(state)
+        _repair_emit(workspace, PLAN_REPAIR_OVERDUE_ACTION, detail)
+        print(f"PLAN_REPAIR_OVERDUE: drift persisted for "
+              f"{state['rounds']} detection round(s) "
+              f"(window={PLAN_REPAIR_WINDOW_ROUNDS}) - the plan amendment "
+              f"did not land; escalate to the operator (issue-281)",
+              file=sys.stderr)
+    _write_repair_state(state_path, state)
+    return state
+
+
+def plan_repair_tick(workspace: Path, drifts: list) -> dict | None:
+    """issue-281: the bounded-window amendment check (the plan-drift
+    mirror of the issue-249 remedy verification), run by check() on EVERY
+    detection round — operator CLI, --auto dispatch-gate face and the
+    hooks gate subprocess all advance the same episode state; one source.
+
+    Episode semantics (state file runs/plan-repair-state.json):
+      - a drift round with no open episode OPENS one (rounds=1) —
+        silently; the REJECT report is the whole operator face;
+      - EVERY drift round advances the cumulative `rounds` counter,
+        regardless of fingerprint (a rotating drift shape cannot reset
+        the window — review round 1 HIGH); a changed fingerprint
+        supersedes the recorded shape in place, with no event;
+      - at every multiple of PLAN_REPAIR_WINDOW_ROUNDS a
+        plan_repair_overdue event + stderr escalation fires (cadence —
+        re-escalates each window of continued drift); never a new block
+        (the drift REJECT itself still gates dispatch);
+      - ONLY a genuinely clean round closes the episode, as verified
+        (plan_repair_verified event) — drift changing shape is not
+        evidence of repair;
+      - a clean round with no open episode writes nothing.
+
+    Fail-open: the tick never alters check()'s verdict. Unreadable state
+    skips verification (annotated); any unexpected error is caught by the
+    wrapper and reported on stderr. STALE_PLAN_ON_NEW_EVIDENCE warns never
+    enter `drifts` and can never open an episode (observe-first stays
+    observe-only). Adversarial-write acceptance: runs/ is a worker surface
+    (write_guard's contract covers the four carriers only), so the state
+    file is forgeable — accepted, the face is additive observability and
+    the REJECT verdict never depends on it (design.md, review round 1
+    MEDIUM).
+    """
+    try:
+        return _plan_repair_tick(workspace, drifts)
+    except Exception as exc:  # noqa: BLE001 — verification must never break
+        # the detector (annotated fail-open, silent-except ratchet form)
+        print(f"[kunglao-agent] plan-repair verification skipped: {exc!r}",
+              file=sys.stderr)
+        return None
 
 
 @_gt.telemetry('plan_drift_detector')
@@ -409,18 +788,22 @@ def check(workspace: Path, active_only: bool = False) -> int:
         qid = q.get("id") if isinstance(q, dict) else None
         if not qid:
             continue
-        # a primary question is ANSWERED when an answering claim reached any
-        # terminal status — PROVEN/VERIFIED confirm, REFUTED/NEGATIVE answer
-        # "no", DEFERRED/STALE record a dead-end. (v1.9.29: TERMINAL_STATUSES
-        # already includes REFUTED/NEGATIVE; previously only PROVEN/VERIFIED
-        # counted, so a yes/no question answered "no" flagged as unanswered.)
-        answered = any(c.get("answers_question") == qid and (c.get("status") or "").upper() in TERMINAL_STATUSES for c in claims)
-        if not answered:
-            drifts.append({
-                "type": "UNANSWERED_QUESTION",
-                "claim_id": qid,
-                "fix": f"primary question {qid} has no terminal-status answering claim",
-            })
+        # D1: UNANSWERED_QUESTION is a liveness-drift only when nothing
+        # is IN FLIGHT toward the answer. A terminal answering claim answers
+        # the question (PROVEN/VERIFIED confirm; REFUTED/NEGATIVE answer
+        # "no"; DEFERRED/STALE record a dead-end — v1.9.29). An answering
+        # claim at any non-terminal status, or an OPEN claim_deps chain
+        # walking to an answerer, is in-progress: mid-run the terminal
+        # claim cannot exist yet while sub-question claims are still OPEN.
+        progress = question_progress(qid, claims, deps_path)
+        if progress in ("terminal", "in-progress"):
+            continue
+        drifts.append({
+            "type": "UNANSWERED_QUESTION",
+            "claim_id": qid,
+            "fix": (f"primary question {qid} has no terminal-status "
+                    "answering claim and no in-progress answering chain"),
+        })
 
     if plan_path and plan_refers_to_register:
         for cid in next_step_ids:
@@ -440,7 +823,12 @@ def check(workspace: Path, active_only: bool = False) -> int:
     # wrong. A claim at status: PROVEN is drift when its reality check never
     # happened (no runs/verify-redteam-*.md on disk) or when its supporting
     # facts carry low confidence (PROVEN on shaky ground).
-    verified_ids = extract_verified_claim_ids(workspace / "runs")
+    # D3: a record counts only when the unified log corroborates a
+    # hook-attributed verifier dispatch for the claim (advisory maker!=
+    # checker pin — a process bar, not authenticity; fail-closed).
+    # File existence + content screening alone was the
+    # forgery surface the 2026-09-12 wbtest incident walked through.
+    verified_ids = corroborated_verified_ids(workspace)
     low_confidence_ids = extract_low_confidence_claim_ids(workspace / "facts")
     for c in claims:
         cid = c.get("id")
@@ -469,6 +857,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
     if not drifts:
         print("OK: no plan drift detected")
         _print_stale_plan_warns(stale_plan_warns)
+        plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
         return 0
 
     by_type = {}
@@ -483,6 +872,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
         if len(items) > 5:
             print(f"    ... and {len(items) - 5} more")
     _print_stale_plan_warns(stale_plan_warns)
+    plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
     # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
     # per the docstring contract that the implementation previously lacked.
     # (#497: STALE_PLAN_ON_NEW_EVIDENCE warns are NOT drift warnings for

@@ -37,6 +37,24 @@ Usage: python scripts/kunglao_wait.py --worker <id> [--claim <claim-id>]
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_wait WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import os
@@ -134,8 +152,8 @@ def _consume_signal(worker: str) -> dict | None:
         return None
     try:
         path.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_consume_signal", f"{type(exc).__name__}: {exc}")
     try:
         payload = json.loads(raw)
     except ValueError:
@@ -164,8 +182,8 @@ def run_wait(worker: str, claim: str | None) -> int:
                     worker,
                     _CRASH_LINE.format(ts=_utc_now(),
                                        kind=type(exc).__name__, exc=exc))
-            except Exception:  # noqa: BLE001 — never raises, terminal write
-                pass
+            except Exception as exc:  # noqa: BLE001 — never raises, terminal write
+                warn("run_wait", f"{type(exc).__name__}: {exc}")
             return EXIT_SELF_KILL_CLAIM
         rounds += 1
         if rounds >= _max_rounds():

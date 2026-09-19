@@ -28,6 +28,15 @@ pending-decision exit; the report has no other HARD FAIL).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
 import argparse
 import dataclasses
 import json
@@ -48,8 +57,8 @@ from pathlib import Path
 # UTF-8 stdout unification (same pattern as tools/static/common.py (ex-_common.py, merged #340))
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+except (AttributeError, ValueError) as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 # single source in _boot (the stdio-insurance boot module);
 # alias binds the SHARED function so the module-level call below keeps its

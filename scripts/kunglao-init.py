@@ -122,6 +122,24 @@ Hook deployment boundary (hard constraint): NEVER write the production
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao-init WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -307,8 +325,8 @@ def archive_previous_init_report(target: Path) -> Path | None:
     try:
         print(f"kunglao-init: archived previous init report -> {archive}",
               file=sys.stderr)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("archive_previous_init_report", f"{type(exc).__name__}: {exc}")
     keep = _parse_init_report_keep()
     try:
         archives: list[tuple[int, Path]] = []
@@ -320,10 +338,10 @@ def archive_previous_init_report(target: Path) -> Path | None:
         for _, p in archives[:-keep] if len(archives) > keep else []:
             try:
                 p.unlink()
-            except OSError:
-                pass
-    except OSError:
-        pass
+            except OSError as exc:
+                warn("archive_previous_init_report_2", f"{type(exc).__name__}: {exc}")
+    except OSError as exc:
+        warn("archive_previous_init_report_3", f"{type(exc).__name__}: {exc}")
     return archive
 
 
@@ -367,8 +385,8 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
     # the spec scenario pins this: "rotation never breaks init".
     try:
         archive_previous_init_report(target)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("write_init_report", f"{type(exc).__name__}: {exc}")
     try:
         atomic_write(target, json.dumps(doc, sort_keys=True,
                                         separators=(",", ":"),
@@ -2270,8 +2288,8 @@ def scaffold(ws: Path) -> list[Path]:
     try:
         from mission_ledger import init as _ml_init
         _ml_init(ws)
-    except FileExistsError:
-        pass  # already initialized — the baseline is the workspace's data
+    except FileExistsError as exc:
+        warn("scaffold", f"{type(exc).__name__}: {exc}")
     except Exception as exc:  # noqa: BLE001 — baseline is WARN-tier
         print(f"kunglao-init: WARN mission-ledger baseline skipped ({exc})",
               file=sys.stderr)
@@ -3407,8 +3425,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             try:
                 kunglao_log.emit(ws, actor="init", action="env_incident",
                                  detail=f"intake-promise: {exc}")
-            except Exception:  # noqa: BLE001 — telemetry never deadlocks
-                pass
+            except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
+                warn("run", f"{type(exc).__name__}: {exc}")
         else:
             print(f"kunglao-init: intake-promise written: {_promise_path}")
 
@@ -3427,8 +3445,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             try:
                 kunglao_log.emit(ws, actor="init", action="env_incident",
                                  detail=f"difficulty-calibration: {exc}")
-            except Exception:  # noqa: BLE001 — telemetry never deadlocks
-                pass
+            except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
+                warn("run_2", f"{type(exc).__name__}: {exc}")
         else:
             print(f"kunglao-init: difficulty-calibration written: {_diff_path} "
                   f"tier={_diff['tier']}")

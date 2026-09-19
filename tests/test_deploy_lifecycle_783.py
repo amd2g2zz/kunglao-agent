@@ -275,7 +275,9 @@ def _early_exit_ws(tmp_path: Path, tag: str) -> Path:
     """Deployed workspace stamped AT the skill target so upgrade()
     takes the already-at-version early-exit path (plan empty). The
     stamp tracks read_skill_version() — a hardcoded release pin would
-    silently fall below the target on the next bump."""
+    silently fall below the target on the next bump. (Issue 258: dev's
+    hardcoded "0.1.4" pin did exactly that once the target became
+    v0.1.5.post1.)"""
     return _deployed_ws(tmp_path, tag=tag)
 
 

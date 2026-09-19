@@ -46,6 +46,24 @@ _kunglao_active + FAIL_OPEN structure (#44).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] completion_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import hashlib
 import json
 import sys
@@ -347,6 +365,25 @@ def process_event(payload: dict) -> int:
             print(json.dumps({"decision": "block", "reason": reason},
                              ensure_ascii=False))
             return EXIT_SUMMARY_FAKE
+        # #250: settle-time epistemic coverage annotation. R4-class
+        # anti-Goodhart: the signal SORTS (event log for the orchestrator to
+        # re-rank), it NEVER blocks — a coverage gate that blocked settlement
+        # would be gamed by cheap mint-and-settle epistemic claims. The
+        # annotation only fires when a terminal claim's presupposition is
+        # unresolved. Double-caged FAIL_OPEN like the discriminators above.
+        try:
+            with scripts_on_path():
+                import plan_epistemics as _pep
+            note = _pep.coverage_note(ws)
+            if note:
+                try:
+                    import kunglao_log as _kl
+                    _kl.emit(ws, actor="hook:completion_gate",
+                             action="epistemic_coverage", detail=note)
+                except Exception as exc:  # noqa: BLE001 — emit never blocks
+                    warn("process_event", f"{type(exc).__name__}: {exc}")
+        except Exception as exc:  # noqa: BLE001 — coverage bookkeeping must never deadlock
+            warn("process_event_2", f"{type(exc).__name__}: {exc}")
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

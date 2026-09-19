@@ -200,17 +200,22 @@ def test_l3_incident_full_shape_blocks():
     assert "PASS" not in reason
 
 
-def test_l3_wellformed_ledger_still_passes():
+def test_l3_wellformed_ledger_still_passes(tmp_path):
     """Guard the other direction: dict items closed + user-signed defers
-    keep passing (the #717 change must not over-block)."""
+    keep passing (the #717 change must not over-block).
+    Pinned citation protocol: the closure cites terminal claim F-100 from a register
+    under the oracle's workspace_path (fail-closed citation protocol)."""
+    (tmp_path / "claim-register.yaml").write_text(
+        "claims:\n  - id: F-100\n    status: PROVEN\n", encoding="utf-8")
     oracle = {
         "task_text": "task text",
+        "workspace_path": str(tmp_path),
         "open_items": [{"id": "OC-1", "closed_by": "F-100"}],
         "deferrals": [{"item": "OC-2", "authorized_by": "andy",
                        "source": "user", "reason": "not needed"}],
     }
-    code, _ = cg.judge(oracle)
-    assert code == 0
+    code, reason = cg.judge(oracle)
+    assert code == 0, reason
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +277,13 @@ def test_heartbeat_off_allows_closed_oracle(tmp_path, monkeypatch):
     monkeypatch.setattr(hb.subprocess, "run",
                         lambda *a, **k: __import__("types").SimpleNamespace(
                             returncode=0))
+    # Pinned citation protocol: the closed item cites terminal claim F-100 from the
+    # workspace register (fail-closed citation protocol).
+    (tmp_path / "claim-register.yaml").write_text(
+        "claims:\n  - id: F-100\n    status: PROVEN\n", encoding="utf-8")
     (tmp_path / "task-oracle.yaml").write_text(
-        "task_text: 'x'\nopen_items:\n  - id: OC-1\n    closed_by: F-100\n",
+        f'task_text: "x"\nworkspace_path: "{tmp_path}"\n'
+        "open_items:\n  - id: OC-1\n    closed_by: F-100\n",
         encoding="utf-8")
     rc = hb.heartbeat_off(tmp_path)
     assert rc == 0

@@ -39,11 +39,16 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1.5.post1"
-# The Claude plugin manifests carry the SEMVER form of the same release
-# (the plugin scanner requires strict semver; PEP 440 ".post1" is not
-# semver). v0.1.5-patch1: tag v0.1.5.post1 <-> plugin 0.1.5-post1.
-PLUGIN_VERSION = "0.1.5-post1"
+EXPECTED_VERSION = "0.1.5.post2"
+# The Claude plugin manifests carry the STRICT X.Y.Z semver form of the
+# same release: the HOL plugin-scanner (ai-plugin-scanner-action, scanner
+# 2.0.1116) gates "Claude required fields and semver" on
+# SEMVER_RE = ^\d+\.\d+\.\d+$ (checks/ecosystem_common.py:9, applied at
+# checks/claude.py:66) — neither the PEP 440 ".post1" nor a semver
+# prerelease "0.1.5-post1" (CLAUDE_VERSION_BAD_SEMVER, -5 pts) matches.
+# Mapping: pyproject "0.1.5.post1" (tag v0.1.5.post1) <-> plugin face
+# "0.1.5". (Issue 258; scan-regression fix for PR 268.)
+PLUGIN_VERSION = "0.1.5"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).
@@ -115,7 +120,7 @@ def test_version_triple_equality():
 
     # Python-side sources carry the PEP 440 string; the Claude plugin
     # manifests carry the semver form of the same release (scanner
-    # requires strict semver — see PLUGIN_VERSION above).
+    # requires strict semver — see PLUGIN_VERSION above). (Issue 258.)
     assert py == rel == EXPECTED_VERSION, (
         f"version drift: pyproject={py} release-manifest={rel}"
     )

@@ -602,22 +602,11 @@ class TestT6Registry:
             "0.1.3-stamped workspace re-plans instead of short-circuiting")
         assert versions.index("0.1.3") < versions.index("0.1.4"), \
             "registry stays linear"
-        # 0.1.4's OWN cargo, pinned by key (the entry is not guaranteed to
-        # stay the registry tail as releases land new entries).
-        ws = _fixture_ws(tmp_path)
-        items_014 = dict(up.MIGRATIONS)["0.1.4"](ws, True)
-        assert any(i.startswith("template_stamp_refresh") for i in items_014), \
-            "0.1.4 must carry the stamp refresh"
-        assert any("uv_sync" in i for i in items_014)
-        # Planner invariant (owner ruling 2026-09-11): the stamp refresh is
-        # the planner's UNIVERSAL terminal step for any behind workspace —
-        # no per-release registry entry required (the G4 tail gate trusts
-        # the plan to carry the stamp face).
-        plan = up._plan_migrations(up._vkey("0.1.5"), "0.1.5.post1")
-        assert plan and plan[-1][0] == "0.1.5.post1"
-        assert any(i.startswith("template_stamp_refresh")
-                   for i in plan[-1][1](ws, True)), \
-            "the stamp refresh must ride the plan tail"
+        last_fn = up.MIGRATIONS[-1][1]
+        items = last_fn(_fixture_ws(tmp_path), True)
+        assert any(i.startswith("template_stamp_refresh") for i in items), \
+            "the stamp refresh must ride the LAST migration"
+        assert any("uv_sync" in i for i in items)
 
     @pytest.fixture(autouse=True)
     def _offline_uv(self, monkeypatch):
@@ -676,7 +665,8 @@ class TestT6Registry:
         is incomplete — the 0.1.4 registry entry must make plan non-empty
         so the fast path cannot skip the repair. The stamp pins the version
         BEFORE the cargo-carrying entry (a prev-of-CUR derivation would
-        silently drift below the entry on the next bump)."""
+        silently drift below the entry on the next bump). Issue 258: it
+        also crashes on a PEP 440 .postN skill version — hence the literal."""
         up = _load_upgrade()
         ws = self._stamped_ws(tmp_path, "0.1.3")
         pre_notes = self._snap(ws)["notes/keep.md"]

@@ -25,6 +25,24 @@ Usage: python kunglao-monitor.py <ws> [--json]
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao-monitor WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import datetime
 import json
@@ -92,8 +110,8 @@ def detect_drift(ws: Path) -> list[dict]:
             ledger = runs / ".drift-events.jsonl"
             with ledger.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
-        except OSError:
-            pass  # advisory: ledger failure never blocks the signal list
+        except OSError as exc:
+            warn("detect_drift", f"{type(exc).__name__}: {exc}")
     return events
 
 
@@ -148,8 +166,8 @@ def loop_reconcile(ws: Path) -> dict:
     try:
         (ws / "runs").mkdir(parents=True, exist_ok=True)
         prev_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass  # snapshot write failure must not crash — next tick treats all as first sight
+    except OSError as exc:
+        warn("loop_reconcile", f"{type(exc).__name__}: {exc}")
     return {"state": state, "gone_events": gone, "prev_ts": prev.get("ts")}
 
 

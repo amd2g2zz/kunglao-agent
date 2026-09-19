@@ -95,6 +95,22 @@ from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
+# issue 275 batch-2: fail-open handlers keep their liveness posture (never
+# raise, never change the verdict) but must leave ONE trace — a stderr WARN
+# naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] convergence_check WARN (fail-open): {op}: {reason}",
+          file=sys.stderr)
+
+
 # #103 exception tiering: the exception family a JUDGMENT-INPUT reader
 # (gate / discriminator / settlement input) may degrade on — IO, parse,
 # and data-shape errors from operator-editable files. Anything outside
@@ -694,9 +710,9 @@ def _append_ledger(workspace: Path, d: dict) -> None:
         }
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
+    except OSError as exc:
         # ledger is a side channel — never block the decision on it
-        pass
+        warn("ledger_append", f"{type(exc).__name__}: {exc}")
 
 
 def record_operator_action(workspace, action: str, actor: str = "orchestrator",
@@ -722,8 +738,8 @@ def record_operator_action(workspace, action: str, actor: str = "orchestrator",
         newline_char = chr(10)
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + newline_char)
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("operator_action", f"{type(exc).__name__}: {exc}")
 
 
 def _failure_blocked(workspace: Path) -> list:
@@ -1346,8 +1362,8 @@ def _detect_contradiction(hyp_body: str, candidates: list[str],
                         if cand.lower() == after:
                             snippet = conclusion[:80]
                             return f"Contradicted: {fid} ({kw.rstrip()} {cand}, conclusion: {snippet})"
-    except Exception:  # fail-open: telemetry side channel (annotation flavor on an already-blocking verdict)
-        pass
+    except Exception as exc:  # fail-open: telemetry side channel (annotation flavor on an already-blocking verdict)
+        warn("contradiction_scan", f"{type(exc).__name__}: {exc}")
     return None
 
 
@@ -1520,9 +1536,9 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
                          "the existing products, continue from where the "
                          "worker died. Do NOT redo from zero.")
         report.write_text("\n".join(lines), encoding="utf-8")
-    except OSError:
+    except OSError as exc:
         # Non-fatal: the verdict and summary still surface to the caller.
-        pass
+        warn("stuck_report_write", f"{type(exc).__name__}: {exc}")
     if dead:
         # #11: the guidance line matters as much as the mechanism — name the
         # records and the continue-from contract right in the decide summary.
@@ -1546,8 +1562,9 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
         if reopened:
             summary += (f" Reopened {len(reopened)} stuck IN_PROGRESS claim(s) "
                         f"→ OPEN for re-dispatch: {', '.join(reopened)}.")
-    except OSError:
-        pass
+    except OSError as exc:
+        # fail-open: register IO must not block the verdict.
+        warn("stuck_reopen", f"{type(exc).__name__}: {exc}")
     return summary
 
 
@@ -1807,8 +1824,8 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                       "blockers; no active workers; no "
                                       "pending partials")
                 decision["wake_condition"] = wake
-        except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory PARK downgrade; failure keeps the machine verdict)
-            pass
+        except Exception as exc:  # noqa: BLE001 — fail-open: advisory PARK downgrade; failure keeps the machine verdict
+            warn("park_downgrade", f"{type(exc).__name__}: {exc}")
     # #634: mission-level stall fingerprint — ΔV_m flat K checkpoints while
     # open work remains. Proposal semantics: annotate + emit, never mutate
     # the verdict (P3's Q-table consumes it for ordering). Key attached ONLY
@@ -1831,15 +1848,15 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                  "(predicted_observation required); the "
                                  "bet leads the next dispatch"),
                 }
-            except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory face only)
-                pass
+            except Exception as exc:  # noqa: BLE001 — fail-open: advisory face only
+                warn("stall_response", f"{type(exc).__name__}: {exc}")
             if emit_snapshot:
                 from kunglao_log import emit as _emit_stall
                 _emit_stall(workspace, actor="convergence_check",
                             action="mission_stall",
                             detail=json.dumps(ms, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (fingerprint unavailable → no annotation)
-        pass
+    except Exception as exc:  # noqa: BLE001 — fail-open: fingerprint unavailable → no annotation
+        warn("mission_stall_face", f"{type(exc).__name__}: {exc}")
     # #823 A2: N-arm first-order value signals — shadow posture (always-on
     # since #51: the dict gains the `value_signals` key and one shadow emit).
     import rho_checkpoint
@@ -1895,7 +1912,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
 def _emit_decision_snapshot(ws, d: dict) -> None:
     """#818 batch-1: ONE decision_snapshot event per verdict (actor=
     convergence_check): claims status counts + top-5 priority (id, score).
-    Fail-open — logging must never block the decision (#287 contract)."""
+    Fail-open — logging must never block the decision (issue-287 contract)."""
     try:
         reg = _load_yaml(Path(ws) / "claim-register.yaml")
         claims = reg.get("claims") or []
@@ -1918,8 +1935,8 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
                  "status_counts": counts,
                  "top_priorities": top,
              }, ensure_ascii=False))
-    except Exception:  # fail-open: telemetry side channel (snapshot emit, #287 contract)
-        pass
+    except Exception as exc:  # fail-open: snapshot emit, issue-287 contract
+        warn("decision_snapshot", f"{type(exc).__name__}: {exc}")
 
 
 def _human(d: dict) -> str:
@@ -1994,6 +2011,19 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"decision": "CRASHED"}, ensure_ascii=False))
         return EXIT_CRASHED
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
+    # issue-282: refresh the rendered progress.txt timeline at the checkpoint —
+    # the snapshot append above is the tick-axis writer, so this is the one
+    # place the render is guaranteed to be in lockstep with the axis.
+    # Fail-open: a render failure never blocks the decision (issue-287 contract
+    # shape: observability side channel).
+    try:
+        from progress_timeline import render_and_repair
+        render_and_repair(workspace)
+    except Exception as exc:  # noqa: BLE001 — fail-open, never silent: the
+        # render face skips leave their own stderr trace inside; this arm
+        # covers a render-face CRASH, observed per the issue-275 WARN policy.
+        print(f'[kunglao-agent] progress timeline render skipped: {exc!r}',
+              file=sys.stderr)
     # #287 observability: mirror the convergence decision to the structured
     # event log. #459: detail now carries the decision plus the counts a
     # `kunglao_log --tail` diagnosis needs (no second read of the register).
@@ -2005,8 +2035,8 @@ def main(argv: list[str] | None = None) -> int:
                      f"partial={d['partial_count']} slots={d['free_slots']} "
                      f"workers={d['active_workers']}"),
              exit=d["exit_code"])
-    except Exception:  # fail-open: telemetry side channel (event-log mirror, #287)
-        pass
+    except Exception as exc:  # fail-open: event-log mirror, #287
+        warn("converge_mirror", f"{type(exc).__name__}: {exc}")
     if args.json:
         print(json.dumps(d, indent=2, ensure_ascii=False))
     else:

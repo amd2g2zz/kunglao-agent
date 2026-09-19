@@ -142,7 +142,8 @@ def _gate_ws(tmp_path):
                      expires_minutes=30)
     (ws / "task-oracle.yaml").write_text(yaml.safe_dump(
         {"task_text": "analyze the payload",
-         "open_items": [{"id": "OC-1", "closed_by": "verifier"}]},
+         "workspace_path": str(ws),  # Pinned citation protocol: terminal register claim
+         "open_items": [{"id": "OC-1", "closed_by": "C-302"}]},
         sort_keys=False), encoding="utf-8")
     (ws / "facts").mkdir(exist_ok=True)
     (ws / "facts" / "F001.md").write_text(FACT_PROVEN, encoding="utf-8")

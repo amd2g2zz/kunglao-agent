@@ -49,6 +49,24 @@ registration entry, #445) alongside dispatch_gate):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] recall_inject WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import subprocess
@@ -380,8 +398,8 @@ def recall_files_batch(queries: list[str], cwd: Path | None = None,
                 for q in queries]
     try:
         return _inprocess_batch(queries, cwd)
-    except Exception:  # noqa: BLE001 — fail-open ladder: child fallback next
-        pass
+    except Exception as exc:  # noqa: BLE001 — fail-open ladder: child fallback next
+        warn("recall_files_batch", f"{type(exc).__name__}: {exc}")
     rc, stdout = _run_recall_batch(queries, cwd)
     if rc != 0 or not stdout:
         return [() for _ in queries]
@@ -421,16 +439,16 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
         mod = load_module_by_path(
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
         mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        warn("_trace", f"{type(exc).__name__}: {exc}")
     try:
         mod = load_module_by_path(
             "recall_metrics_recall814",
             SKILL_DIR / "scripts" / "recall_metrics.py")
         mod.record(ws, kind=kind, query=detail[:80], files=files,
                    reason=action)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        warn("_trace_2", f"{type(exc).__name__}: {exc}")
 
 
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:

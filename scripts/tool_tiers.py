@@ -18,6 +18,24 @@ C-006 实录）。本模块只做加载/选择/注入块渲染，零运行时打
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] tool_tiers WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 from pathlib import Path
 
 import yaml
@@ -73,8 +91,8 @@ def scene_for(ws: Path | None) -> str:
             for scene, hints in _SCENE_HINTS.items():
                 if any(h in blob for h in hints):
                     return scene
-        except (OSError, yaml.YAMLError):
-            pass
+        except (OSError, yaml.YAMLError) as exc:
+            warn("scene_for", f"{type(exc).__name__}: {exc}")
     return "generic-binary"
 
 

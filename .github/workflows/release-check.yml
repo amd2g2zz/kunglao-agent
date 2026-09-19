@@ -86,6 +86,13 @@ jobs:
       # over scripts/** and tests/** (constitution rule on formal content)
       run: uv run python scripts/comment_hygiene_lint.py
 
+    - name: Silent-except ratchet gate (issue #275)
+      # fail-loud gate: no-op-body except handlers over scripts/** and
+      # hooks/** — shrink-only per-file ledger (issue #275 batch 1: the
+      # ledger freezes the ~199-site inventory; growth fails, cleanup
+      # shrinks it in later batches)
+      run: uv run python scripts/silent_except_lint.py
+
     - name: Structural integrity check (issue #141)
       run: uv run python scripts/structural_check.py .
 

@@ -279,9 +279,11 @@ def _plan_paths(ws: Path) -> dict:
 
 
 def test_g3_prewritten_plan_rejected_when_dispatch_anchor_exists(tmp_path):
-    """The #239 gate verified the plan FILE, not the AUTHOR — an
+    """The issue-239 gate verified the plan FILE, not the AUTHOR — an
     orchestrator pre-written plan (mtime before dispatch, no anchor citation)
-    must REJECT once a dispatch anchor exists for the claim."""
+    must REJECT once a dispatch anchor exists for the claim. Contract v2:
+    this is the RE-dispatch face — the planning-round (first) dispatch is
+    plan-free, so a ghostwritten plan buys nothing at dispatch time."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / "ws"
     _seed_plan(ws)
@@ -326,25 +328,30 @@ def test_g3_anchor_line_plus_fresh_mtime_passes(tmp_path):
 
 def test_g3_context_file_arms_the_gate(tmp_path):
     """The #527 corridor artifact (runs/dispatch-context-C001.json) carries
-    the nonce too — its dispatch_ts arms the author gate."""
+    the nonce too. Contract v2: on a RE-dispatch (anchor log seeded) the
+    author gate is armed and the corridor ts is accepted provenance, while
+    an uncited pre-dispatch plan still REJECTS."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / "ws"
     _seed_plan(ws)
+    _seed_anchor_log(ws, "C001", TS_T0)
     (ws / "runs" / "dispatch-context-C001.json").write_text(json.dumps(
         {"claim_id": "C-001", "dispatch_ts": TS_T0}), encoding="utf-8")
     os.utime(ws / "runs" / "plan-C001.md",
              (_epoch(TS_T0) - 3600, _epoch(TS_T0) - 3600))
     ok, msg = check_worker_plan(_plan_paths(ws), "C-001")
-    assert ok is False, "context-carried nonce must arm the author gate"
+    assert ok is False, "uncited pre-dispatch plan must reject the re-dispatch"
     # citing the context ts passes
     _seed_plan(ws, body=f"dispatch-anchor: {TS_T0}\ngoal: x\nsteps: y\nfallback: z\n")
     ok2, msg2 = check_worker_plan(_plan_paths(ws), "C-001")
     assert ok2, msg2
 
 
-def test_g3_prompt_context_block_arms_the_gate(tmp_path):
-    """A dispatch prompt carrying the KUNGLAO_DISPATCH_CONTEXT block arms
-    the gate even without any on-disk anchor artifact."""
+def test_g3_first_dispatch_is_plan_free_239_v2(tmp_path):
+    """Issue 239 v2 (owner ruling): a FIRST dispatch — no anchor log, only the
+    prompt's own KUNGLAO_DISPATCH_CONTEXT block — is plan-free. The current
+    dispatch's own nonce never counts as a prior dispatch (that would
+    re-create the dispatch-time gate this change removes)."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / "ws"
     _seed_plan(ws)
@@ -354,24 +361,27 @@ def test_g3_prompt_context_block_arms_the_gate(tmp_path):
         "<!-- KUNGLAO_DISPATCH_CONTEXT v1 -->\n"
         f'```json\n{{"claim_id": "C-001", "dispatch_ts": "{TS_T0}"}}\n```\n')
     ok, msg = check_worker_plan(_plan_paths(ws), "C-001", prompt)
-    assert ok is False, "prompt-carried nonce must arm the author gate"
+    assert ok, f"first dispatch must not be plan-gated: {msg}"
 
 
 def test_g3_not_armed_legacy_posture_unchanged(tmp_path):
-    """Regression pin (#239/#294): no dispatch anchor anywhere -> the gate
-    behaves exactly as before (content check only)."""
+    """Regression pin (issue 239/294, v2 reading): no dispatch anchor anywhere ->
+    FIRST dispatch -> the gate passes (plan-free planning round; a plan on
+    disk is not even consulted)."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / "ws"
     _seed_plan(ws)
     ok, msg = check_worker_plan(_plan_paths(ws), "C-001")
-    assert ok, f"legacy posture must stay green: {msg}"
+    assert ok, f"first dispatch must stay green: {msg}"
 
 
 def test_g3_prompt_relaxation_path_untouched(tmp_path):
-    """Regression pin: plan referenced in the prompt (worker writes it
-    post-dispatch) still passes — that IS worker authorship by construction."""
+    """Regression pin: the plan path referenced in the prompt is the
+    RE-DISPATCH continuity leg (contract v2) — it passes with a prior approved
+    dispatch even while the file does not exist yet."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / "ws"
+    _seed_anchor_log(ws, "C001", TS_T0)
     ok, msg = check_worker_plan(
         _plan_paths(ws), "C-001",
         "write runs/plan-C001-strings.md first, then execute")

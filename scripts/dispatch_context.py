@@ -49,6 +49,24 @@ BLIND guarantees (issue #527 verifier BLIND 硬排除):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] dispatch_context WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 from pathlib import Path
@@ -169,8 +187,8 @@ def _validated_capability(ws: Path, claim_id: str) -> dict:
         for cid, cap in evidence.validated_capabilities:
             if cid in claim_ids:
                 return {"claim_id": cid, "capability": cap}
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_validated_capability", f"{type(exc).__name__}: {exc}")
     return {}
 
 

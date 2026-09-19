@@ -1,0 +1,7 @@
+schema: silent-except-baseline/1
+unit: per-file count of silent-swallow except handlers (no-op body, no raise, no trace
+  call)
+policy: 'ratchet only shrinks: a count above the ledger fails; an entry whose count
+  reaches zero is deleted; a partially cleared entry is tightened in the same change;
+  an entry whose file is gone is stale and fails; new debt without an entry fails'
+files: {}

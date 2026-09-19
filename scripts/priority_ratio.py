@@ -23,7 +23,8 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   each `target_pq` == the claim's `answers_question`) are Bernoulli
   posteriors (#106 CasePosterior, runs/posteriors.yaml). ONE Thompson Beta
   sample per linked case, summed; a claim with no linked case samples the
-  Beta(1,1) prior once — cold start is UNIFORM RANDOM, which is Thompson's
+  Beta(1,1) prior once — cold start is uniform-random WITHIN a round (the
+  per-round seed itself advances with the ledger row count), which is Thompson's
   intrinsic exploration: an uncertain arm occasionally ranks first with no
   threshold gate, and bad priors recover by evidence.
 
@@ -43,9 +44,15 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
   random.Random(0): same inputs → same ranking (anchor-deterministic).
   Live callers (kunglao-decide, worker_budget.check_priority) share ONE
-  seed source, posterior_rng(ws) — a digest of the CASES posterior state,
-  so the sample moves when evidence moves (the issue's determinism clause:
-  "same rank given the same posterior state") and DECIDE + the dispatch
+  seed source, posterior_rng(ws) — the #251 f(posterior_state, round)
+  digest: sha256 of the canonical CASES posterior payload plus the round
+  (the convergence ledger's RAW snapshot-row count, round_index). The
+  sample moves when evidence moves OR the round advances — static
+  posteriors can no longer freeze Thompson (the #251 defect: 5/5
+  identical rankings on one rng_base; 53 consecutive in the wild) — while
+  the determinism clause survives per-round ("same rank given the same
+  posterior state and round", no wall clock anywhere: the round axis is
+  an append-order counter, machine-independent) and DECIDE + the dispatch
   gate can never disagree about rank #1 (#100/#101 die at the root). The
   per-claim rng is forked from ONE base draw keyed by claim_id, so a
   register reorder never reshuffles dispatch order.
@@ -75,6 +82,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] priority_ratio WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -173,8 +198,8 @@ class EvidenceView:
                               or {}).get("claims") or []:
                         if str(c.get("status", "")).upper() in TERMINAL:
                             terminal_claims.add(c.get("id"))
-                except (yaml.YAMLError, OSError):
-                    pass  # fail-open: broken register must not break ranking
+                except (yaml.YAMLError, OSError) as exc:
+                    warn("from_workspace", f"{type(exc).__name__}: {exc}")
         caps, obstacles = _scan_failure_artifacts(ws)
         classes, overrides = load_value_weights(ws)
         return cls(frozenset(terminal_claims), verified, {}, lines,
@@ -532,16 +557,56 @@ def _load_oracle_cases(ws: Path | None) -> list[tuple[str, str]]:
     return out
 
 
-def case_face_seed(ledger: PosteriorLedger) -> int:
-    """Deterministic seed digest of the CASES posterior state (#106).
+# ===================== Thompson seed contract (EXP-1) =====================
 
-    Only the cases namespace enters the seed: a PQ-categorical update must
-    move the ΔH term, not reshuffle the Thompson case samples (one signal,
-    one channel). Same posterior state → same ranking (the #107 determinism
-    clause); a runner verdict (new alpha/beta) moves the seed — the tick
-    variation Thompson needs, with no clock and no counter file."""
+# The round axis reads the convergence ledger by name (the writer's own
+# constant, scripts/convergence_check.py — pinned equal by
+# tests/test_priority_ratio.py::test_251_accessor_ledger_name_matches_the_writer;
+# a local constant avoids importing the whole checker into every ranker
+# consumer).
+CONV_LEDGER_NAME = ".convergence_ledger.jsonl"
+
+
+def round_index(ws) -> int:
+    """round := RAW snapshot-row count in `<ws>/.convergence_ledger.jsonl`.
+
+    The writer (convergence_check._append_ledger) stores no round field —
+    the index IS the row count. The filter mirrors
+    convergence_health.assess's snapshot face: a snapshot row has no
+    "type" key and carries "open_count" (OPERATOR_ACTION / rollup rows are
+    events, not snapshots); unparseable dirty lines are skipped (#103
+    tolerance, via the kunglao_log tolerant reader — #863 Family K).
+    Deliberately the RAW count, never assess()["rounds"]:
+    _dedup_consecutive collapses same-turn rows on wall-clock proximity
+    (SAME_TURN_WINDOW_SEC), and a deduped index would leak the clock into
+    the seed, breaking machine-independent replay."""
+    p = Path(ws) / CONV_LEDGER_NAME
+    if not p.exists():
+        return 0
+    # a dirty row can also parse to a non-dict ("5", "[1,2]") — only a
+    # mapping can carry the snapshot face
+    return sum(1 for e in kunglao_log.iter_jsonl(
+                   p.read_text(encoding="utf-8", errors="replace").splitlines())
+               if isinstance(e, dict)
+               and "type" not in e and "open_count" in e)
+
+
+def case_face_seed(ledger: PosteriorLedger, round_no: int) -> int:
+    """Deterministic seed digest of (CASES posterior state, round) — the
+    seed contract f(posterior_state, tick).
+
+    Only the cases namespace enters the posterior half: a PQ-categorical
+    update must move the ΔH term, not reshuffle the Thompson case samples
+    (one signal, one channel). The ROUND half is round_index(ws) — the
+    convergence ledger's raw snapshot-row count — mixed INSIDE the hashed
+    doc ({"cases": ..., "round": n}, one canonical payload), so a runner
+    verdict (new alpha/beta) OR a round advance moves the seed: static
+    posteriors no longer freeze Thompson (the frozen-sample defect). No wall clock
+    anywhere: v1's "no clock and no counter file" claim is retired — there
+    IS a counter file (the ledger), and the clock was never needed."""
     doc = {"cases": {k: ledger.cases[k].to_dict()
-                     for k in sorted(ledger.cases)}}
+                     for k in sorted(ledger.cases)},
+           "round": int(round_no)}
     payload = json.dumps(doc, sort_keys=True, ensure_ascii=False)
     return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
 
@@ -552,15 +617,26 @@ def posterior_rng(ws) -> random.Random:
     this, so they can never disagree about rank #1 (#100/#101 die at the
     root: one ranker, one seed).
 
-    Seed = case_face_seed(runs/posteriors.yaml); empty/absent ledger →
-    Random(0) (cold start). A PosteriorSchemaError (unknown ledger version —
-    the #106 version wall) propagates LOUD: DECIDE lands in its
-    conservative-BLOCKED path, the gate fails open with a trace. Never a
-    silent wrong-schema read."""
+    Seed = case_face_seed(runs/posteriors.yaml, round_index(ws)) — the
+    f(posterior_state, round) contract. The empty/absent-posteriors
+    cold start is the SAME hash face ({"cases": {}, "round": n}) — v1
+    short-circuited to constant Random(0) BEFORE any hashing and froze the
+    cold start forever, regardless of round; that branch is gone. A
+    PosteriorSchemaError (unknown ledger version — the #106 version wall)
+    propagates LOUD: DECIDE lands in its conservative-BLOCKED path, the
+    gate fails open with a trace. Never a silent wrong-schema read."""
+    return posterior_seed_state(ws)[0]
+
+
+def posterior_seed_state(ws) -> tuple[random.Random, int]:
+    """posterior_rng PLUS the round it was seeded at (adversarial review):
+    telemetry callers must thread THIS round — a second round_index(ws)
+    read races a concurrent _append_ledger append and would record round
+    n+1 beside an rng_base derived from round n (tail replay mismatch,
+    frozen-delta miscounts)."""
+    rnd = round_index(ws)
     ledger = PosteriorLedger.load(ws)
-    if not ledger.cases:
-        return random.Random(0)
-    return random.Random(case_face_seed(ledger))
+    return random.Random(case_face_seed(ledger, rnd)), rnd
 
 
 # ---------- #157 algorithm event log: rank_feeds (one emit per RUN) --------
@@ -583,11 +659,20 @@ def _evidence_digest(evidence: EvidenceView) -> str:
 
 
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
-                     rng_base: int, actions: list[Action]) -> None:
+                     rng_base: int, actions: list[Action],
+                     round_no: int | None) -> None:
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
     per-claim Thompson feeds + the input fingerprint (claims hash,
-    evidence-view digest, rng base draw). Given the seed, the ranking is
-    exactly replayable from the event tail.
+    evidence-view digest, rng base draw, #251 round). Given the seed inputs,
+    the ranking is exactly replayable from the event tail.
+
+    Frozen-sampling observable: the THREADED seed round rides the
+    fingerprint doc next to ``rng_base``, so frozen sampling (equal rng_base
+    across advancing rounds — the 53-consecutive wild audit) is detectable
+    from the event tail in a one-line delta. The fingerprint hash covers the
+    round key. Never re-read round_index(ws) here when the round is
+    THREADED — the None fallback re-read (static-fixture callers only)
+    lives inside the fail-open try. See posterior_seed_state.
 
     SILENT FAIL-OPEN for the ranking (the decide_fail_open contract, #569):
     a crash in payload build or emit never reaches the ranking result. Issue
@@ -607,7 +692,9 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
         evidence_hash = _evidence_digest(evidence)
         fp_doc = {"claims_hash": claims_hash,
                   "evidence_hash": evidence_hash,
-                  "rng_base": rng_base}
+                  "rng_base": rng_base,
+                  "round": int(round_no) if round_no is not None
+                  else round_index(ws)}
         fingerprint = hashlib.sha256(json.dumps(
             fp_doc, sort_keys=True, ensure_ascii=False)
             .encode("utf-8")).hexdigest()
@@ -618,6 +705,7 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
+                            arm=(actions[0].claim_id if actions else None),
                             detail=json.dumps(payload, sort_keys=True,
                                               ensure_ascii=False)) is False:
             # Issue 218/225: the health bit tracks the LAST ATTEMPT. The
@@ -636,12 +724,15 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
 
 
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
-                   rng: random.Random | None = None) -> list[Action]:
+                   rng: random.Random | None = None,
+                   round_no: int | None = None) -> list[Action]:
     """#107 Thompson ranking (purely mechanical, zero LLM).
 
     Input: claims (claim-register claims[]), deps (claim_deps.yaml {depends_on, competitor_groups}),
           evidence (EvidenceView; `ws` present → #106 posteriors + oracle cases load),
-          rng (injected; None → random.Random(0) — deterministic)
+          rng (injected; None → random.Random(0) — deterministic),
+          round_no (the round the rng was seeded at — threaded to the emit;
+          None → re-read round_index(ws), fine for static test fixtures only)
     Output: the sorted Action list (Thompson sample descending, stable
           tie-break by claim_id — the #107 spec sort).
 
@@ -659,6 +750,20 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         depends_on = {c["id"]: list(c.get("depends_on") or [])
                       for c in claims if c.get("id") and c.get("depends_on")}
     terminal = evidence.terminal_fact_claims
+    # issue 241 (review round 1, CRITICAL): replacement lineage satisfies the
+    # dep gate alongside the facts face. A parent carrying `superseded_by` is
+    # terminal by replacement (status_defs SUPERSEDED / issue 59) — its scope
+    # lives in the successors, so its dependents must rank. This is a REGISTER
+    # consult, deliberately NOT folded into EvidenceView: the facts index is
+    # the evidence channel and its zero-rows fallback (issue 594) keeps its
+    # semantics; supersession is lineage, never an evidence artifact. The
+    # mint_split_claims fan-out writes exactly this shape (parent SUPERSEDED
+    # + superseded_by = sub ids, register only) — without this consult the
+    # split's sub-claims stay dep-blocked forever in any workspace whose
+    # facts index already carries a terminal row (settled subs cite subs,
+    # never the parent — the block would never lift).
+    superseded = {c["id"] for c in claims
+                  if c.get("id") and c.get("superseded_by")}
 
     # dispatchable candidates: OPEN + attempts<3 + all depends_on terminal
     candidates: list[dict] = []
@@ -669,7 +774,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         if attempts_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
             continue
         parents = depends_on.get(cid, []) or []
-        if any(p not in terminal for p in parents):
+        if any(p not in terminal and p not in superseded for p in parents):
             continue
         candidates.append(c)
 
@@ -693,7 +798,8 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         child = random.Random(f"thompson/{base}/{cid}")
         # case face: ONE Thompson Beta sample per linked oracle case, summed;
         # no linkage → a single Beta(1,1) prior sample (cold start = uniform
-        # random: Thompson's intrinsic exploration, no threshold gate).
+        # random WITHIN a round — the per-round seed advances: Thompson's
+        # intrinsic exploration, no threshold gate).
         if linked:
             case_face = 0.0
             for case_id in linked:
@@ -713,10 +819,16 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # ΔH_PQ: H(categorical) — the updatable quantity on the claim's PQ.
         pq_cat = ledger.pqs.get(pq) if pq else None
         dh = pq_cat.entropy() if pq_cat is not None else 0.0
-        dh_state = (f"PQ '{pq}' categorical H={round(dh, 6)} bit"
-                    if pq_cat is not None else
-                    f"no PQ categorical for '{pq or '-'}' in "
-                    f"runs/posteriors.yaml -> dH=0")
+        if pq_cat is not None and str(c.get("boundary_type") or "") == "epistemic":
+            # issue 250: a situational PQ (mint+seed writes ledger.pqs for
+            # situational unknowns) — same LAMBDA_DH term, named source.
+            dh_state = (f"PQ '{pq}' situational categorical "
+                        f"H={round(dh, 6)} bit (epistemic claim)")
+        elif pq_cat is not None:
+            dh_state = f"PQ '{pq}' categorical H={round(dh, 6)} bit"
+        else:
+            dh_state = (f"no PQ categorical for '{pq or '-'}' in "
+                        f"runs/posteriors.yaml -> dH=0")
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
@@ -746,13 +858,16 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         ))
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # The emit below reads actions[0] as the event's arm — valid only
+    # because this sort already ran: actions[0] IS the selected arm.
     # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
     # The emit consumes the ALREADY-BUILT actions — a crash inside it can
     # never change the ranking result (pinned by
     # tests/test_algorithm_event_log_157.py). No ws -> pure in-memory
     # surface, nothing to log to (bare-EvidenceView calls stay pure).
     if evidence.ws is not None:
-        _emit_rank_feeds(evidence.ws, claims, evidence, base, actions)
+        _emit_rank_feeds(evidence.ws, claims, evidence, base, actions,
+                         round_no=round_no)
     return actions
 
 
@@ -1012,8 +1127,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         kunglao_log.emit(ws, actor="priority_ratio",
                          action="priority_deviation", detail="module wired")
-    except Exception:  # noqa: BLE001 — observability never disturbs the run
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the run
+        warn("main", f"{type(exc).__name__}: {exc}")
     reg = _load_yaml(ws / "claim-register.yaml")
     deps = _load_yaml(ws / "claim_deps.yaml")
     evidence = EvidenceView.from_workspace(ws)

@@ -54,12 +54,14 @@ def test_emit_new_fields_land_in_row(tmp_path):
 
 def test_emit_absent_fields_are_null_keys(tmp_path):
     """Backward-compatible schema: absent optional fields are explicit nulls
-    (stable key set) — old consumers use .get() and keep working."""
+    (stable key set) — old consumers use .get() and keep working. epoch is
+    no longer nullable-by-omission: it inherits the tick axis (0 on a
+    workspace with no convergence ledger — the real cold-start tick)."""
     ws = _mk_ws(tmp_path)
     kunglao_log.emit(ws, "test", "converge")
     row = _rows(ws)[-1]
     assert row["arm"] is None
-    assert row["epoch"] is None
+    assert row["epoch"] == 0
     assert row["hypothesis_ref"] is None
     assert row["version"] is None or isinstance(row["version"], str)
 

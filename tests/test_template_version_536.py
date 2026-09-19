@@ -21,7 +21,9 @@ from _factories import seed_bins, seed_oracle_anchors
 def test_skill_version_is_semver_and_matches_pyproject() -> None:
     """Strict X.Y.Z, or the PEP 440 normalized post-release form
     X.Y.Z.postN (the v0.1.5-patch1 line). Tag-style names
-    ("0.1.5-patch1") stay rejected."""
+    ("0.1.5-patch1") stay rejected. (Ported from the release lineage
+    for issue 258 — dev's strict-3-part form rejects the released
+    string.)"""
     v = tv.read_skill_version()
     base, sep, post = v.partition(".post")
     parts = base.split(".")

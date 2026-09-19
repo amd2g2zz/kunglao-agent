@@ -58,6 +58,24 @@ dispatches via the Agent tool):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] dispatch_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -221,8 +239,8 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     try:
         if load_hooks_lib().parse_dispatch_json(text)[2] is not None:
             return (claim_id, "v1")
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_parse_dispatch", f"{type(exc).__name__}: {exc}")
     return (claim_id, "v0")
 
 
@@ -703,8 +721,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         parent = (target or {}).get("obstacle_for")
         if parent:
             claim_ids.add(str(parent))
-    except Exception:  # noqa: BLE001 — register unreadable -> card scope is the claim
-        pass
+    except Exception as exc:  # noqa: BLE001 — register unreadable -> card scope is the claim
+        warn("_capability_guard", f"{type(exc).__name__}: {exc}")
     try:
         evidence = pr.EvidenceView.from_workspace(ws)
     except Exception:  # noqa: BLE001 — artifact scan failure -> fail open
@@ -749,6 +767,28 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         "the validated family.")
 
 
+# ===================== #237 D2: verifier pass-through =====================
+
+# #237 H1: the verifier marker set + the predicate are single-sourced in
+# lib_kunglao (VERIFIER_REMEDIATION_AGENTS / is_verifier_remediation_dispatch)
+# — worker_budget's pre_check drift gate rides the SAME dispatch (both hooks
+# sit on PreToolUse:Agent), and it must reach the identical verdict or the
+# honest remediation path deadlocks at the second hook.
+def _is_verifier_remediation_dispatch(ws: Path, claim_id: str,
+                                      payload: dict,
+                                      prompt_text: str) -> bool:
+    """#237 D2: True when the dispatch targets a verifier-class agent for a
+    PROVEN claim. Delegates to the lib single source shared with
+    worker_budget's pre_check drift gate; lib outage -> False (fail-closed
+    to the legacy gate behavior — an unavailable resolver must not NEWLY
+    open the drift gate)."""
+    try:
+        return load_hooks_lib().is_verifier_remediation_dispatch(
+            ws, claim_id, payload, prompt_text)
+    except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
+        return False
+
+
 def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
                      trace_id: str | None = None) -> int | None:
     """#602: plan-drift auto-integration wire-up for L621 dispatch path entry.
@@ -787,7 +827,7 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
     except Exception:  # noqa: BLE001 — registry unavailable: degraded copy
         # of the documented trio (hook crash-safety, NOT a second authority;
         # contracts.py owns the value — #102).
-        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})
+        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})  # noqa: F841 — fallback binding
     try:
         proc = _sp.run(
             [sys.executable, str(script), str(ws), "--auto"],
@@ -1059,23 +1099,18 @@ def _agent_allowed_tools(agent_name: str | None) -> list[str] | None:
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
-    """Dispatched agent identity from the Agent tool payload or v1 meta."""
-    tool_input = payload.get("tool_input") or {}
-    if isinstance(tool_input, dict):
-        for key in ("subagent_type", "name"):
-            v = tool_input.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
+    """Dispatched agent identity from the Agent tool payload or v1 meta.
+
+    #237 H1: delegated to lib_kunglao.resolve_dispatch_agent — the same
+    resolver worker_budget's #461 corroboration row uses, so the D2
+    pass-through face and the D3 corroborating row can never disagree on
+    the agent identity for one payload (a subagent_type-shaped dispatch
+    used to resolve here but record `agent=?` in the row, so log
+    corroboration never landed)."""
     try:
-        parse_dispatch_json = load_hooks_lib().parse_dispatch_json
-        _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
-        if isinstance(meta, dict):
-            v = meta.get("agent")
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-    except Exception:  # noqa: BLE001 — metadata best-effort only
-        pass
-    return None
+        return load_hooks_lib().resolve_dispatch_agent(payload, prompt_text)
+    except Exception:  # noqa: BLE001 — lib outage: identity unknown
+        return None
 
 
 def _tool_matches_allowed(pattern: str, tool: str) -> bool:
@@ -1327,10 +1362,14 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
     Trigger: the target claim's answers_question names a task_spec
     primary_question AND that PQ is being dispatched for the FIRST time
     (no claim-keyed dispatch-history row answers it yet). The check: the
-    hypothesis layer (#528 store) must hold >= 2 non-adjudicated candidates
-    for the PQ — the #412 seeding contract's "orchestrator fills candidates
-    BEFORE dispatching the first C-NN", now enforced on the one
-    un-bypassable face. Subsequent dispatches on the same PQ are
+    hypothesis layer must hold >= 2 competing explanations for the PQ —
+    counted across BOTH faces since the issue 252 bridge: minted family
+    arm claims (competitor_group hyp-<H-id> bound to the PQ scaffold) and
+    parked store candidate strings (transitional; the cold-start sweep
+    converts strings into arms). The issue 412 seeding contract's
+    "competing explanations BEFORE dispatching the first C-NN", enforced
+    on the one un-bypassable face against the sanctioned representation.
+    Subsequent dispatches on the same PQ are
     unrestricted: the first hypothesis round supplies the prior.
     Parks/reinstatements are unaffected (answers_question null -> silent).
 
@@ -1352,6 +1391,22 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
         candidates = hs.open_candidates_for_question(
             hs.HypothesisStore(ws / "hypotheses").list_all(), qid,
             claim_question)
+        # issue 252: family ARMS are the sanctioned competing-explanation
+        # representation — the bridge sweep drains parked strings and the
+        # no-orphan lint bans re-parking them, so admission counts the
+        # minted arm claims too (strings + arms, transitional; a
+        # sweep-drained workspace passes through minted arms alone).
+        with scripts_on_path():
+            import hypothesis_bridge as hb
+        try:
+            reg_claims = (yaml.safe_load(
+                (ws / "claim-register.yaml").read_text(encoding="utf-8"))
+                or {}).get("claims") or []
+        except Exception:  # noqa: BLE001 — unreadable register -> no arms
+            reg_claims = []
+        arms = hb.open_family_arms_for_question(
+            reg_claims, hs.HypothesisStore(ws / "hypotheses").list_all(),
+            qid, claim_question)
     except Exception as exc:  # noqa: BLE001 — #103 tiering: store outage
         # must not block. WARN + trace, dispatch proceeds unadmitted.
         print(
@@ -1364,28 +1419,30 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
                     f"qid={qid}; reason=store_read_failed; "
                     f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
         return None
-    if len(candidates) >= MIN_ADMITTED_CANDIDATES:
+    if len(set(candidates) | set(arms)) >= MIN_ADMITTED_CANDIDATES:
         return None
     # #459: the REJECT face reaches the unified log like top1/capability.
     _emit_trace(ws, "hypothesis_admission_reject", claim_id,
-                f"qid={qid}; candidates={len(candidates)}; "
+                f"qid={qid}; candidates={len(candidates)}; arms={len(arms)}; "
                 f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
                 trace_id=trace_id)
     return _reject_with_guidance(
         "hypothesis_admission",
         f"{claim_id} answers {qid}, but the hypothesis layer holds only "
-        f"{len(candidates)} non-adjudicated candidate(s) for {qid} — the "
-        f"first dispatch into a PQ neighborhood requires competing "
-        f"explanations (anchoring risk is highest exactly when the system "
-        f"knows least; a single-hypothesis entry is how edge findings get "
-        f"chased as major ones).",
-        f"file ≥2 competing candidates for {qid}, each naming its falsifier "
-        f"(what observation would eliminate it — the falsifier-library "
-        f"semantics: a candidate that cannot say what would kill it is an "
-        f"opinion, not a candidate): fill `candidates:` "
-        f"on the open `pq:{qid}` scaffold hypothesis in hypotheses/ (or "
-        f"file one hypothesis per competitor via hypothesis_store), then "
-        f"re-dispatch.", issue="109")
+        f"{len(set(candidates) | set(arms))} competing explanation(s) for "
+        f"{qid} — the first dispatch into a PQ neighborhood requires "
+        f"competing explanations (anchoring risk is highest exactly when "
+        f"the system knows least; a single-hypothesis entry is how edge "
+        f"findings get chased as major ones).",
+        f"mint >=2 competing family arms for {qid} via "
+        f"`python scripts/hypothesis_bridge.py {ws} --mint <H-ID> "
+        f"'<candidate 1>,<candidate 2>'` (the sanctioned representation — "
+        f"each arm enters claim-register.yaml as a TS-samplable claim "
+        f"with the family linkage), or file one OPEN hypothesis per "
+        f"competitor via hypothesis_store, then re-dispatch. (Filling "
+        f"`candidates:` on the `pq:{qid}` scaffold also counts, "
+        f"transitionally — the cold-start sweep converts strings into "
+        f"arms.)", issue="109")
 
 
 # ===================== #772 redo-leak WARN (L4) =====================
@@ -1633,9 +1690,20 @@ def main() -> int:
     # acceptable (operator can re-dispatch). #102: a crash rc takes the
     # observable degrade face (plan_drift_crashed trace row) — trace_id
     # rides so the row attributes to the mission chain.
-    rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
-    if rc is not None:
-        return rc
+    # #237 D2: verifier pass-through — a kunglao-redteam / verdict-scorer
+    # dispatch for a PROVEN claim IS the flagged UNVERIFIED_EVIDENCE set's
+    # remediation; the B1o blocker must allow it, not reject it (the honest
+    # path was structurally absent and self-minting became the only exit).
+    # Observed, fail-open: the trace row lands in the unified log.
+    if _is_verifier_remediation_dispatch(ws, claim_id, payload, prompt_text):
+        _pt_agent = _resolve_dispatch_agent(payload, prompt_text) or "?"
+        _emit_trace(ws, "drift_verifier_passthrough", claim_id,
+                    f"verifier dispatch allowed through the drift gate "
+                    f"(agent={_pt_agent})", trace_id=trace_id)
+    else:
+        rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
+        if rc is not None:
+            return rc
 
     # #109 hypothesis admission — same enforcement layer as must-stop/top1
     # (activated main flow, REJECT-capable). Protocol completeness precedes

@@ -185,15 +185,20 @@ def test_dry_run_prints_plan(up, tmp_path, capsys):
 
 
 def test_already_current_is_noop(up, tmp_path, capsys):
-    """A stamped-cur workspace plans nothing — no version-specific repair,
-    no terminal carry — and takes the fast path. Natural behavior since the
-    carry became the planner's universal tail (no registry isolation)."""
+    """#755 T6 note: this pins the DRIVER fast-path print. The registry now
+    keeps patch entries above the release stamp reachable ("0.1.4"), so a
+    stamped-cur workspace plans migrations by design; isolating the
+    fast-path contract with an empty registry is the honest unit here."""
     ws = synth_v012_ws(tmp_path)
     assert up.main([str(ws)]) == 0
     cur = template_version.read_skill_version()
     (ws / "CLAUDE.md").write_text(
         _stamp_line(cur) + "\n# fresh\n", encoding="utf-8")
-    rc = up.main([str(ws)])
+    saved, up.MIGRATIONS = up.MIGRATIONS, []
+    try:
+        rc = up.main([str(ws)])
+    finally:
+        up.MIGRATIONS = saved
     assert rc == 0
     assert "already" in capsys.readouterr().out.lower()
 
@@ -325,24 +330,14 @@ def test_dry_run_leaves_no_git(up, tmp_path):
     assert not (ws / ".gitignore").exists()
 
 
-# ------------------------------------------------- universal carry (v0.1.5-patch1)
+# ------------------------------------------------- PEP 440 post releases (issue 258)
 
 def test_vkey_orders_pep440_post_releases(up):
     """The patch release string must sort after its base and before the
-    next feature version; tag-style names stay unparseable."""
+    next feature version; tag-style names stay unparseable. Ported from
+    the v0.1.5-patch1 release lineage: dev's naive int-split _vkey crashes
+    on the released 0.1.5.post1 string (issue 258 version bookkeeping)."""
     assert up._vkey("0.1.5") < up._vkey("0.1.5.post1") < up._vkey("0.1.6")
     assert up._vkey("0.1.5.post10") > up._vkey("0.1.5.post2")
     with pytest.raises(ValueError):
         up._vkey("0.1.5-patch1")
-
-
-def test_plan_appends_universal_terminal_carry(up, tmp_path):
-    """No per-release boilerplate: ANY behind workspace — even one at or
-    past the last version-specific repair — gets the frame/stamp carry as
-    the plan tail; an already-current workspace plans nothing."""
-    ws = synth_v012_ws(tmp_path)
-    plan = up._plan_migrations(up._vkey("0.1.5"), "0.1.5.post1")
-    assert plan and plan[-1][0] == "0.1.5.post1"
-    items = plan[-1][1](ws, True)
-    assert any(i.startswith("template_stamp_refresh") for i in items)
-    assert up._plan_migrations(up._vkey("0.1.5.post1"), "0.1.5.post1") == []

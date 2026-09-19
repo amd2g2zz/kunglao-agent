@@ -53,6 +53,24 @@ touched.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] state_anchor WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -193,8 +211,8 @@ def _open_ids(ws: Path, snap_row: dict | None) -> list:
             if i not in seen:
                 ids.append(i)
                 seen.add(i)
-    except Exception:  # noqa: BLE001 — register read is best-effort
-        pass
+    except Exception as exc:  # noqa: BLE001 — register read is best-effort
+        warn("_open_ids", f"{type(exc).__name__}: {exc}")
     return ids
 
 

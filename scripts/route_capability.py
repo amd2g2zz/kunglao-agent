@@ -60,6 +60,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] route_capability WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import re
@@ -424,15 +442,15 @@ def load_workspace_state(ws) -> dict:
             encoding="utf-8"))
         state["mem_gate_verdict"] = (mg.get("verdict")
                                      if isinstance(mg, dict) else None)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        warn("load_workspace_state", f"{type(exc).__name__}: {exc}")
     try:
         probes = json.loads((ev / "tool-probes.json").read_text(
             encoding="utf-8"))
         if isinstance(probes, dict):
             state["tool_probes"] = probes
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        warn("load_workspace_state_2", f"{type(exc).__name__}: {exc}")
     state["gitnexus_index"] = _valid_gitnexus_marker(
         ev / "gitnexus_index.json")
     # #692 WP6: apkid obfuscator rules (the deobf COMPOSITION prior)

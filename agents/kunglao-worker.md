@@ -71,12 +71,19 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    `confidence: low` + `unverified-part: <what>`. Write "unconfirmed: X may be
    A or B (missing C)" rather than "X is A". Prevents misleading the verifier
    and the report.
-3. **PLAN FIRST, execute second** (v1.9.29) — write `runs/plan-<task>.md` BEFORE
-   any tool call: `goal:` / `preflight:` (verify signatures/APIs/paths FIRST —
-   javap -s / context7 / read source — trial-and-error is the most expensive
-   path, e.g. wrong method sig → full jdb session rerun) / `steps:` with
-   expected output each / `fallback:` ≥1 alternative per step. Update the plan
-   on drift. Report `plan_vs_actual:` at the end.
+3. **PLAN FIRST, execute second** (v1.9.29; plan ownership v2 owner ruling) —
+   the dispatch that starts your session carries intent, NOT a plan: planning
+   is YOUR first act of execution. Your FIRST sanctioned write is your own
+   `runs/plan-<task>.md`: `goal:` / `preflight:` (verify signatures/APIs/
+   paths FIRST — javap -s / context7 / read source — trial-and-error is the
+   most expensive path, e.g. wrong method sig → full jdb session rerun) /
+   `steps:` with expected output each / `fallback:` ≥1 alternative per step.
+   Cite your dispatch anchor as provenance — a `dispatch-anchor:
+   <dispatch_ts>` line carrying the dispatch_ts from your
+   KUNGLAO_DISPATCH_CONTEXT block — because a plan you did not author in
+   your session does not satisfy your contract (maker != checker), and any
+   re-dispatch beyond the planning round requires that plan reference.
+   Update the plan on drift. Report `plan_vs_actual:` at the end.
 4. **Write files or you FAILED** (W-15 lesson) — worker-status first line
    `[HH:MM] step: started <task> | status: in-progress`, append per step; facts
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
@@ -207,6 +214,13 @@ session had to rerun; verifying the signature with javap first takes
      now)
    - `fallback:` a fallback for each step's failure (≥1, not "retry the
      same step")
+   - `if-fails:` (per-step, issue 250) — every ENUMERATED step under
+     `steps:` is followed by an `if-fails:` line carrying condition +
+     action ("if xref index empty -> scan for RegisterNatives"). The
+     plan-first gate REJECTS a re-dispatch plan whose enumerated steps
+     carry no if-fails branch: real RE is a tree, dead-ends are expected
+     structure, not an afterthought. Legacy inline one-liner plans are
+     not rejected, but branch them anyway.
 2. **Execute** — follow the plan, compare each step against its expectation.
    Drift → **update the plan, then continue** (plan-drift is normal
    intelligence; blind execution without a plan is waste). Hitting a wall
@@ -326,6 +340,10 @@ was discarded as untrusted). Write in this order:
 3. **Report** — `runs/<YYYY-MM-DD-HHMMSS>-<task>.md` (NOT `verify-*` — that
    filename is reserved for the verifier subagent).
 4. **LAST** — append one line to `progress.txt`: `[YYYY-MM-DD HH:MM] [W-<n> DONE] <summary>`.
+   (issue-282: progress.txt is regenerated from the event ledger at checkpoints;
+   your appended lines are preserved — the renderer migrates them into the
+   rendered timeline and mirrors them in `runs/progress-narrative.jsonl`.
+   Append exactly as before; never rewrite the file yourself.)
 
 <!-- contract: knowledge-sedimentation -->
 ## Knowledge sedimentation — durable result note

@@ -49,6 +49,15 @@ Taxonomy (25 classes):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
 import argparse
 import json
 import sys
@@ -61,8 +70,8 @@ from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+except (AttributeError, ValueError) as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 def _worker_protocol():
     """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
@@ -145,6 +154,8 @@ ALL_EVENT_TYPES = [
 #   death_verdict_rejected / plan_stall    ask_for_direction_gate TYPE A-E
 #   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
 #   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
+#   plan_repair_overdue / plan_repair_verified
+#                               plan_drift_detector issue-281 bounded-window amendment faces
 #   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
 #   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
@@ -163,6 +174,7 @@ EMIT_ACTIONS = [
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "bridge_lint_findings",  # issue 252 hypothesis-bridge cold-start lint findings (digest face)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_reject",
     "capability_switch",
@@ -183,9 +195,17 @@ EMIT_ACTIONS = [
     "detector_eval",      # #127 a detector ran (detail JSON carries `detector` name + counters)
     "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
+    "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
+    "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "failure_blocked",
+    "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
+    "family_confirmed",    # issue 252 family ledger sync: family confirmed by a positive arm
+    "family_ensured",      # issue 252 hypothesis_bridge idempotent family-scaffold creation
+    "family_refuted",      # issue 252 family ledger sync: all arms settled negative
+    "family_superseded",   # issue 252 family ledger sync: competing hypothesis superseded
+    "family_sync_failed",  # issue 252 guarded sync failure WARN (claim_migrator post-settlement face)
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
@@ -226,9 +246,12 @@ EMIT_ACTIONS = [
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
+    "plan_repair_overdue",  # issue-281 drift REJECT un-repaired past the bounded window (escalation face)
+    "plan_repair_verified",  # issue-281 drift amendment landed within the window (verification face)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
+    "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
@@ -248,6 +271,7 @@ EMIT_ACTIONS = [
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
+    "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)

@@ -300,7 +300,8 @@ def _would_pass_oracle(ws: Path, **extra) -> None:
     skip per their own D4 fail-open rules (isolates the notes face)."""
     oracle = {
         "task_text": "analyze the payload",
-        "open_items": [{"id": "OC-1", "closed_by": "verifier"}],
+        "workspace_path": str(ws),  # Pinned citation protocol: cite a terminal register claim
+        "open_items": [{"id": "OC-1", "closed_by": "C-302"}],
     }
     oracle.update(extra)
     (ws / "task-oracle.yaml").write_text(
@@ -387,7 +388,8 @@ class TestStopFaceNotesDue:
 class TestNotesQueueFailOpen:
     def test_legacy_workspace_without_queue_passes(self, tmp_path):
         shim = _load_shim()
-        ws = _make_ws(tmp_path, [])
+        # Pinned citation protocol: the cited claim C-302 must exist in the register.
+        ws = _make_ws(tmp_path, [{"id": "C-302", "status": "PROVEN"}])
         _activated_state(ws)
         _would_pass_oracle(ws)
         assert shim.process_event({"cwd": str(ws)}) == 0, \
@@ -396,7 +398,8 @@ class TestNotesQueueFailOpen:
     def test_corrupt_queue_blocks_nothing(self, tmp_path):
         gate = _load_scripts_gate()
         shim = _load_shim()
-        ws = _make_ws(tmp_path, [])
+        # Pinned citation protocol: the cited claim C-302 must exist in the register.
+        ws = _make_ws(tmp_path, [{"id": "C-302", "status": "PROVEN"}])
         _activated_state(ws)
         _would_pass_oracle(ws)
         (ws / "runs" / "notes-due.yaml").write_text("{not: [valid", encoding="utf-8")

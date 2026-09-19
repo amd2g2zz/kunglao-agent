@@ -23,6 +23,24 @@ cost 2x~301s = 60% of the 2026-08-25 suite runtime and grew O(n^2) with it).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] acceptance_check WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import os
@@ -222,8 +240,8 @@ def category_regression() -> dict:
     try:
         import pytest_timeout  # noqa: F401
         cmd.append("--timeout=300")
-    except ImportError:
-        pass
+    except ImportError as exc:
+        warn("category_regression", f"{type(exc).__name__}: {exc}")
     rc, stdout, stderr, duration = _run(cmd, KUNGLAO_ROOT, TIMEOUT_S)
 
     (out_dir / "stdout.log").write_text(stdout or "", encoding="utf-8", errors="replace")
@@ -257,8 +275,8 @@ def category_integration() -> dict:
     try:
         import pytest_timeout  # noqa: F401
         cmd.append("--timeout=120")
-    except ImportError:
-        pass
+    except ImportError as exc:
+        warn("category_integration", f"{type(exc).__name__}: {exc}")
     rc, stdout, stderr, duration = _run(cmd, KUNGLAO_ROOT, TIMEOUT_S // 2)
 
     (out_dir / "stdout.log").write_text(stdout or "", encoding="utf-8", errors="replace")
@@ -292,8 +310,8 @@ def category_fault() -> dict:
     try:
         import pytest_timeout  # noqa: F401
         cmd.append("--timeout=60")
-    except ImportError:
-        pass
+    except ImportError as exc:
+        warn("category_fault", f"{type(exc).__name__}: {exc}")
     rc, stdout, stderr, duration = _run(cmd, KUNGLAO_ROOT, TIMEOUT_S // 2)
 
     (out_dir / "stdout.log").write_text(stdout or "", encoding="utf-8", errors="replace")
@@ -414,8 +432,8 @@ def category_smoke() -> dict:
     try:
         import pytest_timeout  # noqa: F401
         cmd.append("--timeout=30")
-    except ImportError:
-        pass
+    except ImportError as exc:
+        warn("category_smoke", f"{type(exc).__name__}: {exc}")
     rc, stdout, stderr, duration = _run(cmd, KUNGLAO_ROOT, 120)
 
     # Full logs (NOT truncated) — per user feedback that app logs are part of

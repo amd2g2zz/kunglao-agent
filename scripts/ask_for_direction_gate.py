@@ -72,6 +72,24 @@ Exit codes:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] ask_for_direction_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import re
@@ -255,8 +273,8 @@ def _emit_interception(workspace: Path, action: str, detail: str, rc: int) -> No
         from kunglao_log import emit
         emit(workspace, actor="orchestrator", action=action,
              detail=detail, exit=rc)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_emit_interception", f"{type(exc).__name__}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +342,12 @@ def find_death_evidence(workspace: Path) -> list:
         REFUTED;
       - a failure_analysis record with outcome REFUTED (capability
         falsified — the disproven method/claim is formally recorded).
+    Pinned scope semantics (issue 233): a path-scoped negative is licensed
+    only by a settled obstacle claim REFUTED (or a capability-falsified
+    failure_analysis) — this standard, unchanged; a task-scoped negative is
+    licensed only by the DEFERRED standard (V-signal + recovery ladder L1-L3
+    + non-empty attempt inventory + wake_condition, per
+    infeasible_signal/infeasible_proposal).
     Fail-closed: missing/unreadable files = no evidence = verdict rejected."""
     out = []
     for c in _load_claims(workspace):

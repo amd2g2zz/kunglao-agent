@@ -61,12 +61,37 @@ import datetime
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
+# issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
+# rate-limited WARN): fault-class degradations take the rate-limited stderr
+# WARN (warn — the _zof_warn pattern of issue 276; one ws per process, so
+# op is the key). The import-time module_emit degradation is the exception:
+# other modules import THIS one for its helpers (the statusline health face
+# imports _oracle_registered), and hook-embedded processes must keep stderr
+# empty (token-zero) — so it lands in the sidecar dict (_note) and main()
+# drains it into runs/.heartbeat-tick.json, the tick's own sidecar.
+_WARN_LAST: dict[str, str] = {}
+_DEGRADED: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] heartbeat_tick WARN (fail-open): {op}: {reason}",
+          file=sys.stderr)
+
+
+def _note(op: str, reason: str) -> None:
+    if op not in _DEGRADED:
+        _DEGRADED[op] = reason
+
+
 # #534: observability lifeline — module-level emit on load.
 try:
     kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
                              detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _note("module_emit", f"{type(exc).__name__}: {exc}")
 from pathlib import Path
 
 import hook_activation as ha
@@ -214,8 +239,8 @@ def noop_breaker(ws: Path, current_hash: str,
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(_json.dumps(
             {"hash": current_hash, "count": count}), encoding="utf-8")
-    except Exception:  # noqa: BLE001 — telemetry must not break the tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — telemetry must not break the tick
+        warn("noop_breaker_state_write", f"{type(exc).__name__}: {exc}")
     if count >= n and _all_workers_waiting(ws):
         return {"tripped": False, "reason": "all-workers-waiting",
                 "consecutive_noop": count, "threshold": n}
@@ -340,6 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     # reading the report — what it dispatched / verified / solved / reactivated.
     # An empty field is the idle-tick fault signal (tokens burned with no action).
     report = {"ts": utc_now(), "workspace": str(ws), "action_taken": ""}
+    if _DEGRADED:
+        # issue 275 sidecar drain: import-time degradations land in the
+        # report (conditional key — reports without degradations keep their
+        # pre-batch byte shape).
+        report["degraded"] = dict(_DEGRADED)
 
     report["selfcheck"] = run("hooks_selfcheck.py", ws)
     report["reconcile"] = run("hook_activation.py", ws, "--reconcile")
@@ -368,8 +398,8 @@ def main(argv: list[str] | None = None) -> int:
         dormant = _dl.dormant_warn(ws)
         if dormant:
             report["detector_dormant"] = dormant
-    except Exception:  # noqa: BLE001 — liveness evidence must not fail the tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — liveness evidence must not fail the tick
+        warn("detector_liveness", f"{type(exc).__name__}: {exc}")
     # #878: registry-driven mechanism scheduling — the tick is the ONLY time
     # host, so the advisory children are no longer hand-wired here. The
     # scheduler walks mechanisms.yaml (schema gate: trigger/cost_class/
@@ -415,8 +445,8 @@ def main(argv: list[str] | None = None) -> int:
     out = ws / "runs" / ".heartbeat-tick.json"
     try:
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — the report write never fails the tick
+        warn("report_write", f"{type(exc).__name__}: {exc}")
 
     # #634 Part B: no-progress circuit breaker — N consecutive identical
     # state fingerprints is the suspended-workspace burn the issue documented
@@ -434,8 +464,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 out.write_text(json.dumps(report, indent=2),
                                encoding="utf-8")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — breaker re-write is fail-open
+                warn("breaker_report_write", f"{type(exc).__name__}: {exc}")
             print(f"*** IDLE CIRCUIT BREAKER: {br['consecutive_noop']} "
                   f"consecutive no-op ticks (>= {br['threshold']}) — "
                   f"PARK or end the session (#634) ***")
@@ -463,8 +493,8 @@ def main(argv: list[str] | None = None) -> int:
                 action="cockpit_sample",
                 detail=json.dumps(cockpit_summary(ws),
                                   ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — cockpit 采样永不打断 tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — cockpit 采样永不打断 tick
+        warn("cockpit_sample", f"{type(exc).__name__}: {exc}")
 
     # step 11b (#142 follow-up, dual-use display): the SAME entropy-honesty
     # values the statusline renders ride the tick report. Computed AFTER the
@@ -484,8 +514,8 @@ def main(argv: list[str] | None = None) -> int:
         report["h_pq"] = _h["h_pq"]
         report["h_trend"] = _h["h_trend"]
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception:  # noqa: BLE001 — a report face never fails the tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+        warn("entropy_face", f"{type(exc).__name__}: {exc}")
 
     # Issue 218: the Thompson rank face rides the same report — ONE
     # computation (scripts/rank_face.py) shared with the statusline snapshot:
@@ -500,8 +530,8 @@ def main(argv: list[str] | None = None) -> int:
         report["rank"] = _r["rank"]
         report["rank_log"] = _r["rank_log"]
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception:  # noqa: BLE001 — a report face never fails the tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+        warn("rank_face", f"{type(exc).__name__}: {exc}")
 
     # step 11c (#142 refinement, event-driven): when this tick HOSTED a
     # settlement/rollup (mission ledger present), that IS a semantic event
@@ -516,8 +546,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             import statusline_snapshot as _sls
             _sls.write_snapshot(ws)
-        except Exception:  # noqa: BLE001 — 快照永不打断 tick
-            pass
+        except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+            warn("snapshot_write", f"{type(exc).__name__}: {exc}")
 
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")

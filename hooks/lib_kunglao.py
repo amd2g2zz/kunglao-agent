@@ -14,6 +14,24 @@ Design: single module imported by all hooks; pure functions, no state.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] lib_kunglao WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -170,6 +188,155 @@ def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
     tier = int(m.group(1))
     tools = [t.strip() for t in m.group(2).split(",") if t.strip()]
     return (tier, tools, m.group(3))
+
+
+# ---- #237 D2/H1: verifier-remediation dispatch identity (single source) ----
+
+# Verifier-class agents (the #57 blind_gate VERIFIER_AGENT_MARKERS set).
+# A dispatch targeting one of these for a PROVEN claim IS the flagged
+# UNVERIFIED_EVIDENCE set's remediation; both hook faces that ride
+# PreToolUse:Agent (dispatch_gate's drift blocker, worker_budget's drift
+# gate) must agree on that identity or the honest path deadlocks again.
+VERIFIER_REMEDIATION_AGENTS = ("kunglao-redteam", "verdict-scorer")
+
+
+def resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
+    """Dispatched agent identity from the Agent tool payload or v1 meta.
+
+    #237 H1 single source: hooks/dispatch_gate._resolve_dispatch_agent (the
+    D2 verifier pass-through face) and hooks/worker_budget_sinks.pre_check
+    (the #461 corroboration row) MUST agree on the agent identity for one
+    payload — the row's `agent=` marker is what plan_drift_detector's D3
+    log corroboration matches, so a resolver split resurrects the deadlock
+    for whichever payload shape the row face fails to resolve.
+
+    Probe order: tool_input.subagent_type (Claude Code's native Agent tool
+    shape) -> tool_input.name -> v1 dispatch meta.agent. None when no
+    candidate carries a non-blank string.
+    """
+    tool_input = payload.get("tool_input") or {}
+    if isinstance(tool_input, dict):
+        for key in ("subagent_type", "name"):
+            v = tool_input.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
+    if isinstance(meta, dict):
+        v = meta.get("agent")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def is_verifier_remediation_dispatch(ws, claim_id: str,
+                                     payload: dict | None = None,
+                                     prompt_text: str = "") -> bool:
+    """#237 D2: True when the dispatch targets a verifier-class agent for a
+    PROVEN claim.
+
+    PROVEN is the UNVERIFIED_EVIDENCE precondition (the class fires only
+    for PROVEN claims), so the register status is the cheap intersection
+    test with the flagged set — no detector re-run in-process. A verifier
+    dispatch for a non-PROVEN claim is ordinary traffic and stays under
+    the drift gates. Register-unreadable -> False (fail-closed to the
+    legacy gate behavior).
+    """
+    agent = resolve_dispatch_agent(payload or {}, prompt_text or "") or ""
+    if not any(m in agent for m in VERIFIER_REMEDIATION_AGENTS):
+        return False
+    try:
+        import yaml
+        reg = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — register unreadable -> no pass-through
+        return False
+    target = next((c for c in (reg.get("claims") or [])
+                   if c.get("id") == claim_id), None)
+    return ((target or {}).get("status") or "").upper() == "PROVEN"
+
+
+# ---- #249: STALLED remedy-exemption identity (single source) ----
+
+# The remedy-declared dispatch marker. A dispatch prompt carrying this line
+# declares "I am the STALLED gate's own prescribed remedy" — admitted ONLY
+# in intersection with detector state (the stuck set / the minted frontier),
+# never on the marker alone. convergence_health's STALLED action prose
+# prints the same literal; the cross-face sync is pinned by
+# tests/test_stalled_remedy_249.py (scripts/ must not import the hooks twin,
+# so the constant is duplicated there with a pinning test — same posture as
+# the #237 H1 agent markers before lib became their single source).
+STALLED_REMEDY_MARKER = "remedy: decompose"
+
+# Round-2 escalation (review HIGH/MEDIUM): the admit telemetry action row
+# the rc=1 face appends for EVERY admitted remedy dispatch; the detector's
+# stalled_state counts consecutive cycles from these rows, and at depth
+# >= STALLED_REMEDY_MAX_DEPTH the follow-through channel closes (channel A
+# stays open, bounded by the plan/zerooutput battery) — repeated remedy
+# cycles escalate toward the human face instead of mint-looping.
+STALLED_REMEDY_ADMIT_ACTION = "stalled_remedy_admitted"
+STALLED_REMEDY_MAX_DEPTH = 2
+
+
+def is_stalled_remedy_dispatch(ws, claim_id, payload=None, prompt_text="",
+                               stuck_ids=None, flatlined_open_ids=None,
+                               remedy_depth=0) -> bool:
+    """#249: True when the dispatch IS the STALLED gate's own prescribed
+    remedy. Mirror of the #237 D2 discipline: a dispatch-prompt declaration
+    (the marker, here) intersected with DETECTOR STATE — never the
+    declaration alone, never the state without a declared purpose.
+
+    Two narrow channels, both marker-gated:
+      A. remedy-declared: the target claim is in the STUCK set (dispatched
+         but flat) — the diagnosis / decomposition-execution dispatch the
+         verdict's action prescribes.
+      B. minted follow-through: the target claim is ABSENT from the
+         flatlined trailing open set AND register-OPEN AND its depends_on
+         references a STUCK claim — mint provenance read from the same
+         register row (the issue-234 siblings and the issue-241 splits
+         both depend_on their stuck parent; operator-agnostic on THAT
+         pin). A fresh unrelated OPEN claim — even a marked one — is NOT
+         the split's output and is refused (review round-1 HIGH: ->OPEN
+         registration is ungated, so "register-OPEN + fresh" alone would
+         admit self-minted work).
+
+    Remedy-depth escalation: remedy_depth >= STALLED_REMEDY_MAX_DEPTH
+    (consecutive admitted cycles on this stuck episode, counted by
+    convergence_health.stalled_state from the admit telemetry rows)
+    closes channel B — repeated cycles narrow the exemption to channel A
+    and escalate to the human face instead of mint-looping.
+
+    Fail-closed: blank claim id, unreadable register, empty flatline set,
+    or no stuck parent -> False (the legacy block applies). Scope: the
+    CALLER (the worker_budget rc=1 face) guarantees the STALLED verdict —
+    SPINNING (rc=2) is never exempt. `payload` is accepted for signature
+    symmetry with the #237 predicate (any agent class may carry the
+    remedy; no payload read today).
+    """
+    if STALLED_REMEDY_MARKER not in (prompt_text or ""):
+        return False
+    cid = str(claim_id or "").strip()
+    if not cid:
+        return False
+    stuck = set(stuck_ids or [])
+    if cid in stuck:
+        return True  # channel A (never depth-gated: bounded by the battery)
+    flat = set(flatlined_open_ids or [])
+    if not flat or cid in flat:
+        return False
+    if int(remedy_depth or 0) >= STALLED_REMEDY_MAX_DEPTH:
+        return False  # escalation: follow-through channel closed
+    try:
+        import yaml
+        reg = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — register unreadable -> no pass-through
+        return False
+    target = next((c for c in (reg.get("claims") or [])
+                   if isinstance(c, dict) and c.get("id") == cid), None)
+    if target is None or str(target.get("status") or "").upper() != "OPEN":
+        return False
+    deps = {str(d).strip() for d in (target.get("depends_on") or [])}
+    return bool(deps & stuck)  # channel B: mint provenance -> a stuck parent
 
 
 # ---- workspace resolution (single source) ----
@@ -451,8 +618,8 @@ def iter_worker_states(workspace: Path) -> list[dict]:
             root = wt.parent / layout.workspace_dir
             if (root / layout.runs_dir).exists():
                 roots.append(root)
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("iter_worker_states", f"{type(exc).__name__}: {exc}")
     states = []
     for root in roots:
         runs = root / layout.runs_dir
