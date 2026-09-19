@@ -8,6 +8,24 @@ amount，会话累计口径）；无 cost 字段的行不入样。stratum 暂固
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] tuition_curve WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 from pathlib import Path
 
@@ -195,16 +213,16 @@ def cockpit_summary(ws):
     try:
         from backtrack_loop import cockpit_backtrack
         out["backtrack"] = cockpit_backtrack(ws)
-    except Exception:  # noqa: BLE001 — cockpit sampling never raises
-        pass
+    except Exception as exc:  # noqa: BLE001 — cockpit sampling never raises
+        warn("cockpit_summary", f"{type(exc).__name__}: {exc}")
     # #14: sub-PQ progress face (per-PQ credit + difficulty damping).
     # Additive + fail-open: ledger-less or malformed workspaces ship no key
     # rather than breaking the V/D/ETA surface.
     try:
         import mission_ledger as _ml
         out["progress"] = _ml.progress_face(ws)
-    except Exception:  # noqa: BLE001 — cockpit sampling never raises
-        pass
+    except Exception as exc:  # noqa: BLE001 — cockpit sampling never raises
+        warn("cockpit_summary_2", f"{type(exc).__name__}: {exc}")
     # #132: missing-intent face — the loud, COUNTED absence of the
     # uncertainty declaration (dispatch-face intent_unparsed events +
     # outcome claims that can never settle). Additive + fail-open, the same
@@ -213,6 +231,6 @@ def cockpit_summary(ws):
     try:
         import oracle_cadence
         out["intent"] = oracle_cadence.missing_intent_face(ws)
-    except Exception:  # noqa: BLE001 — cockpit sampling never raises
-        pass
+    except Exception as exc:  # noqa: BLE001 — cockpit sampling never raises
+        warn("cockpit_summary_3", f"{type(exc).__name__}: {exc}")
     return out

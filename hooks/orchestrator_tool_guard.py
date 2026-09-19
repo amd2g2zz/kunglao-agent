@@ -43,6 +43,24 @@ schema field).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] orchestrator_tool_guard WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -203,8 +221,8 @@ def _emit(ws: str, action: str, rule: str, tool: str, detail: str,
                 kunglao_log.emit(Path(ws), "orchestrator", action,
                                  tool=tool or None, detail=detail,
                                  exit=exit_code, matched_rule=rule)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_emit", f"{type(exc).__name__}: {exc}")
 
 
 def evaluate(payload: dict) -> tuple[int, str, str | None]:

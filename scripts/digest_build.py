@@ -15,6 +15,25 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] digest_build WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -22,8 +41,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="digest_build", action="converge",
                           detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import sys
@@ -281,8 +300,8 @@ def build_digest(ws: Path) -> str:
     try:
         from hypothesis_seeder import seed_from_task_spec
         seed_from_task_spec(ws)
-    except Exception:  # noqa: BLE001 — seeding failure never blocks cold start
-        pass
+    except Exception as exc:  # noqa: BLE001 — seeding failure never blocks cold start
+        warn("build_digest", f"{type(exc).__name__}: {exc}")
     # ---- #110: case-bank priors -> hypothesis layer — FAIL-OPEN ----
     # Same cold-start chain as PQ scaffolding: the per-workspace case bank
     # (runs/case-bank.jsonl) is retrieved by (project_type + protection
@@ -292,8 +311,8 @@ def build_digest(ws: Path) -> str:
     try:
         from hypothesis_seeder import seed_case_candidates
         seed_case_candidates(ws)
-    except Exception:  # noqa: BLE001 — priors never block cold start
-        pass
+    except Exception as exc:  # noqa: BLE001 — priors never block cold start
+        warn("build_digest_2", f"{type(exc).__name__}: {exc}")
     # ---- issue 252: pay parked candidate strings into the claim economy --
     # The bridge sweep mints every candidate string still parked in
     # hypotheses/ as a family arm claim and clears the string (one

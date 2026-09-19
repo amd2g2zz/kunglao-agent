@@ -1,6 +1,24 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_B3_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _B3_WARN_LAST.get(op) == reason:
+        return
+    _B3_WARN_LAST[op] = reason
+    print(f"[kunglao-agent] worker_budget_sinks WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # worker_budget.py aggregator + tests consume these via module attrs
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
@@ -755,8 +773,8 @@ def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:
     try:
         runs.mkdir(parents=True, exist_ok=True)
         state_path.write_text(json.dumps(state, indent=2), encoding='utf-8')
-    except OSError:
-        pass  # persistence failure: this tick's advisory already went to stderr
+    except OSError as exc:
+        warn("_apply_tool_error_policy", f"{type(exc).__name__}: {exc}")
 
 
 def _mark_env_capability_failed(runs: Path, tool: str) -> None:
@@ -788,8 +806,8 @@ def _mark_env_capability_failed(runs: Path, tool: str) -> None:
     })
     try:
         env_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_mark_env_capability_failed", f"{type(exc).__name__}: {exc}")
 
 
 def _emit_tool_calls(paths: dict, payload: dict, tool_result: str) -> None:
@@ -1122,8 +1140,8 @@ def _emit_gate_event(paths: dict, action: str, *, detail: str, exit: int) -> Non
         import kunglao_log
         kunglao_log.emit(Path(ws), actor='hook', action=action,
                          exit=exit, detail=str(detail)[:2000])
-    except Exception:  # noqa: BLE001 - logging never breaks enforcement
-        pass
+    except Exception as exc:  # noqa: BLE001 - logging never breaks enforcement
+        warn("_emit_gate_event", f"{type(exc).__name__}: {exc}")
 
 
 def _resolve_paths(payload: dict) -> dict:

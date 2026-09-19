@@ -19,6 +19,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] outcome_capture WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import re
@@ -203,8 +221,8 @@ def _run_oracle_cadence(ws: Path, *, claim: str | None = None) -> None:
             kunglao_log.emit(ws, actor="outcome_capture",
                              action="oracle_cadence_warn", claim=claim,
                              detail=f"reason=cadence_crashed ({exc!r})")
-        except Exception:  # noqa: BLE001  (telemetry never disturbs capture)
-            pass
+        except Exception as exc:  # noqa: BLE001  (telemetry never disturbs capture)
+            warn("_run_oracle_cadence", f"{type(exc).__name__}: {exc}")
 
 
 def _case_entry_from_settlement(settlement: dict) -> dict:
@@ -261,8 +279,8 @@ def _bank_case(ws: Path, settlement: dict) -> bool:
             emit(ws, actor="outcome_capture", action="case_bank_refused",
                  claim=(settlement or {}).get("claim_id"),
                  detail=f"case-bank append refused ({exc!r})")
-        except Exception:  # noqa: BLE001  (telemetry never disturbs capture)
-            pass
+        except Exception as exc:  # noqa: BLE001  (telemetry never disturbs capture)
+            warn("_bank_case", f"{type(exc).__name__}: {exc}")
         return False
 
 
@@ -333,8 +351,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         kunglao_log.emit(ws, actor="outcome_capture", action="converge",
                          detail="module wired")
-    except Exception:  # noqa: BLE001 — observability never disturbs the run
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the run
+        warn("main", f"{type(exc).__name__}: {exc}")
     added = capture(ws)
     rows = read_outcome_rows(ws)
     reward = aggregate_reward(rows)

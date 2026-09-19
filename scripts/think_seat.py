@@ -31,6 +31,24 @@ Usage: python think_seat.py <workspace>
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] think_seat WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import datetime
 import json
@@ -110,8 +128,8 @@ def update_stall_state(ws: Path, digest: tuple[int, int]) -> int:
         path.write_text(json.dumps({
             "ts": _utc_compact(), "digest": list(digest), "stall_ticks": stall,
         }, indent=2), encoding="utf-8")
-    except OSError:
-        pass  # advisory counter — unwritable state costs a reset next run
+    except OSError as exc:
+        warn("update_stall_state", f"{type(exc).__name__}: {exc}")
     return stall
 
 
@@ -243,8 +261,8 @@ def file_bet(ws: Path, claim_id: str, statement: str,
                          artifact=f"hypotheses/{h.id}.md",
                          hypothesis_ref=h.id,
                          detail=predicted_observation.strip())
-    except Exception:  # noqa: BLE001 — advisory emit must never raise
-        pass
+    except Exception as exc:  # noqa: BLE001 — advisory emit must never raise
+        warn("file_bet", f"{type(exc).__name__}: {exc}")
     return h
 
 
@@ -266,8 +284,8 @@ def settle_bet(ws: Path, hyp_id: str, outcome: str,
                          hypothesis_ref=h.id,
                          exit=1 if outcome == "confirmed" else 0,
                          detail=f"{outcome} by {evidence_id}")
-    except Exception:  # noqa: BLE001 — advisory emit must never raise
-        pass
+    except Exception as exc:  # noqa: BLE001 — advisory emit must never raise
+        warn("settle_bet", f"{type(exc).__name__}: {exc}")
     return h
 
 

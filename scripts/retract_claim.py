@@ -55,6 +55,25 @@ Exit codes:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] retract_claim WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -62,8 +81,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="retract_claim", action="claim_migrate",
                             detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import json
@@ -133,8 +152,8 @@ def _append_ledger(workspace: Path, entry: dict) -> None:
     try:
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_append_ledger", f"{type(exc).__name__}: {exc}")
 
 
 def find_dependents_transitive(deps: dict, retracted_id: str) -> set:

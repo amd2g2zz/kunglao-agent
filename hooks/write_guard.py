@@ -40,6 +40,24 @@ Wiring (register_hooks / hook_activation --wire-up, PreToolUse):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] write_guard WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import locale
 import os
@@ -135,8 +153,8 @@ def _record_status_first(ws: Path, sid: str, target_posix: str) -> None:
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
-    except OSError:
-        pass  # persistence failure: the next write is judged as first — safe
+    except OSError as exc:
+        warn("_record_status_first", f"{type(exc).__name__}: {exc}")
 
 
 def status_first_block(ws: Path, payload: dict, rel: Path) -> str | None:
@@ -451,8 +469,8 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
                                      action="proven_waiver_used",
                                      claim=str(wv.get("claim_id", "")),
                                      detail=str(wv.get("justify", ""))[:2000])
-                except Exception:  # noqa: BLE001 — logging must not break the gate
-                    pass
+                except Exception as exc:  # noqa: BLE001 — logging must not break the gate
+                    warn("adjudicate", f"{type(exc).__name__}: {exc}")
             _dbg(f"adjudicate[{carrier}] proven-gate leg: "
                  f"{len(res['violations'])} violation(s), "
                  f"{len(res['waivers'])} waiver(s)")
@@ -487,8 +505,8 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
                                      detail=(f"{used} lint violation(s) "
                                              f"waived: "
                                              f"{str(waiver.get('reason', ''))[:300]}"))
-                except Exception:  # noqa: BLE001 — logging never breaks gate
-                    pass
+                except Exception as exc:  # noqa: BLE001 — logging never breaks gate
+                    warn("adjudicate_2", f"{type(exc).__name__}: {exc}")
     _dbg(f"adjudicate[{carrier}] total: {len(violations)} violation(s)")
     return violations
 

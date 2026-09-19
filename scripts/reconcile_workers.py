@@ -5,6 +5,24 @@ Extracted from hook_activation.py (T-2 split) — the --reconcile job.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] reconcile_workers WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import re
 from pathlib import Path
 
@@ -40,8 +58,8 @@ def reconcile_workers(workspace: Path) -> int:
             _r = _m.parent / "malware-analysis-workspace" / "runs"
             if _r.is_dir():
                 dirs.append(_r)
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("reconcile_workers", f"{type(exc).__name__}: {exc}")
     for runs in dirs:
         if not runs.is_dir():
             continue

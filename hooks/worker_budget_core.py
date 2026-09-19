@@ -1,5 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] worker_budget_core WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 """worker_budget_core — constants, IO, parsing, claim-register primitives.
 
 #568: extracted from worker_budget.py (was 1847L > 800L limit). This module
@@ -346,8 +364,8 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
             blocked_ids = {b['claim_id'] for b in fag.scan_workspace(ws_path)
                            if b.get('state') == 'BLOCKED'}
             claims = [c for c in claims if c.get('id') not in blocked_ids]
-        except Exception:  # pragma: no cover - the audit stays usable, fail-open
-            pass
+        except Exception as exc:  # pragma: no cover - the audit stays usable, fail-open
+            warn("check_priority", f"{type(exc).__name__}: {exc}")
         evidence = _EvidenceView.from_workspace(ws_path)
         rng, seed_round = _posterior_seed_state(ws_path)
     # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
@@ -480,8 +498,8 @@ def _parse_worker_line(line: str) -> dict:
     if 'dispatched_at' in entry:
         try:
             entry['dispatched_at'] = int(entry['dispatched_at'])
-        except ValueError:
-            pass
+        except ValueError as exc:
+            warn("_parse_worker_line", f"{type(exc).__name__}: {exc}")
     raw = entry.get('tools', '')
     entry['tools'] = [t.strip() for t in raw.split(',') if t.strip()] if raw else []
     return entry

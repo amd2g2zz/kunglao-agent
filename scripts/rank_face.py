@@ -27,6 +27,24 @@ the newest day file — the issue 883 read budget).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] rank_face WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import os
 from datetime import datetime, timezone
@@ -76,16 +94,16 @@ def write_fail_marker(ws, error) -> None:
                                            else type(error).__name__)},
                                 ensure_ascii=False) + "\n",
                      encoding="utf-8")
-    except Exception:  # noqa: BLE001 — the marker never breaks its caller
-        pass
+    except Exception as exc:  # noqa: BLE001 — the marker never breaks its caller
+        warn("write_fail_marker", f"{type(exc).__name__}: {exc}")
 
 
 def clear_fail_marker(ws) -> None:
     """A successful emit clears the marker (last-attempt semantics)."""
     try:
         (Path(ws) / MARKER_REL).unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("clear_fail_marker", f"{type(exc).__name__}: {exc}")
 
 
 def emit_health(ws) -> dict:

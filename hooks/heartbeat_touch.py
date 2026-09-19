@@ -21,6 +21,24 @@ Trigger wiring: PreToolUse matcher=Bash (or any matcher covering tool use).
 Registered by hook_activation.py --wire-up (v1.9.36).
 """
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] heartbeat_touch WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import sys
 from datetime import datetime, timezone
@@ -67,14 +85,14 @@ def _write_statusline_snapshot(ws: Path) -> None:
             mod = load_module_by_path("statusline_snapshot_ws", deployed)
             mod.write_snapshot(ws)
             return
-        except Exception:  # noqa: BLE001 — degrade, never block the tool
-            pass
+        except Exception as exc:  # noqa: BLE001 — degrade, never block the tool
+            warn("_write_statusline_snapshot", f"{type(exc).__name__}: {exc}")
     try:
         import statusline_snapshot  # scripts/ on path via #671 boot
         statusline_snapshot.write_snapshot(ws)
         return
-    except ImportError:
-        pass  # bare-interpreter env (no yaml) — tier 3 below
+    except ImportError as exc:
+        warn("_write_statusline_snapshot_2", f"{type(exc).__name__}: {exc}")
     except Exception:  # noqa: BLE001 — statusline never blocks tools
         return
     try:
@@ -95,8 +113,8 @@ def _write_statusline_snapshot(ws: Path) -> None:
             [uv, "run", "--project", str(root), "python", str(script),
              str(ws)],
             capture_output=True, timeout=60, check=False)
-    except Exception:  # noqa: BLE001 — cosmetic face, never blocks tools
-        pass
+    except Exception as exc:  # noqa: BLE001 — cosmetic face, never blocks tools
+        warn("_write_statusline_snapshot_3", f"{type(exc).__name__}: {exc}")
 
 
 utc_now = harness_common.utc_now_z  # #863 Family F: single source
@@ -135,8 +153,8 @@ def main() -> int:
                         dedup = 0 <= delta < PULSE_DEDUP_SECONDS
                 if not dedup:
                     hbmod.append_tick_log(ws, actor="hook")
-            except Exception:  # noqa: BLE001 — liveness substrate best-effort
-                pass
+            except Exception as exc:  # noqa: BLE001 — liveness substrate best-effort
+                warn("main", f"{type(exc).__name__}: {exc}")
             # #142/#212: per-tool-use statusline snapshot refresh — the v2
             # freshness contract rides the existing touch path so the
             # working-period snapshot mtime advances ~= per tool call,
@@ -146,8 +164,8 @@ def main() -> int:
             # must never block or fail a tool call.
             try:
                 _write_statusline_snapshot(ws)
-            except Exception:  # noqa: BLE001 — statusline never blocks tools
-                pass
+            except Exception as exc:  # noqa: BLE001 — statusline never blocks tools
+                warn("main_2", f"{type(exc).__name__}: {exc}")
             return 0
         except Exception as exc:  # noqa: BLE001 — never break the tool call
             print(f"heartbeat_touch: heartbeat refresh failed ({exc})",

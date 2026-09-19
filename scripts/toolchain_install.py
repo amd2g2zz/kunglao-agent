@@ -26,6 +26,25 @@ without explicit consent, IDA never auto-installed.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] toolchain_install WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -33,8 +52,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="toolchain_install", action="write_blocked",
                                 detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import shutil
 import subprocess
@@ -764,8 +783,8 @@ def _emit_install_event(ws: Path, *, action: str, tool: str,
     try:
         kunglao_log.emit(ws, "toolchain_install", action,
                          tool=tool, detail=detail)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_emit_install_event", f"{type(exc).__name__}: {exc}")
 
 
 def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,

@@ -24,6 +24,24 @@ them from global; they must live in the project settings) but never rewrites it.
 
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] hooks_selfcheck WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import subprocess
 import sys
@@ -235,8 +253,8 @@ def main() -> int:
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("main", f"{type(exc).__name__}: {exc}")
 
     proj_ok = proj_check.get("hooks_segment") and not proj_check.get("missing")
     status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"

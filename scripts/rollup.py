@@ -43,6 +43,24 @@ Exit codes:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] rollup WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import sys
@@ -279,8 +297,8 @@ def _terminal_set() -> set[str]:
     try:
         import retract_claim as _rc
         ts.add(_rc.RETRACTED)
-    except ImportError:
-        pass  # pre-#331 install fragment — close on the canonical set only
+    except ImportError as exc:
+        warn("_terminal_set", f"{type(exc).__name__}: {exc}")
     return ts
 
 

@@ -15,6 +15,24 @@ Design references D1-D8. Fail-open per D7.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] hypothesis_seeder WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import sys
@@ -125,8 +143,8 @@ def _emit(ws: Path, hyp_id: str, qid: str) -> None:
         from kunglao_log import emit
         emit(ws, actor="hypothesis_seeder", action="hypothesis_seed",
              detail=f"{hyp_id} pq:{qid}")
-    except Exception:  # noqa: BLE001 — logging must never break seeding
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging must never break seeding
+        warn("_emit", f"{type(exc).__name__}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -239,8 +257,8 @@ def seed_apkid_candidates(ws: Path) -> int:
                     from kunglao_log import emit
                     emit(ws, actor="hypothesis_seeder", action="apkid_candidates",
                          detail=f"{hyp.id} +{len(new_candidates)}")
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    warn("seed_apkid_candidates", f"{type(exc).__name__}: {exc}")
     return appended
 
 
@@ -347,8 +365,8 @@ def seed_taint_candidates(ws: Path) -> int:
                     emit(ws, actor="hypothesis_seeder",
                          action="taint_candidates",
                          detail="%s +%d" % (hyp.id, len(new_candidates)))
-                except Exception:  # noqa: BLE001 - logging never breaks seeding
-                    pass
+                except Exception as exc:  # noqa: BLE001 - logging never breaks seeding
+                    warn("seed_taint_candidates", f"{type(exc).__name__}: {exc}")
     return appended
 
 
@@ -456,8 +474,8 @@ def _emit_case(ws: Path, hyp_id: str, n: int) -> None:
         from kunglao_log import emit
         emit(ws, actor="hypothesis_seeder", action="case_priors_seeded",
              detail=f"{hyp_id} +{n} case prior(s)")
-    except Exception:  # noqa: BLE001 — logging must never break seeding
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging must never break seeding
+        warn("_emit_case", f"{type(exc).__name__}: {exc}")
 
 
 def seed_case_candidates(ws: Path, limit: int = CASE_HINT_LIMIT) -> int:

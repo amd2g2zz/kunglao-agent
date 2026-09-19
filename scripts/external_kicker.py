@@ -51,6 +51,25 @@ Pure stdlib. Exit 0 = tick ok (kick or skip), 1 = fatal config error.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] external_kicker WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -58,8 +77,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="external_kicker", action="dispatch",
                               detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import json
@@ -317,8 +336,8 @@ def acquire_kick_lock(lock_path: Path, interval_minutes: int) -> bool:
 def release_kick_lock(lock_path: Path) -> None:
     try:
         lock_path.unlink()
-    except OSError:
-        pass  # stale-lock mtime rule makes an unreleased lock harmless
+    except OSError as exc:
+        warn("release_kick_lock", f"{type(exc).__name__}: {exc}")
 
 
 def has_fresh_workers(runs_dir: Path, fresh_minutes: int = FRESH_WORKER_MINUTES) -> bool:
@@ -347,8 +366,8 @@ def has_fresh_workers(runs_dir: Path, fresh_minutes: int = FRESH_WORKER_MINUTES)
             mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
             if (now - mtime) <= timedelta(minutes=fresh_minutes):
                 return True
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("has_fresh_workers", f"{type(exc).__name__}: {exc}")
     return False
 
 
@@ -579,8 +598,8 @@ def _blocker_ids(ws: Path, snapshot: dict | None) -> list[str]:
             if "INVALIDATED" in text.upper():
                 continue
             out.append(p.stem)
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_blocker_ids", f"{type(exc).__name__}: {exc}")
     return sorted(out)
 
 

@@ -58,6 +58,25 @@ FAIL grading (gate logic lives in hooks/env_check_gate.py):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] env_check WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -65,8 +84,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="env_check", action="verify",
                        detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import hashlib
@@ -208,8 +227,8 @@ def check_flag() -> tuple[bool, str]:
                 val = r.stdout.strip()
                 if val and is_truthy(val):
                     truthy.append(f"{scope.lower()}={val}")
-            except Exception:
-                pass  # powershell unavailable — process scope suffices
+            except Exception as exc:
+                warn("check_flag", f"{type(exc).__name__}: {exc}")
     if truthy:
         return (False,
                 f"{FLAG_NAME} truthy ({', '.join(truthy)}). Fix: unset the "

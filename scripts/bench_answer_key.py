@@ -17,6 +17,24 @@ Usage: bench_answer_key.py <answer-key.yaml> --task-spec-out <f>
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] bench_answer_key WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import re
@@ -58,8 +76,8 @@ def normalize_ioc(raw: str) -> str:
                 label.encode("idna").decode("ascii")
                 if label and not label.isascii() else label
                 for label in host.split("."))
-        except (UnicodeError, UnicodeDecodeError):
-            pass
+        except (UnicodeError, UnicodeDecodeError) as exc:
+            warn("normalize_ioc", f"{type(exc).__name__}: {exc}")
     return f"{host}/{rest}" if rest else host
 
 

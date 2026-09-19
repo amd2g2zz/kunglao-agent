@@ -16,6 +16,24 @@ Wiring (scripts/hook_activation.py 部署表): PostToolUse/Edit|Write|MultiEdit|
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] cost_input_capture WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -56,8 +74,8 @@ def process_event(payload: dict) -> int:
                "source": str(payload.get("tool_name") or "unknown")}
         with (ws / COST_EVENTS).open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("process_event", f"{type(exc).__name__}: {exc}")
     return 0
 
 
