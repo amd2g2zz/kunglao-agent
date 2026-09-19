@@ -528,6 +528,30 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
              artifact="claim-register.yaml", detail=effective_status)
     except Exception:
         pass
+    # ---- issue 252: the family ledger syncs FROM this settlement ----
+    # The register write above is the authority; the family ledger is
+    # derived state. Fail-open but NOT fail-silent (the issue 275 class): a
+    # sync failure emits family_sync_failed + a stderr WARN, and the
+    # bridge lint's E3 divergence face makes a persistent failure
+    # detectable at the next lint/cold-start face.
+    try:
+        from hypothesis_bridge import sync_family_ledger
+        sync_family_ledger(ws)
+    except Exception as exc:  # noqa: BLE001 — derived-state sync is best-effort
+        try:
+            from kunglao_log import emit
+            emit(ws, actor=actor, action="family_sync_failed",
+                 claim=claim_id, artifact="claim-register.yaml",
+                 detail=f"{type(exc).__name__}: {exc}")
+        except Exception as emit_exc:  # noqa: BLE001 — observability never raises
+            print(f"kunglao-record: family_sync_failed emit also unavailable "
+                  f"({type(emit_exc).__name__}: {emit_exc})",
+                  file=sys.stderr, flush=True)
+        print(f"kunglao-record: WARN family-ledger sync failed after "
+              f"{claim_id} -> {effective_status} "
+              f"({type(exc).__name__}: {exc}); the ledger may be stale — "
+              f"run `python scripts/hypothesis_bridge.py {ws} --sync`",
+              file=sys.stderr, flush=True)
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)

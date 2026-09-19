@@ -56,7 +56,7 @@ FAST_MODULES = frozenset({
     "test_goal_operationalization_128", "test_governance_binding_867", "test_harness_common_863g", "test_heartbeat_gate",
     "test_heartbeat_pulse_618", "test_heartbeat_window_4", "test_hook_exit_codes", "test_hook_registration_entry",
     "test_hook_registry_singlesource", "test_hooks_resolve_workspace_delegation_865", "test_hypothesis_contradiction_gate", "test_hypothesis_loop_integration_111",
-    "test_hypothesis_seeder", "test_hypothesis_store_528", "test_icd203_alignment", "test_ida_pro_unlock_46",
+    "test_hypothesis_bridge_252", "test_hypothesis_seeder", "test_hypothesis_store_528", "test_icd203_alignment", "test_ida_pro_unlock_46",
     "test_index_capability_annotations", "test_index_docs_contract", "test_infeasible_proposal_815", "test_infeasible_signal",
     "test_inference_blind_scope", "test_init_completeness", "test_init_handoff_593_598", "test_init_marker_625",
     "test_intake_promise_813", "test_issue238_role_contracts", "test_kunglao_core_loop", "test_kunglao_decide",
