@@ -145,6 +145,8 @@ ALL_EVENT_TYPES = [
 #   death_verdict_rejected / plan_stall    ask_for_direction_gate TYPE A-E
 #   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
 #   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
+#   plan_repair_overdue / plan_repair_verified
+#                               plan_drift_detector issue-281 bounded-window amendment faces
 #   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
 #   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
@@ -228,6 +230,8 @@ EMIT_ACTIONS = [
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
+    "plan_repair_overdue",  # issue-281 drift REJECT un-repaired past the bounded window (escalation face)
+    "plan_repair_verified",  # issue-281 drift amendment landed within the window (verification face)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
