@@ -31,7 +31,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: d4c08343d01d5bb0844a9081d144eb6bc2bd185f66185c14ae8c128ffacc39c4
+    sha256: 7314f09d6e23437ff46456ed2cdc08809fed2a48e59bbcda8ae83ad80f1a7126
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -63,7 +63,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 227861f84b6532add31cda6e5a868929cf69639ec3c9a231c72c67b2756c1e9b
+    sha256: 4ddeadc6275adb497af7aa37563ea7fd79d1ce8d08e2bcb3765f7b6c6a832467
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -71,7 +71,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 2c0dc6d3165c0dabfcd45367b45c40c017655524207d71d690568527c06fb69c
+    sha256: 34b1f0cd7afd158da8384c6519e58ab2e8f2ef33e888bafee112c2f1a2113bb8
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -251,7 +251,7 @@ files:
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: 48989e26ec94920ed675c03a61e48f0b595107f750a18456dce538ea19659e0b
+    sha256: de6e4a9ee0f0c9fd93ec37a32933db9bc26c4c2a6d79480c873cc26adaf7cb5c
   - src: scripts/cost_gate.py
     dest: .claude/scripts/cost_gate.py
     kind: scaffold
@@ -339,7 +339,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 9c33847baff88c3633e9c2e3b6bc90f88306b120af45a6a792bb0934fa292fa4
+    sha256: 3179691b0fbee9360f171bb8d3e1e04715a13a57b05e74c62440a3a5a6e979c7
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold

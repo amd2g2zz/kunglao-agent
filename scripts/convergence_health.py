@@ -17,11 +17,16 @@ Three verdicts:
   SPINNING → flat 8+ rounds, OR facts grew 5+ while open_count held (churn)
 
 Recovery protocol is printed alongside the verdict — this is NOT a "flag and
-walk away" tool. STALLED/SPINNING come with a concrete next action.
+walk away" tool. STALLED/SPINNING come with a concrete next action. #249:
+the STALLED action is INVOKABLE — the verdict JSON carries a `remedy`
+reference (the issue-234 target-ladder decomposition operator + the
+remedy-declared dispatch marker the gate exemption admits), so the
+prescribed remedy can never be prose-only again.
 
 Exit codes (machine-readable for hooks):
   0 = HEALTHY   (keep dispatching)
-  1 = STALLED   (diagnose before dispatching)
+  1 = STALLED   (diagnose before dispatching — the prescribed remedy
+      dispatch is EXEMPT at the gate's rc=1 face, issue-249)
   2 = SPINNING  (stop dispatching)
   3 = NO_DATA   (no ledger yet — run convergence_check.py per turn)
   4 = CRASHED   (#3: unexpected error — the check itself is broken; hooks
@@ -74,6 +79,17 @@ EXIT_STALLED = 1
 EXIT_SPINNING = 2
 EXIT_NO_DATA = 3
 EXIT_CRASHED = 4  # #3: unexpected error in the check itself — hooks fail open
+
+# The STALLED remedy reference — the invokable decomposition operator
+# (the issue-234 target-ladder fan-out) plus the remedy-declared dispatch
+# marker the gate's rc=1 exemption admits. The MARKER literal is enforced
+# by hooks/lib_kunglao.STALLED_REMEDY_MARKER (the single source the
+# exemption face consumes); this copy exists because scripts/ must not
+# import the hooks twin — the cross-face sync is pinned by
+# tests/test_stalled_remedy_249.py.
+STALLED_REMEDY_MARKER = "remedy: decompose"
+STALLED_REMEDY_MINT_CMD = ("python scripts/target_ladder.py <workspace> "
+                           "--mint <stuck-claim>")
 
 
 def _resolve_ws(arg):
@@ -281,7 +297,11 @@ def assess(ledger: list, ws=None) -> dict:
                 f"stuck claims (dispatched but flat): {stuck_ids or 'none named'}."
                 f"{queued_note} Re-read each stuck claim's definition + "
                 f"gathered facts, then ask: 'what evidence would actually close this?' "
-                f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged."
+                f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged. "
+                f"Invokable remedy (issue-249): a dispatch carrying "
+                f"`{STALLED_REMEDY_MARKER}` for a stuck claim is admitted at the gate; "
+                f"{STALLED_REMEDY_MINT_CMD} registers the split's sub-claims — "
+                f"minting breaks the flatline mechanically."
             )
         else:
             action = (
@@ -303,6 +323,18 @@ def assess(ledger: list, ws=None) -> dict:
             "last_snapshot": ledger[-1],
         }
 
+        # The verdict JSON carries the invokable remedy reference (the
+        # issue-249 acceptance): the recovery protocol is never prose-only
+        # again. STALLED-only: SPINNING keeps its harder-stop semantics
+        # (out of scope per the issue); HEALTHY/NO_DATA shapes untouched.
+        if verdict == "STALLED":
+            r = {**r, "remedy": {
+                "operator": "decompose",
+                "claims": stuck_ids,
+                "dispatch_marker": STALLED_REMEDY_MARKER,
+                "mint_cmd": STALLED_REMEDY_MINT_CMD,
+            }}
+
     # #2: surface the never-dispatched count whenever the trailing snapshot
     # carries dispatch evidence; absent on old-format rows (prior shape kept)
     if queued is not None:
@@ -315,6 +347,68 @@ def assess(ledger: list, ws=None) -> dict:
     if non_snapshot_rows:
         return {**r, "non_snapshot_rows": non_snapshot_rows}
     return r
+
+
+REMEDY_ADMIT_ACTION = "stalled_remedy_admitted"
+REMEDY_MAX_DEPTH = 2
+
+
+def _remedy_depth(ledger: list, stuck_ids: list) -> int:
+    """Issue-249 round 2: consecutive admitted remedy cycles per stuck
+    claim, counted from the rc=1 face's admit telemetry rows
+    (type=operator_action, action=stalled_remedy_admitted) that fall
+    INSIDE the claim's current stuck episode — the episode starts at the
+    last snapshot where the claim was NOT in open_ids. Returns the max
+    over the stuck set (a fresh snapshot with different open_ids resets
+    the window; a mint-reset cannot hide prior cycles on the same claim).
+    """
+    stuck = set(stuck_ids or [])
+    if not stuck:
+        return 0
+    depths = []
+    for cid in sorted(stuck):
+        n = 0
+        for e in reversed(ledger):
+            if "type" in e:  # event row: count this claim's remedy admits
+                if (e.get("action") == REMEDY_ADMIT_ACTION
+                        and str(e.get("claim_id") or "") == cid):
+                    n += 1
+                continue
+            if cid in (e.get("open_ids") or []):
+                continue  # still inside the stuck episode
+            break  # episode start: claim was not open here
+        depths.append(n)
+    return max(depths) if depths else 0
+
+
+def stalled_state(workspace):
+    """Issue-249: the machine-readable STALLED state the remedy-exemption
+    face (hooks/worker_budget_core.check_convergence_health rc=1) consumes.
+
+    Same detector, same ledger, same thresholds — the exemption face must
+    never re-implement the verdict, so this is the single state source it
+    delegates to. Pure read: no telemetry (ws deliberately NOT passed to
+    assess), no writes. None when the ledger is absent or the verdict is
+    not STALLED — the caller treats None as fail-closed (no exemption).
+    """
+    ledger = _read_ledger(Path(workspace))
+    if not ledger:
+        return None
+    r = assess(ledger)
+    if r.get("verdict") != "STALLED":
+        return None
+    stuck_ids = [s["claim"] for s in (r.get("stuck_claims") or [])]
+    return {
+        "verdict": "STALLED",
+        "stuck_ids": stuck_ids,
+        "flatlined_open_ids": list(
+            (r.get("last_snapshot") or {}).get("open_ids") or []),
+        "remedy": r.get("remedy"),
+        # round-2 escalation: >= REMEDY_MAX_DEPTH closes the follow-through
+        # channel at the gate face (repeated cycles -> the human face)
+        "remedy_depth": _remedy_depth(ledger, stuck_ids),
+        "remedy_max_depth": REMEDY_MAX_DEPTH,
+    }
 
 
 def _emit_liveness_telemetry(ws, r: dict) -> None:
@@ -368,6 +462,11 @@ def _human(r: dict) -> str:
             lines.append(f"  {s['claim']:>8}  open {s['open_for_rounds']} rounds")
     if r.get("queued_claims") is not None:
         lines.append(f"queued (never dispatched): {r['queued_claims']}")
+    if r.get("remedy"):
+        lines.append(f"remedy: {r['remedy']['operator']} — mint via "
+                     f"{r['remedy']['mint_cmd']}; a dispatch carrying "
+                     f"`{r['remedy']['dispatch_marker']}` for a stuck claim "
+                     f"is gate-admitted")
     ch = r.get("churn") or {}
     if ch.get("facts_delta"):
         lines.append(f"facts grown:   +{ch['facts_delta']} (open D{ch.get('open_delta', 0):+d})")
