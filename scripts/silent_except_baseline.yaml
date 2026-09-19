@@ -17,7 +17,7 @@ files:
   hooks/state_anchor.py: 1
   hooks/violation_capture.py: 1
   hooks/worker_budget_core.py: 2
-  hooks/worker_budget_gates.py: 4
+  hooks/worker_budget_gates.py: 5
   hooks/worker_budget_sinks.py: 3
   hooks/worker_pulse.py: 1
   hooks/write_guard.py: 3
