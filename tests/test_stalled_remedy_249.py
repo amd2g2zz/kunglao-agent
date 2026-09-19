@@ -26,10 +26,10 @@ test_stalled_remedy_full_cycle_249.py, slow tier):
   R6  the sinks pre_check chain forwards the dispatch context to the
       health gate (the wiring the exemption rides)
 
-Fast tier: no subprocess anywhere — the health SUBPROCESS is stubbed at
-the _run_py boundary (rc values), but the exemption's detector state is
-the REAL scripts/convergence_health.stalled_state against a REAL ledger,
-and the predicate is the REAL hooks/lib_kunglao function.
+Fast tier: spawns no processes — the health check's out-of-process run is
+stubbed at the _run_py boundary (rc values), but the exemption's detector
+state is the REAL scripts/convergence_health.stalled_state against a REAL
+ledger, and the predicate is the REAL hooks/lib_kunglao function.
 """
 from __future__ import annotations
 
@@ -537,8 +537,9 @@ class TestCoreRc1Face:
         assert msg == "convergence STALLED - diagnose before dispatching"
 
     def test_state_verdict_drift_fails_closed(self, tmp_path, monkeypatch):
-        """rc=1 from the subprocess but the re-derived state is NOT stalled
-        -> no exemption (a ledger change between reads must not open)."""
+        """rc=1 from the out-of-process check but the re-derived state is
+        NOT stalled -> no exemption (a ledger change between reads must
+        not open)."""
         ws = _healthy_ws(tmp_path)
         _write_ledger(ws, [
             _snap(0, 3, ["C-1"], []),
