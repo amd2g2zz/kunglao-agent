@@ -483,7 +483,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 5792021b7bd00b8a4a1519b83c32fe09cfbfca46b285bee22c8527942cfe64bc
+    sha256: b8103f459a8a5e07c8b6f9fe4489c656026d52b12cf29453b771d785a046473f
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold

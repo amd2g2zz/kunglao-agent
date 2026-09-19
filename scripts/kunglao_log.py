@@ -83,6 +83,7 @@ LEGACY_ACTORS = frozenset({
     "env_check", "env_check_gate", "env_repair_l1", "env_state_probe",
     "event_taxonomy", "external_kicker", "failure_analysis",
     "failure_analysis_gate", "heartbeat_tick", "heartbeat_touch",
+    "hypothesis_bridge",  # issue-252 family-ledger sync + bridge lint writer
     "hypothesis_seeder", "infeasible_proposal", "infeasible_signal",
     "hook", "hook_activation", "hypothesis", "init", "kunglao-decide",
     "kunglao_record", "kunglao_resume", "kunglao_status", "kunglao_upgrade",

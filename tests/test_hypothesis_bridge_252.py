@@ -586,6 +586,21 @@ def test_guard_clean_workspace_passes(tmp_path):
 
 
 # =====================================================================
+# trace identity (issue 879): the bridge's actor literal stays registered
+# =====================================================================
+
+def test_hypothesis_bridge_actor_literal_registered():
+    """The bridge emits with actor="hypothesis_bridge" (scripts-side module
+    recorder, the dead_letter class) — the literal must stay registered in
+    kunglao_log.LEGACY_ACTORS (the repo-wide trace-identity anchor turns
+    red otherwise)."""
+    import kunglao_log
+    ok, reason = kunglao_log.validate_actor("hypothesis_bridge")
+    assert ok, reason
+    assert "hypothesis_bridge" in kunglao_log.LEGACY_ACTORS
+
+
+# =====================================================================
 # seeder prose contract mechanized
 # =====================================================================
 
