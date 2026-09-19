@@ -740,6 +740,10 @@ files:
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
     sha256: 642571d461a1b9f434a1587122763e0998b84b234f5efa0a6c6ec9e0e8310a4d
+  - src: scripts/silent_except_lint.py
+    dest: .claude/scripts/silent_except_lint.py
+    kind: scaffold
+    sha256: 078a6b34d4b3894ac440a9b506ff35daadfa616f6a18ccabe946486fcf21f2db
   - src: scripts/stale_blocker_prune.py
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
@@ -1327,7 +1331,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bca54fce9110d81dd97ee0d285f6bd989b9e01d134382d3ac6d1c0517406b543
+    sha256: 8ac51b45e7cec91a0a262db1e7d2ccfea771282b00db4a0ee2da4d9d761d6c40
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

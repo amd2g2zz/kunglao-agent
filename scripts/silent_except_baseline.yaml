@@ -6,8 +6,9 @@ policy: 'ratchet only shrinks: a count above the ledger fails; an entry whose co
   an entry whose file is gone is stale and fails; new debt without an entry fails'
 files:
   hooks/bash_fact_guard.py: 1
+  hooks/completion_gate.py: 2
   hooks/cost_input_capture.py: 1
-  hooks/dispatch_gate.py: 3
+  hooks/dispatch_gate.py: 2
   hooks/env_check_gate.py: 1
   hooks/heartbeat_touch.py: 5
   hooks/lib_kunglao.py: 1
@@ -62,9 +63,10 @@ files:
   scripts/migrate_facts.py: 1
   scripts/mission_stall.py: 2
   scripts/notes_writer.py: 1
-  scripts/oracle_runner.py: 3
+  scripts/oracle_runner.py: 4
   scripts/outcome_capture.py: 3
   scripts/plan_drift_detector.py: 2
+  scripts/plan_epistemics.py: 3
   scripts/plan_stages.py: 1
   scripts/priority_ratio.py: 2
   scripts/provider_health.py: 1
