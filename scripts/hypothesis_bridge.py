@@ -178,8 +178,10 @@ def _emit(ws: Path, action: str, detail: str) -> None:
     try:
         from kunglao_log import emit
         emit(Path(ws), actor="hypothesis_bridge", action=action, detail=detail)
-    except Exception:  # noqa: BLE001 — logging must never break the bridge
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging must never break the bridge
+        print(f"hypothesis_bridge: WARN emit unavailable for {action} "
+              f"({type(exc).__name__}: {exc})",
+              file=sys.stderr, flush=True)
 
 
 def _existing_arm_texts(claims: list[dict], hyp_id: str) -> dict[str, str]:

@@ -295,7 +295,7 @@ files:
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
-    sha256: 923d222a5861b692bb7a1584a00e5d5aa64b6b8522290c9fb6f0dbaeeb8ae505
+    sha256: 93c8ab800ae5c8d718f5eeeac335ec89e54cd47661ce23afc7c1432305af9b4e
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
@@ -403,7 +403,7 @@ files:
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
-    sha256: 117249c006ee82aa6a0b9f6cb90992ccab6a3a6dcbdf9c08e9bc849e1394dbec
+    sha256: da4f422585711e0780d92b15cfaab8bb88dc860e489b750bb5564f30f04129b7
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: 79aeb043d4cf215f2138bdd0751da0a51a55915baccc2a654b6ff233a5df791c
+    sha256: 02cd7f1ee82fb4cc2aa4145b528007cdb399eee93e86297fd1104bae2cc06433
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -748,6 +748,10 @@ files:
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
     sha256: 642571d461a1b9f434a1587122763e0998b84b234f5efa0a6c6ec9e0e8310a4d
+  - src: scripts/silent_except_lint.py
+    dest: .claude/scripts/silent_except_lint.py
+    kind: scaffold
+    sha256: 078a6b34d4b3894ac440a9b506ff35daadfa616f6a18ccabe946486fcf21f2db
   - src: scripts/stale_blocker_prune.py
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
@@ -1335,7 +1339,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 88eb3a750e456b3aeb282654081ebafd14332d4868e2f371b68213035d5c6cba
+    sha256: 5469d14a6e6d0494be984bc3e844f82d53262226a02f24f25828346ee6ded99e
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

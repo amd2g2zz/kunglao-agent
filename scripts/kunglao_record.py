@@ -543,8 +543,10 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             emit(ws, actor=actor, action="family_sync_failed",
                  claim=claim_id, artifact="claim-register.yaml",
                  detail=f"{type(exc).__name__}: {exc}")
-        except Exception:  # noqa: BLE001 — observability never raises
-            pass
+        except Exception as emit_exc:  # noqa: BLE001 — observability never raises
+            print(f"kunglao-record: family_sync_failed emit also unavailable "
+                  f"({type(emit_exc).__name__}: {emit_exc})",
+                  file=sys.stderr, flush=True)
         print(f"kunglao-record: WARN family-ledger sync failed after "
               f"{claim_id} -> {effective_status} "
               f"({type(exc).__name__}: {exc}); the ledger may be stale — "

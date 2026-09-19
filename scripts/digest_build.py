@@ -312,14 +312,19 @@ def build_digest(ws: Path) -> str:
                 from kunglao_log import emit
                 emit(ws, actor="digest_build", action="bridge_lint_findings",
                      detail="; ".join(findings[:10]))
-            except Exception:  # noqa: BLE001 — observability never raises
-                pass
+            except Exception as emit_exc:  # noqa: BLE001 — observability never raises
+                print(f"digest_build: bridge_lint_findings emit also "
+                      f"unavailable ({type(emit_exc).__name__}: {emit_exc})",
+                      file=sys.stderr, flush=True)
             print(f"digest_build: WARN hypothesis-bridge lint: "
                   f"{'; '.join(findings[:5])}"
                   f"{' …' if len(findings) > 5 else ''}",
                   file=sys.stderr, flush=True)
-    except Exception:  # noqa: BLE001 — the sweep never blocks cold start
-        pass
+    except Exception as exc:  # noqa: BLE001 — the sweep never blocks cold start
+        print(f"digest_build: WARN hypothesis-bridge sweep skipped "
+              f"({type(exc).__name__}: {exc}) — candidate strings stay "
+              f"parked until the next cold start",
+              file=sys.stderr, flush=True)
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising
