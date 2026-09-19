@@ -33,9 +33,9 @@ Not carriers (explicitly OUT of the scaffold, per #530):
 
 - `failure-registry.yaml` — template deleted in #530 (zero writers ever existed).
 - `progress.txt` — rendered case timeline VIEW of the kunglao_log ledger
-  plus worker narrative (#282, `scripts/progress_timeline.py`); still not
-  scaffold state and not machine-ingested (downgraded in #530 — the ledger
-  remains the source of truth).
+  plus worker narrative (issue 282, `scripts/progress_timeline.py`); still
+  not scaffold state and not machine-ingested (downgraded in issue 530 —
+  the ledger remains the source of truth).
 - `task_spec_snapshot.yaml` — the forever-3B stub was deleted in #538 (C-4);
   intake writes a real snapshot or the file does not exist; resume handles
   both cases.

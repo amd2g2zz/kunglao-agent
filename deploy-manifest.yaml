@@ -887,7 +887,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: a47e311a356ad0ac7b79603c0fbdf8443e914fb0c46b1a3a08305088ad8e8686
+    sha256: 0a63c791fa77be148b202434ac0f94da214e07f30fce3fd39431ca8cd038cedd
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -939,7 +939,7 @@ files:
   - src: references/contracts/cold-start-contract.md
     dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
-    sha256: 5b6a3b3bdaf422b154e5b13fccfb8c5ba18ad0e0052c0606e78afbde015ab086
+    sha256: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   - src: references/contracts/convergence-loop.md
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset
