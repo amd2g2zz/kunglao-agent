@@ -32,7 +32,7 @@ the loop:
       with the same window number (same posture as the issue-249 literal
       duplication pinning)
 
-Fast tier: in-process only — no subprocess, no nested pytest.
+Fast tier: in-process only — spawns no processes, no nested pytest.
 """
 from __future__ import annotations
 
