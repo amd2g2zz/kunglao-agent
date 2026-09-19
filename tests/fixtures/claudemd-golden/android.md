@@ -148,7 +148,7 @@ Notes travel in six carriers; each row is the contract for what lands there, who
 | `claim-register.yaml` | New OPEN claims or status transitions | Worker, when evidence emerges | Every round, before `convergence_check.py` | Status moves forward only with verifier sign-off; history is never edited |
 | `facts/_INDEX.md` + `facts/F<NNN>.md` | Byte-anchored reproducible facts | Worker, on first observation | Every round, on claim cite | A superseding fact lands as a new `F<NNN>` entry; the prior row stays |
 | `blockers/` | Blocker files for unresolvable environment/tooling gaps | Worker, after the self-repair ladder fails | Every round, before dispatch | A blocker closes only when its root cause is resolved and recorded |
-| `global_plan.txt` | High-level strategy shifts only | Orchestrator, on milestone change | Every round, after the convergence verdict | Amendments append; the prior plan text is preserved under `runs/` |
+| `global_plan.txt` | High-level strategy shifts only | Orchestrator, on milestone change | Every round, after the convergence verdict | Amendments append; the prior plan text is preserved under `runs/`; a drift-REJECT amendment is verified — the same drift persisting 3 detection rounds escalates as `plan_repair_overdue` |
 | `analysis_state.txt` | Venv path, sample hash, toolchain, worker roster | Init and env repair | Every cold start and post-compact re-entry | The file is authoritative; in-memory guesses are discarded |
 | `task-oracle.yaml` | Verbatim task text, open items, deferrals, verdicts | Orchestrator (init writes the skeleton) | Every round, after `convergence_check.py` | Oracle verdicts are terminal until a blocker is filed |
 

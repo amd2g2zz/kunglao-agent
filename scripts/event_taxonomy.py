@@ -145,6 +145,8 @@ ALL_EVENT_TYPES = [
 #   death_verdict_rejected / plan_stall    ask_for_direction_gate TYPE A-E
 #   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
 #   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
+#   plan_repair_overdue / plan_repair_verified
+#                               plan_drift_detector issue-281 bounded-window amendment faces
 #   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
 #   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
@@ -163,6 +165,7 @@ EMIT_ACTIONS = [
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "bridge_lint_findings",  # issue 252 hypothesis-bridge cold-start lint findings (digest face)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_reject",
     "capability_switch",
@@ -188,6 +191,12 @@ EMIT_ACTIONS = [
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "failure_blocked",
+    "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
+    "family_confirmed",    # issue 252 family ledger sync: family confirmed by a positive arm
+    "family_ensured",      # issue 252 hypothesis_bridge idempotent family-scaffold creation
+    "family_refuted",      # issue 252 family ledger sync: all arms settled negative
+    "family_superseded",   # issue 252 family ledger sync: competing hypothesis superseded
+    "family_sync_failed",  # issue 252 guarded sync failure WARN (claim_migrator post-settlement face)
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
@@ -228,6 +237,8 @@ EMIT_ACTIONS = [
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
+    "plan_repair_overdue",  # issue-281 drift REJECT un-repaired past the bounded window (escalation face)
+    "plan_repair_verified",  # issue-281 drift amendment landed within the window (verification face)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
