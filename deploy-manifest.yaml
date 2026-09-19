@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: dba2c6e64a8bed6441121eae2ebd5820f5b58d45dc2bb056ebc98c2eed0d3a77
+    sha256: 509d15e72f675983e2a3e45cdbde86dfa296cdb07406b28ae15f7b1b4a6a6156
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 5cc972007d2913564e1e9cd8e6a14e79ec32ff7784782633406331c6b3dbd75d
+    sha256: 2c0dc6d3165c0dabfcd45367b45c40c017655524207d71d690568527c06fb69c
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -220,6 +220,10 @@ files:
     dest: .claude/scripts/claim_expiry.py
     kind: scaffold
     sha256: f5e33a22c36eaa7230458c36ca1a2259787aa0a62685456caddd907b929284a2
+  - src: scripts/claim_granularity.py
+    dest: .claude/scripts/claim_granularity.py
+    kind: scaffold
+    sha256: 241fe28d3a6ed25a19223827e30fa2f146a7262b7af6be8034c05133b8c00977
   - src: scripts/claudemd_frame.py
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
@@ -627,7 +631,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 4d69f70ffa177192a880d79b7a05925b3739c54f5bb9352b63974678ce654fe1
+    sha256: 8327cffb9004b8f590d28105e563bf8e9455a8a5844e6648fbe37b859ed4e149
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -1331,7 +1335,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: aec8030416f9b1311274c84914078a63265de424c4992472e2577535acb5dffc
+    sha256: 88eb3a750e456b3aeb282654081ebafd14332d4868e2f371b68213035d5c6cba
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
