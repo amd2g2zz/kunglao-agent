@@ -258,6 +258,7 @@ EMIT_ACTIONS = [
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
+    "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)

@@ -32,6 +32,7 @@ FAST_MODULES = frozenset({
     "test_assembly_history_700", "test_audit_guard_reviewgate_799", "test_audit_legacy_proven", "test_audit_traceability",
     "test_bash_fact_guard_809", "test_bench_analyze", "test_bench_grade", "test_bench_intake",
     "test_bench_redteam", "test_bench_runner", "test_bench_safety", "test_bench_tokens",
+    "test_stalled_remedy_249",
     "test_blind_gate", "test_budget_channel_862", "test_calibration_gate", "test_canary_gates",
     "test_carrier_consistency_829", "test_case_bank_110", "test_case_bank_49", "test_challenge_ledger_909",
     "test_changelog", "test_claim_granularity_241", "test_claim_status_guard", "test_classification_collapse_581", "test_claudemd_g2g3_758",
@@ -106,6 +107,7 @@ SLOW_MODULES = frozenset({
     "test_acceptance",   # nested pinned smoke pytest run
     "test_load_lock",    # nested pytest probes of the machine-local lock
     "test_dispatch_gate_237_passthrough",  # #237 D2 hook-interaction (subprocess dispatch_gate runs)
+    "test_stalled_remedy_full_cycle_249",  # issue-249 pinned full cycle (real detector CLI + pre_check + mint)
 })
 
 # routing tag only — see module docstring
