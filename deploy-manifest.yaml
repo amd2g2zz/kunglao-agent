@@ -128,6 +128,10 @@ files:
     dest: .claude/scripts/_hooks_path.py
     kind: scaffold
     sha256: bfcf935bb907d03fb8db83d11f269a3f43bee20abbbf268f728ce1d9a8643fcc
+  - src: scripts/_scriptlib.py
+    dest: .claude/scripts/_scriptlib.py
+    kind: scaffold
+    sha256: bb067f44c9ce754ef53e79864238d94da17fd48a6f4dc37d7cbafe85dc5c7079
   - src: scripts/acceptance_check.py
     dest: .claude/scripts/acceptance_check.py
     kind: scaffold
@@ -223,7 +227,7 @@ files:
   - src: scripts/claim_granularity.py
     dest: .claude/scripts/claim_granularity.py
     kind: scaffold
-    sha256: 241fe28d3a6ed25a19223827e30fa2f146a7262b7af6be8034c05133b8c00977
+    sha256: fb95b70475e2deb051793421b41e84642bd2d3edc0ae62518fb33df0f22f909e
   - src: scripts/claudemd_frame.py
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
@@ -403,7 +407,7 @@ files:
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
-    sha256: da4f422585711e0780d92b15cfaab8bb88dc860e489b750bb5564f30f04129b7
+    sha256: 80abcbf9accac0767bc925270e872d4e1aa2593d5950ec879fc9b2056321e939
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
@@ -603,11 +607,11 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: 2ec57d529ebcc47fe97f1f6ed192742fcd9d8eda2fd5a0153b07124016d653f7
+    sha256: 91d8879a7d701bcea143f9149a48d224f8d8cf5fcf4a34de13d8883d5a93e169
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
-    sha256: 776298d82f1e86e2e7919b98fe1886c71bfe75aa2b425c011fec89ca1386bef3
+    sha256: 9fa00a7caa2411a4e74b1963ec9488554cff5b7cd0e4e73dce43133720aff0fc
   - src: scripts/plan_reviser.py
     dest: .claude/scripts/plan_reviser.py
     kind: scaffold
@@ -779,7 +783,7 @@ files:
   - src: scripts/target_ladder.py
     dest: .claude/scripts/target_ladder.py
     kind: scaffold
-    sha256: 9650d1dc0f123c85f7c2a74e7afe5e98934e63b206b8a4b9e64d3a75bb709e38
+    sha256: 0f6469140b9ad3d083d7459a0289340b2f47e2d0eb5af9dfc037bbdffabd9c76
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
