@@ -33,7 +33,9 @@ EXIT_VERIFY = 2
 EXIT_SATURATED = 3
 EXIT_BLOCKED = 4
 EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
-EXIT_MISSING_WORKSPACE = 64  # convergence_check.main(): no claim-register.yaml
+# convergence_check.main(): resolved dir is not a kunglao workspace (#240:
+# missing claim-register.yaml/task_spec.yaml)
+EXIT_MISSING_WORKSPACE = 64
 # #99: the check itself crashed (malformed YAML, unexpected error). 64 is
 # taken by MISSING_WORKSPACE; 65 is the next free byte. A crash must NEVER
 # share EXIT_DISPATCH's byte — pre-#99 a malformed register exited rc=1,

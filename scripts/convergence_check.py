@@ -30,14 +30,19 @@ registry constant block for #99):
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
   5 = PARK (#634: suspended on external gates — legal idle with wake_condition)
-  64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
+  64 = MISSING_WORKSPACE (#240: the resolved directory is NOT a kunglao
+     workspace — missing claim-register.yaml and/or task_spec.yaml; the
+     caller passed a wrong path or ran from a non-workspace cwd)
   65 = CRASHED (#99: the check itself crashed — stdout {"decision": "CRASHED"},
      traceback on stderr; never a decided state)
 
 Usage:
-  python scripts/convergence_check.py [workspace]          # human-readable
-  python scripts/convergence_check.py [workspace] --json   # machine-readable
-Workspace defaults to $PWD/malware-analysis-workspace if it has claim-register.yaml, else $PWD.
+  python scripts/convergence_check.py <workspace>          # human-readable
+  python scripts/convergence_check.py <workspace> --json   # machine-readable
+#240: resolution is fail-closed — explicit arg wins, else the manifest
+workspace_dir sibling, else cwd; the resolved directory must contain
+claim-register.yaml AND task_spec.yaml, else the check hard-errors
+("not a kunglao workspace", exit 64) instead of ever emitting a verdict.
 """
 from __future__ import annotations
 
@@ -78,6 +83,15 @@ import replay_equivalence as _replay_eq
 from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
+
+# #240: workspace identity markers. A resolved directory is a kunglao
+# workspace only when BOTH exist — the register alone let a stray empty
+# register (skill dir, stale sibling) resolve via the else-$PWD fallback
+# and degenerate into a WRONG CONVERGED (missing task_spec face -> zero
+# primary_questions -> every DRAIN gate silent). task_spec.yaml is init's
+# first artifact (needs-first intake), so its absence means the directory
+# was never a workspace.
+WORKSPACE_MARKERS = ("claim-register.yaml", "task_spec.yaml")
 
 # Exit codes — CONSUMER CONTRACT (#99). The registry itself moved to
 # scripts/contracts.py (#102: producers and consumers kept re-stating the
@@ -1987,16 +2001,31 @@ def _human(d: dict) -> str:
     return "\n".join(lines)
 
 
+def _require_workspace(raw: str | None) -> Path:
+    """#240 fail-closed workspace resolution: resolve, then require identity.
+
+    A resolved directory without claim-register.yaml AND task_spec.yaml is
+    NOT a kunglao workspace — hard error (stderr + exit 64), never a
+    verdict. This kills the else-$PWD fallback's silent mis-resolution:
+    the empty register it used to accept drained to a WRONG CONVERGED from
+    any non-workspace cwd."""
+    workspace = _resolve_ws(raw).resolve()
+    missing = [name for name in WORKSPACE_MARKERS
+               if not (workspace / name).exists()]
+    if missing:
+        print(f"ERROR: not a kunglao workspace: {workspace} "
+              f"(missing: {', '.join(missing)})", file=sys.stderr)
+        raise SystemExit(EXIT_MISSING_WORKSPACE)
+    return workspace
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent convergence check - should I dispatch?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args(argv)
 
-    workspace = _resolve_ws(args.workspace)
-    if not (workspace / "claim-register.yaml").exists():
-        print(f"FAIL: no claim-register.yaml under {workspace}", file=sys.stderr)
-        return EXIT_MISSING_WORKSPACE
+    workspace = _require_workspace(args.workspace)
 
     # #99: decide() is untrusted input territory (claim-register.yaml is
     # hand- and hook-edited YAML). An unguarded crash exits rc=1 — the SAME

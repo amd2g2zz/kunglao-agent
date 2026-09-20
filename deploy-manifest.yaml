@@ -243,11 +243,11 @@ files:
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
-    sha256: a45248e8ae7cb1d7e98975a3b7042331ab811766948e96e41164779e5a3dafb0
+    sha256: 01f7ffe616e49a62500021e1ed3b00a146c8a02fef9784c7be89e4f63dab52c2
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: a55856bd3bb13b240a17a91527ea887b233d66debb2e5e0952899cd417efe6b7
+    sha256: 2177f968bbbd5eb9d61358860c76f705d6f28851aa26e31481dfadfb548194a1
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -455,7 +455,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 8f32ff7435c0488e9ee71004a899cd813ea81dc402cb0800a9ba97eb78fb8afd
+    sha256: 03d82e717efaa7b59e9b058bdee2811ac82660fd9ec4c39f39ef253300f83134
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1255,7 +1255,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 7c5b429e4831d5bb6066f27624ced3f72c37682bdbced223c13cd64c929f9487
+    sha256: b9d33ec8370aa4340e3dcd8e363139ad427cf113edabcd50fed313df2e873515
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1343,7 +1343,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 5469d14a6e6d0494be984bc3e844f82d53262226a02f24f25828346ee6ded99e
+    sha256: bd3c3cb3516c4c89c851313f89076cac63255af2f2215479c391b9386b3ef029
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
