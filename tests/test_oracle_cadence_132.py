@@ -84,6 +84,15 @@ ARMED_CASE = {
          "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    # #301: the quantified verification contract every admitted case
+    # carries (artifact, criterion, threshold, decision coupling).
+    "verification": {
+        "artifact": "auth_algo field layout pinned by facts/F001",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "q1",
+    },
 }
 
 

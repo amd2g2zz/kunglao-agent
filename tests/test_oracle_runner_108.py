@@ -70,6 +70,15 @@ CASE_GOOD = {
         {"field": "nonce_len", "value": 2, "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    # #301: the quantified verification contract (mechanical criterion,
+    # numeric threshold, decision coupling).
+    "verification": {
+        "artifact": "auth_algo/nonce_len field layout pinned by facts/F001",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "C-001",
+    },
 }
 
 # Declares a mutation on a field the case never observes: under the mutation
@@ -85,6 +94,13 @@ CASE_BLIND = {
         {"field": "magic", "value": "MZ", "evidence_refs": ["F002"]},
     ],
     "mutations": [{"field": "checksum", "kind": "change"}],
+    "verification": {
+        "artifact": "magic bytes 'MZ' pinned by facts/F002",
+        "artifact_kind": "constant",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "C-001",
+    },
 }
 
 BLIND_CLIENT = '''def compute(params):
@@ -206,6 +222,13 @@ def test_pending_observation_entries_count_not_compare(tmp_path: Path) -> None:
             {"field": "nonce_len", "value": 2, "evidence_refs": ["F001"]},
         ],
         "mutations": [{"field": "nonce_len", "kind": "change"}],
+        "verification": {
+            "artifact": "nonce_len derivation pinned by facts/F001",
+            "artifact_kind": "hook-state",
+            "criterion": "byte-match",
+            "threshold": {"exact": True},
+            "feeds_decision": "C-001",
+        },
     }
     ws = _mk_ws(tmp_path, [case], None)
     (ws / "oracle" / "client.py").write_text(GOOD_CLIENT, encoding="utf-8")

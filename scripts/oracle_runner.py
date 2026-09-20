@@ -440,6 +440,54 @@ def _retired_or_stages(p: Path, cid: str, doc: dict) -> tuple[bool, dict]:
     return False, dict(stages or {})
 
 
+def _require_hypothesis_ref(p: Path, cid: str, raw) -> str:
+    """#126: case -> hypothesis linkage. A case that discriminates
+    nothing in the live competitor field is indistinguishable from a real
+    experiment at load time (the trivial-oracle class)."""
+    hyp_ref = str(raw or "").strip()
+    if not hyp_ref or "/" in hyp_ref or "\\" in hyp_ref \
+            or hyp_ref in (".", ".."):
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: `hypothesis_ref` is required and "
+            f"must name a hypothesis id in the store (#126: without the "
+            f"linkage a case that discriminates nothing in the live "
+            f"competitor field passes for a real experiment)")
+    return hyp_ref
+
+
+def _get_linked_hypothesis(hypotheses, p: Path, cid: str,
+                           hyp_ref: str):
+    """#126: the linked hypothesis must RESOLVE in the store — a link to
+    nothing links nothing. The store's fail-open parse never invents a
+    hypothesis, so ANY read failure is a refused link."""
+    try:
+        return hypotheses.get(hyp_ref)
+    except (KeyError, OSError, ValueError) as exc:  # InvalidTransition
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: hypothesis_ref {hyp_ref!r} does "
+            f"not resolve to a readable hypothesis in "
+            f"{hypotheses.root} ({exc}) — a link to nothing links "
+            f"nothing (#126)") from None
+
+
+def _require_fresh_signature(p: Path, cid: str,
+                             sig: tuple[str, str],
+                             seen_signatures: dict) -> None:
+    """#126: action-signature dedup. Same signature = one case; a second
+    case with an identical signature adds no marginal discriminative
+    power and is refused. Different channel or different competitor_group
+    = different signature (cross-channel divergence is itself an
+    observation)."""
+    if sig in seen_signatures:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: duplicate action signature "
+            f"{sig} — already covered by case "
+            f"{seen_signatures[sig]!r} (same declared channel + same "
+            f"competitor_group); the dedup axis is marginal "
+            f"discriminative power, not text (#126)")
+    seen_signatures[sig] = cid
+
+
 def load_cases(cases_dir) -> list[dict]:
     """Load + lint every ``*.yaml`` case. Raises OracleCaseError on the
     first refusal (#108 half C presence lint + #126 admission integrity:
@@ -472,6 +520,17 @@ def load_cases(cases_dir) -> list[dict]:
         skip_retired, stages_expected = _retired_or_stages(p, cid, doc)
         if skip_retired:
             continue
+        # #301: the semantic admission gate — a valid root face
+        # (decomposition/bounce) skips the case before the structural
+        # lints the way a #146 retirement does; a counterfeit-coin clause
+        # or an invalid tree is refused with the rejection class NAMED.
+        import oracle_case_admission as oca
+        skip, refusal = oca.pre_gate(doc, cases_dir)
+        if refusal:
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: {refusal}")
+        if skip:
+            continue
         expected = _parse_expected(ws, p, cid, doc.get("expected"))
         mutations = _parse_mutations(p, cid, doc.get("mutations"))
         # #126: mutations are an admission requirement now — a case that
@@ -482,27 +541,9 @@ def load_cases(cases_dir) -> list[dict]:
                 f"{p.name}: case {cid!r}: `mutations` is required non-empty "
                 f"at admission (#126) — a case that cannot go red under a "
                 f"deliberately wrong implementation is a rubber stamp")
-        # #126: case -> hypothesis linkage. A case that discriminates
-        # nothing in the live competitor field is indistinguishable from a
-        # real experiment at load time (the trivial-oracle class).
-        hyp_ref = str(doc.get("hypothesis_ref") or "").strip()
-        if not hyp_ref or "/" in hyp_ref or "\\" in hyp_ref \
-                or hyp_ref in (".", ".."):
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: `hypothesis_ref` is required and "
-                f"must name a hypothesis id in the store (#126: without the "
-                f"linkage a case that discriminates nothing in the live "
-                f"competitor field passes for a real experiment)")
-        try:
-            hyp = hypotheses.get(hyp_ref)
-        except (KeyError, OSError, ValueError) as exc:  # InvalidTransition
-            # is a ValueError; the store's fail-open parse never invents a
-            # hypothesis, so ANY read failure is a refused link.
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: hypothesis_ref {hyp_ref!r} does "
-                f"not resolve to a readable hypothesis in "
-                f"{hypotheses.root} ({exc}) — a link to nothing links "
-                f"nothing (#126)") from None
+        # #126: case -> hypothesis linkage (trivial-oracle class refused).
+        hyp_ref = _require_hypothesis_ref(p, cid, doc.get("hypothesis_ref"))
+        hyp = _get_linked_hypothesis(hypotheses, p, cid, hyp_ref)
         # #126 amendment: cross-candidate separation. The HTTP-200 specimen
         # ("success" = server liveness — a property of the ENVIRONMENT,
         # invariant across the hypothesis space) cannot write a valid
@@ -533,14 +574,17 @@ def load_cases(cases_dir) -> list[dict]:
         # competitor_group = different signature (cross-channel divergence
         # is itself an observation).
         sig = action_signature(channel, hyp.competitor_group)
-        if sig in seen_signatures:
+        _require_fresh_signature(p, cid, sig, seen_signatures)
+        # #301: the semantic admission lint — the quantified verification
+        # contract (artifact, artifact_kind, criterion, threshold,
+        # feeds_decision); the three counterfeit-coin classes
+        # (category-existence / comprehension-claim / activity-claim) are
+        # refused with the class named. Runs LAST: the #108/#126
+        # structural refusals keep their priority.
+        violations = oca.lint_case(doc)
+        if violations:
             raise OracleCaseError(
-                f"{p.name}: case {cid!r}: duplicate action signature "
-                f"{sig} — already covered by case "
-                f"{seen_signatures[sig]!r} (same declared channel + same "
-                f"competitor_group); the dedup axis is marginal "
-                f"discriminative power, not text (#126)")
-        seen_signatures[sig] = cid
+                f"{p.name}: case {cid!r}: " + " | ".join(violations))
         cases.append({
             "id": cid,
             "channel": channel,
@@ -551,6 +595,7 @@ def load_cases(cases_dir) -> list[dict]:
             "expected_stages": dict(stages_expected or {}),
             "expected": expected,
             "mutations": mutations,
+            "verification": dict(doc.get("verification") or {}),
         })
     return cases
 

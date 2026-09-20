@@ -206,8 +206,10 @@ files:
   scripts/oracle_cadence.py:
     r1: 9
     r2: 1
+  scripts/oracle_case_admission.py:
+    r1: 10
   scripts/oracle_runner.py:
-    r1: 44
+    r1: 51
   scripts/outcome_capture.py:
     r1: 13
   scripts/pkg_detect.py:
@@ -415,8 +417,10 @@ files:
   tests/test_carrier_consistency_829.py:
     r1: 1
   tests/test_case_admission_126.py:
-    r1: 7
+    r1: 8
     r2: 1
+  tests/test_case_admission_301.py:
+    r1: 10
   tests/test_case_bank_110.py:
     r1: 3
     r2: 1
@@ -733,7 +737,7 @@ files:
   tests/test_hypothesis_contradiction_gate.py:
     r1: 1
   tests/test_hypothesis_loop_integration_111.py:
-    r1: 28
+    r1: 29
   tests/test_hypothesis_seeder.py:
     r1: 1
   tests/test_hypothesis_store_528.py:
@@ -886,11 +890,13 @@ files:
     r1: 1
   tests/test_operator_action.py:
     r1: 1
+  tests/test_oracle301_go_fixture.py:
+    r1: 1
   tests/test_oracle_cadence_132.py:
-    r1: 11
+    r1: 12
     r2: 1
   tests/test_oracle_runner_108.py:
-    r1: 8
+    r1: 9
   tests/test_orchestration_eval_quality.py:
     r1: 1
   tests/test_orchestration_event_taxonomy.py:
@@ -904,7 +910,7 @@ files:
   tests/test_outcome_capture.py:
     r1: 1
   tests/test_outcome_forensics_146.py:
-    r1: 4
+    r1: 5
     r2: 1
   tests/test_pdl_collapse_582.py:
     r1: 1
