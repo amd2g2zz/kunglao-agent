@@ -240,6 +240,10 @@ files:
     dest: .claude/scripts/content_hash.py
     kind: scaffold
     sha256: 91c582700d08363dcd6c19525bf4dde93b1128d1aa16444432f7d04f3d695c7c
+  - src: scripts/context_budget.py
+    dest: .claude/scripts/context_budget.py
+    kind: scaffold
+    sha256: d29c78bcf56466a5e2ea6979a1739eb43416b9d175d2153a42f515a072692c65
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
@@ -1343,7 +1347,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bd3c3cb3516c4c89c851313f89076cac63255af2f2215479c391b9386b3ef029
+    sha256: d2704b39c3191d6905615259acb5afa5625311b6d8577889a65b15837731953d
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
