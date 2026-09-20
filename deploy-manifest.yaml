@@ -211,7 +211,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: 52555f0b251031942b19db84c1cb6ac115aec4c80af4ab0dd3b67efb59711f46
+    sha256: d3c33e231199cc554f028e9bbddb33711b8e67965f6fcb3b15bd9964b1f1fd8e
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -244,6 +244,10 @@ files:
     dest: .claude/scripts/content_hash.py
     kind: scaffold
     sha256: 91c582700d08363dcd6c19525bf4dde93b1128d1aa16444432f7d04f3d695c7c
+  - src: scripts/context_budget.py
+    dest: .claude/scripts/context_budget.py
+    kind: scaffold
+    sha256: d29c78bcf56466a5e2ea6979a1739eb43416b9d175d2153a42f515a072692c65
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
@@ -251,7 +255,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 2177f968bbbd5eb9d61358860c76f705d6f28851aa26e31481dfadfb548194a1
+    sha256: ce30707b416830713d49e330d1c67f09d63335de78890bdeb13ec797f472ccf4
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -343,7 +347,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 0a8274bfdbe2e80a9ed1d3b2567c8dde06ed43488de6dfc21887e6ff5c3e9ef0
+    sha256: 4ea2a86546749793a0479b4fdca20ccdbda402d7543ab1ab400aefc90e9dbd6d
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -796,6 +800,10 @@ files:
     dest: .claude/scripts/template_version.py
     kind: scaffold
     sha256: 28a239dbcfdc8022c015c1ae7e0da36185a3c38472f0e904b16dd58d1c318293
+  - src: scripts/terminal_settlement.py
+    dest: .claude/scripts/terminal_settlement.py
+    kind: scaffold
+    sha256: 54b196c042a918ea15a513fddc397bb247a942a09840f09c832280d508b9f690
   - src: scripts/think_seat.py
     dest: .claude/scripts/think_seat.py
     kind: scaffold
@@ -1347,7 +1355,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bd3c3cb3516c4c89c851313f89076cac63255af2f2215479c391b9386b3ef029
+    sha256: 9d1ff963437755f439a70381322ca92425f7c7903febe9d2f6684f04d4c8bcac
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
