@@ -65,6 +65,14 @@ from pathlib import Path
 
 import yaml
 
+# issue 292: the register/dep primitives live in _scriptlib; these alias imports
+# keep every call site (and cross-module borrower) byte-identical.
+from _scriptlib import (claims_from_text as _claims_from_text,
+                        ensure_dep_edge as _ensure_dep_edge,
+                        find_claim as _find_claim,
+                        load_register as _load_claims,
+                        load_register_doc)
+
 # The three target/attack-surface levels (mirrors the L1/L2/L3 shape of
 # infeasible_proposal.LADDER_LEVELS — the ladder primitive's shape).
 TARGET_LADDER_LEVELS = ("T1", "T2", "T3")
@@ -175,33 +183,6 @@ def inventory_entries(ladder: dict | None) -> list[dict]:
             if isinstance(e, dict)
             and str(e.get("family") or "").strip()
             and str(e.get("tried") or "").strip()]
-
-
-def _load_claims(ws: Path) -> tuple[list, Path | None]:
-    p = Path(ws) / "claim-register.yaml"
-    if not p.exists():
-        return [], None
-    try:
-        reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return [], p
-    return reg.get("claims") or [], p
-
-
-def _claims_from_text(register_text: str) -> list:
-    """Parsed claims from register TEXT (fail-open: a YAML error yields [])."""
-    try:
-        reg = yaml.safe_load(register_text) or {}
-    except yaml.YAMLError:
-        return []
-    claims = reg.get("claims") if isinstance(reg, dict) else None
-    return claims if isinstance(claims, list) else []
-
-
-def _find_claim(claims: list, claim_id: str) -> dict | None:
-    return next((c for c in claims
-                 if isinstance(c, dict) and str(c.get("id") or "") == claim_id),
-                None)
 
 
 def _sibling_exists(claims: list, obstacle_claim_id: str,
@@ -358,7 +339,7 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
         body=(f"Family ledger for obstacle claim {obstacle_claim_id} — its "
               f"strategy siblings are the arms; family state syncs from "
               f"their claim settlements (#528) via hypothesis_bridge."))
-    reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    reg = load_register_doc(ws)[0]
     from failure_analysis_gate import _next_claim_id  # single ID grammar
     minted: list[dict] = []
     for entry in inv:
@@ -398,33 +379,6 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
         _ensure_dep_edge(ws, obstacle_claim_id, new_id)
         minted.append({"id": new_id, "ladder_family": family_name})
     return {"minted": minted, "refused": None}
-
-
-def _ensure_dep_edge(ws: Path, parent_id: str, child_id: str) -> None:
-    """The real DAG edge (claim_deps.yaml — the authoritative dep store),
-    mirroring _promote_obstacle_claim's deps write."""
-    deps_path = Path(ws) / "claim_deps.yaml"
-    deps: dict = {}
-    if deps_path.exists():
-        try:
-            loaded = yaml.safe_load(deps_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                deps = loaded
-        except Exception:  # noqa: BLE001 — rebuild from the edge below
-            deps = {}
-    edges = deps.get("depends_on")
-    if not isinstance(edges, dict):
-        edges = {}
-    parents = edges.get(child_id)
-    if not isinstance(parents, list):
-        parents = []
-    if parent_id not in parents:
-        parents.append(parent_id)
-    edges[child_id] = parents
-    deps["depends_on"] = edges
-    deps_path.write_text(
-        yaml.safe_dump(deps, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
 
 
 def main() -> int:

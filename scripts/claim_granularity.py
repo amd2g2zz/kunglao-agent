@@ -356,7 +356,10 @@ def mint_split_claims(ws: Path | str, claim_id: str) -> dict:
     # Deferred single-source imports (same shape as the issue-234 mint): the ID
     # grammar from failure_analysis_gate, the register/dep primitives from
     # target_ladder.
-    from target_ladder import _ensure_dep_edge, _find_claim, _load_claims
+    from _scriptlib import (ensure_dep_edge as _ensure_dep_edge,
+                            find_claim as _find_claim,
+                            load_register as _load_claims,
+                            load_register_doc)
     from failure_analysis_gate import _next_claim_id
 
     claims, p = _load_claims(ws)
@@ -374,7 +377,7 @@ def mint_split_claims(ws: Path | str, claim_id: str) -> dict:
         return {"minted": [], "refused": refusal}
     _, detail = granularity_defects(plan_text)
 
-    reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    reg = load_register_doc(ws)[0]
     # chunk N+1 depends_on chunk N within the same domain group (review
     # round 1): sequential execution WITHIN a domain, parallel ACROSS
     # domains. Resolved from existing subs too, so an incremental re-mint
