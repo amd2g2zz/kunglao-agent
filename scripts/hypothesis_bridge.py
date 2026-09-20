@@ -47,6 +47,7 @@ from hypothesis_store import (Hypothesis, HypothesisStore, InvalidTransition,
                               PQ_BODY_MARKER_FMT, PQ_GROUP_FMTS)
 from status_defs import TERMINAL as TERMINAL_STATUSES
 from tool_value import NEGATIVE_SETTLEMENTS, POSITIVE_SETTLEMENTS
+from _scriptlib import claims_of, load_register_doc
 
 FAMILY_GROUP_FMT = "hyp-{hyp_id}"
 ARM_ORIGIN = "hypothesis-arm"
@@ -250,9 +251,8 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
     reg_path = ws / "claim-register.yaml"
     if not reg_path.is_file():
         return {"minted": [], "refused": f"no claim-register.yaml under {ws}"}
-    reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
-    claims = reg.get("claims") if isinstance(reg, dict) else None
-    claims = claims if isinstance(claims, list) else []
+    reg = load_register_doc(ws)[0]
+    claims = claims_of(reg)
     existing = _existing_arm_texts(claims, hyp_id)
     key_map, collision = _candidate_key_map(hyp_id, candidates, existing)
     if collision:
@@ -431,9 +431,8 @@ def sync_family_ledger(ws: Path) -> dict:
              "skipped": [], "pending": [], "unchanged": []}
     if not reg_path.is_file():
         return empty
-    reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
-    claims = reg.get("claims") if isinstance(reg, dict) else None
-    claims = claims if isinstance(claims, list) else []
+    reg = load_register_doc(ws)[0]
+    claims = claims_of(reg)
     store = HypothesisStore(ws / "hypotheses")
     report: dict[str, list[str]] = {k: list(v) for k, v in empty.items()}
     claims_changed = False
@@ -562,11 +561,10 @@ def check_bridge_lint(ws: Path) -> list[str]:
     reg_path = ws / "claim-register.yaml"
     if reg_path.is_file():
         try:
-            reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+            reg = load_register_doc(ws)[0]
         except yaml.YAMLError:
             reg = {}
-        claims = reg.get("claims") if isinstance(reg, dict) else None
-        claims = claims if isinstance(claims, list) else []
+        claims = claims_of(reg)
         _lint_register_claims(ws, claims, errs)
         hyp_by_id = {h.id: h for h in store.list_all()}
         _lint_derivation_divergence(ws, claims, hyp_by_id, errs)

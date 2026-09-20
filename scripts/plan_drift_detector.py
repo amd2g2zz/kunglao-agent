@@ -60,22 +60,12 @@ Auto-integration mode (issue #602, --auto flag):
 from __future__ import annotations
 
 
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
+# issue 275 batch-3 fail-open tracer — single home in _scriptlib (issue 292);
+# the per-module copy (message token + rate-limit state) is the factory's
+# per-tag binding, byte-identical to the former private def.
+from _scriptlib import make_warn
 
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] plan_drift_detector WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+warn = make_warn("plan_drift_detector")
 import gate_telemetry as _gt
 from status_defs import TERMINAL
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
