@@ -224,6 +224,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
+| `context_budget.py` | #300 WS1 context-budget metric — fixed standing bytes (constitution + workspace template) vs the 130% v0.1 baseline cap; per-section audit table (rule-12: consumer + behavior delta), owner-exception path, WS1 high-water ratchet; CLI `--json` for CI; over-cap exits 2 | tests, CLI |
 | `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |
