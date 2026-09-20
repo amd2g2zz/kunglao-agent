@@ -588,10 +588,14 @@ files:
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold
     sha256: 5f2b0e05f60c7d3eafd236da7423cd3f159a05b44d725c62dd8a9ee154134fa3
+  - src: scripts/oracle_case_admission.py
+    dest: .claude/scripts/oracle_case_admission.py
+    kind: scaffold
+    sha256: 40f2bfde12179282ce9923a18f63d1a609465a527f9a39a73d821d7ad6297dac
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 6035b2c7c688c8a311520d88dfa63b73b17af906c67dce060b9b83ba6325e33d
+    sha256: 3e5ee23c038260c341bff868091c2f07d7e9e7b22a9be839855af94c9ca79bb0
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -1343,7 +1347,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bd3c3cb3516c4c89c851313f89076cac63255af2f2215479c391b9386b3ef029
+    sha256: 7d902efa1497c589e692dd50a5d8b4a4611bf21868f655d5f2d974e033042ef5
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

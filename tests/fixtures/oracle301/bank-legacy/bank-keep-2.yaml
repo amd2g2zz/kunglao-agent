@@ -1,0 +1,11 @@
+# Synthetic #301 sweep fixture (no real workspace data).
+id: bank-keep-2
+expected:
+  - field: arx_pairs_matched
+    value: 12
+verification:
+  artifact: "captured (input,output) pair set, 14 pairs"
+  artifact_kind: pair-set
+  criterion: pair-match
+  threshold: {min_hits: 11, of: 14}
+  feeds_decision: "pq:arx-reproduction"
