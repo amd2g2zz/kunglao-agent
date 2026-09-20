@@ -94,6 +94,7 @@ LEGACY_ACTORS = frozenset({
     "anomaly_detector", "ask_for_direction", "ask_for_direction_gate",
     "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
     "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",
+    "claim_granularity",  # issue 293 tagged decision emission (split fan-out + verdict)
     "complete_teardown", "completion_gate", "convergence_check",
     "convergence_health",  # #127 detector liveness telemetry (detector_eval/detector_fired)
     "dead_letter",  # issue-234 dispatch-failure 3-strike writer (must_ask escalation face)
@@ -109,10 +110,12 @@ LEGACY_ACTORS = frozenset({
     "migrate_facts", "mission_ledger", "mission_stall", "notes_writer",
     "nursery", "operator", "oracle_runner",  # #146 retirement coverage WARN face
     "orchestrator_tool_guard", "outcome_capture",
-    "plan_drift", "plan_drift_detector", "priority", "priority_ratio",
+    "plan_drift", "plan_drift_detector", "plan_epistemics", "priority",
+    "priority_ratio", "progress_timeline",  # issue 293 tagged decision emission
     "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
     "rollup", "retract_claim", "rho_verifier", "scan_worker_budget",
     "statusline_snapshot",  # #883 statusline health-snapshot writer (event-driven, #142)
+    "target_ladder",  # issue 293 tagged decision emission (sibling fan-out + settlement gate)
     "telemetry", "think_seat", "toolchain_install", "tuition_curve",
     "update_index", "upgrade", "user", "user_signal", "verdict_scorer",
     "verify_status_watch", "verifier", "violation_capture",

@@ -60,6 +60,7 @@ Ladder artifact (mirrors runs/infeasible-ladder-<claim>.yaml):
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -93,6 +94,20 @@ OBSTACLE_CLASS_FAMILIES: dict[str, tuple[str, ...]] = {
     "visibility": ("static-unpacking", "dynamic-tracing", "memory-imaging"),
     "execution": ("native-execution", "emulation", "instrumented-runner"),
 }
+
+
+def _emit(ws: Path, action: str, *, claim: str | None = None,
+          detail: str | None = None) -> None:
+    """issue 293 fail-open event face (kunglao_record posture): decision records
+    reach the unified ledger tagged actor=target_ladder; observability never
+    breaks the ladder (never raises, never changes a verdict)."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="target_ladder", action=action,
+             claim=claim, detail=detail)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        print(f"[kunglao-agent] target_ladder telemetry skipped: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
 # Fail-open fallback: an unknown or absent obstacle_class still enumerates a
 # generic target-axis ladder — never unwalkable (same posture as the
 # instrument-annotation rule).
@@ -256,16 +271,20 @@ def settlement_blocker(ws: Path, claim_id: str,
     if not defects:
         defects = ladder_defects(ladder, claim.get("obstacle_class"))
     if defects:
-        return (f"TARGET LADDER GATE: obstacle claim {claim_id} cannot "
-                f"settle CONFIRMED (PROVEN) — walk the 3-level "
-                f"target/attack-surface ladder first ({'; '.join(defects)}); "
-                f"artifact: {ladder_path(ws, claim_id)} (scripts/"
-                f"target_ladder.py)")
+        reason = (f"TARGET LADDER GATE: obstacle claim {claim_id} cannot "
+                  f"settle CONFIRMED (PROVEN) — walk the 3-level "
+                  f"target/attack-surface ladder first ({'; '.join(defects)}); "
+                  f"artifact: {ladder_path(ws, claim_id)} (scripts/"
+                  f"target_ladder.py)")
+        _emit(ws, "ladder_reject", claim=claim_id, detail=reason)  # issue 293
+        return reason
     inv = inventory_entries(ladder)
     if not inv:
-        return (f"TARGET LADDER GATE: obstacle claim {claim_id} exhaustion "
-                f"inventory empty — list what was tried per rung "
-                f"({ladder_path(ws, claim_id)} inventory)")
+        reason = (f"TARGET LADDER GATE: obstacle claim {claim_id} exhaustion "
+                  f"inventory empty — list what was tried per rung "
+                  f"({ladder_path(ws, claim_id)} inventory)")
+        _emit(ws, "ladder_reject", claim=claim_id, detail=reason)  # issue 293
+        return reason
     # review r2 (same class as the 237 H1 two-read seam): the sibling
     # checks consume the SAME parsed register as the origin/class lookup —
     # the caller's snapshot when register_text was supplied, else the one
@@ -274,9 +293,11 @@ def settlement_blocker(ws: Path, claim_id: str,
                 if not _sibling_exists(claims, claim_id,
                                        str(e.get("family")).strip().lower())]
     if unminted:
-        return (f"TARGET LADDER GATE: inventory entries without registered "
-                f"strategy siblings: {', '.join(unminted)} — run "
-                f"python scripts/target_ladder.py <ws> --mint {claim_id}")
+        reason = (f"TARGET LADDER GATE: inventory entries without registered "
+                  f"strategy siblings: {', '.join(unminted)} — run "
+                  f"python scripts/target_ladder.py <ws> --mint {claim_id}")
+        _emit(ws, "ladder_reject", claim=claim_id, detail=reason)  # issue 293
+        return reason
     return None
 
 
@@ -302,15 +323,24 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
     ws = Path(ws)
     claims, p = _load_claims(ws)
     if p is None:
+        _emit(ws, "mint_refused", claim=obstacle_claim_id,  # issue 293
+              detail="no claim-register.yaml under "
+                     f"{ws}")
         return {"minted": [],
                 "refused": f"no claim-register.yaml under {ws}"}
     parent = _find_claim(claims, obstacle_claim_id)
     if parent is None:
+        _emit(ws, "mint_refused", claim=obstacle_claim_id,  # issue 293
+              detail=f"parent claim {obstacle_claim_id} not found")
         return {"minted": [],
                 "refused": f"parent claim {obstacle_claim_id} not found — "
                            f"refusing to mint siblings against a "
                            f"nonexistent parent"}
     if str(parent.get("origin") or "") != OBSTACLE_ORIGIN:
+        _emit(ws, "mint_refused", claim=obstacle_claim_id,  # issue 293
+              detail=f"parent claim {obstacle_claim_id} origin is "
+                     f"'{parent.get('origin')}' — only "
+                     f"{OBSTACLE_ORIGIN} claims fan out")
         return {"minted": [],
                 "refused": f"parent claim {obstacle_claim_id} origin is "
                            f"'{parent.get('origin')}' — only "
@@ -319,12 +349,16 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
     defects = _class_defects(parent, ladder) or ladder_defects(
         ladder, parent.get("obstacle_class"))
     if defects:
+        _emit(ws, "mint_refused", claim=obstacle_claim_id,  # issue 293
+              detail=f"target ladder not walked-valid ({'; '.join(defects)})")
         return {"minted": [],
                 "refused": f"target ladder not walked-valid "
                            f"({'; '.join(defects)}) — walk it before "
                            f"minting"}
     inv = inventory_entries(ladder)
     if not inv:
+        _emit(ws, "mint_refused", claim=obstacle_claim_id,  # issue 293
+              detail="exhaustion inventory empty — nothing to fan out")
         return {"minted": [],
                 "refused": "exhaustion inventory empty — nothing to fan out"}
     # ---- issue 252: the fan-out family IS a hypothesis family ----
@@ -378,6 +412,14 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
             encoding="utf-8")
         _ensure_dep_edge(ws, obstacle_claim_id, new_id)
         minted.append({"id": new_id, "ladder_family": family_name})
+    if minted:
+        # issue 293: the fan-out mint is a decision record (register + DAG
+        # writes happened) — tagged + persisted, per-attempt shape (WHAT
+        # happened, never worth).
+        _emit(ws, "siblings_minted", claim=obstacle_claim_id,
+              detail=json.dumps(
+                  {"parent": obstacle_claim_id, "minted": minted},
+                  ensure_ascii=False, sort_keys=True))
     return {"minted": minted, "refused": None}
 
 

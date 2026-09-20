@@ -59,6 +59,18 @@ from _scriptlib import read_register_claims as _read_register
 
 warn = make_warn("plan_epistemics")
 
+
+def _emit(ws: Path, action: str, detail: str) -> None:
+    """issue 293 fail-open event face (kunglao_record posture): the mint face is
+    a state change (register + posterior-ledger writes) — tagged
+    actor=plan_epistemics + persisted; observability never breaks the
+    mint."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="plan_epistemics", action=action, detail=detail)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        warn("_emit", f"{type(exc).__name__}: {exc}")
+
 # ---------------------------------------------------------------------------
 # Piece 1 — per-step if-fails contingency lint
 # ---------------------------------------------------------------------------
@@ -613,6 +625,17 @@ def mint_workspace(ws: Path) -> dict:
                                       sort_keys=False), encoding="utf-8")
         tmp.replace(reg_path)
     report = seed_situational_pqs(ws, minted, task_spec)
+    # issue 293: the mint face is a state change (register + posterior-ledger
+    # writes) — one tagged batch event; the idempotent no-mint run writes
+    # nothing (no state change, no event).
+    if minted:
+        _emit(ws, "epistemic_claims_minted", json.dumps(
+            {"target_class": target_class,
+             "claims": [{"id": str(c.get("id")),
+                         "answers_question": str(c.get("answers_question") or "")}
+                        for c in minted],
+             "seeded": report},
+            ensure_ascii=False, sort_keys=True))
     return {"target_class": target_class, "minted": minted, "report": report}
 
 
