@@ -59,6 +59,18 @@ ROI_NEGATIVE = "NEGATIVE"
 
 REQUIRED_FIELDS = ("claim_id", "method", "roi_class")
 
+# issue-136 terminal-chain weighting: entries whose claim_id sits in the
+# latest task_terminal_settlement row's enabling chain sort above same-class
+# mid-loop entries — a lesson that led to closure outranks one that merely
+# resolved a side question. Implementation: the entry's effective recency
+# position gains this offset, so the chain tier beats up to this many newer
+# same-class entries; recency still decides INSIDE each tier and the
+# failures-first class rank stays the PRIMARY sort (owner ruling 4 —
+# counterexample pruning beats positive reuse, chain or not). Modest
+# default: a bank that will never hold 100k entries is fully ordered by
+# (class, chain, recency).
+TERMINAL_CHAIN_WEIGHT = 100_000
+
 
 class CaseBankError(ValueError):
     """Banking contract violation (ruling 4: unattributed failure, missing
@@ -168,22 +180,35 @@ def append_once(ws: Path, entry: dict) -> dict:
 
 
 def retrieve(ws: Path, context_tags: list, limit: int = 5) -> list[dict]:
-    """Matching entries, FAILURES FIRST then positives, newest first.
+    """Matching entries, FAILURES FIRST then positives, newest first —
+    with the issue-136 terminal-chain tier: entries whose claim_id is in the
+    latest task_terminal_settlement row's enabling chain sort above
+    same-class mid-loop entries (TERMINAL_CHAIN_WEIGHT dominates recency;
+    the class rank stays primary).
 
     Matching = tag intersection (any of the query tags present in the
     entry's context_tags); an empty query matches everything. Order is
-    (NEGATIVE rank, -append-position): append order is recency, so
+    (NEGATIVE rank, chain-boosted -position): append order is recency, so
     -position is newest-first without clock parsing. limit applies AFTER
-    ordering, so the top slice always leads with failures.
+    ordering, so the top slice always leads with failures. Fail-open: an
+    unreadable terminal row degrades to the unweighted order.
     """
     wanted = {str(t) for t in (context_tags or [])}
     matched = [e for e in read_entries(ws)
                if not wanted or wanted & {str(t) for t in
                                           (e.get("context_tags") or [])}]
+    try:  # issue 136: chain membership — a retrieval-side weighting only
+        from terminal_settlement import terminal_chain_claims
+        chain = terminal_chain_claims(ws)
+    except Exception:  # noqa: BLE001 — weighting must never break retrieval
+        chain = set()
     ranked = sorted(
         enumerate(matched),
-        key=lambda pair: (0 if pair[1].get("roi_class") == ROI_NEGATIVE
-                          else 1, -pair[0]))
+        key=lambda pair: (
+            0 if pair[1].get("roi_class") == ROI_NEGATIVE else 1,
+            -(pair[0] + (TERMINAL_CHAIN_WEIGHT
+                         if str(pair[1].get("claim_id") or "") in chain
+                         else 0))))
     return [e for _, e in ranked[:max(int(limit), 0)]]
 
 
