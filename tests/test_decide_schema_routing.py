@@ -52,6 +52,8 @@ def _make_ws(tmp_path, claims=None) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "runs").mkdir()
+    # #240: the convergence CLI now hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     write_claims_register(ws, claims or [], defaults=True)
     return ws
 

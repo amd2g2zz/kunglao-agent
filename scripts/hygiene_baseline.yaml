@@ -55,9 +55,9 @@ files:
   scripts/completion_gate.py:
     r1: 21
   scripts/contracts.py:
-    r1: 9
+    r1: 10
   scripts/convergence_check.py:
-    r1: 133
+    r1: 135
     r2: 2
   scripts/convergence_health.py:
     r1: 15
@@ -468,6 +468,8 @@ files:
     r1: 2
   tests/test_convergence_crash_exit_99.py:
     r1: 2
+  tests/test_convergence_cwd_matrix_240.py:
+    r1: 2
   tests/test_convergence_health_crash_3.py:
     r1: 4
     r2: 1
@@ -477,6 +479,8 @@ files:
     r1: 3
   tests/test_convergence_rules_file.py:
     r1: 1
+  tests/test_convergence_ws_identity_240.py:
+    r1: 3
   tests/test_course_distill_165.py:
     r1: 2
     r2: 1
@@ -498,7 +502,7 @@ files:
     r1: 56
     r2: 35
   tests/test_decide_schema_routing.py:
-    r1: 4
+    r1: 5
   tests/test_decide_state_machine.py:
     r1: 43
   tests/test_decision_pending.py:
@@ -570,7 +574,7 @@ files:
   tests/test_dispatch_tools_760.py:
     r1: 7
   tests/test_dlq_dead_letter.py:
-    r1: 1
+    r1: 2
   tests/test_doc_pointer_lighting_24.py:
     r1: 2
   tests/test_doc_sync.py:
@@ -622,7 +626,7 @@ files:
   tests/test_evals_schema.py:
     r1: 1
   tests/test_event_stream_adoption.py:
-    r1: 20
+    r1: 23
     r2: 1
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
@@ -706,7 +710,7 @@ files:
   tests/test_heartbeat_gate.py:
     r1: 3
   tests/test_heartbeat_off.py:
-    r1: 5
+    r1: 6
   tests/test_heartbeat_pulse_618.py:
     r1: 2
   tests/test_heartbeat_tick.py:
@@ -1020,7 +1024,7 @@ files:
   tests/test_route_capability_providers.py:
     r1: 2
   tests/test_router_runtime.py:
-    r1: 2
+    r1: 3
   tests/test_rpc_skeleton_template.py:
     r1: 1
     r2: 1
@@ -1228,7 +1232,7 @@ files:
   tests/test_worker_death_resume_11.py:
     r1: 7
   tests/test_worker_liveness_protocol.py:
-    r1: 7
+    r1: 10
   tests/test_worker_lookup_constitution_145.py:
     r1: 2
   tests/test_workspace_carriers_538.py:

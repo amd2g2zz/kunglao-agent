@@ -52,6 +52,8 @@ def _write_reg(ws: Path, claims: list) -> None:
         yaml.safe_dump({"claims": claims}, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+    # #240: the convergence pulse hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
 
 
 def test_worker_pulse_shows_quarantined_flag(tmp_path):

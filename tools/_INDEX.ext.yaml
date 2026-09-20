@@ -232,7 +232,7 @@ ext:
     type: "tool"
     consume: "invoke"
     source: "scripts/convergence_check.py"
-    usage: "python scripts/convergence_check.py [workspace]          # human-readable"
+    usage: "python scripts/convergence_check.py <workspace>          # human-readable"
     description: "convergence_check.py - the \"should I dispatch right now?\" decision (v1.9)."
   - name: "convergence_health"
     capability: "converge:health"

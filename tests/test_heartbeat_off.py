@@ -37,6 +37,8 @@ def _make_ws(ws: Path, claims: list[dict] | None = None,
     claims = [dict(c, boundary_type=c.get("boundary_type", "positive_observation"))
               for c in (claims or [])]
     write_claims_register(ws, claims)
+    # #240: the convergence gate now hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     if heartbeat:
         (ws / "runs" / ".heartbeat.json").write_text(
             json.dumps({"started_ts": "2026-08-13T00:00:00Z", "interval_min": 5}),
