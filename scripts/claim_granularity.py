@@ -46,6 +46,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -62,6 +63,20 @@ GRANULARITY_MIN_FAMILY_STEPS = 2
 
 GRANULARITY_SPLIT_ORIGIN = "granularity-split"
 GRANULARITY_BOUNDARY_TYPE = "granularity-split"
+
+
+def _emit(ws: Path | str, action: str, *, claim: str | None = None,
+          detail: str | None = None) -> None:
+    """issue 293 fail-open event face (kunglao_record posture): decision records
+    reach the unified ledger tagged actor=claim_granularity; observability
+    never breaks the gate (never raises, never changes a verdict)."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="claim_granularity", action=action,
+             claim=claim, detail=detail)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        print(f"[kunglao-agent] claim_granularity telemetry skipped: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
 
 # Step-domain table: (family, inferred, keywords) — FIRST match wins, so
 # order is specificity order (network/crypto are keyword-scarce; the broad
@@ -356,25 +371,34 @@ def mint_split_claims(ws: Path | str, claim_id: str) -> dict:
     # Deferred single-source imports (same shape as the issue-234 mint): the ID
     # grammar from failure_analysis_gate, the register/dep primitives from
     # target_ladder.
-    from target_ladder import _ensure_dep_edge, _find_claim, _load_claims
+    from _scriptlib import (ensure_dep_edge as _ensure_dep_edge,
+                            find_claim as _find_claim,
+                            load_register as _load_claims,
+                            load_register_doc)
     from failure_analysis_gate import _next_claim_id
 
     claims, p = _load_claims(ws)
     if p is None:
+        _emit(ws, "mint_refused", claim=claim_id,  # issue 293
+              detail=f"no claim-register.yaml under {ws}")
         return {"minted": [],
                 "refused": f"no claim-register.yaml under {ws}"}
     parent = _find_claim(claims, claim_id)
     if parent is None:
+        _emit(ws, "mint_refused", claim=claim_id,  # issue 293
+              detail=f"parent claim {claim_id} not found")
         return {"minted": [],
                 "refused": f"parent claim {claim_id} not found — refusing "
                            f"to mint split units against a nonexistent "
                            f"parent"}
     plan, plan_text, refusal = _split_plan_input(ws, claim_id)
     if refusal:
+        _emit(ws, "mint_refused", claim=claim_id,  # issue 293
+              detail=refusal)
         return {"minted": [], "refused": refusal}
     _, detail = granularity_defects(plan_text)
 
-    reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    reg = load_register_doc(ws)[0]
     # chunk N+1 depends_on chunk N within the same domain group (review
     # round 1): sequential execution WITHIN a domain, parallel ACROSS
     # domains. Resolved from existing subs too, so an incremental re-mint
@@ -441,6 +465,16 @@ def mint_split_claims(ws: Path | str, claim_id: str) -> dict:
         p.write_text(
             yaml.safe_dump(reg, allow_unicode=True, sort_keys=False),
             encoding="utf-8")
+    if minted:
+        # issue 293: the split fan-out is a decision record (register + DAG
+        # writes + the parent's SUPERSEDED transition happened) — one
+        # tagged per-attempt event (WHAT happened, never worth).
+        _emit(ws, "split_units_minted", claim=claim_id, detail=json.dumps(
+            {"parent": claim_id, "units": minted,
+             "parent_superseded": split_into != prior_split_into,
+             "superseded_by": split_into if split_into != prior_split_into
+             else None},
+            ensure_ascii=False, sort_keys=True))
     return {"minted": minted, "refused": None}
 
 
@@ -476,6 +510,10 @@ def main() -> int:
                   f"{len(detail['groups'])} domain group(s))")
             return 0
         print(split_guidance(args.check, plan.name, defects, detail))
+        # issue 293: the monolithic verdict is a decision record (it directs the
+        # split) — tagged + persisted, additive to the stdout directive.
+        _emit(ws, "granularity_reject", claim=args.check,
+              detail=split_guidance(args.check, plan.name, defects, detail))
         return 1
     if args.split:
         r = mint_split_claims(ws, args.split)

@@ -42,22 +42,9 @@ from __future__ import annotations
 
 
 
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] plan_epistemics WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3 fail-open tracer — single home in _scriptlib (issue 292);
+# the per-module copy (message token + rate-limit state) is the factory's
+# per-tag binding, byte-identical to the former private def.
 import argparse
 import json
 import re
@@ -67,6 +54,22 @@ from pathlib import Path
 import yaml
 
 from posteriors import PosteriorLedger, PQCategorical, entropy_bits
+from _scriptlib import claims_of, load_register_doc, make_warn
+from _scriptlib import read_register_claims as _read_register
+
+warn = make_warn("plan_epistemics")
+
+
+def _emit(ws: Path, action: str, detail: str) -> None:
+    """issue 293 fail-open event face (kunglao_record posture): the mint face is
+    a state change (register + posterior-ledger writes) — tagged
+    actor=plan_epistemics + persisted; observability never breaks the
+    mint."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="plan_epistemics", action=action, detail=detail)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        warn("_emit", f"{type(exc).__name__}: {exc}")
 
 # ---------------------------------------------------------------------------
 # Piece 1 — per-step if-fails contingency lint
@@ -405,18 +408,6 @@ _TERMINAL = frozenset({"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED",
                        "DEFERRED", "STALE", "SUPERSEDED", "DEAD"})
 
 
-def _read_register(ws: Path) -> list[dict]:
-    reg = Path(ws) / "claim-register.yaml"
-    if not reg.is_file():
-        return []
-    try:
-        data = yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return []
-    claims = data.get("claims") if isinstance(data, dict) else None
-    return claims if isinstance(claims, list) else []
-
-
 def _read_facts(ws: Path) -> list[tuple[Path, dict, str]]:
     """[(path, frontmatter, body)] for facts/F*.md (tolerant parse — a
     broken fact degrades to empty frontmatter, never a crash)."""
@@ -592,9 +583,7 @@ def mint_workspace(ws: Path) -> dict:
     reg_path = ws / "claim-register.yaml"
     existing: list[dict] = []
     if reg_path.is_file():
-        data = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
-        existing = data.get("claims") if isinstance(data, dict) else []
-        existing = existing if isinstance(existing, list) else []
+        existing = claims_of(load_register_doc(ws)[0])
     task_spec = {}
     ts_path = ws / "task_spec.yaml"
     if ts_path.is_file():
@@ -636,6 +625,17 @@ def mint_workspace(ws: Path) -> dict:
                                       sort_keys=False), encoding="utf-8")
         tmp.replace(reg_path)
     report = seed_situational_pqs(ws, minted, task_spec)
+    # issue 293: the mint face is a state change (register + posterior-ledger
+    # writes) — one tagged batch event; the idempotent no-mint run writes
+    # nothing (no state change, no event).
+    if minted:
+        _emit(ws, "epistemic_claims_minted", json.dumps(
+            {"target_class": target_class,
+             "claims": [{"id": str(c.get("id")),
+                         "answers_question": str(c.get("answers_question") or "")}
+                        for c in minted],
+             "seeded": report},
+            ensure_ascii=False, sort_keys=True))
     return {"target_class": target_class, "minted": minted, "report": report}
 
 

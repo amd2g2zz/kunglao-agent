@@ -187,6 +187,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
 | `report_render.py` | the report/console rendering face of the toolchain — ToolMeta guidance metadata + FIXES table (incl. derived mcp:<name> entries) + fix_text accessor + closed NextAction vocabulary; single home of the guidance-facing port defaults; pairs with toolchain_install | lib, tests |
 | `_boot.py` | THE CLI boot module — UTF-8 stdio insurance (PYTHONUTF8 setdefault + stdout/stderr reconfigure, stdout-only scoped face) + the script-dir path bootstrap; single home of the entry-time prologue | hooks, tests |
+| `_scriptlib.py` | the ONE shared-primitives home for the product scripts (issue 292): `make_warn(tag)` rate-limited fail-open tracer factory (per-tag state, byte-identical message contract) + tolerant claim-register IO (load_register / load_register_doc / read_register_claims / claims_from_text / find_claim / claims_of / register_path) + the claim_deps.yaml `ensure_dep_edge` write; guard: tests/test_shared_lib_guard_292.py (name-level re-definition ban) | tests |
 | `plan_epistemics.py` | issue 250 epistemic bookkeeping — plan per-step if-fails lint (check_worker_plan wiring) + MUST-MASTER derivation (vmp/android) + epistemic claim mint (boundary_type: epistemic, h_standing/delta_h fields) + situational PQ seeding into runs/posteriors.yaml + signed apply_and_measure + settle_coverage/coverage_note (sort-shaped, never blocks) + semantic contradiction matcher | CLI, tests |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
@@ -202,6 +203,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
 | `heartbeat_touch.py` | lightweight heartbeat timestamp refresh — companion to heartbeat_tick.py (one-shot, no side effects; #534) | hooks, tests |
 | `summary_discriminator.py` | summary 结构合同判别器 (#826) — R1 完成词需暂定节 / R2 不确定性传播(fact-id 或 WAIVED) / R3 未答主问题节; completion_gate SUMMARY_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
+| `terminal_settlement.py` | #136 terminal credit assignment — at master-green closure (convergence_check CONVERGED, post-#829 gate) emits the arc-close `task_terminal_settlement` row into the EXISTING kunglao_log ledger: the #130 reference graph read closure-side (case-green order -> hypothesis -> claim) + the arc's claim settlements + banked premise_corrections; arc-deduped (repeated CONVERGED ticks = one row; settlements after the last row = new arc); case_bank.retrieve weights terminal-chain claims above same-class mid-loop entries (ruling 4's failures-first stays primary) | convergence_check (decide hook), case_bank (retrieval), tests |
 
 ## Support libraries & utilities
 
@@ -223,6 +225,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
+| `context_budget.py` | #300 WS1 context-budget metric — fixed standing bytes (constitution + workspace template) vs the 130% v0.1 baseline cap; per-section audit table (rule-12: consumer + behavior delta), owner-exception path, WS1 high-water ratchet; CLI `--json` for CI; over-cap exits 2 | tests, CLI |
 | `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |

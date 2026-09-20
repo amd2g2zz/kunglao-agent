@@ -101,11 +101,17 @@ def test_every_converted_file_carries_the_rate_limited_helper():
     for path in files:
         src = path.read_text(encoding="utf-8")
         has_warn = "def warn(" in src and "file=sys.stderr" in src
+        # issue 292: the helper may instead be the shared-home binding —
+        # `warn = make_warn("<tag>")` from scripts/_scriptlib.py — which
+        # replaced the private copies (the trace contract is unchanged,
+        # pinned by tests/test_shared_primitives_292.py).
+        has_binding = "warn = make_warn(" in src \
+            and "from _scriptlib import" in src
         has_sidecar = "_IMPORT_DEGRADED: list[str] = []" in src \
             and "_IMPORT_DEGRADED.append(" in src
-        assert has_warn or has_sidecar, path
+        assert has_warn or has_binding or has_sidecar, path
         assert ("_WARN_LAST" in src) or ("_B3_WARN_LAST" in src) \
-            or has_sidecar, path
+            or has_binding or has_sidecar, path
 
 
 # ------------------------------------------------------------ helper shape

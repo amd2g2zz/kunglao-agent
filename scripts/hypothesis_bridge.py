@@ -47,6 +47,7 @@ from hypothesis_store import (Hypothesis, HypothesisStore, InvalidTransition,
                               PQ_BODY_MARKER_FMT, PQ_GROUP_FMTS)
 from status_defs import TERMINAL as TERMINAL_STATUSES
 from tool_value import NEGATIVE_SETTLEMENTS, POSITIVE_SETTLEMENTS
+from _scriptlib import claims_of, load_register_doc
 
 FAMILY_GROUP_FMT = "hyp-{hyp_id}"
 ARM_ORIGIN = "hypothesis-arm"
@@ -54,6 +55,26 @@ HYPOTHESIS_REF = "hypothesis_ref"
 # The idempotency marker field: the normalized candidate slug carried on the
 # arm claim (marker-not-text, the issue 234 rule).
 ARM_KEY = "arm_key"
+
+# ---------------------------------------------------------------------------
+# Investment-arc envelope (issue 293 field upgrade B)
+# ---------------------------------------------------------------------------
+# A family hypothesis IS a multi-dispatch campaign: the arms are the runs,
+# the family verdict is the stop. The envelope rides the ARC-LEVEL events
+# only (investment_arc_open carries budget/max_runs/stop_condition;
+# investment_arc_close carries the value attribution — which arm won).
+# Per-attempt events (family_arms_minted / family_superseded / mint_refused)
+# state WHAT happened and never what it was WORTH: value attribution only
+# at arc close (the delayed/sparse/high-variance reward reality).
+#
+# budget is the TS pool's REAL per-arm drop cap,
+# hooks/worker_budget_core.MAX_PROMOTION_ATTEMPTS (= 3), restated as a
+# literal because scripts/ does not import hooks/ internals; equality is
+# pinned by tests/test_tagged_logging_293.py (the cross-face sync pattern
+# of plan_drift_detector.PLAN_REPAIR_WINDOW_ROUNDS).
+ARC_BUDGET = 3  # == MAX_PROMOTION_ATTEMPTS (pin: test_arc_budget_matches_worker_budget_cap)
+ARC_STOP_CONDITION = ("family ledger sync reaches a terminal verdict "
+                      "(family_confirmed / family_refuted)")
 
 # Modules allowed to write hypotheses/ without minting claims — the
 # scaffold/bet/retro-seed/adjudication faces (none of them arm-minting).
@@ -184,6 +205,20 @@ def _emit(ws: Path, action: str, detail: str) -> None:
               file=sys.stderr, flush=True)
 
 
+def _emit_arc_event(ws: Path, action: str, hyp_id: str, payload: dict) -> None:
+    """issue 293 arc-level event face: `hypothesis_ref` names the campaign so a
+    tail can join the arc's rows (open + close + its per-attempt faces)."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="hypothesis_bridge", action=action,
+             hypothesis_ref=hyp_id,
+             detail=json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — logging must never break the bridge
+        print(f"hypothesis_bridge: WARN emit unavailable for {action} "
+              f"({type(exc).__name__}: {exc})",
+              file=sys.stderr, flush=True)
+
+
 def _existing_arm_texts(claims: list[dict], hyp_id: str) -> dict[str, str]:
     """key -> candidate text of already-minted arms (the statement format
     is deterministic: "[<hyp_id> arm] <candidate>")."""
@@ -244,18 +279,27 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
     try:
         store.get(hyp_id)
     except KeyError:
+        # issue 293: the refusal is a decision record — tagged + persisted
+        _emit_arc_event(ws, "mint_refused", hyp_id,
+                        {"family": family_group(hyp_id),
+                         "reason": "family hypothesis file not found"})
         return {"minted": [], "refused": (
             f"hypothesis {hyp_id} not found under {ws / 'hypotheses'} — "
             f"refusing to mint arms against a nonexistent family")}
     reg_path = ws / "claim-register.yaml"
     if not reg_path.is_file():
+        _emit_arc_event(ws, "mint_refused", hyp_id,
+                        {"family": family_group(hyp_id),
+                         "reason": f"no claim-register.yaml under {ws}"})
         return {"minted": [], "refused": f"no claim-register.yaml under {ws}"}
-    reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
-    claims = reg.get("claims") if isinstance(reg, dict) else None
-    claims = claims if isinstance(claims, list) else []
+    reg = load_register_doc(ws)[0]
+    claims = claims_of(reg)
     existing = _existing_arm_texts(claims, hyp_id)
     key_map, collision = _candidate_key_map(hyp_id, candidates, existing)
     if collision:
+        _emit_arc_event(ws, "mint_refused", hyp_id,
+                        {"family": family_group(hyp_id),
+                         "reason": collision})
         return {"minted": [], "refused": collision}
     from failure_analysis_gate import _next_claim_id  # single ID grammar
     group = family_group(hyp_id)
@@ -289,6 +333,17 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
         _emit(ws, "family_arms_minted",
               f"{hyp_id} +{len(minted)} "
               f"({', '.join(m['id'] for m in minted)})")
+        if not existing:
+            # issue 293: the family's FIRST arms — the investment arc opens.
+            # Top-up mints ride the per-attempt face only (exactly one
+            # arc-open per family, at first mint).
+            _emit_arc_event(ws, "investment_arc_open", hyp_id, {
+                "arc": family_group(hyp_id),
+                "budget": ARC_BUDGET,
+                "max_runs": len(minted),
+                "stop_condition": ARC_STOP_CONDITION,
+                "arms": [str(m["id"]) for m in minted],
+            })
     return {"minted": minted, "refused": None}
 
 
@@ -431,9 +486,8 @@ def sync_family_ledger(ws: Path) -> dict:
              "skipped": [], "pending": [], "unchanged": []}
     if not reg_path.is_file():
         return empty
-    reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
-    claims = reg.get("claims") if isinstance(reg, dict) else None
-    claims = claims if isinstance(claims, list) else []
+    reg = load_register_doc(ws)[0]
+    claims = claims_of(reg)
     store = HypothesisStore(ws / "hypotheses")
     report: dict[str, list[str]] = {k: list(v) for k, v in empty.items()}
     claims_changed = False
@@ -455,6 +509,16 @@ def sync_family_ledger(ws: Path) -> dict:
                 report["confirmed"].append(hid)
                 _emit(ws, "family_confirmed",
                       f"{hid} <- {winner_id} (PROVEN/VERIFIED arm)")
+                # issue 293: the arc CLOSES here — the value attribution (which
+                # arm won) lands on the close event and nowhere earlier.
+                _emit_arc_event(ws, "investment_arc_close", hid, {
+                    "arc": family_group(hid),
+                    "verdict": "confirm",
+                    "winning_arm": winner_id,
+                    "refuting_arm": None,
+                    "arms": {str(a.get("id")): _status_of(a)
+                             for a in arms},
+                })
                 # any arm PROVEN -> competing open hypotheses superseded,
                 # and their open arms retire with the family
                 claims_changed |= _supersede_group_peers(
@@ -476,6 +540,16 @@ def sync_family_ledger(ws: Path) -> dict:
                 _emit(ws, "family_refuted",
                       f"{hid} <- {killer.get('id')} (all arms settled, "
                       f"none won)")
+                # issue 293: arc close, refute face — the refuting arm is the
+                # only worth statement the arc earns.
+                _emit_arc_event(ws, "investment_arc_close", hid, {
+                    "arc": family_group(hid),
+                    "verdict": "refute",
+                    "winning_arm": None,
+                    "refuting_arm": str(killer.get("id")),
+                    "arms": {str(a.get("id")): _status_of(a)
+                             for a in arms},
+                })
             elif hyp.status == "refuted":
                 report["unchanged"].append(f"{hid}: already refuted")
             else:
@@ -562,11 +636,10 @@ def check_bridge_lint(ws: Path) -> list[str]:
     reg_path = ws / "claim-register.yaml"
     if reg_path.is_file():
         try:
-            reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+            reg = load_register_doc(ws)[0]
         except yaml.YAMLError:
             reg = {}
-        claims = reg.get("claims") if isinstance(reg, dict) else None
-        claims = claims if isinstance(claims, list) else []
+        claims = claims_of(reg)
         _lint_register_claims(ws, claims, errs)
         hyp_by_id = {h.id: h for h in store.list_all()}
         _lint_derivation_divergence(ws, claims, hyp_by_id, errs)
