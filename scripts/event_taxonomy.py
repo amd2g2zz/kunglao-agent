@@ -274,6 +274,7 @@ EMIT_ACTIONS = [
     "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
+    "task_terminal_settlement",  # issue 136 arc-close credit ledger: master-green closure writes the enabling chain (convergence_check CONVERGED face)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload

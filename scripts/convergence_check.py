@@ -1895,6 +1895,22 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             decision["decision"] = "DISPATCH"
             decision["exit_code"] = 1
             decision["carrier_drift"] = cv["violations"]
+    # issue-136 terminal credit assignment: a CONFIRMED master-green closure
+    # writes the task-terminal settlement row — the arc-close credit ledger
+    # (enabling chain + premise_corrections, the issue-130 graph read
+    # closure-side) into the EXISTING kunglao_log ledger (no new organ).
+    # Runs AFTER the carrier-drift gate so a drifted carrier never credits a
+    # closure. Fail-open (observability never gates the verdict);
+    # emit_snapshot=False (resume read-only contract) never writes; the
+    # decide() dict is untouched (byte-frozen anchors — the ledger row IS
+    # the artifact). Arc-deduped inside (repeated CONVERGED ticks = one
+    # row; settlements after the last row = new arc, fresh row).
+    if decision["decision"] == "CONVERGED" and emit_snapshot:
+        try:
+            from terminal_settlement import write_terminal_settlement
+            write_terminal_settlement(workspace)
+        except Exception as exc:  # noqa: BLE001 — fail-open per issue-275 WARN policy
+            warn("terminal_settlement", f"{type(exc).__name__}: {exc}")
     # #618: dead-window alarm off the durable heartbeat sidecar (#830
     # substrate). Annotation + event only — never mutates the verdict
     # (unattended dead-window must be VISIBLE, and P3's value ordering
