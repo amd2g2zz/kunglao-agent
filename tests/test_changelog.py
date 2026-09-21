@@ -39,7 +39,10 @@ def test_changelog_declares_v0_1():
 
 def test_changelog_references_issue_numbers():
     text = _changelog_text()
-    added = text.split("### Added", 1)[1].split("### ", 1)[0]
+    # scope to the [0.1] section: an Unreleased section (newer, first in the
+    # file) must not inherit the v0.1 documentation-completeness invariant
+    v01 = text.split("## [0.1]", 1)[1]
+    added = v01.split("### Added", 1)[1].split("### ", 1)[0]
     bullets = [ln for ln in added.splitlines() if ln.startswith("- ")]
     assert len(bullets) >= 10, f"Added section too thin: {len(bullets)} bullets"
     missing = [ln for ln in bullets if not re.search(r"\(#[0-9]+\)", ln)]
