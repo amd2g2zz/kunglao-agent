@@ -171,6 +171,7 @@ EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
     "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
+    "approach_demoted",   # issue 302 D1: approach-class demotion decision face (target_ladder)
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face

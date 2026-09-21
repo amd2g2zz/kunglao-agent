@@ -343,6 +343,98 @@ def oracle_credit_gate(pq_id, case_links: list[tuple[str, str]],
     return all(status_map.get(cid) == "pass" for cid in armed)
 
 
+# ---------- per-round V factor vector (the 2026-09-04 operator ruling) ----------
+
+def _round_index_safe(ws) -> int:
+    """The vector's round axis: the convergence ledger's raw
+    snapshot-row count (priority_ratio.round_index — THE tick axis; no
+    second counter). Fail-open to 0: the vector is telemetry and never
+    breaks settlement."""
+    try:
+        from priority_ratio import round_index
+        return int(round_index(ws))
+    except Exception:  # noqa: BLE001 — telemetry, never settlement
+        return 0
+
+
+def _cost_tokens_safe(ws) -> float:
+    """Cumulative token spend (runs/cost_events.jsonl, tuition_curve single
+    source). Fail-open to 0.0."""
+    try:
+        from tuition_curve import cost_state
+        return float(cost_state(Path(ws))["spent"])
+    except Exception:  # noqa: BLE001 — telemetry, never settlement
+        return 0.0
+
+
+def factor_vector(ws, v_norm: float, pqs: list[dict]) -> dict:
+    """The FULL per-round factor vector (the issue-comment YAML shape,
+    2026-09-04 ruling):
+
+        {round, v_norm, oracle_pass, checks_impl, pq_cov: {pq: coverage},
+         events: {dispatch, verify, confirmed_with_diff, toss},
+         cost_tokens, cost_rounds}
+
+    Sources (all existing, all mechanical):
+      round            — the convergence tick (round_index, no second axis);
+      oracle_pass      — armed oracle cases green (the oracle-status face);
+      checks_impl      — armed oracle cases DECLARED (implemented, not
+                         necessarily passing — the D_t w_impl face);
+      pq_cov           — per-PQ coverage off the ledger itself;
+      events           — signal-stream penalty inputs (dispatch / verify /
+                         confirmed_with_diff / toss) over the append-order
+                         window since the previous vector's ``signals_rows``
+                         cursor (machine-independent, no wall clock); toss
+                         is DERIVED (a dispatch whose claim never sees a
+                         later deliver row — delivery not yet reconciled);
+      cost_tokens      — cumulative spend (cost_events.jsonl);
+      cost_rounds      — 1 (the unit semantic: one value_m call = one round);
+      signals_rows     — the stream cursor at sample time (additive
+                         bookkeeping for the next window).
+
+    The penalty APPLICATION to V is the v0.2 controller's job — only the
+    DATA lands here."""
+    import signals_stream
+    pqs = pqs or []
+    hist_prev = 0
+    try:
+        led = load(ws)
+        for h in reversed(led.get("mission", {}).get("history") or []):
+            if isinstance(h, dict) and "signals_rows" in h:
+                hist_prev = int(h["signals_rows"])
+                break
+    except Exception:  # noqa: BLE001 — telemetry, never settlement
+        hist_prev = 0
+    armed: list[tuple[str, str]] = []
+    try:
+        armed = _oracle_case_links(ws)
+    except Exception:  # noqa: BLE001 — telemetry, never settlement
+        armed = []
+    oracle_pass = 0
+    if armed:
+        status_map = _oracle_status_map(ws)
+        if status_map:  # None = PRESENT but unreadable: fail-closed, no green
+            oracle_pass = sum(1 for cid, _ in armed
+                              if status_map.get(cid) == "pass")
+    pq_cov = {}
+    for p in pqs:
+        try:
+            pq_cov[str(p.get("id"))] = round(float(p.get("coverage", 0.0) or 0.0), 6)
+        except (TypeError, ValueError):
+            pq_cov[str(p.get("id"))] = 0.0
+    return {
+        "round": _round_index_safe(ws),
+        "v_norm": round(float(v_norm), 6),
+        "oracle_pass": int(oracle_pass),
+        "checks_impl": len(armed),
+        "pq_cov": pq_cov,
+        "events": signals_stream.penalty_counts(ws, after_rows=hist_prev),
+        "cost_tokens": round(_cost_tokens_safe(ws), 4),
+        "cost_rounds": 1,
+        "signals_rows": signals_stream.count_rows(ws),
+    }
+
+
 def value_m(ws, now=None) -> dict:
     """V_m + A_t。history 只由此函数追加（增量结算即时入账）。
 
@@ -436,10 +528,18 @@ def value_m(ws, now=None) -> dict:
         prev_norm = (prev / total_w) if total_w > 0 else 0.0
     a_t = v_m - prev
     a_t_norm = v_norm - prev_norm
+    # The history point carries the FULL factor vector — legacy keys
+    # first and UNTOUCHED (byte-identical values, the additive discipline
+    # of the normalization/reconciliation/progress precedents), the
+    # vector keys appended after. The vector is fail-open by
+    # construction: a telemetry gap degrades its fields, never the
+    # settlement.
+    vector = factor_vector(ws, v_norm, pqs)
     hist.append({"ts": _utc_now(), "v_m": round(v_m, 6),
                  "v_norm": round(v_norm, 6),
                  "v_oracle": round(v_oracle, 6),
-                 "v_oracle_norm": round(v_oracle_norm, 6)})
+                 "v_oracle_norm": round(v_oracle_norm, 6),
+                 **vector})
     led["mission"]["history"] = hist
     _save(ws, led)
     n_answered = sum(1 for p in pqs if p.get("state") == "answered")
