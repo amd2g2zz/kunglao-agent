@@ -42,6 +42,16 @@ EXIT_MISSING_WORKSPACE = 64
 # which rc-based consumers read as "dispatch now" while stdout was empty.
 # On this exit: stdout carries {"decision": "CRASHED"}, stderr the traceback.
 EXIT_CRASHED = 65
+# #306: emptiness-grade workspace identity — the #240 markers EXIST but
+# both payloads are empty (task_spec: no live primary_questions AND no
+# oracle-anchor stamp; claim-register: zero claims). Init's own intake
+# order makes this unreachable for a healthy workspace: the oracle-anchor
+# interview runs BEFORE every scaffold write (blank anchors refuse the
+# scaffold) and the register is born with the [initialized] header +
+# structural seed claims. So both-payloads-empty means intake never really
+# happened or the contract files rotted after intake — hard error, never
+# a verdict (the #240 family). 66 is the next free byte after CRASHED.
+EXIT_EMPTY_WORKSPACE = 66
 
 # --- plan_drift_detector --auto face (#602 integration remap) -------------
 # The ONLY bytes --auto may exit with: 0 no-drift (proceed) / 2 drift-severe

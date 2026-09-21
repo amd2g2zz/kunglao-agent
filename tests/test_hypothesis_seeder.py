@@ -143,7 +143,16 @@ def test_red6_open_hypothesis_blocks_close(tmp_path):
     from convergence_check import decide
     ws = tmp_path / "ws"
     ws.mkdir(parents=True)
-    # No claim-register, no task_spec -> earlier DRAIN probes silent
+    # #306: a healthy drained face needs the workspace contract — empty
+    # register + the oracle-anchor stamp (no live questions is not enough
+    # on its own any more; the question-less AND anchor-less pair with a
+    # claimless register is the degenerate state the probe refuses).
+    (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    (ws / "task_spec.yaml").write_text(
+        "primary_questions: []\n"
+        "goal_verbatim: retrieve the family config\n"
+        "success_criterion: family named with evidence\n"
+        "verification_method: static\n", encoding="utf-8")
     _hypo(ws, "H-001", "open")
     d = decide(ws)
     assert d["decision"] == "BLOCKED", \
@@ -162,6 +171,13 @@ def test_red7_refuted_hypothesis_drain_clean(tmp_path):
     from convergence_check import decide
     ws = tmp_path / "ws"
     ws.mkdir(parents=True)
+    # #306: same healthy drained face as RED6 (see there).
+    (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    (ws / "task_spec.yaml").write_text(
+        "primary_questions: []\n"
+        "goal_verbatim: retrieve the family config\n"
+        "success_criterion: family named with evidence\n"
+        "verification_method: static\n", encoding="utf-8")
     _hypo(ws, "H-001", "refuted", extra_fm="refuting_fact_id: F001\n")
     d = decide(ws)
     assert d["decision"] == "CONVERGED", \
