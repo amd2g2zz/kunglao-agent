@@ -213,6 +213,10 @@ EMIT_ACTIONS = [
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
     "granularity_reject",  # issue 293 claim_granularity --check monolithic verdict face
+    "guard_dormant",  # issue 304 fix-as-guard: a wired guard with zero fire records across the settlement window (WARN-level finding, ledger-deduped)
+    "guard_fired",  # issue 304 fix-as-guard fire record: a wired guard's check FIRED (detail JSON carries the guard identity: check_reference)
+    "guard_missing",  # issue 304 fix-settlement refusal face: the fix record carries no wired guard evidence (GUARD_MISSING)
+    "guard_unresolved",  # issue 304 fix-settlement refusal face: guard evidence present but file/anchor not found (GUARD_UNRESOLVED)
     "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds

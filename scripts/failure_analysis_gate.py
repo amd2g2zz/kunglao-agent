@@ -129,6 +129,10 @@ from pathlib import Path
 
 import yaml
 
+# issue 304 (satellite D4): fix-as-guard — the settlement-forensics
+# acceptance lives in the pure module; this gate is its wired face.
+import fix_guard as _fxg
+
 from status_defs import TERMINAL
 # #863 Family C: workspace resolution is single-sourced in ws_layout
 # (manifest-aware — the former inline copy hardcoded the sibling name).
@@ -205,6 +209,22 @@ def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None
                     f"candidates={len(entry.get('candidates') or [])}")
     except Exception as exc:
         warn("_emit_analysis_recorded", f"{type(exc).__name__}: {exc}")
+
+
+def _emit_guard_refusal(workspace: Path, claim_id: str, reason: str) -> None:
+    """issue 304 (satellite D4): the loud refusal face for a fix
+    settlement rejected at the guard acceptance — one event per refusal,
+    word named by the reason token (guard_missing | guard_unresolved),
+    the analysis_blocked posture. Fail-open: observability never changes
+    the verdict."""
+    action = ("guard_unresolved" if reason.startswith(_fxg.GUARD_UNRESOLVED)
+              else "guard_missing")
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action=action, claim=claim_id,
+             detail=reason)
+    except Exception as exc:
+        warn("_emit_guard_refusal", f"{type(exc).__name__}: {exc}")
 
 
 def _load_claims(workspace: Path):
@@ -387,7 +407,10 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     obstacle_class: str | None = None,
                     source: str | None = None,
                     library: Path | None = None,
-                    trigger_precision: dict | None = None) -> dict:
+                    trigger_precision: dict | None = None,
+                    guard_type: str | None = None,
+                    guard_location: str | None = None,
+                    check_reference: str | None = None) -> dict:
     claims, reg = _load_claims(workspace)
     claim = next((c for c in claims if c.get("id") == claim_id), None)
     if not claim:
@@ -460,6 +483,29 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     "reason": f"--outcome must be one of {', '.join(OUTCOME_VALUES)}"}
         what_happened = what_happened.strip()
 
+    # issue 304 (satellite D4): fix-as-guard — the settlement-forensics
+    # acceptance. A fix settlement (a replaced method closing on a WIN
+    # verdict) settles ONLY with wired guard evidence; the fields inherit
+    # from the prior entry on closure backfill (same rule as the
+    # artifacts). Any non-empty guard evidence is validated, fix
+    # settlement or not — a typo'd guard_type is never blessed.
+    guard_raw = {"guard_type": guard_type,
+                 "guard_location": guard_location,
+                 "check_reference": check_reference}
+    for key in _fxg.GUARD_FIELDS:
+        if not str(guard_raw[key] or "").strip():
+            guard_raw[key] = prior.get(key) or ""
+    supplied = any(str(v or "").strip() for v in guard_raw.values())
+    fix_settlement = _fxg.is_fix_settlement(validity, next_method,
+                                            outcome_norm)
+    guard: dict | None = None
+    if supplied or fix_settlement:
+        guard, guard_err = _fxg.evaluate_guard(
+            guard_raw, (workspace, _fxg.REPO_ROOT))
+        if guard_err:
+            _emit_guard_refusal(workspace, claim_id, guard_err)
+            return {"recorded": False, "reason": guard_err}
+
     # #495 method-ladder rung 1 (lessons): auto-search at failure time with
     # the obstacle + assumption error signature. FAIL-OPEN — a missing library
     # or a crashed search never blocks the record.
@@ -515,6 +561,10 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         entry["trigger_precision"] = dict(trigger_precision)
     elif prior.get("trigger_precision"):
         entry["trigger_precision"] = prior["trigger_precision"]
+    # issue 304: the guard evidence lands on the record flat — a fix
+    # settlement carries its wired guard, checked at resolution time.
+    if guard is not None:
+        entry.update(guard)
     _analysis_path(workspace, claim_id).write_text(
         yaml.safe_dump(entry, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
@@ -1090,6 +1140,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", default=None,
                         help="provenance of next_method: "
                              "lesson-hit | reference-hit | web-hit | novel-hypothesis")
+    parser.add_argument("--guard-type", default=None,
+                        help="issue 304 fix-as-guard: the mechanical guard "
+                             "class (artifact-size | did-suffix | marker-grep)")
+    parser.add_argument("--guard-location", default=None,
+                        help="issue 304 fix-as-guard: the file the guard is "
+                             "wired into (repo/workspace-relative or absolute)")
+    parser.add_argument("--check-reference", default=None,
+                        help="issue 304 fix-as-guard: the anchor that must "
+                             "greppably exist in the guard file")
     parser.add_argument("--lessons", action="store_true",
                         help="aggregate analyses into the global lessons library (#41)")
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
@@ -1137,7 +1196,10 @@ def main(argv: list[str] | None = None) -> int:
                            identified_obstacle=args.identified_obstacle,
                            obstacle_class=args.obstacle_class,
                            source=args.source,
-                           library=args.library)
+                           library=args.library,
+                           guard_type=args.guard_type,
+                           guard_location=args.guard_location,
+                           check_reference=args.check_reference)
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:
