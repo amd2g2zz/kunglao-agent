@@ -315,6 +315,11 @@ def test_floor_gate_warns_but_never_rejects(ws, tmp_path, monkeypatch):
     emitted: list[tuple] = []
     monkeypatch.setattr(im, "emit_event",
                         lambda w, a, **k: emitted.append((a, k)))
+    # deterministic CLI supply: the host which-scan (fail-open -> empty on
+    # transient failure) made this test environment-flaky in CI; the floor
+    # LOGIC under test needs exactly one known CLI, not the scanner
+    monkeypatch.setattr(im, "available_system_clis",
+                        lambda: [{"name": "readelf"}])
     ok, msg = wbg.check_handroll_floor(ARMED_PATHS(ws), "C-001")
     assert ok is True, "WARN floor NEVER rejects a dispatch"
     assert "WARN" in msg and "readelf" in msg
