@@ -104,6 +104,7 @@ LEGACY_ACTORS = frozenset({
     "failure_analysis_gate", "heartbeat_tick", "heartbeat_touch",
     "hypothesis_bridge",  # issue-252 family-ledger sync + bridge lint writer
     "hypothesis_seeder", "infeasible_proposal", "infeasible_signal",
+    "instrument_menu",  # issue 243 menu/beat faces (handroll_warn + promotion emit)
     "hook", "hook_activation", "hypothesis", "init", "kunglao-decide",
     "kunglao_record", "kunglao_resume", "kunglao_status", "kunglao_upgrade",
     "kubectl_test", "lessons_telemetry", "lint", "log_setup", "loop_state",

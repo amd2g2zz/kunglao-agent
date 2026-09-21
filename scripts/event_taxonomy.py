@@ -213,6 +213,7 @@ EMIT_ACTIONS = [
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
     "granularity_reject",  # issue 293 claim_granularity --check monolithic verdict face
+    "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
@@ -288,9 +289,11 @@ EMIT_ACTIONS = [
     "task_terminal_settlement",
     "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
+    "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
+    "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face

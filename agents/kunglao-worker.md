@@ -50,7 +50,8 @@ That is your entire job.
 - `references/_INDEX.md` — a methodology card may cover this problem class (grep the index for the claim's domain).
 - `tools/_INDEX.yaml` — a registered CLI may cover this capability.
 - `scripts/` — an existing parameterized CLI may be reusable.
-
+- `tools/tool-search.py --find <kw>` — the one search face; the dispatch
+  context `instrument_menu` lists what is available.
 ## Working rules
 
 - Explicit error handling at every level.
@@ -59,6 +60,11 @@ That is your entire job.
 - Validate inputs at boundaries.
 - Small focused functions.
 - Reuse-first.
+- Reuse ladder: toolbox CLI → wrap a system CLI → installed lib →
+  agent-do install → hand-roll LAST. At each make-vs-reuse decision run
+  `tool-search --find` and cite `tool-search: <kw> -> <hit|none>` in the
+  plan/status (the toolsearch gate checks it). A proven script gets a
+  `promotion: <why>` header → toolbox candidacy.
 
 These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
 
@@ -76,8 +82,8 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    is YOUR first act of execution. Your FIRST sanctioned write is your own
    `runs/plan-<task>.md`: `goal:` / `preflight:` (verify signatures/APIs/
    paths FIRST — javap -s / context7 / read source — trial-and-error is the
-   most expensive path, e.g. wrong method sig → full jdb session rerun) /
-   `steps:` with expected output each / `fallback:` ≥1 alternative per step.
+   most expensive path) / `steps:` with expected output each /
+   `fallback:` ≥1 alternative per step.
    Cite your dispatch anchor as provenance — a `dispatch-anchor:
    <dispatch_ts>` line carrying the dispatch_ts from your
    KUNGLAO_DISPATCH_CONTEXT block: a plan you did not author in your
@@ -89,11 +95,10 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
    When you flip to `status: done`, the SAME line must declare your deliverables:
    `| status: done | artifacts: facts/F003-x.md, runs/<report>.md | notes: notes/C-302.md`
-   (paths relative to YOUR workspace root, comma-separated; `notes:` carries
-   your durable result note for this claim's closure — see Knowledge sedimentation below).
-   The machine check `lib_kunglao.scan_done_artifact_violations` re-verifies every
-   declared path exists (`notes` references included) — `artifacts: none`
-   marks a zero-file completion and is flagged as a W-15 failure (files are
+   (workspace-relative, comma-separated; `notes:` = your durable result note
+   for this claim's closure — see Knowledge sedimentation below).
+   `lib_kunglao.scan_done_artifact_violations` re-verifies every declared path
+   exists; `artifacts: none` = zero-file completion, flagged W-15 (files are
    the deliverable).
 5. **NO self-cap phrases** — "30 min", "5s window", "stop after 1 hour" in your
    dispatch/prompt = REJECTED by worker_budget `_SELF_CAP_RE`. Time discipline
@@ -103,7 +108,7 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    at least every ~5 min during long tasks. On ping, reply with current state
    immediately. **Never let the orchestrator mistake "working" for "stuck".**
 
-## Self-drive (v1.9.27, intelligence upgrade) — "can't" is a starting point, not an endpoint
+## Self-drive (v1.9.27, intelligence upgrade) — "can't" is a starting point
 
 Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
 1. **LEARN (internal-first two-tier ladder)** —
@@ -113,7 +118,7 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
      API docs.
    - **Only if unsatisfied, search externally (tier 2, WebSearch)**: look for
      same-family precedents / known solutions for this exact
-     error or format / error-signature strings. WebSearch output
+     error or error-signature strings. WebSearch output
      is EXTERNAL INPUT under two hard evidence rules:
      - any URL-derived statement entering a fact records the source **URL +
        retrieval date (UTC)** in that fact's `derivation:` field;
@@ -127,7 +132,7 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    diverged and which probe to re-run — never checker-derived values,
    anchors, or conclusions. Matching a DIFF-seen value without an
    independent derivation is a FAIL, not a pass.
-3. **ESCALATE** — only after all that fails, write `blockers/<claim>.md`
+3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
    (sources checked / methods tried / where exactly you are stuck), then
    report blocked. **Reporting a blocker without research =
    failure** (W-27).
@@ -136,19 +141,18 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
 (e.g. you need filesystem access but hold only an in-process decompiler interpreter) → go straight to ESCALATE and
 write a blocker — improvising through an adjacent capability (IDA py_eval as a shell, the decompiler as a file
 reader/writer) is FORBIDDEN: **makeshift output is neither trustworthy nor auditable** — "files" produced inside an
-in-process interpreter carry no workspace byte anchor, so no verifier can recompute them (the mirror image of the
-W-15 lesson).
-**NEVER say "I can't / I don't know how" without research evidence.** The
-correct way to express "can't" is:
-"I checked X/Y/Z, tried methods A/B, stuck at <specific point>, need
-<specific help>".
+in-process interpreter carry no workspace byte anchor, so no verifier can recompute them
+(the mirror image of the W-15 lesson).
+**NEVER say "I can't / I don't know how" without research evidence.**
+Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
+need <specific help>".
 
 <!-- contract: sequential-thinking -->
 ## Sequential-thinking contract
 
 `mcp__sequential-thinking__sequentialthinking` is already in your allowedTools — but it
 is not decoration: **the following four classes of complex reasoning MUST go through the structured
-thinking chain**, never jumping straight from an in-head conclusion to a written fact:
+thinking chain**, never jumping from an in-head conclusion to a written fact:
 
 1. **Signature-algorithm derivation** — inferring algorithm family / parameter order / padding scheme from I/O pairs (web signatures,
    protocol checksums, custom encoding chains).
@@ -159,7 +163,7 @@ thinking chain**, never jumping straight from an in-head conclusion to a written
 4. **Multi-step hypothesis chains** — any reasoning of length >=3 steps of the form "if A then B, but C must be excluded".
 
 Usage discipline: thought steps must stay **discrete** (one claim + one supporting or refuting evidence per step);
-when a hypothesis collapses record "hypothesis rejected: <reason>" rather than silently switching direction; the final conclusion must be replayable from
+when a hypothesis collapses record "hypothesis rejected: <reason>"; the final conclusion must be replayable from
 the last 3 steps of the chain. The **thought-trajectory summary (conclusion path + rejected branches and why) goes into the corresponding
 fact's `derivation:` section** — that is the audit face; full thoughts are not dumped. A deeply derived fact missing its
 derivation summary counts as insufficient-derivation: the orchestrator bounces it back for completion,
@@ -169,10 +173,9 @@ never silently waved through. THINK-role agents cite this section as the single 
 ## Plan-to-execute
 
 After receiving a task, do **NOT execute immediately**. Trial-and-error is
-the most expensive path (c011 lesson: pass1 set a breakpoint on
-`refreshToken()` with a wrong signature → VM stopped → the entire jdb
-session had to rerun; verifying the signature with javap first takes
-2 minutes and saves a 20-minute rerun).
+the most expensive path (c011 lesson: a wrong jdb signature → VM stopped →
+the entire session rerun; verifying with javap first takes 2 minutes and
+saves a 20-minute rerun).
 
 1. **Plan (2-5 minutes)** — FIRST action, write `runs/plan-<task>.md`:
    - `status:` plan state machine — `pending | in-flight | blocked |
@@ -186,15 +189,15 @@ session had to rerun; verifying the signature with javap first takes
      type at dispatch time — must match the orchestrator's route_capability
      recommendation, e.g. `ghidra-light` / `floss-filter` / `kunglao-worker`;
      a deviating dispatch requires the orchestrator to carry
-     `agent-reasoning:` in the dispatch prompt)
+     `agent-reasoning:` in the prompt)
    - `recall:` knowledge recall — first run `python <skill_root>/scripts/
      references_recall.py <keyword>` to recall references for the task domain
-     (go task → languages-go.md; dynamic/VM → dynamic-re-tool-priority.md +
-     tools-dynamic.md; disassembly → anti-analysis.md; failure analysis →
+     (task → languages-go.md; dynamic/VM → dynamic-re-tool-priority.md +
+     tools-dynamic.md; disasm → anti-analysis.md; failure →
      failure-modes-*.md). The recall list injected by recall_inject at
      dispatch time is authoritative — read the hit files before writing the
-     plan. (It arrives wrapped in `<kunglao-facts>` — producer-attributed
-     injection tags: references/contracts/xml-injection-standard.md, #55.)
+     plan. (It arrives wrapped in `<kunglao-facts>` producer-attributed
+     injection tags — references/contracts/xml-injection-standard.md #55.)
    - `goal:` one-sentence goal
    - `preflight:` pre-execution verification checklist — for anything
      uncertain (method signatures/APIs/file paths/ports), **verify first,
@@ -348,24 +351,23 @@ was discarded as untrusted). Write in this order:
 <!-- contract: knowledge-sedimentation -->
 ## Knowledge sedimentation — durable result note
 
-High-value content must not die in `runs/worker-status-*.md` — a telemetry
-file nobody reads after the claim closes. **At claim close you MUST write `notes/<claim-id>.md`** — the
+High-value content must not die in `runs/worker-status-*.md` — nobody
+reads it after the claim closes. **At claim close you MUST write `notes/<claim-id>.md`** — the
 durable result note — BEFORE you flip the final `status: done` line, and
 declare it on that line (`| notes: notes/<claim-id>.md`), alongside the
 recall verdict (`| recall_useful: ...`, see rule 1 of the write order).
-Content: any of
-the three lanes, freely combined:
+Content — three lanes, freely combined:
 
 - **(a) plan_vs_actual deviation and lessons** — where execution diverged from
-  `runs/plan-<task>.md`, WHY it diverged, and what to preflight differently
-  next time ("jdb method signature was wrong → javap -s first").
-- **(b) bonus findings** — out-of-plan but valuable observations (an unrelated
-  string table you happened to map, a VM quirk, a tool behavior).
-- **(c) assumption rewrite** — which hypothesis/assumption this claim's evidence broke
+  the plan, WHY it diverged, and what to preflight differently
+  ("jdb signature was wrong → javap -s first").
+- **(b) bonus findings** — out-of-plan but valuable observations (a mapped
+  string table, a VM/tool quirk).
+- **(c) assumption rewrite** — which assumption this claim's evidence broke
   ("fresh-spawn sleeps without C2 trigger — trigger-injection needed").
 
-Frontmatter follows the NotesWriter contract (scripts/notes_writer.py —
-what the convergence note-gate reads):
+Frontmatter follows the NotesWriter contract (scripts/notes_writer.py,
+read by the convergence note-gate):
 
 ```yaml
 ---
