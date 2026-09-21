@@ -90,8 +90,14 @@ def test_priority_ratio_module_surface_is_thompson():
                  "TIER_COST"):
         assert not hasattr(pr, dead), \
             f"priority_ratio.{dead} survived the #107 demolition"
-    assert hasattr(pr, "LAMBDA_DH"), "the Thompson rebuild must pin LAMBDA_DH"
-    assert pr.LAMBDA_DH == 0.25, "#107 ruling: LAMBDA_DH = 0.25 (the only DOF)"
+    # #295 governed removal (docs/adr-001-strategy-parameter-governance.md):
+    # LAMBDA_DH is DEAD — the ΔH_PQ face was a runtime no-op on all real
+    # ledgers (EXP-B: 612/612 rank events dh_pq=0; #294: λ=0.25 vs λ=0
+    # order digests byte-identical at every tick) and is removed. Any
+    # re-introduction must go through the ADR-001 governed procedure.
+    assert not hasattr(pr, "LAMBDA_DH"), \
+        "LAMBDA_DH was removed by #295 (ADR-001); a reappearance is " \
+        "ungoverned drift"
     assert hasattr(pr, "FLIP_POTENTIAL_BASE")
     assert pr.FLIP_POTENTIAL_BASE == 0.5
     assert hasattr(pr, "FLIP_POTENTIAL_FALLBACK")

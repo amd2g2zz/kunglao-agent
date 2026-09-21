@@ -224,7 +224,7 @@ def test_pq_id_matches_priority_ratio_keying(tmp_path) -> None:
     answers_question = PQ_ID  # case target_pq == claim answers_question
     pq_cat = led.pqs.get(answers_question)
     assert pq_cat is not None
-    assert pq_cat.entropy() > 0.0  # LAMBDA_DH * dh is nonzero from now on
+    assert pq_cat.entropy() > 0.0  # settlement bookkeeping delta is real (ΔH no longer priced — #295)
     assert pq_cat.argmax() == "static_xref_dlsym"
 
 

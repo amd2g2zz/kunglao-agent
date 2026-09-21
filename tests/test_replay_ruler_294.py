@@ -10,8 +10,10 @@ Content-free: every id/statement below is synthetic.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -179,7 +181,7 @@ class TestHarnessBasics:
         rep = rr.run_replay(
             fixture_ws, configs=rr.DEFAULT_CONFIGS, sandbox=tmp_path)
         ttcs = rep["configs"]
-        assert set(ttcs) >= {"lambda_default", "lambda_zero"}
+        assert set(ttcs) >= {"base", "downstream"}
         for name, r in ttcs.items():
             assert r["ttc"] is not None and r["ttc"] > 0
             assert r["converged"] is True
@@ -220,13 +222,18 @@ class TestHarnessBasics:
 # ============================ lambda epistemology ========================
 
 class TestLambdaCheck:
-    def test_lambda_configs_differ_only_in_lambda(self):
-        cfgs = rr.DEFAULT_CONFIGS
-        a, b = cfgs["lambda_default"], cfgs["lambda_zero"]
-        assert a["lambda_dh"] == pytest.approx(pr.LAMBDA_DH)
-        assert b["lambda_dh"] == 0.0
-        assert {k: v for k, v in a.items() if k != "lambda_dh"} == \
-               {k: v for k, v in b.items() if k != "lambda_dh"}
+    def test_lambda_configs_are_consumed_and_gone(self):
+        """#295: the lambda_default/lambda_zero ruler configs are CONSUMED
+        (their question is answered — the ΔH face is removed). No config
+        carries a lambda key; the live TTC comparison axis is base vs
+        downstream."""
+        for name, cfg in rr.DEFAULT_CONFIGS.items():
+            assert "lambda_dh" not in cfg, (
+                f"config {name} still carries the consumed lambda_dh key")
+        assert set(rr.DEFAULT_CONFIGS) == {"base", "downstream"}
+        assert rr.DEFAULT_CONFIGS["base"]["w_downstream"] == 0.0
+        assert (rr.DEFAULT_CONFIGS["downstream"]["w_downstream"]
+                == pr.W_DOWNSTREAM)
 
     def test_lambda_check_reports_dh_nonzero_rate(self, fixture_ws, tmp_path):
         # seed one historical rank_feeds event with nonzero dh + one with none
@@ -249,15 +256,22 @@ class TestLambdaCheck:
         assert lc["dh_nonzero"] == 1
         assert lc["dh_nonzero_rate"] == pytest.approx(0.5)
 
-    def test_lambda_zero_can_change_ordering(self, fixture_ws, tmp_path):
+    def test_replay_orderings_still_recorded(self, fixture_ws, tmp_path):
+        """The byte-identity instrument stays armed: every config records
+        per-tick orderings, and two identical runs produce identical order
+        digests (the #294 determinism face the #295 removal leaned on)."""
         rep = rr.run_replay(fixture_ws, configs=rr.DEFAULT_CONFIGS,
                             sandbox=tmp_path / "sb")
-        orders = {n: [t["order"] for t in r["trajectory"]
-                      if t.get("order")] for n, r in rep["configs"].items()}
-        # the fixture makes PQ-main entropy material: with populated
-        # posteriors the two configs must be CHECKABLE (both rank, and at
-        # least one tick's ordering is recorded per config)
-        assert orders["lambda_default"] and orders["lambda_zero"]
+        for n, r in rep["configs"].items():
+            orders = [t["order"] for t in r["trajectory"] if t.get("order")]
+            assert orders, f"config {n} recorded no ordering"
+        a = rr.run_replay(fixture_ws, configs=rr.DEFAULT_CONFIGS,
+                          sandbox=tmp_path / "s1")
+        b = rr.run_replay(fixture_ws, configs=rr.DEFAULT_CONFIGS,
+                          sandbox=tmp_path / "s2")
+        for name in a["configs"]:
+            assert a["configs"][name]["order_digest"] \
+                == b["configs"][name]["order_digest"]
 
 
 # ============================ downstream term ============================
@@ -426,14 +440,14 @@ class TestRelevanceCoupling:
         assert any_move, "D_t moves on the populated fixture"
 
     def test_d_t_weights_are_config_not_hardcoded(self):
-        cfg = rr.DEFAULT_CONFIGS["lambda_default"]
+        cfg = rr.DEFAULT_CONFIGS["base"]
         assert set(cfg["d_weights"]) == {"w_oracle", "w_impl", "w_ev"}
 
     def test_d_t_series_derived_from_factor_vectors(self, fixture_ws,
                                                     tmp_path):
         rep = rr.run_replay(fixture_ws, configs=rr.DEFAULT_CONFIGS,
                             sandbox=tmp_path / "sb")
-        r = rep["configs"]["lambda_default"]
+        r = rep["configs"]["base"]
         assert r["d_t_series"], "fixture carries factor vectors"
         assert all(0.0 <= d <= 1.0 + 1e-9 for d in r["d_t_series"])
 
@@ -513,9 +527,13 @@ class TestFrozenSamplingMarker266:
 # ==================== review r2 fixes: pins + regressions ================
 
 class TestDownstreamConstantPins:
-    """FIX-1a: the three #294 constants are HARD-PINNED — silent value
-    drift must go red exactly like the LAMBDA_DH == 0.25 pin. Any change
-    goes through #295 (value pins + attached replay evidence)."""
+    """FIX-1a: the #294 constants are HARD-PINNED — silent value drift
+    must go red. Any change goes through the ADR-001 governed procedure
+    (docs/adr-001-strategy-parameter-governance.md: versioned PR + #294
+    replay evidence attached). LAMBDA_DH is not pinned to a value — it is
+    pinned to NONEXISTENCE (#295 governed removal: EXP-B 612/612 real
+    rank events dh_pq=0; #294 λ=0.25 vs λ=0 order digests byte-identical
+    at every tick)."""
 
     def test_decay_pinned(self):
         assert pr.DOWNSTREAM_DECAY == 0.5
@@ -526,8 +544,12 @@ class TestDownstreamConstantPins:
     def test_weight_pinned(self):
         assert pr.W_DOWNSTREAM == 0.1
 
-    def test_lambda_family_pinned(self):
-        assert pr.LAMBDA_DH == 0.25
+    def test_lambda_family_removed(self):
+        # the former LAMBDA_DH == 0.25 value pin is now a REMOVAL pin —
+        # no unpinned drift possible in either direction.
+        assert not hasattr(pr, "LAMBDA_DH"), (
+            "LAMBDA_DH was removed by #295 (ADR-001); a reappearance is "
+            "ungoverned drift")
 
 
 class TestLambdaCheckNumericParse:
@@ -569,32 +591,274 @@ class TestLambdaCheckNumericParse:
 
 
 class TestConfigPoisonHole:
-    """FIX-3: a bad value in ONE config key must never leave the other
-    module constant stuck — validate-then-assign, finally always restores."""
+    """FIX-3, post-#295: the harness's only runtime mutator is the
+    w_downstream parameterize step — a bad value must raise BEFORE any
+    assignment (validate-then-assign) and a successful probe run must
+    restore the constant exactly (finally). The harness may evaluate,
+    never write back (ADR-001 §2.3)."""
 
     def test_invalid_w_downstream_restores_constants(self, fixture_ws,
                                                      tmp_path):
-        # lambda_dh is a VALID but DIFFERENT value (convertible string):
-        # old code assigned it before crashing on w_downstream, leaving
-        # LAMBDA_DH poisoned at 0.9 for the process lifetime
-        before = (pr.LAMBDA_DH, pr.W_DOWNSTREAM)
+        before = pr.W_DOWNSTREAM
         with pytest.raises(ValueError):
             rr.run_replay(
                 fixture_ws,
-                configs={"bad": {"lambda_dh": "0.9",
-                                 "w_downstream": "abc"}},
+                configs={"bad": {"w_downstream": "abc"}},
                 sandbox=tmp_path / "sb")
-        assert (pr.LAMBDA_DH, pr.W_DOWNSTREAM) == before
+        assert pr.W_DOWNSTREAM == before
 
-    def test_invalid_lambda_restores_constants(self, fixture_ws,
-                                               tmp_path):
-        before = (pr.LAMBDA_DH, pr.W_DOWNSTREAM)
-        with pytest.raises(ValueError):
-            rr.run_replay(
-                fixture_ws,
-                configs={"bad": {"lambda_dh": "abc"}},
-                sandbox=tmp_path / "sb")
-        assert (pr.LAMBDA_DH, pr.W_DOWNSTREAM) == before
+    def test_probe_config_evaluates_then_restores(self, fixture_ws,
+                                                  tmp_path):
+        """A counterfactual value runs to completion AND cannot leak: the
+        module constant is back on its pinned production value after the
+        replay returns."""
+        assert pr.W_DOWNSTREAM == 0.1
+        rr.run_replay(
+            fixture_ws,
+            configs={"probe": {"w_downstream": 0.9}},
+            sandbox=tmp_path / "sb")
+        assert pr.W_DOWNSTREAM == 0.1, (
+            "harness evaluation leaked into production constants — "
+            "runtime self-tuning (ADR-001 violation)")
+
+
+class TestNoRuntimeSelfTuning:
+    """ADR-001 §2.3 pin: no production path writes a ranker constant at
+    runtime. The ONLY mutator in the tree is the replay harness's
+    parameterize step (replay_ruler._rank_under_config), validate-then-
+    assign with a finally-restore. The static scan covers EVERY
+    deploy-shipped Python surface (scripts/ + hooks/ + tools/ — the
+    ranker is imported at runtime by hooks too: worker_budget_core,
+    dispatch_gate), and the matcher catches BOTH write shapes: a bare
+    Name target AND the realistic hooks-side tamper, module-attribute
+    form through the import alias (`import priority_ratio as pr;
+    pr.W_DOWNSTREAM = tuned`) — plus augmented/annotated assigns and
+    `del alias.CONST` (same tamper class). The sanctioned sites are
+    exempted by FILE+FUNCTION identity, never by being invisible.
+    Behavioral probes pin both consumers: a full rank run and a
+    dispatch-budget audit pass leave the constants frozen. The loop can
+    never grow a runtime self-tuning path silently."""
+
+    GUARDED = {"LAMBDA_DH", "W_DOWNSTREAM", "DOWNSTREAM_DECAY",
+               "DOWNSTREAM_CAP"}
+
+    # every deploy-manifest src dir that ships Python (agents/references/
+    # templates carry no .py execution surface; hooks/scripts/tools do)
+    SCAN_DIRS = ("scripts", "hooks", "tools")
+
+    def _ranker_aliases(self, tree: ast.AST) -> set[str]:
+        """Local names bound to the priority_ratio MODULE by import
+        statements (`import priority_ratio`, `import priority_ratio as X`,
+        `import pkg.priority_ratio as X`). Function-value imports
+        (`from priority_ratio import priority_ratio as f`) bind no module
+        handle and cannot reach the module namespace."""
+        aliases = {"priority_ratio"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.name == "priority_ratio" \
+                            or a.name.endswith(".priority_ratio"):
+                        aliases.add(a.asname or a.name.split(".")[0])
+        return aliases
+
+    def _target_forms(self, target: ast.AST, aliases: set[str],
+                      prefix: str) -> tuple[str, str] | None:
+        """(form, constant) if ONE assignment/deletion target touches a
+        guarded constant, else None. `prefix` distinguishes write ("")
+        from delete ("del-") forms; Name and module-attribute (through a
+        priority_ratio import alias) targets both match."""
+        if isinstance(target, ast.Name) and target.id in self.GUARDED:
+            return (prefix or "name", target.id)
+        if (prefix and isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in aliases
+                and target.attr in self.GUARDED):
+            return ("del-attr", target.attr)
+        if (isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in aliases
+                and target.attr in self.GUARDED):
+            return ("attr", target.attr)
+        return None
+
+    def _scan_node(self, child: ast.AST, owner: str, aliases: set[str],
+                   sites: list[tuple[str, str, str]]) -> str:
+        """One AST node: record tamper sites, return the owner it binds
+        (function/class name) or the incoming owner."""
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                              ast.ClassDef)):
+            return child.name
+        if isinstance(child, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = (child.targets if isinstance(child, ast.Assign)
+                       else [child.target])
+            for t in targets:
+                hit = self._target_forms(t, aliases, "")
+                if hit:
+                    sites.append((hit[0], hit[1], owner))
+        elif isinstance(child, ast.Delete):
+            for t in child.targets:
+                hit = self._target_forms(t, aliases, "del")
+                if hit:
+                    sites.append((hit[0], hit[1], owner))
+        elif isinstance(child, ast.For):
+            for t in ast.walk(child.target):
+                if isinstance(t, ast.Name) and t.id in self.GUARDED:
+                    sites.append(("name", t.id, owner))
+        return owner
+
+    def _tamper_sites(self, tree: ast.AST) -> list[tuple[str, str, str]]:
+        """(form, constant, owner) for every write or delete touching a
+        guarded constant: form ∈ {name, attr, del, del-attr}; owner is
+        the enclosing function or <module>. `attr` is any
+        `<ranker-alias>.<CONST>` target — the module-namespace tamper."""
+        aliases = self._ranker_aliases(tree)
+        sites: list[tuple[str, str, str]] = []
+
+        def walk(node: ast.AST, owner: str) -> None:
+            for child in ast.iter_child_nodes(node):
+                nxt = self._scan_node(child, owner, aliases, sites)
+                walk(child, nxt)
+
+        walk(tree, "<module>")
+        return sites
+
+    def _sanctioned(self, rel: str, form: str, name: str, owner: str) -> bool:
+        """File+function identity of the ONLY two sanctioned write sites.
+        LAMBDA_DH is never sanctionable — it is a removed constant."""
+        if name == "LAMBDA_DH":
+            return False
+        if rel == "scripts/priority_ratio.py" and owner == "<module>" \
+                and form == "name":
+            return True   # the ranker's own module-level constant definitions
+        if rel == "scripts/replay_ruler.py" and owner == "_rank_under_config" \
+                and form == "attr":
+            return True   # the harness parameterize/finally-restore block
+        return False
+
+    def test_no_runtime_assignment_sites_outside_sanctioned_block(self):
+        sites = []
+        scanned = 0
+        for d in self.SCAN_DIRS:
+            for p in sorted((ROOT / d).rglob("*.py")):
+                scanned += 1
+                tree = ast.parse(p.read_text(encoding="utf-8"),
+                                 filename=str(p))
+                rel = str(p.relative_to(ROOT))
+                for form, name, owner in self._tamper_sites(tree):
+                    if name == "LAMBDA_DH":
+                        pytest.fail(
+                            f"{rel}: {form}-write to removed LAMBDA_DH "
+                            f"({owner}) — ungoverned (#295/ADR-001)")
+                    if self._sanctioned(rel, form, name, owner):
+                        continue
+                    sites.append((rel, form, name, owner))
+        assert scanned > 200, f"scan went stale: only {scanned} files"
+        assert sites == [], (
+            f"runtime strategy-constant writes outside the sanctioned "
+            f"parameterize/restore block: {sites}")
+
+    def test_exemption_is_load_bearing(self):
+        """Mutation proof (r2): the sanctioned harness block's writes are
+        ATTRIBUTE-form, so the extended matcher sees them — the file+
+        function exemption is what keeps the scan green. Drop the
+        exemption and scripts/replay_ruler.py itself gets flagged."""
+        src = (ROOT / "scripts" / "replay_ruler.py").read_text(
+            encoding="utf-8")
+        raw = [(form, name, owner) for form, name, owner
+               in self._tamper_sites(ast.parse(src))
+               if name != "LAMBDA_DH"]
+        assert raw, "matcher must SEE the sanctioned parameterize writes"
+        assert any(form == "attr" for form, _n, _o in raw), (
+            "the sanctioned writes must be attribute-form — otherwise this "
+            "mutation proof no longer exercises the r2 gap")
+        rel = "scripts/replay_ruler.py"
+        exempted = [s for s in raw if self._sanctioned(rel, *s)]
+        assert exempted == raw, (
+            f"sanctioned block carries unmatched writes: "
+            f"{set(raw) - set(exempted)}")
+
+    def test_attribute_form_tamper_is_flagged(self):
+        """The r2 adversarial case: the realistic hooks-side write goes
+        through the import alias. Every tamper form must be FLAGGED, and
+        an unrelated module's same-named attribute must NOT be."""
+        ranker_attr = "import priority_ratio as pr\n"
+        # plain attribute assign (the reviewer's exact case):
+        assert ("attr", "W_DOWNSTREAM", "<module>") in self._tamper_sites(
+            ast.parse(ranker_attr + "pr.W_DOWNSTREAM = 0.9\n"))
+        # augmented:
+        assert ("attr", "W_DOWNSTREAM", "<module>") in self._tamper_sites(
+            ast.parse(ranker_attr + "pr.W_DOWNSTREAM += 0.1\n"))
+        # annotated:
+        assert ("attr", "W_DOWNSTREAM", "<module>") in self._tamper_sites(
+            ast.parse(ranker_attr + "pr.W_DOWNSTREAM: float = 0.9\n"))
+        # del — same tamper class:
+        assert ("del-attr", "W_DOWNSTREAM", "<module>") in self._tamper_sites(
+            ast.parse(ranker_attr + "del pr.W_DOWNSTREAM\n"))
+        # a different import alias of the ranker is still the ranker:
+        assert ("attr", "DOWNSTREAM_CAP", "<module>") in self._tamper_sites(
+            ast.parse("import priority_ratio as ranker_mod\n"
+                      "ranker_mod.DOWNSTREAM_CAP = 9\n"))
+        # no false positive on unrelated modules:
+        assert self._tamper_sites(
+            ast.parse("import os\nos.W_DOWNSTREAM = 0.9\n")) == []
+        # and the flagged synthetic is NOT exempted by identity (it lives
+        # in no sanctioned file):
+        assert not self._sanctioned("hooks/some_hook.py", "attr",
+                                    "W_DOWNSTREAM", "<module>")
+
+    def test_rank_run_leaves_constants_untouched(self, tmp_path):
+        """Behavioral half 1: a full rank + emit cycle mutates nothing."""
+        import os
+        before = (pr.W_DOWNSTREAM, pr.DOWNSTREAM_DECAY, pr.DOWNSTREAM_CAP)
+        ws = tmp_path / "ws"
+        (ws / "runs").mkdir(parents=True)
+        import yaml
+        (ws / "claim-register.yaml").write_text(
+            yaml.safe_dump({"claims": [{"id": "C-1", "status": "OPEN",
+                                        "statement": "s",
+                                        "promotion_attempts": 0}]},
+                           sort_keys=False), encoding="utf-8")
+        ev = pr.EvidenceView.from_workspace(ws)
+        pr.priority_ratio([{"id": "C-1", "status": "OPEN",
+                            "statement": "s", "promotion_attempts": 0}],
+                          {}, ev, rng=random.Random(0))
+        assert (pr.W_DOWNSTREAM, pr.DOWNSTREAM_DECAY,
+                pr.DOWNSTREAM_CAP) == before
+        assert not hasattr(pr, "LAMBDA_DH")
+        # no env-var side channel is consulted by the ranker either —
+        # the ranker is a pure function of (claims, deps, evidence, rng).
+        assert not any(k.startswith("KUNGLAO_RANKER_") for k in os.environ)
+
+    def test_hooks_dispatch_budget_pass_leaves_constants_frozen(
+            self, tmp_path):
+        """Behavioral half 2: the HOOKS consumer (worker_budget_core
+        check_priority — the dispatch-budget audit that imports the ranker
+        at hook time) executes the real rank face and the constants come
+        back frozen — no hooks path writes them."""
+        import worker_budget_core as wbc
+        if not getattr(wbc, "_PRIORITY_AVAILABLE", False):
+            pytest.fail("hooks ranker import unavailable — probe cannot run")
+        import yaml
+        before = (pr.W_DOWNSTREAM, pr.DOWNSTREAM_DECAY, pr.DOWNSTREAM_CAP)
+        reg = tmp_path / "claim-register.yaml"
+        reg.write_text(yaml.safe_dump({"claims": [
+            {"id": "C-1", "status": "OPEN", "statement": "s",
+             "promotion_attempts": 0},
+            {"id": "C-2", "status": "OPEN", "statement": "t",
+             "promotion_attempts": 0},
+        ]}, sort_keys=False), encoding="utf-8")
+        deps = tmp_path / "claim_deps.yaml"
+        deps.write_text(yaml.safe_dump(
+            {"depends_on": {}, "competitor_groups": {}}, sort_keys=False),
+            encoding="utf-8")
+        ok, _msg, _dev = wbc.check_priority(
+            reg, deps, tmp_path / "task_spec.yaml", "C-1")
+        assert ok is True
+        # the audit actually ranked (two dispatchable claims -> actions
+        # were built inside the hook path) — and mutated nothing.
+        assert (pr.W_DOWNSTREAM, pr.DOWNSTREAM_DECAY,
+                pr.DOWNSTREAM_CAP) == before
+        assert not hasattr(pr, "LAMBDA_DH")
 
 
 class TestCycleCut:
