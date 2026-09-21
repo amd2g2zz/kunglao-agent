@@ -297,6 +297,17 @@ function perfSegments(perf) {
     const text = `W${Math.round(wr * 100)}%`;
     segs.push(wr >= 0.5 ? PALETTE.green(text) : PALETTE.amber(text));
   }
+  // #135 prediction hit-rate (cockpit display only — PRODUCE-only face).
+  // Absent (null/undefined) hides; an explicit 0 is the alarm state and
+  // MUST render (Number(null) is 0, so null is filtered by identity).
+  const hr = perf.hit_rate;
+  if (hr !== null && hr !== undefined && Number.isFinite(Number(hr))) {
+    const pct = Math.round(Number(hr) * 100);
+    const text = `HR${pct}%`;
+    segs.push(pct >= 50 ? PALETTE.green(text)
+                        : (pct > 0 ? PALETTE.amber(text)
+                                   : PALETTE.red(text)));
+  }
   const workers = perf.workers && typeof perf.workers === 'object' ? perf.workers : null;
   if (workers && Number(workers.total) > 0) {
     const active = Number.isFinite(Number(workers.active)) ? Number(workers.active) : 0;
