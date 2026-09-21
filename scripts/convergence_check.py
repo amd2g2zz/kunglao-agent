@@ -61,7 +61,7 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED, LEDGER_FORMAT
 from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 # RETRACTED lives in retract_claim.py (retraction domain owner, #331):
 # status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
@@ -728,6 +728,11 @@ def _append_ledger(workspace: Path, d: dict) -> None:
             # tell "dispatched but flat" (stuck) from "never dispatched"
             # (frontier queue). Old-format readers ignore the extra field.
             "dispatched_ids": _dispatched_ids(workspace),
+            # issue 137: self-describing format stamp on NEW writes so
+            # historical-format readers (#294 replay) read by field, not
+            # by inference. Legacy rows (no `schema`) stay readable —
+            # absence = legacy; historical files are never rewritten.
+            "schema": LEDGER_FORMAT,
         }
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -744,7 +749,7 @@ def record_operator_action(workspace, action: str, actor: str = "orchestrator",
     Records who changed what and why: defer/override_proven/weight_change/claim_edit.
     Writes directly to the ledger (not via _append_ledger which expects snapshot fields).
     """
-    from status_defs import LedgerLineType
+    from status_defs import LedgerLineType, LEDGER_FORMAT
     entry = {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": action,
@@ -754,6 +759,9 @@ def record_operator_action(workspace, action: str, actor: str = "orchestrator",
         "before": before,
         "after": after,
         "ts": utc_now().isoformat(timespec="seconds"),
+        # issue 137: same self-describing stamp the snapshot writer carries
+        # (new writes only; legacy rows stay readable — absence = legacy).
+        "schema": LEDGER_FORMAT,
     }
     try:
         newline_char = chr(10)

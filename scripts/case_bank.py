@@ -21,7 +21,7 @@ Owner ruling 4 (this module's whole contract):
 
 Schema (runs/case-bank.jsonl, one JSON object per line):
   {ts, claim_id, method, context_tags, intent_uncertainty, outcome_observed,
-   roi_class, attribution, premise_correction, how}
+   roi_class, attribution, premise_correction, how, schema}
   - ts / claim_id / method / roi_class: required (ts filled on append).
   - attribution: required non-empty IFF roi_class == NEGATIVE (ruling 4).
   - premise_correction: optional.
@@ -29,6 +29,9 @@ Schema (runs/case-bank.jsonl, one JSON object per line):
     mechanism: mismatch_class / mechanism note) — a mapping when present,
     refused otherwise (free text is a label, not a lesson); NEVER
     required: banked rows predating #146 read back with how=None.
+  - schema (#137): format stamp on NEW writes ("case-bank/2" — the `how`
+    era). Absent on legacy rows = legacy, still readable; historical
+    banks are never rewritten (the #135/#136 tolerance pattern).
   - context_tags: normalized to list[str]; intent_uncertainty: the named
     uncertainty from the dispatch intent (roi_settlement gate, ruling 3).
   - roi_class: roi_settlement's four classes (POSITIVE/NEUTRAL/NEGATIVE/
@@ -53,6 +56,11 @@ from kunglao_log import iter_jsonl  # #863 Family K single source
 from harness_common import utc_now_iso  # #863 Family F: single source
 
 BANK_REL = "runs/case-bank.jsonl"
+
+# issue 137: self-describing format stamp on NEW rows ("case-bank/2" = the
+# #146 `how` era). Read tolerance is unchanged: legacy rows carry no
+# `schema` field and read exactly as before; banks are never rewritten.
+SCHEMA_ID = "case-bank/2"
 
 ROI_CLASSES = ("POSITIVE", "NEUTRAL", "NEGATIVE", "UNRESOLVED")
 ROI_NEGATIVE = "NEGATIVE"
@@ -140,6 +148,9 @@ def append(ws: Path, entry: dict) -> dict:
         "premise_correction": str(e.get("premise_correction") or "").strip()
         or None,
         "how": dict(how) if isinstance(how, dict) else None,
+        # issue 137: format stamp on new writes (absent on legacy rows —
+        # absence = legacy, still readable, never rewritten).
+        "schema": SCHEMA_ID,
     }
     p = bank_path(ws)
     p.parent.mkdir(parents=True, exist_ok=True)
