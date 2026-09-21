@@ -160,6 +160,10 @@ files:
     dest: .claude/scripts/apkid_scanner.py
     kind: scaffold
     sha256: 2b5dda6f0a993bf0e77a64fd4436326c6a1c614930abca8cb67b175290a255ac
+  - src: scripts/approach_demotion.py
+    dest: .claude/scripts/approach_demotion.py
+    kind: scaffold
+    sha256: d7292764d3ed47cf4fd108c5116f7758bbbff8e21c5b58b9e619d5ff01afbf76
   - src: scripts/ask_for_direction_gate.py
     dest: .claude/scripts/ask_for_direction_gate.py
     kind: scaffold
@@ -351,7 +355,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 4edd3697eeb34359fd76c68c6d22cabcaaff3704017cde800cb261522fb71149
+    sha256: a02d40a87b0e5d4eaa2414522d989a23f9f510bff5cb8ffca5bded8ef6bfe6cd
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -799,7 +803,7 @@ files:
   - src: scripts/target_ladder.py
     dest: .claude/scripts/target_ladder.py
     kind: scaffold
-    sha256: 13c150771e02a6fc51d4fae8c70caff3c1677918817adf9c3b9d3d67097bed1e
+    sha256: ac9868e57cbf4832c017f3125cd1cba9a7c9b59ecd60fa16a4d82fb68fa55ad5
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
