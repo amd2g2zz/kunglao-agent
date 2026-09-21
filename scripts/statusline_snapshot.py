@@ -141,6 +141,7 @@ TOSS_WINDOW_S = 120                                # dispatch -> toss window
 STALL_TICKS_DEFAULT = 6                            # mirrors noop breaker (#634)
 ACTIVITY_WINDOW_S = 300                            # recent-events window (1 tick)
 AUDIT_STALE_MINUTES = 60                           # audit age WARN line
+WAITING_STALE_MIN = 20                             # #244 waiting heartbeat WARN (pulse STUCK_MIN)
 D_SLOPE_NOMINAL = 0.05                             # healthy settle rate / tick
 FLASH_EVERY_N_TICKS = 10                           # periodic flash cadence
 MILESTONES = (0.25, 0.50, 0.75)
@@ -802,9 +803,20 @@ def _perf_face(ws: Path) -> dict:
         active = [s for s in states
                   if s.get("status") not in lib.TERMINAL_WORKER_STATUSES
                   and s.get("status") != lib.WAITING_WORKER_STATUS]
+        # #244 floor: waiting workers are pulse-exempt by design, so the
+        # statusline carries their count + how many went heartbeat-quiet
+        # (a quiet waiting file = a worker the settle→dispose beat should
+        # have disposed — the 傻等 face).
+        waiting = [s for s in states
+                   if s.get("status") == lib.WAITING_WORKER_STATUS]
         now_dt = datetime.datetime.now(datetime.timezone.utc)
+        stale_waiting = [s for s in waiting
+                         if (now_dt - s.get("mtime")).total_seconds()
+                         > WAITING_STALE_MIN * 60]
         last = max((s.get("mtime") for s in states), default=None)
         out["workers"] = {"total": len(states), "active": len(active),
+                          "waiting": len(waiting),
+                          "stale_waiting": len(stale_waiting),
                           "last_activity_age_s": (round(
                               (now_dt - last).total_seconds(), 1)
                               if last is not None else None)}

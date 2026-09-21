@@ -536,4 +536,14 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             warn("emit_settlements_2", f"{type(exc).__name__}: {exc}")
         if to in NEGATIVE_SETTLEMENTS:
             _burn_lesson_lineage(ws, cid)
+        # #244 settle→dispose: a claim that settled TERMINAL must dispose
+        # its bound waiting pool in the SAME beat — REFUTED re-arms with the
+        # sanitized gap-only redo signal, every other terminal sends stop.
+        # 傻等 (a worker waiting past its claim's settlement) is a contract
+        # violation. Fire-and-forget: disposal never moves the settlement.
+        try:
+            from wait_dispose import dispose_waiting_pool
+            dispose_waiting_pool(ws, cid, to)
+        except Exception as exc:  # noqa: BLE001 — disposal never blocks settle
+            warn("dispose_waiting_pool", f"{type(exc).__name__}: {exc}")
     return count

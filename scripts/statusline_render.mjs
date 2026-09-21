@@ -283,6 +283,10 @@ function perfSegments(perf) {
     segs.push(active > 0
       ? PALETTE.cyan(`w${active}/${Number(workers.total)}`)
       : PALETTE.dim(`w0/${Number(workers.total)}`));
+    // #244 floor: heartbeat-quiet waiting workers (傻等 face) — amber when
+    // a wait went quiet past its claim's settlement window.
+    const sw = Number(workers.stale_waiting);
+    if (Number.isFinite(sw) && sw > 0) segs.push(PALETTE.amber(`sw${sw}`));
   }
   return segs;
 }

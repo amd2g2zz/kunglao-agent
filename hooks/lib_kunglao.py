@@ -463,7 +463,11 @@ from liveness_policy import DEAD_WORKER_MINUTES, STUCK_MINUTES  # noqa: E402
 # #607: statuses that END a worker's liveness. Anything else — including
 # unknown tokens (planning/preflight) and None — counts as active: an
 # invisible worker is worse than an extra slot (claim black-hole, #607).
-TERMINAL_WORKER_STATUSES = frozenset({"done", "failed", "blocked", "error"})
+# #244: dismissed (settlement-confirmed dismissal via a `stop` wait signal)
+# and unscheduled (wait self-kill) end liveness like the other terminals —
+# both are scheduling outcomes, not work failures.
+TERMINAL_WORKER_STATUSES = frozenset(
+    {"done", "failed", "blocked", "error", "dismissed", "unscheduled"})
 
 # A worker that delivered its claim and is ALIVE awaiting the next dispatch:
 # a real sleep-poll wait state whose status file is re-appended every poll,

@@ -1572,6 +1572,9 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
         # collapse; new code wires the util).
         from harness_common import utc_now_z
         path.write_text(json.dumps({
+            # #244 taxonomy: the wait signal carries type dispatch | stop;
+            # the gate's wake is the dispatch arm of the vocabulary.
+            "type": "dispatch",
             "claim": claim_id,
             "ts": utc_now_z(),
         }, ensure_ascii=False), encoding="utf-8")

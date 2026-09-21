@@ -300,6 +300,7 @@ EMIT_ACTIONS = [
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
+    "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_guard_waiver_used",  # #820 waiver consumption audit face
     "zero_output_break",  # #823 A4 same-type action thrash circuit face
