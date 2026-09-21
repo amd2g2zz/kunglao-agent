@@ -774,6 +774,7 @@ def _perf_face(ws: Path) -> dict:
     read fail-open (missing source = the field stays None/0; the renderer
     hides absent segments, it never renders a placeholder)."""
     out: dict = {"claims": _perf_claims(ws), "win_rate": None,
+                 "hit_rate": None,
                  "heartbeat_age_min": None,
                  "workers": {"total": 0, "active": 0,
                              "last_activity_age_s": None}}
@@ -788,6 +789,22 @@ def _perf_face(ws: Path) -> dict:
                                if rate is not None else None)
     except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
         warn("winrate_face", f"{type(exc).__name__}: {exc}")
+    try:
+        # issue-135 prediction hit-rate (PRODUCE-only display face; ranker
+        # and gate consumption stays v0.2 issue 129). Latest rolling window
+        # wins; 0.0 is a REAL zero (every committed prediction wrong —
+        # alarm state), so the None checks are explicit, never an `or` chain.
+        from prediction_hit_rate import face as _phr_face
+        f = _phr_face(ws) or {}
+        if int(f.get("n_scored") or 0) > 0:
+            windowed = f.get("windowed") or []
+            hr = windowed[-1].get("hit_rate") if windowed else None
+            if hr is None:
+                hr = (f.get("overall") or {}).get("hit_rate")
+            out["hit_rate"] = (round(float(hr), 4)
+                               if hr is not None else None)
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("hit_rate_face", f"{type(exc).__name__}: {exc}")
     try:
         hb = ws / "runs" / ".heartbeat.json"
         out["heartbeat_age_min"] = round(max(

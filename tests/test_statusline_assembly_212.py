@@ -508,6 +508,62 @@ class TestDataPlaneFaces:
         snap = sls.build_snapshot(ws)  # never raises
         assert snap["perf"]["claims"]["total"] == 0
         assert snap["perf"]["win_rate"] is None
+        assert snap["perf"]["hit_rate"] is None
+
+    def test_perf_face_hit_rate_renders_from_case_bank(self, tmp_path):
+        """issue-135 cockpit production face: the prediction hit-rate rides the
+        perf face (display-only — ranker/gate consumption stays v0.2)."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        bank = ws / "runs" / "case-bank.jsonl"
+        rows = [
+            {"ts": "2026-01-01T00:00:01Z", "claim_id": "C-1",
+             "method": "static", "context_tags": ["re"],
+             "intent_uncertainty": "binary is UPX-packed",
+             "outcome_observed": {}, "roi_class": "POSITIVE",
+             "attribution": None, "premise_correction": None, "how": None},
+            {"ts": "2026-01-01T00:00:02Z", "claim_id": "C-2",
+             "method": "static", "context_tags": ["re"],
+             "intent_uncertainty": "crypto table at 0x401000",
+             "outcome_observed": {}, "roi_class": "NEGATIVE",
+             "attribution": "verdict=fails", "premise_correction": None,
+             "how": None},
+            {"ts": "2026-01-01T00:00:03Z", "claim_id": "C-3",
+             "method": "static", "context_tags": ["re"],
+             "intent_uncertainty": "maybe packed",
+             "outcome_observed": {}, "roi_class": "POSITIVE",
+             "attribution": None, "premise_correction": None, "how": None},
+        ]
+        bank.write_text("\n".join(json.dumps(r) for r in rows) + "\n",
+                        encoding="utf-8")
+        sys.path.insert(0, str(SCRIPTS))
+        import statusline_snapshot as sls
+        snap = sls.build_snapshot(ws)
+        # 1 predicted hit / 2 committed predictions; the lucky green counts
+        # toward success, never toward the hit rate.
+        assert snap["perf"]["hit_rate"] == 0.5
+
+    def test_perf_face_hit_rate_zero_stays_zero(self, tmp_path):
+        """A 0% hit rate (every committed prediction wrong) is the most
+        diagnostic value the face can carry — it must NOT collapse to the
+        absent state."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        bank = ws / "runs" / "case-bank.jsonl"
+        rows = [
+            {"ts": "2026-01-01T00:00:01Z", "claim_id": "C-1",
+             "method": "static", "context_tags": ["re"],
+             "intent_uncertainty": "builder is gcc-12",
+             "outcome_observed": {}, "roi_class": "NEGATIVE",
+             "attribution": "verdict=fails", "premise_correction": None,
+             "how": None},
+        ]
+        bank.write_text("\n".join(json.dumps(r) for r in rows) + "\n",
+                        encoding="utf-8")
+        sys.path.insert(0, str(SCRIPTS))
+        import statusline_snapshot as sls
+        snap = sls.build_snapshot(ws)
+        assert snap["perf"]["hit_rate"] == 0.0
 
 
 # ===========================================================================
@@ -652,6 +708,44 @@ class TestRenderPlaneSegments:
         assert not re.search(r"W\d", out), "win-rate segment must hide"
         assert not re.search(r"\bC\d+/\d+\b", out), "claims segment must hide"
         assert not re.search(r"\bw\d/\d\b", out), "worker segment must hide"
+
+    def test_hit_rate_segment_renders_when_present(self, tmp_path):
+        """issue-135 cockpit render: the prediction hit-rate carries its own
+        HR segment — including the 0% alarm state."""
+        ws = _make_ws(tmp_path)
+        self._snap(ws, perf={"claims": {"closed": 3, "total": 8},
+                             "win_rate": 0.67, "hit_rate": 0.6667,
+                             "heartbeat_age_min": 0.1,
+                             "workers": {"total": 2, "active": 1,
+                                         "last_activity_age_s": 12.0}})
+        r = _run_renderer(ws)
+        assert r.returncode == 0, r.stderr
+        out = ANSI_RE.sub("", r.stdout)
+        assert "HR67%" in out, "prediction hit-rate segment must render"
+
+    def test_hit_rate_zero_renders_as_alarm(self, tmp_path):
+        ws = _make_ws(tmp_path)
+        self._snap(ws, perf={"claims": {"closed": 3, "total": 8},
+                             "win_rate": 0.5, "hit_rate": 0.0,
+                             "heartbeat_age_min": 0.1,
+                             "workers": {"total": 2, "active": 1,
+                                         "last_activity_age_s": 12.0}})
+        r = _run_renderer(ws)
+        assert r.returncode == 0, r.stderr
+        out = ANSI_RE.sub("", r.stdout)
+        assert "HR0%" in out, "0% hit rate is the alarm state — must render"
+
+    def test_hit_rate_segment_hidden_when_absent(self, tmp_path):
+        ws = _make_ws(tmp_path)
+        self._snap(ws, perf={"claims": {"closed": 3, "total": 8},
+                             "win_rate": 0.67, "hit_rate": None,
+                             "heartbeat_age_min": 0.1,
+                             "workers": {"total": 2, "active": 1,
+                                         "last_activity_age_s": 12.0}})
+        r = _run_renderer(ws)
+        assert r.returncode == 0
+        out = ANSI_RE.sub("", r.stdout)
+        assert not re.search(r"HR\d", out), "hit-rate segment must hide"
 
     def test_all_segments_absent_minimal_line_valid(self, tmp_path):
         ws = _make_ws(tmp_path)

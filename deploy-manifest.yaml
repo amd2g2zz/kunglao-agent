@@ -668,6 +668,10 @@ files:
     dest: .claude/scripts/posteriors.py
     kind: scaffold
     sha256: 33d593ae2bb0c59c449f9c427284474c9d923fe51a8883c4c9dd718414a982f2
+  - src: scripts/prediction_hit_rate.py
+    dest: .claude/scripts/prediction_hit_rate.py
+    kind: scaffold
+    sha256: 4f7745dcc8b873a7cadea20f707a575b63434ef093577d2564ee89f783cef5e4
   - src: scripts/premature_termination_detect.py
     dest: .claude/scripts/premature_termination_detect.py
     kind: scaffold
@@ -819,7 +823,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 3c210a390591bc1a3ee1525d9da3dd9300efecfe9d8343f15a419038d00c9ce7
+    sha256: 22bbac3a005a95c86ca9cd5ed1c1a71290fe1deb595e9a59198d6d9be6756807
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -943,7 +947,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 4d074e0e1bac64b46d3157ffde357482ca319a2afcbfa5d86909ecf8c55424c4
+    sha256: ab9d4d80010433d0e562c8319e5027cefa8ef55b3db6c80345d02d071c74c8c0
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
