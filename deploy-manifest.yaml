@@ -352,6 +352,22 @@ files:
     dest: .claude/scripts/error_response.py
     kind: scaffold
     sha256: ebe9c0334df38a70c1454022d8ab5413836bc5c43b14f3c6ae934b139bbcade6
+  - src: scripts/eval_checker.py
+    dest: .claude/scripts/eval_checker.py
+    kind: scaffold
+    sha256: 32b47c21e5f9dfa49aa0ad7ef0674d693635a824295630f319b10eecec8c4a64
+  - src: scripts/eval_dataset.py
+    dest: .claude/scripts/eval_dataset.py
+    kind: scaffold
+    sha256: 1132c00de167e7f3a96920b14164ef36f4fd061819db6db24cbae7efc05982e5
+  - src: scripts/eval_smoke_runner.py
+    dest: .claude/scripts/eval_smoke_runner.py
+    kind: scaffold
+    sha256: 773f51966efe3485c76886e53e2747b584a1f1a0ce9aa0b4b250d2f138b93662
+  - src: scripts/eval_targets.py
+    dest: .claude/scripts/eval_targets.py
+    kind: scaffold
+    sha256: f0203ac1a951908f6b1274b6f90f864df273e6cdb1acf365c10c169e5997492f
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
@@ -1379,7 +1395,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: e7f5d2398a8ef0646ed29024aa08690de06907453be8763bc7773e1a7fb2f5bd
+    sha256: 9acee8eff6d8f2801274ac3268ced7bf9720c80eb4bd3b9f34eddf544ca5d2e8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

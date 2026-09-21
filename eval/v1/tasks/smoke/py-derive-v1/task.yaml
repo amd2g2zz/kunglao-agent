@@ -1,0 +1,39 @@
+schema: kunglao-eval-task/1
+task_id: py-derive-v1
+eval_version: eval-v1
+tier: smoke
+source: constructed
+family: py-derive
+seed: 29903
+anchors:
+  goal_verbatim: Recover the three parameters of the derivation in target/derive.py
+    and re-implement derive(data) -> int so it reproduces the reference outputs on
+    arbitrary inputs.
+  success_criterion: A derive() re-implementation that reproduces every published
+    and checker-minted probe output exactly.
+  verification_method: reproduction
+workspace_scaffold:
+  language: python
+  files:
+  - target/derive.py
+  entry: target/derive.py
+  candidate_contract: 'A Python module exposing derive(data: bytes) -> int.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 192
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
