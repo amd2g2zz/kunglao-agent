@@ -193,6 +193,25 @@ CASES_REL = ("oracle", "cases")
 DEFAULT_CLIENT_REL = ("oracle", "client.py")
 MUTATION_KINDS = ("swap", "omit", "change")
 
+# ---- issue 303 D2: probe liveness markers (fail-loud instrumentation) -----------
+# The issue-127 detector-liveness doctrine externalized to runtime probes: a
+# probe that cannot prove it was alive has produced NO evidence at all
+# ("register silent" is not "server cooldown"). A probe client opts into the
+# strict era by declaring ``LIVENESS_CONTRACT = 2`` at module level; its
+# compute() results must then carry ``LIVENESS_MARKER: LIVENESS_ALIVE``.
+# VERSIONED SEMANTICS (era stamp = the row-level ``liveness`` FIELD's
+# presence): records without the field (all pre-issue 303 ledgers, and rows of
+# legacy clients that never declared the contract) route marker-absence as
+# business — legacy tolerance, existing ledgers are never retro-invalidated;
+# records WITH the field route absence to INFRA (classify_row / the
+# _settled_rows guard). ``liveness_marker`` is a RESERVED client-output key.
+LIVENESS_MARKER = "liveness_marker"
+LIVENESS_ALIVE = "alive"
+LIVENESS_CONTRACT_NAME = "LIVENESS_CONTRACT"  # trust residual (#237 class, named): an unconditional liveness_marker self-attests —
+# the marker proves the probe RAN, not that its evidence is honest; a forged-liveness client is
+# the same trust class as forged verification and is handled by blind red-team, not this gate.
+LIVENESS_CONTRACT_V2 = 2
+
 # #146 case-abandonment protocol: the closed attribution taxonomy a
 # retirement justification must draw from, and the retired marker.
 RETIRED_CASE_STATUS = "retired"
@@ -654,7 +673,96 @@ def load_client(client_path) -> Compute | None:
     if not callable(compute):
         raise OracleCaseError(
             f"client {path} exposes no callable compute(params) -> dict")
+    # issue 303 D2: stamp the probe's declared liveness-contract era on the
+    # callable (the client module snapshot is digest-named, so the stamp
+    # cannot leak across distinct clients). Undeclared -> legacy era (1).
+    try:
+        compute._liveness_contract = int(
+            getattr(mod, LIVENESS_CONTRACT_NAME, 1) or 1)
+    except (TypeError, ValueError):
+        compute._liveness_contract = 1
     return compute
+
+
+# ------------------------------------------------------- issue 303 D2 liveness
+
+def classify_row(row: dict) -> str:
+    """The versioned-semantics classification point (issue 303 D2). Pure.
+
+    The row-level ``liveness`` FIELD's presence is the era stamp:
+      "legacy"    record without the field (pre-issue 303 ledger rows, rows of
+                  clients that never declared the strict contract) —
+                  marker-absence routes as business (legacy tolerance;
+                  existing ledgers are never retro-invalidated);
+      "infra"     field-carrying row whose probe did not prove liveness —
+                  routes to infra repair, NEVER a business observation;
+      "business"  field-carrying row with liveness proven (or any legacy
+                  record) — classifies exactly as before."""
+    marker = (row or {}).get("liveness")
+    if marker is None:
+        return "legacy"
+    if marker == "absent":
+        return "infra"
+    return "business"
+
+
+def _settled_rows(report: dict) -> dict[str, bool]:
+    """The ONE settle-filter feeding BOTH posterior faces (issue 303 D2):
+    Bernoulli observations come from marker-proven (or legacy-era) pass/fail
+    rows only. An infra row can never settle — a dead instrument must not
+    feed Beta(alpha, beta), even if a business status somehow rides the row
+    (defense in depth). Routes through classify_row: the era semantics have
+    exactly one authority."""
+    return {cid: row.get("status") == "pass"
+            for cid, row in (report.get("cases") or {}).items()
+            if row.get("status") in ("pass", "fail")
+            and classify_row(row) != "infra"}
+
+
+def _emit_infra_dead(ws, case_id: str, reason: str, row: dict | None = None,
+                     claim: str | None = None) -> None:
+    """issue 303 D2: the infra-repair emission — ``probe_infra_dead`` (a
+    registered EMIT_ACTION). Routing ONLY: the item surfaces the dead
+    instrument on the unified log (the repair queue env_repair_l1 /
+    kunglao-monitor read); auto-repair is out of scope. Silent fail-open:
+    observability never disturbs the run."""
+    try:
+        from kunglao_log import emit
+        payload = {"case_id": case_id, "reason": reason,
+                   "status": (row or {}).get("status")}
+        emit(ws, actor="oracle_runner", action="probe_infra_dead",
+             claim=claim,
+             detail=json.dumps(payload, sort_keys=True, ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs
+        warn("_emit_infra_dead", f"{type(exc).__name__}: {exc}")
+
+
+def probe_quality_gate(client_path) -> list[str]:
+    """issue 303 D2 tool quality gate over probe clients (STATIC source check,
+    no execution): a strict-era probe (``LIVENESS_CONTRACT = 2`` declared)
+    that never emits the liveness marker FAILS the gate — by construction
+    every one of its results would route infra-dead, so it must not burn a
+    cadence round pretending to measure. Legacy clients (no declaration)
+    are tolerated: their records keep the legacy era (versioned migration).
+
+    Returns the violation list ([] = pass). Missing client -> [] (nothing
+    registered to judge — the cadence's own client_not_registered face
+    owns that signal)."""
+    path = Path(client_path) if client_path is not None else None
+    if path is None or not path.exists():
+        return []
+    source = path.read_text(encoding="utf-8", errors="replace")
+    if not re.search(rf"^\s*{LIVENESS_CONTRACT_NAME}\s*=\s*"
+                     rf"{LIVENESS_CONTRACT_V2}\b", source, re.MULTILINE):
+        return []  # legacy era — tolerated, records stay legacy-shaped
+    if LIVENESS_MARKER not in source:
+        return [f"strict-era probe declares {LIVENESS_CONTRACT_NAME}="
+                f"{LIVENESS_CONTRACT_V2} but never emits the liveness marker "
+                f"key {LIVENESS_MARKER!r} — every result would route "
+                f"infra-dead (issue 303 D2); emit "
+                f"{LIVENESS_MARKER}: '{LIVENESS_ALIVE}' in compute() "
+                f"results or drop the declaration"]
+    return []
 
 
 # ---------------------------------------------------------------- checking
@@ -672,13 +780,49 @@ def _stage_divergence(observed: dict, expected_stages: dict) -> str | None:
     return None
 
 
+def _finalize_row(row: dict, observed: list, pending_entries: int,
+                  strict: bool, proved_alive: bool | None) -> dict:
+    """issue 303 D2 single classification exit (module-level pure-over-fresh-row
+    so check_case keeps its branch budget). ``proved_alive`` None = the
+    probe produced no result dict at all (crash / bad params / non-dict).
+
+    Strict era: a probe that did not prove liveness routes INFRA — pending,
+    never business pass/fail; the forensic record of what the dead
+    instrument OUTPUT is kept (repair-relevant), only the verdict is
+    voided. Legacy era and marker-present rows classify exactly as before
+    (the pre-issue 303 byte-equivalent path); a no-result row keeps the pending
+    early-return shape it always had."""
+    if strict:
+        row["liveness"] = "present" if proved_alive else "absent"
+        if not proved_alive:
+            row["status"] = "pending"  # infra: no evidence, never pass/fail
+            return row
+    if proved_alive is not None:
+        if row["failures"]:
+            row["status"] = "fail"
+        elif not observed or pending_entries:
+            row["status"] = "pending"  # observations still owed — not pass
+        else:
+            row["status"] = "pass"
+    return row
+
+
 def check_case(case: dict, compute: Compute | None) -> dict:
     """One case -> {"status", "pending_entries", "instrumented", "failures",
-    "error", "forensics"}.
+    "error", "forensics"} (+ ``liveness`` on strict-era rows, issue 303 D2).
 
     status: fail (observed entry mismatched) > pending (no client / client
     crash / nothing observed / scaffold entries owed) > pass (every observed
     entry matches and nothing is owed). "Unknown" is never "pass" (#108 A).
+
+    issue 303 D2 — strict-era routing: a probe that declared
+    ``LIVENESS_CONTRACT = 2`` must prove liveness by carrying
+    ``liveness_marker: "alive"`` in its result dict. Marker-absent routes
+    INFRA, never business: the row stamps ``liveness: "absent"``, the
+    status is pending (NO evidence — not pass, not fail), and run() emits
+    the ``probe_infra_dead`` repair item. Marker-present classifies exactly
+    as before. Legacy-era probes (no declaration) produce rows WITHOUT the
+    field — the era stamp; their records classify exactly as pre-issue 303.
 
     #146 forensics (additive): params_used / meta / mismatches / stages /
     divergence_point — the settlement records HOW it was won or lost; see
@@ -692,15 +836,21 @@ def check_case(case: dict, compute: Compute | None) -> dict:
            "instrumented": False, "failures": [], "error": None,
            "forensics": forensics}
     if compute is None:
-        return row
+        return row  # no probe injected — honest unknown, NOT a dead probe
     row["instrumented"] = True
+    strict = getattr(compute, "_liveness_contract", 1) >= LIVENESS_CONTRACT_V2
+
+    def _finish(proved_alive: bool | None) -> dict:
+        return _finalize_row(row, observed, pending_entries, strict,
+                             proved_alive)
+
     # crash containment (base behavior, #146 review r1-2): a non-mapping
     # params is a per-case error, never a whole-run crash
     try:
         params = dict(case["params"])
     except Exception as exc:  # noqa: BLE001 — contained as a verdict of "unknown"
         row["error"] = f"{type(exc).__name__}: {exc}"
-        return row
+        return _finish(None)
     # #146 snapshot BEFORE the call (review r1-3): the forensic record holds
     # the derivation INPUT — a client that mutates its argument cannot
     # corrupt params_used
@@ -709,10 +859,10 @@ def check_case(case: dict, compute: Compute | None) -> dict:
         out = compute(params)
     except Exception as exc:  # noqa: BLE001 — a crash is a verdict of "unknown"
         row["error"] = f"{type(exc).__name__}: {exc}"
-        return row
+        return _finish(None)
     if not isinstance(out, dict):
         row["error"] = f"client returned {type(out).__name__}, expected dict"
-        return row
+        return _finish(None)
     meta = out.get("meta")
     if isinstance(meta, dict):
         forensics["meta"] = meta
@@ -730,13 +880,7 @@ def check_case(case: dict, compute: Compute | None) -> dict:
             forensics["mismatches"].append(
                 {"field": e["field"], "expected": e["value"],
                  "actual": out.get(e["field"])})
-    if row["failures"]:
-        row["status"] = "fail"
-    elif not observed or pending_entries:
-        row["status"] = "pending"  # observations still owed — not pass
-    else:
-        row["status"] = "pass"
-    return row
+    return _finish(out.get(LIVENESS_MARKER) == LIVENESS_ALIVE)
 
 
 # ---------------------------------------------------------------- mutation
@@ -781,6 +925,10 @@ def _mutated_client(compute: Compute, mut: dict,
         else:
             out[field] = _perturb(out[field])
         return out
+    # issue 303 D2: the mutation wrapper inherits the probe's liveness-contract
+    # era, so a strict probe's mutation self-test routes the same way its
+    # real results would (marker propagates through the dict() copy).
+    bad._liveness_contract = getattr(compute, "_liveness_contract", 1)
     return bad
 
 
@@ -826,9 +974,13 @@ def run(cases_dir, client_path, *, mutation: bool = False) -> dict:
                 "pending": "pending"}[row["status"]]] += 1
     # #157: one observation event per case result row (post-verdict, silent
     # fail-open) — <ws> is the load_cases root (<ws>/oracle/cases).
+    # issue 303 D2: an infra row additionally emits its probe_infra_dead repair
+    # item (routing only — auto-repair is out of scope).
     ws = cases_dir.parent.parent
     for cid, row in rows.items():
         _emit_observation(ws, cid, row)
+        if row.get("liveness") == "absent":
+            _emit_infra_dead(ws, cid, "marker_absent", row)
     return {
         "schema": SCHEMA_ID,
         "cases_dir": str(cases_dir),
@@ -922,6 +1074,12 @@ def _emit_observation(ws, case_id: str, row: dict) -> None:
                 "divergence_point": fore.get("divergence_point"),
             },
         }
+        # issue 303 D2: strict-era rows carry the liveness stamp on the event
+        # face too. Legacy rows (no field) keep their byte-shape — the
+        # field's ABSENCE on old event rows is the era mark, never re-read
+        # as infra.
+        if row.get("liveness"):
+            payload["liveness"] = row["liveness"]
         emit(ws, actor="oracle_runner", action="observation",
              detail=json.dumps(payload, sort_keys=True, ensure_ascii=False,
                                default=repr))
@@ -1123,9 +1281,9 @@ def record_pq_updates(ws, report: dict, led) -> list[dict]:
     if not declarations:
         return []
     records: list[dict] = []
-    settled = {cid: row.get("status") for cid, row in
-               (report.get("cases") or {}).items()
-               if row.get("status") in ("pass", "fail")}
+    # issue 303 D2: same settle-filter as the Bernoulli face — infra rows are
+    # not observations on ANY posterior surface.
+    settled = _settled_rows(report)
     for cid in sorted(declarations):
         if cid not in settled:
             continue  # pending/unknown is not an observation (pending is
@@ -1145,8 +1303,9 @@ def record_pq_updates(ws, report: dict, led) -> list[dict]:
                  "delta_h_bits": 0.0, "h_standing_bits": 0.0,
                  "status": "skipped", "reason": error}, cid, pq_id))
             continue
-        face = "green_up" if settled[cid] == "pass" else "red_up"
-        eliminations = ("eliminate_on_pass" if settled[cid] == "pass"
+        # _settled_rows maps cid -> passed (bool); True == the pass face
+        face = "green_up" if settled[cid] else "red_up"
+        eliminations = ("eliminate_on_pass" if settled[cid]
                         else "eliminate_on_fail")
         events = ([("evidence", n, s) for n, s in faces[face]]
                   + [("eliminate", n, None)
@@ -1183,9 +1342,9 @@ def record_posteriors(ws, report: dict) -> Path | None:
     PQ-categorical settlement face (record_pq_updates); both faces land in
     one atomic ledger save, return value unchanged."""
     import posteriors as po
-    updates = {cid: row["status"] == "pass"
-               for cid, row in report["cases"].items()
-               if row["status"] in ("pass", "fail")}
+    # issue 303 D2: _settled_rows drops infra rows — a dead instrument never
+    # feeds Beta(alpha, beta) as a red (or green) observation.
+    updates = _settled_rows(report)
     if not updates:
         return None
     led = po.PosteriorLedger.load(ws)
