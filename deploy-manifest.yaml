@@ -208,6 +208,10 @@ files:
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
     sha256: 79582b948c270eade801ed8f1e4dde4b3aba5f4c9d6bd17cfbe99602a4f4a6ab
+  - src: scripts/calibration_face.py
+    dest: .claude/scripts/calibration_face.py
+    kind: scaffold
+    sha256: fff1d3fd9fe80b92d8ccd914de7d1b8ff13f320d6409c3145fd52822b762edc2
   - src: scripts/calibration_gate.py
     dest: .claude/scripts/calibration_gate.py
     kind: scaffold
@@ -783,7 +787,7 @@ files:
   - src: scripts/rho_verifier.py
     dest: .claude/scripts/rho_verifier.py
     kind: scaffold
-    sha256: 6067db6ca7d3035332a520681348e4c5edcae6992025d41301b35851d757a97c
+    sha256: 95313bf5f38df615b249384577335a70e93db8d3a321815a391c667a0ec70575
   - src: scripts/roi_settlement.py
     dest: .claude/scripts/roi_settlement.py
     kind: scaffold
@@ -823,7 +827,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 22bbac3a005a95c86ca9cd5ed1c1a71290fe1deb595e9a59198d6d9be6756807
+    sha256: 9f5f8f332156e42b4e6ab256fe7fa661f59d187f024502913a9baf2e4fcc9dbc
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -947,7 +951,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: ab9d4d80010433d0e562c8319e5027cefa8ef55b3db6c80345d02d071c74c8c0
+    sha256: 7945705c65b3c0ebfeac182e258be9a581228cce4d0a50d0a325f3cc1a64ea46
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset

@@ -102,6 +102,12 @@ from entropy_face import SNAPSHOT_REL
 # heartbeat tick report carries the same computed values).
 from rank_face import face as _rank_face
 
+# Issue 134: the rho/Platt calibration face is single-sourced in
+# calibration_face (reliability curve + ECE + current gap over the settled
+# (rho, z) ledger pairs, plus the #127 rho_sampler liveness status). The
+# snapshot ships it verbatim; PRODUCE only — no gate may consume it.
+from calibration_face import face as _calibration_face
+
 # issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
 # rate-limited WARN): absent-source degradations are NORMAL in an idle
 # workspace, and this module's writes are hook-embedded (token-zero
@@ -1003,6 +1009,17 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # health bit. Producer-owned like every other face: the renderer never
     # reads the ledger. Additive fields — readers probe the field set.
     rank = _rank_face(ws, now=now)
+    # Issue 134: the rho/Platt calibration face (curve + ECE + current gap
+    # + rho_sampler liveness status). Producer-owned like every other face;
+    # additive field — readers probe the field set. The face is fail-open
+    # by contract; the try keeps the snapshot's own never-breaks guarantee.
+    try:
+        calibration = _calibration_face(ws)
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("calibration_face", f"{type(exc).__name__}: {exc}")
+        calibration = {"schema": "rho-calibration/1", "status": "NO_DATA",
+                       "n_samples": 0, "n_pairs": 0, "n": 0, "bins": [],
+                       "ece": None, "current_gap": None, "platt": None}
 
     return {
         "schema": SCHEMA_VERSION,
@@ -1043,6 +1060,9 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # while the ranking result itself stays untouched (fail-open).
         "rank": rank["rank"],
         "rank_log": rank["rank_log"],
+        # Issue 134: rho/Platt calibration face + rho_sampler liveness —
+        # PRODUCE only (no gating; consumption is v0.2 #129/#135).
+        "calibration": calibration,
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,
