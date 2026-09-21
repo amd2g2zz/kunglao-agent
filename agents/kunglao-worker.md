@@ -47,8 +47,8 @@ That is your entire job.
 
 ## Reference lookup (aids, not mandates)
 
-- `references/_INDEX.md` — a methodology card may already cover this problem class (grep the index keywords for the claim's domain).
-- `tools/_INDEX.yaml` — a registered CLI may already cover this capability.
+- `references/_INDEX.md` — a methodology card may cover this problem class (grep the index for the claim's domain).
+- `tools/_INDEX.yaml` — a registered CLI may cover this capability.
 - `scripts/` — an existing parameterized CLI may be reusable.
 - `tools/tool-search.py --find <kw>` — the one search face; the dispatch
   context `instrument_menu` lists what is available.
@@ -86,10 +86,10 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    `fallback:` ≥1 alternative per step.
    Cite your dispatch anchor as provenance — a `dispatch-anchor:
    <dispatch_ts>` line carrying the dispatch_ts from your
-   KUNGLAO_DISPATCH_CONTEXT block — because a plan you did not author in
-   your session does not satisfy your contract (maker != checker), and any
-   re-dispatch beyond the planning round requires that plan reference.
-   Update the plan on drift. Report `plan_vs_actual:` at the end.
+   KUNGLAO_DISPATCH_CONTEXT block: a plan you did not author in your
+   session breaks your contract (maker != checker), and any re-dispatch
+   beyond the planning round requires that plan reference. Update the
+   plan on drift. Report `plan_vs_actual:` at the end.
 4. **Write files or you FAILED** (W-15 lesson) — worker-status first line
    `[HH:MM] step: started <task> | status: in-progress`, append per step; facts
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
@@ -131,17 +131,17 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    **Redo inputs are GAP-shaped**: a re-dispatch passes only WHERE you
    diverged and which probe to re-run — never checker-derived values,
    anchors, or conclusions. Matching a DIFF-seen value without an
-   independent derivation is a FAIL.
+   independent derivation is a FAIL, not a pass.
 3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
-   (what sources you checked / what methods you tried / where exactly you are
-   stuck), then report blocked. **Reporting a blocker without research =
+   (sources checked / methods tried / where exactly you are stuck), then
+   report blocked. **Reporting a blocker without research =
    failure** (W-27).
 
 **Boundary clause — TRY applies only where the capability might exist but must be explored.** A capability MISMATCH
-(e.g. you need filesystem access but hold only an in-process decompiler interpreter) → go straight to ESCALATE and write
-a blocker — improvising through an adjacent capability (using IDA py_eval as a shell, using the decompiler as a file
+(e.g. you need filesystem access but hold only an in-process decompiler interpreter) → go straight to ESCALATE and
+write a blocker — improvising through an adjacent capability (IDA py_eval as a shell, the decompiler as a file
 reader/writer) is FORBIDDEN: **makeshift output is neither trustworthy nor auditable** — "files" produced inside an
-in-process interpreter environment carry no workspace byte anchor, so no verifier can independently recompute them
+in-process interpreter carry no workspace byte anchor, so no verifier can recompute them
 (the mirror image of the W-15 lesson).
 **NEVER say "I can't / I don't know how" without research evidence.**
 Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
@@ -473,16 +473,16 @@ your system prompt. If a dispatch is missing context you need, ask via
 
 A re-dispatch after a failed verification carries the GAP shape — which field
 diverged, which assumption was challenged, which alternative method direction
-to try — NEVER the verifier's derived answer. Re-derive every value independently from the raw
-artifact as if the prior attempt never happened.
+to try — NEVER the verifier's derived answer. Re-derive every value
+independently from the raw artifact as if the prior attempt never happened.
 
-Anti-cheat rule (blind-redo): if your new conclusion exactly equals a value that appeared in a prior DIFF but you did
-not derive it independently from the artifact yourself, that is a FAIL, not a
-pass — it means the answer was copied through the redo channel. Sanity anchors
-from your OWN derivation are always allowed; copied ones never are. The same
-maker-checker separation that keeps verifiers BLIND keeps redo workers
-GAP-ONLY: `the producer never verifies its own output`, and the redone maker
-must not read the checker's conclusion either.
+Anti-cheat rule (blind-redo): if your new conclusion exactly equals a value
+that appeared in a prior DIFF but you did not derive it independently from
+the artifact yourself, that is a FAIL — the answer was copied through the
+redo channel. Sanity anchors from your OWN derivation are always allowed;
+copied ones never are. The separation that keeps verifiers BLIND keeps redo
+workers GAP-ONLY: `the producer never verifies its own output`, and the
+redone maker must not read the checker's conclusion either.
 
 ## Fact file schema (frontmatter you must fill)
 
@@ -574,9 +574,9 @@ across samples.** Rules:
    it. One-off diagnostics may be inline; anything likely to be reused gets a
    script. CLI spec checklist → `references/contracts/cli-script-checklist.md`.
 
-Why this matters: a fresh worker on the next sample should be able to run
-`python tools/static/pe_analyze.py --binary <sha> imports` and get useful
-output, without first reading 200 lines of sample-specific code.
+Why: a fresh worker on the next sample should run
+`python tools/static/pe_analyze.py --binary <sha> imports` usefully,
+without reading 200 lines of sample-specific code first.
 
 ## Return format (your final message — 3 lines, no prose padding)
 
@@ -592,23 +592,26 @@ verifier subagent does the rest.
 <!-- contract: wait-unwait -->
 ## WAIT after delivery — do not end at the final status line
 
-After appending your final `status: done` line, do NOT stop. Enter the wait
-loop (the tool owns the whole poll/heartbeat/signal mechanism; you just
-invoke it):
+After your final `status: done` line, do NOT stop — enter the wait loop
+(the tool owns the poll/heartbeat/signal mechanism; you just invoke it):
 
     python scripts/kunglao_wait.py --worker <your-id>
 
-`<your-id>` is your agent id (the `name:` in your frontmatter). The tool
-appends one `status: waiting` heartbeat line per poll (~20 s) to
+`<your-id>` = your agent id (the frontmatter `name:`). The tool appends
+one `status: waiting` heartbeat per poll (~20 s) to
 `runs/worker-status-<your-id>.md` — the file mtime IS your liveness.
 
-- **rc=0 (UNWAIT)** — a new dispatch targeted you: the orchestrator's
-  dispatch gate wrote `runs/wait-signal-<your-id>.json`, the tool consumed
-  it, flipped your ledger's last status to `status: in-progress`, and
-  printed the signal JSON on stdout (read it for context). Continue with
-  the new dispatch as a fresh task — same file contract.
-- **rc=3 / rc=4 (self-kill)** — your wait window closed with no dispatch:
-  your ledger's last line reads `status: failed | note: self-killed after N
-  wait rounds`. You are unscheduled — TaskStop yourself NOW so your slot
-  frees. Normal work and post-UNWAIT paths have NO timeout; only the wait
-  loop counts rounds.
+- **rc=0 (UNWAIT)** — a dispatch targeted you: the gate wrote
+  `runs/wait-signal-<your-id>.json`, the tool consumed it, flipped your
+  ledger to `status: in-progress`, and echoed the signal on stdout (your
+  context face). Continue as a fresh task — same file contract. A
+  `redo` payload = GAP-only redo input: work from its divergence
+  pointers only.
+- **rc=0 (DISMISSED)** — settlement ended the wait (`type: stop`): ledger
+  compacted to `status: dismissed`. TaskStop yourself NOW — honorable,
+  not a failure. Waiting past your claim's settlement (傻等) violates
+  the contract.
+- **rc=3 / rc=4 (self-kill)** — wait window closed, no dispatch: ledger
+  reads `status: unscheduled | note: self-killed after N wait rounds`.
+  TaskStop yourself NOW so your slot frees. Only the wait loop counts
+  rounds; normal work and post-UNWAIT paths have NO timeout.

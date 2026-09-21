@@ -171,6 +171,7 @@ EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
     "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
+    "approach_demoted",   # issue 302 D1: approach-class demotion decision face (target_ladder)
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
@@ -261,6 +262,7 @@ EMIT_ACTIONS = [
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
+    "probe_infra_dead",  # issue 303 D2 dead-instrument routing: a probe that cannot prove liveness produced NO evidence — infra repair item, never a business observation
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
@@ -303,6 +305,7 @@ EMIT_ACTIONS = [
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
+    "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_guard_waiver_used",  # #820 waiver consumption audit face
     "zero_output_break",  # #823 A4 same-type action thrash circuit face

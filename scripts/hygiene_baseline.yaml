@@ -102,7 +102,7 @@ files:
   scripts/error_response.py:
     r1: 8
   scripts/event_taxonomy.py:
-    r1: 114
+    r1: 115
     r2: 1
   scripts/external_kicker.py:
     r1: 32
@@ -176,6 +176,8 @@ files:
     r1: 85
   scripts/kunglao_verify.py:
     r1: 29
+  scripts/kunglao_wait.py:
+    r1: 6
   scripts/lessons_telemetry.py:
     r1: 3
   scripts/lint_facts.py:
@@ -248,7 +250,7 @@ files:
   scripts/refutation_propagate.py:
     r1: 3
   scripts/register_proven_gate.py:
-    r1: 11
+    r1: 12
   scripts/release_check_selfcheck.py:
     r1: 3
   scripts/release_receipt.py:
@@ -276,7 +278,7 @@ files:
   scripts/status_defs.py:
     r1: 1
   scripts/statusline_snapshot.py:
-    r1: 34
+    r1: 36
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -318,6 +320,8 @@ files:
     r1: 1
   scripts/verify_status_watch.py:
     r1: 2
+  scripts/wait_dispose.py:
+    r1: 5
   scripts/winrate_curve.py:
     r1: 4
   scripts/wire_up_settings.py:
@@ -812,7 +816,7 @@ files:
   tests/test_kunglao_upgrade_726.py:
     r1: 13
   tests/test_kunglao_wait_902.py:
-    r1: 2
+    r1: 6
   tests/test_ledger_settlement_8.py:
     r1: 2
   tests/test_ledger_stdlib_584.py:
@@ -1045,7 +1049,7 @@ files:
   tests/test_sanitize.py:
     r1: 3
   tests/test_scan_waiting_902.py:
-    r1: 1
+    r1: 2
   tests/test_scorer_authority.py:
     r1: 6
   tests/test_script_discipline.py:
@@ -1223,6 +1227,8 @@ files:
     r1: 1
   tests/test_vm_normalization_10.py:
     r1: 2
+  tests/test_wait_dispose_244.py:
+    r1: 1
   tests/test_warn_delegation_863f.py:
     r1: 1
   tests/test_web_knowledge_761.py:

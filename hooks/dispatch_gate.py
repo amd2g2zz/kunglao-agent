@@ -1572,6 +1572,9 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
         # collapse; new code wires the util).
         from harness_common import utc_now_z
         path.write_text(json.dumps({
+            # #244 taxonomy: the wait signal carries type dispatch | stop;
+            # the gate's wake is the dispatch arm of the vocabulary.
+            "type": "dispatch",
             "claim": claim_id,
             "ts": utc_now_z(),
         }, ensure_ascii=False), encoding="utf-8")
@@ -1750,6 +1753,17 @@ def main() -> int:
     # dispatch ALLOW tail (all teeth passed, worker not yet started).
     # Fail-open: intent_unparsed event only, never a blocked dispatch.
     _record_dispatch_intent(ws, claim_id, prompt_text, payload)
+    # #12 signal stream: the dispatch ALLOW tail is the one point every
+    # dispatch passes — land the structured dispatch row (runs/signals.jsonl)
+    # the Δ-estimator's events block counts. Fail-open: telemetry never
+    # turns an ALLOW into anything else.
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from signals_stream import append as _signal_append
+        _signal_append(ws, "dispatch", claim=claim_id)
+    except Exception as exc:  # noqa: BLE001 — a signal never blocks dispatch
+        print(f"dispatch_gate: signal-stream append failed ({exc!r})",
+              file=sys.stderr, flush=True)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

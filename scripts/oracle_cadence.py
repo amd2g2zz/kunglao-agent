@@ -136,26 +136,35 @@ def _warn(ws: Path, reason: str, detail: str,
                      detail=f"reason={reason}: {detail}")
 
 
-def _all_red_report(cases_dir: Path, cases: list[dict], client_path,
-                    error: str) -> dict:
-    """Issue fix 2, fail-loud face: a broken registered client is NEVER
-    "skip" — every armed case lands RED (status file + red Bernoulli
-    observations) so the DRAIN probe and the posterior economy both see the
-    broken instrumentation scream instead of quietly pending."""
+def _infra_dead_report(ws: Path, cases_dir: Path, cases: list[dict],
+                       client_path, error: str, *, reason: str,
+                       claim: str | None = None) -> dict:
+    """issue 303 D2, fail-loud INFRA face (supersedes issue-132's all-red face for
+    dead instruments): a dead registered client is NEVER "skip" — but it is
+    also never business evidence. Every armed case lands PENDING with the
+    ``liveness: "absent"`` stamp, so the DRAIN probe still blocks pendings
+    (loudness preserved) while the posterior economy sees NOTHING — a probe
+    that cannot prove it was alive has produced NO evidence at all, and
+    Beta(alpha, beta) must not be fed a red observation on a dead
+    instrument (the doubao incident's first chained bug). One
+    ``probe_infra_dead`` repair item per case hits the durable log
+    (routing only — auto-repair is out of scope)."""
     import oracle_runner as orun
     rows = {}
     for c in cases:
         pending_entries = sum(1 for e in c["expected"] if e["pending"])
-        rows[c["id"]] = {"status": "fail", "pending_entries": pending_entries,
-                         "instrumented": True,
-                         "failures": ["client broken — verdict forced red "
-                                      "(#132: fail-loud, never skip)"],
+        rows[c["id"]] = {"status": "pending",
+                         "pending_entries": pending_entries,
+                         "instrumented": True, "liveness": "absent",
+                         "failures": [],
                          "error": error}
+        orun._emit_infra_dead(ws, c["id"], reason, rows[c["id"]],
+                              claim=claim)
     return {"schema": orun.SCHEMA_ID,
             "cases_dir": str(cases_dir),
             "client": str(client_path),
             "cases": rows,
-            "counts": {"red": len(cases), "green": 0, "pending": 0},
+            "counts": {"red": 0, "green": 0, "pending": len(cases)},
             "mutation": None}
 
 
@@ -220,14 +229,32 @@ def run_cadence(ws, *, claim: str | None = None) -> dict:
     except orun.OracleCaseError as exc:
         _warn(ws, "case_set_refused", str(exc), claim=claim)
         return {"fired": True, "ran": False, "reason": "case_set_refused"}
+    # issue 303 D2 tool quality gate BEFORE the run: a strict-era probe that
+    # cannot prove liveness is infra-dead by construction — route INFRA
+    # (pending + repair items), never red posteriors, never a burned round.
+    violations = orun.probe_quality_gate(client_path)
+    if violations:
+        _warn(ws, "marker_gate_failed",
+              f"{client_path}: {'; '.join(violations)}", claim=claim)
+        report = _infra_dead_report(
+            ws, ws.joinpath(*orun.CASES_REL), cases, client_path,
+            "; ".join(violations), reason="marker_gate_failed", claim=claim)
+        orun.write_status(ws, report)
+        orun.record_posteriors(ws, report)
+        return {"fired": True, "ran": True, "reason": "marker_gate_failed",
+                "counts": report["counts"], "vacuous": []}
     try:
-        # broken-client probe BEFORE the run: a present-but-unloadable
-        # client is all-red + warn, never "no client" pending clothes.
+        # broken-client probe BEFORE the run (issue 303 D2 re-route): a
+        # present-but-unloadable client is a DEAD instrument — pending + a
+        # probe_infra_dead repair item per case, never "no client" pending
+        # clothes and never red Bernoulli observations (a dead instrument
+        # must not update the wrong posterior, the doubao lesson).
         orun.load_client(client_path)
-    except Exception as exc:  # noqa: BLE001 — ANY unloadable client is broken
+    except Exception as exc:  # noqa: BLE001 — ANY unloadable client is dead
         _warn(ws, "client_broken", f"{client_path}: {exc!r}", claim=claim)
-        report = _all_red_report(ws.joinpath(*orun.CASES_REL), cases,
-                                 client_path, repr(exc))
+        report = _infra_dead_report(
+            ws, ws.joinpath(*orun.CASES_REL), cases, client_path,
+            repr(exc), reason="client_broken", claim=claim)
         orun.write_status(ws, report)
         orun.record_posteriors(ws, report)
         return {"fired": True, "ran": True, "reason": "client_broken",
