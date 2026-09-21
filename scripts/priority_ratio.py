@@ -244,34 +244,22 @@ def is_open(claim: dict) -> bool:
 
 # ---------- action classification (feeds the Action.category + worker hints) ----------
 
-_KEYWORD_MAP: list[tuple[tuple[str, ...], str]] = [
-    (("c2", "mpd", "pegasus", "dead-drop", "dead drop", "c2 配置"), "c2_config_extract"),
-    (("命令表", "command table", "命令分发"), "command_table"),
-    (("协议", "protocol", "runtime 行为", "network io", "网络"), "protocol_restore"),
-    (("持久化", "persistence", "autorun", "注册表"), "persistence"),
-    (("注入", "injection", "reflective", "createremotethread"), "injection"),
-    (("反分析", "anti-analysis", "anti analysis", "garble", "诱饵", "decoy", "cff", "混淆"), "anti_analysis"),
-    (("家族", "family", "归属", "vidar", "wingo", "gsb"), "family_attribution"),
-]
-DEFAULT_ACTION = "evidence_collection"
+# The claim-category vocabulary is REGISTRY-OWNED (scripts/action_space.py,
+# the action-vocabulary issue). Verbatim move (same tuples, same order): the
+# rank output stays byte-identical under default weights, pinned by the
+# frozen capture in tests/test_action_space_12.py. The legacy module names
+# stay as aliases for the existing consumers (value_replay, think_seat, tests).
+import action_space  # noqa: E402  (registry-sourced action field)
+
+_KEYWORD_MAP = action_space.CLAIM_ACTION_KEYWORDS
+DEFAULT_ACTION = action_space.DEFAULT_CLAIM_ACTION
 
 
 def classify_action(claim: dict) -> str:
-    """statement + answers_question keywords → action category; no hit → evidence_collection.
-
-    Scoring: each category accumulates keyword hit counts, the highest
-    wins; ties broken by _KEYWORD_MAP order.
-    """
-    text = " ".join([
-        str(claim.get("statement", "")),
-        str(claim.get("answers_question", "")),
-    ]).lower()
-    best, best_score = DEFAULT_ACTION, 0
-    for keywords, action in _KEYWORD_MAP:
-        score = sum(text.count(k) for k in keywords)
-        if score > best_score:
-            best, best_score = action, score
-    return best
+    """statement + answers_question keywords → action category; no hit →
+    evidence_collection. Single scoring authority:
+    action_space.classify_claim_action (the action registry)."""
+    return action_space.classify_claim_action(claim)
 
 
 # ---------- per-claim int guards (#103, unchanged) ----------
