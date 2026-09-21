@@ -50,7 +50,9 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
 # ranking layer — priority_ratio is now the Thompson composite
-# (sampled case posterior + LAMBDA_DH*dH_PQ) and the explore/exploit dual
+# (sampled case posterior + W_DOWNSTREAM*downstream_term; the #295
+# governed removal later deleted the LAMBDA_DH*dH_PQ face,
+# docs/adr-001-strategy-parameter-governance.md) and the explore/exploit dual
 # path is deleted. The ranker swap is an INTENTIONAL SEMANTIC change, and
 # its visible face is kunglao-decide's `top_actions`: any ordering change
 # there is DESIGN INTENT, pinned by the rebuilt suites

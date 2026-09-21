@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Issue 250 — epistemic ΔH enters priority_ratio ranking.
+"""Issue 250 lane, post-#295 — the epistemic ΔH face is REMOVED (ADR-001).
 
-priority_ratio prices `LAMBDA_DH * dh` where dh is the standing entropy of
-`ledger.pqs[claim.answers_question]`. Before issue 250 nothing ever wrote
-ledger.pqs for situational questions (EXP-3: dh ≡ 0 STRUCTURALLY), so an
-epistemic claim was unpriced. After mint+seed, the epistemic claim's ΔH
-term is nonzero — same formula, same single LAMBDA_DH parameter. The dh
-feed line names the situational/epistemic source.
+History: issue 250 wired `LAMBDA_DH * dh` (the standing entropy of
+`ledger.pqs[claim.answers_question]`) into the ranker, and mint+seed
+made epistemic claims carry nonzero ΔH. The governed application of
+issue #295 (docs/adr-001-strategy-parameter-governance.md) REMOVED the
+whole ΔH_PQ face: EXP-B proved ΔH ≡ 0 on 612/612 real rank events and
+#294 proved the λ=0.25 vs λ=0 order digests byte-identical at every
+tick — mechanically inert on all real data. These tests are the REMOVAL
+pins: no dh_pq feed, no λ constant, no ΔH lift anywhere in the rank
+face, even where a seeded situational categorical exists. Re-introducing
+any of them requires the ADR-001 governed procedure.
 
-The issue 251 boundary is pinned too: the seed region (case_face_seed /
-posterior_rng) is NOT touched by this lane.
+The issue 251 boundary is still pinned: the seed region (case_face_seed
+/ posterior_rng) signatures are untouched by any of this.
 """
 from __future__ import annotations
 
@@ -53,7 +57,18 @@ def _mint_and_seed(ws: Path) -> list[dict]:
     return minted
 
 
-def test_epistemic_claim_prices_nonzero_dh(tmp_path):
+def test_lambda_dh_removed():
+    """ADR-001 removal pin: the λ constant must NOT exist. Its reappearance
+    is ungoverned drift — the ΔH term it multiplied is gone (#295)."""
+    assert not hasattr(pr, "LAMBDA_DH"), (
+        "LAMBDA_DH was removed by #295 (docs/adr-001-strategy-parameter-"
+        "governance.md); a reappearance is ungoverned drift")
+
+
+def test_seeded_situational_categorical_no_longer_lifts_score(tmp_path):
+    """Even WITH mint+seed (a populated situational categorical — the exact
+    shape issue 250 made price nonzero ΔH), the score carries no ΔH face:
+    score > 0 from the Thompson case face alone, and no dh_pq feed."""
     _vmp_ws(tmp_path)
     minted = _mint_and_seed(tmp_path)
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
@@ -61,26 +76,22 @@ def test_epistemic_claim_prices_nonzero_dh(tmp_path):
     actions = pr.priority_ratio(minted, {}, evidence, rng=None)
     assert actions, "minted epistemic claims must be rankable candidates"
     for a in actions:
-        dh_state = a.feeds.get("dh_pq", "")
-        assert dh_state, "every action carries the dh feed"
-        assert "categorical H=0.0 bit" not in dh_state, (
-            "seeded situational categorical must price nonzero dH")
+        assert "dh_pq" not in a.feeds, (
+            "the dh_pq feed was removed by #295 (ADR-001)")
         assert a.score > 0
 
 
-def test_dh_feed_names_situational_source_for_epistemic_claims(tmp_path):
+def test_dh_feed_is_gone_entirely(tmp_path):
+    """#295 removal pin: actions carry no dh feed at all — the situational
+    source line of issue 250 died with the term."""
     _vmp_ws(tmp_path)
     minted = _mint_and_seed(tmp_path)
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
                                ws=tmp_path)
     actions = pr.priority_ratio(minted, {}, evidence, rng=None)
     for a in actions:
-        assert "situational" in a.feeds.get("dh_pq", ""), (
-            "the dh feed must distinguish the situational/epistemic source")
-
-
-def test_landa_dh_unchanged():
-    assert pr.LAMBDA_DH == 0.25
+        assert all("dh" not in k for k in a.feeds), (
+            f"unexpected ΔH feed survived: {sorted(a.feeds)}")
 
 
 def test_seed_region_untouched():
@@ -93,9 +104,9 @@ def test_seed_region_untouched():
     assert list(inspect.signature(pr.posterior_rng).parameters) == ["ws"]
 
 
-def test_unseeded_register_still_zero_dh(tmp_path):
-    """Without mint+seed, epistemic claims price dh=0 exactly as before —
-    the pricing enters ONLY through the seeded ledger."""
+def test_unseeded_register_still_ranks_without_dh(tmp_path):
+    """Without mint+seed the cold-start shape is unchanged EXCEPT the dh
+    face, which no longer exists at all (#295)."""
     _vmp_ws(tmp_path)
     unknowns = pe.derive_must_master("vmp", SPEC)
     minted = pe.mint_epistemic_claims(
@@ -104,6 +115,4 @@ def test_unseeded_register_still_zero_dh(tmp_path):
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
                                ws=tmp_path)
     actions = pr.priority_ratio(minted, {}, evidence, rng=None)
-    assert all("H=0" in a.feeds.get("dh_pq", "") or
-               "no PQ categorical" in a.feeds.get("dh_pq", "")
-               for a in actions)
+    assert all("dh_pq" not in a.feeds for a in actions)

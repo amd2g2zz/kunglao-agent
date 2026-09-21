@@ -63,7 +63,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 7f4851d8eb4265ebb56304620cf513b87711026bd364f4eaed014bd5540bb152
+    sha256: 266b4605ee52bdea6798061bdcfcbe94f0c10458cfcd46817d916203cd4ed108
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -135,7 +135,7 @@ files:
   - src: scripts/acceptance_check.py
     dest: .claude/scripts/acceptance_check.py
     kind: scaffold
-    sha256: 5b1a8da76e3b64b1f3aaae0338d2f73f359c3e75d82753088bae390dd60df612
+    sha256: 74518ffb9768b1f159ebc1788ab4047512b636b4bb64b6dcd7dd3c4e3ceaa3d5
   - src: scripts/action_space.py
     dest: .claude/scripts/action_space.py
     kind: scaffold
@@ -655,7 +655,7 @@ files:
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
-    sha256: da666aea4d22760e030f9054467af997605ba863dc854e96340bbc8e2b526e7f
+    sha256: f00538e2b75fddb7fccfd7ad3c34130dffb6b54f3aac43225f3ac90aaa681b95
   - src: scripts/plan_reviser.py
     dest: .claude/scripts/plan_reviser.py
     kind: scaffold
@@ -679,7 +679,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 3da4216e1798a7aef2dd4a87e498aae989c21b18bb0bc537c2ada4855f77a4ac
+    sha256: 1cac05452d24cd12f83e0340c8345dfc6de9475d66178a0337ac15a1cfc03f8e
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -755,7 +755,7 @@ files:
   - src: scripts/replay_ruler.py
     dest: .claude/scripts/replay_ruler.py
     kind: scaffold
-    sha256: 4e65126685416f2d4d9f91c1fe51b6e68f08235ecc46586c7d86bf7a595bf53b
+    sha256: bee5dd531185738c5748449df628ebef75d25248fdfa1a5728acfebc08cb87a3
   - src: scripts/report_consistency_check.py
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
@@ -1407,7 +1407,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: d9ddcc674390058d7987fdb0f605784936bca5091432b678213c1a9607d3d26d
+    sha256: c990f16b3150f4f620134eb5e29b0ff791a4d94a2c74f47fc12a1425f46ea15f
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
