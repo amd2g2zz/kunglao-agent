@@ -675,7 +675,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 42d4326e954a94cb92dac1a9a1251b850d4bb4bdb3e1c4fc7cc29280836e568b
+    sha256: 3da4216e1798a7aef2dd4a87e498aae989c21b18bb0bc537c2ada4855f77a4ac
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -748,6 +748,10 @@ files:
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
     sha256: 10e04a6f7fa2af96198bd642fdf68ed8ec7c442ada03e7987e839339e8657762
+  - src: scripts/replay_ruler.py
+    dest: .claude/scripts/replay_ruler.py
+    kind: scaffold
+    sha256: 4e65126685416f2d4d9f91c1fe51b6e68f08235ecc46586c7d86bf7a595bf53b
   - src: scripts/report_consistency_check.py
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
@@ -1399,7 +1403,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 52eab846048656b5256845c247a6ec54423a5400cecef4b40675d9b606af24d4
+    sha256: d9ddcc674390058d7987fdb0f605784936bca5091432b678213c1a9607d3d26d
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

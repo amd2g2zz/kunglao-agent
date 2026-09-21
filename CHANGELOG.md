@@ -6,6 +6,43 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [Unreleased]
+
+### Added
+
+- **Replay ruler (#294)**: offline policy evaluation for the DECIDE rank
+  face — the convergence loop's first feedback signal for ordering
+  quality. The harness (`scripts/replay_ruler.py`) consumes a COPY of a
+  historical convergence ledger + event stream (explicitly named
+  workspace, read-only source, sandboxed writes only — never a live
+  workspace), replays the rank face under parameterized score
+  configurations through a serial-dispatch counterfactual whose
+  completion clock is the ledger's own observed durations, and emits
+  per-configuration deterministic TTC + order digests. The rank score
+  gains the downstream-blocker term (#294): a bounded, decaying
+  downstream_count over claim_deps/depends_on/obstacle_for reverse edges
+  (`DOWNSTREAM_DECAY`/`DOWNSTREAM_CAP`/`W_DOWNSTREAM`, named free
+  parameters pending the #295 earn-in), recorded on `rank_feeds` events
+  under `feeds.downstream` with the #251 component convention; the seed
+  contract holds unchanged. The λ epistemology check is now mechanical:
+  the harness scans historical `rank_feeds` for the dh_pq nonzero rate
+  and compares λ=0.25 vs λ=0 TTCs on the same replay (no parameter
+  change — #295 owns that). D_t (w_oracle·oracle_pass +
+  w_impl·checks_impl + w_ev·pq_cov) is derived from persisted mission
+  factor vectors with the relevance coupling: activity with flat D_t
+  reports FLAT reward, never shaped progress. Anti-starvation is pinned
+  by test: the decay/cap bound keeps leaf claims dispatchable, and
+  starvation-by-construction is shown visible to the #249 STALLED
+  detector.
+- **Frozen-sampling marker (#266)**: `priority_ratio.frozen_sampling_markers`
+  scans a rank_feeds event tail for K (`FROZEN_SAMPLE_K`) consecutive
+  runs with equal rng_base while the recorded round advances — the #251
+  contract makes a moving round move the seed, so such a run is the old
+  frozen-sampler defect re-emerging; equal base at equal rounds (the
+  contract replaying an unchanged tick) never marks. Pure tail function
+  (tail-replay safe, idempotent); the replay ruler reports it as
+  `frozen_check`.
+
 ## [0.1.5.post2] - 2026-09-19
 
 The post2 batch: seventeen changes to the strategy-learning pipeline. The

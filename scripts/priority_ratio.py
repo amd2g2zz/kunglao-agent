@@ -123,6 +123,47 @@ LAMBDA_DH = 0.25
 FLIP_POTENTIAL_BASE = 0.5       # P(cflip) at cold start
 FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
 
+# #294 downstream-blocker term: a claim others depend on is worth starting
+# earlier — its sample unblocks a subtree, a leaf's unblocks only itself.
+# THREE named free parameters, same discipline as LAMBDA_DH. The values
+# below carry their #295 earn-in evidence FROM THE REPLAY RULER
+# (scripts/replay_ruler.py, run 2026-09-21 against three real historical
+# workspaces — offline policy evaluation, read-only):
+#
+#   earn-in evidence (TTC = replayed ticks to drain, serial dispatch,
+#   same-seed configs; anti-starvation: every claim dispatched, zero
+#   stalls attributable to the term):
+#     cc-case    (25 claims, 215 snaps): base TTC 149 -> term 146 (delta -3)
+#     doubao_web (16 claims, 152 snaps): base TTC 142 -> term 137 (delta -5)
+#     wbtest     ( 6 claims,  39 snaps): base TTC  32 -> term  32 (delta  0)
+#   order digests changed on cc-case/doubao_web (the term reorders real
+#   history); identical on wbtest (frontier too small to differentiate).
+#
+#   W_DOWNSTREAM  — the term's weight inside the composite (bounded lift:
+#                   max lift = W_DOWNSTREAM * DOWNSTREAM_CAP < one cold-start
+#                   prior draw, so a leaf is never systematically starved).
+#                   CHANGING THIS VALUE REQUIRES THE #295 GOVERNED
+#                   PROCEDURE — value pins + attached replay evidence; the
+#                   pins are tests/test_replay_ruler_294.py hard asserts
+#                   and silent drift goes red;
+#   DOWNSTREAM_DECAY — geometric decay per dependency-graph level (direct
+#                   dependents count 1, grandchildren DECAY, ...);
+#   DOWNSTREAM_CAP   — hard clamp on the weighted count (a hub cannot
+#                   dominate the sample face no matter how wide its subtree).
+DOWNSTREAM_DECAY = 0.5
+DOWNSTREAM_CAP = 4.0
+W_DOWNSTREAM = 0.1
+
+# #266 frozen-sampling marker: K CONSECUTIVE rank runs whose recorded
+# rng_base is EQUAL while the recorded round ADVANCES. The #251 contract
+# makes the seed move whenever the round moves — a run of advancing rounds
+# with a static base is exactly the old frozen-sampler defect re-emerging
+# (the 53-consecutive wild audit), detectable from the event tail alone.
+# Equal base with EQUAL rounds is the contract's deterministic replay of
+# an unchanged tick, never freezing. The consumer is a pure tail function:
+# no state, idempotent under tail replay.
+FROZEN_SAMPLE_K = 3
+
 _TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 
 ORACLE_CASES_REL = "oracle/cases"
@@ -301,6 +342,53 @@ def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
         for p in parents:
             rev.setdefault(p, []).append(child)
     return rev
+
+
+def downstream_term(claim_id: str, depends_on: dict,
+                    claims: Iterable | None = ()) -> float:
+    """#294: bounded, decaying downstream_count for one claim.
+
+    Reverse edges over claim_deps/depends_on {child: [parents]} PLUS the
+    register's `obstacle_for` fields (the ladder-mint face writes the same
+    edge into claim_deps.yaml, but a register-only row must still count —
+    the graph, not the file layout, is the signal). BFS from claim_id:
+    each dependent at graph distance d contributes DECAY**d; the sum is
+    clamped to DOWNSTREAM_CAP. Deterministic pure function of the dep
+    inputs — no rng, no wall clock (the seed contract is untouched);
+    cycles are cut by a visited set.
+
+    The count is deliberately STATUS-BLIND (settled dependents still
+    count): filtering live-only would need the whole register threaded
+    through every score and would make the term drift mid-round as
+    statuses flip. The cap keeps a stale hub bounded; the replay ruler is
+    where a status-aware variant must EARN its place on data.
+    """
+    rev: dict[str, list[str]] = _reverse_deps(depends_on or {})
+    for c in claims or ():
+        parent = str(c.get("obstacle_for") or "").strip()
+        cid_ = c.get("id")
+        if parent and cid_:
+            rev.setdefault(parent, []).append(str(cid_))
+    if claim_id not in rev:
+        return 0.0
+    total = 0.0
+    seen = {claim_id}
+    frontier = [claim_id]
+    level = 0
+    while frontier:
+        level += 1
+        nxt: list[str] = []
+        for node in frontier:
+            for dep in rev.get(node, ()):
+                if dep in seen:
+                    continue
+                seen.add(dep)
+                total += DOWNSTREAM_DECAY ** (level - 1)
+                nxt.append(dep)
+        if total >= DOWNSTREAM_CAP:
+            break
+        frontier = nxt
+    return min(total, DOWNSTREAM_CAP)
 
 
 # ===================== #496 typed-fact consumption (capability cards) =====================
@@ -627,6 +715,52 @@ def posterior_seed_state(ws) -> tuple[random.Random, int]:
     return random.Random(case_face_seed(ledger, rnd)), rnd
 
 
+# ---------- #266 frozen-sampling consumer (pure tail function) -------------
+
+def frozen_sampling_markers(rows: Iterable) -> list[dict]:
+    """#266: scan a rank_feeds event tail for frozen sampling.
+
+    A RUN is a maximal stretch of consecutive ``rank_feeds`` rows whose
+    ``input_fingerprint.rng_base`` stays EQUAL while ``round`` strictly
+    ADVANCES; a run of length >= FROZEN_SAMPLE_K is a marker (the seed
+    ignored a moving round axis). Rows that break either condition reset
+    the run: a different base (healthy reseed), an equal round (the
+    contract replaying an unchanged tick), a decreasing round, or an
+    unparseable/absent fingerprint (conservative gap — old envelopes with
+    ``epoch: null`` still carry the fingerprint doc inside ``detail``,
+    which is what this consumer keys on). Pure function of the rows:
+    identical tails -> identical markers, forever (tail-replay safe).
+
+    Returns [{"rng_base", "rounds", "length"}, ...] in tail order."""
+    markers: list[dict] = []
+    cur: dict | None = None
+    for e in rows:
+        if not isinstance(e, dict) or e.get("action") != "rank_feeds":
+            continue
+        # #863 Family K: JSON parsing is delegated to kunglao_log's
+        # tolerant single-source reader (a broken detail yields nothing,
+        # next() falls back to None) — never an inline json parse here.
+        parsed = next(iter(kunglao_log.iter_jsonl(
+            [str(e.get("detail") or "")])), None)
+        fp = (parsed or {}).get("input_fingerprint") or {} \
+            if isinstance(parsed, dict) else {}
+        base, rnd = fp.get("rng_base"), fp.get("round")
+        if base is None or rnd is None or not isinstance(rnd, int):
+            cur = None
+            continue
+        if cur is not None and base == cur["rng_base"] \
+                and rnd > cur["rounds"][-1]:
+            cur["rounds"].append(rnd)
+            cur["length"] += 1
+        else:
+            if cur and cur["length"] >= FROZEN_SAMPLE_K:
+                markers.append(cur)
+            cur = {"rng_base": base, "rounds": [rnd], "length": 1}
+    if cur and cur["length"] >= FROZEN_SAMPLE_K:
+        markers.append(cur)
+    return markers
+
+
 # ---------- #157 algorithm event log: rank_feeds (one emit per RUN) --------
 
 def _evidence_digest(evidence: EvidenceView) -> str:
@@ -820,9 +954,13 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
+        # #294 downstream-blocker term (bounded, decaying; feeds-recorded
+        # like every other component per the #251 auditability convention).
+        dterm = downstream_term(cid, depends_on, claims)
         # stored at 6dp (sort precision; the to_dict/json face still rounds
         # to 3) so the #759 worth multiplier stays an exact identity.
-        score = round((case_face + LAMBDA_DH * dh) * weight, 6)
+        score = round(
+            (case_face + LAMBDA_DH * dh + W_DOWNSTREAM * dterm) * weight, 6)
         feeds = {
             "thompson_sample": thompson_state,
             "case_flip_potential": (
@@ -831,6 +969,10 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                 + ("" if linked else
                    f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
             "dh_pq": dh_state,
+            "downstream": (
+                f"downstream_weighted={round(dterm, 3)} "
+                f"(decay {DOWNSTREAM_DECAY}, cap {DOWNSTREAM_CAP}, "
+                f"weight {W_DOWNSTREAM})"),
         }
         # #103: attempts conversion is per-claim guarded; a dirty raw value
         # scores as 0 and surfaces here as a feed diagnostic instead of
