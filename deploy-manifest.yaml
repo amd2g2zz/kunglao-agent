@@ -371,7 +371,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 7d106d5b422dd42b9a661457939283ae737e4505c7b52407854953e93a6c59b5
+    sha256: 2c0cb385cef5f3742a698a630f8363de4b0967a40e6348eb77c215bbd6a41ded
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -383,11 +383,15 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: ba872cba8bccbc93d7f21f077e854bde05126c4ebafa81bac5c84687891acdd2
+    sha256: 2f02a50f82259796c777ab66d167b5f7e3422141fe2d41f15e31f1ded281cf4f
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
     sha256: e823ae3d31ac61c74ef27fc199df647877d6c9fdfec589003014e9ef091d65ed
+  - src: scripts/fix_guard.py
+    dest: .claude/scripts/fix_guard.py
+    kind: scaffold
+    sha256: ab560638a8fbf75756ed353a231cb75b4ffd1b63230586fad624dd963984acf5
   - src: scripts/fixture_excerpt_lint.py
     dest: .claude/scripts/fixture_excerpt_lint.py
     kind: scaffold
@@ -523,7 +527,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: a5201fb2e65159d384b4ff53bd738c8b91f4ea5b8cb3398647a1b597a7f96e0b
+    sha256: a6321b75bff74321b71c44832ca5c88155d9920eb72ca15fde955e53669705a1
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -727,7 +731,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 0f16a8df8603af0e874899d39fb678ff7da2804de5fc13b4297de6273cedf651
+    sha256: ce342266ef94f1f83c22d39a4f4fe9960e5b7feddedec49be4d20105edf8b0ea
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -1395,7 +1399,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 9acee8eff6d8f2801274ac3268ced7bf9720c80eb4bd3b9f34eddf544ca5d2e8
+    sha256: 52eab846048656b5256845c247a6ec54423a5400cecef4b40675d9b606af24d4
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
