@@ -71,6 +71,7 @@ FAST_MODULES = frozenset({
     "test_orchestration_eval_quality", "test_orchestration_event_taxonomy", "test_orchestration_hardening", "test_orchestration_recov_metrics",
     "test_orchestrator_tool_guard_608", "test_outcome_capture", "test_outcome_forensics_146", "test_pdl_collapse_582",
     "test_pkg_detect", "test_plaintext_610", "test_plan_drift_237_d1_d3", "test_plan_drift_stale_plan", "test_plan_drift_unverified",
+    "test_action_space_12", "test_factor_vector_12", "test_signals_stream_12",
     "test_posteriors_106", "test_pr_template_530", "test_preflight_588_590", "test_premature_termination_detect",
     "test_priority_data_hookup_9", "test_priority_inputs_594_596", "test_priority_ratio", "test_priority_value_terms",
     "test_progress_report_663", "test_progress_timeline_282", "test_progress_txt_530", "test_prompt_command_611", "test_provenance_wiring",

@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 4b71b7f2dd4b098c0fac5101382cef9c97aa3a8f9fc916592cc56adb36bb89bb
+    sha256: bcfbb9e6efe738ecc6b3b918be0dc5e4cfd804ea822959151ecb98d482f2cd31
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -136,6 +136,10 @@ files:
     dest: .claude/scripts/acceptance_check.py
     kind: scaffold
     sha256: 5b1a8da76e3b64b1f3aaae0338d2f73f359c3e75d82753088bae390dd60df612
+  - src: scripts/action_space.py
+    dest: .claude/scripts/action_space.py
+    kind: scaffold
+    sha256: b71bab891e5d9d275a6c83b012b8b7c4a50cd1f801138d5d154845529777a694
   - src: scripts/active_intervention.py
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
@@ -499,7 +503,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: 93a756c7673a60b88027b99f6988481edbfda12a615dd56f3632b27d9bddcd40
+    sha256: 7d7a7bd22603034c932a86277314359f3fc29e3b6461b3450809e41ae396b34f
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -567,7 +571,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: 749c2d9ad2798c61c6d1676fd32c0ecefbfb397cfac39477c6b688abf60d5908
+    sha256: 5074c967576997ae55f0cf2bc33010543d4dbb31001d37060e54a905d9e4f82c
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
@@ -643,7 +647,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: e329876da4577be61039fe7ecc322bfd0d475a0eacd7c183ab99bdc105af8ef3
+    sha256: 42d4326e954a94cb92dac1a9a1251b850d4bb4bdb3e1c4fc7cc29280836e568b
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -751,7 +755,7 @@ files:
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: 9185c283ae670d7b89311178bfafc500a9b6c96332db30219192fbbd246ad5ae
+    sha256: 9489c6c4eebc5a2bfac1c8a28bcc68e74b793a0e0fd09c6bcd4cf43138606e07
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
@@ -764,6 +768,10 @@ files:
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
     sha256: 642571d461a1b9f434a1587122763e0998b84b234f5efa0a6c6ec9e0e8310a4d
+  - src: scripts/signals_stream.py
+    dest: .claude/scripts/signals_stream.py
+    kind: scaffold
+    sha256: a6da83fb13e74e5dd11361c64b2cc2116806b972125ca7d4f665b30273d5ab0c
   - src: scripts/silent_except_lint.py
     dest: .claude/scripts/silent_except_lint.py
     kind: scaffold
