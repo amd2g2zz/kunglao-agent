@@ -28,18 +28,29 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   intrinsic exploration: an uncertain arm occasionally ranks first with no
   threshold gate, and bad priors recover by evidence.
 
-  PQ face — the claim's primary_question categorical (#106
-  PQCategorical). ΔH is mechanical: H(categorical), the entropy the
-  categorical still carries — the updatable quantity an observation on
-  that PQ can remove (a peaked distribution has little left to flip).
-  No PQ categorical → ΔH = 0.
+  PQ face — REMOVED (#295, the first ADR-001 governed application). The
+  #106/#107 ΔH_PQ face (case_face + LAMBDA_DH·ΔH) died on replay
+  evidence: EXP-B measured ΔH = 0 on 612/612 real rank events
+  (runs/posteriors.yaml never instantiated in any real workspace,
+  pooled Spearman vs progress +0.068 p=0.16, wrong-signed vs gate
+  fires) and the #294 λ epistemology check produced order digests
+  BYTE-IDENTICAL at every tick for λ=0.25 vs λ=0 — mechanically inert
+  on all real data. The removal is therefore a runtime no-op on
+  history; the old feeds["dh_pq"] diagnostic is gone with it. The
+  λ epistemology HARNESS face (replay_ruler.lambda_check) stays — it
+  reads history, where dh_pq strings legitimately exist. Any
+  re-introduction goes through docs/adr-001-strategy-parameter-
+  governance.md (replay evidence + versioned PR + pins; never runtime
+  self-tuning).
 
-  score = (case_face + LAMBDA_DH · ΔH) · worth        (#759 worth channel)
+  score = (case_face + W_DOWNSTREAM · downstream_term) · worth
+                                                  (#759 worth channel)
 
-  LAMBDA_DH = 0.25 is the ONLY free parameter of the rebuilt formula
-  (#111 integration tests will exercise it). `worth` is the pre-existing
-  #759 user worth ruling (runs/value-weights.yaml) — a sanctioned exogenous
-  multiplier, not a formula DOF; absent weights → 1.0.
+  The composite's free parameters live in the downstream block below,
+  each carrying its earn-in evidence and governance comment. `worth`
+  is the pre-existing #759 user worth ruling (runs/value-weights.yaml)
+  — a sanctioned exogenous multiplier, not a formula DOF; absent
+  weights → 1.0.
 
   rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
   random.Random(0): same inputs → same ranking (anchor-deterministic).
@@ -117,15 +128,18 @@ import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
 import rank_face  # noqa: E402  (issue 218: the emit-failure marker)
 from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 
-# #107: the single free parameter of the rebuilt value function.
-LAMBDA_DH = 0.25
+# #295: LAMBDA_DH is DELETED (the first governed application of
+# docs/adr-001-strategy-parameter-governance.md — see the module
+# docstring's PQ-face note for the removal evidence).
 # #107 conservative flip-potential reading (diagnostic only — see feeds).
 FLIP_POTENTIAL_BASE = 0.5       # P(cflip) at cold start
 FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
 
 # #294 downstream-blocker term: a claim others depend on is worth starting
 # earlier — its sample unblocks a subtree, a leaf's unblocks only itself.
-# THREE named free parameters, same discipline as LAMBDA_DH. The values
+# THREE named free parameters under the ADR-001 governance procedure
+# (docs/adr-001-strategy-parameter-governance.md — the discipline the
+# removed LAMBDA_DH embodied, now codified). The values
 # below carry their #295 earn-in evidence FROM THE REPLAY RULER
 # (scripts/replay_ruler.py, run 2026-09-21 against three real historical
 # workspaces — offline policy evaluation, read-only):
@@ -142,7 +156,7 @@ FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
 #   W_DOWNSTREAM  — the term's weight inside the composite (bounded lift:
 #                   max lift = W_DOWNSTREAM * DOWNSTREAM_CAP < one cold-start
 #                   prior draw, so a leaf is never systematically starved).
-#                   CHANGING THIS VALUE REQUIRES THE #295 GOVERNED
+#                   CHANGING THIS VALUE REQUIRES THE ADR-001 GOVERNED
 #                   PROCEDURE — value pins + attached replay evidence; the
 #                   pins are tests/test_replay_ruler_294.py hard asserts
 #                   and silent drift goes red;
@@ -191,7 +205,8 @@ class EvidenceView:
     value_claim_overrides: dict[str, float] = field(default_factory=dict)
     # #107: workspace root — the ranker reads runs/posteriors.yaml and
     # oracle/cases/*.yaml through it. None (bare construction, tests) → no
-    # posteriors: every action samples the Beta(1,1) prior and ΔH = 0.
+    # posteriors: every action samples the Beta(1,1) prior. (#295: the
+    # PQ-categorical surface no longer feeds any score term.)
     ws: Path | None = None
 
     @classmethod
@@ -251,7 +266,9 @@ class EvidenceView:
 class Action:
     """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1).
 
-    #107: score = (Thompson case face + LAMBDA_DH·ΔH_PQ) · worth. The
+    #107+#294: score = (Thompson case face + W_DOWNSTREAM·downstream_term)
+    · worth (the #295 governed removal deleted the LAMBDA_DH·ΔH_PQ face —
+    docs/adr-001-strategy-parameter-governance.md). The
     weighted-era term fields (leverage/discriminator/novelty and the old
     lexicographic sort head) are deleted; feeds carries the new diagnostics."""
 
@@ -263,7 +280,7 @@ class Action:
     attempts: int
     cost: float
     weight: float = 1.0  # #759 H2 worth multiplier (exogenous, not a DOF)
-    # #107 diagnostics: thompson_sample / case_flip_potential / dh_pq
+    # #107/#294 diagnostics: thompson_sample / case_flip_potential / downstream
     feeds: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -938,19 +955,12 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             thompson_state = (f"no linked oracle case (oracle/cases/ target_pq "
                               f"!= '{pq or '-'}') -> Beta(1,1) prior sample="
                               f"{round(case_face, 6)} (cold-start exploration)")
-        # ΔH_PQ: H(categorical) — the updatable quantity on the claim's PQ.
-        pq_cat = ledger.pqs.get(pq) if pq else None
-        dh = pq_cat.entropy() if pq_cat is not None else 0.0
-        if pq_cat is not None and str(c.get("boundary_type") or "") == "epistemic":
-            # issue 250: a situational PQ (mint+seed writes ledger.pqs for
-            # situational unknowns) — same LAMBDA_DH term, named source.
-            dh_state = (f"PQ '{pq}' situational categorical "
-                        f"H={round(dh, 6)} bit (epistemic claim)")
-        elif pq_cat is not None:
-            dh_state = f"PQ '{pq}' categorical H={round(dh, 6)} bit"
-        else:
-            dh_state = (f"no PQ categorical for '{pq or '-'}' in "
-                        f"runs/posteriors.yaml -> dH=0")
+        # ΔH_PQ face REMOVED (#295 governed application, ADR-001): the
+        # PQ categorical is no longer read, no entropy is computed, and
+        # no dh_pq feed is emitted. On all real ledgers the removed term
+        # contributed LAMBDA_DH × 0 ≡ 0 at every tick (EXP-B: 612/612
+        # rank events dh_pq=0; #294: λ=0.25 vs λ=0 order digests
+        # byte-identical), so ordering is unchanged byte-for-byte.
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
@@ -960,7 +970,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # stored at 6dp (sort precision; the to_dict/json face still rounds
         # to 3) so the #759 worth multiplier stays an exact identity.
         score = round(
-            (case_face + LAMBDA_DH * dh + W_DOWNSTREAM * dterm) * weight, 6)
+            (case_face + W_DOWNSTREAM * dterm) * weight, 6)
         feeds = {
             "thompson_sample": thompson_state,
             "case_flip_potential": (
@@ -968,7 +978,6 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                 f"by promotion_attempts={attempts_of(c)})"
                 + ("" if linked else
                    f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
-            "dh_pq": dh_state,
             "downstream": (
                 f"downstream_weighted={round(dterm, 3)} "
                 f"(decay {DOWNSTREAM_DECAY}, cap {DOWNSTREAM_CAP}, "

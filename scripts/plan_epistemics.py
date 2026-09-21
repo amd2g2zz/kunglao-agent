@@ -35,7 +35,9 @@ Signed-gain convention (pinned by the EXP-3 spike, .spike-exp3-findings.md):
     bookkeeping records the PER-EVENT delta.
 
 Boundaries: no settlement code calls update_eliminate/update_evidence
-(issue 257 wires that); LAMBDA_DH stays the only pricing parameter; no
+(issue 257 wires that); the rank face carries NO pricing parameter
+beyond the #294 downstream block (#295 removed LAMBDA_DH —
+docs/adr-001-strategy-parameter-governance.md); no
 VMP/Android replay infrastructure (issue 260).
 """
 from __future__ import annotations

@@ -95,8 +95,10 @@ def test_from_workspace_carries_ws(tmp_path):
 
 def test_pq_categorical_reaches_the_unified_ranking(tmp_path):
     """A PQ categorical in runs/posteriors.yaml reaches the ranking
-    unconditionally (no flag, no phase): the claim answering that PQ gains
-    the mechanical dH term in its feeds and its score."""
+    unconditionally (no flag, no phase) — the #51 unified-path regression,
+    re-pinned post-#295: the ledger surface is still read (Thompson cases
+    rank through it) and the former dH face emits NOTHING (removed by
+    #295, docs/adr-001-strategy-parameter-governance.md)."""
     from posteriors import PQCategorical, PosteriorLedger
     import priority_ratio as pr
     ws = _mk_ws(tmp_path)
@@ -108,9 +110,12 @@ def test_pq_categorical_reaches_the_unified_ranking(tmp_path):
     ev = pr.EvidenceView.from_workspace(ws)
     gap = next(a for a in pr.priority_ratio(claims, {}, ev)
                if a.claim_id == "C-gap")
-    assert "dH=0" not in gap.feeds["dh_pq"], (
-        "the open-PQ claim must carry the categorical entropy feed "
-        "(the #51 unified-path regression, re-pinned on the #107 face)")
+    assert "thompson_sample" in gap.feeds, (
+        "the open-PQ claim must rank through the posteriors surface "
+        "unconditionally (the #51 unified-path regression)")
+    assert "dh_pq" not in gap.feeds, (
+        "the dH feed was removed by #295 — no ΔH face may reappear "
+        "without the ADR-001 governed procedure")
 
 
 def test_ranking_deterministic_on_default_env():

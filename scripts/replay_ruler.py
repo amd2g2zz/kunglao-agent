@@ -26,13 +26,20 @@ harness closes it, READ-ONLY against the source workspace:
      FLAT reward with a flagged window — high activity with zero mainline
      progress must never read as shaped progress (#294 annotation 2).
 
-Configurations are dicts (lambda_dh / w_downstream / d_weights) applied by
+Configurations are dicts (w_downstream / d_weights) applied by
 parameterizing the ranker's module constants per run and restoring them —
 NO production default changes here. The three D_t weights and the two
 downstream constants are FREE PARAMETERS: they must EARN their place on
-real data (#295 governed procedure); this harness is what makes that
-checkable (the λ=0.25 vs λ=0 face — the epistemology check, since the
-EXP-B audit found dh_pq identically zero in real rank events).
+real data (the ADR-001 governed procedure,
+docs/adr-001-strategy-parameter-governance.md); this harness is what
+makes that checkable. The former lambda_default/lambda_zero pair is
+CONSUMED (#295): their λ=0.25 vs λ=0 comparison answered the
+epistemology question — EXP-B found dh_pq identically zero in all real
+rank events and the order digests were byte-identical at every tick —
+so the ΔH face was REMOVED from the production ranker and the pair
+collapsed away. The λ-check itself (lambda_check, below) stays: it
+measures HISTORY, and old rank_feeds events legitimately carry dh_pq
+strings the production face no longer emits.
 
 SAFETY (hard, #137 doctrine):
   - the source workspace is opened READ-ONLY — every write (posteriors
@@ -78,31 +85,22 @@ D_W_EV = 1.0 / 3.0
 # reported unconverged (never a hang).
 MAX_REPLAY_TICKS = 200
 
-# the named configurations of the acceptance face. lambda_zero exists to
-# make the λ epistemology check CHECKABLE (annotation 1) — it is NOT a
-# proposal to change the parameter (#295 owns that).
+# the named configurations of the acceptance face, post-#295: the
+# lambda_default/lambda_zero pair is CONSUMED — the λ epistemology check
+# it served answered AGAINST the parameter (EXP-B: dh_pq ≡ 0 on all real
+# events; #294: λ=0.25 vs λ=0 digests byte-identical) and the ΔH face is
+# removed from the ranker, so a λ config axis no longer exists. The live
+# TTC comparison axis is base (no downstream term) vs downstream (the
+# #294 term at its pinned value). d_weights keeps its provisional thirds
+# (they still owe their ADR-001 earn-in evidence).
 DEFAULT_CONFIGS: dict[str, dict] = {
-    "lambda_default": {
-        "lambda_dh": pr.LAMBDA_DH,
-        "w_downstream": pr.W_DOWNSTREAM,
-        "d_weights": {"w_oracle": D_W_ORACLE, "w_impl": D_W_IMPL,
-                      "w_ev": D_W_EV},
-    },
-    "lambda_zero": {
-        "lambda_dh": 0.0,
-        "w_downstream": pr.W_DOWNSTREAM,
+    "base": {
+        "w_downstream": 0.0,
         "d_weights": {"w_oracle": D_W_ORACLE, "w_impl": D_W_IMPL,
                       "w_ev": D_W_EV},
     },
     "downstream": {
-        "lambda_dh": pr.LAMBDA_DH,
         "w_downstream": pr.W_DOWNSTREAM,
-        "d_weights": {"w_oracle": D_W_ORACLE, "w_impl": D_W_IMPL,
-                      "w_ev": D_W_EV},
-    },
-    "base": {
-        "lambda_dh": pr.LAMBDA_DH,
-        "w_downstream": 0.0,
         "d_weights": {"w_oracle": D_W_ORACLE, "w_impl": D_W_IMPL,
                       "w_ev": D_W_EV},
     },
@@ -432,16 +430,17 @@ def _rank_under_config(config: dict, claims: list[dict],
                        deps_face: dict, sandbox: Path, tick: int,
                        done: set[str]) -> list:
     """One rank face under a score configuration: parameterize the ranker
-    constants, seed from the #251 contract at the replay tick, restore."""
+    constant, seed from the #251 contract at the replay tick, restore.
+    This is the ONLY sanctioned runtime mutator of a ranker constant in
+    the tree (ADR-001 §2.3: the harness may evaluate, never write back;
+    pinned by tests/test_replay_ruler_294.py::TestNoRuntimeSelfTuning)."""
     ledger = pr.PosteriorLedger.load(sandbox)
     rng = random.Random(pr.case_face_seed(ledger, tick))
-    # validate-then-assign: BOTH conversions complete before any module
-    # constant moves — a bad value in ONE key ("abc") must never leave the
-    # other key's assignment stuck on the module for the process lifetime.
-    lam = float(config.get("lambda_dh", pr.LAMBDA_DH))
+    # validate-then-assign: the conversion completes before the module
+    # constant moves — a bad value ("abc") raises with nothing assigned.
+    # (#295: the lambda_dh axis is consumed — see DEFAULT_CONFIGS.)
     wds = float(config.get("w_downstream", pr.W_DOWNSTREAM))
-    saved = (pr.LAMBDA_DH, pr.W_DOWNSTREAM)
-    pr.LAMBDA_DH = lam
+    saved = pr.W_DOWNSTREAM
     pr.W_DOWNSTREAM = wds
     try:
         evidence = pr.EvidenceView(
@@ -449,7 +448,7 @@ def _rank_under_config(config: dict, claims: list[dict],
         return pr.priority_ratio(claims, deps_face, evidence, rng=rng,
                                  round_no=tick)
     finally:
-        pr.LAMBDA_DH, pr.W_DOWNSTREAM = saved
+        pr.W_DOWNSTREAM = saved
 
 
 def simulate(config: dict, u: Universe, sandbox: Path,
@@ -562,9 +561,13 @@ def dh_pq_nonzero(dh_pq: str) -> bool:
 def lambda_check(sandbox: Path) -> dict:
     """The λ epistemology check (annotation 1): scan HISTORICAL rank_feeds
     events (the sandbox's copy of runs/logs) for the dh_pq feed — was the
-    ΔH term EVER nonzero in the wild? The TTC comparison λ=0.25 vs λ=0 on
-    the same replay is the other half; the governed parameter decision
-    stays #295's."""
+    ΔH term EVER nonzero in the wild? #295 answered this AGAINST the
+    parameter and the production ranker no longer emits dh_pq at all
+    (the ΔH face is removed, ADR-001); this face stays because it
+    measures HISTORY — old events carry the strings, new ones carry no
+    feed, which parses as inert. The TTC comparison half is the base vs
+    downstream axis now; any NEW history-sensitive parameter change goes
+    through the ADR-001 governed procedure."""
     scanned = 0
     nonzero = 0
     ldir = sandbox / "runs" / "logs"

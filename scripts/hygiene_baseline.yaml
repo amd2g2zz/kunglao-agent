@@ -40,6 +40,8 @@ files:
     r1: 2
   scripts/blind_gate.py:
     r1: 23
+  scripts/calibration_face.py:
+    r1: 2
   scripts/calibration_gate.py:
     r1: 1
   scripts/carrier_consistency.py:
@@ -220,6 +222,8 @@ files:
     r1: 8
   scripts/plan_drift_detector.py:
     r1: 15
+  scripts/plan_epistemics.py:
+    r1: 1
   scripts/plan_reviser.py:
     r1: 2
   scripts/plan_stages.py:
@@ -231,7 +235,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 54
+    r1: 56
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -256,7 +260,7 @@ files:
   scripts/release_receipt.py:
     r1: 5
   scripts/replay_ruler.py:
-    r1: 7
+    r1: 10
   scripts/report_consistency_check.py:
     r1: 1
   scripts/retirement_gate.py:
@@ -266,7 +270,7 @@ files:
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
-    r1: 6
+    r1: 7
   scripts/roi_settlement.py:
     r1: 4
   scripts/rollup.py:
@@ -280,7 +284,7 @@ files:
   scripts/status_defs.py:
     r1: 1
   scripts/statusline_snapshot.py:
-    r1: 36
+    r1: 38
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -416,6 +420,8 @@ files:
     r1: 2
   tests/test_c_normalize.py:
     r1: 3
+  tests/test_calibration_face_134.py:
+    r1: 6
   tests/test_calibration_gate.py:
     r1: 1
   tests/test_canary_gates.py:
@@ -511,7 +517,7 @@ files:
   tests/test_debug_flag_task_spec_25.py:
     r1: 3
   tests/test_decide_regression_anchor.py:
-    r1: 56
+    r1: 57
     r2: 35
   tests/test_decide_schema_routing.py:
     r1: 5
@@ -522,7 +528,7 @@ files:
   tests/test_decision_surface_anchor.py:
     r1: 1
   tests/test_decision_teeth.py:
-    r1: 18
+    r1: 19
     r2: 7
   tests/test_declaration_scan.py:
     r1: 2
@@ -629,6 +635,8 @@ files:
     r1: 2
   tests/test_envcheck_modern_757.py:
     r1: 16
+  tests/test_epistemic_pricing_250.py:
+    r1: 4
   tests/test_error_response.py:
     r1: 3
   tests/test_eval_harness.py:
@@ -948,11 +956,11 @@ files:
   tests/test_premature_termination_detect.py:
     r1: 3
   tests/test_priority_data_hookup_9.py:
-    r1: 4
+    r1: 7
   tests/test_priority_inputs_594_596.py:
     r1: 4
   tests/test_priority_ratio.py:
-    r1: 5
+    r1: 7
   tests/test_priority_value_terms.py:
     r1: 1
   tests/test_probe_tiers_474.py:
@@ -972,7 +980,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_qtable_p3.py:
-    r1: 4
+    r1: 5
   tests/test_recall_inject.py:
     r1: 5
   tests/test_recall_quality_814.py:
@@ -1006,7 +1014,7 @@ files:
   tests/test_replay_gate.py:
     r1: 3
   tests/test_replay_ruler_294.py:
-    r1: 7
+    r1: 10
   tests/test_report_consistency_check.py:
     r1: 3
   tests/test_reproduction_oracle_248.py:
@@ -1068,7 +1076,11 @@ files:
     r1: 1
   tests/test_settle_by_need.py:
     r1: 1
+  tests/test_settlement_pq_257.py:
+    r1: 1
   tests/test_shell_defaults.py:
+    r1: 1
+  tests/test_silent_except_traces_275_batch3.py:
     r1: 1
   tests/test_skill_contract.py:
     r1: 1
@@ -1208,9 +1220,10 @@ files:
   tests/test_validate_index.py:
     r1: 14
   tests/test_value_flag_removed_51.py:
-    r1: 2
+    r1: 3
+    r2: 1
   tests/test_value_rebuild_107.py:
-    r1: 5
+    r1: 7
     r2: 1
   tests/test_value_reconciliation_133.py:
     r1: 5
