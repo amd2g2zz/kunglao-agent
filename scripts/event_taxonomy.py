@@ -217,6 +217,7 @@ EMIT_ACTIONS = [
     "guard_fired",  # issue 304 fix-as-guard fire record: a wired guard's check FIRED (detail JSON carries the guard identity: check_reference)
     "guard_missing",  # issue 304 fix-settlement refusal face: the fix record carries no wired guard evidence (GUARD_MISSING)
     "guard_unresolved",  # issue 304 fix-settlement refusal face: guard evidence present but file/anchor not found (GUARD_UNRESOLVED)
+    "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
@@ -265,6 +266,7 @@ EMIT_ACTIONS = [
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
+    "probe_infra_dead",  # issue 303 D2 dead-instrument routing: a probe that cannot prove liveness produced NO evidence — infra repair item, never a business observation
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
@@ -291,9 +293,11 @@ EMIT_ACTIONS = [
     "task_terminal_settlement",
     "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
+    "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
+    "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face

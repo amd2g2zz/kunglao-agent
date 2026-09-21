@@ -82,7 +82,7 @@ files:
   scripts/digest_build.py:
     r1: 16
   scripts/dispatch_context.py:
-    r1: 14
+    r1: 17
   scripts/dual_gate.py:
     r1: 3
   scripts/emit_gate.py:
@@ -144,6 +144,8 @@ files:
     r1: 8
   scripts/install_reference.py:
     r1: 2
+  scripts/instrument_menu.py:
+    r1: 6
   scripts/intake_promise.py:
     r1: 2
   scripts/kunglao-decide.py:
@@ -1137,6 +1139,9 @@ files:
     r1: 2
   tests/test_tier_rules.py:
     r1: 1
+  tests/test_tool_first_243.py:
+    r1: 4
+    r2: 1
   tests/test_tool_first_proof_630.py:
     r1: 1
   tests/test_tool_search.py:

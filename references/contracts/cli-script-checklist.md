@@ -19,6 +19,8 @@ Before writing any new script, check in this order:
 
 Matching tool found → **prefer solving it with that tool's CLI** (see each tool's `--help` / `input_output` contract); do not write a new script. Only when nothing matches do you proceed to items 1-8 below to write one. The `toolfirst` gate in `hooks/worker_budget.py` checks that every dispatch carries a `tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)` marker — hitting a registered tool's capability keywords without the marker gets REJECTed.
 
+Before writing the script, run `python tools/tool-search.py --find <keywords>` and cite the outcome in the plan (`tool-search: <keywords> -> <hit|none>`) — the plan-check toolsearch gate REJECTS an uncited script-writing plan (issue #243). Ladder: toolbox → wrap system CLI → installed lib → agent-do install → hand-roll LAST; a workspace-proven script carries `promotion: <why>`.
+
 **Hard encoding / naming conventions (issues #317, #314 A1-A3 — missing any one is caught by a mechanical test):**
 
 4. **UTF-8 stdout is mandatory**: every new CLI (a .py with `if __name__ == "__main__":`) must, right after `import sys`, run `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`, wrapped in `try/except (AttributeError, ValueError): pass`. Reason: when the output contains U+FFFD (a decode errors="replace" artifact) or any non-ASCII, a GBK console cannot encode it → a bare UnicodeEncodeError traceback + exit 1, breaking the "structured error, never a traceback" contract (hit independently by three batches: 1b/1c/2b). Standardize on UTF-8; this is not an errors="replace" patch. Mechanical enforcement: `tests/test_utf8_stdout_convention.py` scans every CLI under tools/; a missing call turns red.
