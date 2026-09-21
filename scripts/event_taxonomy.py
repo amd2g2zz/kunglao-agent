@@ -261,6 +261,7 @@ EMIT_ACTIONS = [
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
+    "probe_infra_dead",  # issue 303 D2 dead-instrument routing: a probe that cannot prove liveness produced NO evidence — infra repair item, never a business observation
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
