@@ -1,0 +1,231 @@
+{
+  "case": "ashfern-relay_android_session_refresh_16round",
+  "fixture_status": "SYNTHETIC (issue 302 / D1). Structure-only derivative of the EXP-C dry-run matrix shape: 16-round series (12 canonical failures + first success at 13 + post-success regression episode 14-16), a 4-class fine instrumentation taxonomy, the 6-channel signature-tuple schema, the cluster/recurrence pattern, and the demotion-math pins. Every identifier, target name, mechanism, value and id is FICTIONAL. The real engagement matrix must never enter the repo.",
+  "round_convention": {
+    "canonical_failure_rounds": 12,
+    "note": "Rounds 1-12 = the canonical failure series; round 13 = first success; rounds 14-16 = post-success regression episode (fail, fail, success)."
+  },
+  "approach_class_taxonomy": {
+    "S": "deep-inline tracer class (in-process symbol detour + high-frequency bridge hooks), spawn or attach",
+    "M": "minimal-attach class (no tracer hardening, thin attach driver, bundle-swap layer)",
+    "P": "harness plumbing class (paths, flag parsing, launch orchestration)",
+    "H": "harness-rebuild class (post-success rewrite/evolution of the M-family harness)"
+  },
+  "signature_channels": [
+    "installed_marker",
+    "rewritten_flag",
+    "did_family",
+    "artifact_size_class",
+    "hit_values_fresh",
+    "process_state"
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "id": "sq-01",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "spawn + deep symbol detour (open-family pair)",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "tracer abort during symbol detour"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "tracer-defect-1"
+    },
+    {
+      "round": 2,
+      "id": "sq-02",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "same + dedupe the aliased symbol pair",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "tracer abort during symbol detour"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "tracer-defect-1"
+    },
+    {
+      "round": 3,
+      "id": "sq-03",
+      "macro_class": "device-refresh-track",
+      "approach_class": "M",
+      "action": "fallback to the thin attach driver (no hardening)",
+      "signature": {"installed_marker": true, "rewritten_flag": false, "did_family": "legacy-identity", "artifact_size_class": null, "hit_values_fresh": false, "process_state": "alive"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "timing"
+    },
+    {
+      "round": 4,
+      "id": "sq-04",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "attach with hardening still on (alias fix now lets all hooks install)",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "zero-window hang then host process gone"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "guardian-kill/2"
+    },
+    {
+      "round": 5,
+      "id": "sq-05",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "attach at T+45 (timing patch), hardening on",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "zero-window hang then host process gone"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "guardian-kill/2"
+    },
+    {
+      "round": 6,
+      "id": "sq-06",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "driver spawn + hardening",
+      "signature": {"installed_marker": true, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "ui thread stall after hooks attach"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "tracer-defect-1"
+    },
+    {
+      "round": 7,
+      "id": "sq-07",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "driver attach + hardening (guardian kill confirmed)",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "zero-window hang then host process gone"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "guardian-kill/2"
+    },
+    {
+      "round": 8,
+      "id": "sq-08",
+      "macro_class": "device-refresh-track",
+      "approach_class": "P",
+      "action": "fix runner path",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "runner never started (stale toolchain path)"},
+      "outcome": "fail",
+      "change_kind": "invest",
+      "layer": "low-level"
+    },
+    {
+      "round": 9,
+      "id": "sq-09",
+      "macro_class": "device-refresh-track",
+      "approach_class": "P",
+      "action": "fix flag handling",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "crash at flag parse"},
+      "outcome": "fail",
+      "change_kind": "invest",
+      "layer": "low-level"
+    },
+    {
+      "round": 10,
+      "id": "sq-10",
+      "macro_class": "device-refresh-track",
+      "approach_class": "S",
+      "action": "retry, hardening not fully removed (guardian kill again)",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "zero-window hang then host process gone"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "guardian-kill/2"
+    },
+    {
+      "round": 11,
+      "id": "sq-11",
+      "macro_class": "device-refresh-track",
+      "approach_class": "M",
+      "action": "no hardening + thin attach (first clean M run)",
+      "signature": {"installed_marker": false, "rewritten_flag": false, "did_family": "legacy-identity", "artifact_size_class": "small-unbundled", "hit_values_fresh": null, "process_state": "alive"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "bundle (root cause 1 exposed)"
+    },
+    {
+      "round": 12,
+      "id": "sq-12",
+      "macro_class": "device-refresh-track",
+      "approach_class": "P",
+      "action": "retry run",
+      "signature": {"installed_marker": null, "rewritten_flag": false, "did_family": null, "artifact_size_class": null, "hit_values_fresh": null, "process_state": "launch poll timeout, no pid"},
+      "outcome": "fail",
+      "change_kind": "none",
+      "layer": "low-level"
+    },
+    {
+      "round": 13,
+      "id": "sq-13",
+      "macro_class": "device-refresh-track",
+      "approach_class": "M",
+      "action": "bundle inlined + pair-swap + attach",
+      "signature": null,
+      "outcome": "success",
+      "change_kind": "invest",
+      "layer": "REWRITTEN x3 -> fresh session id -> verified round trip"
+    },
+    {
+      "round": 14,
+      "id": "sq-14",
+      "macro_class": "device-refresh-track",
+      "approach_class": "H",
+      "action": "three-in-one rebuild (bundle ok) + fields swap, template constants reused",
+      "signature": {"installed_marker": true, "rewritten_flag": true, "did_family": "reg-770-family", "artifact_size_class": "large-bundled", "hit_values_fresh": false, "process_state": "alive"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "constant-reuse (root cause 2)"
+    },
+    {
+      "round": 15,
+      "id": "sq-15",
+      "macro_class": "device-refresh-track",
+      "approach_class": "H",
+      "action": "three-in-one rebuild (hardening removed)",
+      "signature": {"installed_marker": false, "rewritten_flag": false, "did_family": "reg-118-family", "artifact_size_class": "small-unbundled", "hit_values_fresh": null, "process_state": "alive"},
+      "outcome": "fail",
+      "change_kind": "patch",
+      "layer": "bundle import loss"
+    },
+    {
+      "round": 16,
+      "id": "sq-16",
+      "macro_class": "device-refresh-track",
+      "approach_class": "H",
+      "action": "bundle import restored + per-round fresh constants + fields swap",
+      "signature": null,
+      "outcome": "success",
+      "change_kind": "invest",
+      "layer": "all hooks installed -> fresh session id -> checks pass"
+    }
+  ],
+  "demotion_rule": {
+    "clause_a": "distinct signature-cluster count for the class >= N demotes the class (same tuple counts once)",
+    "clause_b": "a single post-patch recurrence of one cluster demotes (K_rec=1); a patch is change_kind=patch, an invest never triggers it",
+    "while_demoted": "in-class patching FORBIDDEN from the demotion round onward; an invest re-arms the class for exactly one attempt (its own execution row)",
+    "record_shape": "(approach_class, signature-or-null, outcome, change_kind in {none, patch, invest})"
+  },
+  "pinned_expectations": {
+    "full_rule_n2_clause_b": {
+      "demoted_at": {"S": 2, "M": 11, "P": 9, "H": 15},
+      "clause": {"S": "clause_b", "M": "clause_a", "P": "clause_a", "H": "clause_a"},
+      "forbidden": [4, 5, 6, 7, 10, 12],
+      "deletion_counterfactual": 6,
+      "attempt_counterfactual_full_d1": 4,
+      "protected_rounds_allowed": [3, 8, 9, 11, 13, 14, 15, 16]
+    },
+    "clusters_only_n2": {
+      "demoted_at": {"S": 4, "M": 11, "P": 9, "H": 15},
+      "forbidden": [5, 6, 7, 10, 12]
+    },
+    "clusters_only_n3": {
+      "demoted_at": {"S": 6, "M": null, "P": 12, "H": null},
+      "forbidden": [7, 10]
+    },
+    "n1_unsafe": {
+      "S_demotes_at": 1,
+      "discovery_round_11_forbidden": true
+    },
+    "n4_vacuous": {
+      "demoted_at": {"S": null, "M": null, "P": null, "H": null}
+    }
+  }
+}
