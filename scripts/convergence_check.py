@@ -35,6 +35,11 @@ registry constant block for #99):
      caller passed a wrong path or ran from a non-workspace cwd)
   65 = CRASHED (#99: the check itself crashed — stdout {"decision": "CRASHED"},
      traceback on stderr; never a decided state)
+  66 = EMPTY_WORKSPACE (#306: emptiness-grade identity — both markers EXIST
+     but carry an empty payload: task_spec with no live primary_questions
+     and no oracle-anchor stamp + a claim register with zero claims. Init's
+     anchor intake runs before every scaffold write, so a healthy workspace
+     can never look like this; hard error, never a verdict)
 
 Usage:
   python scripts/convergence_check.py <workspace>          # human-readable
@@ -103,11 +108,13 @@ WORKSPACE_MARKERS = ("claim-register.yaml", "task_spec.yaml")
 # EXIT_DISPATCH's byte — stdout {"decision": "CRASHED"}, stderr traceback)
 # lives with the definition.
 from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
-                       EXIT_DISPATCH, EXIT_MISSING_WORKSPACE, EXIT_PARK,
+                       EXIT_DISPATCH, EXIT_EMPTY_WORKSPACE,
+                       EXIT_MISSING_WORKSPACE, EXIT_PARK,
                        EXIT_SATURATED, EXIT_VERIFY)
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
+import oracle_anchors  # noqa: E402  # #306: the intake stamp vocabulary (task_spec anchors)
 
 # issue 275 batch-2: fail-open handlers keep their liveness posture (never
 # raise, never change the verdict) but must leave ONE trace — a stderr WARN
@@ -1753,7 +1760,60 @@ def _run_machine(snap: _DecideInputs):
     return State.SATURATED, _act_unexpected(snap)
 
 
+def _degenerate_reason(workspace: Path) -> str | None:
+    """#306 emptiness-grade identity: the payload face of the #240 markers.
+
+    #240 made identity fail-closed on marker ABSENCE; an existing-but-empty
+    (or key-less) task_spec.yaml + an empty claim-register.yaml still
+    drained to a WRONG CONVERGED — key-absent/[] parses to "feature
+    unused", zero primary_questions leaves every DRAIN gate silent.
+
+    The intake stamp IS the discriminator (what init writes): kunglao-init's
+    oracle-anchor intake runs BEFORE every scaffold write (blank anchors
+    refuse the scaffold, RC_PENDING_DECISIONS), and claim-register.yaml is
+    born with the [initialized] header + structural seed claims. So a
+    healthy workspace always carries EITHER live primary questions OR the
+    three non-blank anchors in task_spec.yaml OR claims in the register;
+    only the BOTH-EMPTY payload pair means intake never really happened or
+    the contract files rotted — refused as a hard error (EXIT_EMPTY_
+    WORKSPACE), never a verdict. A pre-intake template scaffold stays
+    verdictable: the template ships a live placeholder primary question.
+
+    Fail-open to the existing byte space: unreadable bytes (yaml errors,
+    OSError) return None — the #99 CRASHED face owns corruption; this
+    probe only refuses DEMONSTRABLY empty payloads. (#275 split: silence
+    about data is #99's face; absence of data is ours.)
+
+    Lives inside decide() (not only _require_workspace) because kunglao.py
+    cmd_decide, kunglao-decide and kunglao_resume call cc.decide()
+    directly — the router face must never read a CONVERGED off a rotted
+    workspace either.
+    """
+    try:
+        reg = _load_yaml(workspace / "claim-register.yaml")
+        if isinstance(reg, dict) and reg.get("claims"):
+            return None  # live register — verdictable, whichever spec shape
+        spec = _load_task_spec(workspace)
+    except (yaml.YAMLError, OSError):
+        return None  # corruption is #99's face (CRASHED), not emptiness
+    questions, err = _parse_primary_questions(spec)
+    if err or questions:
+        return None  # parse error -> INVALID face; live questions -> verdictable
+    if len(oracle_anchors.missing(spec)) < len(oracle_anchors.FIELDS):
+        return None  # intake stamp present — the contract was answered
+    return ("task_spec.yaml carries no live primary_questions and no "
+            "oracle-anchor stamp (goal_verbatim / success_criterion / "
+            "verification_method) AND claim-register.yaml holds zero "
+            "claims — intake never really happened or the contract files "
+            "rotted after intake")
+
+
 def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
+    reason = _degenerate_reason(workspace)  # #306 emptiness-grade identity
+    if reason is not None:
+        print(f"ERROR: degenerate kunglao workspace: {workspace} ({reason})",
+              file=sys.stderr)
+        raise SystemExit(EXIT_EMPTY_WORKSPACE)
     snap = _decide_inputs(workspace)
     state, action = _run_machine(snap)
     decision, exit_code = VERDICTS[state]

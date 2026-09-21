@@ -36,6 +36,17 @@ if str(SCRIPTS) not in sys.path:
 import convergence_check  # module under test (== baseline before #443 GREEN)
 import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
+# 2026-09-22 case-hardening (#306 emptiness identity, NO output change):
+# the #306 emptiness probe hard-errors a workspace whose task_spec carries
+# no live primary_questions AND no oracle-anchor stamp while the register
+# holds zero claims — `drain_converged_minimal` was frozen on exactly that
+# degenerate pair (the bug's cleanest repro). The builder now stamps the
+# three oracle anchors into its task_spec (what kunglao-init's intake
+# writes before any scaffold), making the case the minimal LEGITIMATE
+# converged representative. decide()'s output for the case is unchanged
+# (anchors appear in no output field) — verified byte-identical against
+# the frozen anchor; the corpus itself is NOT re-frozen.
+#
 # 2026-09-09 DATA-coupled freeze refresh (the scripts-governance sweep):
 # the anomaly baseline corpus is built FROM references/ (anomaly_detector
 # design D2), and the governance sweep converted nine re-library cards'
@@ -289,7 +300,15 @@ def _ts(ws: Path, text: str) -> None:
 
 
 def _pq(questions: str = "[]") -> str:
-    return f"primary_questions: {questions}\n"
+    # #306: every corpus task_spec carries the oracle-anchor stamp (what
+    # kunglao-init's intake writes before any scaffold). Without it, a
+    # claimless + question-less task_spec is the DEGENERATE pair the
+    # convergence emptiness probe now refuses (exit 66) — the corpus must
+    # model healthy workspaces. Inert wherever live claims/questions exist.
+    return (f"primary_questions: {questions}\n"
+            "goal_verbatim: retrieve the family config\n"
+            "success_criterion: family named with evidence\n"
+            "verification_method: static\n")
 
 
 def _pq_canonical(qid: str = "q1", need: str = "model_selection") -> str:
@@ -382,6 +401,10 @@ def _c_schema_invalid_beats_dispatch(base: Path) -> Path:
 
 
 def _c_drain_converged_minimal(base: Path) -> Path:
+    """Minimal LEGITIMATE converged (#306): feature-unused primary
+    questions + the oracle-anchor stamp (via _pq) over a claimless
+    register. Pre-#306 this case was frozen on the degenerate anchor-less
+    pair the convergence emptiness probe now refuses."""
     ws = _ws(base, "drain_converged_minimal")
     _reg(ws, [])
     _ts(ws, _pq("[]"))

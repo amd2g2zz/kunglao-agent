@@ -33,11 +33,9 @@ again pass CI silently.
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -296,9 +294,9 @@ class TestContractsRegistry:
     """scripts/contracts.py registers the bytes both sides already speak.
 
     Scope discipline: the file collects EXISTING facts (convergence_check's
-    0-5 + 64 + 65 registry, plan_drift's --auto trio, the event field name)
-    — it invents no new contract. convergence_check imports its face, so
-    there is exactly ONE definition.
+    0-5 + 64 + 65 + 66 registry, plan_drift's --auto trio, the event field
+    name) — it invents no new contract. convergence_check imports its face,
+    so there is exactly ONE definition.
     """
 
     def test_contracts_module_exists_with_registry(self):
@@ -311,6 +309,7 @@ class TestContractsRegistry:
         assert contracts.EXIT_PARK == 5
         assert contracts.EXIT_MISSING_WORKSPACE == 64
         assert contracts.EXIT_CRASHED == 65
+        assert contracts.EXIT_EMPTY_WORKSPACE == 66  # #306 emptiness identity
         assert contracts.EVENT_FIELD == "action"
         assert contracts.PLAN_DRIFT_AUTO_RCS == frozenset({0, 2, 3})
 
@@ -320,7 +319,8 @@ class TestContractsRegistry:
         values = [contracts.EXIT_CONVERGED, contracts.EXIT_DISPATCH,
                   contracts.EXIT_VERIFY, contracts.EXIT_SATURATED,
                   contracts.EXIT_BLOCKED, contracts.EXIT_PARK,
-                  contracts.EXIT_MISSING_WORKSPACE, contracts.EXIT_CRASHED]
+                  contracts.EXIT_MISSING_WORKSPACE, contracts.EXIT_CRASHED,
+                  contracts.EXIT_EMPTY_WORKSPACE]
         assert len(set(values)) == len(values), f"byte collision: {values}"
 
     def test_convergence_check_imports_its_face(self):
@@ -331,10 +331,11 @@ class TestContractsRegistry:
         import convergence_check as cc
         for name in ("EXIT_CONVERGED", "EXIT_DISPATCH", "EXIT_VERIFY",
                      "EXIT_SATURATED", "EXIT_BLOCKED", "EXIT_PARK",
-                     "EXIT_CRASHED"):
+                     "EXIT_CRASHED", "EXIT_EMPTY_WORKSPACE"):
             assert getattr(cc, name) == getattr(contracts, name), (
                 f"#102: convergence_check.{name} drifted from the registry")
         assert cc.EXIT_CRASHED == 65 and cc.EXIT_MISSING_WORKSPACE == 64
+        assert cc.EXIT_EMPTY_WORKSPACE == 66
 
     def test_dispatch_gate_uses_registry_rc_set(self):
         """The gate branches on the contracts set, not a local literal
