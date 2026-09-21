@@ -207,7 +207,7 @@ MUTATION_KINDS = ("swap", "omit", "change")
 # _settled_rows guard). ``liveness_marker`` is a RESERVED client-output key.
 LIVENESS_MARKER = "liveness_marker"
 LIVENESS_ALIVE = "alive"
-LIVENESS_CONTRACT_NAME = "LIVENESS_CONTRACT"  # trust residual (#237 class, named): an unconditional liveness_marker self-attests —
+LIVENESS_CONTRACT_NAME = "LIVENESS_CONTRACT"  # trust residual (issue 237 class, named): an unconditional liveness_marker self-attests —
 # the marker proves the probe RAN, not that its evidence is honest; a forged-liveness client is
 # the same trust class as forged verification and is handled by blind red-team, not this gate.
 LIVENESS_CONTRACT_V2 = 2

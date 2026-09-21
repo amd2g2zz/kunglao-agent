@@ -603,7 +603,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 561d6b51c73cae6293bf2cc290289dd0bc0ec3014a007918d2173d75097b8ad1
+    sha256: 2d81a04e99d1c4e262b4c8514b6a5c6cf6d1790d3f3a218062ce4ea819ff6300
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
