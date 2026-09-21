@@ -47,6 +47,8 @@ one-liner complaint.
 Usage:
   python scripts/target_ladder.py <ws> --check C-NN   # settlement predicate
   python scripts/target_ladder.py <ws> --mint C-NN    # auto-register siblings
+  python scripts/target_ladder.py <ws> --pool C-NN    # D1 demotion-aware
+                                                      # generation pool (302)
 
 Ladder artifact (mirrors runs/infeasible-ladder-<claim>.yaml):
   runs/target-ladder-<claim>.yaml
@@ -56,6 +58,16 @@ Ladder artifact (mirrors runs/infeasible-ladder-<claim>.yaml):
          instrument: frida unavailable (annotation, never a filter)}
     inventory:
       - {family: hooking, tried: ..., failed_because: ...}
+
+D1 approach-class demotion (issue 302): attempts may additionally carry the
+failure-signature channels (approach_demotion.SIGNATURE_CHANNELS) and a
+change_kind (none|patch|invest). The artifact's own walk history is then
+replayed: N=2 distinct signature clusters (clause_a) or a single post-patch
+recurrence (clause_b, K_rec=1) DEMOTE the family — in-class patching on a
+demoted family is a walked-validity defect, a demoted family is skipped in
+the --pool generation face, and the gate tags the decision as
+approach_demoted (issue 302; the demotion unit is the family — the fine
+instrumentation granularity, never a coarse strategy cluster).
 """
 from __future__ import annotations
 
@@ -66,13 +78,18 @@ from pathlib import Path
 
 import yaml
 
-# issue 292: the register/dep primitives live in _scriptlib; these alias imports
+# ---- issue 292: the register/dep primitives live in _scriptlib; these alias imports
 # keep every call site (and cross-module borrower) byte-identical.
 from _scriptlib import (claims_from_text as _claims_from_text,
                         ensure_dep_edge as _ensure_dep_edge,
                         find_claim as _find_claim,
                         load_register as _load_claims,
                         load_register_doc)
+
+# issue 302: the D1 approach-class demotion pure face. The demotion unit IS
+# the ladder family (the fine instrumentation granularity) — the binding
+# EXP-C constraint: keying on coarser strategy clusters is vacuous.
+import approach_demotion as _ad
 
 # The three target/attack-surface levels (mirrors the L1/L2/L3 shape of
 # infeasible_proposal.LADDER_LEVELS — the ladder primitive's shape).
@@ -124,6 +141,104 @@ def family_ladder_for(obstacle_class: str | None) -> tuple[str, ...]:
     """The mechanism-family enumeration for an obstacle class (fail-open)."""
     cls = (obstacle_class or "").strip().lower()
     return OBSTACLE_CLASS_FAMILIES.get(cls, FAMILY_FALLBACK)
+
+
+# ---------------- issue 302: D1 approach-class demotion ----------------
+
+def attempt_records(ladder: dict | None) -> tuple[list[dict], list[str]]:
+    """The D1 failure-attempt records of a ladder artifact, in attempt
+    order — the ingestion point: every row carrying a signature /
+    change_kind is validated + normalized (unknown signature channels or
+    change kinds are REJECTED and named in the defects, never silently
+    clustered). Legacy rows (no D1 fields) normalize to change_kind=none /
+    signature=None and cannot demote anything.
+
+    Returns (records, defects) — defects name the rejected rows.
+    """
+    attempts = (ladder or {}).get("attempts")
+    if not isinstance(attempts, list):
+        return [], []
+    records: list[dict] = []
+    defects: list[str] = []
+    for i, a in enumerate(attempts):
+        rec, err = _ad.normalize_attempt(a)
+        if err:
+            defects.append(f"attempt[{i}]: {err}")
+        elif rec is not None:
+            records.append(rec)
+    return records, defects
+
+
+def demotions(ladder: dict | None) -> dict[str, dict]:
+    """Family -> demotion state, replayed from the artifact's attempt
+    records under the recommended rule (N=2 distinct signature clusters +
+    clause_b single post-patch recurrence, K_rec=1)."""
+    records, _ = attempt_records(ladder)
+    return _ad.demotion_state(records)
+
+
+def _as_of_states(records: list[dict],
+                  inclusive: bool = False) -> list[tuple[dict, dict | None]]:
+    """Single left-to-right replay: [(record, the family's demotion state
+    at that record)]. Temporal scope for D1 — a row is judged against what
+    the walk knew at its own round, never the final state (r2 review:
+    final-state judgment defects legal pre-demotion patches and the
+    demoting attempt itself, making a rule-compliant walk un-settleable).
+
+    inclusive=False (enforcement scope): the state strictly BEFORE the
+    record — pre-demotion patches pass, the demoting row passes.
+    inclusive=True (rung annotation): the state INCLUDING the record —
+    the row that fires the demotion shows DEMOTED."""
+    out: list[tuple[dict, dict | None]] = []
+    prefix: list[dict] = []
+    for rec in records:
+        scope = prefix + [rec] if inclusive else prefix
+        out.append((rec, _ad.demotion_state(scope).get(rec["family"])))
+        prefix.append(rec)
+    return out
+
+
+def rungs_with_demotion(ladder: dict | None) -> list[dict]:
+    """The rung face: each D1 attempt row annotated with its family's
+    demotion state AS OF that attempt (the walk's own knowledge at the
+    time). New dicts — the artifact rows are never mutated."""
+    attempts = (ladder or {}).get("attempts")
+    if not isinstance(attempts, list):
+        return []
+    rows: list[tuple[int, dict]] = []
+    defects: list[str] = []
+    for i, a in enumerate(attempts):
+        rec, err = _ad.normalize_attempt(a)
+        if err:
+            defects.append(f"attempt[{i}]: {err}")
+        else:
+            rows.append((i, rec))
+    annotated: list[dict] = []
+    for (i, rec), (_, entry) in zip(rows, _as_of_states(
+            [rec for _, rec in rows], inclusive=True)):
+        if entry is None:
+            continue
+        annotated.append({**(attempts[i] if isinstance(attempts[i], dict)
+                            else {}),
+                          "demotion": {"state": entry["state"],
+                                       "demoted_at": entry["demoted_at"],
+                                       "clause": entry["clause"]}})
+    return annotated
+
+
+def generation_pool(ladder: dict | None,
+                    obstacle_class: str | None = None) -> tuple[str, ...]:
+    """The generation face: the class's family pool minus DEMOTED families —
+    a demoted class is skipped, the next rung suggestion never points at
+    it. Fail-open: an emptied pool falls back to the generic target axis
+    (the ladder is never unwalkable, same posture as the unknown-class
+    fallback)."""
+    pool = family_ladder_for(obstacle_class
+                             or (ladder or {}).get("obstacle_class"))
+    demoted = {f for f, e in demotions(ladder).items()
+               if e["state"] == _ad.DEMOTED}
+    live = tuple(f for f in pool if f not in demoted)
+    return live or FAMILY_FALLBACK
 
 
 def load_ladder(ws: Path, claim_id: str) -> dict | None:
@@ -182,6 +297,22 @@ def ladder_defects(ladder: dict | None,
                           if fm == fam)
         defects.append(f"family-repeat: {fam} on {levels} (levels are "
                        f"mechanism-family distinct by construction)")
+    # issue 302: D1 ingestion + demotion enforcement. Rejected signature
+    # records defect the artifact (they must not silently fork clusters);
+    # an in-class patch on a family ALREADY DEMOTED at that row's round is
+    # the D1 violation ("patching is forbidden afterwards") — as-of scoped:
+    # pre-demotion patches are legal walk history and the demoting attempt
+    # itself is allowed, so a rule-compliant walk stays settleable.
+    records, ing = attempt_records(ladder)
+    defects.extend(ing)
+    for rec, as_of in _as_of_states(records):
+        if (as_of is not None and as_of["demoted_at"] is not None
+                and rec["change_kind"] == "patch"):
+            defects.append(
+                f"demotion: in-class patch on family '{rec['family']}' at "
+                f"round {rec['round']} (family already demoted at round "
+                f"{as_of['demoted_at']}, {as_of['clause']}) — switch class "
+                f"or invest")
     return defects
 
 
@@ -267,6 +398,20 @@ def settlement_blocker(ws: Path, claim_id: str,
     if claim is None or str(claim.get("origin") or "") != OBSTACLE_ORIGIN:
         return None
     ladder = load_ladder(ws, claim_id)
+    # issue 302: the demotion determination is a decision face — the
+    # artifact's own walk history is replayed and any DEMOTED family is
+    # tagged (one row per check, same posture as ladder_reject; no
+    # signature records -> no row, legacy artifacts stay silent).
+    dstate = demotions(ladder)
+    demoted = sorted(f for f, e in dstate.items()
+                     if e["state"] == _ad.DEMOTED)
+    if demoted:
+        _emit(ws, "approach_demoted", claim=claim_id, detail=json.dumps(
+            {"demoted": [{"family": f, "demoted_at": dstate[f]["demoted_at"],
+                          "clause": dstate[f]["clause"],
+                          "recurrences": dstate[f]["recurrences"]}
+                         for f in demoted]},
+            ensure_ascii=False, sort_keys=True))
     defects = _class_defects(claim, ladder)
     if not defects:
         defects = ladder_defects(ladder, claim.get("obstacle_class"))
@@ -435,8 +580,28 @@ def main() -> int:
     parser.add_argument("--mint", metavar="C-NN",
                         help="auto-register one strategy sibling per "
                              "inventory entry (idempotent)")
+    parser.add_argument("--pool", metavar="C-NN",
+                        help="print the D1 demotion-aware generation pool "
+                             "for an obstacle claim (demoted families "
+                             "skipped; issue 302)")
     args = parser.parse_args()
     ws = Path(args.workspace)
+    if args.pool:
+        claims, _ = _load_claims(ws)
+        claim = _find_claim(claims, args.pool)
+        if claim is None:
+            print(f"REFUSED: claim {args.pool} not found")
+            return 1
+        ladder = load_ladder(ws, args.pool)
+        pool = generation_pool(ladder, claim.get("obstacle_class"))
+        state = demotions(ladder)
+        demoted = sorted(f for f, e in state.items()
+                         if e["state"] == _ad.DEMOTED)
+        print(f"generation pool for {args.pool} "
+              f"[{claim.get('obstacle_class') or 'generic'}]: "
+              f"{', '.join(pool)}")
+        print(f"demoted (skipped): {', '.join(demoted) if demoted else '-'}")
+        return 0
     if args.check:
         blocker = settlement_blocker(ws, args.check)
         if blocker:

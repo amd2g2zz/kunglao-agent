@@ -880,7 +880,7 @@ class TestLearningModeCountermand:
         the learning/explanatory output-style plugins: warning when either
         is installed (their SessionStart hooks inject learning-mode context
         into every session), silent when absent."""
-        import kunglao_init_gate_under_test as init
+        init = _load_init_module()  # self-sufficient: no cross-test sys.modules ordering dependency
         cache = tmp_path / "plugins-cache"
         (cache / "learning-output-style" / "1.0.0").mkdir(parents=True)
         with monkeypatch.context() as m:
