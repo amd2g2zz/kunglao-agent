@@ -231,7 +231,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 43
+    r1: 54
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -255,6 +255,8 @@ files:
     r1: 3
   scripts/release_receipt.py:
     r1: 5
+  scripts/replay_ruler.py:
+    r1: 7
   scripts/report_consistency_check.py:
     r1: 1
   scripts/retirement_gate.py:
@@ -1003,6 +1005,8 @@ files:
     r1: 1
   tests/test_replay_gate.py:
     r1: 3
+  tests/test_replay_ruler_294.py:
+    r1: 7
   tests/test_report_consistency_check.py:
     r1: 3
   tests/test_reproduction_oracle_248.py:
