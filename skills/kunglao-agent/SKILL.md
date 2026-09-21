@@ -272,6 +272,8 @@ Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd tur
 1. **L1 mechanical**: run `<MALWARE_VERI_NOTES>/scripts/kunglao-verify.py` — reproduce the worker's command + byte-exact compare; must pass before L2.
 2. **L2 unified redteam**: dispatch `kunglao-redteam` BLIND — the verifier gets ONLY the raw evidence path + questions, derives its own finding, passes only on exact match, DIFFs every divergence (maker-checker §1b/§6.3). No sign-off → no PROVEN.
 
+**Settle→dispose obligation**: after each settlement, dispose the waiting pool bound to that claim — in the same beat, mechanically (the register-carrier settle transaction writes the signals; terminal/CONFIRMED → `stop`, REFUTED → gap-only redo `dispatch` built via `dispatch_context.py --redo-diff`). A worker waiting past its claim's settlement is a contract violation (dumb-wait): the settle step that concludes a claim also ends that claim's waits. The 30-min wait self-kill is only a backstop, never the disposal mechanism.
+
 Static vs dynamic: static = reproduce + byte-exact compare; dynamic = re-run the same tool + normalized trace diff (`scripts/normalize_trace.py`). See `references/_INDEX.md` for verification references.
 
 **Expected-anchor provenance (F3)**: a fact's `expected` must NOT be computed by the producing script — `check_expected_anchor_source` lint-rejects any fact whose recompute_script embeds the expected value or its sha256 (tautological verification). Anchor rule: PASS requires anchors (byte_offset/cmd/expected) — no anchors, no promotion.
