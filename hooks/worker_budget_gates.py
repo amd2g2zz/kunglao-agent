@@ -1498,6 +1498,151 @@ def verify_tool_catalog(ws) -> list:
     return violations
 
 
+# ---------- issue #243: tool-first as a STANDING beat -----------------------
+# wbtest evidence (2026-09-12): a 118-line raw ELF parser was hand-rolled while
+# `readelf -r` had ALREADY WORKED in the same transcript, IDA was installed and
+# capstone was a declared dep — zero value comparison happened. Same ruling as
+# the recall twin #242: standing, repeated, worker-decided. The pure
+# predicates live in scripts/instrument_menu.py; these are the battery
+# adapters (check_claim_granularity precedent: arm on the approval-point log,
+# fire from the NEXT dispatch on, FAIL_OPEN everywhere).
+
+def _plan_text_for_claim(ws, cid: str, prompt: str = ''):
+    """The worker-authored plan for the claim (#239 naming contract, single
+    source: claim_granularity.plan_file + the re-dispatch-continuity leg).
+    Returns (plan_path|None, text|None)."""
+    from claim_granularity import plan_file, read_plan
+    plan_path = plan_file(Path(ws), cid)
+    if plan_path is None and prompt:
+        ref = _prompt_plan_ref(cid.replace('-', ''), prompt)
+        if ref:
+            cand = Path(ws) / 'runs' / ref
+            if cand.exists():
+                plan_path = cand
+    if plan_path is None:
+        return None, None
+    return plan_path, read_plan(plan_path)
+
+
+def check_tool_search_citation(paths: dict, cid: str | None,
+                               prompt: str = '') -> tuple[bool, str]:
+    """Issue #243 acceptance (a): the tool-search BEAT at the plan-check
+    point. A plan that proposes WRITING a new script at a make-vs-reuse
+    decision must cite the tool-search --find result it compared against
+    (`tool-search: <keywords> -> <hit|none>`); a bare marker is NOT a
+    citation (#630 anti-self-attestation shape).
+
+    Arming + fail-open mirror check_claim_granularity: first dispatch passes
+    (the worker has authored no plan yet); no-plan passes (the plan-first
+    gate owns that rejection — one rejection per gate family); unreadable
+    plan passes. Returns (ok, reason). ok=False REJECTs the dispatch.
+    """
+    if not cid:
+        return (True, 'no target claim')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')  # FAIL_OPEN — mirrors check_worker_plan
+    try:
+        import instrument_menu as _im
+    except Exception as exc:  # noqa: BLE001 — a broken beat must not block
+        warn("check_tool_search_citation", f"{type(exc).__name__}: {exc}")
+        return (True, f'toolsearch gate unavailable: {type(exc).__name__}')
+    key = cid.replace('-', '')
+    if not _anchor_log_ts_list(Path(ws), key):
+        return (True, (f'first dispatch of {cid}: tool-search beat not '
+                       f'armed (the gate reads the worker-authored plan '
+                       f'from the NEXT dispatch on)'))
+    plan_path, text = _plan_text_for_claim(ws, cid, prompt)
+    if text is None:
+        return (True, (f'no plan on disk for {cid} — toolsearch fail-open '
+                       f'(the plan-first gate owns the no-plan rejection)'))
+    defects = _im.citation_defects(text)
+    if not defects:
+        return (True, (f'tool-search citation ok: {plan_path.name} names '
+                       f'the make-vs-reuse value comparison'))
+    return (False, (
+        f'TOOL-SEARCH GATE: plan {plan_path.name} proposes writing a new '
+        f'script but cites no tool-search result (issue #243). '
+        f'{_im.CITATION_GUIDANCE}; then re-dispatch with the citation in '
+        f'the plan.'))
+
+
+def check_handroll_floor(paths: dict, cid: str | None,
+                         prompt: str = '') -> tuple[bool, str]:
+    """Issue #243 acceptance (c): the WARN floor for the proven failure
+    shape — a >50-line workspace script whose capability words match an
+    available CLI/toolbox name ("readelf exists"). NEVER rejects: the
+    verdict is a stderr WARN + a `handroll_warn` ledger row (fail-open).
+    The same standing script pass carries `promotion: <why>` notes into the
+    lesson/settlement channel (toolbox_promotion_proposed) — ladder
+    completion, no new machinery. Not arming-gated: a WARN face on the
+    price board is cheap and rejects nothing."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')
+    try:
+        import instrument_menu as _im
+        scripts = _im.workspace_scripts(ws)
+        if not scripts:
+            return (True, '')
+        clis = [c['name'] for c in _im.available_system_clis()
+                if c['name'] not in _im.FLOOR_STOPWORDS]
+        clis += [e['name'] for e in _im.toolbox_entries()]
+        findings = _im.handroll_floor_findings(scripts, clis)
+        proposals = _im.scan_promotion_proposals(scripts)
+        if proposals:
+            _im.emit_promotion_proposals(ws, proposals, claim=cid)
+        if not findings:
+            return (True, '')
+        detail = json.dumps({'findings': findings}, ensure_ascii=False,
+                            sort_keys=True)
+        _im.emit_event(ws, 'handroll_warn', claim=cid, detail=detail)
+        msg = ('WARN: hand-rolled script(s) match available tools: '
+               + '; '.join(f"{f['script']} ({f['lines']} lines) matches "
+                           f"{', '.join(f['matched'])}"
+                           for f in findings)
+               + " — compare value before extending (#243 ladder: toolbox "
+                 "CLI -> wrap system CLI -> installed lib -> agent-do "
+                 "install -> hand-roll LAST)")
+        print(f'[kunglao-agent] handroll {msg}', file=sys.stderr)
+        return (True, msg)
+    except Exception as exc:  # noqa: BLE001 — WARN face never blocks
+        warn("check_handroll_floor", f"{type(exc).__name__}: {exc}")
+        return (True, '')
+
+
+def record_tool_search_citations(paths: dict, cid: str | None,
+                                 prompt: str = '') -> int:
+    """Issue #243 acceptance (e): provenance — every CITED tool-search
+    result in the worker's plan becomes ONE `toolfirst_search` ledger row
+    (keywords + result) at the approval point. Fail-open; returns rows
+    emitted. Zero citations (or no plan) -> zero rows."""
+    if not cid:
+        return 0
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return 0
+    try:
+        import instrument_menu as _im
+        plan_path, text = _plan_text_for_claim(ws, cid, prompt)
+        if text is None:
+            return 0
+        rows = _im.tool_search_citations(text)
+        import kunglao_log
+        for r in rows:
+            kunglao_log.emit(
+                Path(ws), 'hook:worker_budget', 'toolfirst_search',
+                claim=str(cid),
+                detail=json.dumps({'keywords': r['keywords'],
+                                   'result': r['result'],
+                                   'plan': plan_path.name},
+                                  ensure_ascii=False, sort_keys=True))
+        return len(rows)
+    except Exception as exc:  # noqa: BLE001 — observability never blocks
+        warn("record_tool_search_citations", f"{type(exc).__name__}: {exc}")
+        return 0
+
+
 # ---------- issue #310: agenttype gate (specialist-first as a MECHANICAL check) ----------
 # Behavior #2 "specialist-first" was an orchestrator soft constraint: a
 # kunglao-worker could silently take a ghidra-type claim (route_capability has

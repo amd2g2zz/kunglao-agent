@@ -293,6 +293,15 @@ def build_dispatch_context(
         tool_tiers_block = _tt.inject_for_workspace(ws)
     except Exception:  # noqa: BLE001 — context build never raises
         tool_tiers_block = None
+    # #243: the instrument menu rides the context (read-only price board,
+    # NOT a command) — toolbox / which-scanned system CLIs / declared deps,
+    # domain-ranked via the #241 domain_family tag. Fail-open optional key;
+    # NOT in VERIFIER_SAFE_KEYS (orchestrator-side, same class as providers).
+    try:
+        import instrument_menu as _im
+        instrument_menu = _im.context_block(ws, claim_id)
+    except Exception:  # noqa: BLE001 — context build never raises
+        instrument_menu = None
     ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
@@ -311,6 +320,8 @@ def build_dispatch_context(
         ctx["providers"] = providers
     if tool_tiers_block is not None:
         ctx["tool_tiers"] = tool_tiers_block
+    if instrument_menu is not None:
+        ctx["instrument_menu"] = instrument_menu
     _emit_context_manifest(ws, ctx)  # issue 293 field upgrade A
     return ctx
 
@@ -358,6 +369,10 @@ def _context_manifest(ctx: dict) -> dict:
     if ctx.get("tool_tiers"):
         items.append({"kind": "tool_tier", "ref": "scene-injected",
                       "source": "tool_tiers"})
+    # #243: the instrument menu's entries join the manifest inventory
+    # (additive rows — one {kind: instrument} per CLI/toolbox entry/dep).
+    from instrument_menu import manifest_items as _menu_items
+    items.extend(_menu_items(ctx.get("instrument_menu")))
     return {"kind": "context_manifest",
             "version": CONTEXT_BLOCK_VERSION,
             "claim_id": str(ctx.get("claim_id") or ""),

@@ -59,7 +59,7 @@ def _load_hook_by_path():
 # The marker comment the mechanical conversion embedded in every converted
 # module; the set of files carrying it must equal the batch-3 inventory.
 B3_MARKER = "# issue " + "275 batch-3"
-B3_FILE_COUNT = 81
+B3_FILE_COUNT = 82
 
 
 def _batch3_files() -> list[Path]:

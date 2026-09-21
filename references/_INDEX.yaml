@@ -15,7 +15,7 @@ files:
   references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
   references/_index-web.md: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
   references/contracts/agent-three-state-charter.md: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
-  references/contracts/cli-script-checklist.md: 4af55a6056c899c383c550c6cb0da3c931bcd8d2de8db44ff999071ddb3a33da
+  references/contracts/cli-script-checklist.md: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   references/contracts/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
   references/contracts/downstream-contract.md: 41bebf10cda98fedcb0dcfc05f0f8606ba79b4047f5d5b1c6beba5cb04462c6c

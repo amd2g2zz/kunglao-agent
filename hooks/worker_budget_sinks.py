@@ -37,6 +37,9 @@ from worker_budget_gates import (
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
+    check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
+    check_handroll_floor,  # issue 243: >50-line script vs available-CLI WARN floor
+    record_tool_search_citations,  # issue 243: cited --find results -> provenance rows
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
@@ -653,6 +656,16 @@ def pre_check(payload: dict, paths: dict) -> int:
         # where a passing plan gate still let a worker hand-roll a script
         # instead of trying crypto-tool.py for a crypto-decode task.
         ('toolfirst', check_tool_first(paths, desc, prompt)),
+        # issue #243: the tool-search BEAT at the SAME plan-check point — a
+        # plan proposing to WRITE a new script must cite the --find result it
+        # compared against (`tool-search: <keywords> -> <hit|none>`); the
+        # standing make-vs-reuse value comparison the wbtest loop skipped.
+        ('toolsearch', check_tool_search_citation(paths, cid, prompt)),
+        # issue #243 WARN floor: a >50-line workspace script whose capability
+        # words match an available CLI/toolbox name ("readelf exists") —
+        # WARN, never REJECT; the same standing pass carries `promotion:`
+        # notes into the lesson/settlement channel (ladder completion).
+        ('handroll', check_handroll_floor(paths, cid, prompt)),
         # v1.9.33 (#310): agenttype gate — specialist-first as a mechanical
         # check. route_capability recommends the specialist for the claim
         # (task domain x sample features); a deviating dispatch REJECTS
@@ -698,6 +711,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     toolfirst_pass_record(paths, cid,
                           payload.get('tool_input', {}).get('description', ''),
                           prompt)
+    # issue #243: every cited tool-search --find result in the worker's plan
+    # is ONE toolfirst_search provenance row (keywords + result) — the
+    # make-vs-reuse value comparison lands in the ledger, not just in prose.
+    record_tool_search_citations(paths, cid, prompt)
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
