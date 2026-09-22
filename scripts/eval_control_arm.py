@@ -176,16 +176,29 @@ def render_binary_surface(path: Path) -> str:
     section headers + full disassembly + embedded strings — the standard
     static rendering an analyst's tooling produces (the checker's oracle
     face never executes native binaries either). Deterministic subprocess
-    rendering; capped, with the truncation recorded in the text."""
+    rendering; capped, with the truncation recorded in the text. A tool
+    missing on the host is DISCLOSED in the text (the prompt stays
+    gradeable and honest), never a crash — CI runners may lack binutils."""
     parts: list[str] = []
     for args in (["objdump", "-f", str(path)],
                  ["objdump", "-h", str(path)],
                  ["objdump", "-d", str(path)],
                  ["strings", "-n", "4", str(path)]):
-        proc = subprocess.run(args, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=60)
+        try:
+            proc = subprocess.run(args, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace",
+                                  timeout=60)
+        except FileNotFoundError:
+            parts.append(f"[{args[0]} unavailable on this host]")
+            continue
+        except subprocess.TimeoutExpired:
+            parts.append(f"[{args[0]} timed out]")
+            continue
         parts.append((proc.stdout or "").strip())
     text = "\n\n".join(p for p in parts if p)
+    if not text:
+        text = (f"[no static rendering available for {path.name}: "
+                f"rendering tools unavailable on this host]")
     if len(text) > BINARY_RENDER_CAP:
         text = (text[:BINARY_RENDER_CAP]
                 + f"\n[truncated at {BINARY_RENDER_CAP} chars]")

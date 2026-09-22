@@ -423,3 +423,14 @@ class TestBinarySurfaceFace:
         assert len(out) == ca.BINARY_RENDER_CAP + len(
             f"\n[truncated at {ca.BINARY_RENDER_CAP} chars]")
         assert f"[truncated at {ca.BINARY_RENDER_CAP} chars]" in out
+
+    def test_binary_render_tool_absence_is_disclosed(self, monkeypatch):
+        """Hosts without binutils (CI runners) must get an honest
+        disclosure in the text — the prompt stays gradeable, no crash."""
+        def _no_tool(*a, **k):
+            raise FileNotFoundError(2, "No such file or directory")
+
+        monkeypatch.setattr(ca.subprocess, "run", _no_tool)
+        out = ca.render_binary_surface(Path("/nonexistent"))
+        assert "[objdump unavailable on this host]" in out
+        assert "[strings unavailable on this host]" in out
