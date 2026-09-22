@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 551e182267f274bc5d435228d20d748bc52a76166f800526136343f2f9eeeed3
+    sha256: 9fd512902248324fd12b39a267064d071b487efc62674dd4c9d9e3395131789d
   - src: scripts/_boot.py
     dest: .claude/scripts/_boot.py
     kind: scaffold
