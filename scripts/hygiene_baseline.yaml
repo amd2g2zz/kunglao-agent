@@ -539,8 +539,8 @@ files:
   tests/test_debug_flag_task_spec_25.py:
     r1: 3
   tests/test_decide_regression_anchor.py:
-    r1: 61
-    r2: 35
+    r1: 62
+    r2: 36
   tests/test_decide_schema_routing.py:
     r1: 6
   tests/test_decide_state_machine.py:
