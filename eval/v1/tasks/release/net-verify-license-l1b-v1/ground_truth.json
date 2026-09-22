@@ -1,0 +1,133 @@
+{
+  "schema": "kunglao-eval-ground-truth/1",
+  "task_id": "net-verify-license-l1b-v1",
+  "family": "net-verify-license",
+  "seed": 33222,
+  "constants": {
+    "key_hex": "eff1a22918648e0d5bb9fc639f796a53325a2863e273da9394f87751f58cca57",
+    "device": "d0034ce754ed"
+  },
+  "space_bits": 256,
+  "published_pairs": [
+    {
+      "i": 0,
+      "challenge": "27e714dde6947d8d",
+      "client_nonce": "f62b3ed5",
+      "out": "91bf1c24bfdc74a9c734b19d9266c8fc8ccf4fa428ec03d22ec5c7a938f42d54"
+    },
+    {
+      "i": 1,
+      "challenge": "59e09155b6d35753",
+      "client_nonce": "184e9ea1",
+      "out": "31451a8de61c6f54bb3e0030c0105a41c1efc26403478ccec456944b7559e3b2"
+    },
+    {
+      "i": 2,
+      "challenge": "677f5a9b5240725b",
+      "client_nonce": "6916d91b",
+      "out": "a4f3aaaefc556dfe872d77d3570327cff0244f19dc6708d9947fc8f6ff03aec1"
+    },
+    {
+      "i": 3,
+      "challenge": "ab178a07e2d8234d",
+      "client_nonce": "7c71cf9f",
+      "out": "c1ab93961675b5c1388f9e5da2bd548375629ba3a3bc5732f7735c19abc8319d"
+    },
+    {
+      "i": 4,
+      "challenge": "1ffb5f55111e28d1",
+      "client_nonce": "a09b4c01",
+      "out": "51b7b3e4b5134cb8804d1001403b371af9c49214ec8dede4047807088be752d5"
+    },
+    {
+      "i": 5,
+      "challenge": "d5be0eb1f62c37dd",
+      "client_nonce": "ec698d15",
+      "out": "cb88611c4267e2f61ff564d08276a26c875f8aeb5d8acd99eb6fd325c25d4b96"
+    }
+  ],
+  "minted_probe_count": 6,
+  "note": "the oracle is SERVER-SIDE: the checker-hosted loopback mock recomputes HMAC(KDF(challenge, secret), canonical_payload) from the seed and validates every session on published + minted challenges; no egress \u2014 bind 127.0.0.1 ephemeral, base URL via argv.",
+  "core": {
+    "h": [
+      2901309957,
+      3331993883,
+      3046354371,
+      1000463501,
+      2118672021,
+      3353206493,
+      4261597977,
+      4107475421
+    ],
+    "k": [
+      629679105,
+      1898631741,
+      1579555227,
+      2381633107,
+      3758300707,
+      2437484897,
+      2632621089,
+      2828705053,
+      1753331843,
+      2596212867,
+      3639883201,
+      1944462213,
+      1507351867,
+      1196701223,
+      2817365683,
+      1606384063,
+      2720409889,
+      929448535,
+      483585247,
+      1800586383,
+      3630586509,
+      2242342103,
+      272374289,
+      869497281,
+      3136793253,
+      4218463015,
+      2334135115,
+      609312709,
+      3675764783,
+      360763621,
+      2199187829,
+      4181653255,
+      3853202159,
+      636903595,
+      2286126363,
+      3541622713,
+      111735905,
+      1355070489,
+      2139276681,
+      2893839997,
+      2257339759,
+      2726548747,
+      3980979071,
+      1227317421,
+      2553440785,
+      1248365293,
+      1484434177,
+      159971171,
+      2023633619,
+      38306313,
+      4128704417,
+      3818705383,
+      1337907805,
+      644428449,
+      765838319,
+      2186479119,
+      991231053,
+      2576477175,
+      4000771823,
+      531259719,
+      162517677,
+      1236190183,
+      769475803,
+      3710738349
+    ],
+    "key_hex": "eff1a22918648e0d5bb9fc639f796a53325a2863e273da9394f87751f58cca57",
+    "sep_code": 34,
+    "device": "d0034ce754ed",
+    "rounds": 2
+  }
+}

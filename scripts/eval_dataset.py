@@ -41,9 +41,9 @@ EVAL_ROOT = ROOT / "eval"
 # ---- versioning ----------------------------------------------------------
 EVAL_VERSION = "eval-v1"
 # additive version ladder: v1 = #299 smoke tier; v1.1 = #332 release tier
-# (native families + mod-crypto core). A landed version is never mutated.
+# (native families + web/net packaging-ladder families on the shared
+# mod-crypto core). A landed version is never mutated.
 EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1")
-EVAL_TIER_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1"}
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -73,6 +73,14 @@ VERIFICATION_METHODS: tuple[str, ...] = (
     "reproduction", "replay-evidence", "static", "manual")
 
 TIERS: tuple[str, ...] = ("smoke", "release")
+# per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
+# release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
+# never mutated in place per the eval version rules). Both spellings are
+# load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
+# surface; EVAL_TIER_VERSION is the release-tier alias kept for the
+# native-lane tests/runner.
+TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1"}
+EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match", "replay-roundtrip")
 ORACLE_KINDS: tuple[str, ...] = CHECKER_KINDS
@@ -100,15 +108,21 @@ def iter_task_dirs(tier: str = "smoke", version: str = "v1") -> list[Path]:
     return sorted(d for d in base.iterdir() if d.is_dir() and (d / "task.yaml").is_file())
 
 
-def resolve_task_dir(task: str, tier: str = "smoke", version: str = "v1") -> Path:
-    """A task id (searched under the tier) or an explicit task-dir path."""
+def resolve_task_dir(task: str, tier: str | None = None,
+                     version: str = "v1") -> Path:
+    """A task id (searched across tiers when ``tier`` is None — the
+    checker resolves release and smoke units by id alike) or an explicit
+    task-dir path."""
     p = Path(task)
     if p.is_dir():
         return p
-    for tdir in iter_task_dirs(tier, version):
-        if tdir.name == task:
-            return tdir
-    raise FileNotFoundError(f"unknown task {task!r} (tier={tier}, version={version})")
+    tiers = [tier] if tier else list(TIERS)
+    for t in tiers:
+        for tdir in iter_task_dirs(t, version):
+            if tdir.name == task:
+                return tdir
+    raise FileNotFoundError(
+        f"unknown task {task!r} (tiers={tiers}, version={version})")
 
 
 def load_task(tdir: Path) -> dict:
@@ -128,6 +142,11 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
     tier = task.get("tier")
     if tier not in TIERS:
         errors.append(f"tier must be one of {TIERS}, got {tier!r}")
+    want_version = TIER_EVAL_VERSION.get(tier)
+    if want_version is not None and task.get("eval_version") != want_version:
+        errors.append(
+            f"eval_version must be {want_version} for tier {tier!r}, "
+            f"got {task.get('eval_version')!r}")
     source = task.get("source")
     if source not in SOURCES:
         errors.append(f"source must be one of {SOURCES}, got {source!r}")

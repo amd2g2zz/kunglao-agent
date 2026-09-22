@@ -79,9 +79,12 @@ class TestNativeRegistry:
             "smc-x86": 33203,
             "mod-crypto-native": 33204,
         }
-        # one seed per family, disjoint from the #299 smoke seeds
-        smoke_seeds = {m["seed"] for m in tg.FAMILIES.values()}
-        assert smoke_seeds.isdisjoint(set(ntg.FAMILY_SEEDS.values()))
+        # one seed per family, disjoint from every other registered
+        # family's pinned seed (#299 smoke pins family-level seeds; the
+        # #332b web/net families seed per unit, so no family-level key)
+        other_seeds = {m["seed"] for m in tg.FAMILIES.values()
+                       if m.get("seed") is not None}
+        assert other_seeds.isdisjoint(set(ntg.FAMILY_SEEDS.values()))
 
     def test_twelve_release_units_with_rungs(self):
         assert len(ntg.UNITS) == 12
@@ -205,7 +208,12 @@ class TestModelsAndWires:
 class TestLandedCorpus:
     def test_every_release_unit_validates(self):
         dirs = ds.iter_task_dirs(tier="release")
-        assert len(dirs) == 12
+        # the merged #332 inventory: 12 native (this lane) + 15 web/net
+        # (#332b: web-pack-sign x5, mod-crypto-js x4, req-sign x3,
+        # net-verify-license x3) = one 27-unit release ladder
+        assert len(dirs) == 27
+        landed_ids = {d.name for d in dirs}
+        assert {u["task_id"] for u in ntg.UNITS} <= landed_ids
         for tdir in dirs:
             task = ds.load_task(tdir)
             ok, errors = ds.validate_task(task)
@@ -287,6 +295,10 @@ class TestLandedCorpus:
         bytes; the mechanical scan is byte-exact."""
         for tdir in ds.iter_task_dirs(tier="release"):
             task = ds.load_task(tdir)
+            if task["family"] not in ntg.NATIVE_FAMILIES:
+                continue  # addition B is the native lane's ground truth;
+                # the #332b web/net units carry their own stamp contracts
+                # (pinned by tests/test_eval_release_332.py)
             gt = json.loads(
                 (tdir / task["ground_truth"]["file"]).read_text(encoding="utf-8"))
             ad = gt["anti_debug"]
