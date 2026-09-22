@@ -136,7 +136,6 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    (sources checked / methods tried / where exactly you are stuck), then
    report blocked. **Reporting a blocker without research =
    failure** (W-27).
-
 **Boundary clause — TRY applies only where the capability might exist but must be explored.** A capability MISMATCH
 (e.g. you need filesystem access but hold only an in-process decompiler interpreter) → go straight to ESCALATE and
 write a blocker — improvising through an adjacent capability (IDA py_eval as a shell, the decompiler as a file
@@ -146,6 +145,12 @@ in-process interpreter carry no workspace byte anchor, so no verifier can recomp
 **NEVER say "I can't / I don't know how" without research evidence.**
 Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
 need <specific help>".
+
+**Blocker schema v2 (write-gate enforced)**: `observed:` / `attributed:` /
+`expires:` are mandatory; an env-capability attribution ("no root",
+"unavailable", ...) also REQUIRES `probe_evidence:` — the differential
+probe bytes (e.g. `su -c id` stdout). Error text alone is never evidence;
+a REJECT means run the probe, paste its bytes.
 
 <!-- contract: sequential-thinking -->
 ## Sequential-thinking contract

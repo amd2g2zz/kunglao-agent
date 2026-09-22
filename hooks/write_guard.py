@@ -202,11 +202,12 @@ CARRIER_FACT = "fact"
 CARRIER_NOTE = "note"
 CARRIER_REGISTER = "register"
 CARRIER_INDEX = "index"
+CARRIER_BLOCKER = "blocker"  # #340 scope A: blockers/*.md — the premise carrier
 
 # What the shadow workspace must carry for the checkers to reach their
 # evidence. Keep this list minimal and explicit: a shadow that copies runs/
 # wholesale would make every hook fire O(workspace size).
-_SHADOW_TREES = ("facts", "notes", "references")
+_SHADOW_TREES = ("facts", "notes", "blockers", "references")
 _SHADOW_FILES = ("claim-register.yaml", "analysis_state.txt")
 _SHADOW_RUNS_GLOBS = ("*-verify-*.md", "verify-*.json")
 
@@ -303,6 +304,10 @@ def carrier_of(ws: Path, target: Path) -> str | None:
         return CARRIER_FACT
     if parts and parts[0] == "notes" and rel.suffix == ".md":
         return CARRIER_NOTE
+    if parts and parts[0] == "blockers" and rel.suffix == ".md":
+        # #340 scope A: the premise carrier — schema v2 + probe-evidence
+        # gate (README.md included; the blocker lint skips the #538 stub).
+        return CARRIER_BLOCKER
     return None
 
 
@@ -312,7 +317,8 @@ def looks_like_carrier(target: Path) -> bool:
     every edit in every non-kunglao repo the user happens to open)."""
     parts = Path(target).parts
     name = Path(target).name
-    return "facts" in parts or "notes" in parts or name == "claim-register.yaml"
+    return ("facts" in parts or "notes" in parts or "blockers" in parts
+            or name == "claim-register.yaml")
 
 
 def post_image(payload: dict, target: Path) -> tuple[str | None, str]:
@@ -388,6 +394,10 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
     Leg 3 (notes_writer #528): supersedes-chain adjudication of the note
     post-image — a correction without `supersedes:`, a pointer at a
     nonexistent note, or an inherited verify_status stamp is blocked.
+    Leg 4 (#340 scope A): blocker schema v2 on the premise carrier — an
+    environment-capability attribution without non-empty probe_evidence
+    is rejected at write time (error text alone is never evidence), and
+    legacy-shape blockers are rejected per the no-backcompat ruling.
     """
     violations: list[str] = []
     from lint_facts import lint_index, lint_workspace
@@ -445,6 +455,27 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             violations.append(
                 f"supersedes[?] adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    if carrier == CARRIER_BLOCKER:
+        # #340 scope A: blocker v2 schema + env-attribution evidence gate.
+        # The #538 README stub is not a blocker record (the same explicit
+        # skip convergence_check._active_blockers applies). Fail-closed on
+        # a crashed checker, mirroring the supersedes leg.
+        if rel.name == "README.md":
+            _dbg("adjudicate[blocker] README.md stub — skipped")
+        else:
+            try:
+                from blocker_lint import lint_blocker_text
+                pending_text = (shadow / rel).read_text(
+                    encoding="utf-8", errors="replace")
+                msgs = list(lint_blocker_text(pending_text))
+                violations += [f"blocker[{i}] {msg}" for i, msg in
+                               enumerate(msgs, start=1)]
+                _dbg(f"adjudicate[{carrier}] blocker leg: {len(msgs)} "
+                     f"violation(s)")
+            except Exception as exc:  # noqa: BLE001 — crash = fail closed
+                violations.append(
+                    f"blocker[?] adjudication crashed "
+                    f"({type(exc).__name__}: {exc}); fail-closed.")
     if carrier == CARRIER_REGISTER:
         # #819: evidence-gated ->PROVEN. Evidence lives in runs/*.md of the
         # REAL workspace (not the shadow — this tool call does not write
