@@ -372,6 +372,10 @@ files:
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
     sha256: 4018429bfa3e7d2caa7219387c7d301f92ec681134d48c1f68d5459da3c2cc7c
+  - src: scripts/eval_loop_runner.py
+    dest: .claude/scripts/eval_loop_runner.py
+    kind: scaffold
+    sha256: 3a1788621701bc0acbecf0737f95c85e9ad1fa67549a33a3cd80f8a633aa1382
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
@@ -1419,7 +1423,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 1892eec88c8f7edb54098be57052851f5f09cd5ffa21bd06fae68fe3dadc14b3
+    sha256: 1c9dfd7f0ac7ed3d199f4ff9e72c308f8ee1a2c64e7494f3f5f7284d885384cb
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
