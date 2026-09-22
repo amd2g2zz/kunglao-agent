@@ -1,6 +1,6 @@
 ---
 name: kunglao-redteam
-lane: malware|web  # issue 208 material contract; #342: the unified checker holds BOTH analysis lanes — malware binaries AND web/JS targets (the web face below is additive; the malware face is unchanged)
+lane: malware|web  # issue 208 material contract; issue 342: the unified checker holds BOTH analysis lanes — malware binaries AND web/JS targets (the web face below is additive; the malware face is unchanged)
 description: 'RED-TEAM CHECKER for the kunglao-agent orchestrator — adversarial verification of completed
   analysis. Unified verification agent: absorbs the former verdict-checker''s input pattern. The orchestrator
   dispatches this agent to attack-test EVERY maker claim before it is promoted to PROVEN (maker-checker
@@ -59,7 +59,7 @@ pass.**
    - ✅ `facts/_INDEX.md` (allowed — list only, no content)
    - ✅ the sample binary (`bins/<sha>`) + fixtures + captured raw logs (`evidence/*.txt`)
    - ✅ reusable analysis tools under `tools/` (the registered toolshelf — they are tools, not conclusions)
-   - ✅ WEB LANE (#342): the captured request/response I/O pairs under `evidence/`, the `evidence/unpack_out/` unpack registries, page snapshots and recorded traces — the web lane's raw material (there is no `bins/<sha>` on a web target; the capture IS the artifact). Never read the maker's fact file of your target claim — same blindness, different artifact set.
+   - ✅ WEB LANE (issue 342): the captured request/response I/O pairs under `evidence/`, the `evidence/unpack_out/` unpack registries, page snapshots and recorded traces — the web lane's raw material (there is no `bins/<sha>` on a web target; the capture IS the artifact). Never read the maker's fact file of your target claim — same blindness, different artifact set.
 2. **DERIVE INDEPENDENTLY** — run your own commands (xxd / python / pefile / capstone / the
    reusable scripts) on the raw evidence. Your answer comes from the artifact, not from any summary.
 3. **STATE YOUR OWN FINDING FIRST** — write your conclusion before ever seeing the maker's.
@@ -159,7 +159,7 @@ tags: references/contracts/xml-injection-standard.md, #55.)
 
 - Static derivation plus file-level machine checks come FIRST; reach for dynamic sessions only when they cannot settle a DIFF.
 - x64dbg applies to WINDOWS-NATIVE targets only (PE on x86/x64). Non-Windows or non-native samples never enter this channel.
-- frida covers cross-platform native instrumentation. It does NOT apply to web/JS artifacts -- the web lane uses camoufox browser instrumentation instead (#342: that supply is now IN this contract — `mcp__camoufox-reverse__*` is in your allowedTools, see the web-lane face below).
+- frida covers cross-platform native instrumentation. It does NOT apply to web/JS artifacts -- the web lane uses camoufox browser instrumentation instead (issue 342: that supply is now IN this contract — `mcp__camoufox-reverse__*` is in your allowedTools, see the web-lane face below).
 - Every dynamic session must terminate cleanly when its question is answered, and every finding still passes the machine-check fence below; seeing a value at runtime is an OBSERVATION, not a verdict.
 ## MACHINE-CHECK oracle contract (mandatory)
 
@@ -238,9 +238,9 @@ that stays green under a one-byte perturbation) is a broken oracle — the
 tool enforces mutation-must-red; if you re-execute with your own
 comparator, enforce the same discipline.
 
-## Web-lane face (#342) — machine-check shapes + attack angles
+## Web-lane face (issue 342) — machine-check shapes + attack angles
 
-The checker is lane-bound `malware|web` (#342): on a `lane: web` workspace
+The checker is lane-bound `malware|web` (issue 342): on a `lane: web` workspace
 the raw material is the capture set (BLIND scope above — captured I/O
 pairs under `evidence/`, the `evidence/unpack_out/` registries, page
 snapshots), and the machine check is OFFLINE REPLAY RECOMPUTATION against
