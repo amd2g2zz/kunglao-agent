@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: e6b0c633979f7791e3142245494b52247eabbbf860fd1186d8a1673be8f8c7f1
+    sha256: 5d9f33c3299ebd6f93fbdada9da6050400f1966bcdaf8ddaa6dc3dfd349e8d61
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: fbf87fc68315c9857718e0e8a8fb455b33def21d20529bea1c9012c213e93a5d
+    sha256: f4916faada0471898de868df13995a6015400a9ce09908c1629d302018a1a193
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -271,7 +271,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 795d4aeb3f7aded76c42ed2708ab52c02c8e40209dee9ea34efa574fee3df66e
+    sha256: a8e44a87e3a3f524da51c5520a290a382b296d6e35900d1decacea89bb8e05ea
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -379,7 +379,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 0c3194eb2bfa67f483569c2ff1520426f7eb17422dca4f0f7909dd7f99c03c5d
+    sha256: 5493a85899a57834bb927fa69fad3215dd1fd1f282252965355421c87bd76f16
   - src: scripts/eval_native_sources.py
     dest: .claude/scripts/eval_native_sources.py
     kind: scaffold
@@ -447,7 +447,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: cea0f49681bb7debdcdaf698820c6fa954b3f53c1f199613854b70eb65751310
+    sha256: 63ab658496ef4b526698798e351ada382526aaee5aa393026010d56abc738a8a
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -595,7 +595,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: c3599f61396810594048564fe2478b200215c4774e430406716964dfd3db917d
+    sha256: b977966a157e5fcab4fdaa17a3cb4ab067d32223d2086f8fca65f54610532632
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -936,6 +936,10 @@ files:
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
     sha256: f6131a3dbfc65ff2a0641290aed8a3f13bfd917d6cb3fa4031af4d324d03d797
+  - src: scripts/verify_backlog_face.py
+    dest: .claude/scripts/verify_backlog_face.py
+    kind: scaffold
+    sha256: 738b1ff135abdb9f7adcb4bc04defdac47a8f2a581bfb2e8644c04f7806081d1
   - src: scripts/verify_status_watch.py
     dest: .claude/scripts/verify_status_watch.py
     kind: scaffold
@@ -1435,7 +1439,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: f03a520e89ccf8af114d612a8898d771bc3a0eb869512b7008c81f9fcb38c19f
+    sha256: d58d43989459bb05b4c4acddb8faf6ee648937629982fe8f8c5fd9b6d2e88b18
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

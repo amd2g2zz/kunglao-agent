@@ -533,6 +533,20 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
         warn("rank_face", f"{type(exc).__name__}: {exc}")
 
+    # step 11d (#342): the verify-backlog face rides the same report —
+    # PARTIAL-fact count + the stalest partial's age in ticks, the
+    # timeliness twin of the VERIFY_STALE anti-starvation event. Same face
+    # contract as h_bits/rank: ONE computation shared with the display
+    # consumers (scripts/verify_backlog_face.py), own try block so neither
+    # face can take the other down, fail-open like every report field.
+    try:
+        import verify_backlog_face
+        _vb = verify_backlog_face.face(ws)
+        report["verify_backlog"] = _vb["verify_backlog"]
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+        warn("verify_backlog_face", f"{type(exc).__name__}: {exc}")
+
     # step 11c (#142 refinement, event-driven): when this tick HOSTED a
     # settlement/rollup (mission ledger present), that IS a semantic event
     # — it moved the frontier, and the display would otherwise lag it
