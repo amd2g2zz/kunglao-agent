@@ -90,6 +90,7 @@ def test_event_enum_declared_with_landed_vocabulary() -> None:
         "LADDER_REQUIRED_BLOCKER",   # #497 climb-the-ladder flavor
         "LADDER_EXHAUSTED_BLOCKER",  # #497 ladder-exhaustion marker
         "UNEXPECTED_STATE",
+        "VERIFY_STALE",              # #342 SCHEDULE: stale-partial verification forcing
         "JADX_INFEASIBLE",           # #670 intake-level (NOT in DRAIN)
     }
     assert expected == set(Event.__members__), \
