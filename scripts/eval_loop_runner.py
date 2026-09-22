@@ -76,7 +76,6 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import eval_dataset as ds
-import eval_targets as tg
 import eval_smoke_runner as rnr
 import tuition_curve
 
@@ -245,7 +244,9 @@ def init_workspace(task_dir: Path, work_root: Path,
     ws.mkdir()
 
     # scaffold files at their task-relative paths (the goal text references
-    # them, e.g. target/derive.py) + the init target under bins/
+    # them, e.g. target/derive.py) + the init target under bins/.
+    # BYTE-exact copy: native-ladder scaffolds are ELF binaries — a text
+    # decode here crashed the whole task (the bare-arm campaign's gap class)
     ws_bins = ws / "bins"
     ws_bins.mkdir()
     entry = task["workspace_scaffold"]["entry"]
@@ -253,9 +254,8 @@ def init_workspace(task_dir: Path, work_root: Path,
         src = task_dir / rel
         dst = ws / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-    (ws_bins / Path(entry).name).write_text(
-        (task_dir / entry).read_text(encoding="utf-8"), encoding="utf-8")
+        dst.write_bytes(src.read_bytes())
+    (ws_bins / Path(entry).name).write_bytes((task_dir / entry).read_bytes())
 
     answers = ws / ".k334-intake-answers.json"
     answers.write_text(json.dumps(
@@ -470,8 +470,17 @@ def harvest(workspace: Path, *, baseline_rounds: int = 0) -> dict:
 
 # -------------------------------------------------------------- extractor
 def _candidate_suffix(task: dict) -> str:
-    lang = tg.FAMILIES[task["family"]]["language"]
-    return {"go": ".go", "javascript": ".js", "python": ".py"}[lang]
+    """Candidate artifact suffix for the task's family — the literal
+    mirror of the checker's _validate_candidate contract (the checker
+    grades pure-python candidates for the native-ladder families, whose
+    registry rows carry arch strings like "c/arm64", not languages)."""
+    return {
+        "go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
+        "arm-native-kdf": ".py", "win-pe-kdf": ".py", "smc-x86": ".py",
+        "mod-crypto-native": ".py", "web-pack-sign": ".js",
+        "net-verify-license": ".js", "req-sign": ".js",
+        "mod-crypto-js": ".js",
+    }[task["family"]]
 
 
 def extract_candidate(workspace: Path, task: dict) -> Path | None:
@@ -512,7 +521,28 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     suffix = _candidate_suffix(task)
     deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
 
-    ws = init_workspace(tdir, out / "workspaces")
+    try:
+        ws = init_workspace(tdir, out / "workspaces")
+    except RuntimeError as exc:
+        # structured SKIP row, never a tier-wide crash: one unit's init
+        # failure must not take the other units' measurement with it
+        row = ds.results_row(
+            task_id=tdir.name, family=task["family"],
+            checker_kind=task["checker"]["kind"],
+            metrics={m: 0 for m in ds.REQUIRED_METRICS},
+            verdict="SKIP",
+            failures=[{"code": "BAD_TASK",
+                       "detail": str(exc)[-1500:]}],
+            evidence_ref="", arm=ARM)
+        row["loop"] = {"status": "init_failed", "metrics": {},
+                       "checker_rc": 2, "session": {
+                           "returncode": None, "wall_s": 0.0,
+                           "timed_out": False,
+                           "session_cost": None},
+                       "workspace": None, "deliverable": None,
+                       "prompt_sha256": None}
+        print(f"VERDICT {tdir.name} SKIP (loop: init_failed)")
+        return row
     baseline_rounds = count_snapshot_rows(ws)
     prompt = build_loop_prompt(tdir, task, deliverable_rel)
     rec = launch_session(ws, prompt, budget_usd=budget_usd,
