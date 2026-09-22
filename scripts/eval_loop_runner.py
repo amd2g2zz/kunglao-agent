@@ -112,6 +112,22 @@ def _fail(msg: str) -> None:
     print("VERDICT REFUSED", file=sys.stderr)
 
 
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276, house shape of
+# acceptance_check.py): the fail-open probe faces below must stay silent-
+# swallow-free (silent_except ratchet) without ever crashing the host loop.
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] eval_loop_runner WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
+
+
 # ----------------------------------------------------------------- launch
 def default_plugin_dir() -> Path:
     """The repo root (holds .claude-plugin/plugin.json)."""
@@ -196,8 +212,11 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     except (AttributeError, ProcessLookupError, PermissionError, OSError):
         try:
             proc.kill()
-        except OSError:
-            pass
+        except OSError as exc:
+            # best-effort fallback: the reaper lost the race (process already
+            # gone / not ours) — name it on stderr, never crash the session
+            # harvest path (fail-open, silent-swallow-free)
+            warn("kill_tree", f"fallback proc.kill failed: {exc}")
 
 
 def _session_cost(stdout_text: str) -> dict | None:
@@ -398,8 +417,11 @@ def _oracle_face(ws: Path) -> tuple[int, int]:
             total += 1
             if str(case.get("status") or "").lower() == "pass":
                 green += 1
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        # no oracle signal available -> (0, 0) (fail-open), but the reason
+        # is named on stderr, never swallowed silently
+        warn("oracle_face", f"oracle-status.json unreadable: "
+                            f"{type(exc).__name__}: {exc}")
     return green, total
 
 
@@ -412,8 +434,10 @@ def _proven_face(ws: Path) -> int:
         for c in (reg.get("claims") or []):
             if str((c or {}).get("status") or "").upper() == "PROVEN":
                 proven += 1
-    except (OSError, yaml.YAMLError):
-        pass
+    except (OSError, yaml.YAMLError) as exc:
+        # unreadable register -> zero PROVEN (fail-open), reason on stderr
+        warn("proven_face", f"claim-register.yaml unreadable: "
+                            f"{type(exc).__name__}: {exc}")
     return proven
 
 

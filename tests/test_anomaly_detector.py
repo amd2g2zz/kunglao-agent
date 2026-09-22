@@ -193,6 +193,18 @@ def test_red7_convergence_drain_blocks_on_anomaly(tmp_path):
     ws = tmp_path / "ws"
     # No claim-register.yaml -> no open claims -> reaches DRAIN stage.
     # PROVEN high-score fact triggers ANOMALY_DETECTED.
+    # task_spec.yaml carries the init intake stamp (feature-unused
+    # primary_questions + the three oracle anchors): decide() hard-refuses
+    # contract-empty workspaces (EXIT_EMPTY_WORKSPACE, the #306 emptiness
+    # grade), so the stamp keeps this facts-only fixture on the decided-state
+    # path the anomaly observation gate lives on.
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "task_spec.yaml").write_text(
+        "primary_questions: []\n"
+        "goal_verbatim: retrieve the family config\n"
+        "success_criterion: family named with reproduction evidence\n"
+        "verification_method: static\n",
+        encoding="utf-8")
     _fact(ws, "F001", "PROVEN", "C-1", "rare syscall 0xFE nonstandard qword",
           extra="```yaml\nsample_refs:\n  - bins/odd.exe\n```")
     decision = decide(ws)

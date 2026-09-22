@@ -25,9 +25,25 @@ if str(SCRIPTS) not in sys.path:
 
 # ---------- helpers (mirror test_decide_regression_anchor.py patterns) ----------
 
+# The intake stamp (what kunglao-init writes before every scaffold write):
+# primary_questions feature-unused + the three non-blank oracle anchors.
+# decide() hard-refuses contract-empty workspaces (EXIT_EMPTY_WORKSPACE, the
+# #306 emptiness grade — the router face must never read a verdict off a
+# rotted workspace); these fixtures exercise the hypothesis gate at DRAIN,
+# so they carry the stamp to stay on the decided-state path. The anchors are
+# consulted only by the emptiness probe — the decision machine is untouched.
+_TASK_SPEC_STAMP = (
+    "primary_questions: []\n"
+    "goal_verbatim: retrieve the family config\n"
+    "success_criterion: family named with reproduction evidence\n"
+    "verification_method: static\n"
+)
+
+
 def _ws(base: Path, name: str) -> Path:
     ws = base / name
     (ws / "runs").mkdir(parents=True, exist_ok=True)
+    (ws / "task_spec.yaml").write_text(_TASK_SPEC_STAMP, encoding="utf-8")
     return ws
 
 
