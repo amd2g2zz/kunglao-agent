@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: d1961eeadcc7354dd8d34ce0198661cbb10d3c13fa62359ca400cf42e8357487
+    sha256: 331f09320657666ef41f58e2b58cd37f24666d9d89b31a24ea248c2693ed2458
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -263,7 +263,7 @@ files:
   - src: scripts/context_budget.py
     dest: .claude/scripts/context_budget.py
     kind: scaffold
-    sha256: d29c78bcf56466a5e2ea6979a1739eb43416b9d175d2153a42f515a072692c65
+    sha256: 51144ba826641ff621b890dbde144546ba865e481663f89dea17f7aa6593295f
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
@@ -991,7 +991,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: a16de0824764b81e13b1d83a820f9102da16c944055370d61fb0fcfa2e687674
+    sha256: 0213d447e46940719e0a4181c77f605ec446ebe1538730067a32bb77819c95c2
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset

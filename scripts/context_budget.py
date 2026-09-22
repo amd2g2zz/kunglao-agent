@@ -62,7 +62,9 @@ CAP_TOTAL_BYTES = int((BASELINE_CONSTITUTION_BYTES + BASELINE_TEMPLATE_BYTES) * 
 # standing until the owner-reviewed cut pass lands; THIS constant is the
 # live teeth — any growth fails tests/test_context_budget_300.py.
 # Raising it requires an owner citation here.
-WS1_STANDING_TOTAL_BYTES = 53_751  # owner anchor: issue 300 WS1 audit
+# +1087B: issue-341 mandated runtime-field doc block in agents/kunglao-worker.md
+# (orchestrator dispatch, 2026-09-22); prior anchor: issue 300 WS1 audit
+WS1_STANDING_TOTAL_BYTES = 54_838
 
 # ---- owner-approved exceptions (EMPTY by default) ------------------------
 #
