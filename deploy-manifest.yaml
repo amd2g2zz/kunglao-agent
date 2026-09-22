@@ -367,7 +367,7 @@ files:
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
-    sha256: c0ad4be3ca4fed53d27c5fe3c2a860d8236d934a0bbe2868825c42f17c6294a3
+    sha256: 99d1cb03d2a70bfe6820a719ea7371c79fc7f09195f5e98e747d89873f070bf4
   - src: scripts/eval_crypto.py
     dest: .claude/scripts/eval_crypto.py
     kind: scaffold
