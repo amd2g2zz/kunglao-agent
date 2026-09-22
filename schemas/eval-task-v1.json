@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "eval-task-v1.json",
-  "title": "kunglao-agent #299 eval task unit (eval-v1, smoke tier)",
+  "title": "kunglao-agent #299/#332 eval task unit (eval-v1 smoke / eval-v1.1 release)",
   "description": "One eval task = workspace scaffold + the three #191 anchors (goal_verbatim / success_criterion / verification_method) + a mechanical checker contract (runner-style: METRIC emission, arithmetic verdict, evidence archive) + the metric set (ttc_seconds, dispatch_count, pass_at_k_contribution, converged). Smoke tier carries constructed targets only — ground truth by construction, held out from the #298 distillation corpus.",
   "type": "object",
   "required": ["schema", "task_id", "eval_version", "tier", "source", "family", "seed", "anchors", "workspace_scaffold", "checker", "ground_truth", "contamination"],
@@ -10,7 +10,7 @@
     "task_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" },
     "eval_version": { "type": "string", "enum": ["eval-v1", "eval-v1.1"] },
     "tier": {
-      "description": "smoke = 3-5 constructed targets, minutes-scale, runnable per release train. release (#332) = the WEB/NET packaging-ladder families (web-pack-sign, net-verify-license, req-sign, mod-crypto-js) on the mod-crypto generator core, anti-debug stamped, minutes-scale. historical-replay (#294) and public-corpus are later lanes.",
+      "description": "smoke = 3-5 constructed targets, minutes-scale, runnable per release train. release (#332) = one ladder, two halves: the NATIVE families (arm-native-kdf, win-pe-kdf, smc-x86, mod-crypto-native — real arm64/PE/x86_64 artifacts, rungs L0/L1/L2, +L2p UPX) and the WEB/NET packaging-ladder families (web-pack-sign, net-verify-license, req-sign, mod-crypto-js) on the shared mod-crypto generator core, anti-debug stamped, minutes-scale. historical-replay (#294) and public-corpus are later lanes.",
       "enum": ["smoke", "release"]
     },
     "source": {

@@ -59,6 +59,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import eval_dataset as ds
+import eval_native_targets as ntg
 import eval_targets as tg
 
 LINE_JSON = re.compile(r"^\s*\{.*\}\s*$")
@@ -78,7 +79,10 @@ spec.loader.exec_module(mod)
 with open(sys.argv[2], encoding="utf-8") as fh:
     probes = json.load(fh)
 for p in probes["probes"]:
-    print(json.dumps({"i": p["i"], "out": mod.derive(bytes(p["input"]))}))
+    out = mod.{entry}(bytes(p["input"]))
+    if isinstance(out, (bytes, bytearray)):
+        out = bytes(out).hex()
+    print(json.dumps({"i": p["i"], "out": out}))
 '''
 
 _JS_HARNESS = '''\
@@ -141,9 +145,9 @@ class Refusal(Exception):
 
 
 # --------------------------------------------------------------- unit loading
-def load_unit(task_ref: str) -> tuple[Path, dict, dict]:
+def load_unit(task_ref: str, tier: str | None = None) -> tuple[Path, dict, dict]:
     try:
-        tdir = ds.resolve_task_dir(task_ref)
+        tdir = ds.resolve_task_dir(task_ref, tier=tier)
     except FileNotFoundError as exc:
         raise Refusal("BAD_TASK", str(exc)) from exc
     task = ds.load_task(tdir)
@@ -159,10 +163,20 @@ def load_unit(task_ref: str) -> tuple[Path, dict, dict]:
     return tdir, task, gt
 
 
+def _family_meta(family: str) -> dict:
+    """The family registry row: #299 smoke families live in eval_targets,
+    the #332 native families in eval_native_targets."""
+    if family in ntg.FAMILIES:
+        return ntg.FAMILIES[family]
+    return tg.FAMILIES[family]
+
+
 def _validate_candidate(path: Path, family: str) -> None:
     if not path.is_file():
         raise Refusal("BAD_CANDIDATE", f"candidate not found: {path}")
     want = {"go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
+            "arm-native-kdf": ".py", "win-pe-kdf": ".py", "smc-x86": ".py",
+            "mod-crypto-native": ".py",
             "web-pack-sign": ".js", "net-verify-license": ".js",
             "req-sign": ".js", "mod-crypto-js": ".js"}[family]
     if path.suffix != want:
@@ -216,11 +230,18 @@ def _probe_set(family: str, gt: dict) -> list[dict]:
             probes.append({"i": p["i"], "input": p["input"]})
     minted = gt.get("minted_probe_count", 0)
     if minted:
-        probes += tg.minted_probes(family, gt["seed"], minted)
+        if family in ntg.FAMILIES:
+            probes += ntg.minted_probes(family, gt["seed"], minted)
+        else:
+            probes += tg.minted_probes(family, gt["seed"], minted)
     return probes
 
 
 def _expected(family: str, gt: dict, probes: list[dict]) -> dict[int, object]:
+    if family in ntg.FAMILIES:
+        cfg = {"seed": gt["seed"]}
+        return {p["i"]: ntg.model_output(family, cfg, p["i"], p["input"])
+                for p in probes}
     cfg = tg.model_cfg(gt)
     out = {}
     for p in probes:
@@ -256,6 +277,37 @@ def _write_probes(family: str, tdir: Path, outdir: Path,
     return probes_file, stdin_text
 
 
+def _invocation(family: str, tdir: Path, exe: str, candidate: Path,
+                probes: list[dict],
+                outdir: Path) -> tuple[list, str | None, Path]:
+    """Per-family candidate invocation: command, stdin text, probes file
+    (the merged #332 surface: go stdin face, request + sign-bytes js
+    harnesses, native/py entry harnesses)."""
+    probes_file, go_stdin = _write_probes(family, tdir, outdir, probes)
+    if family == "go-arx":
+        # input-agnostic seam: the candidate reads {"i","in"} lines on
+        # stdin; the checker drives published + freshly minted inputs
+        # through it (inputs only on the wire; expected outputs stay
+        # checker-side, recomputed from the seed model — stored nowhere)
+        return [exe, "run", str(candidate)], go_stdin, probes_file
+    if family in REQUEST_FAMILIES:
+        harness = outdir / f"harness-{tdir.name}.js"
+        harness.write_text(_JS_REQUEST_HARNESS, encoding="utf-8")
+    elif family in SIGN_BYTES_FAMILIES:
+        harness = outdir / f"harness-{tdir.name}.js"
+        harness.write_text(_JS_HARNESS, encoding="utf-8")
+    else:
+        harness = outdir / f"harness-{tdir.name}.py"
+        entry = (ntg.CANDIDATE_ENTRIES[family]
+                 if family in ntg.FAMILIES else "derive")
+        harness.write_text(_PY_HARNESS.replace("{entry}", entry),
+                           encoding="utf-8")
+    return [exe, str(harness), str(candidate), str(probes_file)], \
+        None, probes_file
+
+
+
+
 def replay_face(family: str, tdir: Path, gt: dict, candidate: Path,
                 outdir: Path, toolchain: str) -> tuple[int, int, float, list[dict]]:
     """Run the candidate over the probe set; return (matched, count, ttc,
@@ -267,27 +319,8 @@ def replay_face(family: str, tdir: Path, gt: dict, candidate: Path,
     candidate = Path(candidate).resolve()
     probes = _probe_set(family, gt)
     expected = _expected(family, gt, probes)
-    probes_file, stdin_text = _write_probes(family, tdir, outdir, probes)
-
-    if family == "go-arx":
-        # input-agnostic seam: the candidate reads {"i","in"} lines on
-        # stdin; the checker drives published + freshly minted inputs
-        # through it (inputs only on the wire; expected outputs stay
-        # checker-side, recomputed from the seed model — stored nowhere)
-        cmd = [exe, "run", str(candidate)]
-    else:
-        stdin_text = None
-        ext = "js" if (family in REQUEST_FAMILIES or
-                       family in SIGN_BYTES_FAMILIES) else "py"
-        harness = outdir / f"harness-{tdir.name}.{ext}"
-        if family in REQUEST_FAMILIES:
-            harness.write_text(_JS_REQUEST_HARNESS, encoding="utf-8")
-        else:
-            harness.write_text(
-                _JS_HARNESS if family in SIGN_BYTES_FAMILIES else _PY_HARNESS,
-                encoding="utf-8")
-        cmd = [exe, str(harness), str(candidate), str(probes_file)]
-
+    cmd, stdin_text, probes_file = _invocation(family, tdir, exe, candidate,
+                                               probes, outdir)
     notes: list[dict] = []
     started = time.time()
     try:
@@ -489,10 +522,11 @@ def license_face(tdir: Path, gt: dict, candidate: Path, outdir: Path,
 
 
 # -------------------------------------------------------------------- run
-def run(task_ref: str, candidate: Path, out: Path | None = None) -> tuple[int, dict]:
+def run(task_ref: str, candidate: Path, out: Path | None = None,
+        tier: str = "smoke") -> tuple[int, dict]:
     """Check one task; returns (exit_code, evidence_dict). Emits the
     METRIC/FAILURE/EVIDENCE/VERDICT stream on stdout."""
-    tdir, task, gt = load_unit(task_ref)
+    tdir, task, gt = load_unit(task_ref, tier=tier)
     family = task["family"]
     checker = task["checker"]
     oracles = checker.get("oracles", [])
@@ -518,7 +552,7 @@ def run(task_ref: str, candidate: Path, out: Path | None = None) -> tuple[int, d
     # ---- replay face ----
     replay_armed = any(o in oracles for o in ("pair-match", "replay-roundtrip"))
     if replay_armed:
-        toolchain = tg.FAMILIES[family]["toolchain"]
+        toolchain = _family_meta(family)["toolchain"]
         try:
             if family == "net-verify-license":
                 pair_matched, pair_count, ttc, notes = license_face(
@@ -594,6 +628,9 @@ def main(argv: list[str] | None = None) -> int:
                     "emission, arithmetic verdict, evidence archive).")
     ap.add_argument("--task", required=True,
                     help="task id or task-unit directory")
+    ap.add_argument("--tier", default=None,
+                    choices=sorted(ds.TIERS),
+                    help="tier to resolve a bare task id against (explicit task dirs bypass this)")
     ap.add_argument("--candidate", required=True,
                     help="candidate artifact (the arm's re-implementation; "
                          "self-check runs the constructed target itself)")
@@ -601,7 +638,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="evidence out-dir (default: runs/eval/<task_id>/)")
     args = ap.parse_args(argv)
     try:
-        rc, _ = run(args.task, Path(args.candidate), args.out)
+        rc, _ = run(args.task, Path(args.candidate), args.out,
+                    tier=args.tier)
     except Refusal as exc:
         print(f"FAILURE code={exc.code} detail={exc.detail}")
         print("VERDICT REFUSED")

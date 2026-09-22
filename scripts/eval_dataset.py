@@ -39,7 +39,11 @@ ROOT = Path(__file__).resolve().parents[1]
 EVAL_ROOT = ROOT / "eval"
 
 # ---- versioning ----------------------------------------------------------
-# per-tier corpus versions live in TIER_EVAL_VERSION (below, vocabulary)
+EVAL_VERSION = "eval-v1"
+# additive version ladder: v1 = #299 smoke tier; v1.1 = #332 release tier
+# (native families + web/net packaging-ladder families on the shared
+# mod-crypto core). A landed version is never mutated.
+EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1")
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -71,9 +75,12 @@ VERIFICATION_METHODS: tuple[str, ...] = (
 TIERS: tuple[str, ...] = ("smoke", "release")
 # per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
 # release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
-# never mutated in place per the eval version rules)
+# never mutated in place per the eval version rules). Both spellings are
+# load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
+# surface; EVAL_TIER_VERSION is the release-tier alias kept for the
+# native-lane tests/runner.
 TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1"}
-EVAL_VERSION = "eval-v1"
+EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match", "replay-roundtrip")
 ORACLE_KINDS: tuple[str, ...] = CHECKER_KINDS
@@ -128,6 +135,10 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
         errors.append(f"schema must be kunglao-eval-task/1, got {task.get('schema')!r}")
     if not task.get("task_id") or not isinstance(task.get("task_id"), str):
         errors.append("task_id must be a non-empty string")
+    if task.get("eval_version") not in EVAL_VERSIONS:
+        errors.append(
+            f"eval_version must be one of {EVAL_VERSIONS}, "
+            f"got {task.get('eval_version')!r}")
     tier = task.get("tier")
     if tier not in TIERS:
         errors.append(f"tier must be one of {TIERS}, got {tier!r}")
@@ -139,9 +150,10 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
     source = task.get("source")
     if source not in SOURCES:
         errors.append(f"source must be one of {SOURCES}, got {source!r}")
-    if tier == "smoke" and source != "constructed":
+    if tier in ("smoke", "release") and source != "constructed":
         errors.append(
-            f"smoke tier carries constructed targets only, got source={source!r}")
+            f"tier {tier} carries constructed targets only, got "
+            f"source={source!r}")
     if not isinstance(task.get("seed"), int):
         errors.append("seed must be generator-stamped (int)")
 

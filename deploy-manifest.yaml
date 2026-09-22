@@ -363,23 +363,35 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: 67774472d8dc40e4e54643b9cdd580fb9562bebb7043fc718f8a0df6ea84f35f
+    sha256: 1834ac2e3163824a2a1db5bf975414638faa40ce4a2982ecd0855989c38a7c9c
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
     sha256: c0ad4be3ca4fed53d27c5fe3c2a860d8236d934a0bbe2868825c42f17c6294a3
+  - src: scripts/eval_crypto.py
+    dest: .claude/scripts/eval_crypto.py
+    kind: scaffold
+    sha256: 7c37cd9d9132aa3dc7648cb99fdc7a53cd094a084f6dcd3bd5ecc3af427107a7
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 4018429bfa3e7d2caa7219387c7d301f92ec681134d48c1f68d5459da3c2cc7c
+    sha256: 4fefbaccefe3caae95c2399e7844167a81a609be8c39e9a1d3df4246ae615ecb
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 3a1788621701bc0acbecf0737f95c85e9ad1fa67549a33a3cd80f8a633aa1382
+    sha256: 0c3194eb2bfa67f483569c2ff1520426f7eb17422dca4f0f7909dd7f99c03c5d
+  - src: scripts/eval_native_sources.py
+    dest: .claude/scripts/eval_native_sources.py
+    kind: scaffold
+    sha256: df7470a20714a2706737441c63d6061038a5aaf0784b1617e5374a2d6fd314e2
+  - src: scripts/eval_native_targets.py
+    dest: .claude/scripts/eval_native_targets.py
+    kind: scaffold
+    sha256: 26cb9f4d2b6324dbe7048b354c12bba42786dc35606117e56ee33abd148caeb7
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
-    sha256: 773f51966efe3485c76886e53e2747b584a1f1a0ce9aa0b4b250d2f138b93662
+    sha256: 1c9786215aae3764cb3cdc8cc0597aa1fe9a3bbb229207c2854475cd6ef7367f
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
@@ -1423,7 +1435,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 1c9dfd7f0ac7ed3d199f4ff9e72c308f8ee1a2c64e7494f3f5f7284d885384cb
+    sha256: f03a520e89ccf8af114d612a8898d771bc3a0eb869512b7008c81f9fcb38c19f
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
