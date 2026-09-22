@@ -359,7 +359,7 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: 32b47c21e5f9dfa49aa0ad7ef0674d693635a824295630f319b10eecec8c4a64
+    sha256: 67774472d8dc40e4e54643b9cdd580fb9562bebb7043fc718f8a0df6ea84f35f
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
@@ -367,7 +367,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 1132c00de167e7f3a96920b14164ef36f4fd061819db6db24cbae7efc05982e5
+    sha256: 4018429bfa3e7d2caa7219387c7d301f92ec681134d48c1f68d5459da3c2cc7c
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
@@ -375,7 +375,7 @@ files:
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
-    sha256: f0203ac1a951908f6b1274b6f90f864df273e6cdb1acf365c10c169e5997492f
+    sha256: f768c8d4d7c63d0ce42bdb1249d5b384c47e2f5a9903226d49b7a32f11e80f1f
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
