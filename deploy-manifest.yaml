@@ -211,7 +211,7 @@ files:
   - src: scripts/blocker_lint.py
     dest: .claude/scripts/blocker_lint.py
     kind: scaffold
-    sha256: c48521c01eef9edf9f51f4babfd908d6e458aa58dba33ef4b6016743190845b4
+    sha256: 8a866f1aa0643b1b026e1b5b43ae0cd3324c0d7f7341c4d5bca1707e1e30bfb9
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -403,7 +403,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 6ddf7809e65c9a8148d68dcc3f7528b106195280586abc4904a1766f1bd1dd75
+    sha256: d63ee06305e77ce8688dd67dbe8b2ed86fce0fbf554fe8f8891835067d9bf82b
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -711,7 +711,7 @@ files:
   - src: scripts/premise_gate.py
     dest: .claude/scripts/premise_gate.py
     kind: scaffold
-    sha256: 5c9582428526f07b95c6edf5bb80af03a80bd0225725a1ce296d67d65a19477f
+    sha256: 263a51af7abdbbb8daa23f27bd60ec88916a05e7b0d09d0913cf5cd78cc49d02
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
@@ -1443,7 +1443,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: fea86d4bfefd5f8f91948c132b533ffcdbcbd35ac03e9d812a136a2c16d86dc3
+    sha256: 5e239a358a513e554bdbba6f9f71d7ada7125752f2a0e2888f3e0dffac5a1e82
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

@@ -123,12 +123,14 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `backtrack_gate.py` | stuck worker backtrack decision | hooks, lib(1), tests |
 | `backtrack_loop.py` | 回溯环宿主 (#882) — 三触点（dispatch 微回溯 O(1) 前车之鉴块 / register_proven_gate 结算回放 runs/<ts>-retro-<claim>.md / heartbeat_tick 策略回溯门控）+ 四产出（结算行消费 / 链回放 / 模式报告+hypothesis_store 假设种子 / 修订提案议程 retro-agenda-*.md，**不自动执行**）+ 座舱三字段（backtrack_lag/unattributed_rate/pending_proposals → cockpit_summary → statusline 快照）；kunglao-decide 经 --policy 挂入复活 | heartbeat_tick, hooks/dispatch_gate, scripts/register_proven_gate, statusline_snapshot, tuition_curve, tests |
 | `blind_gate.py` | blind-verification gate on promotion | hooks, lib(1), tests |
+| `blocker_lint.py` | blocker schema v2 lint + env-attribution evidence gate (issue 340): mandatory observed/attributed/probe_evidence/expires, whitespace-normalized pattern set, error-text-alone rejected; the checker behind hooks/write_guard.py's blockers carrier | hooks/write_guard, tests |
 | `calibration_face.py` | #134 rho/Platt calibration cockpit face, SINGLE SOURCE, PRODUCE ONLY (no gating; consumption is v0.2) — offline aggregation over the settled (rho, z) ledger pairs (tuition_curve contract: ledger-only, tolerant reads, 4-dp rounding): reliability bins (mean rho vs observed per equal-width bin), ECE, current_gap = |rho−z| of the latest settled pair, platt = the single-sourced rho_checkpoint.fit_platt coefficients; `status` = ACTIVE (settled anchors calibrate) / DORMANT (sampler fires, pairs never settle — the loud #127 finding) / NO_DATA (sampler never ran); fail-open, never writes | rho_verifier (pairs replay), rho_checkpoint (fit_platt), statusline_snapshot, tests |
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
 | `decision_lint.py` | pre-action compatibility lint (#213) — caller-supplied facts gate the next action: BLOCK on known-incompatible (package, fact) pairs, OK-with-note on unknowns; pure, never probes the environment | skills docs, tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
+| `premise_gate.py` | premise epistemics (issue 340): premise-probe reconciliation (SUSPECT append-only marking + one-shot on-demand capability re-probe via toolchain --capability + env_premise_contradiction event) + premise expiry sweep (INVALIDATED(stale) after expires ticks); mechanism registry entry `premise_expiry`; CLI always exit 0 | hooks/worker_budget_sinks, mechanism scheduler, tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
 | `premature_termination_detect.py` | premature-done declaration detector | lib(1), tests |

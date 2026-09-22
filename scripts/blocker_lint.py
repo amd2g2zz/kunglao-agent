@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""blocker_lint.py — blocker schema v2 lint + env-attribution evidence gate (#340).
+"""blocker_lint.py — blocker schema v2 lint + env-attribution evidence gate (issue 340).
 
-The mechanical tooth for the layer-diagnosis doctrine at the exact write
-point where misattribution is born (issue #340 E1/E6): a blocker is a
+The mechanical enforcement for the layer-diagnosis doctrine at the exact write
+point where misattribution is born (audit points E1/E6): a blocker is a
 premise other agents will inherit as ground truth, so the write carries a
 schema — observed bytes, an attributed diagnosis, differential probe
 evidence for any environment-capability verdict, and an expiry.
@@ -42,7 +42,7 @@ from pathlib import Path
 import yaml
 
 # ---------------------------------------------------------------------------
-# The env-capability attribution pattern set (issue #340: "build a small
+# The env-capability attribution pattern set (contract: "build a small
 # pattern set with tests"). A match means the text asserts an environment
 # capability verdict — the class of claim that misdiagnosed invocation
 # errors love ("no root", "frida unavailable"). Pinned by
@@ -88,7 +88,7 @@ _WS_RUN = re.compile(r"\s+")
 
 def _normalize(text: str) -> str:
     """Lowercase + collapse whitespace runs to single spaces (review r1,
-    #340: `cannot  be used` / tab / newline variants must not defeat the
+    the review finding: `cannot  be used` / tab / newline variants must not defeat the
     pattern set — every phrase match and probe-marker search runs on the
     normalized text)."""
     return _WS_RUN.sub(" ", (text or "").lower())
@@ -154,7 +154,7 @@ def parse_expires(value) -> "int | datetime | None":
 def lint_blocker_text(text: str) -> list[str]:
     """Violations of the v2 blocker schema for one post-image. [] = clean.
 
-    Ruling recorded for review (issue #340 A4): the four v2 fields are
+    Ruling recorded for review (scope A4): the four v2 fields are
     mandatory on EVERY new blocker write — B1a/B2/orphan blockers also
     observe something and also carry a clock — while `probe_evidence` is
     additionally required to be NON-EMPTY exactly when the text makes an
@@ -165,19 +165,19 @@ def lint_blocker_text(text: str) -> list[str]:
             "schema v2 required (no-backcompat ruling 2026-09-01): YAML "
             "frontmatter missing or unparseable — legacy-shape blockers are "
             "rejected on write; rewrite from templates/state/blocker.md with "
-            "observed/attributed/probe_evidence/expires (#340)"]
+            "observed/attributed/probe_evidence/expires (issue 340)"]
     violations: list[str] = []
     for field in ("observed", "attributed"):
         if field not in meta:
             violations.append(
-                f"v2 field `{field}` missing — mandatory (#340 schema v2)")
+                f"v2 field `{field}` missing — mandatory (schema v2)")
         elif not str(meta.get(field) or "").strip():
             violations.append(
                 f"v2 field `{field}` empty — mandatory and non-empty "
                 "(exact command + stderr bytes / layer diagnosis)")
     if "probe_evidence" not in meta:
         violations.append(
-            "v2 field `probe_evidence` missing — mandatory (#340 schema v2)")
+            "v2 field `probe_evidence` missing — mandatory (schema v2)")
     phrases = match_env_attribution(text)
     pe_text = str(meta.get("probe_evidence") or "").strip()
     if phrases and not pe_text:
@@ -185,17 +185,17 @@ def lint_blocker_text(text: str) -> list[str]:
             "environment-capability attribution ("
             + ", ".join(phrases)
             + ") without `probe_evidence` — error text alone is never "
-            "sufficient evidence (#340); paste the differential probe "
+            "sufficient evidence; paste the differential probe "
             "output that justifies the attribution (e.g. `su -c id` stdout)")
     elif phrases and _is_error_text_evidence(pe_text):
         violations.append(
             "`probe_evidence` carries only the error text back — a real "
             "differential probe output is required (command + output bytes, "
-            "#340); error text alone is never sufficient evidence")
+            "issue 340); error text alone is never sufficient evidence")
     if "expires" not in meta:
         violations.append(
             "v2 field `expires` missing — mandatory (tick count or ISO "
-            "timestamp, #340)")
+            "timestamp, issue 340)")
     elif parse_expires(meta.get("expires")) is None:
         violations.append(
             "`expires` unparseable — use a tick count (int > 0) or an ISO "
@@ -207,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="blocker_lint.py",
         description="blocker schema v2 lint + env-attribution evidence "
-                    "gate (#340); the checker behind hooks/write_guard.py")
+                    "gate); the checker behind hooks/write_guard.py")
     parser.add_argument("files", nargs="+", help="blocker .md files")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     bad = 0

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""premise_gate.py — premise-probe reconciliation + premise expiry (#340).
+"""premise_gate.py — premise-probe reconciliation + premise expiry (issue 340).
 
 A locally-coherent false belief can only be broken by an information
-channel the belief-holder did not generate (#340 design axiom). This
+channel the belief-holder did not generate (the design axiom). This
 module routes that channel; nobody "realizes" anything:
 
 B — premise-probe reconciliation (wired at the dispatch seam,
@@ -16,7 +16,7 @@ records disagree and the PROBE wins:
   1. the premise is marked SUSPECT by an APPEND-ONLY history line in the
      blocker file (never a silent rewrite);
   2. a ONE-SHOT on-demand capability re-probe is scheduled
-     (runs/.env-reprobe-pending.json; consumed through the #474 on-demand
+     (runs/.env-reprobe-pending.json; consumed through the on-demand
      channel — scripts/toolchain.py --capability — never a reinvented
      probe);
   3. the contradiction is emitted to the event ledger as the registered
@@ -73,7 +73,7 @@ DEFAULT_EXPIRY_TICKS = 12
 REPROBE_MAX_ATTEMPTS = 3
 REPROBE_TIMEOUT_S = 50  # inside the scheduler runner's 60s window
 
-from harness_common import utc_now_z as utc_now  # noqa: E402  # #863 Family F
+from harness_common import utc_now_z as utc_now  # noqa: E402  single-source stamp
 
 # premise text → capability keyword map. KEYED BY the `_env_caps_needed`
 # vocabulary (hooks/worker_budget_sinks) — that function is the single
@@ -159,7 +159,7 @@ def mark_suspect(ws: Path, premise_stem: str, cap: str, probe_ts: str,
             f"env_premise_contradiction: premise claims `{cap}` unavailable, "
             f"but runs/env-state.json recorded `{cap}` PASS "
             f"(probe {probe_ts or 'ts-unreadable'}) — probe wins; "
-            "one-shot capability re-probe scheduled (#340)"
+            "one-shot capability re-probe scheduled (issue 340)"
             + (f"; {detail}" if detail else ""))
     try:
         with p.open("a", encoding="utf-8") as f:
@@ -176,7 +176,7 @@ def schedule_reprobe(ws: Path, caps: set[str], reason: str,
                      blocker_stems: list[str]) -> Path:
     """Merge `caps` into the one-shot pending file (idempotent per cap —
     one pending request carries every contradicting capability until the
-    consumer executes it once through the #474 on-demand channel)."""
+    consumer executes it once through the on-demand channel)."""
     p = Path(ws) / REPROBE_PENDING_REL
     data: dict = {}
     try:
@@ -253,7 +253,7 @@ def _append_history(p: Path, text: str, line: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# B: one-shot re-probe consumer (the #474 on-demand channel)
+# B: one-shot re-probe consumer (the on-demand capability channel)
 # ---------------------------------------------------------------------------
 
 def _load_pending(ws: Path) -> dict | None:
@@ -298,7 +298,7 @@ def _default_runner(argv: list[str], timeout: int) -> tuple[int, str, str]:
 
 
 def _reprobe_argv(ws: Path, ptype: str) -> list[str]:
-    """The #474 on-demand capability channel — reused, never reinvented."""
+    """The on-demand capability channel — reused, never reinvented."""
     return [sys.executable, str(_SCRIPT_DIR / REPROBE_SCRIPT), str(ws),
             "--type", str(ptype), "--capability", "--json"]
 
@@ -311,7 +311,7 @@ def _reprobe_failure(ws: Path, p: Path, pending: dict, stems: list[str],
                        f"{attempts} attempt(s) (last rc={rc}: "
                        f"{(err or out)[:160]}) — premise stays SUSPECT; "
                        "run scripts/toolchain.py --capability manually "
-                       "(#340)")
+                       "(issue 340)")
         p.unlink(missing_ok=True)
         return {"ran": True, "outcome": "failed_consumed", "attempts": attempts}
     pending["attempts"] = attempts
@@ -335,8 +335,8 @@ def _reprobe_success(ws: Path, p: Path, stems: list[str],
         report = json.loads(out or "{}")
         if isinstance(report, dict) and report.get("overall_status"):
             status = str(report["overall_status"])
-    except ValueError:
-        pass
+    except ValueError as exc:
+        _warn("run_pending_reprobe", f"evidence json: {type(exc).__name__}: {exc}")
     _note_blockers(ws, stems, f"- re-probe {utc_now()}: capability re-probe "
                    f"completed: {status} (evidence runs/{ev_name}, via "
                    "toolchain.py --capability #474/#340) — reconcile the "
@@ -347,7 +347,7 @@ def _reprobe_success(ws: Path, p: Path, stems: list[str],
 
 
 def run_pending_reprobe(ws: Path, runner=None) -> dict:
-    """Execute the pending one-shot re-probe through the existing #474
+    """Execute the pending one-shot re-probe through the existing
     on-demand capability channel (scripts/toolchain.py --capability).
 
     `runner(argv, timeout) -> (rc, stdout, stderr)` is the injection seam

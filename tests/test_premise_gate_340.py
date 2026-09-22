@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Issue #340 scope B+C — premise-probe reconciliation gate + premise expiry.
+"""Issue 340 scope B+C — premise-probe reconciliation gate + premise expiry.
 
 B (reconciliation, the main blade): a dispatch needing capability X
 (`_env_caps_needed` vocabulary — single source) is reconciled against
 blockers/*.md env premises and runs/env-state.json. Premise claims X
 unavailable + env-state shows X PASS → premise marked SUSPECT (append-only),
-one-shot capability re-probe scheduled (#474 on-demand channel), event
+one-shot capability re-probe scheduled (on-demand capability channel), event
 `env_premise_contradiction` emitted — and the dispatch is NOT blocked.
 
 C (expiry): a v2 env-class blocker whose probe evidence has not refreshed
@@ -212,7 +212,7 @@ class TestPremiseReconciliation:
 
 
 # =====================================================================
-# B: one-shot re-probe consumer (the #474 on-demand channel)
+# B: one-shot re-probe consumer (the on-demand capability channel)
 # =====================================================================
 
 class TestReprobeConsumer:
@@ -225,7 +225,7 @@ class TestReprobeConsumer:
 
     def test_reprobe_via_existing_toolchain_channel(self, tmp_path):
         """The consumer must route through scripts/toolchain.py --capability
-        (the #474 on-demand channel) — never a reinvented probe."""
+        (the on-demand capability channel) — never a reinvented probe."""
         ws = _mk_ws(tmp_path)
         (ws / "analysis_state.txt").write_text(
             "project_type=windows\n", encoding="utf-8")
@@ -386,7 +386,7 @@ class TestPremiseExpiry:
         assert "INVALIDATED" not in blocker.read_text(encoding="utf-8")
 
     def test_registry_declares_premise_expiry_mechanism(self):
-        """Scope C lives in the #878 registry — trigger/cost_class/
+        """Scope C lives in the mechanism registry — trigger/cost_class/
         cockpit_signal all three, or the registry rejects."""
         import mechanism_scheduler as ms
         res = ms.validate_registry()

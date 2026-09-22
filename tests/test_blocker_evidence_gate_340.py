@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #340 scope A — blocker schema v2 + write-side evidence gate.
+"""Issue 340 scope A — blocker schema v2 + write-side evidence gate.
 
 Contract under test:
   A1. A blockers/*.md write carrying an environment-capability attribution
@@ -104,7 +104,7 @@ class TestEnvAttributionEvidenceGate:
         r = _run_guard(ws, _payload(ws, "Write", target, content=_v2_blocker()))
         assert r.returncode == RC_BLOCK, r.stderr
         assert "probe_evidence" in r.stderr
-        assert "#340" in r.stderr
+        assert "never sufficient" in r.stderr
 
     def test_env_attribution_body_without_field_rejected(self, tmp_path):
         """Attribution phrasing in the BODY with the field absent entirely."""
@@ -204,7 +204,7 @@ class TestNonEnvBlockersPass:
         assert r.returncode == RC_ALLOW, (bt, r.stderr)
 
     def test_blockers_stub_readme_passes(self, tmp_path):
-        """The #538 carriers stub is not a blocker record (mirrors
+        """The carriers stub (README) is not a blocker record (mirrors
         convergence_check._active_blockers' explicit skip)."""
         ws = _mk_ws(tmp_path)
         target = ws / "blockers" / "README.md"
