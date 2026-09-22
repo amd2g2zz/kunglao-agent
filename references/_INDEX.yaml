@@ -50,6 +50,7 @@ files:
   references/re-library/android/signing/native-sign-recovery.md: 59929cc294922c92d29c2ecb815863cab8547302c79e5aeeefb18a345196fa37
   references/re-library/android/signing/signature-check-bypass.md: 649be93b846682fe1608d478aa87819a100bf33364fc9c80692aef8012fb5917
   references/re-library/anti-analysis/catalog/anti-analysis.md: 0cfc71a76c06aa2610159ba12dd5f7e524d7bacde31f1065558d3c8e4e71d955
+  references/re-library/dynamic/rotation-characterization.md: 9c2704fc3ea74611a739b7d3e3b63663af3e18f74ffa6edaf38930fb8541ee6a
   references/re-library/languages/compiled/languages-compiled.md: 4ba5b98c4023333d88e5d51174edc5fcdef58a450bee6df0236fe86cbb1699d3
   references/re-library/languages/compiled/languages-go.md: d058807151a662a5192d15be3f753d96ed547d7b230525436ddbb19baf656a45
   references/re-library/languages/platforms/languages-platforms.md: 1ca19c9ad3dcbdf9eb2ae9a9dd9f51f36ced646441aa7a0275321e3776c7027a
