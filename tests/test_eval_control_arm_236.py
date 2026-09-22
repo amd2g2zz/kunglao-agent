@@ -349,3 +349,88 @@ class TestAbFace:
         assert rc == 0
         assert cmp_doc["arms"]["bare-llm"]["answer_rate"] == 0.0
         assert cmp_doc["arms"]["bare-llm"]["tasks"] == 1
+
+
+# ------------------------------------------- (f) native-tier runnability
+# The v0.1.6 bare-arm campaign ran the driver across the release tier and
+# found three pre-native-ladder gaps: the candidate suffix map keyed by
+# TARGET language (KeyError on every native family), a prompt face that
+# UnicodeDecodeErrors on binary targets, and a response-language face
+# that named the target language ("c/arm64") where the checker grades a
+# .py candidate. These pins keep all three honest.
+
+class TestCandidateSuffixParity:
+    def _tier_families(self, tier: str) -> dict:
+        return {ds.load_task(d)["family"]: d
+                for d in ds.iter_task_dirs(tier=tier)}
+
+    def test_tier_families_mapped_and_checker_accepted(self, tmp_path):
+        """_cand_suffix mirrors eval_checker._validate_candidate exactly:
+        for EVERY tier's families, the mapped suffix is one the checker
+        itself accepts (drift between the two maps = failure)."""
+        import eval_checker as chk
+
+        for tier in ds.TIERS:
+            families = self._tier_families(tier)
+            assert families, f"{tier} tier has no families"
+            for family, tdir in sorted(families.items()):
+                suffix = ca._cand_suffix(ds.load_task(tdir))
+                cand = tmp_path / f"{tier}-{family}-probe{suffix}"
+                cand.write_text("# probe\n", encoding="utf-8")
+                chk._validate_candidate(cand, family)  # raises on drift
+
+    def test_native_families_grade_python_candidates(self):
+        for family in ("arm-native-kdf", "win-pe-kdf", "smc-x86",
+                       "mod-crypto-native"):
+            assert ca.CAND_SUFFIX[family] == ".py"
+
+    def test_response_language_matches_candidate_contract(self):
+        """The prompt's response-language face follows the candidate
+        artifact the checker grades, never the target's implementation
+        language (native units ship c/arm64 targets, grade .py)."""
+        release = {d.name: d for d in ds.iter_task_dirs(tier="release")}
+        for tid in ("arm-kdf-l0", "win-kdf-l0"):  # native: python out
+            prompt = ca.build_bare_prompt(release[tid], ds.load_task(release[tid]))
+            assert "complete Python source file" in prompt
+        for tid in ("web-pack-sign-l0-v1", "req-sign-l1a-v1"):  # js out
+            prompt = ca.build_bare_prompt(release[tid], ds.load_task(release[tid]))
+            assert "complete JavaScript source file" in prompt
+
+
+class TestBinarySurfaceFace:
+    def test_build_bare_prompt_survives_binary_entry(self):
+        """arm-kdf-l0's scaffold entry is an ELF .so: the prompt face must
+        render it (not UnicodeDecodeError) and disclose the rendering."""
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        task = ds.load_task(tdir)
+        assert (tdir / task["workspace_scaffold"]["entry"]).read_bytes()[:4] \
+            == b"\x7fELF", "pin expects the binary target"
+        prompt = ca.build_bare_prompt(tdir, task)
+        assert "text rendering of the binary target" in prompt
+        assert "GOAL:" in prompt and "DELIVERABLE:" in prompt
+
+    def test_binary_render_truncation_is_recorded(self, monkeypatch):
+        """A cap-busted rendering must carry the truncation marker in the
+        text itself — never silent."""
+        class _BigProc:
+            stdout = "x" * (ca.BINARY_RENDER_CAP + 1000)
+            returncode = 0
+
+        monkeypatch.setattr(ca.subprocess, "run",
+                            lambda *a, **k: _BigProc())
+        out = ca.render_binary_surface(Path("/nonexistent"))
+        assert len(out) == ca.BINARY_RENDER_CAP + len(
+            f"\n[truncated at {ca.BINARY_RENDER_CAP} chars]")
+        assert f"[truncated at {ca.BINARY_RENDER_CAP} chars]" in out
+
+    def test_binary_render_tool_absence_is_disclosed(self, monkeypatch):
+        """Hosts without binutils (CI runners) must get an honest
+        disclosure in the text — the prompt stays gradeable, no crash."""
+        def _no_tool(*a, **k):
+            raise FileNotFoundError(2, "No such file or directory")
+
+        monkeypatch.setattr(ca.subprocess, "run", _no_tool)
+        out = ca.render_binary_surface(Path("/nonexistent"))
+        assert "[objdump unavailable on this host]" in out
+        assert "[strings unavailable on this host]" in out

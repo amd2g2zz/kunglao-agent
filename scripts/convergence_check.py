@@ -53,9 +53,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -74,6 +76,11 @@ from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 # STUCK_WORKERS_PRESENT path (no parallel detector, no second scan pass).
 import worker_death as _worker_death
 from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
+# #342: the VERIFY_STALE threshold (single source, liveness_policy #597) +
+# the tick interval that converts wall-clock age into the tick unit.
+from liveness_policy import (  # noqa: F401 — re-exported for the #342 face
+    TICK_INTERVAL_DEFAULT_MIN as _TICK_INTERVAL_MIN,
+    VERIFY_STALE_TICKS as _VERIFY_STALE_TICKS_DEFAULT)
 # #147: the Phase-0 goal operationalization validator (#128). Its declared
 # `generalization` bit is the coverage contract the DRAIN oracle face
 # enforces — convergence requires DECLARED oracle coverage.
@@ -224,6 +231,116 @@ def _partial_facts(workspace: Path):
         if any(s in status for s in PARTIAL_STATUSES):
             partial.append({"fact": parts[0], "status": parts[1]})
     return partial
+
+
+# ---- #342: partial-fact age (the VERIFY_STALE + verify_backlog source) ----
+
+_FACT_FM_CREATED_RE = re.compile(r"^created:\s*([^\n]+)", re.M)
+_FACT_FM_VERIFIED_RE = re.compile(r"^verified:\s*([^\n]+)", re.M)
+
+
+def _verify_stale_ticks() -> float:
+    """#342 threshold: env override at decision time (the
+    KUNGLAO_NOOP_BREAKER_N pattern), default from liveness_policy."""
+    raw = os.environ.get("KUNGLAO_VERIFY_STALE_TICKS")
+    if raw is None:
+        return float(_VERIFY_STALE_TICKS_DEFAULT)
+    try:
+        return float(raw)
+    except ValueError:  # a malformed env value keeps the conservative default
+        return float(_VERIFY_STALE_TICKS_DEFAULT)
+
+
+def _parse_fact_anchor(raw: str) -> datetime | None:
+    """Parse one frontmatter date into a naive-UTC datetime (None if not).
+
+    The template contract is an ISO DATE (`created: 2026-08-13`, field 5 of
+    the 12 mandatory fields); a full ISO datetime is accepted too. Naive
+    values are read as UTC (the template carries no zone); a trailing Z is
+    normalized for the 3.10 floor. Date granularity reads CONSERVATIVELY
+    stale (a fact is at most ~one day older than its written date says)."""
+    text = raw.strip().strip("'\"")
+    if not text or text.lower() == "pending":
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _fact_file_for(workspace: Path, fact_id: str) -> Path | None:
+    """Locate the fact file behind an _INDEX row id. Rows carry either the
+    bare `F<NNN>` or the full `<FNNN>-<slug>` id; exact path first, then the
+    prefix glob (bounded: one directory, ids are unique per the schema)."""
+    fdir = workspace / "facts"
+    direct = fdir / f"{fact_id}.md"
+    if direct.is_file():
+        return direct
+    for p in sorted(fdir.glob(f"{fact_id}*.md")):
+        return p
+    return None
+
+
+def partial_fact_ages(workspace: Path, partials: list | None = None,
+                      ticks: float | None = None,
+                      now: datetime | None = None) -> list[dict]:
+    """#342: age (in heartbeat ticks) of every PARTIAL fact.
+
+    THE single age reader for both #342 consumers — the VERIFY_STALE event
+    (this module) and the verify_backlog tick face
+    (scripts/verify_backlog_face.py) — so the cadence cannot drift.
+
+    Age field choice (the issue's "frontmatter created, or last verify
+    attempt — pick the field that exists"): the anchor is
+    max(frontmatter `created`, frontmatter `verified`). `created` is one of
+    the 12 MANDATORY schema fields (guaranteed present); `verified` is the
+    kunglao extension "date of last L1 pass" (`pending` when none) — it
+    resets the staleness clock so a recently L1-verified partial is not
+    re-forced through the verifier.
+
+    Fail-open: a missing/unreadable/unparseable fact yields age_ticks=None
+    and stale=False (a fact whose age cannot be read never forces
+    verification); a future-dated frontmatter clamps to age 0 (clock-skew
+    tolerant). `ticks` defaults to liveness_policy.VERIFY_STALE_TICKS with
+    the KUNGLAO_VERIFY_STALE_TICKS env override; `exceeds N` is strict.
+    """
+    if partials is None:
+        partials = _partial_facts(workspace)
+    threshold = ticks if ticks is not None else _verify_stale_ticks()
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+    tick_seconds = _TICK_INTERVAL_MIN * 60
+    rows: list[dict] = []
+    for entry in partials:
+        row = {"fact": entry["fact"], "status": entry["status"],
+               "age_ticks": None, "stale": False}
+        path = _fact_file_for(workspace, str(entry["fact"]))
+        head = ""
+        if path is not None:
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:  # narrowed, #103 posture
+                text = ""
+            # frontmatter only: a file without the --- block has no readable
+            # dates and stays fail-open (never parses stray body text)
+            if text.startswith("---") and text.count("---") >= 2:
+                head = text.split("---", 2)[1]
+            anchors = [d for d in (
+                _parse_fact_anchor(m.group(1))
+                for m in (_FACT_FM_CREATED_RE.search(head),
+                          _FACT_FM_VERIFIED_RE.search(head))
+                if m is not None) if d is not None]
+            if anchors:
+                age_seconds = max(0.0, (now - max(anchors)).total_seconds())
+                row["age_ticks"] = round(age_seconds / tick_seconds, 1)
+                row["stale"] = row["age_ticks"] > threshold
+        rows.append(row)
+    return rows
 
 
 def _active_blockers(workspace: Path):
@@ -860,6 +977,16 @@ class Event(str, Enum):
     LADDER_REQUIRED_BLOCKER = "LADDER_REQUIRED_BLOCKER"    # #497 climb flavor
     LADDER_EXHAUSTED_BLOCKER = "LADDER_EXHAUSTED_BLOCKER"  # #497 exhaustion marker
     UNEXPECTED_STATE = "UNEXPECTED_STATE"                  # SCHEDULE catch-all
+    # #342: SCHEDULE, evaluated FIRST — a PARTIAL fact older than N ticks
+    # (liveness_policy.VERIFY_STALE_TICKS, default 12 ~ 1h) forces the
+    # verifier dispatch before any claim dispatch, so a healthy claim
+    # frontier can no longer starve the verify chain. The #595 shape (an
+    # event inserted before the saturation tail so one state can never be
+    # masked by dispatchable work), applied to verification timeliness.
+    # Fresh partials keep current priority: without a stale fact the probe
+    # list reads exactly as before (#342 restraint: verification cadence
+    # only — no distillation/note/recall trigger here or anywhere).
+    VERIFY_STALE = "VERIFY_STALE"
     # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
     # BEFORE convergence_check starts; the name exists for observability.
     JADX_INFEASIBLE = "JADX_INFEASIBLE"
@@ -906,6 +1033,7 @@ class _DecideInputs:
     _discovery_reason: str | None = field(default=None, repr=False)
     _contradiction_reason: str | None = field(default=None, repr=False)
     _ladder_ids: list | None = field(default=None, repr=False)
+    _stale_partials: list | None = field(default=None, repr=False)
     _anomalies: list | None = field(default=None, repr=False)
     _open_hyps: list | None = field(default=None, repr=False)
     _oracle: dict | None = field(default=None, repr=False)
@@ -1099,6 +1227,22 @@ class _DecideInputs:
             self._contradiction_reason = reason
         return self._contradiction_reason
 
+    def stale_partials(self) -> list:
+        """#342 VERIFY_STALE gate input (lazy + cached, the ladder-scan
+        cost profile): per-PARTIAL age rows from partial_fact_ages — the
+        ONE age reader shared with the verify_backlog tick face.
+
+        Fail-open on layer errors only (unreadable facts face -> [] -> the
+        event never fires); per-fact unreadable dates already degrade to
+        stale=False inside the reader."""
+        if self._stale_partials is None:
+            try:
+                self._stale_partials = partial_fact_ages(
+                    self.workspace, self.partials)
+            except _GATE_INPUT_EXC:
+                self._stale_partials = []
+        return self._stale_partials
+
     def ladder_exhausted_ids(self) -> list:
         """#497 ladder-exhaustion marker (ask_for_direction_gate.
         find_ladder_exhaustion): promotion_attempts >= 3 with an empty
@@ -1223,6 +1367,17 @@ def _partials_and_free_slot(s: _DecideInputs) -> bool:
     return bool(s.partials) and s.free_slots > 0
 
 
+def _verify_stale(s: _DecideInputs) -> bool:
+    # #342: verification-slot forcing — ANY partial fact older than
+    # VERIFY_STALE_TICKS takes the free slot BEFORE claim dispatch, so a
+    # healthy claim frontier can never starve the verify chain (the
+    # #595 insert-before-saturation shape). Free-slot condition mirrors
+    # the sibling slot events: without a slot the machine reads SATURATED
+    # (poll) — never DISPATCH_VERIFIER it cannot act on.
+    return any(r.get("stale") for r in s.stale_partials()) \
+        and s.free_slots > 0
+
+
 def _stuck_workers_present(s: _DecideInputs) -> bool:
     # #595: silent-detect — collected stuck_workers were never consumed by the
     # machine. Firing here escalates to BLOCKED so orchestrator intervention
@@ -1297,6 +1452,7 @@ _EVENT_PREDICATES = {
     Event.DRAIN_CLEAN: _drain_clean,
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
+    Event.VERIFY_STALE: _verify_stale,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
     Event.ORACLE_CASE_RED: _oracle_case_red,
@@ -1451,6 +1607,21 @@ def _act_dispatch_top(s: _DecideInputs) -> str:
 def _act_verify_partials(s: _DecideInputs) -> str:
     return (f"Dispatch a verifier for {len(s.partials)} partial fact(s). "
             f"Do NOT declare PROVEN without sign-off.")
+
+
+def _act_verify_stale(s: _DecideInputs) -> str:
+    # #342: the action NAMES the stalest partial — the orchestrator must
+    # know exactly what to verify without re-deriving the age scan.
+    stale = [r for r in s.stale_partials() if r.get("stale")]
+    if not stale:  # unreachable via the machine; keep the verdict decided
+        return _act_verify_partials(s)
+    worst = max(stale, key=lambda r: r.get("age_ticks") or 0.0)
+    age = worst.get("age_ticks")
+    age_text = f"{age:g}" if isinstance(age, (int, float)) else "unknown"
+    return (f"Verification backlog: partial fact {worst['fact']} unverified "
+            f"for {age_text} ticks (> {_verify_stale_ticks():g}). Dispatch a "
+            f"verifier for the stalest partial - do NOT declare PROVEN "
+            f"without sign-off.")
 
 
 def _act_saturated_queue(s: _DecideInputs) -> str:
@@ -1705,7 +1876,14 @@ STAGE_PROBES = {
     # #595: STUCK_WORKERS_PRESENT at index 2 — silent-detect fires BEFORE
     # the saturation/failure/ladder tail so a stuck worker can never be
     # masked by an unblocked-open claim whose dispatch would collide.
-    State.SCHEDULE: [Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
+    # #342: VERIFY_STALE at index 0 — a PARTIAL fact older than
+    # VERIFY_STALE_TICKS takes the slot before ANY claim dispatch (the
+    # verifier can no longer be starved by a healthy claim frontier).
+    # Fresh partials leave the probe list byte-identical to the pre-#342
+    # order below: WORK_AND_FREE_SLOT still wins, DISPATCH stays the
+    # verdict, no extra tick passes.
+    State.SCHEDULE: [Event.VERIFY_STALE,
+                     Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
                      Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
                      Event.FAILURE_ARTIFACTS_DUE,
                      Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,
@@ -1733,6 +1911,7 @@ TRANSITIONS = {
     # runner), never a poll verdict.
     (State.DRAIN, Event.ORACLE_CASE_RED): (State.BLOCKED, _act_oracle_red),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
+    (State.SCHEDULE, Event.VERIFY_STALE): (State.DISPATCH_VERIFIER, _act_verify_stale),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
     (State.SCHEDULE, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),

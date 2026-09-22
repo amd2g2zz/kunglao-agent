@@ -100,6 +100,22 @@ CONTINUITY_WINDOW_TICKS = 12
 CONTINUITY_WINDOW_HOURS = 24
 
 # ---------------------------------------------------------------------------
+# Partial-fact verification staleness (#342: the VERIFY_STALE threshold, 12)
+# ---------------------------------------------------------------------------
+
+# scripts/convergence_check.py VERIFY_STALE (#342): a PARTIAL fact whose
+# frontmatter age exceeds this many heartbeat ticks forces the verifier
+# dispatch even when dispatchable open claims exist (the anti-starvation
+# slot forcing, mirroring the #595 insert-before-saturation precedent).
+# Sized to the tick cadence above: 12 ticks x TICK_INTERVAL_DEFAULT_MIN(5)
+# = ~1h — the conservative default of the 2026-09-22 owner restraint
+# ruling (verification cadence only; zero distillation). Runtime override:
+# KUNGLAO_VERIFY_STALE_TICKS (the KUNGLAO_NOOP_BREAKER_N env pattern — the
+# env is read at decision time, not import time). Named _TICKS, outside the
+# #597 bare `_MINUTES` drift-guard family like CONTINUITY_WINDOW_TICKS.
+VERIFY_STALE_TICKS = 12
+
+# ---------------------------------------------------------------------------
 # Hook-activation TTL (the enforcement-liveness threshold, value 30)
 # ---------------------------------------------------------------------------
 
