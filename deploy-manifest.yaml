@@ -364,6 +364,10 @@ files:
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
     sha256: 32b47c21e5f9dfa49aa0ad7ef0674d693635a824295630f319b10eecec8c4a64
+  - src: scripts/eval_control_arm.py
+    dest: .claude/scripts/eval_control_arm.py
+    kind: scaffold
+    sha256: c0ad4be3ca4fed53d27c5fe3c2a860d8236d934a0bbe2868825c42f17c6294a3
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
@@ -1415,7 +1419,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8536e4257d9e2e975db33dea2e93fe4aa54c61efa330df5b3399ee5cc6fee6d9
+    sha256: 1892eec88c8f7edb54098be57052851f5f09cd5ffa21bd06fae68fe3dadc14b3
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
