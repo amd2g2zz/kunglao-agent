@@ -383,7 +383,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 5493a85899a57834bb927fa69fad3215dd1fd1f282252965355421c87bd76f16
+    sha256: e80ef339c726cc8be238b765b403542f3d57e2386047f7dc98794d25e3bca7b4
   - src: scripts/eval_native_sources.py
     dest: .claude/scripts/eval_native_sources.py
     kind: scaffold
