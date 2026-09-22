@@ -8,10 +8,10 @@
   "properties": {
     "schema": { "const": "kunglao-eval-task/1" },
     "task_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" },
-    "eval_version": { "type": "string", "enum": ["eval-v1"] },
+    "eval_version": { "type": "string", "enum": ["eval-v1", "eval-v1.1"] },
     "tier": {
-      "description": "smoke = 3-5 constructed targets, minutes-scale, runnable per release train. historical-replay (#294) and public-corpus are later lanes.",
-      "enum": ["smoke"]
+      "description": "smoke = 3-5 constructed targets, minutes-scale, runnable per release train. release (#332) = the WEB/NET packaging-ladder families (web-pack-sign, net-verify-license, req-sign, mod-crypto-js) on the mod-crypto generator core, anti-debug stamped, minutes-scale. historical-replay (#294) and public-corpus are later lanes.",
+      "enum": ["smoke", "release"]
     },
     "source": {
       "description": "constructed targets only in this lane; smoke tier refuses anything else.",

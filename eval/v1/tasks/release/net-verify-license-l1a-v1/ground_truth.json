@@ -1,0 +1,133 @@
+{
+  "schema": "kunglao-eval-ground-truth/1",
+  "task_id": "net-verify-license-l1a-v1",
+  "family": "net-verify-license",
+  "seed": 33221,
+  "constants": {
+    "key_hex": "58832933aee0831585e99073c8e48fdd30870f3ddfd552f9a0dceb59cd89c969",
+    "device": "32eafda33864"
+  },
+  "space_bits": 256,
+  "published_pairs": [
+    {
+      "i": 0,
+      "challenge": "27e714dde6947d8d",
+      "client_nonce": "f62b3ed5",
+      "out": "c24487212343e88a9569c268cc40e31dd46ae46adb3b7a673b426feaa2d677fb"
+    },
+    {
+      "i": 1,
+      "challenge": "59e09155b6d35753",
+      "client_nonce": "184e9ea1",
+      "out": "fcf2445d2899638e92d6d8e4a8da1f5fc784384303b0ec90112ab1f2b40b4abc"
+    },
+    {
+      "i": 2,
+      "challenge": "677f5a9b5240725b",
+      "client_nonce": "6916d91b",
+      "out": "a42708ce21ac83edba420849b5b118e841d45b2304d112899fd60574bcd33feb"
+    },
+    {
+      "i": 3,
+      "challenge": "ab178a07e2d8234d",
+      "client_nonce": "7c71cf9f",
+      "out": "7f8790b2ad66611799a5821f25063b5f2c8b88259efd246a2cc938d39319343d"
+    },
+    {
+      "i": 4,
+      "challenge": "1ffb5f55111e28d1",
+      "client_nonce": "a09b4c01",
+      "out": "7b6ffdbddf6dde8f8549550e6a004b9741670a40fd3ab79d4c1ebc737f017322"
+    },
+    {
+      "i": 5,
+      "challenge": "d5be0eb1f62c37dd",
+      "client_nonce": "ec698d15",
+      "out": "92fde88288ab572033ebc56560f3ee9b10e271fe15df0329532f2ae3050c8ad8"
+    }
+  ],
+  "minted_probe_count": 6,
+  "note": "the oracle is SERVER-SIDE: the checker-hosted loopback mock recomputes HMAC(KDF(challenge, secret), canonical_payload) from the seed and validates every session on published + minted challenges; no egress \u2014 bind 127.0.0.1 ephemeral, base URL via argv.",
+  "core": {
+    "h": [
+      1126789621,
+      3390633351,
+      3577501223,
+      1600687617,
+      3659160349,
+      3612383145,
+      3851643421,
+      365135379
+    ],
+    "k": [
+      587759575,
+      602261793,
+      3295183285,
+      1692394875,
+      1172969339,
+      3236144863,
+      754236403,
+      1938377061,
+      2972171195,
+      2036496515,
+      4009278253,
+      2260620201,
+      2696627637,
+      3944408385,
+      3974162797,
+      133111073,
+      889839447,
+      887630773,
+      3841245651,
+      3172883435,
+      655950397,
+      2960545979,
+      2103799845,
+      3170003933,
+      3885916957,
+      2706623815,
+      2490811737,
+      1907328157,
+      909450001,
+      764068335,
+      3758704347,
+      4223355689,
+      1255196597,
+      3524195041,
+      1143089223,
+      3723150021,
+      2828669479,
+      3213653331,
+      137719891,
+      2260529401,
+      2085731359,
+      951401675,
+      463552613,
+      2597363581,
+      4156650289,
+      1048150427,
+      3156357015,
+      2177753081,
+      4274702935,
+      363304463,
+      548809803,
+      443089507,
+      875367067,
+      1889068467,
+      2217330121,
+      1819212789,
+      3615155551,
+      1120564433,
+      2625368209,
+      3176059413,
+      3658094195,
+      3381723439,
+      4045217589,
+      576228441
+    ],
+    "key_hex": "58832933aee0831585e99073c8e48fdd30870f3ddfd552f9a0dceb59cd89c969",
+    "sep_code": 34,
+    "device": "32eafda33864",
+    "rounds": 3
+  }
+}

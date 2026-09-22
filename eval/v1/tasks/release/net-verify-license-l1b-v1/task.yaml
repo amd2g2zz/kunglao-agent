@@ -1,0 +1,58 @@
+schema: kunglao-eval-task/1
+task_id: net-verify-license-l1b-v1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: net-verify-license
+seed: 33222
+rung: l1
+anchors:
+  goal_verbatim: Reverse the license client SDK sample (target/license_client.js),
+    recover the challenge-response derivation (KDF over the mutated core + HMAC over
+    the canonical payload), and re-expose a handshake(opts) that completes the protocol
+    against the checker-hosted loopback mock server.
+  success_criterion: The mock license server validates every session server-side —
+    on the published AND freshly minted challenges; the no-egress guarantee holds
+    (loopback bind, ephemeral port, base URL via argv, no host literal in any artifact).
+  verification_method: replay-evidence
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/license_client.js
+  entry: target/license_client.js
+  candidate_contract: 'A Node module exporting async handshake({serverUrl, i, clientNonce,
+    device}) -> {session, ...}: the module performs the FULL challenge/response protocol
+    against the checker-hosted loopback mock server (base URL arrives via opts only
+    — no host literal in the artifact).'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - constant-hit
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 1
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps:
+  - debugger-loop
+  - timing
+  - console-getter
+  clean_env_guarantee: 'silent in a clean node env (no devtools): traps never fire
+    and outputs are deterministic; on a trip the response is SILENT WRONG OUTPUT,
+    never an exception or log line'
+  self_defending: generator-native
+tooling:
+  packaging: minify+hex-ids+decoys
