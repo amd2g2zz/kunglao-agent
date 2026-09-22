@@ -223,7 +223,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: d3c33e231199cc554f028e9bbddb33711b8e67965f6fcb3b15bd9964b1f1fd8e
+    sha256: addb645d936f7dd2b3f37a3a8ddf1cd26eb858dcfc22bafa87a31cfb778fbd00
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -252,6 +252,10 @@ files:
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
     sha256: 89baa05d70d14da14420da9beaf2f8efb52a9fced892e85e340db6e1ab887061
+  - src: scripts/compute_priors.py
+    dest: .claude/scripts/compute_priors.py
+    kind: scaffold
+    sha256: 9224ddcb39514f75633e0100f71613a19d392d9678299d936f363a54f77fddbe
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -267,7 +271,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: d1374fafa9cdac32eabfe4f001dd16d5e2e8d98467dddb22467741e2acf7ea5a
+    sha256: 795d4aeb3f7aded76c42ed2708ab52c02c8e40209dee9ea34efa574fee3df66e
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -647,7 +651,7 @@ files:
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: ff7cae7426a478639b0a8dfb8f0b91db967a6272743cd4688f71201543a282b9
+    sha256: ebac3f176206be16fd4c86f37afba506a9aae4f89f3270d811f177a8c1a065da
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold
@@ -779,7 +783,7 @@ files:
   - src: scripts/retract_claim.py
     dest: .claude/scripts/retract_claim.py
     kind: scaffold
-    sha256: 410695b0f5418091b4e397ed4cdf451223776686b987cc337429c7c652f9e6c3
+    sha256: 6af0498426d29ff02f2475ae624dec9b9a5e9f0e1dfdd6d98a8bcc2c9c2c3597
   - src: scripts/review_gate.py
     dest: .claude/scripts/review_gate.py
     kind: scaffold
@@ -827,7 +831,7 @@ files:
   - src: scripts/status_defs.py
     dest: .claude/scripts/status_defs.py
     kind: scaffold
-    sha256: a9c67f730d758dbe49a514a59e7eaec1b7e286d11bd1a623f218a093b154845a
+    sha256: 071678326104c6940db95f654f74720abae79527e73037a7c26404397ce05168
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
@@ -1415,7 +1419,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b62614c4df0077fc4257fd42b9cdafba723e3c58d951b0eafb1d6c697812e54b
+    sha256: 1892eec88c8f7edb54098be57052851f5f09cd5ffa21bd06fae68fe3dadc14b3
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
