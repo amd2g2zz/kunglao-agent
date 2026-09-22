@@ -147,10 +147,9 @@ Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
 need <specific help>".
 
 **Blocker schema v2 (write-gate enforced)**: `observed:` / `attributed:` /
-`expires:` are mandatory; an env-capability attribution ("no root",
-"unavailable", ...) also REQUIRES `probe_evidence:` — the differential
-probe bytes (e.g. `su -c id` stdout). Error text alone is never evidence;
-a REJECT means run the probe, paste its bytes.
+`probe_evidence:` / `expires:` mandatory; env attributions ("no root",
+"unavailable", ...) REQUIRE differential probe bytes (e.g. `su -c id`
+stdout) — error text alone is never evidence.
 
 <!-- contract: sequential-thinking -->
 ## Sequential-thinking contract

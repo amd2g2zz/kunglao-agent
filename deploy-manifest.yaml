@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: dc5d3b7994176c1dd718c0f696ac28e638bcb81fc649753db0dfaacd712cb76d
+    sha256: 08fe0f299bde99034a46e83aad602ccb999bf0ff729eb538988610cbc46cabaa
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -267,7 +267,7 @@ files:
   - src: scripts/context_budget.py
     dest: .claude/scripts/context_budget.py
     kind: scaffold
-    sha256: d29c78bcf56466a5e2ea6979a1739eb43416b9d175d2153a42f515a072692c65
+    sha256: f863d6cd4b76c95daab43f5ab08a67157087feaf1055db05b5e52509e428259a
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
