@@ -43,6 +43,31 @@ release (see the mapping table at the end).
   (tail-replay safe, idempotent); the replay ruler reports it as
   `frozen_check`.
 
+- **State persistence format stamps + on-demand priors (#137)**: workspaces
+  now self-describe their persisted state so historical-format replay
+  (#294) reads by field, not by inference. NEW writes to the convergence
+  ledger (snapshot + operator_action rows) and the case bank carry a
+  `schema` stamp (`convergence-ledger/2`, `case-bank/2` — the same
+  `<name>/<rev>` convention as `posteriors-schema/1` and
+  `task-terminal-settlement/1`, which were already stamped); legacy rows
+  without the stamp stay readable — absence = legacy, and historical
+  files are never rewritten (the #135/#136 tolerance pattern). Plus the
+  on-demand cross-workspace prior face: `scripts/compute_priors.py` sums
+  Beta alpha/beta observations from EXPLICITLY-NAMED workspaces' case
+  banks and posterior ledgers into one aggregate prior
+  (`aggregate-prior/1`) — pure (filesystem verified byte-identical),
+  deterministic (same inputs -> same prior), loud on bad inputs
+  (nonexistent path / unknown posteriors schema / degraded ledger raise,
+  never a silent scan or a silent zero; the one aggregate keeps a single
+  Beta(1,1) base). The graduation-gate DESIGN SPEC (five mechanical
+  criteria: engagement >= N, >= K positives with zero negative
+  attribution, hash-only privacy, #294 replay non-regression, human
+  review = the PR — same shape for every artifact type, wired to the
+  existing release train, no new organs) lands as docs/adr-002 (shape
+  per the #295 ADR-001 precedent) with the workspace
+  directory-convention section; the gate MACHINERY itself is v0.2
+  scope.
+
 ## [0.1.5.post2] - 2026-09-19
 
 The post2 batch: seventeen changes to the strategy-learning pipeline. The
