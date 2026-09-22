@@ -1,6 +1,6 @@
 {
   "name": "kunglao-agent",
-  "description": "**kunglao-agent is an autonomous reverse-engineering system. You hand it a target and the questions you need answered; it works the problem for hours or days on its own — planning its own path, recovering from worker deaths, resuming after crashes — and converges only when every answer is derived from raw evidence and survives mechanical verification gates.**",
+  "description": "**kunglao-agent is an RLVR-driven reverse-engineering agent: an autonomous system that plans its own route through binary analysis, works for hours or days unattended, recovers from failures, and converges only when every answer survives a mechanical oracle verdict — every claim machine-checked, every verdict reproducible, the loop measures itself.**",
   "version": "0.1.5",
   "author": {
     "name": "amd2g2zz"

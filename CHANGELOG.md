@@ -67,6 +67,20 @@ release (see the mapping table at the end).
   per the #295 ADR-001 precedent) with the workspace
   directory-convention section; the gate MACHINERY itself is v0.2
   scope.
+### Changed
+
+- **README rewrite (#333)**: the README now leads with the RLVR positioning —
+  the oracle verdict as the only trusted currency (`oracle_case_admission.py`
+  quantified verification contracts), context as the policy surface, Thompson
+  sampling (`priority_ratio.py`), terminal credit (`terminal_settlement.py`),
+  and replay-based measurement (`replay_ruler.py`) closing the loop — followed
+  by a benchmark how-to (the smoke tier runnable today; the #332 release tier
+  landing in v0.1.6; the #236 control-arm A/B with its five metrics; the #294
+  replay ruler) and the v0.2 pi-agent migration direction with its measured
+  adoption gates and pre-committed falsifiers (#319) plus the workbench
+  (#320). Quickstart, subcommands, toolchain, channel, configuration, safety,
+  development, and internals essentials preserved; the opening one-liner is
+  reworded and kept in lockstep with the plugin-manifest description.
 
 ## [0.1.5.post2] - 2026-09-19
 
