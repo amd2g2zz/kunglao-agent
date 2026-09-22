@@ -93,21 +93,23 @@ SCHEMA_BARE_RUN = "kunglao-eval-bare-run/1"
 
 DEFAULT_TIMEOUT_S = 300.0
 
-# candidate artifact suffix per family language (mirrors the checker's
-# _validate_candidate expectation)
-CAND_SUFFIX = {"go": ".go", "javascript": ".js", "python": ".py"}
+# candidate artifact suffix per FAMILY (mirrors the checker's
+# _validate_candidate map — the authoritative family→suffix contract,
+# #332 native families included; candidates are pure-python there)
+CAND_SUFFIX = {"go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
+               "arm-native-kdf": ".py", "win-pe-kdf": ".py",
+               "smc-x86": ".py", "mod-crypto-native": ".py",
+               "web-pack-sign": ".js", "net-verify-license": ".js",
+               "req-sign": ".js", "mod-crypto-js": ".js"}
+
+# prompt cap for a rendered binary input surface (chars; truncation is
+# recorded in the prompt text, never silent)
+BINARY_RENDER_CAP = 600_000
 
 RC_OK, RC_REFUSED = 0, 2
 
 _ANSWER_VERDICTS = ("PASS", "FAIL")
 _FALSIFIED_VERDICTS = ("FAIL", "REFUSED")
-
-
-# ---------------------------------------------------------------- rates
-def _cand_suffix(task: dict) -> str:
-    """Candidate artifact suffix from the family's language (mirrors the
-    checker's _validate_candidate expectation)."""
-    return CAND_SUFFIX[tg.FAMILIES[task["family"]]["language"]]
 
 
 def answer_rate(answered: int, total: int) -> float:
@@ -161,22 +163,66 @@ def is_premature_closure(claimed_converged: bool, rerun_verdict: str | None,
 
 
 # ---------------------------------------------------------- bare prompt
+def _cand_suffix(task: dict) -> str:
+    """Candidate artifact suffix for the task's family — the literal
+    mirror of the checker's _validate_candidate contract (kept in sync by
+    the parity test in tests/test_eval_control_arm_236.py)."""
+    return CAND_SUFFIX[task["family"]]
+
+
+def render_binary_surface(path: Path) -> str:
+    """Text face of a BINARY target for a prompt-only arm: ELF header +
+    section headers + full disassembly + embedded strings — the standard
+    static rendering an analyst's tooling produces (the checker's oracle
+    face never executes native binaries either). Deterministic subprocess
+    rendering; capped, with the truncation recorded in the text."""
+    parts: list[str] = []
+    for args in (["objdump", "-f", str(path)],
+                 ["objdump", "-h", str(path)],
+                 ["objdump", "-d", str(path)],
+                 ["strings", "-n", "4", str(path)]):
+        proc = subprocess.run(args, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=60)
+        parts.append((proc.stdout or "").strip())
+    text = "\n\n".join(p for p in parts if p)
+    if len(text) > BINARY_RENDER_CAP:
+        text = (text[:BINARY_RENDER_CAP]
+                + f"\n[truncated at {BINARY_RENDER_CAP} chars]")
+    return text
+
+
 def build_bare_prompt(tdir: Path, task: dict) -> str:
     """The prompt-only bare-agent surface: anchors + candidate contract +
-    the observable input surface (target source). Structurally cannot
-    leak ground truth: this function never receives it."""
+    the observable input surface (target source; binary targets render
+    through objdump/strings). Structurally cannot leak ground truth: this
+    function never receives it."""
     ws = task["workspace_scaffold"]
-    target = (Path(tdir) / ws["entry"]).read_text(encoding="utf-8")
+    entry_path = Path(tdir) / ws["entry"]
+    try:
+        target = entry_path.read_text(encoding="utf-8")
+        surface_header = (f"INPUT SURFACE — the reference source "
+                          f"({ws['entry']}):")
+    except UnicodeDecodeError:
+        target = render_binary_surface(entry_path)
+        surface_header = (
+            f"INPUT SURFACE — text rendering of the binary target "
+            f"({ws['entry']}): file/section headers, full disassembly, "
+            f"embedded strings:")
     anchors = task["anchors"]
+    # the RESPONSE language follows the candidate artifact the checker
+    # grades (CAND_SUFFIX), never the target's implementation language —
+    # native units ship c/arm64 targets but grade pure-python candidates
+    response_lang = {".py": "Python", ".js": "JavaScript",
+                     ".go": "Go"}[_cand_suffix(task)]
     return (
         "You are solving a reverse-engineering task cold, with no tools, "
         "no feedback loop, and no second chance: one response, final.\n\n"
         f"GOAL: {anchors['goal_verbatim']}\n\n"
         f"SUCCESS: {anchors['success_criterion']}\n\n"
         f"DELIVERABLE: {ws['candidate_contract']}\n\n"
-        f"INPUT SURFACE — the reference source ({ws['entry']}):\n"
+        f"{surface_header}\n"
         f"{target}\n\n"
-        f"Respond with ONLY the complete {ws['language']} source file that "
+        f"Respond with ONLY the complete {response_lang} source file that "
         "fulfills the deliverable. No markdown fences, no commentary, "
         "no explanation — source code only."
     )
