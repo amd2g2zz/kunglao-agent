@@ -10,6 +10,29 @@ release (see the mapping table at the end).
 
 ### Added
 
+- **Premise epistemics (#340)**: environment premises become clocks with
+  evidence, not facts. Blocker schema v2 (`templates/state/blocker.md`)
+  mandates `observed` / `attributed` / `probe_evidence` / `expires`, and
+  the write gate (`hooks/write_guard.py` + new `scripts/blocker_lint.py`)
+  rejects any new blocker carrying an environment-capability attribution
+  ("no root", "unavailable", "not supported", "cannot use", ...) without
+  non-empty differential probe evidence — error text alone is never
+  sufficient; legacy-shape blockers are rejected on write per the
+  no-backcompat ruling (2026-09-01). The premise-probe reconciliation
+  gate (`check_env_premise` in `hooks/worker_budget_sinks.py`, the
+  `check_env_fresh` seam) marks a premise SUSPECT (append-only history
+  line) and schedules a one-shot on-demand capability re-probe (the #474
+  `toolchain.py --capability` channel) whenever a dispatch-needed
+  capability (`_env_caps_needed` vocabulary) shows liveness PASS in
+  `runs/env-state.json` while an active blocker claims it unavailable —
+  emitting the new registered event `env_premise_contradiction` and
+  letting the dispatch proceed (the probe wins, the premise loses).
+  The `premise_expiry` mechanism (new `scripts/premise_gate.py`,
+  declared in `scripts/mechanisms.yaml`) invalidates env-class blockers
+  unverified for > `expires` ticks (default 12,
+  `KUNGLAO_PREMISE_EXPIRY_TICKS`) with an append-only
+  stale-marker history line, forcing re-derivation on next need.
+
 - **Replay ruler (#294)**: offline policy evaluation for the DECIDE rank
   face — the convergence loop's first feedback signal for ordering
   quality. The harness (`scripts/replay_ruler.py`) consumes a COPY of a

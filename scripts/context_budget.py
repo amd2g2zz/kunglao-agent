@@ -62,7 +62,9 @@ CAP_TOTAL_BYTES = int((BASELINE_CONSTITUTION_BYTES + BASELINE_TEMPLATE_BYTES) * 
 # standing until the owner-reviewed cut pass lands; THIS constant is the
 # live teeth — any growth fails tests/test_context_budget_300.py.
 # Raising it requires an owner citation here.
-WS1_STANDING_TOTAL_BYTES = 53_751  # owner anchor: issue 300 WS1 audit
+WS1_STANDING_TOTAL_BYTES = 54_010  # owner anchor: issue 300 WS1 audit;
+# raised 259B for issue 340 (owner-tasked): worker.md ESCALATE must name
+# the blocker schema v2 fields + probe-evidence rule (premise epistemics)
 
 # ---- owner-approved exceptions (EMPTY by default) ------------------------
 #
