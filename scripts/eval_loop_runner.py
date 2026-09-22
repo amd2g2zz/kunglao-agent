@@ -196,8 +196,9 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     except (AttributeError, ProcessLookupError, PermissionError, OSError):
         try:
             proc.kill()
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"[eval_loop_runner] kill fallback failed: {exc}",
+                  file=sys.stderr)
 
 
 def _session_cost(stdout_text: str) -> dict | None:
@@ -398,8 +399,9 @@ def _oracle_face(ws: Path) -> tuple[int, int]:
             total += 1
             if str(case.get("status") or "").lower() == "pass":
                 green += 1
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[eval_loop_runner] oracle face unreadable: {exc}",
+              file=sys.stderr)
     return green, total
 
 
@@ -412,8 +414,9 @@ def _proven_face(ws: Path) -> int:
         for c in (reg.get("claims") or []):
             if str((c or {}).get("status") or "").upper() == "PROVEN":
                 proven += 1
-    except (OSError, yaml.YAMLError):
-        pass
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"[eval_loop_runner] claim register unreadable: {exc}",
+              file=sys.stderr)
     return proven
 
 
