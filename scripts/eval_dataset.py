@@ -40,6 +40,10 @@ EVAL_ROOT = ROOT / "eval"
 
 # ---- versioning ----------------------------------------------------------
 EVAL_VERSION = "eval-v1"
+# additive version ladder: v1 = #299 smoke tier; v1.1 = #332 release tier
+# (native families + mod-crypto core). A landed version is never mutated.
+EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1")
+EVAL_TIER_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1"}
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -68,7 +72,7 @@ ANCHOR_FIELDS: tuple[str, ...] = (
 VERIFICATION_METHODS: tuple[str, ...] = (
     "reproduction", "replay-evidence", "static", "manual")
 
-TIERS: tuple[str, ...] = ("smoke",)
+TIERS: tuple[str, ...] = ("smoke", "release")
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match", "replay-roundtrip")
 ORACLE_KINDS: tuple[str, ...] = CHECKER_KINDS
@@ -117,18 +121,20 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
         errors.append(f"schema must be kunglao-eval-task/1, got {task.get('schema')!r}")
     if not task.get("task_id") or not isinstance(task.get("task_id"), str):
         errors.append("task_id must be a non-empty string")
-    if task.get("eval_version") != EVAL_VERSION:
+    if task.get("eval_version") not in EVAL_VERSIONS:
         errors.append(
-            f"eval_version must be {EVAL_VERSION}, got {task.get('eval_version')!r}")
+            f"eval_version must be one of {EVAL_VERSIONS}, "
+            f"got {task.get('eval_version')!r}")
     tier = task.get("tier")
     if tier not in TIERS:
         errors.append(f"tier must be one of {TIERS}, got {tier!r}")
     source = task.get("source")
     if source not in SOURCES:
         errors.append(f"source must be one of {SOURCES}, got {source!r}")
-    if tier == "smoke" and source != "constructed":
+    if tier in ("smoke", "release") and source != "constructed":
         errors.append(
-            f"smoke tier carries constructed targets only, got source={source!r}")
+            f"tier {tier} carries constructed targets only, got "
+            f"source={source!r}")
     if not isinstance(task.get("seed"), int):
         errors.append("seed must be generator-stamped (int)")
 

@@ -43,7 +43,10 @@ if str(SCRIPT_DIR) not in sys.path:
 import eval_dataset as ds
 
 TIERS = {"smoke": {"desc": "3-5 constructed targets, minutes-scale, "
-                           "runnable per release train"}}
+                           "runnable per release train"},
+         "release": {"desc": "#332 native ladder: real arm64/PE/x86_64 "
+                             "artifacts, rungs L0/L1/L2 (+L2p UPX), "
+                             "minutes-scale"}}
 
 RC_OK, RC_FAIL, RC_REFUSED = 0, 1, 2
 
@@ -135,7 +138,9 @@ def run_tier(tasks: list[str], tier: str, arm: str, candidates: dict[str, Path],
     for tdir in selected:
         task = _load_unit_meta(tdir)
         if arm == "self-check" or tdir.name in candidates:
-            candidate = candidates.get(tdir.name) or (tdir / task["workspace_scaffold"]["entry"])
+            candidate = candidates.get(tdir.name) \
+                or (tdir / (task["checker"].get("self_check_candidate")
+                            or task["workspace_scaffold"]["entry"]))
             res = run_task(tdir, candidate, out)
             row = ds.results_row(
                 task_id=res["task_id"], family=res["family"],
@@ -190,7 +195,7 @@ def run_tier(tasks: list[str], tier: str, arm: str, candidates: dict[str, Path],
     }
     doc = {
         "schema": ds.RESULTS_SCHEMA,
-        "eval_version": ds.EVAL_VERSION,
+        "eval_version": ds.EVAL_TIER_VERSION.get(tier, ds.EVAL_VERSION),
         "tier": tier,
         "arm": arm,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

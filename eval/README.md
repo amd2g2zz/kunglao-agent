@@ -21,6 +21,12 @@ eval/
           target/            the constructed target artifact
           ground_truth.json  construction-known manifest + captured pairs
           checker.py         standalone mechanical-checker shim
+      release/         the #332 native ladder (eval-v1.1, 12 units:
+                       arm-native-kdf / win-pe-kdf / smc-x86 /
+                       mod-crypto-native at rungs L0/L1/L2 (+L2p UPX);
+                       real arm64/PE/x86_64 artifacts + reference.py
+                       self-check candidate; mod-crypto core lives in
+                       scripts/eval_crypto.py)
 ```
 
 Versioning: an eval set is **versioned** (`eval-v1`); churn (new variants,
@@ -57,6 +63,7 @@ Every landed task unit also self-declares its contamination block:
 | tier | shape | cadence |
 |---|---|---|
 | smoke | 3-5 constructed targets, minutes-scale | runnable per release train |
+| release | #332 native ladder: real arm64/PE/x86_64 artifacts, rungs L0/L1/L2 (+L2p UPX), minutes-scale | runnable per release train |
 | (later) | historical replay | #294 |
 | (later) | public corpus held-out | later lane |
 

@@ -1,0 +1,43 @@
+schema: kunglao-eval-task/1
+task_id: mod-crypto-l2
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: mod-crypto-native
+seed: 33204
+anchors:
+  goal_verbatim: 'Analyze the arm64 shared object target/libmodcrypto.so (the mutated
+    mod-crypto core: S-box permutation, mutated H/K), and re-implement mod_kdf byte-exact.'
+  success_criterion: A re-implementation carrying the mutated S-box and H/K constants
+    that reproduces every published and checker-minted probe (byte-exact hex).
+  verification_method: reproduction
+workspace_scaffold:
+  language: c/arm64
+  files:
+  - target/libmodcrypto.so
+  - reference.py
+  entry: target/libmodcrypto.so
+  candidate_contract: 'A Python module exposing mod_kdf(data: bytes) -> str (lowercase
+    hex, 16 bytes out = the mod-crypto AES-of-digest transform).'
+checker:
+  kind: pair-match
+  oracles:
+  - constant-hit
+  - pair-match
+  entrypoint: checker.py
+  self_check_candidate: reference.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 5
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 512
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

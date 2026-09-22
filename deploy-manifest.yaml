@@ -359,19 +359,31 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: 32b47c21e5f9dfa49aa0ad7ef0674d693635a824295630f319b10eecec8c4a64
+    sha256: 7fdeb43ea50f92296f57106f7a02f04b9c4ad25d0b5606dec1dd9db5a8d6b2bb
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
     sha256: c0ad4be3ca4fed53d27c5fe3c2a860d8236d934a0bbe2868825c42f17c6294a3
+  - src: scripts/eval_crypto.py
+    dest: .claude/scripts/eval_crypto.py
+    kind: scaffold
+    sha256: 7c37cd9d9132aa3dc7648cb99fdc7a53cd094a084f6dcd3bd5ecc3af427107a7
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 1132c00de167e7f3a96920b14164ef36f4fd061819db6db24cbae7efc05982e5
+    sha256: db01666d59086e57c0f26536a39856c3b371939c628c521b02719358d61d9cf8
+  - src: scripts/eval_native_sources.py
+    dest: .claude/scripts/eval_native_sources.py
+    kind: scaffold
+    sha256: df7470a20714a2706737441c63d6061038a5aaf0784b1617e5374a2d6fd314e2
+  - src: scripts/eval_native_targets.py
+    dest: .claude/scripts/eval_native_targets.py
+    kind: scaffold
+    sha256: 26cb9f4d2b6324dbe7048b354c12bba42786dc35606117e56ee33abd148caeb7
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
-    sha256: 773f51966efe3485c76886e53e2747b584a1f1a0ce9aa0b4b250d2f138b93662
+    sha256: 1c9786215aae3764cb3cdc8cc0597aa1fe9a3bbb229207c2854475cd6ef7367f
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
@@ -1415,7 +1427,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b62614c4df0077fc4257fd42b9cdafba723e3c58d951b0eafb1d6c697812e54b
+    sha256: 07123159121b600cc9e3a78808fb416a04d861a1cc3f1cf4fcfe621a0e646f79
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
