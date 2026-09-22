@@ -94,8 +94,9 @@ SCHEMA_BARE_RUN = "kunglao-eval-bare-run/1"
 DEFAULT_TIMEOUT_S = 300.0
 
 # candidate artifact suffix per FAMILY (mirrors the checker's
-# _validate_candidate map — the authoritative family→suffix contract,
-# #332 native families included; candidates are pure-python there)
+# _validate_candidate map — the authoritative family→suffix contract;
+# native families included, registered in eval_native_targets —
+# candidates are pure-python there)
 CAND_SUFFIX = {"go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
                "arm-native-kdf": ".py", "win-pe-kdf": ".py",
                "smc-x86": ".py", "mod-crypto-native": ".py",

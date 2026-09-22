@@ -353,8 +353,8 @@ class TestAbFace:
 
 # ------------------------------------------- (f) native-tier runnability
 # The v0.1.6 bare-arm campaign ran the driver across the release tier and
-# found three pre-#332a gaps: the candidate suffix map keyed by TARGET
-# language (KeyError on every native family), a prompt face that
+# found three pre-native-ladder gaps: the candidate suffix map keyed by
+# TARGET language (KeyError on every native family), a prompt face that
 # UnicodeDecodeErrors on binary targets, and a response-language face
 # that named the target language ("c/arm64") where the checker grades a
 # .py candidate. These pins keep all three honest.
