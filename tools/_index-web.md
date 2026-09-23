@@ -8,6 +8,7 @@
 |---|---|---|
 | `jsvmp_triage` | Three-feature JSVMP/VMP triage CLI (verdict = three-of-two votes) | Read when a deobfuscated web bundle may hide a bytecode VM; not a proof — runtime trace confirmation stays with the operator |
 | `js_obfuscation_detect` | Obfuscation-technique inventory + routing to the registered next tool | Read FIRST on a raw minified bundle to route (packer → unbundle → deobfuscate → VMP triage); advisory only — no transforms, no family proof |
+| `js_env_diagnose` | Bare Node-VM sandbox run reporting missing browser globals | Read when a deobfuscated bundle must execute outside the browser and the env-patch list is unknown; diagnosis only — not an evidence-collection environment |
 
 ## Three-feature thresholds
 
@@ -44,3 +45,15 @@ Verdict: `votes = F1+F2+F3`; suspected ⇔ votes ≥ 2; confidence high(3/3) / m
 - **Outputs**: JSON report per file: `techniques` [{name, confidence, evidence}] + `recommendation` {route, next_tool, why} (routes: unpack-first → webcrack-deobfuscate; unbundle; webcrack-deobfuscate; vmp-triage → jsvmp_triage; sandbox-decode → js_env_diagnose; direct-read).
 - **exit code**: 0 = every file analyzed / 2 = any missing, empty, or undecodable path (fail loud — errors on stderr; reports still print for good files).
 - **when_not**: Advisory routing only — performs no transforms and proves no family; run the routed registered tool for the real work (consistent with _INDEX.yaml when_not).
+
+### js_env_diagnose
+
+- **Purpose**: Execute a target JS file in a bare Node-VM sandbox whose proxy-monitored global records every missing browser-environment access — the mechanical first step of the env-patching loop (patch what is reported, re-run, repeat until the bundle executes or residue stabilizes).
+- **Usage**:
+  ```bash
+  python tools/web/js_env_diagnose.py --target obfuscated_bundle.js
+  ```
+- **Inputs**: `--target <file.js>` (required); optional `--prelude <stub.js>` (repeatable — plain JS assigning onto globalThis, to verify a patch suppresses its miss), `--timeout-ms` (default 60000), `--node` (binary name/path), `--max-console` (tail cap).
+- **Outputs**: stdout JSON: `success` (bundle ran without throwing), `error` (truncated error class + message), `undefined_paths` (sorted missing globals), `access_stats` {get, set, has, construct}, `console_tail` [[level, message]].
+- **exit code**: 0 = diagnosis produced (a target crash or sandbox timeout is a RESULT, not an error) / 2 = tool-level failure (node binary missing, target missing/empty, harness crash, wall-clock budget exhausted — fail loud, never a silent fallback).
+- **when_not**: Not an execution environment for evidence collection — diagnosis only; requires a node binary on the analysis host (consistent with _INDEX.yaml when_not).

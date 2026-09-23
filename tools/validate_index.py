@@ -89,6 +89,8 @@ _CAPABILITY_TAGS = frozenset({
     "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
     "js:semantic-query",  # #751: graph RAG queries over a js source tree
     "js:unbundle",
+    "js:env-diagnose",    # wave-2 distillation: Node-VM sandbox missing-
+                          # browser-env diagnosis (the env-patch list)
     "js:obfuscation-detect",  # wave-2 distillation: technique inventory +
                               # registered-tool routing (advisory, no proof)
     "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
