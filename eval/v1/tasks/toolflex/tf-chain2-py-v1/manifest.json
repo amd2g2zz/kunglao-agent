@@ -1,0 +1,232 @@
+{
+  "schema": "kunglao-eval-tf-manifest/1",
+  "task_id": "tf-chain2-py-v1",
+  "family": "tf-chain2",
+  "seed": 35601,
+  "k": 2,
+  "roles": [
+    {
+      "role": "extract",
+      "implements": [
+        "peek",
+        "probe"
+      ]
+    },
+    {
+      "role": "fold",
+      "implements": [
+        "fold64",
+        "refold64"
+      ]
+    }
+  ],
+  "minimum_required_set": {
+    "extract": [
+      "peek",
+      "probe"
+    ],
+    "fold": [
+      "fold64",
+      "refold64"
+    ]
+  },
+  "minimal_chain": [
+    "peek",
+    "fold64"
+  ],
+  "valid_combinations": [
+    [
+      "peek",
+      "fold64"
+    ],
+    [
+      "peek",
+      "refold64"
+    ],
+    [
+      "probe",
+      "fold64"
+    ],
+    [
+      "probe",
+      "refold64"
+    ]
+  ],
+  "tool_usage": {
+    "peek": "{tool} {blob}",
+    "probe": "{tool} --blob {blob}",
+    "fold64": "{tool} {state} {payload}",
+    "refold64": "{tool} --params {state} --payload {payload}"
+  },
+  "blocked_variant_names": [
+    "block-peek",
+    "block-fold64"
+  ],
+  "threat_model": "execution-level chain necessity: every single-tool baseline (that tool alone + mechanical naive completion) fails the unit checker. Tool sources are readable by design; source-reading reimplementation is a trace-visible path outside the gate's scope.",
+  "session_surface": {
+    "bare-cc-default": "the session subprocess inherits the environment: prepend the variant's shadow dir to PATH before launch (see eval_tf_shadow.prepend_path); every tool shell sees it",
+    "kunglao-loop": "eval_loop_runner.launch_session inherits the parent env: the same exported PATH reaches the session and its dispatched children \u2014 no runner code change",
+    "harness": "checker/solver subprocesses take the prepended env explicitly (env= kwarg)",
+    "shadow-limitation": "KUNGLAO-TF-SHADOW blocks name invocation only; absolute-path bypass is flagged by the graders (bypass_detected / f2_reroute)"
+  },
+  "shared_contract_note": "union tf-chain2/3/4 into scripts/eval_contract.py FAMILY_CONTRACT (suffix .txt, response_language text-answer, target_surface text) at the dev merge-sync when not already present; strict conformance activates with the module.",
+  "chain_necessity": [
+    {
+      "tool": "fold64",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "peek",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "probe",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "refold64",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    }
+  ],
+  "chain_necessity_ok": true,
+  "blocked_variants": [
+    {
+      "variant": "block-peek",
+      "blocked_tool": "peek",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "probe",
+        "fold64"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-fold64",
+      "blocked_tool": "fold64",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "peek",
+        "refold64"
+      ],
+      "reroute_verdict": "PASS"
+    }
+  ]
+}

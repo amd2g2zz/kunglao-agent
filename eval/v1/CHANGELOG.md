@@ -1,5 +1,110 @@
 # eval-v1 changelog
 
+## eval-v1.3 (#356 toolflex tier — tool-combination flexibility)
+
+- Corpus layout extended: `eval/v1/tasks/toolflex/` with 3 constructed
+  units across three chain-width families (owner directive 2026-09-23:
+  the ladder grades OUTCOMES; this family grades PATH CAPABILITY —
+  select / chain / RE-ROUTE tool combinations). One seed per family
+  (35601-35603), every constant synthetic and seeded:
+  - `tf-chain2-py-v1` (K=2) — extract (peek|probe) -> fold
+    (fold64|refold64); four valid combinations.
+  - `tf-chain3-js-v1` (K=3) — unwrap (xtract|scan) -> keymix (mix|blend)
+    -> emit (emit64|reemit64); eight valid combinations.
+  - `tf-chain4-py-v1` (K=4) — open (unlock|peel) -> derive (sprout|
+    distill) -> expand (weave|braid) -> seal (seal|cap); sixteen valid
+    combinations.
+- Pipeline parameters exist ONLY as a mod-crypto-encrypted blob (the
+  #332 generator core); the blob key lives ONLY inside extract-tool
+  sources; the final digest folds in a seeded odd constant that lives
+  ONLY in final-stage tool sources. Stock-crypto naive completion fails
+  by construction.
+- Chain-necessity mint gate (the deception-smoke analog): a unit ships
+  only if EVERY single-tool baseline FAILS — each toolbox tool alone
+  (all others PATH-shadowed) + mechanical naive completion (stock
+  sha256/sha1/md5 truncations, zero-state fold, and a raw-stdout echo
+  face when the solo output already has the answer shape); every
+  attempt is checker-graded and recorded in `manifest.json`
+  (kunglao-eval-tf-manifest/1). Threat-model boundary documented in the
+  manifest: execution-level necessity; source-reading reimplementation
+  is a trace-visible path outside the gate's scope.
+- Blocked-path variants (the flexibility measurement): one tool per
+  minimal-chain role mechanically blocked via PATH shadowing
+  (`scripts/eval_tf_shadow.py` — prepended shadow dir, honest-error fake
+  tools carrying the KUNGLAO-TF-SHADOW marker, never silent no-ops).
+  Arm-agnostic wiring: the shadow travels in the session ENVIRONMENT
+  (bare/CC-default and kunglao-loop runners inherit PATH; no runner code
+  change). Mint-time verification per variant: the shadow errors with
+  the marker + nonzero rc AND the re-route chain (alternate
+  implementers) still greens the checker. Known limitation, graded not
+  denied: name-invocation blocking only — absolute-path invocation
+  bypasses; the graders flag it (bypass_detected) and F2 reports a
+  re-route-only headline (f2_reroute).
+- Trace graders (`scripts/eval_tf_graders.py`, kunglao-eval-tf-scores/1
+  + kunglao-eval-tf-aggregate/1): F1 solve per (unit x variant) from the
+  checker verdict; F2 = solved(blocked)/solved(unblocked) per unit
+  (f2_reroute excludes bypass solves); F3 coverage = successful tool
+  uses cover every manifest-required role; F4 waste = failed invocations
+  + superseded route switches + post-coverage churn (unknown exits never
+  count). Extraction faces: stream-json session transcripts (tool_use
+  events; pipelines split; tool_result is_error -> exit) and kunglao
+  event ledgers (action=tool_call rows, the `tool` field).
+- Task-unit schema: `toolflex` tier + `eval-v1.3` version enum
+  (schemas/eval-task-v1.json + validator in scripts/eval_dataset.py,
+  per-tier TIER_EVAL_VERSION map extended additively). Shared-contract
+  coordination: TF families follow the per-driver mirror convention
+  until unioned into #352's scripts/eval_contract.py FAMILY_CONTRACT at
+  the dev merge-sync (suffix ".txt", target_surface "text"); the strict
+  conformance test activates with the module.
+
+## eval-v1.2 (misdirection tier — adversarial trap units)
+
+- Corpus layout extended: `eval/v1/tasks/misdirection/` with 10
+  constructed units across six families, minted FROM the catalogued
+  failure modes (the trap is the point — samples engineered so the
+  naive first reading veers wrong). Ground truth by construction on the
+  shared mod-crypto generator core; deception smoke is a MINT-TIME GATE
+  (a unit whose trap fails to deceive the scripted naive method never
+  ships; the manifest records the naive-method wrong-answer baseline).
+  - `env-misattr-js` / `env-misattr-net` — env-misattribution bait: the
+    lazy first invocation path fails with permission-flavored errors
+    (empty helper token, non-executable helper, mock 403
+    insufficient_privileges) while a correct path exists. Checker face
+    `misdirection-verdict`: BYPASSED-VIA-CORRECT-PATH (route marker +
+    byte-exact proof answers) / ATTRIBUTED-WITH-EVIDENCE (rubric-
+    compliant env verdict carrying probe evidence) / MISATTRIBUTED
+    (bare env verdict). The verdict rubric rides in the unit manifest.
+  - `key-rotation-js` / `key-rotation-net` — rotation bait: one unit per
+    trigger class (per-session / per-request / timer) with a findable
+    KDF derivation point. Checker face `rotation-verdict`:
+    ROTATION-INDUCED (conclusion + cadence + derivation point + proof
+    answers spanning rotation boundaries — a single fixed key fails by
+    construction) / REHOOK-LOOP (N distinct captures, no induction) /
+    EXHAUSTED.
+  - `decoy-marker-js` / `decoy-marker-go` — planted false markers
+    (stock AES s-box inside the custom cipher, honeypot key strings, a
+    decoy anti-debug branch gating a decoy signer). Existing
+    conclusion-equality machinery (replay-roundtrip) grades them; the
+    decoy baseline is recorded per unit and differs from truth on every
+    published pair.
+- Transfer pairs: variant A/B per trap class on different surfaces
+  (js vs net vs go), recorded in the manifests — they only ENABLE a
+  later distillation-transfer measurement; no new cadence of any kind.
+- Single-source family contract: `scripts/eval_contract.py` owns the
+  family→candidate-suffix / response-language / target-surface table;
+  the mechanical checker, the loop-arm extractor and the bare-arm
+  prompt builder all consume it (conformance:
+  `tests/test_eval_contract_352.py`). This removes the duplicated
+  literal maps that caused the control-arm campaign's native-tier
+  KeyError class.
+- Tier vocabulary: tier `misdirection` at `eval-v1.2`; checker kinds
+  `misdirection-verdict` / `rotation-verdict` (schema
+  `schemas/eval-task-v1.json` extended). Mint + self-check CLI:
+  `scripts/eval_misdirection.py` (--mint task_id / --self-check
+  task_id; self-check compiles and executes every unit against the
+  model, grades the reference artifact PASS and the naive artifact
+  FAIL).
+
 ## eval-v1.1 (#332 release tier — WEB/NET half + NATIVE ladder)
 
 - Corpus layout extended: `eval/v1/tasks/release/` with 15 constructed
@@ -161,54 +266,6 @@ stored nowhere). Toolchain-absent = structured SKIP on the mint side
 - Held-out path contract: `EVAL_CORPUS_PREFIXES` +
   `filter_distiller_sources` — eval tasks never enter the #298
   distillation corpus.
-
-## eval-v1.2 (misdirection tier — adversarial trap units)
-
-- Corpus layout extended: `eval/v1/tasks/misdirection/` with 10
-  constructed units across six families, minted FROM the catalogued
-  failure modes (the trap is the point — samples engineered so the
-  naive first reading veers wrong). Ground truth by construction on the
-  shared mod-crypto generator core; deception smoke is a MINT-TIME GATE
-  (a unit whose trap fails to deceive the scripted naive method never
-  ships; the manifest records the naive-method wrong-answer baseline).
-  - `env-misattr-js` / `env-misattr-net` — env-misattribution bait: the
-    lazy first invocation path fails with permission-flavored errors
-    (empty helper token, non-executable helper, mock 403
-    insufficient_privileges) while a correct path exists. Checker face
-    `misdirection-verdict`: BYPASSED-VIA-CORRECT-PATH (route marker +
-    byte-exact proof answers) / ATTRIBUTED-WITH-EVIDENCE (rubric-
-    compliant env verdict carrying probe evidence) / MISATTRIBUTED
-    (bare env verdict). The verdict rubric rides in the unit manifest.
-  - `key-rotation-js` / `key-rotation-net` — rotation bait: one unit per
-    trigger class (per-session / per-request / timer) with a findable
-    KDF derivation point. Checker face `rotation-verdict`:
-    ROTATION-INDUCED (conclusion + cadence + derivation point + proof
-    answers spanning rotation boundaries — a single fixed key fails by
-    construction) / REHOOK-LOOP (N distinct captures, no induction) /
-    EXHAUSTED.
-  - `decoy-marker-js` / `decoy-marker-go` — planted false markers
-    (stock AES s-box inside the custom cipher, honeypot key strings, a
-    decoy anti-debug branch gating a decoy signer). Existing
-    conclusion-equality machinery (replay-roundtrip) grades them; the
-    decoy baseline is recorded per unit and differs from truth on every
-    published pair.
-- Transfer pairs: variant A/B per trap class on different surfaces
-  (js vs net vs go), recorded in the manifests — they only ENABLE a
-  later distillation-transfer measurement; no new cadence of any kind.
-- Single-source family contract: `scripts/eval_contract.py` owns the
-  family→candidate-suffix / response-language / target-surface table;
-  the mechanical checker, the loop-arm extractor and the bare-arm
-  prompt builder all consume it (conformance:
-  `tests/test_eval_contract_352.py`). This removes the duplicated
-  literal maps that caused the control-arm campaign's native-tier
-  KeyError class.
-- Tier vocabulary: tier `misdirection` at `eval-v1.2`; checker kinds
-  `misdirection-verdict` / `rotation-verdict` (schema
-  `schemas/eval-task-v1.json` extended). Mint + self-check CLI:
-  `scripts/eval_misdirection.py` (--mint task_id / --self-check
-  task_id; self-check compiles and executes every unit against the
-  model, grades the reference artifact PASS and the naive artifact
-  FAIL).
 
 ## Rules for future versions
 

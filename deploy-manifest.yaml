@@ -371,7 +371,7 @@ files:
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
-    sha256: 12358cedb593aa8406b9b6dbebb16496779ca0e20b3eabe995b64f245a3c9b6b
+    sha256: 77ee0bec0477e01c519e12787e87943bf643a654ff25cd84bd85fb928b2720a6
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
@@ -383,7 +383,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 52da57e737df1cfbd3c56cf44a1fc14b51666117968b1033b9118b14ac0acd0f
+    sha256: d244f83c80d8ed5af4f1810aad1be7c63eed7a18e56ba87fbf59657726ba20b7
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -408,6 +408,18 @@ files:
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
     sha256: f768c8d4d7c63d0ce42bdb1249d5b384c47e2f5a9903226d49b7a32f11e80f1f
+  - src: scripts/eval_tf_graders.py
+    dest: .claude/scripts/eval_tf_graders.py
+    kind: scaffold
+    sha256: 02edfecc57c605e90e1c9b27707878686895856a46980f7172238b5b4c7ff2fe
+  - src: scripts/eval_tf_shadow.py
+    dest: .claude/scripts/eval_tf_shadow.py
+    kind: scaffold
+    sha256: a3cc8d57f644f6f4932a41cf1792903956b82109ce98e9bcae5d47e2c9906f72
+  - src: scripts/eval_toolflex.py
+    dest: .claude/scripts/eval_toolflex.py
+    kind: scaffold
+    sha256: 27003e60d0355ae4f9626e80dd75e551dc3947e1de70e833f4f461383b017cfc
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
@@ -1511,7 +1523,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: acdd4c3543a4eac3682379410a9999050b9ff076d56f3a678a9a90109dc710bb
+    sha256: fb25c2e72e10aad464f0d355743af36809ecd211c2321d77991ea4e1fc77a517
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
