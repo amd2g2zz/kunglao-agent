@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 5d9f33c3299ebd6f93fbdada9da6050400f1966bcdaf8ddaa6dc3dfd349e8d61
+    sha256: dcffd63cae0840b3db555b4877d273d3a3e508b34fe5c78a3bf097208fa0bd1b
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: f4916faada0471898de868df13995a6015400a9ce09908c1629d302018a1a193
+    sha256: 346aa45a0224f8604b565cae1dd6e9e0cd67c88609a0f7cc33dec5a68fbe0c45
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
