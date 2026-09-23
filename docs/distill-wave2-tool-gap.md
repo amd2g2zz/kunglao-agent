@@ -71,9 +71,13 @@ generality × gap vs shelf × eval-family relevance.
 - (b) Index example rows: landed as `tools/_INDEX.yaml` entries with copyable
   usage in the matching `tools/_index-<category>.md` contract blocks
   (mechanically pinned).
-- (c) Wave-1 distillate cards: NOT YET LANDED in the repo at branch-out time
-  (wave-1 PR still in flight). Per the merge rule, the "Tool" usage-example
-  appends for those cards are deferred to merge-sync; on this branch the
-  few-shots additionally land in the *existing* cards
-  (`references/re-library/patterns/vm/vm-deobfuscation-routing.md`,
-  `references/re-library/web/labs/web-re-quickref.md`) as additive sections.
+- (c) Wave-1 distillate cards: landed during this PR's merge-sync (wave-1
+  PR #361 reached dev mid-flight) — additive `## Tool section` appends on
+  the four matching cards: external-env-stub-generation (js_env_diagnose),
+  external-peel-ordering-family-adapters (js_obfuscation_detect),
+  external-algorithm-recovery-chains (cipher_identify),
+  external-delivery-verification-gates (sign_candidate_verify). The
+  pre-existing cards (`references/re-library/patterns/vm/
+  vm-deobfuscation-routing.md`, `references/re-library/web/labs/
+  web-re-quickref.md`) also carry the wave-2 tool pointers. All landing
+  places are mechanically pinned by the few-shot test.

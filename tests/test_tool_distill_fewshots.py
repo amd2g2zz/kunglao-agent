@@ -82,6 +82,29 @@ def test_c_card_usage_examples_appended() -> None:
     assert "tools/web/sign_candidate_verify.py" in quickref
 
 
+def test_c_wave1_distillate_cards_carry_tool_sections() -> None:
+    """Merge-sync completed: the wave-1 cards landed (#361), and each
+    card matching a wave-2 capability now carries a Tool section pointing
+    at its registered CLI."""
+    cards = ROOT / "references/re-library/web/external-distilled"
+    env_stub = (cards / "external-env-stub-generation.md").read_text(
+        encoding="utf-8")
+    assert "## Tool section" in env_stub
+    assert "tools/web/js_env_diagnose.py" in env_stub
+    peel = (cards / "external-peel-ordering-family-adapters.md").read_text(
+        encoding="utf-8")
+    assert "## Tool section" in peel
+    assert "tools/web/js_obfuscation_detect.py" in peel
+    algo = (cards / "external-algorithm-recovery-chains.md").read_text(
+        encoding="utf-8")
+    assert "## Tool section" in algo
+    assert "tools/crypto/cipher_identify.py" in algo
+    delivery = (cards / "external-delivery-verification-gates.md").read_text(
+        encoding="utf-8")
+    assert "## Tool section" in delivery
+    assert "tools/web/sign_candidate_verify.py" in delivery
+
+
 def test_d_templates_documented() -> None:
     readme = (ROOT / "templates/frida/README.md").read_text(encoding="utf-8")
     for tmpl, params in NEW_TEMPLATES:
