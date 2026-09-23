@@ -93,6 +93,24 @@ release (see the mapping table at the end).
   scope.
 ### Changed
 
+- **Checker lane-universal (#355)**: the red-team checker is defined by its
+  FUNCTION — adversarial verification — not by any material domain, so ALL
+  evidence gets red-team checking on every lane. `agents/kunglao-redteam.md`
+  drops the #342 `lane: malware|web` declaration and carries a lane-contract
+  note (adversarial checking is lane-universal; the lane-specific evidence
+  sets and machine-check methods remain METHOD guidance, never admission
+  restrictions), and `hooks/dispatch_gate._lane_gate` /
+  `_agent_lane_declaration` document the #355 semantics: a lane-absent agent
+  is permitted on every lane, the `lane:` axis binds maker-type agents only
+  (the four malware-lane specialists' contracts unchanged), and the
+  declaration is file truth — the dispatch payload cannot influence it, with
+  plugin-qualified subagent ids (`kunglao-agent:ghidra-light`) now resolving
+  to their bare segment so a crafted payload id cannot dodge the lane gate
+  or the #760 tools-rack face through an unresolvable filename. The four
+  lanes #342 left refused (algorithm/protocol/data/app) are admitted;
+  blind_gate promotion semantics are untouched (PROVEN still requires
+  sign-off + dispatched-verifier evidence); deploy-manifest shas regenerated.
+
 - **README rewrite (#333)**: the README now leads with the RLVR positioning —
   the oracle verdict as the only trusted currency (`oracle_case_admission.py`
   quantified verification contracts), context as the policy surface, Thompson
