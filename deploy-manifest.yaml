@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 133adcd3419dd0929c8d4f1bd2444385ae46ecf6c432960fbc608edc6eb2f883
+    sha256: f197495d1d34126b8742e2467ff1414fd8af238125c54d130ce08df0050ae51d
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: a638d180800fd53b140a9798497c34d34b60462ec3f3afc9a9b0e67bb21cd572
+    sha256: e1fd97aa144371fa12f262643c6484c116a6497adcc17d75093ea91cdea244d2
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: fb42152eb2f18392caee596bd257dacb53d323bfeacccbabbd4cb39eb4b0b2da
+    sha256: 4ced443ecc464f2c5030f6664e1fa21f4d5015c7823b4338dababfedb4bafc65
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 99342db56d515e64b918e009215f20d1ad1c9bc3c3d46924b4aa0b51b54634d9
+    sha256: e49ea52ae8e82f30d6bf56cd7e3cafcff95eb3a740c8e438ca5fc13dbfb837c7
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -208,6 +208,10 @@ files:
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
     sha256: 79582b948c270eade801ed8f1e4dde4b3aba5f4c9d6bd17cfbe99602a4f4a6ab
+  - src: scripts/blocker_lint.py
+    dest: .claude/scripts/blocker_lint.py
+    kind: scaffold
+    sha256: 8a866f1aa0643b1b026e1b5b43ae0cd3324c0d7f7341c4d5bca1707e1e30bfb9
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -263,7 +267,7 @@ files:
   - src: scripts/context_budget.py
     dest: .claude/scripts/context_budget.py
     kind: scaffold
-    sha256: d29c78bcf56466a5e2ea6979a1739eb43416b9d175d2153a42f515a072692c65
+    sha256: 225b9d44299c694cacd8878042378ff3597e5f48724079581837b8dbbce97aef
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
@@ -275,7 +279,7 @@ files:
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: ba377a188dd04bead1fe377c4f878af69f1ffe3c5fc0f5e74da8a6c9edd6043f
+    sha256: 7d5d3938b3f3aef9f70975438821cc11e4d0af0b182c17526a592876c9ee7c3b
   - src: scripts/cost_gate.py
     dest: .claude/scripts/cost_gate.py
     kind: scaffold
@@ -407,7 +411,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 2c0cb385cef5f3742a698a630f8363de4b0967a40e6348eb77c215bbd6a41ded
+    sha256: e6c339f6944ac754a3c82db36ad43cb5c40db96bd3d26b5fe4a8cfc16a5c42bc
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -475,7 +479,7 @@ files:
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
-    sha256: 15361c24da987c57a487a0180e8da3bb5a0c35b0065e726342f660cf2cdd9706
+    sha256: 6dede354384328cb42d06149fb352128c6989935c11ddaef683ae1930d239b18
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
@@ -563,7 +567,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: a6321b75bff74321b71c44832ca5c88155d9920eb72ca15fde955e53669705a1
+    sha256: ca20865235decb0c267b5804a6b7319dbd38b5263774f2c5f95931287aad2074
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -599,7 +603,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: f436b54d8723c4e28f640229cc8a47115f153c913070ad30d8b20a3b79ca7d07
+    sha256: 56f1527c39eaab2374b46d1e5be43004d230146095064ba934411d38eebcb45d
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -712,6 +716,10 @@ files:
     dest: .claude/scripts/premature_termination_detect.py
     kind: scaffold
     sha256: 99c790d8fd500c68420b7bc227b503932598de99e83e16c35db75b64edf88d6b
+  - src: scripts/premise_gate.py
+    dest: .claude/scripts/premise_gate.py
+    kind: scaffold
+    sha256: 263a51af7abdbbb8daa23f27bd60ec88916a05e7b0d09d0913cf5cd78cc49d02
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
@@ -828,10 +836,18 @@ files:
     dest: .claude/scripts/rollup.py
     kind: scaffold
     sha256: 9489c6c4eebc5a2bfac1c8a28bcc68e74b793a0e0fd09c6bcd4cf43138606e07
+  - src: scripts/rotation_induction.py
+    dest: .claude/scripts/rotation_induction.py
+    kind: scaffold
+    sha256: ce0a795ebaa29789e1d3f780efdcaad27417f6ac32a817cd50fbe9d6edd65ab9
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
     sha256: 3fe8ea1d3b0fbcb1bd1a7228ea39e89b558b40e17746918c2e45685eade7be4e
+  - src: scripts/runtime_facts.py
+    dest: .claude/scripts/runtime_facts.py
+    kind: scaffold
+    sha256: 37b7c86da394c5b59a05c3fcc9ab0e6f7212fd7282742a6955075b2f1c3c8c7a
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -991,11 +1007,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 7daf97e436f088f6c41c503a0813efd677748624240205954cfae0447116ef17
+    sha256: bbbf7f15321d366987f7e97f1a90372592671d3d08345e30a46ceea29d95f1a6
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 7de34897d87f631a243ddc715c8b9854c3f2189d18cc5cb9a822f3ae584a2458
+    sha256: 0213d447e46940719e0a4181c77f605ec446ebe1538730067a32bb77819c95c2
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1004,6 +1020,10 @@ files:
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
     sha256: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
+  - src: references/_index-dynamic.md
+    dest: .claude/references/_index-dynamic.md
+    kind: asset
+    sha256: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   - src: references/_index-languages.md
     dest: .claude/references/_index-languages.md
     kind: asset
@@ -1147,7 +1167,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: aea4c8e1f9fc48125f87488e309e16f59eca8b21e31445337f041866bc4f3914
+    sha256: 9c3d452b33a40fd9c09ae1e6d5c347c0f1b2438f897da7a76009af24ebaf4259
   - src: references/re-library/android/emulation/android-fingerprint-apis.md
     dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
@@ -1184,6 +1204,10 @@ files:
     dest: .claude/references/re-library/anti-analysis/catalog/anti-analysis.md
     kind: asset
     sha256: 0cfc71a76c06aa2610159ba12dd5f7e524d7bacde31f1065558d3c8e4e71d955
+  - src: references/re-library/dynamic/rotation-characterization.md
+    dest: .claude/references/re-library/dynamic/rotation-characterization.md
+    kind: asset
+    sha256: 9c2704fc3ea74611a739b7d3e3b63663af3e18f74ffa6edaf38930fb8541ee6a
   - src: references/re-library/languages/compiled/languages-compiled.md
     dest: .claude/references/re-library/languages/compiled/languages-compiled.md
     kind: asset
@@ -1407,7 +1431,7 @@ files:
   - src: templates/state/blocker.md
     dest: .claude/templates/state/blocker.md
     kind: asset
-    sha256: 4b51edb7926ed9db0380b63766b87401716df16fd9819022b696ea021f34ae93
+    sha256: 06decae17da322e273a730900f2b19db780e265810401a8696420563e948d9ff
   - src: templates/state/claim-register.yaml
     dest: .claude/templates/state/claim-register.yaml
     kind: asset
@@ -1447,7 +1471,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ff0023b983502de3be1b8307f0cbd56c57a6affc23d75eac8101b8ab2e9eefe2
+    sha256: 2e73745fb563274a6002214b48518ea474b9bab4b8c309844592017969263d05
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

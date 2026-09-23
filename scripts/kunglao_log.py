@@ -116,7 +116,9 @@ LEGACY_ACTORS = frozenset({
     "plan_drift", "plan_drift_detector", "plan_epistemics", "priority",
     "priority_ratio", "progress_timeline",  # issue 293 tagged decision emission
     "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
-    "rollup", "retract_claim", "rho_verifier", "scan_worker_budget",
+    "rollup",
+    "rotation_induction",  # issue-341 same-slot value-join induction writer
+    "retract_claim", "rho_verifier", "scan_worker_budget",
     "statusline_snapshot",  # #883 statusline health-snapshot writer (event-driven, #142)
     "target_ladder",  # issue 293 tagged decision emission (sibling fan-out + settlement gate)
     "telemetry", "think_seat", "toolchain_install", "tuition_curve",

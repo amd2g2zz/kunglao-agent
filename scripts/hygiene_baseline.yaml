@@ -64,7 +64,7 @@ files:
     r1: 155
     r2: 2
   scripts/convergence_health.py:
-    r1: 15
+    r1: 18
   scripts/cost_gate.py:
     r1: 2
   scripts/dead_letter.py:
@@ -122,7 +122,7 @@ files:
   scripts/eval_targets.py:
     r1: 4
   scripts/event_taxonomy.py:
-    r1: 115
+    r1: 116
     r2: 1
   scripts/external_kicker.py:
     r1: 32
@@ -539,8 +539,8 @@ files:
   tests/test_debug_flag_task_spec_25.py:
     r1: 3
   tests/test_decide_regression_anchor.py:
-    r1: 61
-    r2: 35
+    r1: 62
+    r2: 36
   tests/test_decide_schema_routing.py:
     r1: 6
   tests/test_decide_state_machine.py:
@@ -1335,4 +1335,14 @@ files:
   tests/test_yara_tools.py:
     r1: 1
   tests/test_zero_output_fingerprint.py:
+    r1: 1
+  scripts/rotation_induction.py:
+    r1: 3
+  scripts/runtime_facts.py:
+    r1: 2
+  tests/test_rotation_dispatch_gate_341.py:
+    r1: 1
+  tests/test_rotation_induction_341.py:
+    r1: 1
+  tests/test_runtime_fact_gate_341.py:
     r1: 1

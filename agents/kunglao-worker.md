@@ -136,7 +136,6 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    (sources checked / methods tried / where exactly you are stuck), then
    report blocked. **Reporting a blocker without research =
    failure** (W-27).
-
 **Boundary clause — TRY applies only where the capability might exist but must be explored.** A capability MISMATCH
 (e.g. you need filesystem access but hold only an in-process decompiler interpreter) → go straight to ESCALATE and
 write a blocker — improvising through an adjacent capability (IDA py_eval as a shell, the decompiler as a file
@@ -146,6 +145,11 @@ in-process interpreter carry no workspace byte anchor, so no verifier can recomp
 **NEVER say "I can't / I don't know how" without research evidence.**
 Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
 need <specific help>".
+
+**Blocker schema v2 (write-gate enforced)**: `observed:` / `attributed:` /
+`probe_evidence:` / `expires:` mandatory; env attributions ("no root",
+"unavailable", ...) REQUIRE differential probe bytes (e.g. `su -c id`
+stdout) — error text alone is never evidence.
 
 <!-- contract: sequential-thinking -->
 ## Sequential-thinking contract
@@ -524,6 +528,17 @@ self_caveat: "unverified — needs independent verifier pass"
 ```
 
 lint check: `cd <workspace> && python <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
+
+**Runtime-state facts (rotation induction)** — a fact whose `source` is a runtime-observation value (`dynamic_re`, `mixed`, `dynamic-trace`, `frida-capture`, `qiling-emu`) about a VOLATILE subject (key/token/session/nonce/cookie in the title or slot) must ALSO carry four frontmatter fields — the write gate (`hooks/write_guard.py` runtime-fact leg) REJECTS the fact otherwise:
+
+```yaml
+temporal_scope: runtime              # the value AS CAPTURED, not the slot forever
+subject_slot: config-decrypt-key     # STABLE slot id across captures (kebab-case role, never the value)
+value_fingerprint: <64-hex sha256>   # sha256 of the observed value — NEVER raw key material
+captured_at: "<ISO-8601 timestamp>"  # moment of capture (quote it; the time survives parsing)
+```
+
+Re-extraction of the same slot = a NEW fact with the same `subject_slot`, fresh `value_fingerprint`/`captured_at` — never an edit of the earlier fact. Same slot + distinct fingerprints is the rotation input `rotation_induction` joins mechanically; fingerprints are the only value material that leaves your session.
 
 <!-- contract: tool-discovery -->
 ## Script reusability
