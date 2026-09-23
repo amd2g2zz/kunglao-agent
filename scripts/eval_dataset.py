@@ -44,7 +44,7 @@ EVAL_VERSION = "eval-v1"
 # (native families + web/net packaging-ladder families on the shared
 # mod-crypto core); v1.2 = the adversarial-misdirection tier (trap units
 # minted from the catalogued failure modes, verdict-class checker faces);
-# v1.3 = #356 toolflex tier (chain-necessity units + blocked-path
+# v1.3 = issue-356 toolflex tier (chain-necessity units + blocked-path
 # variants). A landed version is never mutated.
 EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1", "eval-v1.2",
                                   "eval-v1.3")
@@ -82,8 +82,8 @@ TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex")
 # never mutated in place per the eval version rules). Both spellings are
 # load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
 # surface; EVAL_TIER_VERSION is the release-tier alias kept for the
-# native-lane tests/runner. #352 adds the misdirection tier at eval-v1.2;
-# #356 adds the toolflex tier at eval-v1.3.
+# native-lane tests/runner. Misdirection (issue 352) lands at eval-v1.2;
+# toolflex (issue 356) at eval-v1.3.
 TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1",
                                      "release": "eval-v1.1",
                                      "misdirection": "eval-v1.2",

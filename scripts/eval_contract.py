@@ -75,7 +75,7 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                         "target_surface": "text"},
     "decoy-marker-go": {"suffix": ".go", "response_language": "Go",
                         "target_surface": "text"},
-    # ---- toolflex tier (eval_toolflex registry, #356) --------------------
+    # ---- toolflex tier (eval_toolflex registry, issue 356) ---------------
     # the graded artifact is the session's answer DOCUMENT (answer.txt,
     # byte-exact against the unit's construction); the toolbox tools are
     # the measurement surface, never a graded candidate.

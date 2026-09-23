@@ -439,7 +439,7 @@ class TestNativeRunnability:
         """_candidate_suffix mirrors eval_checker._validate_candidate
         exactly across every tier's families (checker must accept the
         mapped suffix). Both now consume the single-source contract
-        (#352), TF families included (#356 union)."""
+        (issue 352), TF families included (issue 356 union)."""
         import eval_checker as chk
 
         for tier in ds.TIERS:
