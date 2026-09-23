@@ -58,6 +58,20 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # fact_ids and top_dimension — only the four anomaly scores changed. No
 # ranker or decide() code path was touched by the sweep.
 #
+# 2026-09-23 DATA-coupled freeze refresh (issue 358 external-distillation
+# wave 1): ten external-distilled reference cards + one gap report landed
+# under references/re-library/, growing the anomaly baseline corpus
+# (anomaly_detector design D2 source 1: every .md under references/re-library/).
+# Lexical-rarity statistics shifted, moving anomalies[].score in the 3rd
+# decimal on 2 of 31 cases (drain_blocked_contradiction,
+# order_discovery_beats_contradiction). Case-by-case verification of
+# capture_current() vs the previous anchor: drift is score-only (4 score
+# fields total; zero changes in action, decision order, phase fields,
+# anomaly counts, fact_ids, top_dimension). No ranker or decide() code path
+# was touched. Card bodies were also restructured to the stage-5
+# card-format contract (house exemplars: web-re-quickref /
+# jsvmp-triage) — same corpus class.
+#
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
 # ranking layer — priority_ratio is now the Thompson composite
