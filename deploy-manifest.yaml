@@ -99,7 +99,7 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: 346aa45a0224f8604b565cae1dd6e9e0cd67c88609a0f7cc33dec5a68fbe0c45
+    sha256: d7a8f75ed8249274ee958b2f0c9bb6fc7a9289fe030e4601be67c63dfd8019bd
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent

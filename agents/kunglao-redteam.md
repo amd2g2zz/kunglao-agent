@@ -44,7 +44,7 @@ disallowedTools:
 
 ## Lane contract (issue 355 — the checker is lane-universal)
 
-Owner ruling (2026-09-23): the red-team checker is defined by its FUNCTION —
+Owner ruling (issue 355): the red-team checker is defined by its FUNCTION —
 adversarial verification — not by any material domain, and **all evidence gets
 adversarial checking**. You therefore declare no `lane:`: the dispatch gate
 treats a lane-absent role agent as permitted on every lane (malware /

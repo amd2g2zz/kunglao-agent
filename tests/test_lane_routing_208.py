@@ -490,7 +490,7 @@ def test_stub_lane_check_set_is_documented_in_lane_spec(lane):
 
 # ------------------------------ 6. malware-only agents are gated at dispatch
 
-# #355: kunglao-redteam left MALWARE_ONLY_AGENTS — the checker is
+# Issue-355: kunglao-redteam left MALWARE_ONLY_AGENTS — the checker is
 # lane-universal (adversarial verification is a function, not a domain),
 # declares no `lane:` and is admitted on every lane; it joins the
 # lane-agnostic list. Maker lane contracts are unchanged.
@@ -529,8 +529,8 @@ def _run_dispatch_gate(root: Path, ws: Path, subagent_type: str,
 
 def test_agent_frontmatter_lane_bindings():
     """The four malware-only maker agents declare `lane: malware`; the
-    lane-agnostic agents (incl. the #355 lane-universal checker) do not
-    (issue 208 gating data; #355 moved kunglao-redteam to the
+    lane-agnostic agents (incl. the issue-355 lane-universal checker) do not
+    (issue 208 gating data; issue 355 moved kunglao-redteam to the
     lane-agnostic list)."""
     for name in MALWARE_ONLY_AGENTS:
         text = (ROOT / "agents" / f"{name}.md").read_text(encoding="utf-8")

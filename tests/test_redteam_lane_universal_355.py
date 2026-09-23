@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Issue #355 — the red-team checker is lane-universal by design.
+"""Issue 355 — the red-team checker is lane-universal by design.
 
 Owner ruling (2026-09-23): "redteam是用来做对抗校验的。跟web没有冲突。跟
 malware更是没有关系。所有的证据都需要redteam去做对抗" — the checker is
 defined by its FUNCTION (adversarial verification: blind re-derivation,
 >=2 independent paths, machine-check oracle), not by any material domain.
-#342's `lane: malware|web` preserved the wrong frame (a lane LIST on the
-checker); #355 removes the axis: agents/kunglao-redteam.md declares NO
+Issue 342's `lane: malware|web` preserved the wrong frame (a lane LIST on the
+checker); issue 355 removes the axis: agents/kunglao-redteam.md declares NO
 `lane:`, and hooks/dispatch_gate treats a lane-absent agent as permitted on
 every lane. The `lane:` axis governs maker-type agents only (ghidra-light,
 go-symbols, pefile-signature, floss-filter — material contracts, unchanged).
@@ -14,13 +14,13 @@ go-symbols, pefile-signature, floss-filter — material contracts, unchanged).
 Contract pinned here:
   1. THE fixture: kunglao-redteam dispatches rc=0 on all six lanes
      (malware / algorithm / protocol / web / data / app) — the four lanes
-     #342 left blocked are the regression core.
+     issue 342 left blocked are the regression core.
   2. role agents (redteam, init-worker, verdict-scorer) declare no lane —
      lane-universal by construction, no runtime role detection involved.
   3. maker lane-gating unchanged: ghidra-light still refused on web,
      allowed on malware. web-re-worker stays lane-absent (its unchanged
      contract — it never declared a lane; gating it would be a maker lane
-     contract change, out of #355 scope).
+     contract change, out of issue-355 scope).
   4. identity cannot dodge the gate: a plugin-qualified subagent_type
      ("kunglao-agent:ghidra-light") resolves to the same agents/<bare>.md
      frontmatter (the _waiting_target_id bare-segment convention) — a
@@ -98,7 +98,7 @@ def _run_dispatch_gate(root: Path, ws: Path, subagent_type: str,
 # ------------------------------------- 1. THE six-lane admission fixture
 
 def test_redteam_declares_no_lane():
-    """The `lane:` line is GONE from the checker contract (#355): the
+    """The `lane:` line is GONE from the checker contract (issue 355): the
     parser sees no binding, and no binding means every lane."""
     mod = _load_gate_module()
     assert mod._agent_lane_declaration("kunglao-redteam") == ()
@@ -108,7 +108,7 @@ def test_redteam_declares_no_lane():
 @pytest.mark.parametrize("lane", ALL_LANES)
 def test_redteam_rc0_on_all_six_lanes(tmp_path, lane):
     """THE acceptance fixture: rc=0 on every lane — including the four
-    (algorithm / protocol / data / app) that #342 left refused."""
+    (algorithm / protocol / data / app) that issue 342 left refused."""
     ws = _write_lane_ws(tmp_path, lane)
     r = _run_dispatch_gate(tmp_path, ws, "kunglao-redteam")
     assert r.returncode == 0, \
@@ -118,7 +118,7 @@ def test_redteam_rc0_on_all_six_lanes(tmp_path, lane):
 
 
 def test_redteam_rc0_on_legacy_laneless_workspace(tmp_path):
-    """A lane-less (legacy) contract keeps the pre-#208 behavior: pass."""
+    """A lane-less (legacy) contract keeps the pre-issue-208 behavior: pass."""
     ws = _write_lane_ws(tmp_path, None)
     r = _run_dispatch_gate(tmp_path, ws, "kunglao-redteam")
     assert r.returncode == 0, f"legacy lane-less must pass: {r.stderr}"
@@ -127,7 +127,7 @@ def test_redteam_rc0_on_legacy_laneless_workspace(tmp_path):
 # --------------------------------- 2. role agents are lane-absent by design
 
 def test_role_agents_declare_no_lane():
-    """Role agents are dispatched by protocol position (#310), never by
+    """Role agents are dispatched by protocol position (issue 310), never by
     claim routing — none of them declares a lane axis. The 'role agent'
     determination is the git-versioned agent FILE (frontmatter truth),
     not a runtime property a dispatch payload could influence."""
@@ -141,7 +141,7 @@ def test_role_agents_declare_no_lane():
 # ------------------------------------------ 3. maker lane-gating unchanged
 
 def test_ghidra_light_still_refused_on_web(tmp_path):
-    """Regression pin (#342/#208 intent): a malware-lane maker stays
+    """Regression pin (issue 342 / 208 intent): a malware-lane maker stays
     refused outside its declared lane."""
     ws = _write_lane_ws(tmp_path, "web")
     r = _run_dispatch_gate(tmp_path, ws, "ghidra-light")
@@ -159,8 +159,8 @@ def test_ghidra_light_allowed_on_malware_lane(tmp_path):
 def test_web_re_worker_contract_unchanged_lane_absent(tmp_path):
     """web-re-worker is a lane-ABSENT maker (it has never declared a
     `lane:` — verified across its full git history): its admission face is
-    unchanged by #355 on every lane, malware included. Gating it would be
-    a maker lane-contract change — explicitly out of #355 scope."""
+    unchanged by issue 355 on every lane, malware included. Gating it would be
+    a maker lane-contract change — explicitly out of issue-355 scope."""
     fm = _frontmatter(ROOT / "agents" / "web-re-worker.md")
     assert "lane" not in fm
     for lane in ("malware", "web"):
@@ -217,7 +217,7 @@ def _fact_with_signoff(ws: Path, claim_id: str) -> None:
 
 
 def test_blind_gate_dispatch_evidence_required_on_protocol_lane(tmp_path):
-    """blind_gate is lane-agnostic AND unchanged (#355 touches admission
+    """blind_gate is lane-agnostic AND unchanged (issue 355 touches admission
     only): on a protocol-lane workspace the sign-off alone does NOT
     promote — the dispatched-verifier evidence is still required, and the
     composed register gate still blocks the promotion."""
@@ -252,7 +252,7 @@ def test_blind_gate_dispatch_evidence_required_on_protocol_lane(tmp_path):
 
 def test_redteam_stays_out_of_the_maker_route_table():
     """route_capability keys on `triggers:` — the checker must not grow
-    one (#342 pin, unchanged by #355; the ruling changes ADMISSION, not
+    one (issue 342 pin, unchanged by issue 355; the ruling changes ADMISSION, not
     routing)."""
     import route_capability as rc
     table = rc.load_specialist_table()

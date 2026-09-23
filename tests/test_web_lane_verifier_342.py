@@ -25,7 +25,7 @@ scripts/lane_spec.py). Therefore the single-source alignment is:
     face is purely additive (allowedTools + BLIND evidence + machine-check
     shapes + attack angles)
 
-#355 ADDENDUM (supersedes the lane-LIST frame, keeps this module's intent):
+ISSUE-355 ADDENDUM (supersedes the lane-LIST frame, keeps this module's intent):
 the owner ruled the checker is lane-UNIVERSAL — adversarial verification is
 a function, not a domain, so kunglao-redteam.md now declares NO `lane:` and
 a lane-absent agent is permitted on every lane. The two tests below that
@@ -83,11 +83,11 @@ def _declared_lanes() -> set[str]:
 
 
 # ------------------------------------------------------------------
-# the declaration (was: the malware|web multi-lane list; #355: lane-absent)
+# the declaration (was: the malware|web multi-lane list; issue 355: lane-absent)
 # ------------------------------------------------------------------
 
 def test_redteam_declares_no_lane_universal():
-    """#355: the checker declares NO lane — lane-universal by the owner
+    """Issue 355: the checker declares NO lane — lane-universal by the owner
     ruling (adversarial checking is a function, not a domain). The parser
     sees no binding, so no lane can refuse it."""
     assert _declared_lanes() == set()
@@ -161,7 +161,7 @@ def test_redteam_passes_lane_gate_on_web_workspace(tmp_path):
 @pytest.mark.parametrize("lane", ["malware", "algorithm", "protocol",
                                   "web", "data", "app"])
 def test_redteam_admitted_on_every_lane_355(tmp_path, lane):
-    """#355 inversion of the four-lane refusal pin: with the lane axis
+    """Issue-355 inversion of the four-lane refusal pin: with the lane axis
     removed from the checker, EVERY lane admits it (the six-lane fixture
     lives in test_redteam_lane_universal_355.py; this keeps the 342-face
     coverage green under the new contract)."""
