@@ -656,3 +656,20 @@ tools:
     requires: []
     cost_hint: {mem_gb: 0.2, time: cheap}
     quality: {js:env-diagnose: mid}
+
+  # issue #359 wave-2 distillation: differential verification of candidate
+  # signer/encryptor functions against captured request samples. emit a
+  # browser-side harness, apply promotes only fully-verified candidates.
+  - name: sign_candidate_verify
+    category: web
+    capability: js:sign-verify
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "candidates JSON {name, locator 'global:|expr:', samples [{args, expected}]} + harness results JSON", output: "emit: harness .js + plan .json; apply: verified candidates JSON (verified=true only when EVERY sample ran+matched and count clears --minimum-matches) + stdout summary"}
+    description: Verifies recovered signer functions differentially
+    when_not: "verification step, not discovery — candidates must already be recovered (static read or runtime trace); never promotes on partial matches (every planned sample must run and match); malformed artifacts exit 2"
+    provider: sign-candidate-verify
+    produces: [js:sign-verify]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {js:sign-verify: mid}

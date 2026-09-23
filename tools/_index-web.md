@@ -9,6 +9,7 @@
 | `jsvmp_triage` | Three-feature JSVMP/VMP triage CLI (verdict = three-of-two votes) | Read when a deobfuscated web bundle may hide a bytecode VM; not a proof — runtime trace confirmation stays with the operator |
 | `js_obfuscation_detect` | Obfuscation-technique inventory + routing to the registered next tool | Read FIRST on a raw minified bundle to route (packer → unbundle → deobfuscate → VMP triage); advisory only — no transforms, no family proof |
 | `js_env_diagnose` | Bare Node-VM sandbox run reporting missing browser globals | Read when a deobfuscated bundle must execute outside the browser and the env-patch list is unknown; diagnosis only — not an evidence-collection environment |
+| `sign_candidate_verify` | Differential verification of candidate signer functions vs captured request samples | Read when candidate sign/encrypt functions are recovered and must be PROVEN against captured I/O before delivery; promotion requires every sample to run and match |
 
 ## Three-feature thresholds
 
@@ -57,3 +58,15 @@ Verdict: `votes = F1+F2+F3`; suspected ⇔ votes ≥ 2; confidence high(3/3) / m
 - **Outputs**: stdout JSON: `success` (bundle ran without throwing), `error` (truncated error class + message), `undefined_paths` (sorted missing globals), `access_stats` {get, set, has, construct}, `console_tail` [[level, message]].
 - **exit code**: 0 = diagnosis produced (a target crash or sandbox timeout is a RESULT, not an error) / 2 = tool-level failure (node binary missing, target missing/empty, harness crash, wall-clock budget exhausted — fail loud, never a silent fallback).
 - **when_not**: Not an execution environment for evidence collection — diagnosis only; requires a node binary on the analysis host (consistent with _INDEX.yaml when_not).
+
+### sign_candidate_verify
+
+- **Purpose**: Turn "I think this function is the signer" into evidence — emit a browser-side harness that calls each candidate function with every captured sample and fingerprints the outputs, then promote a candidate to `verified=true` only when EVERY planned sample ran and matched and the match count clears the minimum.
+- **Usage**:
+  ```bash
+  python tools/web/sign_candidate_verify.py emit --candidates artifacts/candidates.json --out harness.js
+  ```
+- **Inputs**: candidates JSON `{"candidates": [{name, locator, samples: [{args: [...], expected: str}]}]}` with locator `"global:<dotted.path>"` or `"expr:<js expression>"`; apply additionally takes the harness results JSON and `--minimum-matches` (default 2).
+- **Outputs**: emit: harness `.js` (paste into the target page console/CDP; prints one JSON line) + optional plan `.json`; apply: verified candidates JSON (per-sample checks with reasons: never-ran / fingerprint mismatch / harness error) + stdout summary {candidates_total, candidates_verified, minimum_matches}.
+- **exit code**: 0 = emitted/applied / 2 = malformed artifacts or invalid schema (unknown candidate, out-of-range sample index, duplicate result — fail loud, never a silent fallback).
+- **when_not**: Verification step, not discovery — candidates must already be recovered (static read or runtime trace); partial matches are never promoted (consistent with _INDEX.yaml when_not).
