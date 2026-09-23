@@ -21,90 +21,92 @@ dedup: overlap(web-risk-control backward endpoint tracing)
 > provenance = S-id list above. Backward endpoint tracing (consume-point →
 > producer, one hop per iteration) is web-risk-control's; this card lands the
 > planning layer around it: triage, checkpoint structure, deviation walks,
-> and candidate scoring.
+> and candidate scoring. Advisory: it is planning doctrine, not proof —
+> candidate verdicts still go through the evidence stratification below.
 
 ## Problem-type triage comes before route choice
 
-Classify the target into one of a small set of problem types BEFORE choosing
-an entry route — each type implies a different plan:
+Classify the target before choosing an entry route; if the type is unclear,
+classify the BLOCKER instead — it is the cheaper question and each answer
+names its own next move.
 
-- standard signature / digest (regular output shape, named crypto
-  primitives in source)
-- hybrid encryption / key wrapping (asymmetric transport of a symmetric key)
-- cookie / header / multi-parameter joint signing (several fields consume
-  shared intermediates)
-- bytecode-VM / heavy-obfuscation pure-algorithm (big arrays, dispatch
-  loops, bitwise-dense state machines)
-- binary-protocol (WASM / protobuf-class / WebSocket frames)
-- challenge / risk-control parameter (environment and behavior enter the
-  computation)
+| Problem type | Signals | Route implication |
+|---|---|---|
+| standard signature / digest | regular output shape, named crypto primitives in source | capture → identify → offline replay (quickref five-step) |
+| hybrid encryption / key wrapping | asymmetric transport of a symmetric key | locate key-unwrap first, payload cipher second |
+| cookie / header / multi-param joint signing | several fields consume shared intermediates | checkpoint discipline (below), joint capture |
+| bytecode-VM / heavy-obfuscation pure-algorithm | big arrays, dispatch loops, bitwise-dense state | jsvmp-triage lane, instruction-trace methodology |
+| binary protocol | WASM / protobuf-class / WebSocket frames | imports/exports census, frame segmentation |
+| challenge / risk-control parameter | environment + behavior enter the computation | five-line decomposition (below) |
 
-If the type is unclear, the blocking-point question disambiguates: wrong
-entry found, raw string not aligned, intermediates not captured, runtime
-dependencies missing, image vs parameter line entangled, or protocol
-boundary unproven — each blocker names its own next move, and "which
-blocker am I at" is a cheaper question than "which tool do I run".
+Blocker vocabulary when type is unclear: `wrong-entry`, `raw-string-unaligned`,
+`intermediates-uncaptured`, `runtime-deps-missing`, `image-vs-param-entangled`,
+`protocol-boundary-unproven`.
 
 ## Writer→builder→entry→source decomposition
 
-Enter at the FINAL WRITE POINT, never at a big obfuscated file: the last
-place a value touches the outgoing request (send call, header setter, cookie
-write, frame emit). Then decompose backward one role at a time: the writer
-(consumes the finished value) ← the builder (assembles it from parts) ← the
-entry (the function the page actually calls) ← the source (where each part
-is born).
+Enter at the FINAL WRITE POINT, never at a big obfuscated file. Decompose
+backward one role at a time, capturing five checkpoint layers at every hop —
+they are the anchors every later comparison stands on:
 
-**Checkpoint discipline** — record FIVE layers as you go, so every later
-comparison has an anchor:
+| Layer | Content |
+|---|---|
+| 1 writer | the final URL / header / body / cookie / frame |
+| 2 builder inputs | query, payload, token, challenge material, trajectory, environment fields |
+| 3 raw payload | the raw string / byte stream being encoded |
+| 4 intermediates | pre-encode arrays, sub-digests, padded blocks |
+| 5 final output | the finished encoded value |
 
-1. writer checkpoint: the final URL / header / body / cookie / frame
-2. builder inputs: query, payload, token, challenge material, trajectory,
-   environment fields
-3. the raw string / payload being encoded
-4. intermediates: pre-encode arrays, sub-digests, padded blocks
-5. the final output
+**First-deviation walk** for any failing replay — why: mismatch hunts over
+five anchored layers localize the wrong step; hunts over input/output pairs
+only prove "something inside differs":
 
-**Intermediates before encoding.** Recover the intermediate values before
-fighting the final encoding layer — mismatch hunts over five anchored layers
-localize a wrong step immediately, while mismatch hunts over input/output
-pairs only prove "something inside differs". This is the **first-deviation
-walk** for any failing replay: walk raw input → concatenation → time/random
-injection → intermediates → final output, and fix the FIRST layer that
-diverges, not the symptom downstream of it.
+```text
+for layer in [raw_input, concat, time_random_inject, intermediates, final]:
+    diff(current[layer], expected[layer])
+    on divergence: FIX THIS LAYER (not the downstream symptom); restart verification
+```
 
 ## Challenge (captcha-family) decomposition
 
-A challenge target is FIVE parallel lines, never one problem — decompose
-before solving, because the lines have independent blockers:
+A challenge target is five parallel lines, never one problem — blockers are
+independent, and entangling L2 with L3 is the classic stall (the geometry can
+be perfect while the verify still fails because L4's blob was wrong):
 
-1. initialization / challenge-issuance line (how the challenge is fetched,
-   bound to the session)
-2. image / prompt-recognition line (the perceptual problem, if any)
-3. parameter-builder line (trajectory, distance, answer encoding)
-4. environment / collector line (the fingerprint blob the verify call carries)
-5. final verify line (the submit request and its joint parameters)
+| Line | Owns |
+|---|---|
+| L1 init/challenge-issuance | how the challenge is fetched, bound to the session |
+| L2 image/prompt-recognition | the perceptual problem, if any |
+| L3 parameter-builder | trajectory, distance, answer encoding |
+| L4 environment/collector | the fingerprint blob the verify call carries |
+| L5 final verify | the submit request and its joint parameters |
 
-Entangling line 2 with line 3 is the classic stall: the geometry can be
-solved while the verify still fails because line 4's blob was wrong. Gate
-live verification on a **success baseline**: a handful of manually-produced
-successful samples define what "success" looks like and calibrate the
-solver; consecutive failures with no anomaly in any line trigger a
-deliberate route switch (change the approach class), not another retry.
+Verdict algebra for the live-verification gate:
+`solver-ready ⇔ success-baseline (∼5 manual successes, per type ≥2) ∧ no open line anomaly`;
+`consecutive failures ∧ no line anomaly → deliberate route switch` (change the
+approach class), never another blind retry.
 
 ## Candidate scoring for entry discovery
 
-When multiple functions claim to be the signer, score candidates on declared
-dimensions instead of eyeballing: name match, source-keyword match, runtime
-stack presence, request correlation (does it run when the request fires),
-input/output flow match, module-export visibility, cross-source agreement,
-and verification result. Evidence classes are stratified: a candidate is
-"verified" only with at least one runtime-verification-class item, and a
-"high confidence" label requires TWO independent evidence classes — name
-plus keyword is never enough. Failed verifications are kept as negative
-evidence; an entry-discovery ladder that exhausts (global search → component
-registry → module cache → runtime hook → init-time hook → static AST →
-source reimplementation) ends in an explicit unsupported verdict, not a
-guess.
+When multiple functions claim to be the signer, score instead of eyeball:
+
+| Dimension | Question |
+|---|---|
+| name / source keyword | textual match (weakest class) |
+| runtime stack | does it appear on the live call path when the request fires |
+| request correlation | does it run when the request runs |
+| input/output flow | do shapes line up with the checkpoints |
+| module-export visibility | reachable from the page's module graph |
+| cross-source agreement | independent hints agree |
+| verification | runtime verification result |
+
+Verdict algebra:
+`verified := ≥1 runtime-verification-class evidence item`;
+`high := verified ∧ ≥2 independent evidence classes` — name plus keyword is
+never enough. Failed verifications are KEPT as negative evidence. The
+discovery ladder that exhausts (global search → component registry → module
+cache → runtime hook → init-time hook → static AST → source reimplementation)
+ends in an explicit `unsupported` verdict, not a guess.
 
 Companions: [web-re-quickref.md](../labs/web-re-quickref.md) (five-step
 signature workflow), [web-risk-control.md](../risk-control/web-risk-control.md)

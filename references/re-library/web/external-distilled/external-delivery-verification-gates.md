@@ -21,13 +21,16 @@ dedup: overlap(web-re-quickref anti-pattern 4)
 > provenance = S-id list above. The replay-is-the-checker principle is
 > web-re-quickref anti-pattern 4; this card generalizes it into a delivery
 > gate doctrine: what "working" means at each level, and what may NOT count.
+> Advisory: gates are fail-closed — any sub-audit failure blocks the real
+> request; noting risk in a summary is not a pass.
 
 ## Liveness is not usability
 
-Every layer of a delivery has a cheaper fake that LOOKS like success. Name
-the fake, forbid it explicitly:
+The verdict algebra: `confirmed ⇔ full result tuple ∧ fresh parameters ∧
+baseline identity match`; every other state is "unconfirmed". Each level of a
+delivery has a cheap fake that LOOKS like success — name it, forbid it:
 
-| Level | Liveness signal (fake) | Usability signal (required) |
+| Level | Liveness fake | Usability signal (required) |
 |---|---|---|
 | environment build | script loads without throwing | target function produces correctly-shaped output |
 | service | port listens / health endpoint 200 | a real action call returns the full result |
@@ -37,64 +40,67 @@ the fake, forbid it explicitly:
 The action-level **result tuple** is the unit of proof: plaintext (or
 recovered value) + the final request actually sent (route, body) + HTTP
 status + business response. Any tuple member missing → "unconfirmed", not
-"passed". A standalone parameter check (length, alphabet, format) is a
-smoke test, never acceptance.
+"passed". A standalone parameter check (length, alphabet, format) is a smoke
+test, never acceptance.
 
 ## The unified pre-request closure gate
 
 Before the first real (state-changing, billable, bannable) request, run ONE
-aggregating gate that collects every sub-audit at once: environment/runtime
-contract audit, fingerprint/baseline consistency, session and TLS-client
-identity match, request-semantics audit, and code-quality checks on the
-generated deliverable. Any sub-audit failing blocks the real request —
-"noted the risk in the summary" is not a pass. Gated behind the same rule:
-a deliverable must generate parameters FRESH (no hardcoded captured values),
-reuse the exact baseline identity (UA/headers/TLS/session/cookies) the
-evidence was captured under, and carry no analysis scaffolding.
+aggregating gate that collects every sub-audit at once:
+
+| Sub-audit | Verifies |
+|---|---|
+| environment/runtime-contract audit | sandbox fidelity vs live baseline |
+| fingerprint/baseline consistency | one identity across all evidence and audits |
+| session + TLS-client identity match | transport face matches the capture face |
+| request-semantics audit | headers/order/lifecycle semantics of the deliverable |
+| code quality | generated deliverable carries no scaffolding, no hardcoded captured values |
+
+Any sub-audit failing blocks the real request. Deliverable rules carried by
+the same gate: parameters generated FRESH; the exact evidence-capture
+identity reused (UA/headers/TLS/session/cookies); zero analysis scaffolding.
 
 ## Acceptance layering
 
-Verification is layered, and lower layers never substitute for higher ones:
+Verification is layered, and lower layers never substitute for higher ones —
+each tier catches a failure class the tiers below cannot see:
 
-1. **Offline fixture regression** — known input/output pairs replay in the
-   runtime without network (catches algorithm regressions).
-2. **Representative live requests** — a handful (convention: five) of
-   current, representative requests succeed against the real endpoint
-   (catches session/binding/freshness issues fixtures cannot).
-3. **Duration** — sustained operation for the period the task claims to
-   sustain (catches expiry/rotation the five-shot cannot). Time not actually
-   run cannot be claimed as passed.
-4. **Browser-independence check** — the protocol deliverable regresses in an
-   environment with NO browser; passing in the analysis browser proves the
-   analysis path, not the deliverable.
+| Tier | What | Catches |
+|---|---|---|
+| L1 offline fixture regression | known I/O pairs replay in-runtime, no network | algorithm regressions |
+| L2 representative live requests | ~5 current, representative requests succeed | session/binding/freshness issues fixtures cannot |
+| L3 duration | sustained operation for the claimed period | expiry/rotation the five-shot cannot; time not actually run cannot be claimed as passed |
+| L4 browser-independence | deliverable regresses in an environment with NO browser | analysis-path-only success; the protocol deliverable must survive a headless container |
 
-Retry discipline inside acceptance: automatic retries for read-only
-requests only; a failed non-idempotent request (POST-class) is NEVER blindly
-replayed — verify server-side effect first, then decide, because the replay
-itself can be the incident (double submit, double charge, double ban).
+Retry discipline: automatic retries for read-only requests only; a failed
+non-idempotent request (POST-class) is NEVER blindly replayed — verify
+server-side effect first, because the replay itself can be the incident
+(double submit, double charge, double ban).
 
 ## Session identity & staleness
 
-Evidence and calls bind to a session identity (tab/document/connection).
-Any navigation, disconnect, suspension, or identity change invalidates prior
-bindings AND prior results: rebind, re-verify. A stale-identity result that
-"looks fine" is treated as unverified, because the environment behind it may
-have silently changed. Suppressed-page-behavior test modes (e.g. suppressing
-the post-success redirect during verification) are allowed only when the
-real response is still recorded.
+```text
+// evidence and calls bind to a session identity (tab/document/connection)
+on navigation | disconnect | suspension | identity change:
+    prior bindings INVALID, prior results UNVERIFIED
+    (the environment behind them may have silently changed)
+    -> rebind, re-verify; a stale-identity result that "looks fine" stays unverified
+suppressed-page-behavior test modes (e.g. suppressing the post-success redirect):
+    allowed ONLY when the real response is still recorded
+```
 
 ## Signer-service packaging
 
-Recovered signers that must be callable from other runtimes are packaged as
-a local HTTP sign-service (the recovered environment stays resident; callers
-POST input, receive the computed value) rather than spawning a fresh process
-per call — per-call subprocesses reintroduce environment drift and startup
-fragility. Client-side integration carries its own trap table: parameter
-serialization must go through the HTTP client's native parameter handling
-(manual URL-quoting of computed values re-encodes differently and breaks
-server-side verification), cookies pass as structured values not raw header
-strings, and the client's transport fingerprint should match the baseline
-identity the signer assumes.
+Recovered signers that must be callable from other runtimes are packaged as a
+local HTTP sign-service (environment stays resident; callers POST input,
+receive the computed value) — per-call subprocesses reintroduce environment
+drift and startup fragility. Client-side trap table:
+
+| Trap | Rule |
+|---|---|
+| parameter serialization | go through the HTTP client's native parameter handling — manual URL-quoting of computed values re-encodes differently and breaks server-side verification |
+| cookies | structured values, not raw header strings |
+| transport face | client fingerprint should match the baseline identity the signer assumes |
 
 ## Delivery-shape note (conflict flagged)
 

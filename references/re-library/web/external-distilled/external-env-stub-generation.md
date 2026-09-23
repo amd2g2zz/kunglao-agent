@@ -22,99 +22,90 @@ dedup: overlap(web-re-quickref Path B)
 > sources; provenance is the S-id list above, nothing more. The seed concept —
 > replicate the browser environment in a sandbox and diff detection points —
 > is web-re-quickref Path B; this card lands the loop mechanics, ordering
-> contracts, and audit gates that seed does not name.
+> contracts, and audit gates that seed does not name. Advisory: the loop is
+> methodology, not proof — load-success is not usability, the functional
+> verification gate owns that verdict.
 
 ## The diagnose-driven stub loop
 
-Do not stub from intuition. Run a mechanical loop where each iteration is
-driven by observed missing-environment evidence:
+One question first: *what environment read does the target actually make?*
+The loop is driven by observed missing-environment evidence, never by
+intuition.
 
-1. **First diagnosis runs with ZERO stubs.** Execute the target in the
-   sandbox and collect the undefined-path list (every global/property access
-   that failed). This list, not a guess, is the work plan.
-2. **Map paths to stub modules by prefix**, pull in declared dependencies,
-   and order them by the loading contract (below).
-3. **Re-diagnose with stubs loaded.** Compare: the undefined list shrinking =
-   correct selection; new errors = loading-order or inter-module dependency
-   problem; unchanged = the value needs real capture, not another stub.
-4. **Residue handling:** covered by a module but still failing → order
-   problem; not covered by any module → write a minimal new stub (define the
-   property with a plausible default, keep it isolated and labeled); needs a
-   real browser value → capture it from a real environment, never invent it.
-5. **Stop conditions (avoid spinning):** load succeeds with no meaningful
-   undefined paths left, OR two consecutive iterations produce the identical
-   undefined list (dead loop — change approach, do not re-run), OR the
-   residue is all instrumentation-internal symbols.
-6. **Load-success is not usability.** The diagnostic verdict only means the
-   script loads without throwing. The recovered capability (signature,
-   encryption) needs its own functional verification — trigger the real code
-   path and check the output shape — before any claim (see
-   external-delivery-verification-gates.md).
+```text
+// round 1: diagnose with ZERO stubs — the undefined list IS the work plan
+node diagnose.js target.js                    -> success, error, undefinedPaths[]
+// map each path to a stub module by PREFIX + declared dependencies
+undefinedPaths -> prefix match -> modules (ordered per the contract below)
+// re-diagnose and branch on the delta:
+undefinedPaths shrinks  -> selection correct, continue
+new errors appear       -> loading-order or inter-module dependency problem
+list unchanged          -> value needs REAL capture, not another stub
+// residue routing:
+in a module but failing -> order problem
+in no module            -> minimal isolated labeled stub (plausible default)
+needs live value        -> capture from real env; NEVER invent
+```
+
+Verdict algebra for the stop decision:
+`stop ⇔ load-ok ∧ residue-meaningless ∨ two-identical-rounds ∨ residue-all-internal`.
+The identical-rounds clause is the anti-spin ratchet: change approach, do not
+re-run. `success:true` means the script LOADED; the recovered capability
+(signing, encryption) needs its own functional verification before any claim
+(external-delivery-verification-gates.md owns that verdict).
 
 ## Loading-order contract
 
-Stub initialization order is load-bearing; violations produce wrong-state
-environments that fail far from the cause:
+Order is load-bearing; violations produce wrong-state environments that fail
+far from the cause. Injection protocol, in order:
 
-- Environment stubs load BEFORE the target script (the target reads the
-  environment at load time, not lazily).
-- Dependency order inside the stub set: low-level browser objects first;
-  container objects before the elements they contain; network API stubs
-  before higher-level network wrappers that reference them.
-- **Capture/instrumentation hooks go in the MIDDLE**: fake globals before the
-  target (the target must hook THEM), but value-capture hooks AFTER the
-  target — targets may carry polyfills that overwrite any hook installed
-  earlier, silently. The canonical chain: env stubs → fake globals → target
-  script → capture hooks → initialization call → trigger.
-- Initialization parameters are part of the environment. Independently-loaded
-  SDK-style scripts commonly gate their signing behavior on init/config
-  parameters captured at runtime; loading without them produces the
-  **silent-skip failure mode**: everything loads, hooks fire, but the signed
-  value is never produced and no error surfaces. When a hook-type SDK loads
-  but never signs, capture the init parameters from a live page before
-  touching any stub.
+1. **Environment stubs first** — the target reads the environment at load
+   time, not lazily.
+2. **Fake globals before the target** — the target must hook THEM.
+3. **Capture hooks after the target** — targets carry polyfills that
+   overwrite any hook installed earlier, silently.
+4. **Init call after target load, before trigger** — params captured from a
+   live page (`set_breakpoint_on_text("SDK.init(")`-class anchor).
+5. **Trigger last** — standard open/setRequestHeader/send flow.
+
+Inside the stub set: low-level browser objects first; container objects
+before the elements they contain; network API stubs before higher-level
+wrappers that reference them.
+
+**Init parameters are part of the environment.** Silent-skip failure mode:
+SDK-style scripts gate signing on init/config params — without them
+everything loads, hooks fire, the signed value never appears, no error
+surfaces. Hook-type SDK loads but never signs → capture init params from a
+live page before touching any stub.
 
 ## Trace-first coverage planning
 
 When a runtime trace of the target exists, plan the stub set from it BEFORE
-writing the first stub: build the API-consumption inventory (every browser
-API the trace shows being touched), mark each item implemented / sampling
-/ deliberately-not-mounted, and implement the high-priority items in the
-first round. A trace item that later surfaces as a failure is a process
-defect (missed-from-trace), not bad luck — record it as such. Complexity of
-the trace sets risk and priority only; it does not choose the runtime.
+writing the first stub:
+
+| Step | Action | Evidence produced |
+|---|---|---|
+| inventory | every browser API the trace shows being touched | `trace-api-inventory` |
+| triage | mark each: implemented / sampling / deliberately-not-mounted | coverage matrix |
+| round one | implement P0/P1 before the first env write | first-pass stub set |
+| defect rule | a trace item failing later = missed-from-trace, recorded as a process defect | coverage ledger |
+
+Trace complexity sets risk and priority only; it never chooses the runtime.
 
 ## Machine-audited fidelity
 
-"Fills the values in" is the floor, not the bar. Three audit disciplines
-separate a stub that runs from a stub that survives detection:
+"Values filled in" is the floor. Three audits separate a stub that runs from
+a stub that survives detection:
 
-- **Runtime-contract audit (no-send mode).** Run the final entry with network
-  sends disabled and diff the sandbox against a real-browser baseline:
-  receiver identity, property descriptors, getter/setter presence,
-  prototype chains, own-key sets, constructor behavior, and result/exception
-  equality per touched API. The comparison must be machine-produced —
-  hand-written "matched" status is not observation — and a field missing on
-  BOTH sides is a mismatch too (absence of evidence on both sides hides a
-  broken probe). Re-audit after every environment change.
-- **Native-first object shape.** Detection reads object SHAPE, not just
-  values: `toString` brand, `typeof`-class behavior, illegal-receiver
-  throws, `instanceof` and cross-realm identity. Plain objects and simple
-  functions fail these. Isolate internal state off the visible object
-  (no underscore-prefixed or symbol own-properties leaking internals;
-  module-scoped weak maps are the pattern). Host runtime leakage is part of
-  shape: quarantine the host's own globals (process, module system, host
-  timers, host network) before the target runs — a leaked host global is a
-  detection point that no value-level stub can fix.
-- **Fingerprint value provenance.** Every replayed fingerprint value carries
-  its origin: captured from a real browser under the SAME baseline identity
-  as everything else in the case (one profile/seed/locale/timezone/UA
-  identity for all evidence and audits — record the baseline id and switch
-  it only deliberately). Watch for capture-side truncation of long values
-  (length near the capture buffer cap is a tell); record full length and a
-  hash of each value. Guessed, random, default, or synthesized values are
-  not replay material — absent real capture, mark the API unmounted and
-  record the gap instead of fabricating.
+| Audit | What it checks | Rules |
+|---|---|---|
+| runtime-contract (no-send) | receiver identity, descriptors, getter/setter, prototypes, own-keys, constructor behavior, result/exception equality vs a real-browser baseline | machine-produced comparison only (hand-written "matched" is not observation); field missing on BOTH sides = mismatch too; re-audit after every env change |
+| native-first object shape | `toString` brand, typeof-class, illegal-receiver throws, `instanceof`, cross-realm identity | plain objects/functions fail; internal state OFF the visible object (no `_x`/`__x`/symbol own-props; module-scoped WeakMap pattern); quarantine HOST globals (process, module system, host timers, host network) before target runs |
+| fingerprint value provenance | origin capture under the SAME baseline identity (one profile/seed/locale/timezone/UA id for all evidence; record baseline id) | length near capture-buffer cap = truncation tell; record full length + hash; guessed/random/default/synthesized values are NOT replay material — unmounted-and-recorded beats fabricated |
+
+Why host-leakage is a shape concern, not a values concern: a leaked host
+global is a detection point no value-level stub can fix, because detection
+reads object SHAPE and identity, not just values.
 
 ## Path-selection note
 

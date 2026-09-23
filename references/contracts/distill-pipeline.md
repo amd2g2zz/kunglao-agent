@@ -63,6 +63,25 @@ attributed conceptual excerpts where the license permits. Index registration
 + re-pin + recall hits for domain keywords (tests). A card skips the library
 until it passes standardization.
 
+### Card format contract (owner addendum, 2026-09-23)
+
+The exemplars ARE the contract: a distillate card matches the style of
+
+- `references/re-library/web/labs/web-re-quickref.md`
+- `references/re-library/web/vm/jsvmp-triage.md`
+
+(read both in full before drafting). That means: scenario-anchored commented
+pseudocode groups (the comment carries the rule); tables for enumerable
+rules; decision semantics as one-line verdict algebra followed by the
+"why this design" paragraph where a choice is non-obvious; numbered step
+protocols with tool names inline; a tool-face line when a tool exists or is
+proposed; mermaid only for a genuinely load-bearing branching ladder (>3
+levels). TL;DR-first holds WITHIN the card (progressive disclosure): the
+opening purpose line + verdict algebra / step list are the TL;DR — not a
+separate bolted-on block; detail sections below are self-titled. The blocks
+are the distiller's own synthesis (same desensitization rules apply), never
+copied source snippets.
+
 ## Wave artifacts
 
 Per wave: private scratch ledger (S-id ↔ source, HEAD, license, retrieval

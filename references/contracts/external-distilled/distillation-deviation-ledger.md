@@ -27,53 +27,53 @@ dedup: overlap(machine-check-contract)
 
 ## The pattern
 
-Formal derivation has a rule worth stealing whole: when a property cannot be
-mapped faithfully across a representation boundary (formal spec → storage
-schema is the canonical case), do not hide the loss — **record a deviation
-entry** (what diverges, why the target representation cannot express it, and
-the compensating control that covers the gap), and give every invariant a
-**named enforcement site** (mechanism-level constraint / application-layer
-check / test). Derivation is INCOMPLETE while any invariant lacks a
-guarantor. A failed proof discharges as a concrete counterexample — a
-specific value that violates the property — not a bare false.
+Verdict algebra: `derivation complete ⇔ every invariant has a named
+enforcement site (mechanism / app-check / test)`; `unfaithful mapping ⇒ a
+deviation entry {what diverges, why, compensating control} exists`; `failed
+verification ⇒ concrete counterexample (input, expected, actual), never a
+bare false`.
+
+```text
+// crossing a representation boundary (distill, generate, migrate, translate):
+for property in preserved_properties(artifact):
+    site = enforcement_site(property)        # where is it checked NOW?
+    if site is None:
+        record_deviation(property,           # what diverges
+                         reason,             # why the target cannot express it
+                         compensating)       # the control that covers the gap
+assert no_orphan_invariants()                # derivation INCOMPLETE otherwise
+```
+
+Why: silent fidelity loss at representation boundaries survives because
+nothing was REQUIRED to name where the property now lives — a card
+"summarizes" away its guardrails, an index regenerates away its symptom
+routes, a migration drops an invariant. The ledger makes the loss a
+first-class artifact: visible, addressed, and auditable.
 
 ## Mapping onto kunglao's contracts
 
-- **machine-check-contract** (our card): every claim's verification carries a
-  machine_check record. The ledger pattern extends this from "each check
-  passes" to "the property survives the boundary": distillations, mappings
-  and migrations are incomplete while any property they should preserve
-  (recall hits, byte-exact index rows, provenance fields) lacks a named
-  checking site. The parity tests that pin contract docs to YAML maps are
-  this pattern already — the card generalizes it to every cross-boundary
-  artifact.
-- **error-response-taxonomy** (our card): deviations are pre-declared
-  tolerance, not runtime errors; the taxonomy's forced-response table governs
-  the compensating controls.
-- **wal-protocol / claim-register**: deviation entries are facts like any
-  other (status per the schema; never silently dropped).
+| Our contract | Overlap | Delta this card adds |
+|---|---|---|
+| machine-check-contract | every claim's verification carries machine_check {command, expected, actual, passed} | extends from "each check passes" to "the property survives the boundary": distillations/mappings/migrations name where each preserved property IS enforced — the parity tests pinning contract docs to YAML maps are this pattern, generalized to every cross-boundary artifact |
+| error-response-taxonomy | forced-response table governs deviations' compensating controls | deviations are pre-declared tolerance, not runtime errors |
+| wal-protocol / claim-register | deviation entries are facts like any other (status per the schema; never silently dropped) | the ledger form: loss recorded with a named compensating site |
 
 ## When to use
 
-- A knowledge-carrier artifact (distillate card, generated index, migrated
-  schema) cannot faithfully carry a source property — record the deviation +
-  compensating control; name where each preserved property IS enforced.
-- An audit asks "which mechanism guarantees rule R?" — the traceability
-  table answers with a site name, or the audit fails with an orphan list.
-- A verification fails — the discharge is a concrete counterexample (input,
-  expected, actual) reusable as a test fixture, per the machine-check
-  contract's exception path.
+```text
+use when:
+  - a knowledge-carrier artifact (distillate card, generated index, migrated
+    schema) cannot faithfully carry a source property
+  - an audit asks "which mechanism guarantees rule R?"
+      -> traceability table answers with a site name,
+         or the audit fails with an orphan list
+  - a verification fails -> discharge as a concrete counterexample per the
+    machine-check contract's exception path
+```
 
-## Failure mode addressed
-
-Silent fidelity loss at representation boundaries: a card "summarizes" a
-methodology and drops its guardrails; an index regenerates and drops
-symptom routes; a migration drops an invariant — each survives because
-nothing was REQUIRED to name where the property now lives. The ledger makes
-the loss a first-class artifact: visible, addressed, and auditable — and the
-self-inspiring move is to ask, for every boundary you cross (distill,
-generate, migrate, translate), "what does this boundary lose, and which
-named site compensates for it?"
+The self-inspiring move: at every boundary you cross — distill, generate,
+migrate, translate — ask "what does this boundary lose, and which named site
+compensates for it?"
 
 Companions: [machine-check-contract.md](../machine-check-contract.md),
 [error-response-taxonomy.md](../error-response-taxonomy.md),

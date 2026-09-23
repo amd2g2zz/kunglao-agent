@@ -19,20 +19,22 @@ dedup: overlap(machine-check-contract)
 # Complexity-routed model tiers (external-distilled)
 
 > External-derived methodology (never directly PROVEN). Generalized
-> paraphrase; provenance = S-id above (agent-contract formality
-> source). Our dispatch protocol already carries tool tiers (T1/T2/T3 tool
-> budgets) and the global rules carry model-selection guidance; this card
-> lands the missing piece — signal-driven PER-UNIT model assignment with an
-> invariant checker.
+> paraphrase; provenance = S-id above (agent-contract formality source). Our
+> dispatch protocol already carries tool tiers (T1/T2/T3 tool budgets) and
+> the global rules carry model-selection guidance; this card lands the
+> missing piece — signal-driven PER-UNIT model assignment with an invariant
+> checker. Advisory: routing is a cost optimization, never a safety argument —
+> the gate owns safety.
 
-## The pattern
+## The routing rule
 
-Bulk phases (generation, transcription, distillation fan-out) burn tokens
-mechanically; verification stays cheap and centralized. So: route each work
-unit to the lightest CAPABLE tier, judged by objective countable signals
-read off the artifact itself — never vibes:
+Verdict algebra:
+`tier(unit) = lightest tier whose capability covers the unit's signal set`;
+`light ⇔ purely-mechanical ∧ ¬any-implicit-reasoning`;
+`escalate(unit) ⇔ 2 consecutive verification failures on that unit` (one
+tier, bounded, recorded).
 
-| Signal | Meaning |
+| Signal (countable, from the artifact) | Meaning |
 |---|---|
 | purely-mechanical content (no implicit reasoning) | convertible by template — light tier |
 | implicit-reasoning content (pre/post-shape reasoning, no body) | requires real reasoning — never light |
@@ -40,21 +42,26 @@ read off the artifact itself — never vibes:
 | quantifier-dense conditions | resists mechanical translation |
 | recursion / termination-sensitive logic | termination-sensitive |
 | cross-unit interfaces | protocol logic between agents |
-| verifier's own difficulty estimate (PO-count class) | checker-side difficulty prior |
+| checker difficulty prior (PO-count class) | checker-side difficulty estimate |
 
-**Fast paths:** purely-mechanical unit → always light. Any implicit-reasoning
-content → never light. Tier names are abstract; map to whatever the runtime
-offers, and never pick a tier above the session's main model.
+Fast paths hold regardless of totals: purely-mechanical → always light; any
+implicit-reasoning content → never light. Tier names are abstract — map to
+whatever the runtime offers, and never pick a tier above the session's main
+model.
 
-**The safety argument is the checker, not the chooser:** whichever tier
-generates the artifact, the SAME verification gate judges the result. The
-gate is invariant; tier changes cost tokens, not safety.
+## Why the checker, not the chooser, is the safety argument
 
-**Two-strike escalation:** if one unit fails the same verification twice
-consecutively, auto-escalate that unit one tier (and record it). Escalation
-is per-unit, bounded, and evidence-triggered — the anti-patterns are
-global escalation on first failure and silent tier-shopping until a lucky
-pass.
+Whichever tier generates the artifact, the SAME verification gate judges the
+result — the gate is invariant, so tier changes cost tokens, never safety.
+This is what makes signal-routing legitimate: a wrong tier assignment surfaces
+as a gate failure and triggers the bounded escalation, not as silent quality
+loss.
+
+| Anti-pattern | Forbidden by |
+|---|---|
+| tier assigned by author confidence instead of artifact signals | objective-signal rule |
+| weaker checkers for lighter models | invariant-gate rule |
+| global escalation on first failure; silent tier-shopping until a lucky pass | two-strike bounded escalation |
 
 ## Mapping onto kunglao
 
@@ -66,13 +73,6 @@ pass.
   (claim density, hypothesis count, obfuscation-family novelty, falsifier
   count) — the card's move is: route on measured signals, not on dispatch
   author's mood.
-
-## Anti-patterns
-
-- Tier assigned by author confidence instead of artifact signals.
-- Checker strength varying with the generator's tier (weaker checkers for
-  lighter models — the invariant-gate rule forbids this).
-- Escalation as punishment instead of evidence-triggered bounded response.
 
 Companions: [machine-check-contract.md](../machine-check-contract.md),
 [dispatch-protocol](../../orchestration/dispatch-protocol.md) (tool-tier

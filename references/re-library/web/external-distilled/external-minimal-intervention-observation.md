@@ -21,88 +21,76 @@ dedup: new
 > provenance = S-id list above. Our quickref owns WHERE to hook and the
 > install-before-load rule; web-risk-control owns the trigger→observe→
 > attribute loop. This card owns the intervention POSTURE: how much to touch,
-> in what order, and how to trust what the hooks report.
+> in what order, and how to trust what the hooks report. Advisory: the ladder
+> is discipline, not proof — a diff that only shows your own instrumentation
+> is a failed intervention.
 
 ## The observe→intervene ladder
 
-Instrumentation itself is an intervention with detection cost. Climb it
-deliberately:
+One question first: *what justifies touching the target's behavior?* Only a
+RECORDED signal naming the target — never "it might detect us".
 
-1. **Observe passively first.** The FIRST look at an anti-bot mechanism uses
-   no hooks at all — read the response chain, the request sequence, the page
-   scripts. Passive observation has zero detection surface.
-2. **Probe in observe mode.** When instrumentation starts, the first probes
-   only RECORD: anti-debug constructs, integrity checks, environment reads,
-   dynamic code, realm/loader activity. No patching, no behavior change.
-3. **Intervene only on an observed signal.** Mode changes (time shifts,
-   randomness forcing, environment overrides, debugger neutralization) are
-   justified exclusively by a RECORDED signal that names the target — never
-   "it might detect us". Interventions stay minimal and scoped to the
-   observed construct.
-4. **Diff baseline vs intervention.** Compare recorded events, requests,
-   errors, and side effects between the two runs. An increase in recorded
-   events is NOT success — only the target request and business state count
-   as the outcome. A diff that only shows your own instrumentation is a
-   failed intervention.
-5. **Conservative source taps before broad rewrites.** When source-level
-   instrumentation is needed, tap narrowly chosen property reads only, skip
-   strings/comments/assignments/calls, and verify the tapped build against
-   the original on exceptions, requests, and key outputs before widening.
+```text
+// rung 1: passive-observe FIRST — response chain, request sequence, page scripts; zero hooks
+//   (detection surface of passive observation is zero)
+// rung 2: probe in RECORD-ONLY mode — anti-debug constructs, integrity checks,
+//   environment reads, dynamic code, realm/loader activity; no patching
+// rung 3: intervene ONLY on a recorded signal — time shifts, randomness forcing,
+//   env overrides, debugger neutralization, scoped to the observed construct
+// rung 4: diff baseline vs intervention — recorded events, requests, errors, side effects
+//   rule: MORE events is NOT success; only the target request + business state count
+// rung 5: widen only after the tapped build verifies against the original
+//   (exceptions, requests, key outputs unchanged)
+```
 
 Compatible layering with the hook-early rule: passive-first applies to the
 FIRST observation of a mechanism; once instrumentation is chosen, hooks still
-install before the target code runs.
+install before the target code runs. Source taps stay conservative: narrow
+property reads only, skip strings/comments/assignments/calls, verify the
+tapped build before widening.
 
 ## Hook composition & persistence
 
-Multiple probes on the SAME API must compose in layers, not overwrite:
-second registration wraps the first; an external reassignment by the page
-triggers a reconcile (rebuild the chain on the new holder) — and reconcile
-failure, not the reassignment itself, is the alarm. Persistent hooks survive
-navigation; their registration on a not-yet-existing frame is "pending", not
-"installed" — pending is a promise, never evidence. Snapshot-bound references
-(frame indexes, element handles) die on navigation; identity-bearing
-references (frame URL/name, document identity) are the durable form, and any
-session-identity change invalidates prior captures: rebind and re-verify,
-never replay stale handles.
+| Situation | Rule |
+|---|---|
+| multiple probes on the same API | compose in LAYERS (second wraps first); overwriting is a defect |
+| page reassigns a hooked API | reconcile: rebuild the chain on the new holder; reconcile FAILURE (not the reassignment) is the alarm |
+| persistent hook on a not-yet-existing frame | status `pending` — a promise, never evidence of installation |
+| frame indexes / element handles | snapshot-bound: die on navigation; use identity-bearing references (frame url/name, document identity) |
+| session identity changed (nav/disconnect/suspend) | prior bindings AND results invalid: rebind, re-verify; never replay stale handles |
 
 ## Evidence budgets & completeness
 
-- **Sampling budgets keep the signal.** Unbounded high-frequency hooks
-  (prototype getters, hot APIs) evict the rare events that matter. Budget
-  the stream: first N events per source recorded in full, then sampled, with
-  per-source caps. Suppressed-by-budget and genuinely-dropped are DISTINCT
-  counts — conflating them corrupts every "nothing was recorded" reading.
-- **Capture completeness gates.** A capture is evidence only when its
-  completeness fields say so: pending requests drained (stop does not wait
-  for stragglers by default — check), body states resolved (skipped /
-  failed / truncated are not bodies), dropped counters at zero. Two
-  truncation layers exist (what was SAVED vs what was RETURNED) — check both
-  before treating a body as complete.
-- **Attribution humility.** Initiator stacks for same-URL concurrent
-  requests are match-confidence hints, not proof; corroborate by request
-  identity, not URL equality. A changed capture field is a lead, not an
-  identified algorithm.
+Verdict algebra for the hook stream:
+`evidence-grade ⇔ pending_drained ∧ body_states_resolved ∧ dropped == 0`,
+with per-source budgets (first N events full, then sampled, per-source caps)
+and the counting rule `suppressed_by_budget ≠ dropped` — conflating them
+corrupts every "nothing was recorded" reading.
+
+| Completeness field | Meaning | Fail rule |
+|---|---|---|
+| pending requests | stop does not wait for stragglers by default | undrained → capture incomplete |
+| body_state | skipped / failed / truncated are not bodies | any unresolved → no body evidence |
+| dropped counters | genuine event loss in the ring | >0 → evidence suspect |
+| truncation layers | what was SAVED vs what was RETURNED | check BOTH before treating a body as complete |
+
+Attribution humility: initiator stacks for same-URL concurrent requests are
+match-confidence hints, not proof — corroborate by request identity, not URL
+equality. A changed capture field is a lead, not an identified algorithm.
 
 ## Reading emptiness correctly
 
-- **Hit ≠ miss asymmetry.** Fixed instrumentation points prove presence only:
-  a recorded hit is positive evidence; an empty result is NOT evidence of
-  absence (fixed-point coverage, event caps, and process acknowledgement all
-  bound what "empty" means). Check the channel with the same world/frame
-  identity the hook used, and never cite an empty bounded log as proof
-  something did not run.
-- **Snapshot ≠ at-event.** Values collected at trace END are a post-hoc
-  snapshot, not the value at event time — rotating values make the two
-  different (our rotation-characterization card is the local formalization).
-  Value capture on side-effecting reads is skippable by design.
-- **Rewrite success ≠ execution.** A source rewrite reporting success means
-  transformation completed, not that the instrumented code ran — confirm via
-  runtime markers and actual log lines before building on it.
-- **Channel discipline.** Evaluate in the page's main world when reading
-  page-owned globals or hooking page functions; the isolated default is for
-  neutral probing. A failed user expression is not retried on a different
-  channel — side effects may have fired; audit before re-firing.
+Verdict algebra for instrumentation reads:
+`recorded_hit ⇒ positive evidence`; `empty ⇏ absence` (fixed-point coverage,
+event caps, and process acknowledgement bound what "empty" means). Rules
+that follow, each with its failure story:
+
+| Anti-read | Correct read |
+|---|---|
+| "log is empty, the target never ran" | check the channel with the SAME world/frame identity the hook used; never cite an empty bounded log as absence proof |
+| "trace-end values show what flowed" | values collected at trace END are a post-hoc snapshot, not at-event values — rotating values make them differ (rotation-characterization formalizes this); side-effecting reads may be value-skipped by design |
+| "rewrite reported success, so the instrumented code ran" | rewrite success = transformation completed; confirm via runtime markers + actual log lines |
+| "user expression failed, retry on the other world" | a failed expression is not retried on another channel — side effects may have fired; audit before re-firing. Page-owned globals/hooking → main world; neutral probing → isolated default |
 
 Companions: [web-re-quickref.md](../labs/web-re-quickref.md) (hook/boundary
 reference + injection order), [web-risk-control.md](../risk-control/web-risk-control.md)

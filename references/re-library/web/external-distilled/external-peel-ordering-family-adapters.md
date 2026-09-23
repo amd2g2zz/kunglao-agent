@@ -22,86 +22,91 @@ dedup: overlap(web-re-quickref layered peeling)
 > provenance = S-id list above. The peel LOOP (inspect → route → transform →
 > re-inspect) and the bundler/obfuscator routing table are web-re-quickref's;
 > this card lands what happens INSIDE a pass chain and how per-family residue
-> is engineered, which the loop card does not cover.
+> is engineered, which the loop card does not cover. Advisory: ordering
+> violations do not error — they silently no-op or mangle, which is worse.
 
 ## The pass-ordering contract
 
-A deobfuscation chain is a sequence where each pass expects the input SHAPE
-the previous pass produced. Out-of-order runs do not error — they silently
-no-op or mangle, which is worse. The contract generalizes:
+One question first: *what input shape does the next pass expect?* Each pass
+consumes the shape the previous one produced; the contract makes that
+explicit as ordered groups with the rule in the comment:
 
-- **Unwrap execution-form first.** Packed/self-decoding wrappers are one
-  giant call expression until unwrapped; AST-level passes have nothing to
-  grip. Unwrap before any structural pass.
-- **Resolve the string table before literal passes.** Inlining the string
-  array first lets literal-decoding passes walk only used literals, and
-  constant folding works on resolved literals. Folding FIRST can rewrite the
-  rotation wrapper into a shape the string-array matcher no longer
-  recognizes.
-- **Structural reporting LAST.** Control-flow reports must run after
-  constant-folding has eaten the fake-branch residue, or the report describes
-  noise.
-- **Byte-rewriting passes invalidate downstream artifacts.** Any pass that
-  rewrites bytes (unwrapper, transpiler-normalizer) invalidates recorded
-  positions/ids from earlier passes — re-derive them after, never reuse.
-- **Re-detect after every unwrap.** Unwrapping reveals the layer underneath
-  (our loop card's "layers hide under layers", from the mechanical side):
-  re-run detection after each unwrap and let the detector, not memory, pick
-  the next pass.
-- **Per-pass fault isolation.** Wrap each pass so one failure does not abort
-  the chain — a pass that throws still leaves the earlier passes' output
-  usable.
+```text
+// unwrap execution-form FIRST — packed input is one giant CallExpression; AST passes starve
+unpack (Packer/AAEncode/URLencode classes, iterate until no layer matches)
+// resolve the string table BEFORE literal passes — decoders then walk only used literals
+string-array inline (rotation wrapper intact)
+// fold AFTER resolution — folding first mangles the rotation wrapper's shape
+decode-literals + constant fold + dead-branch removal
+// structural report LAST — fake-branch residue must fold out first, or the report is noise
+control-flow report (read-only)
+// cross-cutting assertions:
+assert positions_rederived after EVERY byte-rewriting pass   # old offsets/ids are stale
+assert detect() re-run after EVERY unwrap                    # the detector picks the next pass
+assert each pass try/except-wrapped + standalone-runnable    # one failure must not abort the chain
+```
 
-**Decoder-indirection escape hatch:** when string-table access is wrapped in
-a decoder function, direct inlining fails. Inline the small wrapper functions
-first (a simplification pass), then re-run the string-table pass — order the
-retry, do not conclude "unrecoverable".
+**Decoder-indirection escape hatch** — when string-table access is wrapped in
+a decoder function, direct inlining fails:
 
-**Eval-safety gate:** unwrapping packed input executes it by construction
-(the decoder runs). Treat unwrapping as untrusted-code execution: sandbox
-isolation for the pass, or an explicit no-eval refusal mode that leaves the
-input unchanged and says so. Never unwrap unvetted input in a privileged
-runtime.
+```text
+if access is `_tbl = function(i){ return arr[i-0x10]; }` shape:
+    inline the small wrapper functions first (simplify pass)
+    then RETRY the string-table pass      # ordered retry, not "unrecoverable"
+```
+
+**Eval-safety gate** — unwrapping packed input executes it by construction
+(the decoder runs):
+
+```text
+rule: sandbox-isolate the unwrap pass, or offer an explicit no-eval refusal
+      mode (input unchanged, refusal recorded). Never unwrap unvetted input
+      in a privileged runtime.
+```
 
 ## Residue metrics drive the adapter layer
 
 Generic passes stay generic (structure normalization, dead-branch removal,
-constant folding). Site/family-specific quirks live in SEPARATE adapter
-passes, and the separation is enforced by evidence, not taste:
+constant folding); family quirks live in separate adapter passes, and the
+separation is enforced by evidence:
 
-- **Measure the residue.** After the generic chain, count what is still
-  undigested (string-table access patterns, flat dispatch remains, opaque
-  predicates, obfuscator-name density). The residue profile IS the family
-  fingerprint.
-- **Family adapters enter only on evidence.** A family-specific adapter
-  (rule doc + detector signature + targeted script + pipeline entry) is
-  written when a pattern recurs; a one-sample quirk stays a one-off script
-  and does NOT graduate into the generic chain until it proves out on
-  unrelated samples.
-- **Reorder expensive passes per family.** High-cost passes run where the
-  family needs them, not in a universal order — running literal inlining
-  late on a huge sample can stall the whole chain; families that do not need
-  a pass skip it.
-- **Every structural rewrite re-parses.** After each transforming pass the
-  output must re-parse cleanly, and each pass must run standalone for
-  debugging — a chain that only works end-to-end is undebuggable.
+| Rule | Statement |
+|---|---|
+| measure the residue | after the generic chain, count undigested symptoms (string-table access patterns, flat dispatch remains, opaque predicates, obfuscator-name density) — the residue profile IS the family fingerprint |
+| graduation | pattern recurs across unrelated samples → family adapter (rule doc + detector signature + targeted script + pipeline entry); a one-sample quirk stays a one-off script, never the generic chain |
+| cost | high-cost passes run only where the family needs them (literal inlining late on a huge sample stalls the chain); families that don't need a pass skip it |
+| integrity | every structural rewrite must re-parse cleanly; every pass runs standalone (a chain that only works end-to-end is undebuggable) |
+
+Why evidence-gated graduation: site-specific logic accreting inside generic
+passes is how deobfuscator chains rot — the adapter boundary keeps the
+generic chain auditable while family knowledge still accumulates.
 
 ## Entry selection & the false-completion trap
 
-For multi-chunk bundles, choosing WHERE to start has its own failure mode:
+For multi-chunk bundles, choosing WHERE to start has its own failure mode —
+a >3-level ladder with a trap at its first branch:
 
-- **Sourcemap before sweat.** If a source map exists, recovering original
-  sources beats any renaming pipeline. Check first, always.
-- **Fan-out sanity check on the entry.** The real application entry has
-  LARGE local fan-out and approximately nobody imports it; a vendor leaf is
-  the exact inverse. Sanity-check the chosen entry against this shape before
-  restoring from it.
-- **The false-completion trap:** restoring from a transitive vendor leaf
-  yields a small closure that LOOKS complete — a handful of files, all
-  resolved, nothing missing — while the actual application tree sits
-  unexplored. "Everything I touched resolved" is not "the tree is done".
-  Anchor on the host page's script graph or a high-fan-out chunk, and let a
-  graph walk (not file count) define completion.
+```mermaid
+flowchart TD
+    A[multi-chunk bundle] --> B{source map exists?}
+    B -- yes --> C[recover originals - beats any rename pipeline]
+    B -- no --> D[pick entry candidate]
+    D --> E{fan-out sanity: large local fan-out AND ~nobody imports it?}
+    E -- inverse shape --> F[vendor leaf - WRONG entry]
+    F --> G[re-anchor: host page script graph or high-fan-out chunk]
+    G --> D
+    E -- passes --> H[graph walk defines completion - not file count]
+    H --> I{every reachable project-local chunk promoted?}
+    I -- no --> J[NOT done - false-completion trap]
+    I -- yes --> K[done]
+```
+
+Why the trap needs a named rule: restoring from a transitive vendor leaf
+yields a small closure that LOOKS complete — everything touched resolved,
+nothing missing — while the real application tree sits unexplored. "Everything
+I touched resolved" is not "the tree is done". The fan-out algebra:
+`real entry ⇔ large local fan-out ∧ ~nobody imports it`; a vendor leaf is the
+exact inverse.
 
 Companions: [web-re-quickref.md](../labs/web-re-quickref.md) (peel loop +
 routing table), [jsvmp-triage.md](../vm/jsvmp-triage.md) (VM boundary stop
