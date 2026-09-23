@@ -227,10 +227,13 @@ class TestLandedCorpus:
             assert task["eval_version"] == "eval-v1"
 
     def test_schema_enums_extended(self):
+        """The enum ladder is additive: the release additions from this
+        card stay, later tiers append (misdirection at eval-v1.2)."""
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-        assert set(schema["properties"]["tier"]["enum"]) == {"smoke", "release"}
-        assert set(schema["properties"]["eval_version"]["enum"]) == \
-            {"eval-v1", "eval-v1.1"}
+        assert {"smoke", "release"} <= \
+            set(schema["properties"]["tier"]["enum"])
+        assert {"eval-v1", "eval-v1.1"} <= \
+            set(schema["properties"]["eval_version"]["enum"])
 
     def test_release_units_stamp_v11(self):
         for tdir in ds.iter_task_dirs(tier="release"):
