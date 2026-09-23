@@ -12,6 +12,7 @@ domains:
   malware: 'Malware analysis application domain: workflow, triage, reporting'
   method: 'Analysis method: process discipline (falsifiers, stage gates, verification, IDA lane) and wire
     formats'
+  dynamic: 'Dynamic-observation doctrine: rotating runtime values, characterization experiments, capture protocol'
   web: 'Web RE: labs quick-reference, JS VM triage, risk-control doctrine, crawler engineering'
   research: 'External research: multi-engine OSINT search and RE resource collections'
 scenarios:
@@ -289,3 +290,7 @@ cards:
   to: references/re-library/method/formats/wire-format-recognition.md
   domain: method
   family: formats
+- from: references/re-library/rotation-characterization.md
+  to: references/re-library/dynamic/rotation-characterization.md
+  domain: dynamic
+  family: rotation

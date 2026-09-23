@@ -509,6 +509,26 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             violations.append(
                 f"proven-gate: adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    # #341: runtime-state fact gate — a dynamic-source fact about a volatile
+    # subject (key/token/session/nonce/cookie) must carry the four runtime
+    # fields (temporal_scope/subject_slot/value_fingerprint/captured_at).
+    # Appended AFTER the pre-existing legs (never reorders them); the leg is
+    # stamp-class: lint[] waivers never cover it, a volatile-subject runtime
+    # fact missing a field is REJECTED outright.
+    if carrier == CARRIER_FACT:
+        try:
+            from runtime_facts import check_fact_postimage
+            pending_text = (shadow / rel).read_text(
+                encoding="utf-8", errors="replace")
+            msgs = check_fact_postimage(pending_text)
+            violations += [f"runtime-fact[{i}] {msg}"
+                           for i, msg in enumerate(msgs, start=1)]
+            _dbg(f"adjudicate[{carrier}] runtime-fact leg: {len(msgs)} "
+                 f"violation(s)")
+        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
+            violations.append(
+                f"runtime-fact[?] adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
     # #820: an active per-file waiver (runs/write-guard-waivers.yaml, written
     # by scripts/write_guard_unlock.py unlock) exempts the TARGET's own lint
     # violations for migration-mode rewrites. Only lint-leg violations are
