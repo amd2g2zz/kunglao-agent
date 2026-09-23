@@ -129,6 +129,13 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # re-pin entry below). The oracle-blocking semantics themselves are
 # unanchored by construction (the matrix has no oracle-bearing DRAIN case);
 # covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-23 corpus re-pin (#364): the seven android/case-distilled cards + D1 gap report join the references corpus, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-23 DATA-coupled freeze refresh (merge-sync union, wave-2 tool
+# reimplementation PR): the four wave-2 Tool-section card appends landed on
+# top of the wave-1 cards, growing the same D2 source-1 corpus once more;
+# anchor re-captured on the merged tree (score-only verified vs the
+# prior anchor; convergence_check.py / anomaly_detector.py byte-identical
+# to dev).
 # 2026-09-23 corpus re-pin (#341): the new rotation-characterization re-library card joins the references corpus, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-09 corpus re-pin (#166 PR E deletions): five dead references removed (optimization-2026-08, long-horizon-architecture archive, awesome-re-resources, malware-analysis-quickstart, search-policy), shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-08 corpus re-pin (#166 FM bring-up): domain/family frontmatter landed on all 49 re-library cards, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).

@@ -3,8 +3,8 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 93d3edbf39ab4e4d7c95580527502aa510f254d20766807bee11bc60107ee6e4
-  references/_index-android.md: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
+  references/_INDEX.md: 5f560906661dac9bf7b7edf8c154c58359f55e1f324097de896b1e592d9275e4
+  references/_index-android.md: 0c615e6ff0b690451bc0678d7574d83ce2e7c090c535ef6651537cb56bbf1584
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
@@ -19,7 +19,7 @@ files:
   references/contracts/cli-script-checklist.md: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   references/contracts/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
-  references/contracts/distill-pipeline.md: 380c916fb12fe361b929891c00b9c7968d4cae8c98fb6bf101c28d6fcb8ba8e1
+  references/contracts/distill-pipeline.md: 4054911491b68e2869249a32afbcc432e200f7b680bd13541192a5fc54cfc4fb
   references/contracts/downstream-contract.md: 41bebf10cda98fedcb0dcfc05f0f8606ba79b4047f5d5b1c6beba5cb04462c6c
   references/contracts/error-response-taxonomy.md: a5710b439bc5b1df49ca68097979ccb780fbad173f25c7c9b91db542f1fa53f7
   references/contracts/external-distilled/complexity-routed-model-tiers.md: 7164c6d5dfa3e0dc8950dcc30d5f7234730bea36ad2023532b6b236b2141eff3
@@ -45,6 +45,13 @@ files:
   references/orchestration/operational-mechanics.md: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
   references/orchestration/tool-inventory.md: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
   references/orchestration/verify-static-vs-dynamic.md: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
+  references/re-library/android/case-distilled/_GAP-REPORT-D1.md: 6c302fe057bb987bac009451fc98aac34de1db3b2c4cfc52fc62916a5a92c98c
+  references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md: a4a89356ff6d90b842389932c7d9e075b439a29dfbd71f2fdf60e628369466da
+  references/re-library/android/case-distilled/case-emulation-campaign-discipline.md: 2cd8500cdc47e6d68ec5285779b0f211ab3b0e3feb442b386409897bbd992c17
+  references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md: e5e90fa46b1e5e98a3d13a2675aa2dc1700d41fe1fa04f28052e3da977c8681a
+  references/re-library/android/case-distilled/case-identity-channel-epistemics.md: 548bcecc852dfb77d02657644c2bc30d6ca3ce220541d9d371e0b4c714311607
+  references/re-library/android/case-distilled/case-kill-evidence-counterplay.md: c6b65a07ce13e98dd3f26588ef050a32c7e866b733aafbd146756fcfd11171d2
+  references/re-library/android/case-distilled/case-observation-claim-discipline.md: c06d35420def091c71821f9caa3272231761a265876621fbe0c8d835884c5e4d
   references/re-library/android/emulation/android-fingerprint-apis.md: 4863eb94450f1ac2922ab3285e32387afee1f18884294d6bbdff09ba03ee0fba
   references/re-library/android/emulation/android-fingerprint-seeds.yaml: 73fb6a3e638c3a9d0ab85488f2abd3b15842f0291408019e3937ad9f61e8cc1d
   references/re-library/android/emulation/unidbg-algo-recovery.md: f85f27f62e8d14df6951bcc1579e39be5f824afa009955205e39acacc3bda6ac

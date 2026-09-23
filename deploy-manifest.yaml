@@ -1019,15 +1019,15 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 93d3edbf39ab4e4d7c95580527502aa510f254d20766807bee11bc60107ee6e4
+    sha256: 5f560906661dac9bf7b7edf8c154c58359f55e1f324097de896b1e592d9275e4
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: c4b48e404cf8bc14661689132089588e6aa5db3f6313d4ac4c0b192dd85cb063
+    sha256: 41180bc7d1d2588f2babb7b92f39cd417899421de0b260752d74515687cefe59
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
-    sha256: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
+    sha256: 0c615e6ff0b690451bc0678d7574d83ce2e7c090c535ef6651537cb56bbf1584
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -1087,7 +1087,7 @@ files:
   - src: references/contracts/distill-pipeline.md
     dest: .claude/references/contracts/distill-pipeline.md
     kind: asset
-    sha256: 380c916fb12fe361b929891c00b9c7968d4cae8c98fb6bf101c28d6fcb8ba8e1
+    sha256: 4054911491b68e2869249a32afbcc432e200f7b680bd13541192a5fc54cfc4fb
   - src: references/contracts/downstream-contract.md
     dest: .claude/references/contracts/downstream-contract.md
     kind: asset
@@ -1191,7 +1191,35 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 78f2756063feb79ad2eea55e2590d66ce3545cb3d711a7a8f6ad05beedfa0f34
+    sha256: 005ec54f5578028c3bc0816dc0de6aafd149c56f8e1f5d7cb5a6e041eb0ce5f8
+  - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
+    dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
+    kind: asset
+    sha256: 6c302fe057bb987bac009451fc98aac34de1db3b2c4cfc52fc62916a5a92c98c
+  - src: references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md
+    dest: .claude/references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md
+    kind: asset
+    sha256: a4a89356ff6d90b842389932c7d9e075b439a29dfbd71f2fdf60e628369466da
+  - src: references/re-library/android/case-distilled/case-emulation-campaign-discipline.md
+    dest: .claude/references/re-library/android/case-distilled/case-emulation-campaign-discipline.md
+    kind: asset
+    sha256: 2cd8500cdc47e6d68ec5285779b0f211ab3b0e3feb442b386409897bbd992c17
+  - src: references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md
+    dest: .claude/references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md
+    kind: asset
+    sha256: e5e90fa46b1e5e98a3d13a2675aa2dc1700d41fe1fa04f28052e3da977c8681a
+  - src: references/re-library/android/case-distilled/case-identity-channel-epistemics.md
+    dest: .claude/references/re-library/android/case-distilled/case-identity-channel-epistemics.md
+    kind: asset
+    sha256: 548bcecc852dfb77d02657644c2bc30d6ca3ce220541d9d371e0b4c714311607
+  - src: references/re-library/android/case-distilled/case-kill-evidence-counterplay.md
+    dest: .claude/references/re-library/android/case-distilled/case-kill-evidence-counterplay.md
+    kind: asset
+    sha256: c6b65a07ce13e98dd3f26588ef050a32c7e866b733aafbd146756fcfd11171d2
+  - src: references/re-library/android/case-distilled/case-observation-claim-discipline.md
+    dest: .claude/references/re-library/android/case-distilled/case-observation-claim-discipline.md
+    kind: asset
+    sha256: c06d35420def091c71821f9caa3272231761a265876621fbe0c8d835884c5e4d
   - src: references/re-library/android/emulation/android-fingerprint-apis.md
     dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
@@ -1531,7 +1559,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: eccea0130d0a87d8d52135554c9d7bace2114be5edebfc12c0edd422d45e930f
+    sha256: c9e51d95853a78030a357412e5c3f36438272ab9ae0616c8c83739d6120e96e2
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
