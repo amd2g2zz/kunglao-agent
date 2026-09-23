@@ -134,23 +134,41 @@ def build_claude_argv(prompt: str, plugin_dir: Path,
     ]
 
 
+def build_cc_default_argv(prompt: str, budget_usd: float) -> list[str]:
+    """The CC-DEFAULT arm face: the same CLI invocation with the kunglao
+    plugin flags REMOVED — default Claude Code harness, default tools,
+    no plugin hooks. The only harness variable left vs the bare arm is
+    tools + working directory access + multiple turns until the wall."""
+    return [
+        "claude", "-p", prompt,
+        "--permission-mode", "bypassPermissions",
+        "--output-format", "json",
+        "--max-budget-usd", str(budget_usd),
+    ]
+
+
 def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                    wall_cap_s: float, session_cmd: str | None = None,
-                   plugin_dir: Path | None = None) -> dict:
+                   plugin_dir: Path | None = None,
+                   plugin: bool = True) -> dict:
     """THE adapter (harness-neutral): start the real analysis session in
     ``workspace`` cwd under the budget caps, wait, return the session
     record. The production face is `claude -p`; an explicit session
     command (argument or KUNGLAO_LOOP_SESSION_CMD) replaces the argv
     wholesale — only the prompt is appended as the positional (the test
-    seam; never used in production)."""
+    seam; never used in production). ``plugin=False`` selects the
+    CC-DEFAULT face (build_cc_default_argv): same caps, no kunglao
+    plugin — the harness-capability-variable arm."""
     workspace = Path(workspace)
     if session_cmd is None:
         session_cmd = os.environ.get(ENV_SESSION_CMD) or None
     if session_cmd:
         argv = shlex.split(session_cmd) + [prompt]
-    else:
+    elif plugin:
         argv = build_claude_argv(prompt, plugin_dir or default_plugin_dir(),
                                  budget_usd)
+    else:
+        argv = build_cc_default_argv(prompt, budget_usd)
     started = time.time()
     timed_out = False
     # start_new_session: the child leads its own process group so the
@@ -274,6 +292,45 @@ def init_workspace(task_dir: Path, work_root: Path,
             f"kunglao-init failed rc={proc.returncode} for {task_dir.name}: "
             f"{(proc.stderr or proc.stdout or '')[-1500:]}")
     return ws
+
+
+def init_cc_default_workspace(task_dir: Path,
+                              work_root: Path) -> tuple[Path, str]:
+    """The CC-DEFAULT arm's neutral cwd: NO kunglao-init, no plugin
+    scaffold — ONLY the unit's material at its task-relative paths
+    (byte-exact; native scaffolds are ELF) plus TASK.md carrying the
+    anchors + deliverable contract verbatim. Returns (workspace,
+    prompt)."""
+    task_dir = Path(task_dir)
+    task = ds.load_task(task_dir)
+    work_root = Path(work_root)
+    work_root.mkdir(parents=True, exist_ok=True)
+    ws = work_root / f"ws-ccd-{task_dir.name}-" \
+        f"{time.strftime('%Y%m%dT%H%M%SZ')}-{os.getpid() % 100000}"
+    ws.mkdir()
+    for rel in task["workspace_scaffold"]["files"]:
+        dst = ws / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes((task_dir / rel).read_bytes())
+    anchors = task["anchors"]
+    ws_scaffold = task["workspace_scaffold"]
+    files = "\n".join(f"  - {f}" for f in ws_scaffold["files"])
+    deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate" \
+        f"{_candidate_suffix(task)}"
+    prompt = (
+        "Solve the reverse-engineering task in THIS working directory. "
+        "Work fully autonomously: no questions, no user input.\n\n"
+        f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
+        f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
+        f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
+        f"TASK MATERIAL — already in this working directory:\n{files}\n\n"
+        f"DELIVERABLE CONTRACT: {ws_scaffold['candidate_contract']}\n\n"
+        f"MANDATORY FINAL STEP: before you finish, write the complete "
+        f"re-implementation as ONE source file to "
+        f"{deliverable_rel} in this workspace (create the directory if "
+        f"needed). This file is how the delivered answer is collected.")
+    (ws / "TASK.md").write_text(prompt, encoding="utf-8")
+    return ws, prompt
 
 
 # ----------------------------------------------------------------- prompt
@@ -506,9 +563,13 @@ def extract_candidate(workspace: Path, task: dict) -> Path | None:
 def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_BUDGET_USD, wall_cap_s: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
-                  plugin_dir: Path | None = None) -> dict:
+                  plugin_dir: Path | None = None,
+                  arm: str = ARM) -> dict:
     """One eval task through the FULL pipeline: init -> real session ->
-    harvest -> mechanical check -> results row (arm=loop)."""
+    harvest -> mechanical check -> results row. ``arm`` selects the
+    harness face: "loop" (kunglao-init + plugin session) or "cc-default"
+    (neutral cwd + plugin-less session) — same caps, extractor and
+    checker either way."""
     out = Path(out)
     tdir = ds.resolve_task_dir(task_ref)
     task = ds.load_task(tdir)
@@ -516,7 +577,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
 
     try:
-        ws = init_workspace(tdir, out / "workspaces")
+        if arm == "cc-default":
+            ws, prompt = init_cc_default_workspace(tdir, out / "workspaces")
+        else:
+            ws = init_workspace(tdir, out / "workspaces")
+            prompt = build_loop_prompt(tdir, task, deliverable_rel)
     except RuntimeError as exc:
         # structured SKIP row, never a tier-wide crash: one unit's init
         # failure must not take the other units' measurement with it
@@ -527,7 +592,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             verdict="SKIP",
             failures=[{"code": "BAD_TASK",
                        "detail": str(exc)[-1500:]}],
-            evidence_ref="", arm=ARM)
+            evidence_ref="", arm=arm)
         row["loop"] = {"status": "init_failed", "metrics": {},
                        "checker_rc": 2, "session": {
                            "returncode": None, "wall_s": 0.0,
@@ -535,13 +600,13 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                            "session_cost": None},
                        "workspace": None, "deliverable": None,
                        "prompt_sha256": None}
-        print(f"VERDICT {tdir.name} SKIP (loop: init_failed)")
+        print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
         return row
     baseline_rounds = count_snapshot_rows(ws)
-    prompt = build_loop_prompt(tdir, task, deliverable_rel)
     rec = launch_session(ws, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-                         plugin_dir=plugin_dir)
+                         plugin_dir=plugin_dir,
+                         plugin=(arm != "cc-default"))
     if rec["timed_out"]:
         status = "exhausted"
     elif rec["returncode"] == 0:
@@ -570,7 +635,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         task_id=res["task_id"], family=res["family"],
         checker_kind=res["checker_kind"], metrics=res["metrics"],
         verdict=res["verdict"], failures=res["failures"],
-        evidence_ref=res["evidence"], arm=ARM)
+        evidence_ref=res["evidence"], arm=arm)
     row["loop"] = {
         "status": status,
         "metrics": metrics,
@@ -603,10 +668,12 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   budget_usd: float = DEFAULT_BUDGET_USD,
                   wall_cap_s: float = DEFAULT_WALL_CAP_S,
                   session_cmd: str | None = None,
-                  plugin_dir: Path | None = None
+                  plugin_dir: Path | None = None,
+                  arm: str = ARM
                   ) -> tuple[int, dict]:
-    """The tier face: one kunglao-eval-results/1 doc, arm=loop — directly
-    comparable with the #236 bare rows (same row contract)."""
+    """The tier face: one kunglao-eval-results/1 doc (arm=loop or
+    arm=cc-default) — directly comparable with the #236 bare rows (same
+    row contract)."""
     started = time.time()
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -622,7 +689,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     for tdir in selected:
         rows.append(run_loop_task(
             tdir.name, out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
-            session_cmd=session_cmd, plugin_dir=plugin_dir))
+            session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm))
 
     summary = {
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
@@ -637,7 +704,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         "schema": ds.RESULTS_SCHEMA,
         "eval_version": ds.EVAL_TIER_VERSION.get(tier, ds.EVAL_VERSION),
         "tier": tier,
-        "arm": ARM,
+        "arm": arm,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "rows": rows,
         "summary": summary,
@@ -674,6 +741,10 @@ def main(argv: list[str] | None = None) -> int:
                          "production face is the real claude CLI")
     ap.add_argument("--plugin-dir", default=None,
                     help="kunglao plugin dir (default: this repo root)")
+    ap.add_argument("--arm", default=ARM, choices=("loop", "cc-default"),
+                    help="harness face: loop = kunglao-init + plugin "
+                         "session (default); cc-default = plain Claude "
+                         "Code default harness, no plugin, neutral cwd")
     ap.add_argument("--out", default=str(
         ds.EVAL_ROOT.parent / "runs" / "eval-loop"),
         help="output dir (default: runs/eval-loop/)")
@@ -682,7 +753,8 @@ def main(argv: list[str] | None = None) -> int:
     rc, _doc = run_loop_tier(
         tasks, Path(args.out), tier=args.tier, budget_usd=args.budget_usd,
         wall_cap_s=args.wall_cap_s, session_cmd=args.session_cmd,
-        plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None)
+        plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None,
+        arm=args.arm)
     return rc
 
 
