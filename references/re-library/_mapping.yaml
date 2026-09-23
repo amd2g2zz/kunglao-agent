@@ -286,6 +286,34 @@ cards:
   to: references/re-library/web/risk-control/web-risk-control.md
   domain: web
   family: risk-control
+- from: references/re-library/_GAP-REPORT.md
+  to: references/re-library/web/external-distilled/_GAP-REPORT.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-algorithm-recovery-chains.md
+  to: references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-delivery-verification-gates.md
+  to: references/re-library/web/external-distilled/external-delivery-verification-gates.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-env-stub-generation.md
+  to: references/re-library/web/external-distilled/external-env-stub-generation.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-minimal-intervention-observation.md
+  to: references/re-library/web/external-distilled/external-minimal-intervention-observation.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-peel-ordering-family-adapters.md
+  to: references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-protocol-failure-ladder.md
+  to: references/re-library/web/external-distilled/external-protocol-failure-ladder.md
+  domain: web
+  family: external-distilled
 - from: references/re-library/wire-format-recognition.md
   to: references/re-library/method/formats/wire-format-recognition.md
   domain: method

@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: bbbf7f15321d366987f7e97f1a90372592671d3d08345e30a46ceea29d95f1a6
+  references/_INDEX.md: 93d3edbf39ab4e4d7c95580527502aa510f254d20766807bee11bc60107ee6e4
   references/_index-android.md: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -14,13 +14,16 @@ files:
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   references/_index-research.md: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
   references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
-  references/_index-web.md: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
+  references/_index-web.md: c7f94b4ac4f9ca3b8177ab655309f04a80284eed29fb7ee994ceb01e3cce48d8
   references/contracts/agent-three-state-charter.md: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
   references/contracts/cli-script-checklist.md: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   references/contracts/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
+  references/contracts/distill-pipeline.md: 380c916fb12fe361b929891c00b9c7968d4cae8c98fb6bf101c28d6fcb8ba8e1
   references/contracts/downstream-contract.md: 41bebf10cda98fedcb0dcfc05f0f8606ba79b4047f5d5b1c6beba5cb04462c6c
   references/contracts/error-response-taxonomy.md: a5710b439bc5b1df49ca68097979ccb780fbad173f25c7c9b91db542f1fa53f7
+  references/contracts/external-distilled/complexity-routed-model-tiers.md: 7164c6d5dfa3e0dc8950dcc30d5f7234730bea36ad2023532b6b236b2141eff3
+  references/contracts/external-distilled/distillation-deviation-ledger.md: c96f205f6145590f1b7dbadfcf5af7753f793edfcce1e695d65b9240b602dfeb
   references/contracts/machine-check-contract.md: c0eb7ca471af3b37030d11223c25d4ba31c44515193372063727ad8819926c1b
   references/contracts/wal-protocol.md: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
   references/contracts/xml-injection-standard.md: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
@@ -89,6 +92,13 @@ files:
   references/re-library/tools/static/tools-advanced.md: dea1a7b538317f7276cd58bceda6693762f5ea5bf8f89f0c62489342f7581573
   references/re-library/tools/static/tools.md: 0b5d7010b1d14c4e9baa2e2077f81a4201ef699ddb7961216a38c7196c242ee2
   references/re-library/web/crawler/web-crawler-engineering.md: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
+  references/re-library/web/external-distilled/_GAP-REPORT.md: cc1cc3e7abac349ec5190d95abb3300f529bff3361e6879a1e31275cc6fd740d
+  references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: 424943b15c089d9054763ff1231d81de2ee09c350e6796350b5d9d8d4cba83b4
+  references/re-library/web/external-distilled/external-delivery-verification-gates.md: b14694d0b82ac04373e3e5b71dcc3e67b3fc1ec49ec4d934b1901fc3f0418b68
+  references/re-library/web/external-distilled/external-env-stub-generation.md: 3106b4d93f4d6d11ac540eea4f820b65ba5e0ad21df2ff1f0d4720e556a3795f
+  references/re-library/web/external-distilled/external-minimal-intervention-observation.md: 3d7b5437ad12df2dbc4a5ea0642de8c555cde23c3301a66f2bc8c40f75df9b6f
+  references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: a36403f3e7badc8cc01eef0150ba7706dcf5a459f67341024b1e258249baf6cb
+  references/re-library/web/external-distilled/external-protocol-failure-ladder.md: 8f7e0db5d5a3810b85e6d36bc942481697f6bc67fd06f1f9221ba2c453cf5a4c
   references/re-library/web/labs/web-re-quickref.md: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
   references/re-library/web/risk-control/web-risk-control.md: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
   references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f

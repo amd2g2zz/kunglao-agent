@@ -11,6 +11,7 @@ Covers the rebuilt #229/#275 contract on the #261 layered index:
   - progressive disclosure: output carries index rows + scores, never file contents
   - alignment with the real layered references/_INDEX.md (>=50 entries / 9 scenes)
 """
+
 from __future__ import annotations
 
 import io
@@ -125,16 +126,20 @@ def _cli(*args: str) -> subprocess.CompletedProcess:
     own location; unit tests above cover the synthetic fixture)."""
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, encoding="utf-8", timeout=60,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
     )
 
 
 # ---------- parser: domain table / scenario map / per-domain files ----------
 
+
 class TestParse:
     def test_parse_counts(self, index_dir: Path) -> None:
         idx = _index(index_dir)
-        assert len(idx.entries) == 7          # 2 top-level + 5 re-library
+        assert len(idx.entries) == 7  # 2 top-level + 5 re-library
         assert len(idx.scenes) == 3
         assert set(idx.domains) == {"tools", "patterns", "methodology"}
 
@@ -142,7 +147,8 @@ class TestParse:
         idx = _index(index_dir)
         s = next(x for x in idx.scenes if "动态分析" in x.label)
         assert s.primary == (
-            "re-library/tools-dynamic.md", "re-library/patterns-debugging.md",
+            "re-library/tools-dynamic.md",
+            "re-library/patterns-debugging.md",
         )
         # supplementary = remaining files of the owning domains (tools-crypto)
         assert s.supplementary == ("re-library/tools-crypto.md",)
@@ -170,7 +176,7 @@ class TestDomainEnrichment:
     def test_per_domain_summary_loaded(self, index_dir: Path) -> None:
         idx = _index(index_dir)
         e = next(x for x in idx.entries if x.path == "re-library/tools-crypto.md")
-        assert "编解码" in e.summary          # from _index-tools.md
+        assert "编解码" in e.summary  # from _index-tools.md
         assert "哈希" in e.summary
 
     def test_domain_attached_to_entry(self, index_dir: Path) -> None:
@@ -184,10 +190,13 @@ class TestDomainEnrichment:
         refs = tmp_path / "references"
         refs.mkdir()
         (refs / "convergence-loop.md").write_text("# c\n", encoding="utf-8")
-        (refs / "_INDEX.md").write_text(FIXTURE_INDEX.replace(
-            "| `guardrails.md` | governance | Full backing reference for orchestrator guardrails. | When the inline summary is insufficient. |\n",
-            "| `convergence-loop.md` | contracts | Convergence behaviours. | When spinning. |\n",
-        ), encoding="utf-8")
+        (refs / "_INDEX.md").write_text(
+            FIXTURE_INDEX.replace(
+                "| `guardrails.md` | governance | Full backing reference for orchestrator guardrails. | When the inline summary is insufficient. |\n",
+                "| `convergence-loop.md` | contracts | Convergence behaviours. | When spinning. |\n",
+            ),
+            encoding="utf-8",
+        )
         for fname, content in PER_DOMAIN.items():
             (refs / fname).write_text(content, encoding="utf-8")
         for rel, body in BODY.items():
@@ -209,13 +218,15 @@ class TestDomainEnrichment:
 
 # ---------- recall: scene label precedence, then scored top-K ----------
 
+
 class TestRecall:
     def test_scene_query_hits(self, index_dir: Path) -> None:
         idx = _index(index_dir)
         r = rr.recall(list(idx.entries), list(idx.scenes), "frida")
         assert r.kind == "scene"
         assert r.files == (
-            "re-library/tools-dynamic.md", "re-library/patterns-debugging.md",
+            "re-library/tools-dynamic.md",
+            "re-library/patterns-debugging.md",
             "re-library/tools-crypto.md",
         )
 
@@ -237,7 +248,8 @@ class TestRecall:
         r = rr.recall(list(idx.entries), list(idx.scenes), "tools")
         assert r.kind == "scored"
         assert {e.path for e in r.entries} == {
-            "re-library/tools-dynamic.md", "re-library/tools-crypto.md",
+            "re-library/tools-dynamic.md",
+            "re-library/tools-crypto.md",
         }
 
     def test_filename_query_hits(self, index_dir: Path) -> None:
@@ -276,6 +288,7 @@ class TestRecall:
 
 
 # ---------- CLI ----------
+
 
 class TestCli:
     def test_cli_scene_query_exit_zero(self) -> None:
@@ -325,6 +338,7 @@ class TestCli:
 
 # ---------- progressive disclosure (index rows + scores, never file contents) ----------
 
+
 class TestProgressiveDisclosure:
     def test_output_never_dumps_file_contents(self, index_dir: Path) -> None:
         idx = _index(index_dir)
@@ -345,6 +359,7 @@ class TestProgressiveDisclosure:
 
 
 # ---------- real-index alignment (#261 layered index) ----------
+
 
 @pytest.mark.skipif(not REAL_INDEX.is_file(), reason="repo references/_INDEX.md missing")
 class TestRealIndexAlignment:
@@ -377,3 +392,59 @@ class TestRealIndexAlignment:
         r = rr.recall(list(idx.entries), list(idx.scenes), "spinning")
         assert r.kind == "scored"
         assert "contracts/convergence-loop.md" in r.files
+
+
+# ---------- external-distilled wave-1 recall alignment (issue 358) ----------
+
+
+@pytest.mark.skipif(not REAL_INDEX.is_file(), reason="repo references/_INDEX.md missing")
+class TestExternalDistilledRecall:
+    """External-distilled cards (issue 358) must be recallable by their domain
+    keywords (distill bar: general + heuristic distillates only)."""
+
+    def _paths(self, query: str) -> set:
+        idx = rr.build_index(REAL_INDEX)
+        r = rr.recall(list(idx.entries), list(idx.scenes), query)
+        assert r.kind == "scored", (query, r.kind)
+        return set(r.files)
+
+    def test_environment_stub_query_returns_env_stub_card(self) -> None:
+        paths = self._paths("environment stub sandbox")
+        assert "re-library/web/external-distilled/external-env-stub-generation.md" in paths
+
+    def test_pass_ordering_query_returns_peel_ordering_card(self) -> None:
+        paths = self._paths("pass ordering deobfuscation")
+        assert (
+            "re-library/web/external-distilled/external-peel-ordering-family-adapters.md" in paths
+        )
+
+    def test_algorithm_recovery_query_returns_recovery_chains_card(self) -> None:
+        paths = self._paths("algorithm recovery checkpoint")
+        assert "re-library/web/external-distilled/external-algorithm-recovery-chains.md" in paths
+
+    def test_intervention_query_returns_observation_card(self) -> None:
+        paths = self._paths("intervention ladder hook")
+        assert (
+            "re-library/web/external-distilled/external-minimal-intervention-observation.md"
+            in paths
+        )
+
+    def test_delivery_gate_query_returns_verification_gates_card(self) -> None:
+        paths = self._paths("delivery gate liveness usability")
+        assert "re-library/web/external-distilled/external-delivery-verification-gates.md" in paths
+
+    def test_protocol_failure_query_returns_failure_ladder_card(self) -> None:
+        paths = self._paths("protocol failure replay diagnosis")
+        assert "re-library/web/external-distilled/external-protocol-failure-ladder.md" in paths
+
+    def test_deviation_ledger_query_returns_ledger_contract(self) -> None:
+        paths = self._paths("deviation ledger traceability")
+        assert "contracts/external-distilled/distillation-deviation-ledger.md" in paths
+
+    def test_model_routing_query_returns_tiers_contract(self) -> None:
+        paths = self._paths("model routing tiers escalation")
+        assert "contracts/external-distilled/complexity-routed-model-tiers.md" in paths
+
+    def test_distill_pipeline_query_returns_pipeline_contract(self) -> None:
+        paths = self._paths("distillation pipeline wave")
+        assert "contracts/distill-pipeline.md" in paths
