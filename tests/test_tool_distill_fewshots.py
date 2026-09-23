@@ -83,7 +83,7 @@ def test_c_card_usage_examples_appended() -> None:
 
 
 def test_c_wave1_distillate_cards_carry_tool_sections() -> None:
-    """Merge-sync completed: the wave-1 cards landed (#361), and each
+    """Merge-sync completed: the wave-1 cards landed, and each
     card matching a wave-2 capability now carries a Tool section pointing
     at its registered CLI."""
     cards = ROOT / "references/re-library/web/external-distilled"
