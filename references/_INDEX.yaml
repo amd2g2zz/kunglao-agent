@@ -3,9 +3,10 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 7daf97e436f088f6c41c503a0813efd677748624240205954cfae0447116ef17
+  references/_INDEX.md: bbbf7f15321d366987f7e97f1a90372592671d3d08345e30a46ceea29d95f1a6
   references/_index-android.md: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
+  references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
   references/_index-malware.md: 9ca74cb65468f24574835a1132415d585399fc65efa5633a417453c0594f4eb9
   references/_index-method.md: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
@@ -50,6 +51,7 @@ files:
   references/re-library/android/signing/native-sign-recovery.md: 59929cc294922c92d29c2ecb815863cab8547302c79e5aeeefb18a345196fa37
   references/re-library/android/signing/signature-check-bypass.md: 649be93b846682fe1608d478aa87819a100bf33364fc9c80692aef8012fb5917
   references/re-library/anti-analysis/catalog/anti-analysis.md: 0cfc71a76c06aa2610159ba12dd5f7e524d7bacde31f1065558d3c8e4e71d955
+  references/re-library/dynamic/rotation-characterization.md: 9c2704fc3ea74611a739b7d3e3b63663af3e18f74ffa6edaf38930fb8541ee6a
   references/re-library/languages/compiled/languages-compiled.md: 4ba5b98c4023333d88e5d51174edc5fcdef58a450bee6df0236fe86cbb1699d3
   references/re-library/languages/compiled/languages-go.md: d058807151a662a5192d15be3f753d96ed547d7b230525436ddbb19baf656a45
   references/re-library/languages/platforms/languages-platforms.md: 1ca19c9ad3dcbdf9eb2ae9a9dd9f51f36ced646441aa7a0275321e3776c7027a

@@ -25,6 +25,16 @@ scripts/lane_spec.py). Therefore the single-source alignment is:
     face is purely additive (allowedTools + BLIND evidence + machine-check
     shapes + attack angles)
 
+ISSUE-355 ADDENDUM (supersedes the lane-LIST frame, keeps this module's intent):
+the owner ruled the checker is lane-UNIVERSAL — adversarial verification is
+a function, not a domain, so kunglao-redteam.md now declares NO `lane:` and
+a lane-absent agent is permitted on every lane. The two tests below that
+pinned the malware|web list were reshaped to pin the universal face (the
+refusal-on-four-lanes pin inverted into the six-lane admission fixture,
+which lives in test_redteam_lane_universal_355.py); every other pin in this
+module — allowedTools, additive contract sections, agenttype role rule,
+maker route, blind_gate semantics — is unchanged and still green.
+
 Contract pinned here:
   1. kunglao-redteam on a lane: web workspace passes the lane gate (rc=0)
   2. kunglao-redteam on algorithm/protocol/data/app is still refused (rc=2)
@@ -73,12 +83,15 @@ def _declared_lanes() -> set[str]:
 
 
 # ------------------------------------------------------------------
-# the multi-lane declaration
+# the declaration (was: the malware|web multi-lane list; issue 355: lane-absent)
 # ------------------------------------------------------------------
 
-def test_redteam_declares_malware_and_web_lanes():
-    """`lane: malware|web` — the issue's exact binding."""
-    assert _declared_lanes() == {"malware", "web"}
+def test_redteam_declares_no_lane_universal():
+    """Issue 355: the checker declares NO lane — lane-universal by the owner
+    ruling (adversarial checking is a function, not a domain). The parser
+    sees no binding, so no lane can refuse it."""
+    assert _declared_lanes() == set()
+    assert "lane" not in _frontmatter(REDTEAM)
 
 
 def test_redteam_allowedtools_carry_camoufox():
@@ -145,16 +158,18 @@ def test_redteam_passes_lane_gate_on_web_workspace(tmp_path):
     assert "lane_routing" not in r.stdout + r.stderr
 
 
-@pytest.mark.parametrize("lane", ["algorithm", "protocol", "data", "app"])
-def test_redteam_still_refused_on_out_of_contract_lanes(tmp_path, lane):
-    """The multi-lane form must NOT degrade to allow-all: lanes outside
-    malware|web keep the issue-208 refusal."""
+@pytest.mark.parametrize("lane", ["malware", "algorithm", "protocol",
+                                  "web", "data", "app"])
+def test_redteam_admitted_on_every_lane_355(tmp_path, lane):
+    """Issue-355 inversion of the four-lane refusal pin: with the lane axis
+    removed from the checker, EVERY lane admits it (the six-lane fixture
+    lives in test_redteam_lane_universal_355.py; this keeps the 342-face
+    coverage green under the new contract)."""
     ws = _write_lane_ws(tmp_path, lane)
     r = _run_dispatch_gate(tmp_path, ws, "kunglao-redteam")
-    assert r.returncode == 2, \
-        f"kunglao-redteam must be refused on lane: {lane}"
-    assert "lane_routing" in r.stdout + r.stderr
-    assert lane in r.stdout + r.stderr
+    assert r.returncode == 0, \
+        f"kunglao-redteam must pass lane: {lane} — {r.stdout}{r.stderr}"
+    assert "lane_routing" not in r.stdout + r.stderr
 
 
 def test_redteam_passes_lane_gate_on_malware_and_legacy(tmp_path):

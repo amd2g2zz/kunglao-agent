@@ -1,0 +1,45 @@
+schema: kunglao-eval-task/1
+task_id: m2-session-v1
+eval_version: eval-v1.2
+tier: misdirection
+source: constructed
+family: key-rotation-js
+seed: 35211
+anchors:
+  goal_verbatim: 'Analyze target/rotkeys.js: the crypto material changes across invocations.
+    Determine the rotation trigger, cadence, and the derivation point (the KDF call
+    site), then record the conclusion as a kunglao-rotation-verdict/1 JSON document
+    with proof outputs spanning the rotation boundaries.'
+  success_criterion: The verdict document carries the rotation conclusion (detected,
+    cadence matching the true trigger class, the derivation point named) and proof
+    outputs byte-exact on the checker-minted probes across at least two rotation lanes.
+    N captures without the induction fails.
+  verification_method: replay-evidence
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/rotkeys.js
+  entry: target/rotkeys.js
+  candidate_contract: 'A kunglao-rotation-verdict/1 JSON document: rotation {detected,
+    cadence, trigger, derivation_point}, captures[], and proof_answers spanning the
+    rotation boundaries.'
+checker:
+  kind: rotation-verdict
+  oracles:
+  - rotation-verdict
+  entrypoint: checker.py
+  self_check_candidate: reference_verdict.json
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_distinct_captures: 2
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

@@ -438,16 +438,11 @@ class TestNativeRunnability:
     def test_candidate_suffix_parity_with_checker(self, tmp_path):
         """_candidate_suffix mirrors eval_checker._validate_candidate
         exactly across every tier's families (checker must accept the
-        mapped suffix)."""
+        mapped suffix). Both now consume the single-source contract
+        (#352), TF families included (#356 union)."""
         import eval_checker as chk
 
         for tier in ds.TIERS:
-            if tier == "toolflex":
-                # #356: TF candidates are answer documents graded by the
-                # per-unit checker (manifest.json), not by
-                # eval_checker._validate_candidate — the mirror-map
-                # parity face scopes to checker-graded tiers
-                continue
             for d in ds.iter_task_dirs(tier=tier):
                 family = ds.load_task(d)["family"]
                 suffix = lr._candidate_suffix(ds.load_task(d))

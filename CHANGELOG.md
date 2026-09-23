@@ -10,6 +10,7 @@ release (see the mapping table at the end).
 
 ### Added
 
+- **Runtime-state rotation induction (#341)**: runtime values (keys, tokens, sessions, nonces, cookies) are no longer recorded as timeless truths. WRITE side: a dynamic-source fact about a volatile subject must carry `temporal_scope: runtime`, `subject_slot`, `value_fingerprint` (sha256 of the value only), `captured_at` (ISO ts) — `hooks/write_guard.py` gains a runtime-fact leg (`scripts/runtime_facts.check_fact_postimage`) that REJECTS the fact otherwise; static-source facts are never required to carry the fields. JOIN side: the `rotation_induction` mechanism (registered in `scripts/mechanisms.yaml`, tick channel, cheap) groups runtime facts by (claim_id, `subject_slot`); ≥2 distinct `value_fingerprint`s under one slot emit `runtime_value_rotation` (EMIT_ACTIONS-registered), auto-file the rotation hypothesis as the COMPETITOR of the implicit static premise, and write a pending synthesis note recording the fingerprint series — idempotent on an unchanged fingerprint set, a grown set refires with the fuller series (superseding note, hypothesis never duplicated). GATE side: a dispatch on a rotation-flagged claim without the `rotation-experiment: rotation-characterization` marker is REJECTED with guidance pointing at the new reference card `references/re-library/dynamic/rotation-characterization.md` (derivation-point hook / T,T+Δ double capture / trigger-isolation matrix / rotation-input source trace). HEALTH face: the rotation event feeds the convergence ledger (operator_action row) and `convergence_health`'s verdict face renders `rotation_events` + names the marker requirement in the STALLED/SPINNING action text. Hygiene pinned by test: fingerprints only — raw key material never reaches events/ledger/hypotheses/notes/state.
 - **Premise epistemics (#340)**: environment premises become clocks with
   evidence, not facts. Blocker schema v2 (`templates/state/blocker.md`)
   mandates `observed` / `attributed` / `probe_evidence` / `expires`, and
@@ -91,6 +92,24 @@ release (see the mapping table at the end).
   directory-convention section; the gate MACHINERY itself is v0.2
   scope.
 ### Changed
+
+- **Checker lane-universal (#355)**: the red-team checker is defined by its
+  FUNCTION — adversarial verification — not by any material domain, so ALL
+  evidence gets red-team checking on every lane. `agents/kunglao-redteam.md`
+  drops the #342 `lane: malware|web` declaration and carries a lane-contract
+  note (adversarial checking is lane-universal; the lane-specific evidence
+  sets and machine-check methods remain METHOD guidance, never admission
+  restrictions), and `hooks/dispatch_gate._lane_gate` /
+  `_agent_lane_declaration` document the #355 semantics: a lane-absent agent
+  is permitted on every lane, the `lane:` axis binds maker-type agents only
+  (the four malware-lane specialists' contracts unchanged), and the
+  declaration is file truth — the dispatch payload cannot influence it, with
+  plugin-qualified subagent ids (`kunglao-agent:ghidra-light`) now resolving
+  to their bare segment so a crafted payload id cannot dodge the lane gate
+  or the #760 tools-rack face through an unresolvable filename. The four
+  lanes #342 left refused (algorithm/protocol/data/app) are admitted;
+  blind_gate promotion semantics are untouched (PROVEN still requires
+  sign-off + dispatched-verifier evidence); deploy-manifest shas regenerated.
 
 - **README rewrite (#333)**: the README now leads with the RLVR positioning —
   the oracle verdict as the only trusted currency (`oracle_case_admission.py`

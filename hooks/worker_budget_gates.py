@@ -1837,3 +1837,79 @@ def check_zero_output_circuit(workspace: str | Path, cid: str | None = None,
         ))
     except Exception:
         return (True, 'zero-output circuit error - fail-open')
+
+
+# ---------- issue #341: rotation-experiment dispatch gate (C) ----------
+# When the rotation induction (#341 scope B) has FIRED for a claim —
+# runs/.rotation-induction.json carries the flag — a dispatch that just
+# re-hooks and retries is the exact failure loop the issue names: each
+# cycle locally successful, the meta-fact invisible. The dispatch prompt
+# must carry the experiment-template marker `rotation-experiment:`
+# (same enforcement face as `tool-catalog:` / `remedy: decompose`), which
+# points the worker at references/re-library/dynamic/
+# rotation-characterization.md: derivation-point hook, T / T+delta double
+# capture, trigger-isolation matrix, rotation-input source trace. The
+# REJECT keys on rotation-FLAGGED claims ONLY — unflagged claims dispatch
+# freely, never gated by this check.
+ROTATION_MARKER = 'rotation-experiment:'
+ROTATION_STATE_REL = 'runs/.rotation-induction.json'
+ROTATION_REFERENCE_CARD = ('references/re-library/dynamic/'
+                           'rotation-characterization.md')
+
+
+def load_rotation_flags(ws) -> dict:
+    """claim_id -> [subject_slot, ...] from the induction's fired flags.
+    FAIL-OPEN: an absent/corrupt state file means no flags (the induction
+    is advisory; a broken flag store must not block dispatches)."""
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        data = _json.loads(
+            (_Path(ws) / ROTATION_STATE_REL).read_text(encoding='utf-8'))
+        rotations = data.get('rotations') if isinstance(data, dict) else None
+        if not isinstance(rotations, dict):
+            return {}
+        flags: dict = {}
+        for key, rec in rotations.items():
+            if not isinstance(rec, dict) or not rec.get('fired'):
+                continue
+            claim, _, slot = str(key).partition('|')
+            claim, slot = claim.strip(), slot.strip()
+            if claim and slot:
+                flags.setdefault(claim, []).append(slot)
+        return flags
+    except (OSError, ValueError):
+        return {}
+    except Exception:  # noqa: BLE001 — flag-store outage must not block dispatch
+        return {}
+
+
+def check_rotation_experiment(paths: dict, cid, prompt: str) -> tuple:
+    """(ok, msg) — a dispatch on a rotation-flagged claim REQUIRES the
+    `rotation-experiment:` marker; anything else passes silently."""
+    try:
+        if not cid:
+            return (True, '')
+        ws = paths.get('workspace')
+        if not ws:
+            return (True, '')
+        flags = load_rotation_flags(ws)
+        flagged = flags.get(str(cid).strip(), [])
+        if not flagged:
+            return (True, '')
+        if ROTATION_MARKER in (prompt or ''):
+            return (True, '')
+        return (False, (
+            f'reject: claim {cid} is rotation-flagged '
+            f'(runtime_value_rotation fired for slot(s): '
+            f'{", ".join(sorted(flagged))}). A re-hook/retry-only dispatch '
+            'on a rotating value is the #341 failure class — each cycle '
+            'locally successful, the meta-fact invisible. Carry '
+            f'`{ROTATION_MARKER} rotation-characterization` in the dispatch '
+            f'prompt and follow {ROTATION_REFERENCE_CARD}: derivation-point '
+            'hook (where the value is BORN), T / T+delta double capture, '
+            'trigger-isolation matrix (per-process / per-session / '
+            'per-request / timer), rotation-input source trace.'
+        ))
+    except Exception:  # noqa: BLE001 — gate error must not crash the checks loop
+        return (True, '')

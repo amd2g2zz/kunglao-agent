@@ -40,6 +40,7 @@ from worker_budget_gates import (
     check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
     check_handroll_floor,  # issue 243: >50-line script vs available-CLI WARN floor
     record_tool_search_citations,  # issue 243: cited --find results -> provenance rows
+    check_rotation_experiment,  # issue #341: rotation-flagged claim requires the experiment-template marker
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
@@ -722,6 +723,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # (task domain x sample features); a deviating dispatch REJECTS
         # without `agent-reasoning:` (same anti-spoof shape as devreason).
         ('agenttype', check_agent_type(paths, cid, prompt, agent_name)),
+        # issue #341: rotation-experiment gate — a dispatch on a claim the
+        # rotation induction has flagged (runtime_value_rotation fired,
+        # runs/.rotation-induction.json) REQUIRES the experiment-template
+        # marker `rotation-experiment:`; a re-hook-only retry is REJECTED
+        # with guidance pointing at the characterization reference card.
+        ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
     for name, (ok, msg) in checks:
         if not ok:

@@ -227,8 +227,9 @@ class TestLandedCorpus:
             assert task["eval_version"] == "eval-v1"
 
     def test_schema_enums_extended(self):
-        # additive ladder: later tiers append (#356 toolflex / eval-v1.3);
-        # the earlier entries never move
+        """The enum ladder is additive: the release additions from this
+        card stay, later tiers append (misdirection at eval-v1.2,
+        toolflex at eval-v1.3); the earlier entries never move."""
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         tiers = set(schema["properties"]["tier"]["enum"])
         assert {"smoke", "release"} <= tiers

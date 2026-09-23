@@ -57,6 +57,54 @@
   the dev merge-sync (suffix ".txt", target_surface "text"); the strict
   conformance test activates with the module.
 
+## eval-v1.2 (misdirection tier — adversarial trap units)
+
+- Corpus layout extended: `eval/v1/tasks/misdirection/` with 10
+  constructed units across six families, minted FROM the catalogued
+  failure modes (the trap is the point — samples engineered so the
+  naive first reading veers wrong). Ground truth by construction on the
+  shared mod-crypto generator core; deception smoke is a MINT-TIME GATE
+  (a unit whose trap fails to deceive the scripted naive method never
+  ships; the manifest records the naive-method wrong-answer baseline).
+  - `env-misattr-js` / `env-misattr-net` — env-misattribution bait: the
+    lazy first invocation path fails with permission-flavored errors
+    (empty helper token, non-executable helper, mock 403
+    insufficient_privileges) while a correct path exists. Checker face
+    `misdirection-verdict`: BYPASSED-VIA-CORRECT-PATH (route marker +
+    byte-exact proof answers) / ATTRIBUTED-WITH-EVIDENCE (rubric-
+    compliant env verdict carrying probe evidence) / MISATTRIBUTED
+    (bare env verdict). The verdict rubric rides in the unit manifest.
+  - `key-rotation-js` / `key-rotation-net` — rotation bait: one unit per
+    trigger class (per-session / per-request / timer) with a findable
+    KDF derivation point. Checker face `rotation-verdict`:
+    ROTATION-INDUCED (conclusion + cadence + derivation point + proof
+    answers spanning rotation boundaries — a single fixed key fails by
+    construction) / REHOOK-LOOP (N distinct captures, no induction) /
+    EXHAUSTED.
+  - `decoy-marker-js` / `decoy-marker-go` — planted false markers
+    (stock AES s-box inside the custom cipher, honeypot key strings, a
+    decoy anti-debug branch gating a decoy signer). Existing
+    conclusion-equality machinery (replay-roundtrip) grades them; the
+    decoy baseline is recorded per unit and differs from truth on every
+    published pair.
+- Transfer pairs: variant A/B per trap class on different surfaces
+  (js vs net vs go), recorded in the manifests — they only ENABLE a
+  later distillation-transfer measurement; no new cadence of any kind.
+- Single-source family contract: `scripts/eval_contract.py` owns the
+  family→candidate-suffix / response-language / target-surface table;
+  the mechanical checker, the loop-arm extractor and the bare-arm
+  prompt builder all consume it (conformance:
+  `tests/test_eval_contract_352.py`). This removes the duplicated
+  literal maps that caused the control-arm campaign's native-tier
+  KeyError class.
+- Tier vocabulary: tier `misdirection` at `eval-v1.2`; checker kinds
+  `misdirection-verdict` / `rotation-verdict` (schema
+  `schemas/eval-task-v1.json` extended). Mint + self-check CLI:
+  `scripts/eval_misdirection.py` (--mint task_id / --self-check
+  task_id; self-check compiles and executes every unit against the
+  model, grades the reference artifact PASS and the naive artifact
+  FAIL).
+
 ## eval-v1.1 (#332 release tier — WEB/NET half + NATIVE ladder)
 
 - Corpus layout extended: `eval/v1/tasks/release/` with 15 constructed

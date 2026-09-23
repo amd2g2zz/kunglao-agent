@@ -27,6 +27,11 @@ eval/
                        real arm64/PE/x86_64 artifacts + reference.py
                        self-check candidate; mod-crypto core lives in
                        scripts/eval_crypto.py)
+      misdirection/    the adversarial-misdirection tier (eval-v1.2,
+                       10 units: env-misattr / key-rotation / decoy-
+                       marker families + distillation transfer pairs;
+                       verdict-class checker faces; deception smoke is
+                       a mint-time gate — scripts/eval_misdirection.py)
       toolflex/        the #356 tool-combination-flexibility tier
                        (eval-v1.3, 3 units: tf-chain2/3/4 at K=2/3/4 —
                        chain-necessity units with >= 2 valid tool
@@ -72,6 +77,7 @@ Every landed task unit also self-declares its contamination block:
 |---|---|---|
 | smoke | 3-5 constructed targets, minutes-scale | runnable per release train |
 | release | #332 native ladder: real arm64/PE/x86_64 artifacts, rungs L0/L1/L2 (+L2p UPX), minutes-scale | runnable per release train |
+| misdirection | adversarial trap units minted from the catalogued failure modes (env-misattribution bait, key-rotation bait, decoy markers) + distillation transfer pairs; verdict-class checker faces; deception smoke at mint | runnable per release train |
 | (later) | historical replay | #294 |
 | (later) | public corpus held-out | later lane |
 

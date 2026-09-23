@@ -86,6 +86,7 @@ import eval_dataset as ds
 import eval_targets as tg
 import eval_checker as chk
 import eval_smoke_runner as rnr
+import eval_contract as ec
 
 SCHEMA_CANDIDATES = "kunglao-eval-candidates/1"
 SCHEMA_AB = "kunglao-eval-ab/1"
@@ -93,15 +94,11 @@ SCHEMA_BARE_RUN = "kunglao-eval-bare-run/1"
 
 DEFAULT_TIMEOUT_S = 300.0
 
-# candidate artifact suffix per FAMILY (mirrors the checker's
-# _validate_candidate map — the authoritative family→suffix contract;
-# native families included, registered in eval_native_targets —
-# candidates are pure-python there)
-CAND_SUFFIX = {"go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
-               "arm-native-kdf": ".py", "win-pe-kdf": ".py",
-               "smc-x86": ".py", "mod-crypto-native": ".py",
-               "web-pack-sign": ".js", "net-verify-license": ".js",
-               "req-sign": ".js", "mod-crypto-js": ".js"}
+# candidate artifact suffix per FAMILY: the single-source contract module
+# (eval_contract) all three drivers consume — this view exists for the
+# parity tests; the literal lives only in eval_contract.FAMILY_CONTRACT
+CAND_SUFFIX = {family: ec.candidate_suffix(family)
+               for family in ec.FAMILY_CONTRACT}
 
 # prompt cap for a rendered binary input surface (chars; truncation is
 # recorded in the prompt text, never silent)
@@ -165,10 +162,17 @@ def is_premature_closure(claimed_converged: bool, rerun_verdict: str | None,
 
 # ---------------------------------------------------------- bare prompt
 def _cand_suffix(task: dict) -> str:
-    """Candidate artifact suffix for the task's family — the literal
-    mirror of the checker's _validate_candidate contract (kept in sync by
-    the parity test in tests/test_eval_control_arm_236.py)."""
-    return CAND_SUFFIX[task["family"]]
+    """Candidate artifact suffix for the task's family — the single-source
+    contract module all three drivers consume (parity-pinned in
+    tests/test_eval_control_arm_236.py)."""
+    return ec.candidate_suffix(task["family"])
+
+
+def _response_language(family: str) -> str:
+    """The bare prompt's response-language face, from the contract (the
+    candidate artifact the checker grades, never the target's
+    implementation language)."""
+    return ec.response_language(ec.candidate_suffix(family))
 
 
 def render_binary_surface(path: Path) -> str:
@@ -224,10 +228,10 @@ def build_bare_prompt(tdir: Path, task: dict) -> str:
             f"embedded strings:")
     anchors = task["anchors"]
     # the RESPONSE language follows the candidate artifact the checker
-    # grades (CAND_SUFFIX), never the target's implementation language —
-    # native units ship c/arm64 targets but grade pure-python candidates
-    response_lang = {".py": "Python", ".js": "JavaScript",
-                     ".go": "Go"}[_cand_suffix(task)]
+    # grades (the contract's response_language face), never the target's
+    # implementation language — native units ship c/arm64 targets but
+    # grade pure-python candidates
+    response_lang = _response_language(task["family"])
     return (
         "You are solving a reverse-engineering task cold, with no tools, "
         "no feedback loop, and no second chance: one response, final.\n\n"

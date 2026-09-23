@@ -281,6 +281,7 @@ EMIT_ACTIONS = [
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
     "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
     "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
