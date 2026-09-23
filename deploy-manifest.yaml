@@ -1007,11 +1007,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: bbbf7f15321d366987f7e97f1a90372592671d3d08345e30a46ceea29d95f1a6
+    sha256: e659bcabfa85a9165998de9636f8b72bdb0f541abe2ac1fe7e04f5d1ebb1a74c
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 0213d447e46940719e0a4181c77f605ec446ebe1538730067a32bb77819c95c2
+    sha256: 4ed626a5e880e5ec088bb0596a813fe9396bfd37794b00c082e9b56d7109d66a
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1055,7 +1055,7 @@ files:
   - src: references/_index-web.md
     dest: .claude/references/_index-web.md
     kind: asset
-    sha256: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
+    sha256: de581371b5155e67c158640f736d78bbb85fdb0d7fb5874921ef0be1dbe25ec0
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
@@ -1072,6 +1072,10 @@ files:
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset
     sha256: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
+  - src: references/contracts/distill-pipeline.md
+    dest: .claude/references/contracts/distill-pipeline.md
+    kind: asset
+    sha256: 8abf39db5e555cf0138f57b3e939282d0c2ad794833d030020d1f15156fc5578
   - src: references/contracts/downstream-contract.md
     dest: .claude/references/contracts/downstream-contract.md
     kind: asset
@@ -1080,6 +1084,14 @@ files:
     dest: .claude/references/contracts/error-response-taxonomy.md
     kind: asset
     sha256: a5710b439bc5b1df49ca68097979ccb780fbad173f25c7c9b91db542f1fa53f7
+  - src: references/contracts/external-distilled/complexity-routed-model-tiers.md
+    dest: .claude/references/contracts/external-distilled/complexity-routed-model-tiers.md
+    kind: asset
+    sha256: 5cec0c86a2e6439871907f71c0352cec2bcac76a290b529d39ac4baada571feb
+  - src: references/contracts/external-distilled/distillation-deviation-ledger.md
+    dest: .claude/references/contracts/external-distilled/distillation-deviation-ledger.md
+    kind: asset
+    sha256: 34d48e70c42fb7144d194c1fea0a21c3a083b8e6004e9f51735b9a479e0d9706
   - src: references/contracts/machine-check-contract.md
     dest: .claude/references/contracts/machine-check-contract.md
     kind: asset
@@ -1167,7 +1179,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 9c3d452b33a40fd9c09ae1e6d5c347c0f1b2438f897da7a76009af24ebaf4259
+    sha256: e79977d16c881c1142d5d1ea8589a05a0b3acb007e3b8d1330727fca1f3e2abd
   - src: references/re-library/android/emulation/android-fingerprint-apis.md
     dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
@@ -1356,6 +1368,34 @@ files:
     dest: .claude/references/re-library/web/crawler/web-crawler-engineering.md
     kind: asset
     sha256: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
+  - src: references/re-library/web/external-distilled/_GAP-REPORT.md
+    dest: .claude/references/re-library/web/external-distilled/_GAP-REPORT.md
+    kind: asset
+    sha256: cc1cc3e7abac349ec5190d95abb3300f529bff3361e6879a1e31275cc6fd740d
+  - src: references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
+    dest: .claude/references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
+    kind: asset
+    sha256: dcf671d0ed93364322a43b75b2fe62009f8fd8ed8556591c3bd8450db8292c32
+  - src: references/re-library/web/external-distilled/external-delivery-verification-gates.md
+    dest: .claude/references/re-library/web/external-distilled/external-delivery-verification-gates.md
+    kind: asset
+    sha256: 0903268b42e963322dddc8a4673a833f88d917ea5ffb81ae1815a099b7ad1ff9
+  - src: references/re-library/web/external-distilled/external-env-stub-generation.md
+    dest: .claude/references/re-library/web/external-distilled/external-env-stub-generation.md
+    kind: asset
+    sha256: 5a8eb7c1a7a9ee70a24b279b4715fb644803c61e40cb004e523a20c0ddcd80bf
+  - src: references/re-library/web/external-distilled/external-minimal-intervention-observation.md
+    dest: .claude/references/re-library/web/external-distilled/external-minimal-intervention-observation.md
+    kind: asset
+    sha256: 50df0c7938b8dcb3ecbff72bbbafecce00262ba2cb0b41cc3c1b1900aa7aa04e
+  - src: references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md
+    dest: .claude/references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md
+    kind: asset
+    sha256: 8a8d09c411e5221d623f93e55b98d3522f33d070e2c04b730b73fdb2e692c8bc
+  - src: references/re-library/web/external-distilled/external-protocol-failure-ladder.md
+    dest: .claude/references/re-library/web/external-distilled/external-protocol-failure-ladder.md
+    kind: asset
+    sha256: dcc6d812b19aa948762b95ef5709526349e757477ccf2d62bebe4d086af9b496
   - src: references/re-library/web/labs/web-re-quickref.md
     dest: .claude/references/re-library/web/labs/web-re-quickref.md
     kind: asset
