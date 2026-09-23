@@ -448,3 +448,46 @@ class TestExternalDistilledRecall:
     def test_distill_pipeline_query_returns_pipeline_contract(self) -> None:
         paths = self._paths("distillation pipeline wave")
         assert "contracts/distill-pipeline.md" in paths
+
+
+# ---------- case-distilled wave-1 recall alignment (issue 364) ----------
+
+
+@pytest.mark.skipif(not REAL_INDEX.is_file(), reason="repo references/_INDEX.md missing")
+class TestCaseDistilledRecall:
+    """Android case-distilled cards (issue 364) must be recallable by their
+    android-domain keywords (same distill bar: general + heuristic only)."""
+
+    def _paths(self, query: str) -> set:
+        idx = rr.build_index(REAL_INDEX)
+        r = rr.recall(list(idx.entries), list(idx.scenes), query)
+        assert r.kind == "scored", (query, r.kind)
+        return set(r.files)
+
+    def test_computed_call_query_returns_dispatch_recovery_card(self) -> None:
+        paths = self._paths("computed indirect call dispatcher")
+        assert "re-library/android/case-distilled/case-hardened-dispatch-recovery.md" in paths
+
+    def test_hook_crash_query_returns_counterplay_card(self) -> None:
+        paths = self._paths("hook crash anti-tamper tombstone")
+        assert "re-library/android/case-distilled/case-kill-evidence-counterplay.md" in paths
+
+    def test_enrollment_query_returns_identity_channel_card(self) -> None:
+        paths = self._paths("device enrollment encrypted channel")
+        assert "re-library/android/case-distilled/case-identity-channel-epistemics.md" in paths
+
+    def test_emulation_query_returns_campaign_discipline_card(self) -> None:
+        paths = self._paths("emulation campaign license state")
+        assert "re-library/android/case-distilled/case-emulation-campaign-discipline.md" in paths
+
+    def test_sampling_window_query_returns_observation_card(self) -> None:
+        paths = self._paths("sampling window claim discipline")
+        assert "re-library/android/case-distilled/case-observation-claim-discipline.md" in paths
+
+    def test_constant_fingerprint_query_returns_attribution_card(self) -> None:
+        paths = self._paths("constant fingerprint algorithm attribution")
+        assert "re-library/android/case-distilled/case-constant-fingerprint-attribution.md" in paths
+
+    def test_case_distilled_gap_report_recallable(self) -> None:
+        paths = self._paths("case distillation gap report android")
+        assert "re-library/android/case-distilled/_GAP-REPORT-D1.md" in paths
