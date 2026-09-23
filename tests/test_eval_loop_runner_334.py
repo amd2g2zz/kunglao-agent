@@ -466,3 +466,73 @@ class TestNativeRunnability:
         assert row["failures"][0]["code"] == "BAD_TASK"
         assert "kunglao-init failed rc=1" in row["failures"][0]["detail"]
         assert row["loop"]["workspace"] is None
+
+
+# --------------------------------------- (j) CC-DEFAULT arm (harness var)
+class TestCcDefaultArm:
+    def test_cc_default_argv_has_no_plugin(self):
+        """The harness-variable face: same caps, NO --plugin-dir, NO
+        kunglao flags — plain default-harness claude."""
+        argv = lr.build_cc_default_argv("PROMPT", 7.5)
+        assert argv[:3] == ["claude", "-p", "PROMPT"]
+        assert "--plugin-dir" not in argv
+        assert "--permission-mode" in argv
+        assert argv[argv.index("--max-budget-usd") + 1] == "7.5"
+
+    def test_launch_session_plugin_false_uses_cc_default_face(self,
+                                                              tmp_path):
+        recorded = {}
+
+        def _fake_builder(prompt, budget):
+            recorded["prompt"] = prompt
+            recorded["budget"] = budget
+            return ["echo-cmd", prompt]
+
+        orig = lr.build_cc_default_argv
+        lr.build_cc_default_argv = _fake_builder
+        try:
+            lr.launch_session(tmp_path, "PROMPT", budget_usd=1.0,
+                              wall_cap_s=1, plugin=False)
+        finally:
+            lr.build_cc_default_argv = orig
+        assert recorded["prompt"] == "PROMPT"
+        assert recorded["budget"] == 1.0
+
+    def test_cc_default_workspace_is_neutral_and_complete(self, tmp_path):
+        """Neutral cwd: unit material + TASK.md only — no kunglao-init
+        scaffold (no claim-register/task_spec), anchors verbatim in the
+        prompt, deliverable path mandated."""
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        task = ds.load_task(tdir)
+        ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path)
+        for rel in task["workspace_scaffold"]["files"]:
+            assert (ws / rel).read_bytes() == (tdir / rel).read_bytes()
+        assert (ws / "TASK.md").is_file()
+        assert not (ws / "claim-register.yaml").exists()
+        assert not (ws / "task_spec.yaml").exists()
+        for field in ds.ANCHOR_FIELDS:
+            assert task["anchors"][field] in prompt
+        assert task["workspace_scaffold"]["candidate_contract"] in prompt
+        assert "runs/deliverables/candidate.py" in prompt
+        # the kunglao invocation face must NOT appear
+        assert "/kunglao-agent" not in prompt
+
+    def test_run_loop_task_cc_default_end_to_end(self, tmp_path,
+                                                 monkeypatch):
+        """arm='cc-default' drives the STUB seam end to end and labels
+        rows arm=cc-default with the same checker verdict contract. The
+        session command MUST stay wired to the stub — an unwired seam
+        would spawn a real claude session inside a unit test."""
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+
+        def _ccd_stub(task_dir, root):
+            ws = lr.init_workspace(_task_dir(PY), root)
+            return ws, "solve it; deliver to runs/deliverables/candidate.py"
+
+        monkeypatch.setattr(lr, "init_cc_default_workspace", _ccd_stub)
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=5, arm="cc-default",
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert row["arm"] == "cc-default"
+        assert row["verdict"] in ("PASS", "FAIL", "SKIP")
