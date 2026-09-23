@@ -7,6 +7,7 @@
 | Tool | Purpose (one-liner) | When to read / when not |
 |---|---|---|
 | `jsvmp_triage` | Three-feature JSVMP/VMP triage CLI (verdict = three-of-two votes) | Read when a deobfuscated web bundle may hide a bytecode VM; not a proof — runtime trace confirmation stays with the operator |
+| `js_obfuscation_detect` | Obfuscation-technique inventory + routing to the registered next tool | Read FIRST on a raw minified bundle to route (packer → unbundle → deobfuscate → VMP triage); advisory only — no transforms, no family proof |
 
 ## Three-feature thresholds
 
@@ -31,3 +32,15 @@ Verdict: `votes = F1+F2+F3`; suspected ⇔ votes ≥ 2; confidence high(3/3) / m
 - **Outputs**: JSON verdict per file: `vmp_suspected` / `votes` / `confidence` (high|medium|low) + per-feature evidence (`f1_bytecode_array`, `f2_dispatch_loop`, `f3_semanticless_handlers.ratio` + `case_bodies_found`), `signals` lines, advisory `note`.
 - **exit code**: 0 = triage completed (advisory posture — the verdict lives in the JSON, a miss is still exit 0, mirroring think_seat); 1/2 unused (reserved, not emitted).
 - **when_not**: Not a proof of VMP — runtime confirmation requires a single-generation opcode/stack trace (CP3 of the trace methodology); use on already-deobfuscated bundles, not raw minified input. Consistent with _INDEX.yaml when_not.
+
+### js_obfuscation_detect
+
+- **Purpose**: Inventory which obfuscation techniques a JS bundle carries (packer bootstrap, string-array + rotation, control-flow flattening, opaque predicates, dead-code injection, bundler markers, aaencode face-text, hex-renamed identifiers) with per-technique count evidence, then recommend the registered next tool.
+- **Usage**:
+  ```bash
+  python tools/web/js_obfuscation_detect.py bundle.min.js
+  ```
+- **Inputs**: One or more raw or deobfuscated `.js` file paths (batch-capable).
+- **Outputs**: JSON report per file: `techniques` [{name, confidence, evidence}] + `recommendation` {route, next_tool, why} (routes: unpack-first → webcrack-deobfuscate; unbundle; webcrack-deobfuscate; vmp-triage → jsvmp_triage; sandbox-decode → js_env_diagnose; direct-read).
+- **exit code**: 0 = every file analyzed / 2 = any missing, empty, or undecodable path (fail loud — errors on stderr; reports still print for good files).
+- **when_not**: Advisory routing only — performs no transforms and proves no family; run the routed registered tool for the real work (consistent with _INDEX.yaml when_not).

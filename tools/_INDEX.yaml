@@ -622,3 +622,20 @@ tools:
     requires: []
     cost_hint: {mem_gb: 0.1, time: cheap}
     quality: {web:triage: mid}
+
+  # issue #359 wave-2 distillation: obfuscation-technique inventory + routing
+  # over RAW or deobfuscated bundles. Advisory static heuristic; per-technique
+  # count evidence; recommendation routes to a REGISTERED next tool only.
+  - name: js_obfuscation_detect
+    category: web
+    capability: js:obfuscation-detect
+    tier: T1
+    cost_tier: probe
+    input_output: {input: "raw or deobfuscated JS bundle(s) as file paths", output: "JSON report per file: techniques [{name, confidence, evidence}] (packer/string-array+rotation/control-flow-flattening/opaque-predicates/dead-code/webpack/aaencode/hex-renamed) + recommendation {route, next_tool, why}"}
+    description: Detects obfuscation, routes next tool
+    when_not: "advisory routing only — no transforms, no family proof; run the routed registered tool (webcrack-deobfuscate / jsvmp_triage / js_env_diagnose) for the real work; on raw minified input it reads shape, not semantics"
+    provider: js-obfuscation-detect
+    produces: [js:obfuscation-detect]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: probe}
+    quality: {js:obfuscation-detect: mid}
