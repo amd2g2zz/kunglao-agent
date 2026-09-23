@@ -200,6 +200,7 @@ EMIT_ACTIONS = [
     "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
+    "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "failure_blocked",

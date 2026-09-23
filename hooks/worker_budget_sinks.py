@@ -480,6 +480,51 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     return True, ''
 
 
+def check_env_premise(paths: dict, tier: int = 0,
+                      tools: list[str] | None = None) -> tuple[bool, str]:
+    """#340 scope B: premise-probe reconciliation at the dispatch seam.
+
+    When this dispatch needs capability X (`_env_caps_needed` — the single
+    source of capability names), an ACTIVE env-attribution premise in
+    blockers/*.md claims X unavailable, and runs/env-state.json shows X
+    liveness PASS, two machine-readable records disagree and the probe
+    wins: the premise is marked SUSPECT (append-only history line), a
+    one-shot on-demand capability re-probe is scheduled (the #474 channel,
+    scripts/premise_gate.run_pending_reprobe), and
+    `env_premise_contradiction` is emitted to the event ledger. The
+    dispatch itself is NEVER rejected on the stale premise — routing, not
+    awareness (#340 design axiom).
+
+    Posture: FAIL-OPEN always. Missing/unreadable env-state.json keeps the
+    existing fail-open behavior unchanged (pinned by test); a crashed
+    reconciliation degrades to a stderr WARN. The (True, '') shape is the
+    contract: this check is the channel that kills the false premise, not
+    another gate for the orchestrator to argue with."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    try:
+        needed = _env_caps_needed(tier, tools or [])
+    except Exception:  # noqa: BLE001 — vocabulary failure must not block
+        return True, ''
+    if not needed:
+        return True, ''
+    p = Path(ws) / ENV_STATE_FILE
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        per = data.get('per_capability') if isinstance(data, dict) else None
+        if not isinstance(per, dict):
+            per = {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return True, ''  # missing/corrupt env-state: fail-open (unchanged)
+    try:
+        import premise_gate
+        premise_gate.reconcile_dispatch(Path(ws), needed, per)
+    except Exception as exc:  # noqa: BLE001 — fail-open with one WARN
+        warn("check_env_premise", f"{type(exc).__name__}: {exc}")
+    return True, ''
+
+
 def _declared_trace_id(prompt: str) -> str | None:
     """#879: the v1 envelope's optional `trace_id` (meta passthrough), or
     None. Format-invalid declarations degrade to None (the dispatch row stays
@@ -621,6 +666,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # stale-beyond-2xTTL state follows the FAIL_OPEN/self-heal split
         # (see check_env_fresh). Pure file read (<5ms), no subprocess.
         ('envfresh', check_env_fresh(paths, tier, tools)),
+        # #340 scope B: premise-probe reconciliation — an env premise that
+        # contradicts a liveness PASS in env-state is marked SUSPECT + a
+        # one-shot re-probe is scheduled + env_premise_contradiction is
+        # emitted; the dispatch is NOT blocked on the stale premise (the
+        # probe wins). Fail-open always (see check_env_premise).
+        ('envpremise', check_env_premise(paths, tier, tools)),
         # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.

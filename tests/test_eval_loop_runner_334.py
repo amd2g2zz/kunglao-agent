@@ -409,3 +409,59 @@ class TestPromptLeakage:
             out = pair.get("out")
             if out is not None:
                 assert str(out) not in prompt
+
+
+# ---------------------------------------- (i) native-tier runnability
+# The v0.1.6 loop-arm campaign ran the runner across the release tier's
+# L1 set and surfaced three native-tier gaps: a text-decode scaffold copy
+# (UnicodeDecodeError on ELF targets), a language-keyed candidate suffix
+# (KeyError on the native families), and a tier-wide crash on one unit's
+# init failure. Pins below; all faces deterministic.
+
+class TestNativeRunnability:
+    def test_elf_scaffold_copies_byte_exact(self, tmp_path):
+        """arm-kdf-l0's scaffold entry is an ELF binary: the workspace copy
+        must round-trip the bytes exactly (a text decode crashed here)."""
+        release = sorted(ds.iter_task_dirs(tier="release"))
+        tdir = next(d for d in release if d.name == "arm-kdf-l0")
+        task = ds.load_task(tdir)
+        assert (tdir / task["workspace_scaffold"]["entry"]).read_bytes()[:4] \
+            == b"\x7fELF", "pin expects the binary target"
+        ws = lr.init_workspace(tdir, tmp_path)
+        for rel in task["workspace_scaffold"]["files"]:
+            assert (ws / rel).read_bytes() == (tdir / rel).read_bytes(), \
+                f"scaffold file {rel} must round-trip byte-exact"
+        entry = task["workspace_scaffold"]["entry"]
+        assert (ws / "bins" / Path(entry).name).read_bytes() \
+            == (tdir / entry).read_bytes()
+
+    def test_candidate_suffix_parity_with_checker(self, tmp_path):
+        """_candidate_suffix mirrors eval_checker._validate_candidate
+        exactly across every tier's families (checker must accept the
+        mapped suffix)."""
+        import eval_checker as chk
+
+        for tier in ds.TIERS:
+            for d in ds.iter_task_dirs(tier=tier):
+                family = ds.load_task(d)["family"]
+                suffix = lr._candidate_suffix(ds.load_task(d))
+                cand = tmp_path / f"{tier}-{family}-probe{suffix}"
+                cand.write_bytes(b"# probe\n")
+                chk._validate_candidate(cand, family)
+
+    def test_init_failure_is_structured_skip_never_crash(self, tmp_path,
+                                                         monkeypatch):
+        """One unit's kunglao-init failure yields a structured SKIP row
+        (loop.status=init_failed, BAD_TASK code, reason carried) — the
+        tier's other units still measure."""
+        def _boom(task_dir, work_root, **kw):
+            raise RuntimeError("kunglao-init failed rc=1 "
+                               "for some-unit: gated detail")
+
+        monkeypatch.setattr(lr, "init_workspace", _boom)
+        row = lr.run_loop_task(PY, tmp_path)
+        assert row["verdict"] == "SKIP"
+        assert row["loop"]["status"] == "init_failed"
+        assert row["failures"][0]["code"] == "BAD_TASK"
+        assert "kunglao-init failed rc=1" in row["failures"][0]["detail"]
+        assert row["loop"]["workspace"] is None

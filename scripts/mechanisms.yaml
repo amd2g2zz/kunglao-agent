@@ -227,6 +227,26 @@ mechanisms:
       of an idle action_taken. The seat self-arbitrates waiting internally
       (no cheap external gate); idle != EMPTY.
 
+  - name: premise_expiry
+    entry: scripts/premise_gate.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "blockers/*.md INVALIDATED(stale) history lines + runs/.env-reprobe-pending.json + runs/.premise-expiry.json tick counter"
+    owner: scripts/premise_gate.py
+    description: >
+      #340 premise epistemics: env-class premises are clocks, not facts.
+      Each pass advances the tick counter, appends INVALIDATED(stale) to
+      env-class v2 blockers whose probe evidence did not refresh within
+      their expires window (default 12 ticks,
+      KUNGLAO_PREMISE_EXPIRY_TICKS), and consumes any one-shot pending
+      capability re-probe through the #474 on-demand channel
+      (toolchain.py --capability). Append-only; convergence
+      _active_blockers excludes the marked files, forcing re-derivation.
+
   - name: policy_retro
     entry: scripts/backtrack_loop.py
     channel: tick

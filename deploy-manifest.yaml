@@ -71,7 +71,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 3c82f56f16e3e486be6c0fe11c3fc1edd8c73102858776af0341fdb58b03a3c6
+    sha256: e1fd97aa144371fa12f262643c6484c116a6497adcc17d75093ea91cdea244d2
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: ff0fde2764e6a0463acf1a26508618980a6219058af68f3c90c1e5e37c820fa2
+    sha256: 4ced443ecc464f2c5030f6664e1fa21f4d5015c7823b4338dababfedb4bafc65
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 331f09320657666ef41f58e2b58cd37f24666d9d89b31a24ea248c2693ed2458
+    sha256: e49ea52ae8e82f30d6bf56cd7e3cafcff95eb3a740c8e438ca5fc13dbfb837c7
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -208,6 +208,10 @@ files:
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
     sha256: 79582b948c270eade801ed8f1e4dde4b3aba5f4c9d6bd17cfbe99602a4f4a6ab
+  - src: scripts/blocker_lint.py
+    dest: .claude/scripts/blocker_lint.py
+    kind: scaffold
+    sha256: 8a866f1aa0643b1b026e1b5b43ae0cd3324c0d7f7341c4d5bca1707e1e30bfb9
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -263,7 +267,7 @@ files:
   - src: scripts/context_budget.py
     dest: .claude/scripts/context_budget.py
     kind: scaffold
-    sha256: 51144ba826641ff621b890dbde144546ba865e481663f89dea17f7aa6593295f
+    sha256: 225b9d44299c694cacd8878042378ff3597e5f48724079581837b8dbbce97aef
   - src: scripts/contracts.py
     dest: .claude/scripts/contracts.py
     kind: scaffold
@@ -379,7 +383,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 5493a85899a57834bb927fa69fad3215dd1fd1f282252965355421c87bd76f16
+    sha256: e80ef339c726cc8be238b765b403542f3d57e2386047f7dc98794d25e3bca7b4
   - src: scripts/eval_native_sources.py
     dest: .claude/scripts/eval_native_sources.py
     kind: scaffold
@@ -399,7 +403,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: aaf49fe8b1f3e7f6f2885c4533bf8202180ed298d0966c6f8bd617bf75a58199
+    sha256: e6c339f6944ac754a3c82db36ad43cb5c40db96bd3d26b5fe4a8cfc16a5c42bc
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -704,6 +708,10 @@ files:
     dest: .claude/scripts/premature_termination_detect.py
     kind: scaffold
     sha256: 99c790d8fd500c68420b7bc227b503932598de99e83e16c35db75b64edf88d6b
+  - src: scripts/premise_gate.py
+    dest: .claude/scripts/premise_gate.py
+    kind: scaffold
+    sha256: 263a51af7abdbbb8daa23f27bd60ec88916a05e7b0d09d0913cf5cd78cc49d02
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
@@ -1415,7 +1423,7 @@ files:
   - src: templates/state/blocker.md
     dest: .claude/templates/state/blocker.md
     kind: asset
-    sha256: 4b51edb7926ed9db0380b63766b87401716df16fd9819022b696ea021f34ae93
+    sha256: 06decae17da322e273a730900f2b19db780e265810401a8696420563e948d9ff
   - src: templates/state/claim-register.yaml
     dest: .claude/templates/state/claim-register.yaml
     kind: asset
@@ -1455,7 +1463,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: dffa36609c71411ed8988ee39374f7b8f09dce289daaf88dcd0897b5d20ba713
+    sha256: 8b840fa88cf9ca400563be643508109fb0cb1a263877ad4587886c76164c478b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
