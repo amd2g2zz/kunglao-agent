@@ -58,6 +58,18 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # fact_ids and top_dimension — only the four anomaly scores changed. No
 # ranker or decide() code path was touched by the sweep.
 #
+# 2026-09-23 DATA-coupled freeze refresh (wave-2 tool reimplementation): the
+# few-shot card appends on four external-distilled cards + two pre-existing
+# cards (vm-deobfuscation-routing, web-re-quickref) grew the anomaly
+# baseline corpus again (design D2 source 1). Lexical-rarity statistics
+# shifted, moving anomalies[].score past the frozen precision on 2 of 31
+# cases (drain_blocked_contradiction, order_discovery_beats_contradiction).
+# Case-by-case verification of capture_current() vs the previous anchor:
+# drift is score-only (zero changes in action, decision order, phase
+# fields, anomaly counts, fact_ids, top_dimension); convergence_check.py
+# and anomaly_detector.py are byte-identical to origin/dev (channel 1
+# trivially green — no code path touched).
+#
 # 2026-09-23 DATA-coupled freeze refresh (issue 358 external-distillation
 # wave 1): ten external-distilled reference cards + one gap report landed
 # under references/re-library/, growing the anomaly baseline corpus
