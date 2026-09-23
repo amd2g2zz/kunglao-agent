@@ -666,7 +666,7 @@ tools:
     tier: T1
     cost_tier: cheap
     input_output: {input: "candidates JSON {name, locator 'global:|expr:', samples [{args, expected}]} + harness results JSON", output: "emit: harness .js + plan .json; apply: verified candidates JSON (verified=true only when EVERY sample ran+matched and count clears --minimum-matches) + stdout summary"}
-    description: Verifies recovered signer functions differentially
+    description: Differentially verifies signer claims
     when_not: "verification step, not discovery — candidates must already be recovered (static read or runtime trace); never promotes on partial matches (every planned sample must run and match); malformed artifacts exit 2"
     provider: sign-candidate-verify
     produces: [js:sign-verify]
