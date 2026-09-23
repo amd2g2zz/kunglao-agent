@@ -40,6 +40,31 @@ Per-cluster verdict against the standing bar, with recorded rationale:
   stripping names — if the insight does not survive stripping, it was not
   general.
 
+**Methodology focus, three layers in priority order (owner ruling,
+2026-09-23, binding on every card):**
+
+1. **怎么规划** — why the path was ordered this way (what made each step the
+   right next step given what was known at that point).
+2. **遇到情况下一步怎么做** — decision rules as branch tables: situation →
+   next action. The situation-action pair is the payload.
+3. **隐含思路** — the mental model / invariant behind choices (e.g.
+   "execution-form must be unwrapped before structural passes" is a boundary
+   prior, not a step). Mine these from how the sources SEQUENCE their work,
+   not only from what they state.
+
+Facts/parameters/results are secondary payload — they enter a card only in
+service of a decision rule. **The bar**: strip all concrete values from a
+card; if no decision rules remain, it is reference material, not methodology
+— it has not passed. Structurally: every card's soul-sections are the branch
+table (situation → action) and the why-this-design reasoning.
+
+**Clustering is algorithmic (owner ruling, 2026-09-23):** cluster assignment
+comes from an actual algorithm over normalized items (e.g. TF-IDF +
+k-means-class with k selected by silhouette), never from hand-waved themes.
+Weak separation is an honest, reportable outcome; when structure is soft,
+consolidation into cards happens at assessment stage with per-card cluster
+provenance recorded.
+
 ## Stage 4 — conflict + duplicate vs existing references
 
 - Overlap rows cite OUR card; external-derived content never silently
@@ -63,6 +88,15 @@ attributed conceptual excerpts where the license permits. Index registration
 + re-pin + recall hits for domain keywords (tests). A card skips the library
 until it passes standardization.
 
+Internal-campaign waves (case-distilled lane): `source_id` = campaign id
+(D-ids), `source_license: internal`, `epistemic: evidence-derived`;
+community-source content from the campaign's own strategy material stays a
+separate epistemic class and is marked `[community-claim]` inline — the three
+classes evidence-derived ≠ community-claim ≠ external-derived never merge
+in-card. Lane directory: `<domain>/case-distilled/` for internal campaigns,
+`<domain>/external-distilled/` for external sources (provenance decides the
+lane name).
+
 ### Card format contract (owner addendum, 2026-09-23)
 
 The exemplars ARE the contract: a distillate card matches the style of
@@ -82,11 +116,18 @@ separate bolted-on block; detail sections below are self-titled. The blocks
 are the distiller's own synthesis (same desensitization rules apply), never
 copied source snippets.
 
+Owner addendum (2026-09-23, structural): every card's soul-sections are the
+branch table (situation → action) and the why-this-design reasoning. Chain
+skeletons and reference tables serve these — reframe their emphasis
+accordingly. The strip test decides admission: remove every concrete value;
+whatever decision rules survive is the card.
+
 ## Wave artifacts
 
 Per wave: private scratch ledger (S-id ↔ source, HEAD, license, retrieval
-date) + private PIPELINE.md (cleaning log, cluster table, verdicts+rationale,
-conflict rows) + committed desensitized gap report
-(`references/re-library/web/external-distilled/_GAP-REPORT.md` for web-lane
-waves) + PR-body summary. Scratch never commits; source material is deleted
-from the worktree after merge.
+date) + private PIPELINE.md (cleaning log, cluster table with the algorithmic
+assignment record, verdicts+rationale, conflict rows) + committed desensitized
+gap report (`references/re-library/web/external-distilled/_GAP-REPORT.md` for
+web-lane external waves; `<domain>/case-distilled/_GAP-REPORT-<campaign-id>.md` for internal
+campaign waves) + PR-body summary. Scratch never commits; source material is
+deleted from the worktree after merge.

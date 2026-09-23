@@ -90,3 +90,6 @@ docs/superpowers/
 
 # #358 distillation scratch (untracked; source clones never committed)
 .scratch-sources/
+
+# #364 campaign distillation scratch (untracked; D1 workspace material never committed)
+.scratch-d1/

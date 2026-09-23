@@ -322,3 +322,31 @@ cards:
   to: references/re-library/dynamic/rotation-characterization.md
   domain: dynamic
   family: rotation
+- from: references/re-library/case-hardened-dispatch-recovery.md
+  to: references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-kill-evidence-counterplay.md
+  to: references/re-library/android/case-distilled/case-kill-evidence-counterplay.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-identity-channel-epistemics.md
+  to: references/re-library/android/case-distilled/case-identity-channel-epistemics.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-emulation-campaign-discipline.md
+  to: references/re-library/android/case-distilled/case-emulation-campaign-discipline.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-observation-claim-discipline.md
+  to: references/re-library/android/case-distilled/case-observation-claim-discipline.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-constant-fingerprint-attribution.md
+  to: references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md
+  domain: android
+  family: case-distilled
+- from: references/re-library/case-distilled-gap-report-D1.md
+  to: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
+  domain: android
+  family: case-distilled
