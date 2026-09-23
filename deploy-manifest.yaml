@@ -1007,11 +1007,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: e659bcabfa85a9165998de9636f8b72bdb0f541abe2ac1fe7e04f5d1ebb1a74c
+    sha256: 93d3edbf39ab4e4d7c95580527502aa510f254d20766807bee11bc60107ee6e4
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 4ed626a5e880e5ec088bb0596a813fe9396bfd37794b00c082e9b56d7109d66a
+    sha256: 772114338e6d00780526ec14d242d90353e7ed578be1a7c9c621b14a02d8fe5c
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1055,7 +1055,7 @@ files:
   - src: references/_index-web.md
     dest: .claude/references/_index-web.md
     kind: asset
-    sha256: de581371b5155e67c158640f736d78bbb85fdb0d7fb5874921ef0be1dbe25ec0
+    sha256: c7f94b4ac4f9ca3b8177ab655309f04a80284eed29fb7ee994ceb01e3cce48d8
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
@@ -1179,7 +1179,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: e79977d16c881c1142d5d1ea8589a05a0b3acb007e3b8d1330727fca1f3e2abd
+    sha256: 78f2756063feb79ad2eea55e2590d66ce3545cb3d711a7a8f6ad05beedfa0f34
   - src: references/re-library/android/emulation/android-fingerprint-apis.md
     dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
@@ -1511,7 +1511,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 2e73745fb563274a6002214b48518ea474b9bab4b8c309844592017969263d05
+    sha256: acdd4c3543a4eac3682379410a9999050b9ff076d56f3a678a9a90109dc710bb
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

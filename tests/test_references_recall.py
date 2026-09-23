@@ -394,13 +394,13 @@ class TestRealIndexAlignment:
         assert "contracts/convergence-loop.md" in r.files
 
 
-# ---------- #358 external-distilled wave-1 recall alignment ----------
+# ---------- external-distilled wave-1 recall alignment (issue 358) ----------
 
 
 @pytest.mark.skipif(not REAL_INDEX.is_file(), reason="repo references/_INDEX.md missing")
 class TestExternalDistilledRecall:
-    """#358: external-distilled cards must be recallable by their domain
-    keywords (five-wave quality bar: general + heuristic distillates only)."""
+    """External-distilled cards (issue 358) must be recallable by their domain
+    keywords (distill bar: general + heuristic distillates only)."""
 
     def _paths(self, query: str) -> set:
         idx = rr.build_index(REAL_INDEX)
