@@ -1,5 +1,62 @@
 # eval-v1 changelog
 
+## eval-v1.3 (#356 toolflex tier — tool-combination flexibility)
+
+- Corpus layout extended: `eval/v1/tasks/toolflex/` with 3 constructed
+  units across three chain-width families (owner directive 2026-09-23:
+  the ladder grades OUTCOMES; this family grades PATH CAPABILITY —
+  select / chain / RE-ROUTE tool combinations). One seed per family
+  (35601-35603), every constant synthetic and seeded:
+  - `tf-chain2-py-v1` (K=2) — extract (peek|probe) -> fold
+    (fold64|refold64); four valid combinations.
+  - `tf-chain3-js-v1` (K=3) — unwrap (xtract|scan) -> keymix (mix|blend)
+    -> emit (emit64|reemit64); eight valid combinations.
+  - `tf-chain4-py-v1` (K=4) — open (unlock|peel) -> derive (sprout|
+    distill) -> expand (weave|braid) -> seal (seal|cap); sixteen valid
+    combinations.
+- Pipeline parameters exist ONLY as a mod-crypto-encrypted blob (the
+  #332 generator core); the blob key lives ONLY inside extract-tool
+  sources; the final digest folds in a seeded odd constant that lives
+  ONLY in final-stage tool sources. Stock-crypto naive completion fails
+  by construction.
+- Chain-necessity mint gate (the deception-smoke analog): a unit ships
+  only if EVERY single-tool baseline FAILS — each toolbox tool alone
+  (all others PATH-shadowed) + mechanical naive completion (stock
+  sha256/sha1/md5 truncations, zero-state fold, and a raw-stdout echo
+  face when the solo output already has the answer shape); every
+  attempt is checker-graded and recorded in `manifest.json`
+  (kunglao-eval-tf-manifest/1). Threat-model boundary documented in the
+  manifest: execution-level necessity; source-reading reimplementation
+  is a trace-visible path outside the gate's scope.
+- Blocked-path variants (the flexibility measurement): one tool per
+  minimal-chain role mechanically blocked via PATH shadowing
+  (`scripts/eval_tf_shadow.py` — prepended shadow dir, honest-error fake
+  tools carrying the KUNGLAO-TF-SHADOW marker, never silent no-ops).
+  Arm-agnostic wiring: the shadow travels in the session ENVIRONMENT
+  (bare/CC-default and kunglao-loop runners inherit PATH; no runner code
+  change). Mint-time verification per variant: the shadow errors with
+  the marker + nonzero rc AND the re-route chain (alternate
+  implementers) still greens the checker. Known limitation, graded not
+  denied: name-invocation blocking only — absolute-path invocation
+  bypasses; the graders flag it (bypass_detected) and F2 reports a
+  re-route-only headline (f2_reroute).
+- Trace graders (`scripts/eval_tf_graders.py`, kunglao-eval-tf-scores/1
+  + kunglao-eval-tf-aggregate/1): F1 solve per (unit x variant) from the
+  checker verdict; F2 = solved(blocked)/solved(unblocked) per unit
+  (f2_reroute excludes bypass solves); F3 coverage = successful tool
+  uses cover every manifest-required role; F4 waste = failed invocations
+  + superseded route switches + post-coverage churn (unknown exits never
+  count). Extraction faces: stream-json session transcripts (tool_use
+  events; pipelines split; tool_result is_error -> exit) and kunglao
+  event ledgers (action=tool_call rows, the `tool` field).
+- Task-unit schema: `toolflex` tier + `eval-v1.3` version enum
+  (schemas/eval-task-v1.json + validator in scripts/eval_dataset.py,
+  per-tier TIER_EVAL_VERSION map extended additively). Shared-contract
+  coordination: TF families follow the per-driver mirror convention
+  until unioned into #352's scripts/eval_contract.py FAMILY_CONTRACT at
+  the dev merge-sync (suffix ".txt", target_surface "text"); the strict
+  conformance test activates with the module.
+
 ## eval-v1.1 (#332 release tier — WEB/NET half + NATIVE ladder)
 
 - Corpus layout extended: `eval/v1/tasks/release/` with 15 constructed

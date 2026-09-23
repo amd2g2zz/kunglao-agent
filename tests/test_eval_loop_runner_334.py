@@ -442,6 +442,12 @@ class TestNativeRunnability:
         import eval_checker as chk
 
         for tier in ds.TIERS:
+            if tier == "toolflex":
+                # #356: TF candidates are answer documents graded by the
+                # per-unit checker (manifest.json), not by
+                # eval_checker._validate_candidate — the mirror-map
+                # parity face scopes to checker-graded tiers
+                continue
             for d in ds.iter_task_dirs(tier=tier):
                 family = ds.load_task(d)["family"]
                 suffix = lr._candidate_suffix(ds.load_task(d))

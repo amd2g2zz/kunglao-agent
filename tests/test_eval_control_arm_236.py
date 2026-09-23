@@ -371,6 +371,12 @@ class TestCandidateSuffixParity:
         import eval_checker as chk
 
         for tier in ds.TIERS:
+            if tier == "toolflex":
+                # #356: TF candidates are answer documents graded by the
+                # per-unit checker (manifest.json), not by
+                # eval_checker._validate_candidate — the mirror-map
+                # parity face scopes to checker-graded tiers
+                continue
             families = self._tier_families(tier)
             assert families, f"{tier} tier has no families"
             for family, tdir in sorted(families.items()):

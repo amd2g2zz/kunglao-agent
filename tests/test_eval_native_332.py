@@ -227,10 +227,15 @@ class TestLandedCorpus:
             assert task["eval_version"] == "eval-v1"
 
     def test_schema_enums_extended(self):
+        # additive ladder: later tiers append (#356 toolflex / eval-v1.3);
+        # the earlier entries never move
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-        assert set(schema["properties"]["tier"]["enum"]) == {"smoke", "release"}
-        assert set(schema["properties"]["eval_version"]["enum"]) == \
+        tiers = set(schema["properties"]["tier"]["enum"])
+        assert {"smoke", "release"} <= tiers
+        assert set(schema["properties"]["eval_version"]["enum"]) >= \
             {"eval-v1", "eval-v1.1"}
+        assert list(schema["properties"]["eval_version"]["enum"])[:2] == \
+            ["eval-v1", "eval-v1.1"]
 
     def test_release_units_stamp_v11(self):
         for tdir in ds.iter_task_dirs(tier="release"):
