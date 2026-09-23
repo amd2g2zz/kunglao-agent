@@ -367,7 +367,9 @@ class TestCandidateSuffixParity:
     def test_tier_families_mapped_and_checker_accepted(self, tmp_path):
         """_cand_suffix mirrors eval_checker._validate_candidate exactly:
         for EVERY tier's families, the mapped suffix is one the checker
-        itself accepts (drift between the two maps = failure)."""
+        itself accepts (drift between the two maps = failure). Both now
+        consume the single-source contract (issue 352), TF families
+        included (issue 356 union)."""
         import eval_checker as chk
 
         for tier in ds.TIERS:

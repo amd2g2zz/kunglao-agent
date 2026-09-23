@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+# toolbox/probe — constructed TF pipeline tool (#356).
+# Synthetic; seeded by scripts/eval_toolflex.py. stage=extract variant=b
+import json
+import sys
+
+_K1 = "17d55a0906d399b370c29e8facef83e1958a3e6f7584b19f91da380f360eb919"
+HT = [0x94326a53, 0x418858a3, 0xd542b0b9, 0x230bb683, 0x4166c293, 0x2d10105f, 0x9b0eb48b, 0x56175cb7]
+KT = [0x33e492a3, 0x3c8dbc79, 0x2e4fd209, 0xd3b17653, 0xaff27e59, 0x71edf0f3, 0x24f88ed9, 0xe67bb76b, 0xcc127141, 0x1702ed6d, 0x8b867799, 0x4ed9974b, 0x5d458f27, 0x3e592b91, 0xb80d5191, 0xf589f0c3, 0x10bf792f, 0x09ee832d, 0xd64cc46b, 0xe81f1085, 0x4dba3ef5, 0x0fc3f39f, 0xa7889aa9, 0x8e053621, 0xe682bb19, 0xaf8a8ba5, 0x5a4f4587, 0x3531a58d, 0xee97da8b, 0xd1208ba5, 0x7951060f, 0xa94825d1, 0x744b1d31, 0x5e96a0ad, 0xba2a0b65, 0xcdad0091, 0x762ef089, 0xee2a2689, 0xe7747fc5, 0xc50eec39, 0xcc1078e1, 0x2a4a628f, 0xac1bd58f, 0x42a87013, 0x3183318b, 0x83de9fad, 0xacf90007, 0x40627fad, 0x42024d19, 0x3a734479, 0x8d327b33, 0x8ea8d78f, 0x3b41613f, 0xb9f53535, 0xc5287157, 0xefc535b7, 0x930ff5eb, 0xec42959b, 0x30b8b551, 0xfdf59197, 0xd4147413, 0x6f1efab1, 0xdbe427c3, 0xb2b21d2b]
+
+def _rotr(x, n):
+    return ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF
+
+
+def _pad(data):
+    msg = bytearray(data)
+    ml = len(data) * 8
+    msg.append(0x80)
+    while len(msg) % 64 != 56:
+        msg.append(0)
+    msg += ml.to_bytes(8, "big")
+    return bytes(msg)
+
+
+def mod_sha256(data):
+    h = list(HT)
+    kt = KT
+    msg = _pad(data)
+    for off in range(0, len(msg), 64):
+        w = [int.from_bytes(msg[off + i * 4: off + i * 4 + 4], "big")
+             for i in range(16)]
+        for i in range(16, 64):
+            s0 = _rotr(w[i - 15], 7) ^ _rotr(w[i - 15], 18) ^ (w[i - 15] >> 3)
+            s1 = _rotr(w[i - 2], 17) ^ _rotr(w[i - 2], 19) ^ (w[i - 2] >> 10)
+            w.append((w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF)
+        a, b, c, d, e, f, g, hh = h
+        for i in range(64):
+            S1 = _rotr(e, 6) ^ _rotr(e, 11) ^ _rotr(e, 25)
+            ch = (e & f) ^ (~e & g)
+            t1 = (hh + S1 + ch + kt[i] + w[i]) & 0xFFFFFFFF
+            S0 = _rotr(a, 2) ^ _rotr(a, 13) ^ _rotr(a, 22)
+            mj = (a & b) ^ (a & c)
+            t2 = (S0 + mj) & 0xFFFFFFFF
+            hh, g, f = g, f, e
+            e = (d + t1) & 0xFFFFFFFF
+            d, c, b = c, b, a
+            a = (t1 + t2) & 0xFFFFFFFF
+        h = [(x + y) & 0xFFFFFFFF
+             for x, y in zip(h, (a, b, c, d, e, f, g, hh))]
+    return b"".join(x.to_bytes(4, "big") for x in h)
+
+M64 = 0xFFFFFFFFFFFFFFFF
+GOLD = 0x9E3779B97F4A7C15
+MIX_C = 0xBF58476D1CE4E5B9
+EXP_C = 0x94D049BB133111EB
+
+
+def stage_mix(p):
+    h = p[0] & M64
+    for x in p[1:]:
+        h = (((h ^ (x & M64)) * GOLD) + MIX_C) & M64
+    return h
+
+
+def stage_expand(key):
+    a = ((key ^ (key >> 30)) * MIX_C) & M64
+    a = ((a ^ (a >> 27)) * EXP_C) & M64
+    return (a ^ (a >> 31)) & M64, (a + GOLD) & M64
+
+
+def stage_final(w0, w1, data):
+    h = w0 & M64
+    mul = (w1 | 1) & M64
+    for b in data:
+        h = ((h ^ b) * mul) & M64
+    return (h ^ (h >> 31)) & M64
+
+
+def _flag_value(argv, flag):
+    if flag not in argv:
+        raise SystemExit("probe: missing %s" % flag)
+    return argv[argv.index(flag) + 1]
+
+
+def main(argv):
+    blob = argv[0] if not True else _flag_value(argv, "--blob")
+    try:
+        data = bytes.fromhex(open(blob, encoding="utf-8").read().strip())
+    except (OSError, ValueError) as exc:
+        sys.stderr.write("probe: cannot read blob: %s\n" % exc)
+        return 2
+    key = bytes.fromhex(_K1)
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(data):
+        stream += mod_sha256(key + counter.to_bytes(4, "big"))
+        counter += 1
+    plain = bytes(a ^ b for a, b in zip(data, stream))
+    try:
+        params = json.loads(plain.decode("utf-8"))["p"]
+    except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as exc:
+        sys.stderr.write("probe: blob did not decode: %s\n" % exc)
+        return 2
+    print(json.dumps({"p": params}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

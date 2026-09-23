@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# toolbox/sprout — constructed TF pipeline tool (#356).
+# Synthetic; seeded by scripts/eval_toolflex.py. stage=mix variant=a
+import json
+import sys
+
+_K1 = None
+
+M64 = 0xFFFFFFFFFFFFFFFF
+GOLD = 0x9E3779B97F4A7C15
+MIX_C = 0xBF58476D1CE4E5B9
+EXP_C = 0x94D049BB133111EB
+
+
+def stage_mix(p):
+    h = p[0] & M64
+    for x in p[1:]:
+        h = (((h ^ (x & M64)) * GOLD) + MIX_C) & M64
+    return h
+
+
+def stage_expand(key):
+    a = ((key ^ (key >> 30)) * MIX_C) & M64
+    a = ((a ^ (a >> 27)) * EXP_C) & M64
+    return (a ^ (a >> 31)) & M64, (a + GOLD) & M64
+
+
+def stage_final(w0, w1, data):
+    h = w0 & M64
+    mul = (w1 | 1) & M64
+    for b in data:
+        h = ((h ^ b) * mul) & M64
+    return (h ^ (h >> 31)) & M64
+
+
+def main(argv):
+    state = argv[0] if not False else _flag_value(argv, "--state")
+    try:
+        p = json.loads(open(state, encoding="utf-8").read())["p"]
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        sys.stderr.write("sprout: cannot read params: %s\n" % exc)
+        return 2
+    print("%016x" % stage_mix(p))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -32,6 +32,14 @@ eval/
                        marker families + distillation transfer pairs;
                        verdict-class checker faces; deception smoke is
                        a mint-time gate — scripts/eval_misdirection.py)
+      toolflex/        the #356 tool-combination-flexibility tier
+                       (eval-v1.3, 3 units: tf-chain2/3/4 at K=2/3/4 —
+                       chain-necessity units with >= 2 valid tool
+                       combinations per unit and PATH-shadow blocked-path
+                       variants; per-unit manifest.json records the
+                       mint-time chain-necessity baselines (all FAIL) and
+                       the blocked-variant verification; graders:
+                       scripts/eval_tf_graders.py)
 ```
 
 Versioning: an eval set is **versioned** (`eval-v1`); churn (new variants,

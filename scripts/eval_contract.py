@@ -75,6 +75,16 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                         "target_surface": "text"},
     "decoy-marker-go": {"suffix": ".go", "response_language": "Go",
                         "target_surface": "text"},
+    # ---- toolflex tier (eval_toolflex registry, issue 356) ---------------
+    # the graded artifact is the session's answer DOCUMENT (answer.txt,
+    # byte-exact against the unit's construction); the toolbox tools are
+    # the measurement surface, never a graded candidate.
+    "tf-chain2": {"suffix": ".txt", "response_language": "Text answer document",
+                  "target_surface": "text"},
+    "tf-chain3": {"suffix": ".txt", "response_language": "Text answer document",
+                  "target_surface": "text"},
+    "tf-chain4": {"suffix": ".txt", "response_language": "Text answer document",
+                  "target_surface": "text"},
 }
 
 
@@ -94,6 +104,7 @@ _RESPONSE_BY_SUFFIX: dict[str, str] = {
     ".js": "JavaScript",
     ".go": "Go",
     ".json": "JSON document",
+    ".txt": "Text answer document",
 }
 
 

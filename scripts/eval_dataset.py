@@ -43,9 +43,11 @@ EVAL_VERSION = "eval-v1"
 # additive version ladder: v1 = #299 smoke tier; v1.1 = #332 release tier
 # (native families + web/net packaging-ladder families on the shared
 # mod-crypto core); v1.2 = the adversarial-misdirection tier (trap units
-# minted from the catalogued failure modes, verdict-class checker faces).
-# A landed version is never mutated.
-EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1", "eval-v1.2")
+# minted from the catalogued failure modes, verdict-class checker faces);
+# v1.3 = issue-356 toolflex tier (chain-necessity units + blocked-path
+# variants). A landed version is never mutated.
+EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1", "eval-v1.2",
+                                  "eval-v1.3")
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -74,15 +76,18 @@ ANCHOR_FIELDS: tuple[str, ...] = (
 VERIFICATION_METHODS: tuple[str, ...] = (
     "reproduction", "replay-evidence", "static", "manual")
 
-TIERS: tuple[str, ...] = ("smoke", "release", "misdirection")
+TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex")
 # per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
 # release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
 # never mutated in place per the eval version rules). Both spellings are
 # load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
 # surface; EVAL_TIER_VERSION is the release-tier alias kept for the
-# native-lane tests/runner.
-TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1",
-                                     "misdirection": "eval-v1.2"}
+# native-lane tests/runner. Misdirection (issue 352) lands at eval-v1.2;
+# toolflex (issue 356) at eval-v1.3.
+TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1",
+                                     "release": "eval-v1.1",
+                                     "misdirection": "eval-v1.2",
+                                     "toolflex": "eval-v1.3"}
 EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match",

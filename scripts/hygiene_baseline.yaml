@@ -121,6 +121,12 @@ files:
     r1: 1
   scripts/eval_targets.py:
     r1: 4
+  scripts/eval_tf_graders.py:
+    r1: 1
+  scripts/eval_tf_shadow.py:
+    r1: 1
+  scripts/eval_toolflex.py:
+    r1: 1
   scripts/event_taxonomy.py:
     r1: 116
     r2: 1
@@ -293,8 +299,12 @@ files:
     r1: 4
   scripts/rollup.py:
     r1: 15
+  scripts/rotation_induction.py:
+    r1: 3
   scripts/route_capability.py:
     r1: 14
+  scripts/runtime_facts.py:
+    r1: 2
   scripts/shell_defaults.py:
     r1: 1
   scripts/stale_blocker_prune.py:
@@ -671,6 +681,12 @@ files:
     r1: 6
   tests/test_eval_release_332.py:
     r1: 1
+  tests/test_eval_tf_graders_356.py:
+    r1: 1
+  tests/test_eval_tf_shadow_356.py:
+    r1: 2
+  tests/test_eval_toolflex_356.py:
+    r1: 3
   tests/test_evals_fixture_530.py:
     r1: 1
   tests/test_evals_schema.py:
@@ -1075,6 +1091,10 @@ files:
     r2: 1
   tests/test_rollup_loop.py:
     r1: 4
+  tests/test_rotation_dispatch_gate_341.py:
+    r1: 1
+  tests/test_rotation_induction_341.py:
+    r1: 1
   tests/test_route_capability.py:
     r1: 5
   tests/test_route_capability_providers.py:
@@ -1084,6 +1104,8 @@ files:
   tests/test_rpc_skeleton_template.py:
     r1: 1
     r2: 1
+  tests/test_runtime_fact_gate_341.py:
+    r1: 1
   tests/test_runtime_version_758.py:
     r1: 4
   tests/test_rust_dep_strings.py:
@@ -1335,14 +1357,4 @@ files:
   tests/test_yara_tools.py:
     r1: 1
   tests/test_zero_output_fingerprint.py:
-    r1: 1
-  scripts/rotation_induction.py:
-    r1: 3
-  scripts/runtime_facts.py:
-    r1: 2
-  tests/test_rotation_dispatch_gate_341.py:
-    r1: 1
-  tests/test_rotation_induction_341.py:
-    r1: 1
-  tests/test_runtime_fact_gate_341.py:
     r1: 1

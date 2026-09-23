@@ -1,0 +1,79 @@
+schema: kunglao-eval-task/1
+task_id: tf-chain3-js-v1
+eval_version: eval-v1.3
+tier: toolflex
+source: constructed
+family: tf-chain3
+seed: 35602
+anchors:
+  goal_verbatim: 'Workspace puzzle: produce answer.txt in the workspace root. The
+    toolbox/ directory ships the pipeline tools. For each probe payload (probes/payload-0.bin
+    .. probes/payload-5.bin) in index order and finally the main material (target/payload.bin),
+    compute the 16-hex-char digest and write one line per item into answer.txt (7
+    lines, lowercase hex, in that order). The pipeline stages hand off state: no single
+    tool computes the answer.'
+  success_criterion: answer.txt carries the seven digests byte-exact (lowercase 16-hex
+    per line, probes in index order then target/payload.bin) as fixed by the unit's
+    construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: python
+  files:
+  - target/README.txt
+  - target/blob.enc
+  - target/payload.bin
+  - toolbox/blend
+  - toolbox/emit64
+  - toolbox/mix
+  - toolbox/reemit64
+  - toolbox/scan
+  - toolbox/xtract
+  - probes/payload-0.bin
+  - probes/payload-1.bin
+  - probes/payload-2.bin
+  - probes/payload-3.bin
+  - probes/payload-4.bin
+  - probes/payload-5.bin
+  entry: target/README.txt
+  candidate_contract: 'answer.txt — seven 16-hex-char lowercase lines: probes in index
+    order, then target/payload.bin.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 448
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+toolflex:
+  manifest: manifest.json
+  k: 3
+  roles:
+  - unwrap
+  - keymix
+  - emit
+  minimum_required_set:
+    unwrap:
+    - xtract
+    - scan
+    keymix:
+    - mix
+    - blend
+    emit:
+    - emit64
+    - reemit64
+  blocked_variants:
+  - block-xtract
+  - block-mix
+  - block-emit64
