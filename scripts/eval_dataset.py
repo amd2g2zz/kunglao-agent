@@ -42,8 +42,10 @@ EVAL_ROOT = ROOT / "eval"
 EVAL_VERSION = "eval-v1"
 # additive version ladder: v1 = #299 smoke tier; v1.1 = #332 release tier
 # (native families + web/net packaging-ladder families on the shared
-# mod-crypto core). A landed version is never mutated.
-EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1")
+# mod-crypto core); v1.2 = the adversarial-misdirection tier (trap units
+# minted from the catalogued failure modes, verdict-class checker faces).
+# A landed version is never mutated.
+EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1", "eval-v1.2")
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -72,17 +74,20 @@ ANCHOR_FIELDS: tuple[str, ...] = (
 VERIFICATION_METHODS: tuple[str, ...] = (
     "reproduction", "replay-evidence", "static", "manual")
 
-TIERS: tuple[str, ...] = ("smoke", "release")
+TIERS: tuple[str, ...] = ("smoke", "release", "misdirection")
 # per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
 # release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
 # never mutated in place per the eval version rules). Both spellings are
 # load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
 # surface; EVAL_TIER_VERSION is the release-tier alias kept for the
 # native-lane tests/runner.
-TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1"}
+TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1", "release": "eval-v1.1",
+                                     "misdirection": "eval-v1.2"}
 EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
-CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match", "replay-roundtrip")
+CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match",
+                                  "replay-roundtrip", "misdirection-verdict",
+                                  "rotation-verdict")
 ORACLE_KINDS: tuple[str, ...] = CHECKER_KINDS
 REQUIRED_METRICS: tuple[str, ...] = (
     "ttc_seconds", "dispatch_count", "pass_at_k_contribution", "converged")
@@ -93,6 +98,11 @@ FAILURE_CODES: frozenset[str] = frozenset({
     "TOOLCHAIN_MISSING", # replay face: go/node absent -> SKIP, never FAIL
     "BAD_CANDIDATE",     # candidate artifact missing / wrong shape -> refusal
     "BAD_TASK",          # task unit malformed / unknown -> refusal
+    "MISATTRIBUTED",     # verdict face: bare env verdict, no probe evidence
+    "WRONG_CORRECT_PATH",  # verdict face: bypass claimed, wrong marker/proof
+    "ROTATION_UNPROVEN",   # verdict face: rotation claimed, proof wrong
+    "REHOOK_LOOP",       # verdict face: N captures, no rotation induction
+    "EXHAUSTED",         # verdict face: neither captures nor conclusion
 })
 
 RESULTS_SCHEMA = "kunglao-eval-results/1"
@@ -150,7 +160,8 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
     source = task.get("source")
     if source not in SOURCES:
         errors.append(f"source must be one of {SOURCES}, got {source!r}")
-    if tier in ("smoke", "release") and source != "constructed":
+    if tier in ("smoke", "release", "misdirection") and \
+            source != "constructed":
         errors.append(
             f"tier {tier} carries constructed targets only, got "
             f"source={source!r}")

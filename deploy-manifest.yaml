@@ -367,11 +367,15 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: 1834ac2e3163824a2a1db5bf975414638faa40ce4a2982ecd0855989c38a7c9c
+    sha256: bfae7f6c568b66e427e783d4698d26041335bce8604c24ccec305c4e6734e9f9
+  - src: scripts/eval_contract.py
+    dest: .claude/scripts/eval_contract.py
+    kind: scaffold
+    sha256: 12358cedb593aa8406b9b6dbebb16496779ca0e20b3eabe995b64f245a3c9b6b
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
-    sha256: 99d1cb03d2a70bfe6820a719ea7371c79fc7f09195f5e98e747d89873f070bf4
+    sha256: 7e724d9713399b1aae1cda0d3827c0b5cf5450b2e1f1722fc969c5f7f1ca77c1
   - src: scripts/eval_crypto.py
     dest: .claude/scripts/eval_crypto.py
     kind: scaffold
@@ -379,11 +383,15 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 4fefbaccefe3caae95c2399e7844167a81a609be8c39e9a1d3df4246ae615ecb
+    sha256: 52da57e737df1cfbd3c56cf44a1fc14b51666117968b1033b9118b14ac0acd0f
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: e80ef339c726cc8be238b765b403542f3d57e2386047f7dc98794d25e3bca7b4
+    sha256: b7909070f8e4ef73773e892efb73234bb820d31172a460a99079f291912b5e3c
+  - src: scripts/eval_misdirection.py
+    dest: .claude/scripts/eval_misdirection.py
+    kind: scaffold
+    sha256: 026c273209a07810616f850325472aafae6c44d1e2c0173f9cd31489b8aaa2a2
   - src: scripts/eval_native_sources.py
     dest: .claude/scripts/eval_native_sources.py
     kind: scaffold
@@ -1463,7 +1471,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8b840fa88cf9ca400563be643508109fb0cb1a263877ad4587886c76164c478b
+    sha256: 2e73745fb563274a6002214b48518ea474b9bab4b8c309844592017969263d05
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

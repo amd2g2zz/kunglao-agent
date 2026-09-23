@@ -470,17 +470,11 @@ def harvest(workspace: Path, *, baseline_rounds: int = 0) -> dict:
 
 # -------------------------------------------------------------- extractor
 def _candidate_suffix(task: dict) -> str:
-    """Candidate artifact suffix for the task's family — the literal
-    mirror of the checker's _validate_candidate contract (the checker
-    grades pure-python candidates for the native-ladder families, whose
-    registry rows carry arch strings like "c/arm64", not languages)."""
-    return {
-        "go-arx": ".go", "js-sign": ".js", "py-derive": ".py",
-        "arm-native-kdf": ".py", "win-pe-kdf": ".py", "smc-x86": ".py",
-        "mod-crypto-native": ".py", "web-pack-sign": ".js",
-        "net-verify-license": ".js", "req-sign": ".js",
-        "mod-crypto-js": ".js",
-    }[task["family"]]
+    """Candidate artifact suffix for the task's family — the single-source
+    contract module (eval_contract) both drivers consume; the checker's
+    _validate_candidate resolves the same row."""
+    import eval_contract as contract
+    return contract.candidate_suffix(task["family"])
 
 
 def extract_candidate(workspace: Path, task: dict) -> Path | None:
