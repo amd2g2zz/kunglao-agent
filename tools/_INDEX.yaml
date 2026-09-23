@@ -46,6 +46,21 @@ tools:
     cost_hint: {mem_gb: 0.5, time: cheap}
     quality: {crypto:decode: high}
 
+  # -- crypto: captured-param cipher-shape classifier (issue #359 wave-2 distillation) --
+  - name: cipher_identify
+    category: crypto
+    capability: crypto:identify
+    description: Classifies captured cipher-param shapes
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "captured param string (positional or --in file, single token)", output: "stdout JSON: charset / decoded_byte_len / entropy_bits_per_byte / printable_ratio + ranked candidates [{family, confidence, why, next_check}] over md5/sha-*/sm3/aes/des-family/sm4/rsa/jwt/uuid/unix-timestamp/base64-text"}
+    when_not: "classifier only — never decodes or proves; perform the actual decode/verify via crypto-tool; unrecognized garbage yields an empty candidate list (a valid answer), only unreadable tool input exits 2"
+    provider: cipher-identify
+    produces: [crypto:identify]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {crypto:identify: mid}
+
   # -- ghidra: function-level static reconnaissance (issue #293 absorption, sa-ghidra final) --
   - name: ghidra-recon
     category: ghidra

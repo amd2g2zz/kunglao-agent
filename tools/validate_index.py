@@ -92,6 +92,8 @@ _CAPABILITY_TAGS = frozenset({
     "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
+    "crypto:identify",    # wave-2 distillation: captured-param cipher-shape
+                          # classifier (hypothesis ranking, never decode)
     # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
     # capabilities joined the closed vocabulary (1:1 from the entries'
     # capability fields — no invented semantics).
