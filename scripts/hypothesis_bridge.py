@@ -85,6 +85,7 @@ HYPOTHESIS_WRITER_ALLOWLIST = (
     "hypothesis_seeder",   # PQ scaffolds + string feeders (paid by the sweep)
     "notes_writer",        # adjudication: supersede per issue 528
     "think_seat",          # issue 711 falsifiable bets (group think-bet)
+    "rotation_induction",  # issue-341 mechanical rotation competitor (same-slot value join)
 )
 
 

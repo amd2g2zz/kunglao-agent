@@ -161,6 +161,10 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
     "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
     "assumptions",  # issue 250: '<topic>=<polarity>' premises (semantic refutation)
+    "temporal_scope",  # issue 341: 'runtime' for volatile runtime-state facts
+    "subject_slot",  # issue 341: stable slot id (e.g. config-decrypt-key)
+    "value_fingerprint",  # issue 341: sha256 hex of the observed value only
+    "captured_at",  # issue 341: ISO-8601 capture timestamp
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.

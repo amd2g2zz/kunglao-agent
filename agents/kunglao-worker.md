@@ -529,6 +529,17 @@ self_caveat: "unverified — needs independent verifier pass"
 
 lint check: `cd <workspace> && python <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
 
+**Runtime-state facts (rotation induction)** — a fact whose `source` is a runtime-observation value (`dynamic_re`, `mixed`, `dynamic-trace`, `frida-capture`, `qiling-emu`) about a VOLATILE subject (key/token/session/nonce/cookie in the title or slot) must ALSO carry four frontmatter fields — the write gate (`hooks/write_guard.py` runtime-fact leg) REJECTS the fact otherwise:
+
+```yaml
+temporal_scope: runtime              # the value AS CAPTURED, not the slot forever
+subject_slot: config-decrypt-key     # STABLE slot id across captures (kebab-case role, never the value)
+value_fingerprint: <64-hex sha256>   # sha256 of the observed value — NEVER raw key material
+captured_at: "<ISO-8601 timestamp>"  # moment of capture (quote it; the time survives parsing)
+```
+
+Re-extraction of the same slot = a NEW fact with the same `subject_slot`, fresh `value_fingerprint`/`captured_at` — never an edit of the earlier fact. Same slot + distinct fingerprints is the rotation input `rotation_induction` joins mechanically; fingerprints are the only value material that leaves your session.
+
 <!-- contract: tool-discovery -->
 ## Script reusability
 
