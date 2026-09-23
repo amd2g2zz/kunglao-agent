@@ -387,7 +387,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: b7909070f8e4ef73773e892efb73234bb820d31172a460a99079f291912b5e3c
+    sha256: 8d8636b423473bbe381c18cc9ef134b4801bd57f2d8394c9b606383082d5fbde
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
