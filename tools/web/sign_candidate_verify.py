@@ -46,6 +46,15 @@ import json
 import sys
 from pathlib import Path
 
+# UTF-8 stdout guard via the shared tools/ _lib; the guard itself fires in
+# __main__ only.
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents
+                  if _p.name == "tools")
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 HARNESS_TEMPLATE = r"""// sign-candidate differential harness (auto-generated)
 // Runs in the TARGET PAGE context: console / CDP evaluate.
 // Calls every candidate with every captured sample, fingerprints each
@@ -355,4 +364,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

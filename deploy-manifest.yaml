@@ -1023,7 +1023,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 0213d447e46940719e0a4181c77f605ec446ebe1538730067a32bb77819c95c2
+    sha256: 731718b887e9af46f9877870434c759ab9245ac68783af4dd2d221b22ce47fcd
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1311,7 +1311,7 @@ files:
   - src: references/re-library/patterns/vm/vm-deobfuscation-routing.md
     dest: .claude/references/re-library/patterns/vm/vm-deobfuscation-routing.md
     kind: asset
-    sha256: 385fdb310f5176f8fa57d717d4ea2cdb4f80229fc0adf2c1dd36863c836a7481
+    sha256: 87aa11332da91f36da2a47b55aeaafcaaeaeeb4ac27f49f08d984666ad0b287f
   - src: references/re-library/patterns/vm/vm-protection-anatomy.md
     dest: .claude/references/re-library/patterns/vm/vm-protection-anatomy.md
     kind: asset
@@ -1371,7 +1371,7 @@ files:
   - src: references/re-library/web/labs/web-re-quickref.md
     dest: .claude/references/re-library/web/labs/web-re-quickref.md
     kind: asset
-    sha256: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
+    sha256: 07a2218f2a1f7fa2c479432b353de65b1c3f0a40ca93dc9731633efcbb5d1d0e
   - src: references/re-library/web/risk-control/web-risk-control.md
     dest: .claude/references/re-library/web/risk-control/web-risk-control.md
     kind: asset
@@ -1407,7 +1407,11 @@ files:
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
-    sha256: e884d88b6e7dcb10c06a3081248fb2f2db9f1a7e58b544c31cc944083cd204f2
+    sha256: 4f9a59195d25e3fb55f6bb613df8664bf49114f0ecc0b10d49581646571e3ec0
+  - src: templates/frida/android-bypass-phase1.js.tmpl
+    dest: .claude/templates/frida/android-bypass-phase1.js.tmpl
+    kind: asset
+    sha256: 4a40b9be7539cd53e04a6d121609da6c11ddb68917a768fea357baf4b0bf309c
   - src: templates/frida/cfg-analyze.py.tmpl
     dest: .claude/templates/frida/cfg-analyze.py.tmpl
     kind: asset
@@ -1416,6 +1420,10 @@ files:
     dest: .claude/templates/frida/cfg-hook.js.tmpl
     kind: asset
     sha256: 0d779c321691f5ea8050f6b82118f0d9e64fbc8910cf901b2267b1ad261d4665
+  - src: templates/frida/dex-dump-art.js.tmpl
+    dest: .claude/templates/frida/dex-dump-art.js.tmpl
+    kind: asset
+    sha256: 07ca177e22a43158b7df1ce318dd6e324ddf734e95a1d4385367fa4bd4874e29
   - src: templates/frida/rpc-skeleton.js.tmpl
     dest: .claude/templates/frida/rpc-skeleton.js.tmpl
     kind: asset
@@ -1483,7 +1491,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: fbc48b411db41048e3ac02a69f459284d7fd0ee870d6f6e9733da1768dc791ed
+    sha256: eee0d9837607189ab54c0823592e7cd36bac277bc4131b474fbcc5a514777d96
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1491,7 +1499,7 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: a318a40e3a55e1c56493c90723dd932696c39d8ac694b7781d92e0439c34e9af
+    sha256: e866520359d2a0cd38a8842d6bbf6d20e45f5af49642076325a9608baac9dfd5
   - src: tools/_index-auxiliary.md
     dest: .claude/tools/_index-auxiliary.md
     kind: asset
@@ -1499,7 +1507,7 @@ files:
   - src: tools/_index-crypto.md
     dest: .claude/tools/_index-crypto.md
     kind: asset
-    sha256: cfe212e1c726805a09b061e824595c8faac9624aba923dde1b24b8b3c838606a
+    sha256: d771a87346c41f597cc9501288b0bdca31d285eb1160077981f744916a5a7ed6
   - src: tools/_index-dynamic.md
     dest: .claude/tools/_index-dynamic.md
     kind: asset
@@ -1519,7 +1527,7 @@ files:
   - src: tools/_index-web.md
     dest: .claude/tools/_index-web.md
     kind: asset
-    sha256: 8d8f8ccd787175aaf0ee0688048440648ddb37f12a1e708b4fed18242c9b1fe9
+    sha256: 798196fe99c86318771a35e85cc8410920f1c9b15e5a220425c9dd08dc6b7ddc
   - src: tools/_lib/index_schema.py
     dest: .claude/tools/_lib/index_schema.py
     kind: asset
@@ -1572,6 +1580,10 @@ files:
     dest: .claude/tools/crypto/algorithms.py
     kind: asset
     sha256: 66b89aad35371b91e6f0933d78863a072775103da5c9bcc1f5b02bf9a0d9e092
+  - src: tools/crypto/cipher_identify.py
+    dest: .claude/tools/crypto/cipher_identify.py
+    kind: asset
+    sha256: 34db7b375795a984c47933cc6432fadc644e5b7af9071c936713ff97162cc525
   - src: tools/crypto/crypto-tool.py
     dest: .claude/tools/crypto/crypto-tool.py
     kind: asset
@@ -1743,12 +1755,24 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: f54a97e80b5ceae7bde5f16a8b270b24e449775bc0762416f281035f50e8298b
+    sha256: d92da8c373bc7b0bc11a58ec4505983ca9ff41207d7a1811c940ba338d6d421a
   - src: tools/web/README.md
     dest: .claude/tools/web/README.md
     kind: asset
     sha256: c5ee3f7f845f418f6e8b197bcf5e91a96793ef315b034724bb6b47b45db5f14c
+  - src: tools/web/js_env_diagnose.py
+    dest: .claude/tools/web/js_env_diagnose.py
+    kind: asset
+    sha256: fc9876baff40af09380a290a215590cac9ce07a32c975b36ef2bf186431f8fdc
+  - src: tools/web/js_obfuscation_detect.py
+    dest: .claude/tools/web/js_obfuscation_detect.py
+    kind: asset
+    sha256: f6210ed48546155a96a617a146186948fc721cb76c6e72f73a2007a82fb28a88
   - src: tools/web/jsvmp_triage.py
     dest: .claude/tools/web/jsvmp_triage.py
     kind: asset
     sha256: 16a424faa3f94176e18a95c77af41262a2fb34fa88e090294753716fe98fdb7a
+  - src: tools/web/sign_candidate_verify.py
+    dest: .claude/tools/web/sign_candidate_verify.py
+    kind: asset
+    sha256: 126e8a8b7a4acee15c8f9ca00c5539982a7d1aaaa342cd941af2ffb36dec6ef7

@@ -74,7 +74,7 @@ files:
   references/re-library/patterns/debugging/patterns-debugging.md: 9009c257d26d2cfe95394ac6ddbee9efeefbd2983d3f831992a4f969a13ca103
   references/re-library/patterns/decode/patterns-decode.md: 0a3b2fca6a4f157665008f0974f3d8fe76016dca50fcf7df818b1c5f72f49a2c
   references/re-library/patterns/simulation/patterns-simulation.md: 35cdbeb743c8b18baa4f3e343c86e1909687eb5128e3fee47056a29572394c78
-  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 385fdb310f5176f8fa57d717d4ea2cdb4f80229fc0adf2c1dd36863c836a7481
+  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 87aa11332da91f36da2a47b55aeaafcaaeaeeb4ac27f49f08d984666ad0b287f
   references/re-library/patterns/vm/vm-protection-anatomy.md: 6df22f57c4f1600e78242c28aff2f4d7ce7b10047f4f45c647b0e6c085490ad5
   references/re-library/platforms/catalog/platforms.md: d6108a8c43586be7d3bcb679fe4c48a6735aaba1582f663853840e0389041605
   references/re-library/platforms/elf/platforms-elf.md: 589b3227da632491a565eba0a456606054dfd5a25cb4937369a9dbdcfb606da3
@@ -89,7 +89,7 @@ files:
   references/re-library/tools/static/tools-advanced.md: dea1a7b538317f7276cd58bceda6693762f5ea5bf8f89f0c62489342f7581573
   references/re-library/tools/static/tools.md: 0b5d7010b1d14c4e9baa2e2077f81a4201ef699ddb7961216a38c7196c242ee2
   references/re-library/web/crawler/web-crawler-engineering.md: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
-  references/re-library/web/labs/web-re-quickref.md: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
+  references/re-library/web/labs/web-re-quickref.md: 07a2218f2a1f7fa2c479432b353de65b1c3f0a40ca93dc9731633efcbb5d1d0e
   references/re-library/web/risk-control/web-risk-control.md: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
   references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
   references/schemas/schema.md: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
