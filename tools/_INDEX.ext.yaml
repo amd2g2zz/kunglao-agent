@@ -1724,7 +1724,7 @@ ext:
     consume: "read"
     source: "references/re-library/web/risk-control/web-risk-control.md"
     usage: "read references/re-library/web/risk-control/web-risk-control.md (capability reference)"
-    description: "'风控对抗 anti-bot doctrine (#761): 信号分类学 device-fingerprint/behavioral/environment-consistency/protocol,"
+    description: "'Anti-bot / risk-control doctrine for web targets: signal taxonomy device-fingerprint/behavioral/environment-consistency/protocol,"
   - name: "windowed-stalker.js"
     capability: "unknown"
     type: "template"

@@ -1047,11 +1047,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 5f560906661dac9bf7b7edf8c154c58359f55e1f324097de896b1e592d9275e4
+    sha256: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 41180bc7d1d2588f2babb7b92f39cd417899421de0b260752d74515687cefe59
+    sha256: e157608f2ad70efe14f8d146ca263fd7920582039e86c4110d02bb1e7a0b99ad
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1095,7 +1095,7 @@ files:
   - src: references/_index-web.md
     dest: .claude/references/_index-web.md
     kind: asset
-    sha256: c7f94b4ac4f9ca3b8177ab655309f04a80284eed29fb7ee994ceb01e3cce48d8
+    sha256: 1743007abc6f48863793cbeb6fcee16e88edbf95f035627e3f8abed5456b3544
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
@@ -1475,7 +1475,7 @@ files:
   - src: references/re-library/web/risk-control/web-risk-control.md
     dest: .claude/references/re-library/web/risk-control/web-risk-control.md
     kind: asset
-    sha256: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
+    sha256: 185ba8d7f91969a1a37fae2b70ad23fbac696f9e985d7627709987a491051bf1
   - src: references/re-library/web/vm/jsvmp-triage.md
     dest: .claude/references/re-library/web/vm/jsvmp-triage.md
     kind: asset
@@ -1591,7 +1591,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 2baf83850acd00739d9b2498de8384081e15a7f76ac1044c64fcb5f13d10fc74
+    sha256: b3108bf1cb27c94f5e098ffbd7366431e2cfdb70a504a3015e52a090a2a6d8a2
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

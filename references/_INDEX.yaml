@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 5f560906661dac9bf7b7edf8c154c58359f55e1f324097de896b1e592d9275e4
+  references/_INDEX.md: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
   references/_index-android.md: 0c615e6ff0b690451bc0678d7574d83ce2e7c090c535ef6651537cb56bbf1584
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -14,7 +14,7 @@ files:
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   references/_index-research.md: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
   references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
-  references/_index-web.md: c7f94b4ac4f9ca3b8177ab655309f04a80284eed29fb7ee994ceb01e3cce48d8
+  references/_index-web.md: 1743007abc6f48863793cbeb6fcee16e88edbf95f035627e3f8abed5456b3544
   references/contracts/agent-three-state-charter.md: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
   references/contracts/cli-script-checklist.md: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
@@ -107,7 +107,7 @@ files:
   references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: 4b8c39f0b2eb8d56745d464bd3e52c2c51564b2b6b9ab7c672ec898adaa788f7
   references/re-library/web/external-distilled/external-protocol-failure-ladder.md: 8f7e0db5d5a3810b85e6d36bc942481697f6bc67fd06f1f9221ba2c453cf5a4c
   references/re-library/web/labs/web-re-quickref.md: 07a2218f2a1f7fa2c479432b353de65b1c3f0a40ca93dc9731633efcbb5d1d0e
-  references/re-library/web/risk-control/web-risk-control.md: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
+  references/re-library/web/risk-control/web-risk-control.md: 185ba8d7f91969a1a37fae2b70ad23fbac696f9e985d7627709987a491051bf1
   references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
   references/schemas/schema.md: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
   references/schemas/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
