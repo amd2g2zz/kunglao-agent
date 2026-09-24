@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: e49ea52ae8e82f30d6bf56cd7e3cafcff95eb3a740c8e438ca5fc13dbfb837c7
+    sha256: e6a0bb51ac8ac9f3b157ed231288eebbfcf09e2b1d51aa4ad6f864ef7339e466
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -387,7 +387,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 8d8636b423473bbe381c18cc9ef134b4801bd57f2d8394c9b606383082d5fbde
+    sha256: 7f45515e62a4485873508d1f53fe6f8f6f1153c45925d727b7c5f6ebc984fc4b
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -423,7 +423,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 65e00a766ff3bd15b47b4e4c0e483771456b3d51cb8f362cee5771f8dac4ae65
+    sha256: 4f4f463709e84e2d3669d0b377a2d9fe16fed84f8fa255e4e73850014d0e98a6
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
