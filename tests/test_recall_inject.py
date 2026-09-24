@@ -503,3 +503,52 @@ def test_failure_gate_blocked_output_recalls_failure_modes(tmp_path, capsys):
     assert "failure-modes" in out, "BLOCKED output must recall the failure-modes references"
     assert "failure-modes-lifecycle.md" in out, "lifecycle domain file must be named"
     assert "failure-modes-state.md" in out, "state domain file must be named"
+
+
+# ---- H1a (autoresearch thin-base): dispatch-scoped recall + content dedup --
+
+def test_first_dispatch_injects_fresh_workspace(tmp_path):
+    """H1a: dispatch-scoped, not event-gated — a fresh workspace with no
+    ledger events still injects (the dispatch itself is the trigger)."""
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True)
+    (ws / "claim-register.yaml").write_text(
+        "claims:\n- id: C-001\n  status: OPEN\n", encoding="utf-8")
+    rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
+    assert rc == 0 and stderr == "" and ctx is not None
+
+
+def test_repeat_dispatch_same_content_is_deduped(tmp_path):
+    """H1a: the same worker (claim) with an unchanged recall file set is
+    silent on re-dispatch — re-injecting unchanged content was the tax."""
+    ws = _kunglao_ws(tmp_path)
+    rc1, _, ctx1 = evaluate(_payload(ws, VM_CLAIM))
+    assert ctx1 is not None  # first dispatch for C-101 injects
+    rc2, _, ctx2 = evaluate(_payload(ws, VM_CLAIM))
+    assert rc2 == 0 and ctx2 is None  # same worker, same content -> deduped
+
+
+def test_changed_content_reinjects(tmp_path):
+    """H1a: the dedup key is the injected FILE SET — when recall returns a
+    changed set for the same worker, the dispatch is re-injected."""
+    ws = _kunglao_ws(tmp_path)
+    rc1, _, ctx1 = evaluate(_payload(ws, VM_CLAIM),
+                            recall_runner=lambda q: (
+                                0, "dynamic-re-tool-priority.md | a | b | c"))
+    assert ctx1 is not None
+    rc2, _, ctx2 = evaluate(_payload(ws, VM_CLAIM),
+                            recall_runner=lambda q: (
+                                0, "tools-dynamic.md | x | y | z"))
+    assert rc2 == 0 and ctx2 is not None, "changed content must re-inject"
+
+
+def test_redteam_dispatch_injects_like_any_role(tmp_path):
+    """H1a owner ruling: recall is dispatch-scoped for EVERY role — no
+    exemptions. A redteam dispatch on a fresh workspace (no events) gets
+    its adversarial recall like everyone else; the J4 injection pin passes
+    unchanged under this design."""
+    ws = _kunglao_ws(tmp_path)
+    redteam_prompt = ("[T2 tools=ghidra] verify-redteam claim C-201 plan "
+                      "attacks against the static analysis conclusion")
+    rc, _, ctx = evaluate(_payload(ws, redteam_prompt))
+    assert rc == 0 and ctx is not None

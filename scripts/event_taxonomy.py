@@ -297,6 +297,7 @@ EMIT_ACTIONS = [
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
+    "toolfirst_advisory",  # H1 thin-base: demoted tool-first REJECT (missing_marker/self_attestation) — logged, dispatch proceeds
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
     "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)

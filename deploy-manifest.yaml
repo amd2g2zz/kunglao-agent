@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: f62e9d6014ac3f7df6cfefd85b49167fd98ecf78f455b0ce38bc932ebba8d669
+    sha256: 88e74215b2bd61deeee2d36aab734814917b30010fbd931aceeb6160baf45a81
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: f197495d1d34126b8742e2467ff1414fd8af238125c54d130ce08df0050ae51d
+    sha256: 10a538c620abef3d00a6dfab6e046abe89fed87277ead10d667862ffe4fc7709
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -423,7 +423,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: e6c339f6944ac754a3c82db36ad43cb5c40db96bd3d26b5fe4a8cfc16a5c42bc
+    sha256: 65e00a766ff3bd15b47b4e4c0e483771456b3d51cb8f362cee5771f8dac4ae65
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -471,7 +471,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 63ab658496ef4b526698798e351ada382526aaee5aa393026010d56abc738a8a
+    sha256: c9ecc44c7d7a0f2c7748e6c8fe03a9c21d680f80ed957d4d60c1ef93725ff37c
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -643,7 +643,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: b252c960c201ff3381c6c968fba10ccdf43601e046ec2f263b05409e50bbe90d
+    sha256: b695dc5b553f8b51212fe5d88353d7535cc0bc328325ab5632d24d8e55ea9a6c
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold

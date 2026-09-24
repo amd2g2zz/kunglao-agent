@@ -35,7 +35,15 @@ def _make_ws(tmp_path: Path, name: str = "ws") -> Path:
     return ws
 
 
+def _emit_settlement_event(ws: Path) -> None:
+    """H1a: the verify-backlog face rides the tick report only when the
+    pass consumed a ledger event — one settlement row wakes it."""
+    import kunglao_log
+    kunglao_log.emit(ws, "test", "claim_settled", detail="h1-face-gate")
+
+
 def _tick(ws: Path) -> tuple[dict, subprocess.CompletedProcess]:
+    _emit_settlement_event(ws)  # H1a: the face under test is event-gated
     r = subprocess.run(
         [sys.executable, str(TICK), str(ws)],
         capture_output=True, text=True,

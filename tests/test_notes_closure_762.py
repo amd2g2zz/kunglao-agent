@@ -173,6 +173,10 @@ class TestTickWiring:
         monkeypatch.setattr(ht, "run", spy)
         monkeypatch.setattr(ht, "_oracle_registered", lambda w: True)
         ws = _make_ws(tmp_path, [])
+        # H1a: notes_rollup is event-gated (events_seen gate) — one
+        # settlement row opens the gate for the pass under test.
+        import kunglao_log
+        kunglao_log.emit(ws, "test", "claim_settled", detail="h1-rollup-wake")
         rc = ht.main([str(ws)])
         assert rc == 0
         assert "rollup.py" in calls, f"tick must run the sweep: {list(calls)}"
@@ -192,6 +196,10 @@ class TestTickWiring:
         monkeypatch.setattr(ht, "run", broken_sweep)
         monkeypatch.setattr(ht, "_oracle_registered", lambda w: True)
         ws = _make_ws(tmp_path, [])
+        # H1a: the sweep mechanism is event-gated — one settlement row opens
+        # the gate for the pass under test.
+        import kunglao_log
+        kunglao_log.emit(ws, "test", "claim_settled", detail="h1-rollup-wake")
         rc = ht.main([str(ws)])
         assert rc == 0, "advisory step must not weigh into rc/alert"
         report = json.loads((ws / "runs" / ".heartbeat-tick.json").read_text())

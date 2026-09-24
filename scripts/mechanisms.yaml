@@ -156,8 +156,9 @@ mechanisms:
     entry: scripts/kunglao-monitor.py
     channel: tick
     trigger:
-      type: tick
-      gate: always
+      type: event
+      gate: events_seen
+      events: [settlement, stall, plan_review]
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
@@ -166,6 +167,9 @@ mechanisms:
     description: >
       M5 MONITOR background advisory (#88 freeze, #620 runtime consumer):
       heartbeat/stuck/help/health watchers; next is a suggestion, not a gate.
+      H1 (autoresearch thin-base): default trigger flipped from tick to the
+      ledger event bus (settlement/stall/plan_review) — the tick-cadence
+      plan-drift face was forensics wall tax, not liveness.
 
   - name: stale_feedback
     entry: scripts/feedback.py
@@ -201,8 +205,9 @@ mechanisms:
     entry: scripts/rollup.py
     channel: tick
     trigger:
-      type: tick
-      gate: always
+      type: event
+      gate: events_seen
+      events: [settlement, stall, plan_review]
     cost_class: cheap
     depth: mission
     argv: ["--sweep-terminal"]
@@ -211,6 +216,9 @@ mechanisms:
     description: >
       Mechanical notes-closure sweep (#762 K1a): every terminal claim gets
       its outcomes -> lessons -> notes-due -> checkpoint write loop.
+      H1 (autoresearch thin-base): default trigger flipped from tick to the
+      ledger event bus (settlement/stall/plan_review) — a sweep at tick
+      cadence re-swept terminal claims with no new settlements (wall tax).
 
   - name: think_seat
     entry: scripts/think_seat.py

@@ -158,6 +158,70 @@ ensure_scripts_path()
 from tier_rules import tier_for_claim  # noqa: E402
 
 
+# ---- H1a (autoresearch thin-base): dispatch-scoped recall + content dedup --
+# Recall is DISPATCH-SCOPED: every dispatched agent gets recall (any role —
+# a dispatch's context needs are determined by the dispatch itself, never by
+# whether a clock tick or an event fired; events are the control variable
+# for the continuous observability faces, not for dispatch context). The
+# calibration's 115 injection rows were per-tick re-injections of UNCHANGED
+# content — that was the tax form. So re-injection is deduped by CONTENT:
+# per worker (claim id for claim dispatches, text hash otherwise), the hash
+# of the injected file set lives in runs/.recall-inject.json and a repeat
+# dispatch with the SAME recall set is silent. No role exemptions: a
+# special-case table for redteam would be the #294 misfire's disease
+# (special cases instead of an algorithm) recurring in a new organ — a fresh
+# workspace passes naturally because a first injection is always new content.
+RECALL_DEDUP_STATE = Path("runs") / ".recall-inject.json"
+
+
+def _worker_key(prompt_text: str) -> str:
+    """Stable per-worker dispatch identity: the claim id for claim
+    dispatches, else a short hash of the dispatch text (redteam plans,
+    one-off verifiers)."""
+    m = re.search(r"claim[ \t]+(C-[0-9]+)", prompt_text, re.IGNORECASE)
+    if m:
+        return "claim:" + m.group(1).upper()
+    import hashlib
+    return "text:" + hashlib.sha256(
+        prompt_text.encode("utf-8")).hexdigest()[:16]
+
+
+def _recall_set_hash(files: list[str]) -> str:
+    import hashlib
+    return hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest()
+
+
+def _content_unchanged(ws: Path, key: str, files: list[str]) -> bool:
+    """True when this worker's last injection carried the SAME file set
+    (content dedup — the recall knowledge did not move). Fail-open:
+    unreadable state -> False (inject; recall must never starve a
+    dispatch)."""
+    try:
+        state = json.loads(
+            (Path(ws) / RECALL_DEDUP_STATE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (state.get("workers") or {}).get(key) == _recall_set_hash(files)
+
+
+def _record_injection(ws: Path, key: str, files: list[str]) -> None:
+    """Persist the injected-set hash for the worker. Telemetry — never
+    breaks the dispatch (fail-open)."""
+    try:
+        path = Path(ws) / RECALL_DEDUP_STATE
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            state = {}
+        workers = state.get("workers") or {}
+        workers[key] = _recall_set_hash(files)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": 1, "workers": workers}),
+                        encoding="utf-8")
+    except OSError as exc:
+        warn("recall_dedup_state_write", f"{type(exc).__name__}: {exc}")
+
+
 def _resolve_workspace(payload: dict) -> Path | None:
     """Delegate to hooks.lib_kunglao.resolve_workspace_canonical (#865).
 
@@ -462,7 +526,10 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     rc is ALWAYS 0 — this hook injects knowledge, never rejects.
     Trigger faces: claim dispatch (`[T<N> tools=...] claim C-NN`, #268) and
     red-team verification dispatch (#761 J4 — adversarial knowledge BEFORE
-    the checker plans its attacks).
+    the checker plans its attacks). H1a: recall is DISPATCH-SCOPED for every
+    role (no exemptions), deduped by content — a repeat dispatch whose
+    recall file set is unchanged for that worker (runs/.recall-inject.json,
+    per-worker injected-set hash) is silent; a changed set re-injects.
     """
     ws = _resolve_workspace(payload)
     if ws is None:
@@ -472,7 +539,8 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
         return 0, "", None
 
     is_claim = _is_claim_dispatch(prompt_text)
-    if not is_claim and not REDTEAM_RE.search(prompt_text):
+    is_redteam = bool(REDTEAM_RE.search(prompt_text))
+    if not is_claim and not is_redteam:
         # #814: fail-open ≠ fail-silent — 留痕后放行
         _trace(ws, "skipped", "recall_skip",
                "not_a_claim_or_redteam_dispatch")
@@ -497,6 +565,14 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
         _trace(ws, "no_match", "recall_skip", "no_recall_results: "
                + ",".join(queries[:3]))
         return 0, "", None  # no knowledge to inject
+    # H1a content dedup: the SAME recall set for the SAME worker is not new
+    # knowledge — silent skip (no row, no payload). A changed set (index
+    # grew, different claim, different task) re-injects. Every role goes
+    # through this one gate — there are no exemptions.
+    key = _worker_key(prompt_text)
+    if _content_unchanged(ws, key, files):
+        return 0, "", None
+    _record_injection(ws, key, files)
     _trace(ws, "injected", "recall_injected",
            "files:" + ",".join(files[:MAX_FILES]), files=len(files))
     return 0, "", _guidance(queries, files[:MAX_FILES])

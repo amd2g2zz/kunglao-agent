@@ -1114,7 +1114,19 @@ def plan_author_violation(plan_path: Path, plan_text: str, ws: Path,
 # singulars stay (capability domains aux:*/pipeline:* still emit them).
 _TOOLFIRST_STOPWORDS = frozenset(
     {'static', 'pipeline', 'pipelines', 'aux', 'auxiliary',
-     'annotate', 'decode'})
+     'annotate', 'decode',
+     # H1 (autoresearch thin-base) misfire fix: the web category tokens
+     # mapped the GENERIC prose "web" (every web unit name: "web-pack-sign")
+     # and "triage" onto jsvmp_triage — the campaign's non-JSVMP obfuscated
+     # units (web-pack-sign-l1a: javascript-obfuscator STRONG, NOT JSVMP)
+     # drew `tool-catalog: jsvmp_triage` demands and dispatch rejections.
+     # "js" is the same class (capability domain token -> wakaru-unbundle):
+     # every ".js" target path in dispatch prose matched it (live sweep
+     # ledgers: net-verify-license-l1a, web-pack-sign-l1a all drew
+     # wakaru-unbundle missing_marker rows). Same discipline as the original
+     # table: DISTINCTIVE terms only — generic prose stays OUT of the
+     # trigger set; wakaru keeps its distinctive "unbundle" keyword.
+     'web', 'triage', 'js'})
 
 # ---------- issue #54: android toolchain lighting aliases (keyword DATA) ------
 # LIGHTING ONLY (#54 owner ruling: 不能强制 — we cannot force tool choice).
@@ -1142,6 +1154,16 @@ _ANDROID_KEYWORD_ALIASES: dict[str, tuple[str, ...]] = {
     'android:java-source': ('反编译', 'java源码', 'java 源码'),
     'android:bytecode-truth': ('smali',),
     'android:packer-fingerprint': ('加固', '脱壳', '加壳'),
+}
+
+# H1 follow-up: after stopwording the generic web-category tokens, jsvmp_triage
+# kept its name-carried technical term as its single DISTINCTIVE trigger —
+# dispatch prose that literally says "jsvmp" means this tool (the same
+# distinctiveness bar as the android aliases); generic obfuscated-bundler
+# prose (javascript-obfuscator, webpack) never contains it, so the campaign
+# misfire cannot recur.
+_TOOL_KEYWORD_ALIASES: dict[str, tuple[str, ...]] = {
+    'web:triage': ('jsvmp',),
 }
 
 # One-off diagnostic exemption: CJK phrases are substring-matched (no word
@@ -1209,6 +1231,9 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
             for alias in _ANDROID_KEYWORD_ALIASES.get(cap_l, ()):
                 if alias and alias not in out:
                     out[alias] = name
+        for alias in _TOOL_KEYWORD_ALIASES.get(cap_l, ()):
+            if alias and alias not in out:
+                out[alias] = name
     return out
 
 
@@ -1306,23 +1331,28 @@ def _toolfirst_evaluate(text_lower: str, cited: str | None) -> dict:
             'reason': 'no tool-catalog keyword match'}
 
 
-def _toolfirst_emit(ws, ev: dict) -> None:
+def _toolfirst_emit(ws, ev: dict, action: str = 'toolfirst_reject') -> None:
     """#880: the tool-first gate's REJECT face reaches the unified ledger
     (dual_gate._emit mirror shape: detail = JSON payload). Fail-open —
     observability never gates a decision (#459 contract).
 
-    The PASS face deliberately does NOT emit here: check_tool_first runs
-    mid-battery, BEFORE gates that may still reject the dispatch
-    (heartbeat #754 pins "a rejected dispatch emits no lifecycle noise" —
-    test_heartbeat_bootstrap). The pass row fires at the APPROVAL point via
-    toolfirst_pass_record instead, so ledger rows describe real dispatches.
+    H1 (autoresearch thin-base): the REJECT face is demoted to ADVISORY —
+    check_tool_first passes `action='toolfirst_advisory'` for the
+    missing_marker/self_attestation modes and PROCEEDS; the row format is
+    unchanged (mode/keywords/tool payload), only the action name and the
+    gate outcome differ. The PASS face deliberately does NOT emit here:
+    check_tool_first runs mid-battery, BEFORE gates that may still reject
+    the dispatch (heartbeat #754 pins "a rejected dispatch emits no
+    lifecycle noise" — test_heartbeat_bootstrap). The pass row fires at the
+    APPROVAL point via toolfirst_pass_record instead, so ledger rows
+    describe real dispatches.
     """
     if not ws or ev['mode'] != 'reject':
         return
     try:
         import kunglao_log
         kunglao_log.emit(
-            Path(ws), 'hook:worker_budget', 'toolfirst_reject',
+            Path(ws), 'hook:worker_budget', action,
             detail=json.dumps({'mode': ev['detail_mode'],
                                'keywords': ev['keywords'],
                                'tool': ev['tool']},
@@ -1332,22 +1362,31 @@ def _toolfirst_emit(ws, ev: dict) -> None:
 
 
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
-    """Issue #294: a dispatch touching a registered tool's domain must cite it.
+    """Issue #294: a dispatch touching a registered tool's domain should cite it.
 
     Scans `desc + prompt` for tools/_INDEX.yaml category/capability keywords
     (ASCII-bounded, case-insensitive, stopworded). No match -> pass silently
     (FAIL_OPEN on ambiguity — this gate only fires on a positive keyword hit).
     A one-off diagnostic declaration exempts the dispatch. Otherwise the text
-    MUST contain `tool-catalog:` (either naming the matched tool or an
-    explicit `none (reasoning: ...)` opt-out) or the dispatch is REJECTED.
+    SHOULD contain `tool-catalog:` (either naming the matched tool or an
+    explicit `none (reasoning: ...)` opt-out).
 
-    #880: the REJECT face emits (toolfirst_reject) with the structured
-    (keyword->tool) payload; the PASS face emits at the approval point
-    (toolfirst_pass_record) so rejected dispatches stay lifecycle-silent
-    (#754). Decisions are byte-identical with the pre-#880 gate (the emit is
-    strictly additive, fail-open).
+    H1 (autoresearch thin-base) — advisory demotion: a keyword hit without a
+    marker (missing_marker) or a marker naming an unmatched tool
+    (self_attestation) is logged as a `toolfirst_advisory` event ledger row
+    and the dispatch PROCEEDS. The gate no longer REJECTS: the campaign's
+    non-JSVMP obfuscated-JS units drew jsvmp_triage demands (keyword
+    misfire — fixed in the stopword table) and 4 analysis-worker dispatch
+    rejections (the REJECT face) — two faces of the same wall tax. The
+    opt-out / exempt / no_index / no_match faces are unchanged.
 
-    Returns (ok, reason). ok=False means REJECT the dispatch.
+    #880: the advisory face emits with the structured (keyword->tool)
+    payload (same row format, action renamed toolfirst_advisory); the PASS
+    face still emits at the approval point (toolfirst_pass_record) so the
+    row describes a real dispatch (#754).
+
+    Returns (ok, reason). ok is always True post-H1: this gate is
+    advisory-only; it never blocks a dispatch.
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     text_lower = f'{desc}\n{prompt}'.lower()
@@ -1356,8 +1395,10 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
         m = re.search(r'tool-catalog:\s*(.+)', text_lower)
         cited = (m.group(1).strip() if m else '')
     ev = _toolfirst_evaluate(text_lower, cited)
-    _toolfirst_emit(ws, ev)
-    return (ev['mode'] != 'reject', ev['reason'])
+    if ev['mode'] == 'reject':
+        # H1: demote REJECT to ADVISORY — log the row, PROCEED.
+        _toolfirst_emit(ws, ev, action='toolfirst_advisory')
+    return (True, ev['reason'])
 
 
 # ---------- #880: operation label (toolfirst attribution -> claim attr) ------
@@ -1427,8 +1468,12 @@ def toolfirst_pass_record(paths: dict, claim_id: str | None,
     AFTER the whole gate battery passed, so the emitted toolfirst_pass rows
     (and the operation-label claim attributes) describe real dispatches. A
     dispatch rejected by any earlier gate stays silent here (heartbeat #754
-    zero-noise contract; the tool-first gate's own REJECT face already emits
-    from check_tool_first).
+    zero-noise contract; the tool-first gate's own advisory face already
+    emits from check_tool_first).
+
+    H1: post-demotion a `reject` evaluation reaches this function for real
+    dispatches (the gate no longer blocks) — the pass row carries the
+    advisory payload (detail_mode + advisory: True).
 
     Returns True iff a pass row was emitted. Fail-open, never raises.
     """
@@ -1444,7 +1489,25 @@ def toolfirst_pass_record(paths: dict, claim_id: str | None,
         cited = (m.group(1).strip() if m else '')
     ev = _toolfirst_evaluate(text_lower, cited)
     if ev['mode'] == 'reject':
-        return False  # a reject at this point would double-emit the face
+        # H1 advisory demotion: the dispatch PROCEEDED through
+        # check_tool_first and the whole gate battery — the approval-point
+        # face carries the advisory payload (mode/keywords/tool + advisory
+        # flag) instead of skipping. No claim-operation label: only the
+        # `matched` mode attributes an operation.
+        try:
+            import kunglao_log
+            kunglao_log.emit(
+                Path(ws), 'hook:worker_budget', 'toolfirst_pass',
+                claim=str(claim_id),
+                detail=json.dumps({'mode': ev['detail_mode'],
+                                   'keywords': ev['keywords'],
+                                   'tool': ev['tool'],
+                                   'advisory': True},
+                                  ensure_ascii=False))
+            return True
+        except Exception as exc:  # noqa: BLE001 — logging never breaks the dispatch
+            warn("toolfirst_pass_record", f"{type(exc).__name__}: {exc}")
+            return False
     emitted = False
     try:
         import kunglao_log

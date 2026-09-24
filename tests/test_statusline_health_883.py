@@ -466,10 +466,12 @@ class TestSnapshotWriter:
         assert r.returncode in (0, 1)  # tick ran to its own verdict
 
     def test_tick_settlement_writes_snapshot(self, tmp_path):
-        """#142 refinement: a tick-hosted settlement IS a semantic event —
-        a workspace with a mission ledger gets a post-settlement snapshot
-        write (the display would otherwise lag the frontier indefinitely
-        during LLM-idle). No tool-use flow required."""
+        """#142 refinement: a settlement IS a semantic event — the tick that
+        consumes one writes the post-settlement snapshot (the display would
+        otherwise lag the frontier indefinitely during LLM-idle). No tool-use
+        flow required. H1a: the event is a real ledger row (the
+        claim_settled row a tick-hosted settlement emits), not ledger
+        existence."""
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         pqs = [{"id": "PQ-1", "question": "q", "state": "unattempted",
@@ -481,6 +483,8 @@ class TestSnapshotWriter:
                                         "history": hist,
                                         "feature_used": True}},
                            sort_keys=False), encoding="utf-8")
+        import kunglao_log
+        kunglao_log.emit(ws, "test", "claim_settled", detail="h1-snapshot")
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
             capture_output=True, text=True, encoding="utf-8",

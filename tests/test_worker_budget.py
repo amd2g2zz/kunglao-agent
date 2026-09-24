@@ -576,15 +576,15 @@ def test_check_tool_first_no_keyword_match_accepts():
     assert ok, msg
 
 
-def test_check_tool_first_keyword_match_without_marker_rejects():
-    """#294: dispatch text matching a registered tool's category/capability
-    keyword ('crypto' -> crypto-tool) with no `tool-catalog:` marker is
-    REJECTED — closes the Swiss-army-test gap (worker hand-rolled a script
-    instead of trying crypto-tool.py)."""
+def test_check_tool_first_keyword_match_without_marker_advisory():
+    """#294 / H1: dispatch text matching a registered tool's
+    category/capability keyword ('crypto' -> crypto-tool) with no
+    `tool-catalog:` marker PROCEEDS (advisory-only since H1) — the demand
+    text still names the tool + the marker escape hatch."""
     ok, msg = check_tool_first(
         {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok, msg
     assert 'crypto-tool' in msg
     assert 'tool-catalog' in msg
 
@@ -654,14 +654,14 @@ def test_check_tool_first_operation_stopword_no_false_positive():
     assert ok, msg
 
 
-def test_check_tool_first_cjk_adjacent_keyword_rejects():
+def test_check_tool_first_cjk_adjacent_keyword_still_matches():
     """#294: a keyword glued to CJK text (解码crypto层) must still match —
     ASCII-only boundaries, because Python's \b treats CJK chars as word chars
-    and would silently bypass the gate."""
+    and would silently bypass the gate. H1: match -> advisory, not reject."""
     ok, msg = check_tool_first(
         {}, '[T1 tools=grep] claim C-001 解码crypto层',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok
     assert 'crypto-tool' in msg
 
 
@@ -676,11 +676,12 @@ def test_check_tool_first_keyword_inside_longer_word_ignored():
 
 def test_check_tool_first_negated_diagnostic_not_exempt():
     """#294: 'not a one-off diagnostic' must NOT count as an exemption — the
-    diagnostic marker is negation-aware."""
+    diagnostic marker is negation-aware. H1: non-exempt = advisory demand,
+    the dispatch still proceeds."""
     ok, msg = check_tool_first(
         {}, '[T1 tools=grep] claim C-001 not a one-off diagnostic — decode the crypto layer',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok
     assert 'crypto-tool' in msg
 
 
@@ -700,10 +701,11 @@ def test_check_tool_first_marker_case_insensitive():
     assert ok, msg
 
 
-def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsys):
-    """#294 e2e: a dispatch whose description matches a registered tool's
-    keyword ('crypto') with no `tool-catalog:` marker is REJECTED by the 13th
-    pre_check gate, even when the plan gate itself passes."""
+def test_pre_check_advisory_dispatch_matching_tool_without_marker(tmp_path, capsys):
+    """#294 e2e / H1: a dispatch whose description matches a registered
+    tool's keyword ('crypto') with no `tool-catalog:` marker PROCEEDS
+    through the pre_check battery (tool-first is advisory-only) and leaves a
+    toolfirst_advisory ledger row — the demotion is observable."""
     ws = tmp_path / 'ws'
     (ws / 'runs').mkdir(parents=True)
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
@@ -715,8 +717,12 @@ def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsy
         'facts-snapshot: 1 facts\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
-    assert rc == 2
-    assert 'REJECT toolfirst' in captured.err
+    assert rc == 0, captured.err  # H1: advisory-only — dispatch proceeds
+    ledger_rows = (ws / 'runs' / 'logs').glob('kunglao-*.jsonl')
+    actions = [json.loads(ln).get('action')
+               for p in ledger_rows
+               for ln in p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+    assert 'toolfirst_advisory' in actions
 
 
 def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
