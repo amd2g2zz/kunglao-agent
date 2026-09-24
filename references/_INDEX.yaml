@@ -107,7 +107,7 @@ files:
   references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: 4b8c39f0b2eb8d56745d464bd3e52c2c51564b2b6b9ab7c672ec898adaa788f7
   references/re-library/web/external-distilled/external-protocol-failure-ladder.md: 8f7e0db5d5a3810b85e6d36bc942481697f6bc67fd06f1f9221ba2c453cf5a4c
   references/re-library/web/labs/web-re-quickref.md: 07a2218f2a1f7fa2c479432b353de65b1c3f0a40ca93dc9731633efcbb5d1d0e
-  references/re-library/web/risk-control/web-risk-control.md: 185ba8d7f91969a1a37fae2b70ad23fbac696f9e985d7627709987a491051bf1
+  references/re-library/web/risk-control/web-risk-control.md: 026a7c1fd99feb2a9158fac4c54e869e5e5e33890f8cb6c9d4f050ef70c33bf7
   references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
   references/schemas/schema.md: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
   references/schemas/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
