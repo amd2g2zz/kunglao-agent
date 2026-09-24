@@ -24,6 +24,10 @@ tests/test_compute_priors_137.py):
     alpha, NEGATIVE -> +1 beta, NEUTRAL / UNRESOLVED -> nothing. Rows are
     read tolerantly (kunglao_log.iter_jsonl); pre-#137 rows without the
     `schema` stamp are legacy and sum like any other row.
+  - runs/rollout-ledger.jsonl settled rows (unified reward, U4) contribute per
+    polarity: SETTLED_GREEN/HELPED -> +1 alpha, SETTLED_RED/ADVERSE ->
+    +1 beta, NEUTRAL/pending -> nothing. Read through the ONE interface
+    (reward_settlement.prior_observations over rollout_ledger.settled).
   - runs/posteriors.yaml contributes the observations ON TOP of its own
     per-case uniform base: per CasePosterior max(alpha-1, 0) alpha and
     max(beta-1, 0) beta. The two namespaces count DIFFERENT observables
@@ -105,6 +109,21 @@ def _posteriors_obs(ws: Path) -> tuple[float, float]:
     return alpha, beta
 
 
+def _rollout_ledger_obs(ws: Path) -> tuple[int, int]:
+    """(alpha_obs, beta_obs) from the unified rollout ledger (U4 —
+    the ONE prior interface: reward_settlement.prior_observations reads
+    through rollout_ledger.settled; polarity mapping lives there, the
+    prior math here is untouched). Missing ledger -> (0, 0). Settled bands
+    only: NEUTRAL/pending rows are not observations."""
+    try:
+        import reward_settlement
+        return reward_settlement.prior_observations(ws)
+    except ImportError as exc:  # pragma: no cover — sibling always present
+        raise ValueError(
+            f"compute_priors: {ws}: reward_settlement unavailable "
+            f"({exc})") from exc
+
+
 def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
     """Aggregate Beta prior over the EXPLICITLY-NAMED workspaces.
 
@@ -126,6 +145,7 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
 
     cb_alpha = cb_beta = 0
     post_alpha = post_beta = 0.0
+    rl_alpha = rl_beta = 0
     for p in paths:
         a, b = _case_bank_obs(p)
         cb_alpha += a
@@ -133,9 +153,12 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         pa, pb = _posteriors_obs(p)
         post_alpha += pa
         post_beta += pb
+        ua, ub = _rollout_ledger_obs(p)  # unified-reward prior feed (additive)
+        rl_alpha += ua
+        rl_beta += ub
 
-    alpha = BASE_ALPHA + cb_alpha + post_alpha
-    beta = BASE_BETA + cb_beta + post_beta
+    alpha = BASE_ALPHA + cb_alpha + post_alpha + rl_alpha
+    beta = BASE_BETA + cb_beta + post_beta + rl_beta
     return {
         "schema": RESULT_SCHEMA,
         "alpha": alpha,
@@ -144,6 +167,7 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         "sources": {
             "case_bank": {"alpha": cb_alpha, "beta": cb_beta},
             "posteriors": {"alpha": post_alpha, "beta": post_beta},
+            "rollout_ledger": {"alpha": rl_alpha, "beta": rl_beta},
         },
         "workspaces": [str(p) for p in paths],
     }
