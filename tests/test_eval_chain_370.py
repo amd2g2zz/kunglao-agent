@@ -338,7 +338,10 @@ class TestPeelParity:
     @pytest.mark.skipif(not CHAIN_TASKS.is_dir(), reason="corpus lands with the mint commit")
     def test_grader_greens_an_independently_recovered_go_workspace(self, tmp_path):
         """The F1 regression face: a correct analyst's go peel (from the
-        independent decoder) must satisfy the go unit's checkpoint."""
+        independent decoder) must satisfy the go unit's checkpoint.
+        Digest layers verify without a toolchain; the exec layer
+        verifies only where go exists (else structured SKIP, the
+        #332 convention)."""
         gr = eval_chain_grader
         task_id = "chain-l2-go-v1"
         got, want = self._independent_decode(task_id)
@@ -356,7 +359,15 @@ class TestPeelParity:
         (ws / "layer_out" / "1-unpacked.json").write_bytes(
             mint_mod.tt.go_blob_doc_text(cfg).encode("utf-8"))
         rc, scores = gr.grade(task_id, ws)
-        assert scores["layers_completed"] == scores["layers_total"] == 3
+        go_present = shutil.which("go") is not None
+        if go_present:
+            assert scores["layers_completed"] == scores["layers_total"] == 3
+        else:
+            # digest layers still verify mechanically; the exec layer
+            # degrades to SKIP, never a false FAIL
+            assert scores["layers_completed"] == 2
+            assert scores["skipped_ops"] == 1
+            assert scores["verdict"] == "SKIP" and rc == gr.RC_SKIP
 
 # ------------------------------------------------- (d) mint gate is real
 class TestMintGate:
