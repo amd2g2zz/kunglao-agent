@@ -1,0 +1,291 @@
+{
+  "chain": {
+    "gradient": "L1",
+    "layers": [
+      {
+        "id": "obfuscation",
+        "mechanisms": [
+          "obfuscation",
+          "junk-code"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/1-unpacked.js",
+            "sha256": "d7eaf300cab84c66ae073187a943816ad2eb38035e312a15513522daf1e08223"
+          }
+        ]
+      },
+      {
+        "id": "encrypted-config",
+        "mechanisms": [
+          "encrypted-config"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/2-config.json",
+            "sha256": "2449f03fec1aba442ec6bf7c28e1f1ae1c965e499b530e0eaddc402aba12ff96"
+          }
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "i": 0,
+        "lane": 0,
+        "out": "7ec5181027e8d185",
+        "payload": "00000000000000003dd9eb2336c54c3b"
+      },
+      {
+        "i": 1,
+        "lane": 0,
+        "out": "c1a33de0dc8abe87",
+        "payload": "00000000000000001191a5d97236dbc5"
+      },
+      {
+        "i": 2,
+        "lane": 0,
+        "out": "beac4a9269307913",
+        "payload": "0000000000000000fdd0fc3f88fb9911"
+      },
+      {
+        "i": 3,
+        "lane": 0,
+        "out": "6db9d679a03427e0",
+        "payload": "0000000000000000a3f475156f6277c1"
+      },
+      {
+        "i": 4,
+        "lane": 0,
+        "out": "ba9c6215e04fdd1e",
+        "payload": "0000000000000000121f7f9b99654057"
+      },
+      {
+        "i": 5,
+        "lane": 0,
+        "out": "74b99ccde5db9715",
+        "payload": "00000000000000005f87e7fb58f62c79"
+      },
+      {
+        "i": 6,
+        "lane": 0,
+        "out": "c6634b95109aa4a0",
+        "payload": "00000000000000003633d79df2449967"
+      },
+      {
+        "i": 7,
+        "lane": 0,
+        "out": "e2466ce774caca2d",
+        "payload": "000000000000000013cc761d30ec2c6b"
+      },
+      {
+        "i": 100,
+        "lane": 0,
+        "out": "6511e4d2c2504b93",
+        "payload": "0000000000000000a20bc255a0851057"
+      },
+      {
+        "i": 101,
+        "lane": 0,
+        "out": "7951bb369cb77ee5",
+        "payload": "00000000000000009706cff744174c27"
+      },
+      {
+        "i": 102,
+        "lane": 0,
+        "out": "8103e875f8b3ebc1",
+        "payload": "00000000000000005268eedd4e492e81"
+      },
+      {
+        "i": 103,
+        "lane": 0,
+        "out": "3dee78d9535c755b",
+        "payload": "0000000000000000f9ece4e52dd46031"
+      },
+      {
+        "i": 104,
+        "lane": 0,
+        "out": "2b9ae4ecdef03d0b",
+        "payload": "0000000000000000f32ea2751c50c24b"
+      },
+      {
+        "i": 105,
+        "lane": 0,
+        "out": "66d10ee5f39f4e43",
+        "payload": "0000000000000000a0fef753ce8be759"
+      },
+      {
+        "i": 106,
+        "lane": 0,
+        "out": "2423acc1a9de14e5",
+        "payload": "00000000000000001cabbff7cb84579b"
+      },
+      {
+        "i": 107,
+        "lane": 0,
+        "out": "5fb810c643644784",
+        "payload": "0000000000000000294e44c7794dde9d"
+      }
+    ]
+  },
+  "core": {
+    "cfg_hex": "2e4aa16fabd01483a73a9084d1f91d535e85ce6d879dd07e1e9c98255e5344c8dac2c1a09dc8a0374dbfb888dc04c0d0a5cefc91414f324add8621b140694f5bf410e6621e97c6c5968475e052d1dd1ce4296b077061b3d17c141c103e495d609a057cae801a33c6a2bf789496c4e10efd9510f6f61c878345131a70e970c2ce351a50cb468fd45906bbd115d508600929fc2baa2130e65d6a25",
+    "config": {
+      "core": {
+        "c0": 1913267183,
+        "c1": 1936336201,
+        "c2": 884828295,
+        "odd": 3954029577,
+        "odd2": 46881931,
+        "rot": 25
+      },
+      "mac_key": "6484f10f439a8ec77d718fff03133f33",
+      "v": 1
+    },
+    "corrupt": 3486724033,
+    "decoy_config": {
+      "core": {
+        "c0": 4098106695,
+        "c1": 2033742831,
+        "c2": 3637271237,
+        "odd": 2152239857,
+        "odd2": 961296803,
+        "rot": 13
+      },
+      "mac_key": "eaade0b9d1bff259203442ef54d1fe8b",
+      "v": 0
+    },
+    "decoy_hex": "2e4aa16fabd01483a73a9084d1f91d535e85cb648f96d3781f9b99235e5344c8dac2c2a99dcda43049b5bb88dc04c0d0a5cef79f46403245de8d27aa4e24445bb208ef691a96c4c59c887ae249df9017e47f7b1f7e6ebdd87f1419192258032d9c4832be8f562c99e3fc76aa9efef349be951ce0ab4980d610454c7ab42098cd301f5296438edf0b54ef8440d10f375e7caa31e4216ae6117962cd2d",
+    "family": "chain-js",
+    "fp": [
+      2240937649,
+      3662400163,
+      2183579245
+    ],
+    "gate_dt_ms": 363,
+    "gradient": "L1",
+    "honeypot": "e791121b679f85c76717e291ab6ae963d0da55c97978d571fa106705c8a563c9",
+    "integ": 280640991,
+    "junk_a": 1991590945,
+    "junk_b": 1156005095,
+    "rc": [
+      [
+        535779629,
+        3633145497,
+        3830350325,
+        3550967499
+      ],
+      [
+        2001715411,
+        2218736285,
+        797714179,
+        1110171617
+      ],
+      [
+        1471194585,
+        805438885,
+        4054235425,
+        121482701
+      ],
+      [
+        3521290733,
+        3586933627,
+        799236553,
+        3524825429
+      ],
+      [
+        1449299333,
+        61672753,
+        38664683,
+        3902995135
+      ],
+      [
+        1467564065,
+        3399118077,
+        2832510845,
+        282814331
+      ],
+      [
+        2596456001,
+        789845225,
+        475110121,
+        1401440005
+      ],
+      [
+        892304691,
+        3610041467,
+        272503863,
+        3637994461
+      ]
+    ],
+    "rt_key": "90e6434ce5bbc14448726b928955e103",
+    "salt": 194389555,
+    "seed": 37001,
+    "sel_key": 110,
+    "sel_val": 2502673262,
+    "task_id": "chain-l1-js-v1",
+    "unit": {
+      "family": "chain-js",
+      "gradient": "L1",
+      "seed": 37001,
+      "task_id": "chain-l1-js-v1"
+    }
+  },
+  "family": "chain-js",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "lane": 0,
+      "out": "7ec5181027e8d185",
+      "payload": "00000000000000003dd9eb2336c54c3b"
+    },
+    {
+      "i": 1,
+      "lane": 0,
+      "out": "c1a33de0dc8abe87",
+      "payload": "00000000000000001191a5d97236dbc5"
+    },
+    {
+      "i": 2,
+      "lane": 0,
+      "out": "beac4a9269307913",
+      "payload": "0000000000000000fdd0fc3f88fb9911"
+    },
+    {
+      "i": 3,
+      "lane": 0,
+      "out": "6db9d679a03427e0",
+      "payload": "0000000000000000a3f475156f6277c1"
+    },
+    {
+      "i": 4,
+      "lane": 0,
+      "out": "ba9c6215e04fdd1e",
+      "payload": "0000000000000000121f7f9b99654057"
+    },
+    {
+      "i": 5,
+      "lane": 0,
+      "out": "74b99ccde5db9715",
+      "payload": "00000000000000005f87e7fb58f62c79"
+    },
+    {
+      "i": 6,
+      "lane": 0,
+      "out": "c6634b95109aa4a0",
+      "payload": "00000000000000003633d79df2449967"
+    },
+    {
+      "i": 7,
+      "lane": 0,
+      "out": "e2466ce774caca2d",
+      "payload": "000000000000000013cc761d30ec2c6b"
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 37001,
+  "space_bits": 64,
+  "task_id": "chain-l1-js-v1"
+}

@@ -282,6 +282,19 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # penalty; the DATA lands now). Fail-open.
     _capture_confirmed_with_diff(workspace, claim_id)
 
+    # unified-reward face: snapshot the lessons library BEFORE
+    # aggregation so the self_distill emission adapter can diff-exactly the
+    # lesson files this rollup wrote (adapter seam; aggregate_lessons itself
+    # is untouched). Fail-open: a snapshot failure disables only the diff
+    # face (task rows still emit), never the rollup.
+    _u366_lib = lessons_library if lessons_library is not None else None
+    try:
+        import reward_settlement as _rs366
+        _u366_before = _rs366.snapshot_lessons(_u366_lib)
+    except Exception as exc:  # noqa: BLE001 — emission adapter degrades only
+        warn("unified_reward_snapshot", f"{type(exc).__name__}: {exc}")
+        _u366_before = None
+
     # Step 2: aggregate analyses -> lessons library / reflect queue.
     agg_res = _fag.aggregate_lessons(
         workspace,
@@ -315,6 +328,21 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         except Exception as exc:  # noqa: BLE001 — settlement never breaks rollup
             mission_settlement = f"error: {exc!r}"
 
+    # Step 4.5/4.6 (unified reward): emission adapters land unified rows
+    # (task + self_distill), then the ONE deterministic settlement engine
+    # settles the pending rows. Additive face on the rollup tick — never a
+    # replacement for steps 1-4; fully caged (the terminal transition must
+    # not break).
+    unified_reward: dict = {"settlement": "skipped:no-adapter"}
+    try:
+        import reward_settlement as _rs366
+        unified_reward = _rs366.rollup_face(
+            workspace, claim_id, status_upper,
+            lessons_before=_u366_before, library=_u366_lib)
+    except Exception as exc:  # noqa: BLE001 — settlement never breaks rollup
+        unified_reward = {"settlement": f"error: {exc!r}"}
+        warn("unified_reward", f"{type(exc).__name__}: {exc}")
+
     _append_ledger(workspace, {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": "rollup",
@@ -327,6 +355,9 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit": ck,
         "mission_settlement": mission_settlement,
+        "unified_settled": (
+            unified_reward.get("settled", 0)
+            if isinstance(unified_reward, dict) else 0),
         "ts": utc_now_iso(),
     })
 
@@ -340,6 +371,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit_called": True,
         "mission_settlement": mission_settlement,
+        "unified_reward": unified_reward,
     }
 
 

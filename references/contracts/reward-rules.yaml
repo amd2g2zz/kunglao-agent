@@ -1,0 +1,75 @@
+schema: reward-rules/1
+version: 1
+description: >
+  Deterministic settlement rules for the unified rollout ledger (#366).
+  THE reward currency contract: reward_settlement.py reads ONLY this table
+  and only machine-recorded signals. Settlement rewards are NEVER model
+  opinions (owner ruling 2026-09-23) — signals produced by a model enter
+  the ledger marked advisory and are excluded from rule matching by
+  construction; no rule below names a model source. Every rule requires at
+  least two distinct signals (multi-signal anti-pollution: recall_useful
+  is a model self-report, no single signal settles a band alone).
+  Rules are evaluated in declared `order`; the FIRST full match settles.
+bands:
+  SETTLED_GREEN: {reward: 1.0, polarity: positive}
+  SETTLED_RED:   {reward: 0.0, polarity: negative}
+  ADVERSE:       {reward: 0.0, polarity: negative}
+  HELPED:        {reward: 0.5, reward_full: 1.0, polarity: positive}
+  NEUTRAL:       {reward: 0.0, polarity: none}
+rules:
+  - rule_id: task/oracle-green
+    kind: task
+    order: 1
+    requires:
+      - {type: oracle_verdict, equals: pass}
+      - {type: claim_terminal, in: [PROVEN, VERIFIED]}
+    band: SETTLED_GREEN
+    reward: 1.0
+    evidence: [runs/oracle-status.json, claim-register.yaml]
+    never_demoted: true   # the oracle checker verdict is the hard currency
+
+  - rule_id: task/oracle-red
+    kind: task
+    order: 2
+    requires:
+      - {type: oracle_verdict, equals: fail}
+      - {type: claim_terminal, in: [NEGATIVE, REFUTED]}
+    band: SETTLED_RED
+    reward: 0.0
+    evidence: [runs/oracle-status.json, claim-register.yaml]
+
+  - rule_id: self_distill/adverse
+    kind: [self_distill, hybrid_distill]
+    order: 3
+    requires:
+      - {type: misleading_declaration, equals: true}
+      - {type: zero_recall, equals: true}
+      - {type: no_citation, equals: true}
+    band: ADVERSE
+    reward: 0.0
+    evidence: [verdict surface, recall telemetry, lessons telemetry]
+
+  - rule_id: self_distill/helped
+    kind: [self_distill, hybrid_distill]
+    order: 4
+    requires:
+      - {type: distill_consumption, min_count: 1}
+      - {type: downstream_positive_reference, equals: true}
+    optional:
+      - {type: distill_reuse, min_count: 2}
+    band: HELPED
+    reward: 0.5
+    reward_full: 1.0     # when every optional predicate holds too
+    evidence: [distill engine consumption rows, convergence ledger]
+
+neutral:
+  rule_id_suffix: pending
+  note: >
+    Rows no rule can settle land NEUTRAL (reward 0.0, rule_id
+    "<kind>/pending") pending corroboration — the single-signal and
+    partial-evidence anti-pollution default. NEUTRAL contributes nothing
+    to any prior.
+polarity_map:
+  positive: [SETTLED_GREEN, HELPED]   # prior alpha
+  negative: [SETTLED_RED, ADVERSE]    # prior beta
+  none: [NEUTRAL]                     # no prior observation

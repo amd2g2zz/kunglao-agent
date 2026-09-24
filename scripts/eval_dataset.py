@@ -45,9 +45,10 @@ EVAL_VERSION = "eval-v1"
 # mod-crypto core); v1.2 = the adversarial-misdirection tier (trap units
 # minted from the catalogued failure modes, verdict-class checker faces);
 # v1.3 = issue-356 toolflex tier (chain-necessity units + blocked-path
-# variants). A landed version is never mutated.
+# variants); v1.4 = issue-370 chain tier (multi-layer decryption-chain
+# units, dense per-layer grading). A landed version is never mutated.
 EVAL_VERSIONS: tuple[str, ...] = ("eval-v1", "eval-v1.1", "eval-v1.2",
-                                  "eval-v1.3")
+                                  "eval-v1.3", "eval-v1.4")
 
 # ---- held-out path contract (distiller-lane exclusion) -------------------
 # Every prefix here is OFF-LIMITS as a distillation-corpus source: eval
@@ -76,7 +77,8 @@ ANCHOR_FIELDS: tuple[str, ...] = (
 VERIFICATION_METHODS: tuple[str, ...] = (
     "reproduction", "replay-evidence", "static", "manual")
 
-TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex")
+TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex",
+                          "chain")
 # per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
 # release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
 # never mutated in place per the eval version rules). Both spellings are
@@ -87,7 +89,8 @@ TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex")
 TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1",
                                      "release": "eval-v1.1",
                                      "misdirection": "eval-v1.2",
-                                     "toolflex": "eval-v1.3"}
+                                     "toolflex": "eval-v1.3",
+                                     "chain": "eval-v1.4"}
 EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match",
@@ -165,7 +168,7 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
     source = task.get("source")
     if source not in SOURCES:
         errors.append(f"source must be one of {SOURCES}, got {source!r}")
-    if tier in ("smoke", "release", "misdirection") and \
+    if tier in ("smoke", "release", "misdirection", "chain") and \
             source != "constructed":
         errors.append(
             f"tier {tier} carries constructed targets only, got "

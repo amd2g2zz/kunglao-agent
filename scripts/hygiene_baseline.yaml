@@ -105,8 +105,18 @@ files:
     r1: 6
   scripts/error_response.py:
     r1: 8
+  scripts/eval_chain.py:
+    r1: 1
+  scripts/eval_chain_grader.py:
+    r1: 1
+  scripts/eval_chain_mint.py:
+    r1: 1
+  scripts/eval_chain_render.py:
+    r1: 1
+  scripts/eval_chain_targets.py:
+    r1: 1
   scripts/eval_checker.py:
-    r1: 2
+    r1: 3
   scripts/eval_control_arm.py:
     r1: 1
   scripts/eval_crypto.py:
@@ -671,6 +681,10 @@ files:
     r1: 4
   tests/test_error_response.py:
     r1: 3
+  tests/test_eval_chain_370.py:
+    r1: 4
+  tests/test_eval_contract_352.py:
+    r1: 1
   tests/test_eval_control_arm_236.py:
     r1: 1
   tests/test_eval_harness.py:
