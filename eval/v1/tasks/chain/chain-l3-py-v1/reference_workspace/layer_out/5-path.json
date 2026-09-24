@@ -1,0 +1,11 @@
+{
+  "schema": "kunglao-eval-chain-evidence/1",
+  "task_id": "chain-l3-py-v1",
+  "true_path": {
+    "decoy_branch": "corrupted-INTEG path (gate tripped)",
+    "decoy_sel_value": "729b77ff",
+    "sel_key": "22",
+    "sel_value": "c439fe22",
+    "selection": "(FP0 ^ INTEG) & 0xff == SEL_KEY"
+  }
+}

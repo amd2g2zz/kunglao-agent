@@ -46,7 +46,12 @@ def _all_registered_families() -> set[str]:
         import eval_misdirection as md
     except ImportError:  # pragma: no cover - module lands with this card
         return families
-    return families | set(md.FAMILIES)
+    families |= set(md.FAMILIES)
+    try:
+        import eval_chain as ch  # noqa: F401 - #370 chain tier registry
+    except ImportError:  # pragma: no cover - module lands with its card
+        return families
+    return families | set(ch.FAMILIES)
 
 
 class TestContractCoverage:

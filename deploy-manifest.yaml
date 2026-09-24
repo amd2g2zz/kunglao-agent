@@ -364,14 +364,34 @@ files:
     dest: .claude/scripts/error_response.py
     kind: scaffold
     sha256: ebe9c0334df38a70c1454022d8ab5413836bc5c43b14f3c6ae934b139bbcade6
+  - src: scripts/eval_chain.py
+    dest: .claude/scripts/eval_chain.py
+    kind: scaffold
+    sha256: 2a5adfe4d4088ad744e1bdc90e5293cb3c6921610a57934ca599a87ddc4e25f0
+  - src: scripts/eval_chain_grader.py
+    dest: .claude/scripts/eval_chain_grader.py
+    kind: scaffold
+    sha256: aa51ed5550bb9d7641c4ac3c5d3e7ea4c7f2c5ed6a6f94e41991df48bf55828c
+  - src: scripts/eval_chain_mint.py
+    dest: .claude/scripts/eval_chain_mint.py
+    kind: scaffold
+    sha256: 8a55089692a6a170e5adb607838f1545d34d5f894a509dd333953eed84887eeb
+  - src: scripts/eval_chain_render.py
+    dest: .claude/scripts/eval_chain_render.py
+    kind: scaffold
+    sha256: e56bd97b7c2491988fdaf28b44519dbf75ec35253cd64f194815dc3f20283d8e
+  - src: scripts/eval_chain_targets.py
+    dest: .claude/scripts/eval_chain_targets.py
+    kind: scaffold
+    sha256: 8f7fabed8715f4c7ec694e85122c8c92d9060d15e3d0ab46ca2ad33ac33aa3e1
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: bfae7f6c568b66e427e783d4698d26041335bce8604c24ccec305c4e6734e9f9
+    sha256: 62bb133ffbded4f20ff33f3e895e06b3f1b0dffd6ec1ecbf8f4287fd9519259b
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
-    sha256: 77ee0bec0477e01c519e12787e87943bf643a654ff25cd84bd85fb928b2720a6
+    sha256: 87a722e74a70c765435cd087e09a96c0ef5f298f66cd710227e925376503a937
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
@@ -383,7 +403,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: d244f83c80d8ed5af4f1810aad1be7c63eed7a18e56ba87fbf59657726ba20b7
+    sha256: 796cd027aa67f6312e8b7ec511dc6b7a9a9323a4a92ecba773b0ec6c915541b4
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -1563,7 +1583,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 53b64731bdf60730c08c026b7fa99fd30cc56812e13adaa7f7499286c712c916
+    sha256: c693f68c3cd68f7ef8c17199f3d0927e03da96fcdbc2dfb6b3257e4a76f23f1c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

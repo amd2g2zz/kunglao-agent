@@ -1,0 +1,10 @@
+{
+  "gate": {
+    "bypass": "evaluate with the gate untripped (clean env); the tripped path silently corrupts INTEG",
+    "corrupt_constant": "a03e65bf",
+    "predicate": "debugger/timing window > 525ms",
+    "trip_threshold_ms": 525
+  },
+  "schema": "kunglao-eval-chain-evidence/1",
+  "task_id": "chain-l3-js-v1"
+}
