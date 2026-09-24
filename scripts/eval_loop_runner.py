@@ -51,6 +51,20 @@ loud harness_drift event row lands in <out>/harness-events.jsonl, and
 the session row is marked harness_contaminated (diagnostic — the
 verdict is unaffected, grading already ran).
 
+Gap-closure mechanizations (exp5, from the distilled cards):
+    M1  WALL PARTITION  the runner owns the wall cap, so it COMMUNICATES
+        the cap into each session's task prompt as a first-class
+        WALL_BUDGET_PARTITION block (solo-attempt hard cap at 50% wall,
+        deliverable due before a 300s reserve) — the case-dispatch-budget
+        partition contract, not a behavior rule;
+    M2  GAP-REDO ROUND  when a session ends with a delivered candidate
+        that FAILS the mechanical checker and wall+budget remain, the
+        runner spawns ONE gap-redo session in the SAME workspace: the
+        prompt carries the checker GAP (GAP-shape only — which faces
+        failed and by how much, never the checker's derived answer, per
+        the repo's redo discipline); the redo's verdict replaces the
+        original (checker-strict); one redo max.
+
 Harness neutrality: the session launch goes through ONE thin adapter
 (launch_session / build_claude_argv) — the pi face swaps at v0.2 by
 replacing the adapter alone. Tests drive the seam with an env/cmd-
@@ -101,6 +115,20 @@ DEFAULT_BUDGET_USD = 2.0
 DEFAULT_WALL_CAP_S = 1800.0
 INIT_TIMEOUT_S = 300.0
 CONV_TIMEOUT_S = 120.0
+
+# M1 (exp5): the wall partition the runner COMMUNICATES into each task
+# prompt (case-dispatch-budget-partition Rule 1 — orchestrators that
+# analyze solo past 60-90% wall dispatch too late to matter; the runner
+# owns the cap, so the cap must travel with the task).
+SOLO_PARTITION_FRACTION = 0.5     # solo/direct attempt hard cap (of wall)
+DELIVERABLE_RESERVE_S = 300.0     # final deliverable due before this much
+                                  # residual wall (the checker+harvest tail)
+
+# M2 (exp5): gap-redo round gates. A redo with less than this much wall or
+# budget left is dispatch theater (the card's own rule: workers need a
+# window that can actually finish) — suppressed, reason recorded.
+MIN_REDO_WALL_S = 600.0
+MIN_REDO_BUDGET_USD = 1.0
 
 # the loop prompt's mandated deliverable (the extractor's primary face)
 DELIVERABLE_DIR = ("runs", "deliverables")
@@ -351,6 +379,31 @@ def _harness_drift_event(out: Path, task: str, drifted: list[str],
         fh.write(json.dumps(row) + "\n")
 
 
+# ---------------------------------------------------------- wall partition
+def wall_partition_block(wall_cap_s: float) -> str:
+    """M1 (exp5): the WALL_BUDGET_PARTITION contract block. The runner
+    owns the wall cap and kills the session tree at it — a session that
+    was never told the cap cannot partition its own budget. This is
+    contract COMMUNICATION (the harness's enforcement parameters), not a
+    behavior rule: what the session does inside the partition is still
+    its decision. Rendered from the session's ACTUAL cap."""
+    total = int(round(wall_cap_s))
+    solo_cap = int(round(wall_cap_s * SOLO_PARTITION_FRACTION))
+    due = max(int(round(wall_cap_s - DELIVERABLE_RESERVE_S)), 0)
+    return (
+        "WALL_BUDGET_PARTITION (harness contract — the runner enforces "
+        "these caps by killing this session's whole process tree; "
+        "nothing written after the kill is collected):\n"
+        f"- TOTAL WALL CAP: {total}s.\n"
+        f"- SOLO/DIRECT ATTEMPT HARD CAP: {solo_cap}s. If the deliverable "
+        f"is not complete by then, a worker dispatch MUST occur by "
+        f"{solo_cap}s — attach the failure GAP (what was tried, where it "
+        "stalls) so the worker does not repeat the dead path.\n"
+        f"- FINAL DELIVERABLE DUE BY {due}s: write the deliverable file, "
+        "verify it exists and is non-empty, and only then spend any "
+        "residual window on verification polish.")
+
+
 # ------------------------------------------------------------------- init
 def _default_type() -> str:
     return DEFAULT_TYPES.get(sys.platform, "linux")
@@ -405,12 +458,15 @@ def init_workspace(task_dir: Path, work_root: Path,
 
 
 def init_cc_default_workspace(task_dir: Path,
-                              work_root: Path) -> tuple[Path, str]:
+                              work_root: Path,
+                              *, wall_cap_s: float | None = None
+                              ) -> tuple[Path, str]:
     """The CC-DEFAULT arm's neutral cwd: NO kunglao-init, no plugin
     scaffold — ONLY the unit's material at its task-relative paths
     (byte-exact; native scaffolds are ELF) plus TASK.md carrying the
-    anchors + deliverable contract verbatim. Returns (workspace,
-    prompt)."""
+    anchors + deliverable contract verbatim. ``wall_cap_s`` (M1) injects
+    the runner-owned WALL_BUDGET_PARTITION block into the prompt +
+    TASK.md. Returns (workspace, prompt)."""
     task_dir = Path(task_dir)
     task = ds.load_task(task_dir)
     work_root = Path(work_root)
@@ -430,7 +486,9 @@ def init_cc_default_workspace(task_dir: Path,
     prompt = (
         "Solve the reverse-engineering task in THIS working directory. "
         "Work fully autonomously: no questions, no user input.\n\n"
-        f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
+        + (wall_partition_block(wall_cap_s) + "\n\n"
+           if wall_cap_s is not None else "")
+        + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
         f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
         f"TASK MATERIAL — already in this working directory:\n{files}\n\n"
@@ -444,12 +502,16 @@ def init_cc_default_workspace(task_dir: Path,
 
 
 # ----------------------------------------------------------------- prompt
-def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str) -> str:
+def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
+                      *, wall_cap_s: float | None = None) -> str:
     """The loop brief: the anchors verbatim + the candidate contract + the
     mandated deliverable path. Structurally cannot leak ground truth: this
     function never receives it (same leakage posture as the #236 bare
     prompt — thresholds, oracles and the checker's existence stay
-    checker-side)."""
+    checker-side). ``wall_cap_s`` (M1, exp5) injects the runner-owned
+    WALL_BUDGET_PARTITION block as a first-class section directly after
+    the opening directive — the session cannot partition a cap it was
+    never told."""
     anchors = task["anchors"]
     ws = task["workspace_scaffold"]
     files = "\n".join(f"  - {f}" for f in ws["files"])
@@ -459,6 +521,129 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str) -> str:
         "further rounds cannot improve the result. Work fully "
         "autonomously: no questions, no user input — every decision is "
         "yours to make from the anchors below.\n\n"
+        + (wall_partition_block(wall_cap_s) + "\n\n"
+           if wall_cap_s is not None else "")
+        + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
+        f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
+        f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
+        f"ANALYSIS SUBJECT — the task's material, already in this "
+        f"workspace (also under bins/):\n{files}\n\n"
+        f"DELIVERABLE CONTRACT: {ws['candidate_contract']}\n\n"
+        f"MANDATORY FINAL STEP: before you finish, write the complete "
+        f"re-implementation as ONE source file to "
+        f"{deliverable_rel} in this workspace (create the directory if "
+        f"needed). This file is how the delivered answer is collected.")
+
+
+# --------------------------------------------------------------- gap redo
+def extract_checker_gap(res: dict) -> dict:
+    """M2 (exp5): GAP-shape extraction from the checker result — WHICH
+    faces failed and by how much, never the checker's derived answer
+    (the repo's redo discipline: the redo input is built by the runner's
+    gap extraction, DIFF conclusion lines are never pasted). Sources: the
+    structured FAILURE rows (codes + count-shaped details) and the
+    evidence doc's face aggregates (static: hit/required + missing
+    constant NAMES; replay: matched/count). A missing evidence organ
+    degrades the gap to the failure rows alone — never a crash."""
+    gap: dict = {
+        "verdict": res.get("verdict"),
+        "failures": [dict(f) for f in (res.get("failures") or [])],
+        "static_missing": [],
+        "replay": None,
+    }
+    ev_path = res.get("evidence")
+    if not ev_path:
+        return gap
+    try:
+        doc = json.loads(Path(ev_path).read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return gap
+    faces = doc.get("faces") or {}
+    static = faces.get("static") or {}
+    gap["static_missing"] = [str(m) for m in (static.get("missing") or [])]
+    replay = faces.get("replay") or {}
+    if replay:
+        gap["replay"] = {"matched": replay.get("matched"),
+                         "count": replay.get("count")}
+    return gap
+
+
+def render_gap_block(gap: dict) -> str:
+    """Render the extracted gap as the redo prompt's first-class CHECKER
+    GAP block (GAP-shape only)."""
+    lines = [
+        "CHECKER GAP (from the mechanical final check of the previously "
+        "delivered candidate — gap shape only: which faces failed and by "
+        "how much; no expected answers are carried or derivable from "
+        f"this block):",
+        f"- CHECK RESULT: {gap.get('verdict')}",
+    ]
+    for f in gap.get("failures") or []:
+        lines.append(f"- FAILURE code={f.get('code')} "
+                     f"detail=\"{f.get('detail')}\"")
+    if gap.get("static_missing"):
+        names = ", ".join(gap["static_missing"])
+        lines.append(f"- STATIC FACE: candidate is missing these required "
+                     f"constant names (names only): {names}")
+    if gap.get("replay"):
+        r = gap["replay"]
+        lines.append(f"- REPLAY FACE: {r.get('matched')}/{r.get('count')} "
+                     f"probe pairs reproduced")
+    return "\n".join(lines)
+
+
+def gap_redo_decision(verdict: str | None, session_record: dict, *,
+                      wall_cap_s: float, budget_usd: float) -> dict:
+    """M2 (exp5): whether ONE gap-redo round may run — pure decision over
+    (checker verdict, session spend). Allowed ONLY when a candidate was
+    delivered and FAILED the checker (not SKIP/REFUSED: there is no gap
+    to hand back) AND wall+budget remain above the dispatch-theater floor
+    (MIN_REDO_WALL_S / MIN_REDO_BUDGET_USD). Spend is the session's own
+    cost report; a missing report (test seam) reads as zero spent."""
+    spend = ((session_record.get("session_cost") or {})
+             .get("total_cost_usd"))
+    remaining_budget = budget_usd - (float(spend) if spend is not None
+                                     else 0.0)
+    remaining_wall = wall_cap_s - float(session_record.get("wall_s") or 0.0)
+    if (verdict or "").strip().upper() != "FAIL":
+        return {"allowed": False, "reason": "not_checker_fail",
+                "remaining_wall_s": remaining_wall,
+                "remaining_budget_usd": remaining_budget}
+    if remaining_wall < MIN_REDO_WALL_S:
+        return {"allowed": False, "reason": "wall_exhausted",
+                "remaining_wall_s": remaining_wall,
+                "remaining_budget_usd": remaining_budget}
+    if remaining_budget < MIN_REDO_BUDGET_USD:
+        return {"allowed": False, "reason": "budget_exhausted",
+                "remaining_wall_s": remaining_wall,
+                "remaining_budget_usd": remaining_budget}
+    return {"allowed": True, "reason": "checker_fail_within_budget",
+            "remaining_wall_s": remaining_wall,
+            "remaining_budget_usd": remaining_budget}
+
+
+def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
+                      gap_block: str, *, wall_cap_s: float,
+                      budget_usd: float) -> str:
+    """The gap-redo session's brief: same task (anchors + contract +
+    deliverable path, the workspace ITSELF carries the prior session's
+    state) + the CHECKER GAP block + the wall partition recomputed for
+    the redo's own remaining cap. Leakage posture identical to the loop
+    prompt: anchors and contract only — the gap adds shape, not
+    answers."""
+    anchors = task["anchors"]
+    ws = task["workspace_scaffold"]
+    files = "\n".join(f"  - {f}" for f in ws["files"])
+    return (
+        "/kunglao-agent GAP-REDO round in THIS workspace: the previous "
+        "session's delivered candidate FAILED the mechanical final "
+        "check. Do not restart the analysis from scratch — this "
+        "workspace already holds that session's state; target the GAP "
+        "below, re-derive the failing faces from the raw target "
+        "material, and update the SAME deliverable path. Work fully "
+        "autonomously: no questions, no user input.\n\n"
+        f"{wall_partition_block(wall_cap_s)}\n\n"
+        f"{gap_block}\n\n"
         f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
         f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
@@ -700,10 +885,12 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
 
     try:
         if arm == "cc-default":
-            ws, prompt = init_cc_default_workspace(tdir, out / "workspaces")
+            ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
+                                                   wall_cap_s=wall_cap_s)
         else:
             ws = init_workspace(tdir, out / "workspaces")
-            prompt = build_loop_prompt(tdir, task, deliverable_rel)
+            prompt = build_loop_prompt(tdir, task, deliverable_rel,
+                                       wall_cap_s=wall_cap_s)
     except RuntimeError as exc:
         # structured SKIP row, never a tier-wide crash: one unit's init
         # failure must not take the other units' measurement with it
@@ -768,11 +955,77 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             "evidence": "", "checker_rc": 2,
         }
 
+    # ---- M2 (exp5): ONE runner-driven gap-redo round. Fires only on a
+    # delivered-and-FAILED candidate with wall+budget remaining above the
+    # dispatch-theater floor; the redo session reuses the SAME workspace
+    # and receives the CHECKER GAP (gap-shape only) built by the runner's
+    # own extraction — never the checker stream pasted wholesale.
+    gap_redo: dict = {"ran": False, "reason": "", "decision": None,
+                      "session": None, "verdict_replaced": False}
+    redo_decision = gap_redo_decision(res["verdict"], rec,
+                                      wall_cap_s=wall_cap_s,
+                                      budget_usd=budget_usd)
+    gap_redo["decision"] = redo_decision
+    gap_redo["reason"] = redo_decision["reason"]
+    if redo_decision["allowed"]:
+        redo_wall = redo_decision["remaining_wall_s"]
+        redo_budget = redo_decision["remaining_budget_usd"]
+        redo_prompt = build_redo_prompt(
+            tdir, task, deliverable_rel,
+            render_gap_block(extract_checker_gap(res)),
+            wall_cap_s=redo_wall, budget_usd=redo_budget)
+        print(f"GAP_REDO task={tdir.name} starting "
+              f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
+              file=sys.stderr)
+        pre_redo = harness_surface_hashes()
+        redo_rec = launch_session(ws, redo_prompt, budget_usd=redo_budget,
+                                  wall_cap_s=redo_wall,
+                                  session_cmd=session_cmd,
+                                  plugin_dir=plugin_dir,
+                                  plugin=(arm != "cc-default"))
+        redo_drifted = harness_drift(pre_redo, harness_surface_hashes())
+        if redo_drifted:
+            redo_restored = restore_harness(redo_drifted)
+            _harness_drift_event(out, tdir.name, redo_drifted,
+                                 redo_restored)
+            print(f"HARNESS_DRIFT task={tdir.name} (gap-redo session) "
+                  f"files={len(redo_drifted)} "
+                  f"restored={len(redo_restored)}", file=sys.stderr)
+        if redo_rec["timed_out"]:
+            status = "exhausted"
+        elif redo_rec["returncode"] == 0:
+            status = "completed"
+        else:
+            status = _post_cap_status(redo_rec, redo_budget)
+        gap_redo["ran"] = True
+        gap_redo["session"] = {
+            "returncode": redo_rec["returncode"],
+            "wall_s": redo_rec["wall_s"],
+            "timed_out": redo_rec["timed_out"],
+            "session_cost": redo_rec["session_cost"],
+            "harness_contaminated": bool(redo_drifted),
+            "harness_drift_files": redo_drifted,
+            "prompt_sha256": hashlib.sha256(
+                redo_prompt.encode("utf-8")).hexdigest(),
+        }
+        # the redo's ledger rows are the task's ticks too
+        metrics = harvest(ws, baseline_rounds=baseline_rounds)
+        redo_cand = extract_candidate(ws, task)
+        if redo_cand is not None:
+            # checker-strict: the redo's verdict REPLACES the original
+            res = rnr.run_task(tdir, redo_cand, out)
+            cand = redo_cand
+            gap_redo["verdict_replaced"] = True
+        # a redo that lands no gradeable candidate leaves the original
+        # FAIL standing: SKIP must stay harness-only per the accounting
+        # ruling, and the attempt still ended on a failing deliverable
+
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
         checker_kind=res["checker_kind"], metrics=res["metrics"],
         verdict=res["verdict"], failures=res["failures"],
         evidence_ref=res["evidence"], arm=arm)
+    row["gap_redo"] = gap_redo["ran"]
     row["loop"] = {
         "status": status,
         "metrics": metrics,
@@ -789,6 +1042,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         "deliverable": str(cand) if cand else None,
         "prompt_sha256": hashlib.sha256(
             prompt.encode("utf-8")).hexdigest(),
+        "gap_redo": gap_redo,
     }
     for name, value in res["metrics"].items():
         print(ds.metric_line(f"{tdir.name}.{name}", value))
@@ -798,8 +1052,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     print(f"METRIC {tdir.name}.oracle_green_rate="
           f"{metrics['oracle_green_rate']:.4f}")
     print(f"METRIC {tdir.name}.tokens_cost={metrics['tokens_cost']}")
+    print(f"METRIC {tdir.name}.gap_redo_ran="
+          f"{int(gap_redo['ran'])}")
     print(f"VERDICT {tdir.name} {res['verdict']} "
-          f"(loop: {status}, decision={metrics['decision']})")
+          f"(loop: {status}, decision={metrics['decision']}"
+          f"{', gap_redo' if gap_redo['ran'] else ''})")
     return row
 
 
@@ -841,6 +1098,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
             1 for r in rows
             if r.get("loop", {}).get("session", {})
             .get("harness_contaminated")),
+        "gap_redo": sum(1 for r in rows if r.get("gap_redo")),
         "wall_seconds": round(time.time() - started, 2),
     }
     doc = {
@@ -860,6 +1118,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     print(f"RESULTS {results_path}")
     print(f"SUMMARY pass={summary['pass']} fail={summary['fail']} "
           f"skip={summary['skip']} exhausted={summary['exhausted']} "
+          f"gap_redo={summary['gap_redo']} "
           f"wall_seconds={summary['wall_seconds']}")
     return RC_OK, doc
 

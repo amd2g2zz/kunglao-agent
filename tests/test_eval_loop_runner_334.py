@@ -89,6 +89,10 @@ _STUB_SESSION = textwrap.dedent("""\
     (cwd / "session-argv.json").write_text(
         json.dumps(sys.argv), encoding="utf-8")
     mode = os.environ.get("K334_STUB_MODE", "candidate")
+    # exp5: every stub invocation APPENDS one call row — the gap-redo
+    # tests count sessions this way (session-argv.json stays last-argv).
+    with (cwd / "session-calls.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"argv": sys.argv, "mode": mode}) + "\\n")
     if mode == "escape":
         # exp3 Part A: the workspace-escape face — the session writes to a
         # HARNESS-SURFACE file OUTSIDE its cwd (the 2026-09-24 incident:
@@ -149,6 +153,20 @@ _STUB_SESSION = textwrap.dedent("""\
         # rc=1 WITH the claude --output-format json cost line: the CLI-side
         # --max-budget-usd stop face (print mode exits non-zero at/over
         # the cap — the 2026-09-24 sweep's session_error class)
+        print(json.dumps({"type": "result", "total_cost_usd": 15.14,
+                          "usage": {"input_tokens": 251052,
+                                    "output_tokens": 71887}}))
+        sys.exit(1)
+    if mode in ("candidate-bad", "budget-bad"):
+        # exp5 gap-redo faces: a DELIVERED candidate that FAILS the
+        # mechanical checker (wrong output on every probe → PAIR_MISMATCH)
+        (runs / "deliverables" / "candidate.py").write_text(
+            "def derive(b):\\n"
+            "    return len(b)  # deliberately wrong (test-only stub)\\n",
+            encoding="utf-8")
+    if mode == "budget-bad":
+        # FAIL verdict + CLI-side budget stop: cost >= cap so the
+        # gap-redo decision must deny on budget exhaustion
         print(json.dumps({"type": "result", "total_cost_usd": 15.14,
                           "usage": {"input_tokens": 251052,
                                     "output_tokens": 71887}}))
@@ -589,7 +607,7 @@ class TestCcDefaultArm:
         would spawn a real claude session inside a unit test."""
         monkeypatch.setenv("K334_STUB_MODE", "candidate")
 
-        def _ccd_stub(task_dir, root):
+        def _ccd_stub(task_dir, root, *, wall_cap_s=None):
             ws = lr.init_workspace(_task_dir(PY), root)
             return ws, "solve it; deliver to runs/deliverables/candidate.py"
 
@@ -759,3 +777,216 @@ class TestHarnessEscapeGate:
                                    session_cmd=_stub_session_cmd(tmp_path))
         assert rc == 0
         assert doc["summary"]["harness_contaminated"] == 1
+
+
+# ------------------------------ (k) wall partition injection (exp5 M1)
+# exp4 distillate (case-dispatch-budget-partition Rule 1): 6/7 orchestrated
+# sessions soloed past 60–90% wall before dispatching — the orchestrator
+# cannot partition a cap it was never told. The runner owns the cap, so
+# the cap must COMMUNICATE into each session's prompt as a first-class
+# WALL_BUDGET_PARTITION block. Contract communication, not a behavior rule.
+
+class TestWallPartitionBlock:
+    def test_block_is_first_class_and_derived_from_actual_cap(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "WALL_BUDGET_PARTITION" in block
+        assert "TOTAL WALL CAP: 3600s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 1800s" in block, \
+            "solo cap = 50% of wall (the card's ≤50%-rule)"
+        assert "FINAL DELIVERABLE DUE BY 3300s" in block, \
+            "deliverable due before the 300s checker/harvest reserve"
+        # derived, not hardcoded: a different cap renders different numbers
+        block2 = lr.wall_partition_block(7200.0)
+        assert "TOTAL WALL CAP: 7200s" in block2
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 3600s" in block2
+        assert "FINAL DELIVERABLE DUE BY 6900s" in block2
+
+    def test_loop_prompt_carries_partition_prominently(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        assert "WALL_BUDGET_PARTITION" in prompt
+        # first-class = near the top, before the goal anchors
+        assert prompt.index("WALL_BUDGET_PARTITION") \
+            < prompt.index("GOAL (verbatim)")
+
+    def test_loop_prompt_without_cap_stays_unchanged(self):
+        """Backward-compatible face: no cap → no block (pure prompt
+        builder; existing anchors/contract-only posture unchanged)."""
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py")
+        assert "WALL_BUDGET_PARTITION" not in prompt
+
+    def test_cc_default_prompt_carries_partition_too(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                  wall_cap_s=3600.0)
+        assert "WALL_BUDGET_PARTITION" in prompt
+        assert "WALL_BUDGET_PARTITION" in (ws / "TASK.md").read_text("utf-8"), \
+            "the contract lands in TASK.md as well (the session's own copy)"
+        assert "/kunglao-agent" not in prompt
+
+    def test_e2e_session_receives_partition_in_prompt(self, tmp_path,
+                                                      monkeypatch):
+        """THE M1 pin: the prompt the session ACTUALLY received carries
+        the partition block (stub records its argv)."""
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=1.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        argv = json.loads((ws / "session-argv.json").read_text("utf-8"))
+        assert "WALL_BUDGET_PARTITION" in argv[-1]
+        assert "TOTAL WALL CAP: 3600s" in argv[-1]
+
+    def test_partition_adds_no_ground_truth(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in prompt
+
+
+# ------------------------------ (l) gap-redo round (exp5 M2)
+# exp3/exp4 diagnosis: mod-crypto-l1 delivered a candidate the checker
+# failed 0/20 and NO redo round ran in-wall. M2: runner-driven, ONE
+# gap-redo session on checker-FAIL with wall+budget remaining; the redo
+# input is GAP-shape only (which faces failed, counts) — never the
+# checker's derived answer; the redo's verdict replaces (checker-strict).
+
+class TestGapRedo:
+    # ---- pure decision function
+    def test_fail_with_remaining_budget_and_wall_is_allowed(self):
+        rec = {"wall_s": 2980.0,
+               "session_cost": {"total_cost_usd": 8.0}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is True
+        assert d["reason"] == "checker_fail_within_budget"
+
+    def test_pass_verdict_never_redoes(self):
+        rec = {"wall_s": 100.0, "session_cost": {"total_cost_usd": 1.0}}
+        d = lr.gap_redo_decision("PASS", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "not_checker_fail"
+
+    def test_wall_exhausted_denies_redo(self):
+        rec = {"wall_s": 3600.0, "session_cost": {"total_cost_usd": 2.0}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "wall_exhausted"
+
+    def test_budget_exhausted_denies_redo(self):
+        rec = {"wall_s": 100.0,
+               "session_cost": {"total_cost_usd": 14.9}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "budget_exhausted"
+
+    def test_missing_cost_report_reads_as_zero_spent(self):
+        rec = {"wall_s": 100.0, "session_cost": None}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is True, \
+            "no cost report (stub seam) → assume nothing spent"
+
+    # ---- gap extraction shape (GAP-shape only)
+    def test_gap_block_is_shape_only_never_answers(self, tmp_path):
+        """The CHECKER GAP block carries failure codes/counts and constant
+        NAMES at most — never ground-truth values or published outputs."""
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        res = {
+            "verdict": "FAIL",
+            "failures": [{"code": "PAIR_MISMATCH",
+                          "detail": "pairs 0/16 match "
+                                    "(threshold 16 at ratio 1.0)"}],
+            "evidence": "",
+        }
+        block = lr.render_gap_block(lr.extract_checker_gap(res))
+        assert "CHECKER GAP" in block
+        assert "PAIR_MISMATCH" in block
+        assert "0/16" in block
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in block, "ground-truth constant value leaked"
+        for pair in (gt.get("published_pairs") or []):
+            out = pair.get("out")
+            if out is not None:
+                assert str(out) not in block, "published output leaked"
+
+    # ---- e2e through run_loop_task (stub seam)
+    def test_checker_fail_triggers_exactly_one_gap_redo(self, tmp_path,
+                                                        monkeypatch):
+        """checker-FAIL + budget remaining → exactly ONE redo session
+        (same workspace), its verdict replaces the original, the redo
+        prompt carries the GAP block, and the row is marked."""
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        calls = [json.loads(l) for l in
+                 (ws / "session-calls.jsonl").read_text("utf-8")
+                 .splitlines() if l.strip()]
+        assert len(calls) == 2, "original + exactly one gap-redo session"
+        assert row["gap_redo"] is True
+        loop = row["loop"]
+        assert loop["gap_redo"]["ran"] is True
+        assert loop["gap_redo"]["verdict_replaced"] is True
+        assert loop["gap_redo"]["decision"]["allowed"] is True
+        redo_prompt = calls[1]["argv"][-1]
+        assert "GAP-REDO" in redo_prompt
+        assert "CHECKER GAP" in redo_prompt
+        assert "PAIR_MISMATCH" in redo_prompt
+        assert "WALL_BUDGET_PARTITION" in redo_prompt, \
+            "the redo gets the partition recomputed for its remaining cap"
+        gt = json.loads((Path(__file__).resolve().parents[1]
+                         / "eval/v1/tasks/smoke/py-derive-v1/ground_truth.json")
+                        .read_text("utf-8"))
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in redo_prompt, "ground truth leaked into redo"
+        # checker-strict: the stub writes a bad candidate again → FAIL stands
+        assert row["verdict"] == "FAIL"
+        assert loop["session"]["returncode"] == 0, "first session"
+        assert loop["gap_redo"]["session"]["returncode"] == 0, "redo session"
+
+    def test_budget_exhausted_suppresses_redo(self, tmp_path, monkeypatch):
+        """FAIL verdict but session cost ≥ cap → NO redo session; the
+        original FAIL stands and the suppression reason is recorded."""
+        monkeypatch.setenv("K334_STUB_MODE", "budget-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        calls = [json.loads(l) for l in
+                 (ws / "session-calls.jsonl").read_text("utf-8")
+                 .splitlines() if l.strip()]
+        assert len(calls) == 1, "budget-exhausted: no redo session spawned"
+        assert row["gap_redo"] is False
+        assert row["verdict"] == "FAIL"
+        assert row["loop"]["gap_redo"]["ran"] is False
+        assert row["loop"]["gap_redo"]["reason"] == "budget_exhausted"
+        assert row["loop"]["status"] == "exhausted"
+
+    def test_tier_summary_counts_gap_redo(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad")
+        rc, doc = lr.run_loop_tier(
+            [PY], tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == 0
+        assert doc["summary"]["gap_redo"] == 1
