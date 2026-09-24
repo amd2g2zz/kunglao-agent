@@ -44,6 +44,13 @@ wall-cap SIGKILL (timed_out) and the CLI's own --max-budget-usd stop
 loop wrote before the kill is still harvested and graded. A sub-budget
 rc!=0 exit is a genuine session_error.
 
+Workspace-escape gate (exp3): the harness surface (agents/ hooks/
+skills/ scripts/) is hashed BEFORE each session spawn and AFTER its
+exit; on drift the files are restored from HEAD (git checkout --), a
+loud harness_drift event row lands in <out>/harness-events.jsonl, and
+the session row is marked harness_contaminated (diagnostic — the
+verdict is unaffected, grading already ran).
+
 Harness neutrality: the session launch goes through ONE thin adapter
 (launch_session / build_claude_argv) — the pi face swaps at v0.2 by
 replacing the adapter alone. Tests drive the seam with an env/cmd-
@@ -242,6 +249,106 @@ def _session_cost(stdout_text: str) -> dict | None:
                 "output_tokens": usage.get("output_tokens"),
             }
     return None
+
+
+# ------------------------------------------------------ harness escape gate
+# The 2026-09-24 sweep caught a spawned session ESCAPING its workspace: an
+# Edit targeting the worktree-level agents/kunglao-redteam.md (a checker
+# permission-widening). Workspace isolation is advisory — a
+# bypassPermissions session can write anywhere. The gate hashes the
+# harness surface before spawn + after exit, restores drift from HEAD and
+# marks the session row (diagnostic; the verdict is unaffected — grading
+# already ran).
+ENV_HARNESS_ROOT = "KUNGLAO_HARNESS_ROOT"
+HARNESS_DIRS = ("agents", "hooks", "skills", "scripts")
+HARNESS_DRIFT_ACTION = "harness_drift"  # registered: event_taxonomy.EMIT_ACTIONS
+
+
+def _harness_root() -> Path:
+    env = os.environ.get(ENV_HARNESS_ROOT)
+    return Path(env) if env else SCRIPT_DIR.parent
+
+
+def harness_surface_hashes(root: Path | None = None) -> dict[str, str]:
+    """Scoped sha256 over the harness surface (agents/ hooks/ skills/
+    scripts/): relpath -> digest. __pycache__ excluded (bytecode is not
+    surface). Runs before each session spawn and after its exit; any
+    delta is a workspace escape by that session."""
+    root = Path(root) if root is not None else _harness_root()
+    out: dict[str, str] = {}
+    for d in HARNESS_DIRS:
+        base = root / d
+        if not base.is_dir():
+            continue
+        for p in sorted(base.rglob("*")):
+            if not p.is_file() or "__pycache__" in p.parts:
+                continue
+            rel = f"{d}/{p.relative_to(base).as_posix()}"
+            out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def harness_drift(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Drifted relpaths between the two surface hashes: changed, added
+    AND deleted all count (sorted for determinism)."""
+    return sorted(k for k in set(before) | set(after)
+                  if before.get(k) != after.get(k))
+
+
+def restore_harness(drifted: list[str],
+                    root: Path | None = None) -> list[str]:
+    """Restore the drifted subset to HEAD. Tracked files (modified or
+    deleted) come back via `git checkout --`; session-created additions
+    (untracked — no HEAD bytes to restore) are removed. Returns the
+    paths actually restored; unrestored names stay in the event row."""
+    root = Path(root) if root is not None else _harness_root()
+    if not drifted:
+        return []
+    tracked, added = [], []
+    for rel in drifted:
+        probe = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--", rel],
+            capture_output=True, text=True)
+        (tracked if probe.stdout.strip() else added).append(rel)
+    restored: list[str] = []
+    if tracked:
+        co = subprocess.run(
+            ["git", "-C", str(root), "checkout", "--", *tracked],
+            capture_output=True, text=True)
+        if co.returncode == 0:
+            restored.extend(tracked)
+        else:
+            print(f"[eval_loop_runner] harness restore failed: "
+                  f"{(co.stderr or '').strip()[-500:]}", file=sys.stderr)
+    for rel in added:
+        try:
+            (root / rel).unlink()
+            restored.append(rel)
+        except OSError as exc:
+            print(f"[eval_loop_runner] harness addition removal failed "
+                  f"({rel}): {exc}", file=sys.stderr)
+    return restored
+
+
+def _harness_drift_event(out: Path, task: str, drifted: list[str],
+                         restored: list[str]) -> None:
+    """The loud event row: one JSON line per drift incident in
+    <out>/harness-events.jsonl (the sweep's grep face)."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    row = {
+        "schema": "harness-event/1",
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "task": task,
+        "action": HARNESS_DRIFT_ACTION,
+        "drifted": drifted,
+        "restored": restored,
+        "unrestored": [f for f in drifted if f not in restored],
+        "remedy": "git checkout -- <files> (restore from HEAD); "
+                  "session row marked harness_contaminated",
+    }
+    with (out / "harness-events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
 
 
 # ------------------------------------------------------------------- init
@@ -612,16 +719,31 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                        "checker_rc": 2, "session": {
                            "returncode": None, "wall_s": 0.0,
                            "timed_out": False,
-                           "session_cost": None},
+                           "session_cost": None,
+                           "harness_contaminated": False,
+                           "harness_drift_files": []},
                        "workspace": None, "deliverable": None,
                        "prompt_sha256": None}
         print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
         return row
     baseline_rounds = count_snapshot_rows(ws)
+    pre_surface = harness_surface_hashes()
     rec = launch_session(ws, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
                          plugin_dir=plugin_dir,
                          plugin=(arm != "cc-default"))
+    post_surface = harness_surface_hashes()
+    drifted = harness_drift(pre_surface, post_surface)
+    contaminated = bool(drifted)
+    if drifted:
+        restored = restore_harness(drifted)
+        _harness_drift_event(out, tdir.name, drifted, restored)
+        print(f"HARNESS_DRIFT task={tdir.name} files={len(drifted)} "
+              f"restored={len(restored)} action={HARNESS_DRIFT_ACTION} "
+              f"(session escaped its workspace; surface restored from "
+              f"HEAD; row marked harness_contaminated)", file=sys.stderr)
+        print(f"HARNESS_DRIFT task={tdir.name} files={len(drifted)} "
+              f"restored={len(restored)}")
     if rec["timed_out"]:
         status = "exhausted"
     elif rec["returncode"] == 0:
@@ -660,6 +782,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             "wall_s": rec["wall_s"],
             "timed_out": rec["timed_out"],
             "session_cost": rec["session_cost"],
+            "harness_contaminated": contaminated,
+            "harness_drift_files": drifted,
         },
         "workspace": str(ws),
         "deliverable": str(cand) if cand else None,
@@ -713,6 +837,10 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         "refused": sum(1 for r in rows if r["verdict"] == "REFUSED"),
         "exhausted": sum(1 for r in rows
                          if r.get("loop", {}).get("status") == "exhausted"),
+        "harness_contaminated": sum(
+            1 for r in rows
+            if r.get("loop", {}).get("session", {})
+            .get("harness_contaminated")),
         "wall_seconds": round(time.time() - started, 2),
     }
     doc = {

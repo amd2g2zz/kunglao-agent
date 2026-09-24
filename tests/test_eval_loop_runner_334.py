@@ -89,6 +89,16 @@ _STUB_SESSION = textwrap.dedent("""\
     (cwd / "session-argv.json").write_text(
         json.dumps(sys.argv), encoding="utf-8")
     mode = os.environ.get("K334_STUB_MODE", "candidate")
+    if mode == "escape":
+        # exp3 Part A: the workspace-escape face — the session writes to a
+        # HARNESS-SURFACE file OUTSIDE its cwd (the 2026-09-24 incident:
+        # an Edit on the worktree-level agents/kunglao-redteam.md), then
+        # falls through to the normal ledger path (grading still runs).
+        tgt = os.environ.get("K334_ESCAPE_TARGET", "")
+        if tgt:
+            p = Path(tgt)
+            p.write_text(p.read_text(encoding="utf-8") + "# ESCAPE-JUNK\\n",
+                         encoding="utf-8")
     if mode == "slow":
         (cwd / ".convergence_ledger.jsonl").write_text(
             json.dumps({"open_count": 0}) + "\\n", encoding="utf-8")
@@ -589,3 +599,163 @@ class TestCcDefaultArm:
                                session_cmd=_stub_session_cmd(tmp_path))
         assert row["arm"] == "cc-default"
         assert row["verdict"] in ("PASS", "FAIL", "SKIP")
+
+
+# --------------------------------- (j) harness escape gate (exp3 Part A)
+# The 2026-09-24 sweep caught a spawned analysis session ESCAPING its
+# workspace TWICE (activity log 2026-09-24T04:18:44, session
+# 2026-09-24_68ea2493): an Edit tool call targeting the worktree-level
+# agents/kunglao-redteam.md — a checker permission-widening. Workspace
+# isolation is advisory; bypassPermissions sessions can write anywhere.
+# The gate: hash the harness surface (agents/ hooks/ skills/ scripts/)
+# BEFORE each session spawn and AFTER session exit; on drift emit a loud
+# event row (EMIT_ACTIONS-registered harness_drift), restore the drifted
+# files from HEAD (git checkout --), and mark the session row
+# harness_contaminated (diagnostic — the verdict is unaffected, grading
+# already ran on the workspace's own deliverable).
+
+class TestHarnessEscapeGate:
+    def _fake_root(self, tmp_path: Path) -> Path:
+        """A synthetic harness root: the four surface dirs + a git HEAD —
+        restore proves itself against a real checkout, never the live
+        repo tree (parallel-safe)."""
+        import subprocess as sp
+
+        root = tmp_path / "repo"
+        for rel in ("agents/kunglao-redteam.md", "hooks/gate.py",
+                    "skills/kunglao-agent/SKILL.md", "scripts/runner.py"):
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(f"original {rel}\n", encoding="utf-8")
+        pyc = root / "scripts" / "__pycache__"
+        pyc.mkdir(parents=True)
+        (pyc / "runner.pyc").write_bytes(b"\x00")
+
+        def git(*args: str) -> None:
+            r = sp.run(["git", "-C", str(root), *args],
+                       capture_output=True, text=True)
+            assert r.returncode == 0, r.stderr
+
+        git("init", "-q")
+        git("add", "-A")
+        git("-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-qm", "base")
+        return root
+
+    def test_hashes_cover_four_surface_dirs_skip_pycache(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        h = lr.harness_surface_hashes(root)
+        assert "agents/kunglao-redteam.md" in h
+        assert "hooks/gate.py" in h
+        assert "skills/kunglao-agent/SKILL.md" in h
+        assert "scripts/runner.py" in h
+        assert not any("__pycache__" in k for k in h), \
+            "pycache is not harness surface"
+
+    def test_default_root_is_the_repo(self):
+        h = lr.harness_surface_hashes()
+        assert any(k.startswith("agents/") for k in h)
+        assert any(k.startswith("hooks/") for k in h)
+        assert any(k.startswith("scripts/") for k in h)
+
+    def test_drift_reports_changed_added_deleted(self):
+        before = {"a.md": "1", "b.md": "2", "c.md": "3"}
+        assert lr.harness_drift(before, dict(before)) == []
+        after = {"a.md": "1", "b.md": "X", "d.md": "4"}
+        assert lr.harness_drift(before, after) == \
+            ["b.md", "c.md", "d.md"], \
+            "changed + deleted (c) + added (d) are drift, sorted"
+        after_del = {"a.md": "1", "c.md": "3"}
+        assert lr.harness_drift(before, after_del) == ["b.md"], \
+            "a deleted surface file is drift too"
+
+    def test_restore_reverts_modified_file_from_head(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        p = root / "agents" / "kunglao-redteam.md"
+        before = lr.harness_surface_hashes(root)
+        p.write_text(p.read_text(encoding="utf-8") + "TAMPERED\n",
+                     encoding="utf-8")
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["agents/kunglao-redteam.md"]
+        restored = lr.restore_harness(drifted, root=root)
+        assert restored == drifted
+        assert "TAMPERED" not in p.read_text(encoding="utf-8"), \
+            "git checkout -- put HEAD bytes back"
+
+    def test_restore_reverts_deleted_file_from_head(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        p = root / "skills" / "kunglao-agent" / "SKILL.md"
+        before = lr.harness_surface_hashes(root)
+        p.unlink()
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["skills/kunglao-agent/SKILL.md"]
+        assert lr.restore_harness(drifted, root=root) == drifted
+        assert p.is_file(), "deleted tracked file restored from HEAD"
+
+    def test_restore_removes_untracked_addition(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        before = lr.harness_surface_hashes(root)
+        rogue = root / "agents" / "rogue-tool.md"
+        rogue.write_text("rogue\n", encoding="utf-8")
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["agents/rogue-tool.md"]
+        assert lr.restore_harness(drifted, root=root) == drifted
+        assert not rogue.exists(), \
+            "session-created addition removed (not in HEAD to restore)"
+
+    def test_escape_session_detected_reverted_marked(self, tmp_path,
+                                                     monkeypatch):
+        """THE incident face: a session writes OUTSIDE its workspace onto
+        the harness surface — detected, reverted from HEAD, the session
+        row is marked harness_contaminated, the loud event row lands, and
+        the verdict is UNAFFECTED (grading already ran)."""
+        root = self._fake_root(tmp_path)
+        target = root / "agents" / "kunglao-redteam.md"
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET", str(target))
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert "ESCAPE-JUNK" not in target.read_text(encoding="utf-8"), \
+            "the escape write was reverted from HEAD"
+        sess = row["loop"]["session"]
+        assert sess["harness_contaminated"] is True
+        assert sess["harness_drift_files"] == ["agents/kunglao-redteam.md"]
+        assert row["verdict"] == "PASS", \
+            "verdict unaffected: grading already ran"
+        ev = json.loads((tmp_path / "harness-events.jsonl")
+                        .read_text(encoding="utf-8").splitlines()[-1])
+        assert ev["action"] == "harness_drift"
+        assert ev["task"] == PY
+        assert ev["drifted"] == ["agents/kunglao-redteam.md"]
+        assert ev["restored"] == ["agents/kunglao-redteam.md"]
+
+    def test_clean_session_leaves_no_contamination(self, tmp_path,
+                                                   monkeypatch):
+        root = self._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert row["loop"]["session"]["harness_contaminated"] is False
+        assert row["loop"]["session"]["harness_drift_files"] == []
+        assert not (tmp_path / "harness-events.jsonl").exists()
+
+    def test_harness_drift_is_registered_emit_word(self):
+        import event_taxonomy
+        assert "harness_drift" in event_taxonomy.EMIT_ACTIONS
+
+    def test_tier_summary_counts_contaminated_sessions(self, tmp_path,
+                                                       monkeypatch):
+        root = self._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET",
+                           str(root / "agents" / "kunglao-redteam.md"))
+        rc, doc = lr.run_loop_tier([PY], tmp_path, budget_usd=1.0,
+                                   wall_cap_s=60.0,
+                                   session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == 0
+        assert doc["summary"]["harness_contaminated"] == 1
