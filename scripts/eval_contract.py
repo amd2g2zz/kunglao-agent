@@ -85,6 +85,16 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                   "target_surface": "text"},
     "tf-chain4": {"suffix": ".txt", "response_language": "Text answer document",
                   "target_surface": "text"},
+    # ---- chain tier (eval_chain registry, issue 370) ---------------------
+    # multi-layer decryption-chain units: the analysis subject is the
+    # committed obfuscated bundle (text surface); the graded candidate is
+    # the FINAL derivation re-exposed after every layer is peeled.
+    "chain-js": {"suffix": ".js", "response_language": "JavaScript",
+                 "target_surface": "text"},
+    "chain-py": {"suffix": ".py", "response_language": "Python",
+                 "target_surface": "text"},
+    "chain-go": {"suffix": ".go", "response_language": "Go",
+                 "target_surface": "text"},
 }
 
 

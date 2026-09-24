@@ -10,6 +10,64 @@ release (see the mapping table at the end).
 
 ### Added
 
+- **Multi-layer decryption-chain eval tier (#370)**: the capability
+  ladder gains units where the answer sits behind 2-6 nested protection
+  stages and pass REQUIRES peeling every layer — obfuscation (custom
+  string-table/packer loader), 花指令 junk-code (provably-inert opaque
+  predicates + no-op forests that pollute naive decompilation), encrypted
+  config (key derived at RUNTIME from machine-fingerprint constants via
+  a seeded ARX KDF — never a literal), a custom ARX cipher core with
+  planted non-standard constants (stock crypto fails every pair by
+  construction), a 伪装层 decoy-path (a WORKING parallel implementation
+  whose outputs are well-formed garbage; branch selection keyed to an
+  integrity fold), and an anti-debug gate that silently steers to the
+  decoy when tripped plus 3-lane core rotation (7 units: 2×L1, 3×L2,
+  2×L3 across js/py/go under `eval/v1/tasks/chain/`, eval-v1.4). Every
+  unit's manifest records the mint-time anti-shortcut audit — naive
+  strings/constant scans re-run against the committed artifact FAIL to
+  yield the answer, the honeypot is the only key-shaped literal, decoy
+  outputs differ from truth on every pair — and mint refuses a unit
+  whose audit would pass. Grading upgrades from binary to dense:
+  `scripts/eval_chain_grader.py` scores layers-completed (0..N) from the
+  analysis workspace's layer artifacts via mechanical checkpoint ops
+  (digest/exec/markers/clean), while the final answer face reuses the
+  mechanical replay checker; the decoy-following trajectory scores
+  partial by construction, making decoy cost visible to the scheduling
+  experiments.
+- **Unified RLVA reward (#366)**: one rollout ledger + one deterministic
+  settlement engine + model-score whitelist — the whole RLVA reward is ONE
+  accounting system (owner ruling 2026-09-23). WRITE: `scripts/rollout_ledger.py`
+  owns `runs/rollout-ledger.jsonl` (append-only JSONL, one row schema
+  `{rollout_id, kind, anchor, ts, signals[], reward, settlement}`; kinds are a
+  centrally-registered open enum — `task` / `self_distill` live now,
+  `hybrid_distill` pre-registered for #365, whose distill_rollout rows MUST
+  conform to this schema; appends take an flock on
+  `runs/.rollout-ledger.lock`; the byte prefix is invariant — settlements are
+  AMENDMENT rows and the fold is last-wins). SETTLE: `scripts/reward_settlement.py`
+  is the ONLY place reward is computed — a deterministic rules-table engine
+  over `references/contracts/reward-rules.yaml` (versioned; every rule cites
+  its band, reward and evidence requirement). Multi-signal anti-pollution:
+  no rule has fewer than two required signals; adverse (0.0) needs
+  misleading-declaration AND zero-recall AND no-citation; helped (0.5, full
+  1.0) needs consumption AND downstream positive reference; single-signal or
+  partial-evidence rows settle NEUTRAL (`<kind>/pending`) pending
+  corroboration; a signal-set change reopens a settled rollout
+  (DEFERRED→wake→PROVEN upgrades its band). U3 whitelist: model-produced
+  scores enter only as signals marked `advisory` — excluded from rule
+  matching by construction — and the engine's import surface is
+  allowlist-pinned by test (no model-call path, no shell-out). TASK rollouts
+  keep the oracle checker verdict as hard currency (`task/oracle-green`
+  reward 1.0, never demoted; red 0.0). EMISSION ADAPTERS (domain state
+  untouched): the rollup tick gained an additive face — task rows from the
+  oracle-status/claim-closure surfaces, self_distill rows diffed from the
+  lessons library — then the engine settles pending rows and emits ONE
+  registered event (`rollout_settled`); a failed settlement face never
+  blocks the terminal transition. U4 prior feed: `compute_priors` gains one
+  additive source namespace (`rollout_ledger`) reading settled rows through
+  THE one interface (`rollout_ledger.settled(kind, window)`) —
+  SETTLED_GREEN/HELPED → alpha, SETTLED_RED/ADVERSE → beta, NEUTRAL →
+  nothing; the prior math itself is untouched.
+>>>>>>> origin/dev
 - **Runtime-state rotation induction (#341)**: runtime values (keys, tokens, sessions, nonces, cookies) are no longer recorded as timeless truths. WRITE side: a dynamic-source fact about a volatile subject must carry `temporal_scope: runtime`, `subject_slot`, `value_fingerprint` (sha256 of the value only), `captured_at` (ISO ts) — `hooks/write_guard.py` gains a runtime-fact leg (`scripts/runtime_facts.check_fact_postimage`) that REJECTS the fact otherwise; static-source facts are never required to carry the fields. JOIN side: the `rotation_induction` mechanism (registered in `scripts/mechanisms.yaml`, tick channel, cheap) groups runtime facts by (claim_id, `subject_slot`); ≥2 distinct `value_fingerprint`s under one slot emit `runtime_value_rotation` (EMIT_ACTIONS-registered), auto-file the rotation hypothesis as the COMPETITOR of the implicit static premise, and write a pending synthesis note recording the fingerprint series — idempotent on an unchanged fingerprint set, a grown set refires with the fuller series (superseding note, hypothesis never duplicated). GATE side: a dispatch on a rotation-flagged claim without the `rotation-experiment: rotation-characterization` marker is REJECTED with guidance pointing at the new reference card `references/re-library/dynamic/rotation-characterization.md` (derivation-point hook / T,T+Δ double capture / trigger-isolation matrix / rotation-input source trace). HEALTH face: the rotation event feeds the convergence ledger (operator_action row) and `convergence_health`'s verdict face renders `rotation_events` + names the marker requirement in the STALLED/SPINNING action text. Hygiene pinned by test: fingerprints only — raw key material never reaches events/ledger/hypotheses/notes/state.
 - **Premise epistemics (#340)**: environment premises become clocks with
   evidence, not facts. Blocker schema v2 (`templates/state/blocker.md`)

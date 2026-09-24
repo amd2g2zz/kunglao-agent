@@ -1,5 +1,56 @@
 # eval-v1 changelog
 
+## eval-v1.4 (#370 chain tier — multi-layer decryption chains)
+
+- Corpus layout extended: `eval/v1/tasks/chain/` with 7 constructed
+  units across three language families (owner directive 2026-09-24:
+  the ladder's simple units pass by constant lookup; these units pass
+  ONLY by peeling every protection stage). One seed per unit
+  (37001-37007), every constant synthetic and seeded:
+  - `chain-l1-js-v1` / `chain-l1-py-v1` (L1, 2 layers) — obfuscation
+    (string-table loader + encoded payload) -> encrypted config with a
+    runtime-derived key; answer = ARX MAC keyed with the sealed
+    config-only key.
+  - `chain-l2-js-v1` / `chain-l2-py-v1` / `chain-l2-go-v1` (L2, 3
+    layers) — + custom ARX cipher core restored from the decrypted
+    config constants (go face: packed field-blob packer + stdin
+    protocol).
+  - `chain-l3-js-v1` / `chain-l3-py-v1` (L3, 6 layers) — + dedicated
+    junk-code layer (opaque predicates + no-op forests, provably
+    inert), decoy-path layer (a WORKING parallel implementation with
+    visible plausible constants whose outputs are well-formed garbage,
+    branch selection keyed to an integrity/fingerprint fold), and an
+    anti-debug gate (debugger/timing window) that silently steers to
+    the decoy branch when tripped, plus 3-lane core rotation.
+- Anti-shortcut construction (the win-kdf-l1 rule, ladder-wide):
+  runtime keys derived from machine-fingerprint constants via the ARX
+  KDF and asserted absent as literals; answer constants exist only
+  inside the encrypted config; a honeypot key is the ONLY exact-64-hex
+  literal (post-peel naive key grab lands exactly wrong); decoy
+  outputs differ from truth on EVERY published pair. Each unit's
+  `manifest.json` (kunglao-eval-chain-manifest/1) records the
+  mint-time shortcut audit — entry scan, post-peel payload scan,
+  constant scan (with decoy bait hits), runtime-key absence, junk
+  pollution baseline (polluted vs stripped), decoy baseline — and mint
+  REFUSES a unit whose audit would pass (live-re-run by tests).
+- Dense per-layer grading: `scripts/eval_chain_grader.py`
+  (kunglao-eval-chain-scores/1) scores LAYERS-COMPLETED (0..N) from
+  the analysis workspace's `layer_out/` artifacts; checkpoint ops are
+  mechanically verified per layer — digest (byte-exact peels:
+  unpacked payload, decrypted config), exec (artifacts reproduce the
+  shared probe rows byte-exact under their own toolchain, rotation
+  lanes included), markers (true-path branch condition, gate trip
+  predicate cited), clean (junk markers absent). Toolchain-absent exec
+  ops degrade to structured SKIP, never a false FAIL.
+- Final answer face: the existing mechanical replay machinery
+  (`eval_checker.py`) extended additively with the chain dispatch
+  ({i, payload, lane} probes; js/py harness face + go stdin face;
+  expected outputs recomputed checker-side from the seed model).
+- Task-unit schema: `chain` tier + `eval-v1.4` version enum
+  (schemas/eval-task-v1.json + validator in scripts/eval_dataset.py);
+  chain-js/chain-py/chain-go consume the #352 single-source contract
+  (all three drivers pinned in tests).
+
 ## eval-v1.3 (#356 toolflex tier — tool-combination flexibility)
 
 - Corpus layout extended: `eval/v1/tasks/toolflex/` with 3 constructed
