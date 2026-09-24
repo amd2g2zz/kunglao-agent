@@ -371,11 +371,11 @@ files:
   - src: scripts/eval_chain_grader.py
     dest: .claude/scripts/eval_chain_grader.py
     kind: scaffold
-    sha256: 1a154530b0f6be12023ec53c1cc8c623dcc9dfa993865ac0ac73d3b8ab5af353
+    sha256: aa51ed5550bb9d7641c4ac3c5d3e7ea4c7f2c5ed6a6f94e41991df48bf55828c
   - src: scripts/eval_chain_mint.py
     dest: .claude/scripts/eval_chain_mint.py
     kind: scaffold
-    sha256: f715bca72ccc4fe32d8c20cfec719e69015deb7e0de908982a936a3fb954b2bc
+    sha256: 8a55089692a6a170e5adb607838f1545d34d5f894a509dd333953eed84887eeb
   - src: scripts/eval_chain_render.py
     dest: .claude/scripts/eval_chain_render.py
     kind: scaffold
