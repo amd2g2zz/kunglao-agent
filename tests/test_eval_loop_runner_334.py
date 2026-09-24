@@ -28,8 +28,11 @@ session (budget caps) -> wait -> harvest the ledgers the REAL loop wrote
       (claim-register.yaml), the #136 task_terminal_settlement row
       (runs/logs/kunglao-*.jsonl);
   (e) BUDGET — budget exhaustion is a TERMINAL metric row
-      (loop.status=exhausted), never a crash: the runner kills an
-      over-wall-cap session and still harvests + emits the row;
+      (loop.status=exhausted), never a crash, on BOTH kill faces: the
+      runner kills an over-wall-cap session (timed_out) and the CLI stops
+      itself at/over --max-budget-usd (rc=1 + cost report) — either way
+      the row is still harvested + graded; a sub-budget rc=1 stays
+      session_error (a genuine crash);
   (f) EXTRACTOR — the loop's deliverable maps to checker candidate form
       (runs/deliverables/candidate<suffix> primary, deterministic
       workspace fallback scan, None -> structured BAD_CANDIDATE row);
@@ -91,6 +94,9 @@ _STUB_SESSION = textwrap.dedent("""\
             json.dumps({"open_count": 0}) + "\\n", encoding="utf-8")
         time.sleep(60)
         sys.exit(0)
+    if mode == "crash":
+        # rc=1 with NO cost report: a genuine mid-session crash face
+        sys.exit(1)
     runs = cwd / "runs"
     (runs / "logs").mkdir(parents=True, exist_ok=True)
     (runs / "deliverables").mkdir(parents=True, exist_ok=True)
@@ -129,6 +135,14 @@ _STUB_SESSION = textwrap.dedent("""\
     src = sorted((cwd / "bins").glob("*.py"))[0]
     (runs / "deliverables" / "candidate.py").write_text(
         src.read_text(encoding="utf-8"), encoding="utf-8")
+    if mode == "budget":
+        # rc=1 WITH the claude --output-format json cost line: the CLI-side
+        # --max-budget-usd stop face (print mode exits non-zero at/over
+        # the cap — the 2026-09-24 sweep's session_error class)
+        print(json.dumps({"type": "result", "total_cost_usd": 15.14,
+                          "usage": {"input_tokens": 251052,
+                                    "output_tokens": 71887}}))
+        sys.exit(1)
 """)
 
 
@@ -310,6 +324,45 @@ class TestBudgetExhaustion:
             "no deliverable landed before the kill: structured SKIP"
         assert any(f["code"] == "BAD_CANDIDATE" for f in row["failures"])
         assert row["loop"]["session"]["timed_out"] is True
+
+    def test_cli_budget_cap_exit_is_terminal_exhausted_row(
+            self, tmp_path, monkeypatch):
+        """The CLI-side budget face: `claude -p --max-budget-usd` stops the
+        session ITSELF at/over the cap and exits rc=1 (the 2026-09-24
+        sweep's session_error class: 9/12 units rc=1 at $15.0x against a
+        $15.0 cap). The module contract — budget exhaustion is a TERMINAL
+        metric row, never a crash — covers BOTH kill faces: the runner's
+        wall cap AND the CLI's budget stop."""
+        monkeypatch.setenv("K334_STUB_MODE", "budget")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        loop = row["loop"]
+        assert loop["status"] == "exhausted", \
+            "CLI budget-cap exit (rc=1, cost>=cap) is budget exhaustion: " \
+            "the terminal exhausted row, never session_error"
+        assert loop["session"]["timed_out"] is False, \
+            "the runner never fired the wall cap: the CLI stopped itself"
+        assert loop["session"]["returncode"] == 1
+        assert loop["session"]["session_cost"][
+            "total_cost_usd"] == pytest.approx(15.14)
+        assert row["verdict"] == "PASS", \
+            "whatever the loop wrote before the kill is still harvested " \
+            "and graded (the stub's candidate is checker-green)"
+
+    def test_sub_budget_rc1_stays_session_error(self, tmp_path, monkeypatch):
+        """The guard face: rc=1 WITHOUT a budget-cap cost report is a
+        genuine session crash — session_error must survive for it."""
+        monkeypatch.setenv("K334_STUB_MODE", "crash")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert row["loop"]["status"] == "session_error", \
+            "sub-budget rc=1 is a real crash: the misclassification fix " \
+            "must not swallow it"
+        assert row["loop"]["session"]["session_cost"] is None
+        assert row["verdict"] == "SKIP", \
+            "the crash left no deliverable: structured BAD_CANDIDATE row"
 
 
 # ------------------------------------------------------------- (f) extractor

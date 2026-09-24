@@ -37,9 +37,12 @@ no mocked telemetry. The runner's ONLY jobs:
     5. RESULTS           kunglao-eval-results/1 rows with arm=loop —
                          comparable with the #236 bare rows.
 
-Budget/cancellation: budget exhaustion (wall cap kill) is a TERMINAL
-metric row (loop.status=exhausted), never a crash — whatever the loop
-wrote before the kill is still harvested and graded.
+Budget/cancellation: budget exhaustion is a TERMINAL metric row
+(loop.status=exhausted), never a crash, on BOTH kill faces — the runner's
+wall-cap SIGKILL (timed_out) and the CLI's own --max-budget-usd stop
+(print mode exits rc=1 with a cost report at/over the cap) — whatever the
+loop wrote before the kill is still harvested and graded. A sub-budget
+rc!=0 exit is a genuine session_error.
 
 Harness neutrality: the session launch goes through ONE thin adapter
 (launch_session / build_claude_argv) — the pi face swaps at v0.2 by
@@ -560,6 +563,18 @@ def extract_candidate(workspace: Path, task: dict) -> Path | None:
 
 
 # ------------------------------------------------------------------- runs
+def _post_cap_status(rec: dict, budget_usd: float) -> str:
+    """rc!=0 post-session classification. The CLI-side ``--max-budget-usd``
+    stop (print mode exits rc=1 with a cost report at/over the cap) is
+    BUDGET EXHAUSTION — the same TERMINAL exhausted row as the runner's
+    wall-cap kill, never a crash (the 2026-09-24 sweep mislabeled 9/12
+    units this way). Any other rc!=0 is a genuine session_error."""
+    cost = (rec.get("session_cost") or {}).get("total_cost_usd")
+    if cost is not None and float(cost) >= budget_usd:
+        return "exhausted"
+    return "session_error"
+
+
 def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_BUDGET_USD, wall_cap_s: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
@@ -612,7 +627,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     elif rec["returncode"] == 0:
         status = "completed"
     else:
-        status = "session_error"
+        status = _post_cap_status(rec, budget_usd)
 
     metrics = harvest(ws, baseline_rounds=baseline_rounds)
     cand = extract_candidate(ws, task)
