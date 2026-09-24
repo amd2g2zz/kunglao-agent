@@ -759,11 +759,11 @@ def _execute_target(task_id: str, tdir: Path, cfg: dict,
     else:
         probe = tmp_path / "probe.py"
         probe.write_text(
-            "import importlib.util, json, sys\n"
-            "spec = importlib.util.spec_from_file_location("
-            '"cand", sys.argv[1])\n'
-            "mod = importlib.util.module_from_spec(spec)\n"
-            "spec.loader.exec_module(mod)\n"
+            "import json, sys\n"
+            "sys.path.insert(0, %r)\n" % str(_SCRIPTS) +
+            "from _hooks_path import load_module_by_path\n"
+            "mod = load_module_by_path('kunglao_chain_candidate', "
+            "sys.argv[1])\n"
             "for r in json.load(open(sys.argv[2])):\n"
             "    print(json.dumps({\"i\": r[\"i\"], "
             "\"out\": mod.derive(r[\"payload\"], r[\"lane\"])}))\n",

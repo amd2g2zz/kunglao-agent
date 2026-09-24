@@ -55,13 +55,12 @@ SCHEMA_SCORES = ch.SCHEMA_SCORES
 RC_PASS, RC_FAIL, RC_REFUSED, RC_SKIP = 0, 1, 2, 3
 
 _PY_HARNESS = '''"""kunglao-eval chain probe harness (py face)."""
-import importlib.util
 import json
 import sys
 
-spec = importlib.util.spec_from_file_location("cand", sys.argv[1])
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
+sys.path.insert(0, "%SCRIPTS_DIR%")
+from _hooks_path import load_module_by_path  # #863 Family B delegation
+mod = load_module_by_path("kunglao_chain_candidate", sys.argv[1])
 for row in json.load(open(sys.argv[2], encoding="utf-8")):
     out = mod.derive(row["payload"], row.get("lane", 0))
     print(json.dumps({"i": row["i"], "out": out}))
@@ -180,7 +179,9 @@ def _op_probe_run(ws: Path, op: dict, probes: list[dict],
             stdin_text = None
         elif op["lang"] == "python3":
             harness = tmp_path / "harness.py"
-            harness.write_text(_PY_HARNESS, encoding="utf-8")
+            harness.write_text(
+                _PY_HARNESS.replace("%SCRIPTS_DIR%", str(SCRIPT_DIR)),
+                encoding="utf-8")
             cmd = [exe, str(harness), str(path.resolve()), str(rows_file)]
             stdin_text = None
         else:  # go: stdin protocol face (rows on stdin, rows on stdout)
