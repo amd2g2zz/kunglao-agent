@@ -46,6 +46,21 @@ tools:
     cost_hint: {mem_gb: 0.5, time: cheap}
     quality: {crypto:decode: high}
 
+  # -- crypto: captured-param cipher-shape classifier (issue #359 wave-2 distillation) --
+  - name: cipher_identify
+    category: crypto
+    capability: crypto:identify
+    description: Classifies captured cipher-param shapes
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "captured param string (positional or --in file, single token)", output: "stdout JSON: charset / decoded_byte_len / entropy_bits_per_byte / printable_ratio + ranked candidates [{family, confidence, why, next_check}] over md5/sha-*/sm3/aes/des-family/sm4/rsa/jwt/uuid/unix-timestamp/base64-text"}
+    when_not: "classifier only — never decodes or proves; perform the actual decode/verify via crypto-tool; unrecognized garbage yields an empty candidate list (a valid answer), only unreadable tool input exits 2"
+    provider: cipher-identify
+    produces: [crypto:identify]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {crypto:identify: mid}
+
   # -- ghidra: function-level static reconnaissance (issue #293 absorption, sa-ghidra final) --
   - name: ghidra-recon
     category: ghidra
@@ -607,3 +622,54 @@ tools:
     requires: []
     cost_hint: {mem_gb: 0.1, time: cheap}
     quality: {web:triage: mid}
+
+  # issue #359 wave-2 distillation: obfuscation-technique inventory + routing
+  # over RAW or deobfuscated bundles. Advisory static heuristic; per-technique
+  # count evidence; recommendation routes to a REGISTERED next tool only.
+  - name: js_obfuscation_detect
+    category: web
+    capability: js:obfuscation-detect
+    tier: T1
+    cost_tier: probe
+    input_output: {input: "raw or deobfuscated JS bundle(s) as file paths", output: "JSON report per file: techniques [{name, confidence, evidence}] (packer/string-array+rotation/control-flow-flattening/opaque-predicates/dead-code/webpack/aaencode/hex-renamed) + recommendation {route, next_tool, why}"}
+    description: Detects obfuscation, routes next tool
+    when_not: "advisory routing only — no transforms, no family proof; run the routed registered tool (webcrack-deobfuscate / jsvmp_triage / js_env_diagnose) for the real work; on raw minified input it reads shape, not semantics"
+    provider: js-obfuscation-detect
+    produces: [js:obfuscation-detect]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: probe}
+    quality: {js:obfuscation-detect: mid}
+
+  # issue #359 wave-2 distillation: bare Node-VM sandbox diagnosis for
+  # obfuscated web JS. Proxy-monitored global reports the missing browser
+  # env paths — the mechanical first step of the env-patching loop.
+  - name: js_env_diagnose
+    category: web
+    capability: js:env-diagnose
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "target JS file (--target) + optional --prelude stub files + --timeout-ms + --node binary", output: "stdout JSON: success / error / undefined_paths (missing browser globals) / access_stats / console_tail"}
+    description: Diagnoses missing browser env in sandbox
+    when_not: "not an execution environment for evidence collection — diagnosis only (the miss list is the patch list); requires a node binary on the VM/analysis host; a target crash or sandbox timeout is a RESULT (exit 0), only tool-level breakage exits 2"
+    provider: js-env-diagnose
+    produces: [js:env-diagnose]
+    requires: []
+    cost_hint: {mem_gb: 0.2, time: cheap}
+    quality: {js:env-diagnose: mid}
+
+  # issue #359 wave-2 distillation: differential verification of candidate
+  # signer/encryptor functions against captured request samples. emit a
+  # browser-side harness, apply promotes only fully-verified candidates.
+  - name: sign_candidate_verify
+    category: web
+    capability: js:sign-verify
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "candidates JSON {name, locator 'global:|expr:', samples [{args, expected}]} + harness results JSON", output: "emit: harness .js + plan .json; apply: verified candidates JSON (verified=true only when EVERY sample ran+matched and count clears --minimum-matches) + stdout summary"}
+    description: Differentially verifies signer claims
+    when_not: "verification step, not discovery — candidates must already be recovered (static read or runtime trace); never promotes on partial matches (every planned sample must run and match); malformed artifacts exit 2"
+    provider: sign-candidate-verify
+    produces: [js:sign-verify]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {js:sign-verify: mid}

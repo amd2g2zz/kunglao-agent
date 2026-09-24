@@ -140,3 +140,29 @@ def classify(shape, trace):
 - Concrete flattening/MBA countermeasure patterns (tool-level, verify currency): [anti-analysis.md](anti-analysis.md#control-flow-flattening-advanced)
 - Flattening inside a sign-recovery ladder: [native-sign-recovery.md](../../android/signing/native-sign-recovery.md)
 - Unpacking before this card applies: [stacked-protections.md](../../android/protections/stacked-protections.md)
+
+## Tool pointers — pre-unpack screening + sandbox diagnosis (mechanical)
+
+The ordered checks above are the eyeball pass; the registered CLIs make
+them mechanical. Route FIRST, transform second:
+
+```bash
+# technique inventory + routing (raw or deobfuscated bundles)
+python tools/web/js_obfuscation_detect.py bundle.min.js
+#   recommendation.route = unpack-first        -> packer bootstrap
+#                        = unbundle            -> bundler markers
+#                        = webcrack-deobfuscate-> string-array/CFF family
+#                        = vmp-triage          -> run jsvmp_triage next
+#                        = sandbox-decode      -> self-decoding payload
+#                        = direct-read         -> no known shape
+
+# self-decoding payloads (face-text/packed): execute in the bare sandbox
+# instead of the browser — the miss list IS the environment patch list
+python tools/web/js_env_diagnose.py --target payload.js --timeout-ms 3000
+```
+
+Falsifier: a `direct-read` route with `_0x` identifiers on disk means the
+detector's string-array probe missed — widen the fixture set before
+trusting clean verdicts. A sandbox diagnosis that reports NO missing
+globals while the bundle still fails in the browser means the difference
+is fingerprinting, not environment (switch lanes, do not keep patching).

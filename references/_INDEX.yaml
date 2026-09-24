@@ -84,7 +84,7 @@ files:
   references/re-library/patterns/debugging/patterns-debugging.md: 9009c257d26d2cfe95394ac6ddbee9efeefbd2983d3f831992a4f969a13ca103
   references/re-library/patterns/decode/patterns-decode.md: 0a3b2fca6a4f157665008f0974f3d8fe76016dca50fcf7df818b1c5f72f49a2c
   references/re-library/patterns/simulation/patterns-simulation.md: 35cdbeb743c8b18baa4f3e343c86e1909687eb5128e3fee47056a29572394c78
-  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 385fdb310f5176f8fa57d717d4ea2cdb4f80229fc0adf2c1dd36863c836a7481
+  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 87aa11332da91f36da2a47b55aeaafcaaeaeeb4ac27f49f08d984666ad0b287f
   references/re-library/patterns/vm/vm-protection-anatomy.md: 6df22f57c4f1600e78242c28aff2f4d7ce7b10047f4f45c647b0e6c085490ad5
   references/re-library/platforms/catalog/platforms.md: d6108a8c43586be7d3bcb679fe4c48a6735aaba1582f663853840e0389041605
   references/re-library/platforms/elf/platforms-elf.md: 589b3227da632491a565eba0a456606054dfd5a25cb4937369a9dbdcfb606da3
@@ -100,13 +100,13 @@ files:
   references/re-library/tools/static/tools.md: 0b5d7010b1d14c4e9baa2e2077f81a4201ef699ddb7961216a38c7196c242ee2
   references/re-library/web/crawler/web-crawler-engineering.md: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
   references/re-library/web/external-distilled/_GAP-REPORT.md: cc1cc3e7abac349ec5190d95abb3300f529bff3361e6879a1e31275cc6fd740d
-  references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: 424943b15c089d9054763ff1231d81de2ee09c350e6796350b5d9d8d4cba83b4
-  references/re-library/web/external-distilled/external-delivery-verification-gates.md: b14694d0b82ac04373e3e5b71dcc3e67b3fc1ec49ec4d934b1901fc3f0418b68
-  references/re-library/web/external-distilled/external-env-stub-generation.md: 3106b4d93f4d6d11ac540eea4f820b65ba5e0ad21df2ff1f0d4720e556a3795f
+  references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
+  references/re-library/web/external-distilled/external-delivery-verification-gates.md: 2ceda5a3d365003edccb14876b950a3d9709be97d79d6701d12ecab361037bbc
+  references/re-library/web/external-distilled/external-env-stub-generation.md: 3689222e622fe7e608e9a54ebaaffac71038a61c84fc4bf0e8689a0b2fc9e25d
   references/re-library/web/external-distilled/external-minimal-intervention-observation.md: 3d7b5437ad12df2dbc4a5ea0642de8c555cde23c3301a66f2bc8c40f75df9b6f
-  references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: a36403f3e7badc8cc01eef0150ba7706dcf5a459f67341024b1e258249baf6cb
+  references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: 4b8c39f0b2eb8d56745d464bd3e52c2c51564b2b6b9ab7c672ec898adaa788f7
   references/re-library/web/external-distilled/external-protocol-failure-ladder.md: 8f7e0db5d5a3810b85e6d36bc942481697f6bc67fd06f1f9221ba2c453cf5a4c
-  references/re-library/web/labs/web-re-quickref.md: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
+  references/re-library/web/labs/web-re-quickref.md: 07a2218f2a1f7fa2c479432b353de65b1c3f0a40ca93dc9731633efcbb5d1d0e
   references/re-library/web/risk-control/web-risk-control.md: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
   references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
   references/schemas/schema.md: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
