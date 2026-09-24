@@ -272,6 +272,92 @@ class TestAntiShortcutLive:
                         audit["decoy_baseline"][str(p["i"])])
 
 
+# ------------------------------- (c2) INDEPENDENT peel parity (anti-circle)
+class TestPeelParity:
+    """An independent decoder (no mint functions) recovers each
+    committed target's layer-1 product and it MUST satisfy the
+    recorded layer-1 digest — the anti-circular face the mint's own
+    reference workspaces cannot provide."""
+
+    @staticmethod
+    def _independent_decode(task_id):
+        """Decode the committed target with regex-parsed constants only
+        (eval_chain_targets._encode_hex/_storage are NOT used)."""
+        import hashlib
+        import re as _re
+        unit = ch.UNIT_BY_ID[task_id]
+        target = (_tdir(task_id) / ch.FAMILIES[unit["family"]]["target"]
+                  ).read_text(encoding="utf-8")
+        gt = _gt(task_id)
+        want = gt["chain"]["layers"][0]["ops"][0]["sha256"]
+        if unit["family"] == "chain-js":
+            chunks = _re.findall(r"'([0-9a-f]+)'",
+                                 _re.search(r"var _p = \[(.*?)\n\];",
+                                            target, _re.S).group(1))
+            order = [int(x) for x in _re.search(
+                r"var _o = \[([0-9, ]+)\];", target).group(1).split(",")]
+            key = [int(x) for x in _re.search(
+                r"var _k = \[([0-9, ]+)\];", target).group(1).split(",")]
+            h = "".join(chunks[i] for i in order)
+            raw = bytes.fromhex(h)
+            out = bytes(b ^ key[i % 16] for i, b in enumerate(raw))
+        elif unit["family"] == "chain-py":
+            chunks = _re.findall(r"'([0-9a-f]+)'",
+                                 _re.search(r"_P = \[(.*?)\n\]",
+                                            target, _re.S).group(1))
+            order = [int(x) for x in _re.search(
+                r"_O = \[([0-9, ]+)\]", target).group(1).split(",")]
+            key = [int(x) for x in _re.search(
+                r"_K = \[([0-9, ]+)\]", target).group(1).split(",")]
+            h = "".join(chunks[i] for i in order)
+            raw = bytes.fromhex(h)
+            out = bytes(b ^ key[i % 16] for i, b in enumerate(raw))
+        else:
+            chunks = _re.findall(r'"([0-9a-f]+)"',
+                                 _re.search(r"var PACKED = \[\]string\{(.*?)\n\}",
+                                            target, _re.S).group(1))
+            order = [int(x) for x in _re.search(
+                r"var PACK_ORDER = \[\]int\{\n\t([0-9, ]+),\n\}",
+                target).group(1).split(",")]
+            key = [int(x) for x in _re.search(
+                r"var PACK_KEY = \[\]byte\{([0-9, ]+)\}",
+                target).group(1).split(",")]
+            h = "".join(chunks[i] for i in order)
+            raw = bytes.fromhex(h)
+            assert raw[:7] == b"CF70PK1"
+            out = bytes(b ^ key[i % 16]
+                        for i, b in enumerate(raw[7:]))
+        return hashlib.sha256(out).hexdigest(), want
+
+    @pytest.mark.skipif(not CHAIN_TASKS.is_dir(), reason="corpus lands with the mint commit")
+    def test_independent_peel_satisfies_layer1_digest(self):
+        for task_id in EXPECTED_TASK_IDS:
+            got, want = self._independent_decode(task_id)
+            assert got == want, f"{task_id}: independent peel {got} != recorded {want}"
+
+    @pytest.mark.skipif(not CHAIN_TASKS.is_dir(), reason="corpus lands with the mint commit")
+    def test_grader_greens_an_independently_recovered_go_workspace(self, tmp_path):
+        """The F1 regression face: a correct analyst's go peel (from the
+        independent decoder) must satisfy the go unit's checkpoint."""
+        gr = eval_chain_grader
+        task_id = "chain-l2-go-v1"
+        got, want = self._independent_decode(task_id)
+        assert got == want
+        unit = ch.UNIT_BY_ID[task_id]
+        cfg = mint_mod.stage_cfg(unit)
+        cfg["task_id"] = task_id
+        cfg["unit"] = unit
+        ws = tmp_path / "ws"
+        for rel, data in mint_mod.reference_workspace(cfg).items():
+            f = ws / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(data)
+        # overwrite layer-1 with the INDEPENDENTLY recovered doc
+        (ws / "layer_out" / "1-unpacked.json").write_bytes(
+            mint_mod.tt.go_blob_doc_text(cfg).encode("utf-8"))
+        rc, scores = gr.grade(task_id, ws)
+        assert scores["layers_completed"] == scores["layers_total"] == 3
+
 # ------------------------------------------------- (d) mint gate is real
 class TestMintGate:
     def test_refusal_when_answer_constant_is_visible(self):
