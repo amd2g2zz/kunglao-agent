@@ -120,3 +120,25 @@ recovery task (external-algorithm-recovery-chains.md).
 Companions: [web-re-quickref.md](../labs/web-re-quickref.md) (Path B seed),
 [web-risk-control.md](../risk-control/web-risk-control.md) (detection-point
 attribution loop).
+
+## Tool section — the mechanical diagnose loop (registered CLI)
+
+The loop above is mechanical end to end; `tools/web/js_env_diagnose.py`
+(tag `js:env-diagnose`, registered in `tools/_INDEX.yaml`) runs it as a CLI.
+Reach for it when: the bundle must execute outside the browser and the
+missing-env list is unknown — the miss list replaces the eyeball pass
+as step 1 of the planning order.
+
+```bash
+# first diagnosis: bare Node-VM sandbox, zero browser env — the miss list
+# IS the patch list
+python tools/web/js_env_diagnose.py --target bundle.js
+
+# verify a stub suppresses its miss before writing it into the workspace
+python tools/web/js_env_diagnose.py --target bundle.js --prelude stub_navigator.js
+```
+
+Read the `undefined_paths` from the JSON verdict as the module-selection
+step, one sandbox iteration per patch round; `success:true` with the
+target still misbehaving in the browser means the residue is
+fingerprinting, not environment (switch lanes — do not keep patching).

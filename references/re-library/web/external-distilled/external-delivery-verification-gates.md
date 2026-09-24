@@ -117,3 +117,28 @@ workflow + anti-patterns),
 (machine_check record shape),
 [loop-stage-gates](../../method/process/loop-stage-gates.md) (stage
 completion discipline).
+
+## Tool section — the offline fixture gate, mechanical (registered CLI)
+
+The acceptance layering's first gate (offline fixture regression) has a
+registered CLI: `tools/web/sign_candidate_verify.py` (tag
+`js:sign-verify`).
+Reach for it when: a recovered candidate is about to feed a delivery
+claim — differential verification against captured samples is the gate,
+and a candidate that is not `verified` may not pass it:
+
+```bash
+# emit a harness that calls the recovered candidate with every captured
+# sample and fingerprints the outputs
+python tools/web/sign_candidate_verify.py emit \
+    --candidates artifacts/candidates.json --out harness.js
+# run harness.js in the page console, save its JSON, then:
+python tools/web/sign_candidate_verify.py apply \
+    --results artifacts/results.json --candidates artifacts/candidates.json \
+    --out artifacts/verified.json --minimum-matches 2
+```
+
+The promotion rule IS the gate algebra: `verified=true` only when every
+planned sample ran and matched and the count clears the minimum — partial
+matches and never-ran samples stay false with per-sample reasons. A
+candidate that is not `verified` may not feed a delivery claim.

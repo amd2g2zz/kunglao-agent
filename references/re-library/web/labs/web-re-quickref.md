@@ -242,3 +242,26 @@ Index only — open on demand when the main workflow dead-ends:
 - **Stacked protections** — pinning/RASP/obfuscation/encryption as
   orthogonal layers over any route, plus the recon order
   ([stacked-protections.md](../../android/protections/stacked-protections.md)).
+
+## Captured-param cipher-shape classifier (mechanical)
+
+Before touching JS to hunt an algorithm, classify the captured value's
+shape — charset × decoded length × entropy rank the family candidates and
+tell you what to look for in the code:
+
+```bash
+python tools/crypto/cipher_identify.py "e10adc3949ba59abbe56e057f20f883e"
+#   charset=hex_lower, decoded 16 bytes -> md5(high), md4/ntlm(low)
+
+python tools/crypto/cipher_identify.py --in captured_param.txt
+#   base64 decodable, 16-aligned, entropy ~8 -> aes(high) with key/iv hunt
+#   base64url x3 dot segments                -> jwt(high): decode claims,
+#                                               sign input = segments 1+2
+```
+
+Read the `next_check` of the top candidate as the search target in the JS:
+hash families -> the concatenation order and any secret prefix/suffix;
+block ciphers -> the key schedule and mode; `base64-text` -> stop, it is
+an encoding, not encryption. The classifier never proves anything — the
+proof is the differential verification of the recovered function against
+captured samples (`tools/web/sign_candidate_verify.py emit` + `apply`).

@@ -112,3 +112,24 @@ Companions: [web-re-quickref.md](../labs/web-re-quickref.md) (peel loop +
 routing table), [jsvmp-triage.md](../vm/jsvmp-triage.md) (VM boundary stop
 condition), [vm-deobfuscation-routing](../../patterns/vm/vm-deobfuscation-routing.md)
 (lane gate).
+
+## Tool section — mechanical entry detection & routing (registered CLI)
+
+The entry-selection step above has a registered CLI:
+`tools/web/js_obfuscation_detect.py` (tag `js:obfuscation-detect`).
+Reach for it when: a raw bundle arrives and the peel order is undecided —
+detect before the first transform, and let the route pick the entry.
+
+```bash
+python tools/web/js_obfuscation_detect.py bundle.min.js
+# recommendation.route = unpack-first         -> packer bootstrap
+#                      = unbundle             -> bundler markers
+#                      = webcrack-deobfuscate -> string-array/CFF family
+#                      = vmp-triage           -> confirm with jsvmp_triage
+#                      = sandbox-decode       -> self-decoding payload
+```
+
+The route names are the peel-order decisions of this card, emitted
+mechanically with per-technique count evidence. Falsifier: a
+`direct-read` route while `_0x` identifiers sit on disk means the
+detector missed — widen fixtures before trusting clean verdicts.
