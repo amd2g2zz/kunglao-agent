@@ -1831,7 +1831,7 @@ files:
   - src: tools/static/web_gitnexus_demo.py
     dest: .claude/tools/static/web_gitnexus_demo.py
     kind: asset
-    sha256: 5601a053d2bd453d874495a3677905b16f5858c994a9b937405def4b17fc1e3a
+    sha256: 098ff1a0b6a39f9d82016f3abf3754f5e801204981bc314db9e5f87957ae277f
   - src: tools/static/yara-gen.py
     dest: .claude/tools/static/yara-gen.py
     kind: asset
