@@ -60,6 +60,24 @@ The source workspace opens read-only; writes land in a sandbox. `--configs-json`
 
 **Anti-memorization by design.** Targets are constructed and seed-mutated; checkers mint held-out probes the candidate never saw, so digest-table copying fails; and the eval corpus is contractually excluded from any distillation source — the discipline lives in [`eval/README.md`](eval/README.md).
 
+## Benchmarks
+
+Measured on the built-in 12-unit L1 eval matrix: static reverse-engineering targets across JS, x86/ARM64 ELF, and Windows PE; oracle-graded with a strict checker — byte-anchored deliverables only, no partial credit, per-session caps of $15 / 3600s, pass@1.
+
+| Runtime | pass@1 | Session cost |
+|---|---|---|
+| kunglao v0.1.5.post2 | 5/12 | ~$135 total (13 sessions) |
+| **kunglao v0.1.6 (this release)** | **10/12** | ~$120 total across 4 governed iteration rounds |
+| plain Claude Code (default harness, no plugin) | 12/12 | ~$11.4 total |
+
+Reading the table honestly:
+
+- v0.1.6 vs v0.1.5.post2 is a measured +5 units on identical harness, units, and caps (same runner, same checker, same oracle).
+- The 12 units are single-session-tractable: a frontier model with default tools saturates them, and plain Claude Code does so at the lowest cost. kunglao's loop does not beat that ceiling on static single-session units — the remaining 2 units are budget-bound in loop mode, not capability-bound (documented).
+- Where kunglao differentiates is not static single-session units. It is long-horizon layered work — the chain tier (2-6 nested protection layers) where both runtimes pass but kunglao's L3 passes were authored by specialist workers through claim decomposition — plus verification discipline (oracle + blind red-team on every claim) and the dynamic lanes (Android/Windows/Linux VM work) opening in v0.2.
+
+Methodology: identical harness for all rows (same runner, same checker, same units); pass@1, k=1; exhausted counts as fail; harness-surface integrity gate active; no runtime patching during measurement.
+
 ## Road to v0.2: the pi-agent migration
 
 The headline direction: **v0.2 migrates kunglao fully onto the [pi agent stack](https://github.com/earendil-works/pi)** — the embeddable `pi-ai` (unified LLM API) and `pi-agent` core libraries — and kunglao ships as an **independent application**, not a Claude Code plugin. The full design lives in card [#319](https://github.com/amd2g2zz/kunglao-agent/issues/319).
