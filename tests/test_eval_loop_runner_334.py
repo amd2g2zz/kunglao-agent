@@ -129,6 +129,16 @@ _STUB_SESSION = textwrap.dedent("""\
     (runs / "mission_ledger.yaml").write_text(
         _y.safe_dump({"mission": {"history": [vec, vec2]}}),
         encoding="utf-8")
+    if mode == "late-dispatch":
+        # exp8 I4: dispatch signals landing AFTER the ledger's last
+        # sample cursor (signals_rows=3) — the settle face must count
+        # the late dispatch (exp4 read 0 ticks on all 7 units).
+        (runs / "signals.jsonl").write_text(
+            json.dumps({"ts": "t1", "kind": "dispatch", "claim": "C-101"}) + "\\n"
+            + json.dumps({"ts": "t2", "kind": "deliver", "claim": "C-101"}) + "\\n"
+            + json.dumps({"ts": "t3", "kind": "verify"}) + "\\n"
+            + json.dumps({"ts": "t4", "kind": "dispatch", "claim": "C-104"}) + "\\n",
+            encoding="utf-8")
     (runs / "oracle-status.json").write_text(json.dumps({
         "schema": "oracle-status/1",
         "cases": {"case-a": {"status": "pass"},
@@ -990,3 +1000,276 @@ class TestGapRedo:
             session_cmd=_stub_session_cmd(tmp_path))
         assert rc == 0
         assert doc["summary"]["gap_redo"] == 1
+
+
+# ------------------------------ (m) EXP-8 high-ROI injections
+# Five contract/injection-level closures, each backed by measured evidence:
+#   I1 deliverable schedule (post2: 5/5 deliverers pass, 7/7 non-deliverers
+#      die; exp5 arm-kdf delivered AT budget death — 0/16 graded on a rush)
+#   I2 layer checkpoints (exp4: 13/14 chain sessions scored 0/N despite
+#      real peels — the layer_out/ convention was invisible)
+#   I3 family self-check (mod-crypto-l1 delivered a 0/20 candidate an
+#      in-session probe would have caught)
+#   I4 factor settle (exp4: dispatch-tick face 0 on all 7 units — the
+#      last value_m sample predated the 60-90%-wall dispatches)
+#   I5 T1_DIRECT affirmative (CC-default 12/12 proves the direct path
+#      exists; the demoted toolfirst advisory left no affirmative)
+
+CHAIN_JS = "chain-l1-js-v1"
+CHAIN_GO = "chain-l2-go-v1"
+CRYPTO = "mod-crypto-l1"
+
+
+def _tier_task_dir(tier: str, task_id: str) -> Path:
+    d = ROOT / "eval" / "v1" / "tasks" / tier / task_id
+    assert d.is_dir(), f"task dir not found: {d}"
+    return d
+
+
+class TestDeliverableScheduleBlock:
+    """I1: the wall-partition block carries the deliverable schedule."""
+
+    def test_block_carries_deliverable_schedule(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "DELIVERABLE_SCHEDULE" in block
+        assert "continuously improve" in block
+        assert "CURRENT on-disk state is what gets graded" in block
+
+    def test_schedule_is_derived_from_actual_cap(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "draft the candidate on disk by 1800s" in block, \
+            "the 50%-wall mark (solo cap) is the draft deadline"
+        block2 = lr.wall_partition_block(7200.0)
+        assert "draft the candidate on disk by 3600s" in block2
+
+    def test_loop_prompt_carries_schedule(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        assert "DELIVERABLE_SCHEDULE" in prompt
+
+    def test_cc_default_prompt_carries_schedule_too(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        _ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                   wall_cap_s=3600.0)
+        assert "DELIVERABLE_SCHEDULE" in prompt
+
+
+class TestLayerCheckpointsBlock:
+    """I2: chain prompts name the grader's exact layer_out/ paths."""
+
+    def test_js_unit_paths_exact(self):
+        paths = lr.chain_layer_paths(_tier_task_dir("chain", CHAIN_JS))
+        assert paths == ["layer_out/1-unpacked.js", "layer_out/2-config.json"]
+
+    def test_go_unit_paths_exact(self):
+        paths = lr.chain_layer_paths(_tier_task_dir("chain", CHAIN_GO))
+        assert paths == ["layer_out/1-unpacked.json", "layer_out/2-config.json",
+                         "layer_out/3-core.go"]
+
+    def test_non_chain_unit_has_no_paths(self):
+        assert lr.chain_layer_paths(_task_dir(PY)) == []
+        assert lr.chain_layer_paths(_tier_task_dir("release", CRYPTO)) == []
+
+    def test_block_lists_exact_paths(self):
+        block = lr.layer_checkpoints_block(
+            ["layer_out/1-unpacked.js", "layer_out/2-config.json"])
+        assert "LAYER_CHECKPOINTS" in block
+        assert "- layer_out/1-unpacked.js" in block
+        assert "- layer_out/2-config.json" in block
+        assert "a layer counts only if its file exists and verifies" in block
+
+    def test_chain_prompt_carries_block(self):
+        tdir = _tier_task_dir("chain", CHAIN_JS)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.js",
+            wall_cap_s=3600.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        assert "LAYER_CHECKPOINTS" in prompt
+        assert "layer_out/1-unpacked.js" in prompt
+        assert "layer_out/2-config.json" in prompt
+
+    def test_chain_prompt_leaks_no_ground_truth(self):
+        """The block lifts PATH STRINGS only — no digests, no probe
+        payloads, no expected outputs."""
+        tdir = _tier_task_dir("chain", CHAIN_JS)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.js",
+            wall_cap_s=3600.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        for layer in gt["chain"]["layers"]:
+            for op in layer["ops"]:
+                assert op.get("sha256") not in prompt, "digest leaked"
+        for p in gt["chain"]["probes"]:
+            assert str(p.get("payload")) not in prompt, "payload leaked"
+            assert str(p.get("out")) not in prompt, "expected output leaked"
+
+    def test_non_chain_prompt_has_no_layer_block(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0, layer_paths=[])
+        assert "LAYER_CHECKPOINTS" not in prompt
+
+    def test_redo_prompt_carries_layer_block(self):
+        tdir = _tier_task_dir("chain", CHAIN_GO)
+        task = ds.load_task(tdir)
+        prompt = lr.build_redo_prompt(
+            tdir, task, "runs/deliverables/candidate.go", "CHECKER GAP: x",
+            wall_cap_s=1800.0, budget_usd=5.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        assert "layer_out/3-core.go" in prompt
+
+
+class TestFamilySelfCheckBlock:
+    """I3: registered families get their probe pattern injected."""
+
+    def test_map_has_exactly_three_entries(self):
+        assert lr.FAMILY_PROBE_SHAPES == {
+            "mod-crypto-native": "crypto",
+            "arm-native-kdf": "kdf",
+            "req-sign": "sign",
+        }
+
+    def test_crypto_block_is_pair_match(self):
+        block = lr.self_check_block("mod-crypto-native")
+        assert block.startswith("SELF_CHECK:")
+        assert "PAIR-MATCH PROBE" in block
+        assert "EVERY pair" in block
+
+    def test_kdf_block_is_static_constant(self):
+        block = lr.self_check_block("arm-native-kdf")
+        assert "STATIC-CONSTANT PROBE" in block
+
+    def test_sign_block_is_sign_verify(self):
+        block = lr.self_check_block("req-sign")
+        assert "SIGN-VERIFY PROBE" in block
+
+    def test_unregistered_family_gets_no_block(self):
+        assert lr.self_check_block("py-derive") == ""
+        assert lr.self_check_block(None) == ""
+
+    def test_missing_template_degrades_to_directive(self, monkeypatch,
+                                                    tmp_path):
+        monkeypatch.setattr(lr, "SELFCHECK_TEMPLATE_DIR", tmp_path)
+        block = lr.self_check_block("mod-crypto-native")
+        assert block.startswith("SELF_CHECK:")
+        assert "PAIR-MATCH" not in block, "snippet absent, directive stays"
+
+    def test_release_unit_prompt_carries_self_check(self):
+        tdir = _tier_task_dir("release", CRYPTO)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.py", wall_cap_s=3600.0,
+            probe_block=lr.self_check_block(task["family"]))
+        assert "SELF_CHECK:" in prompt
+        assert "PAIR-MATCH PROBE" in prompt
+
+    def test_templates_exist_for_every_registered_shape(self):
+        for shape in set(lr.FAMILY_PROBE_SHAPES.values()):
+            p = lr.SELFCHECK_TEMPLATE_DIR / f"probe-{shape}.md"
+            assert p.is_file(), f"missing probe template: {p}"
+
+
+class TestSettleFactorSample:
+    """I4: one final factor-vector sample — late dispatches get counted."""
+
+    @staticmethod
+    def _late_dispatch_ws(tmp_path: Path) -> Path:
+        """Synthetic late-dispatch ledger: the history's last point has
+        cursor 0 (sampled at init), the dispatch signals landed after."""
+        ws = tmp_path / "ws-late"
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "mission_ledger.yaml").write_text(
+            "mission:\n"
+            "  pqs: []\n"
+            "  beta: 0.3\n"
+            "  history:\n"
+            "  - ts: 2026-09-26T00:00:00Z\n"
+            "    v_m: 0.0\n"
+            "    round: 1\n"
+            "    events: {dispatch: 0, verify: 0, confirmed_with_diff: 0,"
+            " toss: 0}\n"
+            "    signals_rows: 0\n", encoding="utf-8")
+        rows = [
+            {"ts": "2026-09-26T00:10:00Z", "kind": "dispatch",
+             "claim": "C-101"},
+            {"ts": "2026-09-26T00:20:00Z", "kind": "dispatch",
+             "claim": "C-102"},
+        ]
+        (ws / "runs" / "signals.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return ws
+
+    def test_synthetic_late_dispatch_is_counted(self, tmp_path):
+        ws = self._late_dispatch_ws(tmp_path)
+        assert lr.settle_factor_sample(ws) is True
+        led = yaml.safe_load(
+            (ws / "runs" / "mission_ledger.yaml").read_text("utf-8"))
+        hist = led["mission"]["history"]
+        assert len(hist) == 2, "one settle sample appended"
+        assert hist[-1]["events"]["dispatch"] == 2, \
+            "the two post-sample dispatches land in the tick face"
+        assert hist[-1]["signals_rows"] == 2
+        assert lr.harvest(ws)["dispatch_count"] == 2
+
+    def test_workspace_without_ledger_is_false(self, tmp_path):
+        ws = tmp_path / "ws-bare"
+        (ws / "runs").mkdir(parents=True)
+        assert lr.settle_factor_sample(ws) is False
+
+    def test_e2e_late_dispatch_counted(self, tmp_path, monkeypatch):
+        """THE I4 pin: a session whose dispatch signals land after the
+        ledger's last sample leaves the run row with the dispatches
+        COUNTED (exp4 read 0 on all 7 units)."""
+        monkeypatch.setenv("K334_STUB_MODE", "late-dispatch")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=1.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        m = row["loop"]["metrics"]
+        assert m["dispatch_count"] == 6, \
+            "stub vectors (2 + 3) + the settle sample (1 late dispatch)"
+        led = yaml.safe_load(
+            (Path(row["loop"]["workspace"]) / "runs" / "mission_ledger.yaml")
+            .read_text("utf-8"))
+        assert led["mission"]["history"][-1]["events"]["dispatch"] == 1
+        assert led["mission"]["history"][-1]["events"]["toss"] == 1, \
+            "the late dispatch has no later deliver — derived toss"
+
+
+class TestT1DirectLine:
+    """I5: the T-1 affirmative rides the loop prompts; the control arm
+    stays neutral."""
+
+    def test_loop_prompt_carries_t1_direct(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py")
+        assert "T1_DIRECT:" in prompt
+        assert "tool-catalog:" in prompt
+
+    def test_redo_prompt_carries_t1_direct(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_redo_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      "CHECKER GAP: x",
+                                      wall_cap_s=1800.0, budget_usd=5.0)
+        assert "T1_DIRECT:" in prompt
+
+    def test_cc_default_prompt_stays_neutral(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        _ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                   wall_cap_s=3600.0)
+        assert "T1_DIRECT" not in prompt
+        assert "LAYER_CHECKPOINTS" not in prompt
+        assert "SELF_CHECK" not in prompt

@@ -220,6 +220,9 @@ its report was discarded as untrusted). Write in this order:
    the rendered timeline and mirrors them in
    `runs/progress-narrative.jsonl`).
 
+Deliverable discipline: deliverable draft early, update continuously —
+at any cap the on-disk state is graded.
+
 ## Knowledge sedimentation — durable result note
 
 High-value content must not die in `runs/worker-status-*.md` — nobody
