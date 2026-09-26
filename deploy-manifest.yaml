@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 320df4c89b80bfa9fa803cee8a6fa0b5493b314772f8262470a7d231bf613179
+    sha256: aa31d2c30088e474e6f3e85cc8091955fd1e4900f1f0abc34038e5150b1ce958
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -444,6 +444,10 @@ files:
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
     sha256: 8638adbc6145ead683a99120f03a13d8a647bad2cf75d40eea9da8f9f8158e85
+  - src: scripts/experience_triples.py
+    dest: .claude/scripts/experience_triples.py
+    kind: scaffold
+    sha256: 7673049b3dbf8e186779284c3911842525a30a2f9ca0ca9c26f6df34abbfe91b
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -912,6 +916,10 @@ files:
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
     sha256: 5d70a7975e9215868b6f735dd19ac36da77d37c6241cb8ed82d9c2d0920d37ba
+  - src: scripts/state_signature.py
+    dest: .claude/scripts/state_signature.py
+    kind: scaffold
+    sha256: c5924473470b96d3c2873b9c06745d735ed681b1d42d708ad7d70e8fd9d5e100
   - src: scripts/status_defs.py
     dest: .claude/scripts/status_defs.py
     kind: scaffold
@@ -932,6 +940,10 @@ files:
     dest: .claude/scripts/target_ladder.py
     kind: scaffold
     sha256: ac9868e57cbf4832c017f3125cd1cba9a7c9b59ecd60fa16a4d82fb68fa55ad5
+  - src: scripts/tc_journal.py
+    dest: .claude/scripts/tc_journal.py
+    kind: scaffold
+    sha256: de92fc0cff940bc9dc253266ab77388c1959417c0cb3be42db0d24a1a1cca55c
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
