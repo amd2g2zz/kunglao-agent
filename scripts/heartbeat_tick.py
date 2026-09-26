@@ -240,10 +240,10 @@ def noop_breaker(ws: Path, current_hash: str,
         count = int(prev.get("count", 0)) + 1
     else:
         count = 1
-    # #380 P3-3: the persisted premise_hash gets a READER — compare the
+    # issue 380 P3-3: the persisted premise_hash gets a READER — compare the
     # incoming digest against the previously persisted one and persist the
     # comparison verdict alongside the evidence. The RETURN shape is
-    # untouched (the #275 trace contract pins it); the verdict lives in
+    # untouched (the issue 275 trace contract pins it); the verdict lives in
     # runs/.heartbeat-noop.json for postmortems. Evidence only: premise
     # churn must never gate (or reset) the trip.
     prev_premise = prev.get("premise_hash")
@@ -288,7 +288,7 @@ def state_fingerprint(ws: Path) -> str:
         no-op counter; a real state advance (claim-register change) still
         does.
 
-    The premise digest (blockers/*.md contents only, #380 P3-3) is
+    The premise digest (blockers/*.md contents only, issue 380 P3-3) is
     exposed via premise_digest() so the breaker state can carry it as
     evidence (what the loop was metabolizing) without it gating the trip.
     """
@@ -305,7 +305,7 @@ def state_fingerprint(ws: Path) -> str:
 
 def premise_digest(ws: Path) -> str:
     """H1c: the premise-state hash — blockers/*.md contents ONLY
-    (#380 P3-3: runs/env-state.json was hashed here too, but env_state_probe
+    (issue 380 P3-3: runs/env-state.json was hashed here too, but env_state_probe
     rewrites it every tick, so the persisted digest churned every tick and
     carried no signal; the digest must be stable under tick cadence and
     move only when premise metabolism rewrites a blocker).
@@ -333,7 +333,7 @@ def premise_digest(ws: Path) -> str:
 
 
 def _mission_history_due(ws: Path) -> bool:
-    """#8 cockpit cadence gate — now a DELEGATE (#380 P3-7): the rule
+    """issue 8 cockpit cadence gate — now a DELEGATE (issue 380 P3-7): the rule
     lives in mission_ledger.history_due so the
     eval runner's settle face shares the exact same semantics (a second
     un-gated sampler was the finding). Kept as a named wrapper to

@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 2982e46c80b9594ef6f5cbb60729eff7c87d996bffc766625598f0adb95bba84
+    sha256: 582a3ca55d37429d1fc3d8ddbf9022830d43298d9487fc67b6bde1325bc4a6e4
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: c9ecc44c7d7a0f2c7748e6c8fe03a9c21d680f80ed957d4d60c1ef93725ff37c
+    sha256: 1b1ab431aaaf35fe961984ba9cc7cbc22fafc9c7e52a6b2ebca0d26ef9513d97
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -671,7 +671,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: 5074c967576997ae55f0cf2bc33010543d4dbb31001d37060e54a905d9e4f82c
+    sha256: 883a20d3916bfb3272ad705efa96a49e247c9655d7c7c189af8f34fd40b39c76
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold

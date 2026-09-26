@@ -559,12 +559,12 @@ def value_m(ws, now=None) -> dict:
             "blocked": n_blocked, "unattempted": n_unattempted}
 
 
-# ------------------------------------------------------ #380 P3: settle API
+# ------------------------------------------------------ issue 380 P3: settle API
 # The V_m cadence gate LIVES HERE now (was heartbeat_tick's private
 # _mission_history_due) so every host that samples the mission history —
 # the heartbeat cockpit block AND the eval runner's session-end settle —
 # shares ONE cadence semantic instead of growing a second un-gated
-# sampler (the #380 P3-7 finding: settle_factor_sample called value_m()
+# sampler (the issue 380 P3-7 finding: settle_factor_sample called value_m()
 # directly, distorting the d_slope windows the gate exists to protect).
 
 MISSION_HISTORY_MIN_GAP_MIN = 30  # heartbeat cadence (liveness_policy's
@@ -579,7 +579,7 @@ except ImportError:  # pragma: no cover — the policy module is repo-local
 
 def history_due(ws) -> bool:
     """True when a new V_m history point is DUE under the shared cadence
-    gate (#8 origin; #380 P3-7 made it the single source both hosts use).
+    gate (issue 8 origin; issue 380 P3-7 made it the single source both hosts use).
 
     value_m appends history on EVERY call — un-gated, a 5-min tick cadence
     would spam runs/mission_ledger.yaml and flatten the d_slope that
@@ -587,7 +587,7 @@ def history_due(ws) -> bool:
     once per MISSION_SETTLE_MIN (liveness_policy), EXCEPT when the signal
     stream has new rows since the newest point's cursor: a settle that
     would drop pending dispatch accounting loses information, not just
-    cadence, so it is always due (the #334 settle face's live-effect —
+    cadence, so it is always due (the issue 334 settle face's live-effect —
     late dispatches must be counted). The gate is therefore
     information-lossless: it suppresses only no-new-signal samples inside
     the window.
@@ -629,7 +629,7 @@ def history_due(ws) -> bool:
 
 
 def settle(ws) -> dict | None:
-    """Explicit V_m settle face (#380 P3-7): ONE history point under the
+    """Explicit V_m settle face (issue 380 P3-7): ONE history point under the
     shared cadence gate (history_due). Hosts (heartbeat cockpit, eval
     runner session-end) call THIS, never value_m directly, so no second
     un-gated sampler can reappear. Returns the value_m result, or None

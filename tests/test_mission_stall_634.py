@@ -233,7 +233,7 @@ def test_h1c_ledger_and_envstate_churn_do_not_reset_counter(tmp_path):
     assert r["consecutive_noop"] == 4  # churn ignored: counter keeps counting
 
 
-# ---------- #380 P3-3: the premise digest gets stable inputs + a reader ---
+# ---------- issue 380 P3-3: the premise digest gets stable inputs + a reader ---
 # The persisted premise_hash was write-only AND changed every tick (the
 # env-state ts churn inside the hash) — churn-every-tick evidence carries
 # no signal. Fix: digest blockers/*.md ONLY (stable under tick cadence)
@@ -261,7 +261,7 @@ def test_breaker_reads_persisted_premise_hash(tmp_path):
     """The persisted digest has a READER: each tick compares the incoming
     digest against the previously persisted one and persists the verdict
     in runs/.heartbeat-noop.json. The RETURN shape stays untouched (the
-    #275 trace contract pins it)."""
+    issue 275 trace contract pins it)."""
     ht = _h1_load_tick()
     ws = _mk_ws(tmp_path)
     h0 = ht.state_fingerprint(ws)

@@ -157,13 +157,13 @@ T1_DIRECT_LINE = (
     "it first before any decomposition (tool-catalog: <name> if "
     "applicable).")
 
-# I3 (exp8) + #380 P3-5: family -> self-check probe shape, DERIVED from
+# I3 (exp8) + issue 380 P3-5: family -> self-check probe shape, DERIVED from
 # the per-family template convention — no hard special-case map keyed on
 # family strings (the special-case-instead-of-algorithm disease). A
 # family is registered by shipping templates/selfcheck/probe-<shape>.md
 # whose header names the shape and the family it is injected for:
 #   <!-- probe shape: crypto (pair-match) — injected for family X -->
-# Adding family #4 is adding a template file — zero code change — and the
+# Adding family issue 4 is adding a template file — zero code change — and the
 # map can never drift from the templates it points at.
 SELFCHECK_TEMPLATE_DIR = (Path(__file__).resolve().parent.parent
                           / "templates" / "selfcheck")
@@ -173,7 +173,7 @@ _PROBE_HEADER_RE = re.compile(
 
 
 def derive_family_probe_shapes(template_dir: Path) -> dict[str, str]:
-    """The template-convention reader (#380 P3-5): parse every
+    """The template-convention reader (issue 380 P3-5): parse every
     probe-*.md header in ``template_dir`` into {family: shape}.
     Fail-open: an absent dir, an unreadable file or a headerless
     template contributes nothing (never raises)."""
@@ -217,7 +217,7 @@ def _fail(msg: str) -> None:
 
 
 def _warn_fail_open(op: str, exc: Exception) -> None:
-    """#380 P3-9: fail-open telemetry degradations keep their liveness
+    """issue 380 P3-9: fail-open telemetry degradations keep their liveness
     posture (never raise, never change the return shape) but leave ONE
     trace — the shared _boot.warn idiom: a stderr WARN naming the
     operation + reason, rate-limited to once per op until the reason
@@ -464,7 +464,7 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
                         plugin_dir: Path | None = None,
                         plugin: bool = True,
                         note: str = "") -> tuple[dict, list[str], list[str]]:
-    """#380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
+    """issue 380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
     route through here so the harness-drift handling can no longer
     diverge (the finding: main printed stdout+stderr, redo printed only
     stderr, and redo contamination never fed the summary counter). Hash
@@ -608,7 +608,7 @@ def prompt_injection_blocks(task_dir: Path,
 # ------------------------------------------------------- factor settle (I4)
 def settle_factor_sample(workspace: Path) -> bool:
     """I4 (exp8): append ONE final factor-vector history sample at session
-    end — THROUGH THE SHARED CADENCE GATE (#380 P3-7: this used to call
+    end — THROUGH THE SHARED CADENCE GATE (issue 380 P3-7: this used to call
     mission_ledger.value_m() directly, an un-gated second sampler
     distorting the d_slope windows; it now calls mission_ledger.settle(),
     the same gate the heartbeat cockpit's _mission_history_due uses).
@@ -734,7 +734,7 @@ def init_cc_default_workspace(task_dir: Path,
 # ----------------------------------------------------------------- prompt
 def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
                         extras: list[str], gap_block: str = "") -> str:
-    """#380 P3-1: the SHARED task-brief renderer — the anchors verbatim +
+    """issue 380 P3-1: the SHARED task-brief renderer — the anchors verbatim +
     the analysis-subject listing + the candidate contract + the mandated
     deliverable tail, preceded by the caller's ``extras`` blocks (each
     followed by a blank line) and, when present, the redo's ``gap_block``.
@@ -771,7 +771,7 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     """The loop brief: the anchors verbatim + the candidate contract + the
     mandated deliverable path, plus the injected contract blocks.
 
-    Leakage posture (#380 P3-6 — documented choice: PROCEDURAL, not
+    Leakage posture (issue 380 P3-6 — documented choice: PROCEDURAL, not
     structural). The old docstring claimed "structurally cannot leak
     ground truth: this function never receives it". That stopped being
     true when I2 (exp8) added ``layer_paths`` — path strings lifted from
@@ -784,7 +784,7 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     probe payloads and expected outputs are never read, so nothing
     gradeable can travel into the prompt; thresholds, oracles and the
     checker's derived answers stay checker-side (the same posture as the
-    #236 bare prompt).
+    issue 236 bare prompt).
 
     ``wall_cap_s`` (M1, exp5) injects the runner-owned
     WALL_BUDGET_PARTITION block as a first-class section directly after
@@ -910,7 +910,7 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     prompt: anchors and contract only — the gap adds shape, not answers.
     I2/I3/I5 (exp8): the chain LAYER_CHECKPOINTS block, the family
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
-    same task under the same prompt contract. (#380 P3-1: the shared
+    same task under the same prompt contract. (issue 380 P3-1: the shared
     tail renders through _render_task_prompt.)"""
     extras: list[str] = [wall_partition_block(wall_cap_s)]
     if layer_paths:
@@ -1134,7 +1134,7 @@ def _post_cap_status(rec: dict, budget_usd: float) -> str:
     wall-cap kill, never a crash (the 2026-09-24 sweep mislabeled 9/12
     units this way).
 
-    HEURISTIC, EXPLICITLY DOCUMENTED (#380 P3-8): the adapter sees no
+    HEURISTIC, EXPLICITLY DOCUMENTED (issue 380 P3-8): the adapter sees no
     structured budget-stop discriminator to consume — the CLI's json
     result face carries the cost report but no field distinguishing
     "stopped BY the cap" from "crashed WHILE at/over the cap" — so
@@ -1243,7 +1243,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     # dispatch-theater floor; the redo session reuses the SAME workspace
     # and receives the CHECKER GAP (gap-shape only) built by the runner's
     # own extraction — never the checker stream pasted wholesale.
-    # #380 P3-4: the reason is stored ONCE — inside the decision (the
+    # issue 380 P3-4: the reason is stored ONCE — inside the decision (the
     # row-level duplicate gap_redo["reason"] is gone)
     gap_redo: dict = {"ran": False, "decision": None,
                       "session": None, "verdict_replaced": False}
@@ -1366,7 +1366,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         "refused": sum(1 for r in rows if r["verdict"] == "REFUSED"),
         "exhausted": sum(1 for r in rows
                          if r.get("loop", {}).get("status") == "exhausted"),
-        # #380 P3-2: BOTH guarded faces count — redo contamination is no
+        # issue 380 P3-2: BOTH guarded faces count — redo contamination is no
         # longer silently dropped from the tier summary
         "harness_contaminated": sum(
             1 for r in rows

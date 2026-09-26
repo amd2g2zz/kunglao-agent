@@ -168,7 +168,7 @@ _STUB_SESSION = textwrap.dedent("""\
                                     "output_tokens": 71887}}))
         sys.exit(1)
     if mode == "candidate-bad-escape":
-        # #380 P3-2: the REDO session escapes the harness surface (the
+        # issue 380 P3-2: the REDO session escapes the harness surface (the
         # main session stays clean) — the summary-counter divergence face.
         if sum(1 for _ in open(cwd / "session-calls.jsonl")) >= 2:
             tgt = os.environ.get("K334_ESCAPE_TARGET", "")
@@ -999,7 +999,7 @@ class TestGapRedo:
         assert row["gap_redo"] is False
         assert row["verdict"] == "FAIL"
         assert row["loop"]["gap_redo"]["ran"] is False
-        # #380 P3-4: stored ONCE — the decision carries the reason
+        # issue 380 P3-4: stored ONCE — the decision carries the reason
         assert row["loop"]["gap_redo"]["decision"]["reason"] == \
             "budget_exhausted"
         assert row["loop"]["status"] == "exhausted"
@@ -1143,7 +1143,7 @@ class TestFamilySelfCheckBlock:
     """I3: registered families get their probe pattern injected."""
 
     def test_map_has_exactly_three_entries(self):
-        # #380 P3-5: the pin moved to the general mechanism — the map is
+        # issue 380 P3-5: the pin moved to the general mechanism — the map is
         # derived from the template headers (non-growth = the templates
         # dir's content), not a hard special-case map in code.
         assert lr.FAMILY_PROBE_SHAPES == \
@@ -1291,7 +1291,7 @@ class TestT1DirectLine:
         assert "SELF_CHECK" not in prompt
 
 
-# ------------------------------ (n) #380 Package 3 — runner quality pack
+# ------------------------------ (n) issue 380 Package 3 — runner quality pack
 # Nine audit findings, fixed under the same discipline: extract the shared
 # machinery, kill the write-only state, derive instead of special-case,
 # and document every posture choice at the site it lives.
@@ -1321,7 +1321,7 @@ PRE_REFACTOR_PROMPT_SHAS = {
 
 
 class TestPromptRenderHelperByteIdentity:
-    """#380 P3-1: build_loop_prompt / build_redo_prompt share ONE
+    """issue 380 P3-1: build_loop_prompt / build_redo_prompt share ONE
     renderer; the extraction is byte-identical to the pre-refactor
     prompts (sha256 of the full prompt text, golden literals captured on
     the pre-refactor commit)."""
@@ -1383,7 +1383,7 @@ class TestPromptRenderHelperByteIdentity:
 
 
 class TestRunSessionGuarded:
-    """#380 P3-2: ONE guarded spawn helper for BOTH faces; the drift
+    """issue 380 P3-2: ONE guarded spawn helper for BOTH faces; the drift
     handling (hash -> launch -> hash -> restore + loud event row) can no
     longer diverge, and redo contamination feeds the summary counter."""
 
@@ -1446,7 +1446,7 @@ class TestRunSessionGuarded:
 
 
 class TestProbeShapeDerivation:
-    """#380 P3-5: the family->probe-shape map is DERIVED from the
+    """issue 380 P3-5: the family->probe-shape map is DERIVED from the
     template headers (a per-family template convention), not a hard
     special-case map keyed on family strings."""
 
@@ -1478,7 +1478,7 @@ class TestProbeShapeDerivation:
 
 
 class TestGapRedoReasonStoredOnce:
-    """#380 P3-4: the row-level gap_redo['reason'] duplicated
+    """issue 380 P3-4: the row-level gap_redo['reason'] duplicated
     gap_redo['decision']['reason'] — the decision is the single store."""
 
     def test_gap_redo_row_has_no_top_level_reason(self, tmp_path,
@@ -1493,7 +1493,7 @@ class TestGapRedoReasonStoredOnce:
 
 
 class TestPostCapStatusCaveat:
-    """#380 P3-8: the cost>=budget heuristic IS the consumption of the
+    """issue 380 P3-8: the cost>=budget heuristic IS the consumption of the
     CLI's structured stop face (rc=1 + the json cost report); the
     crash-at/over-cap mislabel and its pass@k accounting caveat must be
     documented at the site (no structured discriminator exists to
@@ -1514,7 +1514,7 @@ class TestPostCapStatusCaveat:
 
 
 class TestFailOpenWarnIdiom:
-    """#380 P3-9: fail-open telemetry degradations leave ONE rate-limited
+    """issue 380 P3-9: fail-open telemetry degradations leave ONE rate-limited
     stderr trace (the _boot.warn idiom), not unbounded raw prints."""
 
     @staticmethod

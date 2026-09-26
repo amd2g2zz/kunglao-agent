@@ -236,11 +236,11 @@ def test_cockpit_summary_unchanged_for_settled_ledger(tmp_path):
     assert out["answered"] == 1 and out["unattempted"] == 0
 
 
-# ---------- #380 P3-7: explicit settle API with host-shared cadence -------
+# ---------- issue 380 P3-7: explicit settle API with host-shared cadence -------
 # settle_factor_sample (eval_loop_runner) called value_m() directly,
 # bypassing the heartbeat cockpit's _mission_history_due gate — a second
 # un-gated sampler. The gate now LIVES in mission_ledger (history_due /
-# settle) and both hosts share it. The gate gains one rule so the #334
+# settle) and both hosts share it. The gate gains one rule so the issue 334
 # settle face stays live: a settle with NEW signal rows since the newest
 # point's cursor is ALWAYS due (dropping pending dispatches loses
 # accounting, not just cadence).
