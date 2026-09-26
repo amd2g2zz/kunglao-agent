@@ -554,12 +554,12 @@ def test_redteam_dispatch_injects_like_any_role(tmp_path):
     assert rc == 0 and ctx is not None
 
 
-# ---- #380 Package 4 F1/F2: dedup key + content hash ------------------------
+# ---- issue 380 Package 4 F1/F2: dedup key + content hash -------------------
 
 def _v1_prompt(claim: str, agent: str = "w-p4",
                tail: str = "facts-snapshot: 3 facts") -> str:
     """A v1 JSON-envelope dispatch — the shape the retired local prose regex
-    (`claim[ \\t]+C-NN`) could not see (the #861 bug class)."""
+    (`claim[ \\t]+C-NN`) could not see (the issue 861 bug class)."""
     return ('{"kunglao_dispatch": {"version": 1, "claim": "%s", "tier": 3, '
             '"tools": ["mcp__x64dbg__*"], "agent": "%s"}}\n'
             '%s observe the sample dynamic behavior in the VM'
@@ -571,8 +571,8 @@ def test_v1_envelope_dispatch_keys_by_claim_id(tmp_path):
     HASH — the local prose regex only saw v0 dispatches, so a same-claim
     re-dispatch whose tail moved (facts-snapshot count) re-injected
     unchanged content. The dedup key must be the claim id via
-    lib_kunglao.parse_dispatch (the #861 single source), text-hash only
-    when the text parses as no dispatch at all."""
+    lib_kunglao.parse_dispatch (the issue 861 single source), text-hash
+    only when the text parses as no dispatch at all."""
     ws = _kunglao_ws(tmp_path)
     same_files = lambda q: (0, "dynamic-re-tool-priority.md | a | b | c")
     p1 = _v1_prompt("C-301", tail="facts-snapshot: 3 facts")

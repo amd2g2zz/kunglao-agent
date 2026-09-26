@@ -165,15 +165,16 @@ class TestToolfirstDualEmit:
         assert not [e for e in events if e["action"].startswith("toolfirst")]
 
 
-# ---------- #380 Package 4 F3/F4: one emitter, three faces -------------------
+# ---------- issue 380 Package 4 F3/F4: one emitter, three faces --------------
 
 class TestEmitConsolidation:
-    """All three toolfirst emit faces (check_tool_first advisory,
-    toolfirst_pass_record advisory, toolfirst_pass_record pass) ride ONE
-    emitter (_toolfirst_emit) — identical payload shape, only action /
-    claim / extra differ. The unreachable `action='toolfirst_reject'`
-    default is gone (action is required); the taxonomy word itself stays
-    registered (append-only history)."""
+    """issue 380 Package 4 F3/F4: all three toolfirst emit faces
+    (check_tool_first advisory, toolfirst_pass_record advisory,
+    toolfirst_pass_record pass) ride ONE emitter (_toolfirst_emit) —
+    identical payload shape, only action / claim / extra differ. The
+    unreachable `action='toolfirst_reject'` default is gone (action is
+    required); the taxonomy word itself stays registered (append-only
+    history)."""
 
     def test_three_faces_share_one_payload_shape(self, tmp, events, keywords):
         ws = _ws(tmp)
