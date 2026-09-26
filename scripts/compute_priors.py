@@ -28,6 +28,10 @@ tests/test_compute_priors_137.py):
     polarity: SETTLED_GREEN/HELPED -> +1 alpha, SETTLED_RED/ADVERSE ->
     +1 beta, NEUTRAL/pending -> nothing. Read through the ONE interface
     (reward_settlement.prior_observations over rollout_ledger.settled).
+  - runs/rollout-ledger.jsonl settled EPISODE TIER SCALARS (issue 379,
+    reward-rules v2) contribute a separate Normal-Gamma posterior under
+    sources.scalar_ledger (n / mean / posterior) — the exponential-family
+    form for a continuous scalar, NOT folded into the Beta counts.
   - runs/posteriors.yaml contributes the observations ON TOP of its own
     per-case uniform base: per CasePosterior max(alpha-1, 0) alpha and
     max(beta-1, 0) beta. The two namespaces count DIFFERENT observables
@@ -51,8 +55,11 @@ other persisted/computed surface — issue 137):
     {"schema": "aggregate-prior/1",
      "alpha": <aggregate alpha>, "beta": <aggregate beta>,
      "mean": alpha/(alpha+beta),
-     "sources": {"case_bank":  {"alpha": .., "beta": ..},
-                 "posteriors": {"alpha": .., "beta": ..}},
+     "sources": {"case_bank":      {"alpha": .., "beta": ..},
+                 "posteriors":     {"alpha": .., "beta": ..},
+                 "rollout_ledger": {"alpha": .., "beta": ..},
+                 "scalar_ledger":  {"n": .., "mean": ..,
+                                    "posterior": {n/mu/kappa/alpha/beta/var}}},
      "workspaces": [<the named paths, as given>]}
 
 CLI:
@@ -124,6 +131,29 @@ def _rollout_ledger_obs(ws: Path) -> tuple[int, int]:
             f"({exc})") from exc
 
 
+def _scalar_ledger_obs(ws: Path) -> dict:
+    """Episode tier scalars (issue 379, reward-rules v2) as a Normal-Gamma
+    posterior — the exponential-family conjugate form for a CONTINUOUS
+    observation, deliberately NOT Beta-Bernoulli (that family counts
+    binary outcomes, and squashing the {0, 0.4, 0.7, 1.0} tier scalars
+    into win/lose counts would discard the measured efficiency gap the
+    tiers exist to express). Exponential-family Thompson sampling is what
+    has the regret grounding (Russo & Van Roy 2014, "Learning to Optimize
+    via Posterior Sampling" — the information-ratio bound covers
+    exponential-family posteriors). Additive source: read-only through
+    scalar_settlement.scalar_observations. Missing ledger -> n=0 prior."""
+    try:
+        import scalar_settlement
+        observations = scalar_settlement.scalar_observations(ws)
+    except ImportError as exc:  # pragma: no cover — sibling always present
+        raise ValueError(
+            f"compute_priors: {ws}: scalar_settlement unavailable "
+            f"({exc})") from exc
+    posterior = scalar_settlement.normal_gamma_update(observations)
+    mean = (sum(observations) / len(observations)) if observations else 0.0
+    return {"n": len(observations), "mean": mean, "posterior": posterior}
+
+
 def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
     """Aggregate Beta prior over the EXPLICITLY-NAMED workspaces.
 
@@ -146,6 +176,9 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
     cb_alpha = cb_beta = 0
     post_alpha = post_beta = 0.0
     rl_alpha = rl_beta = 0
+    sc_n_total = 0
+    sc_sum = 0.0
+    sc_posts: list[dict] = []
     for p in paths:
         a, b = _case_bank_obs(p)
         cb_alpha += a
@@ -156,9 +189,16 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         ua, ub = _rollout_ledger_obs(p)  # unified-reward prior feed (additive)
         rl_alpha += ua
         rl_beta += ub
+        sc = _scalar_ledger_obs(p)  # issue-379 scalar feed (additive, Normal-Gamma)
+        sc_n_total += sc["n"]
+        sc_sum += sc["mean"] * sc["n"]
+        sc_posts.append(sc["posterior"])
 
     alpha = BASE_ALPHA + cb_alpha + post_alpha + rl_alpha
     beta = BASE_BETA + cb_beta + post_beta + rl_beta
+    agg_mean = (sc_sum / sc_n_total) if sc_n_total else 0.0
+    import scalar_settlement
+    agg_post = scalar_settlement.merge_normal_gamma_posts(sc_posts)
     return {
         "schema": RESULT_SCHEMA,
         "alpha": alpha,
@@ -168,6 +208,8 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
             "case_bank": {"alpha": cb_alpha, "beta": cb_beta},
             "posteriors": {"alpha": post_alpha, "beta": post_beta},
             "rollout_ledger": {"alpha": rl_alpha, "beta": rl_beta},
+            "scalar_ledger": {"n": sc_n_total, "mean": agg_mean,
+                              "posterior": agg_post},
         },
         "workspaces": [str(p) for p in paths],
     }
