@@ -44,7 +44,7 @@ wall-cap SIGKILL (timed_out) and the CLI's own --max-budget-usd stop
 loop wrote before the kill is still harvested and graded. A sub-budget
 rc!=0 exit is a genuine session_error.
 
-Workspace-escape gate (exp3, boundary widened by #380 P1): the
+Workspace-escape gate (exp3, boundary widened by the P1 audit): the
 integrity surface — the harness surface (agents/ hooks/ skills/
 scripts/) PLUS the graded surface (eval/v1/tasks/** — ground_truth.json,
 per-unit checkers, task specs, chain/reference goldens, targets) — is
@@ -54,7 +54,7 @@ lands in <out>/harness-events.jsonl, and the session row is marked
 harness_contaminated (diagnostic — the verdict is unaffected, grading
 already ran). The graders themselves (scripts/eval_checker.py,
 eval_chain_grader.py, eval_dataset.py, eval_targets.py) sit inside
-scripts/ and were already covered; the #380 P1 gap was the tasks tree.
+scripts/ and were already covered; the P1 gap was the tasks tree.
 
 Gap-closure mechanizations (exp5, from the distilled cards):
     M1  WALL PARTITION  the runner owns the wall cap, so it COMMUNICATES
@@ -332,7 +332,7 @@ def _session_cost(stdout_text: str) -> dict | None:
 # and marks the session row (diagnostic; the verdict is unaffected —
 # grading already ran).
 #
-# #380 P1 (/simplify audit): the original boundary hashed only agents/
+# P1 /simplify audit: the original boundary hashed only agents/
 # hooks/ skills/ scripts/ — but the highest-value bypassPermissions
 # target is the GRADING surface: flipping eval/v1/tasks/**/ground_truth.json
 # or a per-unit checker turns FAIL into PASS with the gate watching the
@@ -384,7 +384,7 @@ def harness_surface_hashes(root: Path | None = None) -> dict[str, str]:
 
 
 def graded_surface_hashes(root: Path | None = None) -> dict[str, str]:
-    """#380 P1: scoped sha256 over the GRADING surface (the full
+    """P1 audit: scoped sha256 over the GRADING surface (the full
     eval/v1/tasks tree — answer keys, per-unit checkers, task specs,
     chain/reference goldens, targets): relpath -> digest. The tasks tree
     is read-only harness input; any delta is a grading flip attempt."""

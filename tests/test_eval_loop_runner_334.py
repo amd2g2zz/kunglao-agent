@@ -646,7 +646,7 @@ class TestHarnessEscapeGate:
     def _fake_root(self, tmp_path: Path) -> Path:
         """A synthetic harness root: the four surface dirs + a git HEAD —
         restore proves itself against a real checkout, never the live
-        repo tree (parallel-safe). #380 P1: the root also carries a
+        repo tree (parallel-safe). P1: the root also carries a
         graded-surface task unit (eval/v1/tasks/...) so the tamper faces
         exercise the real boundary, not a stand-in directory."""
         import subprocess as sp
@@ -699,11 +699,11 @@ class TestHarnessEscapeGate:
         assert any(k.startswith("hooks/") for k in h)
         assert any(k.startswith("scripts/") for k in h)
 
-    # ------------------------------------------- #380 P1: graded surface
+    # ------------------------------------------------- graded surface
     GRADED_UNIT = "eval/v1/tasks/smoke/py-x-v1"
 
     def test_graded_surface_covers_full_tasks_tree(self, tmp_path):
-        """#380 P1: the GRADING surface — ground_truth.json, the per-unit
+        """P1: the GRADING surface — ground_truth.json, the per-unit
         checker.py, the task spec, chain/reference goldens AND the target
         samples — is hashed beside the harness surface. FULL tree, not
         answer-files-only: a name allowlist silently misses future task
@@ -737,7 +737,7 @@ class TestHarnessEscapeGate:
 
     def test_ground_truth_tamper_detected_reverted_marked(self, tmp_path,
                                                           monkeypatch):
-        """#380 P1 THE flip-face: editing ground_truth.json turns FAIL
+        """THE flip-face: editing ground_truth.json turns FAIL
         into PASS undetected — the gate must fire, restore, and mark
         exactly as it does for the harness surface."""
         root = self._fake_root(tmp_path)
@@ -762,7 +762,7 @@ class TestHarnessEscapeGate:
 
     def test_checker_tamper_detected_reverted_marked(self, tmp_path,
                                                      monkeypatch):
-        """#380 P1: the per-unit checker is the other flip-face — same
+        """P1: the per-unit checker is the other flip-face — same
         gate contract (detect + restore + mark) on checker.py."""
         root = self._fake_root(tmp_path)
         target = root / self.GRADED_UNIT / "checker.py"
