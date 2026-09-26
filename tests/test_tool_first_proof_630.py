@@ -126,3 +126,82 @@ def test_jsvmp_triage_keeps_one_distinctive_keyword():
     # the misfire fixture stays clean
     ev2 = wbg._toolfirst_evaluate(WEB_PACK_SIGN_DISPATCH.lower(), None)
     assert ev2['tool'] != 'jsvmp_triage'
+
+
+# ---------- issue 380 Package 2: pins for the four findings ----------
+
+def test_category_level_tokens_demoted_wholesale():
+    """issue 380 P2 finding 4: the web/js/triage CLASS is demoted STRUCTURALLY —
+    every category-level token (registry category ids, capability domain
+    halves, generic verbs — current AND future) is out of the trigger set.
+    No per-token blocklist: the class cannot rejoin by accreting registry
+    entries."""
+    for generic in ('web', 'js', 'triage', 'android', 'static', 'aux',
+                    'auxiliary', 'pipeline', 'pipelines', 'annotate',
+                    'decode', 'diff', 'identify', 'sanitize'):
+        ev = wbg._toolfirst_evaluate(f'the {generic} pass', None)
+        assert ev['mode'] == 'no_match', (generic, ev)
+
+
+def test_per_token_stopword_table_is_gone():
+    """issue 380 P2 finding 4: the per-token blocklist is REPLACED by the
+    structural distinctive-only discipline — the stopword attribute must not
+    exist, so the whack-a-mole cannot restart."""
+    assert not hasattr(wbg, '_TOOLFIRST_STOPWORDS')
+
+
+def test_distinctive_compounds_and_jargon_still_trigger():
+    """issue 380 P2 finding 4: the demotion keeps the trigger surface ALIVE —
+    name-carried compounds and curated RE-jargon singles still light the
+    gate (advisory demand text still names the tool)."""
+    ev = wbg._toolfirst_evaluate('run the xref-scan pass', None)
+    assert ev['tool'] == 'ghidra-scan-pointer'
+    assert ev['keywords'] == ['xref-scan']
+    ev2 = wbg._toolfirst_evaluate('decompile with ghidra', None)
+    assert ev2['mode'] == 'reject'  # missing_marker advisory demand still fires
+    assert 'ghidra-decompile-functions' in ev2['reason']
+
+
+def test_gate_bool_face_constant_true_all_modes():
+    """issue 380 P2 finding 3: the (ok, reason) tuple is a documented CONSTANT —
+    ok is True for EVERY evaluation mode (advisory-only gate); the demand
+    payload lives entirely in `reason`."""
+    cases = (
+        ('decompile the binary', ''),                     # missing_marker
+        ('decompile the binary', 'tool-catalog: nope'),   # self_attestation
+        ('decode the crypto layer', ''),                  # crypto advisory
+        ('totally unrelated prose', ''),                  # no_match
+        ('x', 'tool-catalog: none (reasoning: y)'),       # optout
+    )
+    for desc, prompt in cases:
+        ok, reason = wbg.check_tool_first({}, desc, prompt)
+        assert ok is True, (desc, prompt, reason)
+        assert reason
+
+
+def test_orchestrator_skill_carries_affirmative_t1():
+    """issue 380 P2 finding 1: the affirmative T1_DIRECT line lives in the
+    ORCHESTRATOR dispatch contract (skills/kunglao-agent/SKILL.md) — the
+    layer production (non-eval) dispatch paths are assembled from — with
+    parity to the eval loop's injected line, and the stale REJECT
+    enforcement sentence is gone."""
+    text = (ROOT / 'skills' / 'kunglao-agent' / 'SKILL.md').read_text(
+        encoding='utf-8')
+    assert 'T1_DIRECT' in text
+    assert 'execute it first before any decomposition' in text
+    assert 'REJECTS it otherwise' not in text
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    import eval_loop_runner
+    assert 'execute it first before any decomposition' in \
+        eval_loop_runner.T1_DIRECT_LINE
+
+
+def test_worker_doc_describes_advisory_reality():
+    """issue 380 P2 finding 2: the worker contract no longer reads as enforcement
+    (the stale 'the toolfirst gate checks it' sentence is gone) and states
+    the affirmative T1_DIRECT expectation."""
+    text = (ROOT / 'agents' / 'kunglao-worker.md').read_text(encoding='utf-8')
+    assert 'the toolfirst gate checks it' not in text
+    assert 'tool-catalog:' in text
+    assert 'T1_DIRECT' in text
+    assert 'advisory' in text.lower()

@@ -44,12 +44,17 @@ wall-cap SIGKILL (timed_out) and the CLI's own --max-budget-usd stop
 loop wrote before the kill is still harvested and graded. A sub-budget
 rc!=0 exit is a genuine session_error.
 
-Workspace-escape gate (exp3): the harness surface (agents/ hooks/
-skills/ scripts/) is hashed BEFORE each session spawn and AFTER its
-exit; on drift the files are restored from HEAD (git checkout --), a
-loud harness_drift event row lands in <out>/harness-events.jsonl, and
-the session row is marked harness_contaminated (diagnostic — the
-verdict is unaffected, grading already ran).
+Workspace-escape gate (exp3, boundary widened by the P1 audit): the
+integrity surface — the harness surface (agents/ hooks/ skills/
+scripts/) PLUS the graded surface (eval/v1/tasks/** — ground_truth.json,
+per-unit checkers, task specs, chain/reference goldens, targets) — is
+hashed BEFORE each session spawn and AFTER its exit; on drift the files
+are restored from HEAD (git checkout --), a loud harness_drift event row
+lands in <out>/harness-events.jsonl, and the session row is marked
+harness_contaminated (diagnostic — the verdict is unaffected, grading
+already ran). The graders themselves (scripts/eval_checker.py,
+eval_chain_grader.py, eval_dataset.py, eval_targets.py) sit inside
+scripts/ and were already covered; the P1 gap was the tasks tree.
 
 Gap-closure mechanizations (exp5, from the distilled cards):
     M1  WALL PARTITION  the runner owns the wall cap, so it COMMUNICATES
@@ -323,11 +328,28 @@ def _session_cost(stdout_text: str) -> dict | None:
 # Edit targeting the worktree-level agents/kunglao-redteam.md (a checker
 # permission-widening). Workspace isolation is advisory — a
 # bypassPermissions session can write anywhere. The gate hashes the
-# harness surface before spawn + after exit, restores drift from HEAD and
-# marks the session row (diagnostic; the verdict is unaffected — grading
-# already ran).
+# integrity surface before spawn + after exit, restores drift from HEAD
+# and marks the session row (diagnostic; the verdict is unaffected —
+# grading already ran).
+#
+# P1 /simplify audit: the original boundary hashed only agents/
+# hooks/ skills/ scripts/ — but the highest-value bypassPermissions
+# target is the GRADING surface: flipping eval/v1/tasks/**/ground_truth.json
+# or a per-unit checker turns FAIL into PASS with the gate watching the
+# wrong asset. The tasks tree is hashed in FULL (not answer-files-only):
+# task.yaml thresholds, chain manifests/reference goldens and the target
+# samples are grading-validity faces too, and a name allowlist silently
+# misses future task files — the same wrong-asset class this gate closes.
+# Cost of the wider boundary (shipped walker, 10-run warm mean,
+# 2026-09-26): the graded tree adds ~103 ms/call (326 files / ~2.1 MB),
+# gate total ~200 ms vs ~97 ms before — two calls per session against
+# minutes-long sessions, so stat-first-then-hash was considered and
+# rejected as unneeded complexity. Restore scope
+# matches hash scope automatically: drift keys are the union relpaths and
+# restore_harness() takes repo-root-relative paths either way.
 ENV_HARNESS_ROOT = "KUNGLAO_HARNESS_ROOT"
 HARNESS_DIRS = ("agents", "hooks", "skills", "scripts")
+GRADED_DIRS = ("eval/v1/tasks",)
 HARNESS_DRIFT_ACTION = "harness_drift"  # registered: event_taxonomy.EMIT_ACTIONS
 
 
@@ -336,23 +358,46 @@ def _harness_root() -> Path:
     return Path(env) if env else SCRIPT_DIR.parent
 
 
-def harness_surface_hashes(root: Path | None = None) -> dict[str, str]:
-    """Scoped sha256 over the harness surface (agents/ hooks/ skills/
-    scripts/): relpath -> digest. __pycache__ excluded (bytecode is not
-    surface). Runs before each session spawn and after its exit; any
-    delta is a workspace escape by that session."""
-    root = Path(root) if root is not None else _harness_root()
+def _surface_hashes(root: Path, dirs: tuple[str, ...]) -> dict[str, str]:
+    """Scoped sha256 over repo-root-relative trees: <dir>/<rel> ->
+    digest. __pycache__ excluded (bytecode is not surface)."""
     out: dict[str, str] = {}
-    for d in HARNESS_DIRS:
+    for d in dirs:
         base = root / d
         if not base.is_dir():
             continue
         for p in sorted(base.rglob("*")):
             if not p.is_file() or "__pycache__" in p.parts:
                 continue
-            rel = f"{d}/{p.relative_to(base).as_posix()}"
-            out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+            out[f"{d}/{p.relative_to(base).as_posix()}"] = \
+                hashlib.sha256(p.read_bytes()).hexdigest()
     return out
+
+
+def harness_surface_hashes(root: Path | None = None) -> dict[str, str]:
+    """Scoped sha256 over the harness surface (agents/ hooks/ skills/
+    scripts/): relpath -> digest. __pycache__ excluded (bytecode is not
+    surface). Runs before each session spawn and after its exit; any
+    delta is a workspace escape by that session."""
+    return _surface_hashes(
+        Path(root) if root is not None else _harness_root(), HARNESS_DIRS)
+
+
+def graded_surface_hashes(root: Path | None = None) -> dict[str, str]:
+    """P1 audit: scoped sha256 over the GRADING surface (the full
+    eval/v1/tasks tree — answer keys, per-unit checkers, task specs,
+    chain/reference goldens, targets): relpath -> digest. The tasks tree
+    is read-only harness input; any delta is a grading flip attempt."""
+    return _surface_hashes(
+        Path(root) if root is not None else _harness_root(), GRADED_DIRS)
+
+
+def integrity_surface_hashes(root: Path | None = None) -> dict[str, str]:
+    """The gate's hash input: harness surface ∪ graded surface. Drift
+    over either is a workspace escape; restore_harness() consumes the
+    same repo-root-relative keys, so restore scope matches hash scope."""
+    r = Path(root) if root is not None else _harness_root()
+    return {**harness_surface_hashes(r), **graded_surface_hashes(r)}
 
 
 def harness_drift(before: dict[str, str], after: dict[str, str]) -> list[str]:
@@ -1111,12 +1156,12 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
         return row
     baseline_rounds = count_snapshot_rows(ws)
-    pre_surface = harness_surface_hashes()
+    pre_surface = integrity_surface_hashes()
     rec = launch_session(ws, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
                          plugin_dir=plugin_dir,
                          plugin=(arm != "cc-default"))
-    post_surface = harness_surface_hashes()
+    post_surface = integrity_surface_hashes()
     drifted = harness_drift(pre_surface, post_surface)
     contaminated = bool(drifted)
     if drifted:
@@ -1171,13 +1216,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
               file=sys.stderr)
-        pre_redo = harness_surface_hashes()
+        pre_redo = integrity_surface_hashes()
         redo_rec = launch_session(ws, redo_prompt, budget_usd=redo_budget,
                                   wall_cap_s=redo_wall,
                                   session_cmd=session_cmd,
                                   plugin_dir=plugin_dir,
                                   plugin=(arm != "cc-default"))
-        redo_drifted = harness_drift(pre_redo, harness_surface_hashes())
+        redo_drifted = harness_drift(pre_redo,
+                                     integrity_surface_hashes())
         if redo_drifted:
             redo_restored = restore_harness(redo_drifted)
             _harness_drift_event(out, tdir.name, redo_drifted,

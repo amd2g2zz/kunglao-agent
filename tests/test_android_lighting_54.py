@@ -190,8 +190,8 @@ def test_android_aliases_in_gate_keyword_map():
 
 
 def test_gate_map_keeps_generic_words_out():
-    """_TOOLFIRST_STOPWORDS discipline: generic prose never joins the gate
-    trigger set — ambiguous terms are route-side lighting ONLY."""
+    """issue 380 P2 distinctive-trigger discipline: generic prose never joins the
+    gate trigger set — ambiguous terms are route-side lighting ONLY."""
     kw = wbg._load_tool_index_keywords(wbg._SKILL_ROOT)
     for generic in ("app", "apk", "java", "加密", "登录", "tls", "okhttp",
                     "frida", "xposed", "certificate", "network library",
