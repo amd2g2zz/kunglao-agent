@@ -95,6 +95,12 @@ def _record(ws: Path, cid: str, **kwargs) -> dict:
         validated_capability=kwargs.get("capability", "bridge works"),
         identified_obstacle=kwargs.get("obstacle", "vm blocked it"),
         source=kwargs.get("source", "lesson-hit"),
+        # issue 304 fix-as-guard: resolving guard evidence for the fixture
+        # fix settlements (repo vocabulary anchor; overridable via kwargs).
+        guard_type=kwargs.get("guard_type", "marker-grep"),
+        guard_location=kwargs.get("guard_location",
+                                  "scripts/event_taxonomy.py"),
+        check_reference=kwargs.get("check_reference", "EMIT_ACTIONS"),
         trigger_precision=tp)
 
 

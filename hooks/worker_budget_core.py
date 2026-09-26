@@ -92,7 +92,9 @@ HOST_FORBIDDEN_TOOLS = (
 # ---------- best-first priority advisory (imports scripts/priority_ratio.py) ----------
 # #499: priority_ratio is THE sanctioned next-claim scorer (specs/phase-4/
 # contract.md §1 — the DECIDE ranker). #107 rebuilt it: ONE Thompson ranker
-# (sampled case posterior + LAMBDA_DH·ΔH); the explore/exploit dual path and
+# (sampled case posterior + W_DOWNSTREAM·downstream_term — the #295 governed
+# removal deleted the λ·ΔH face, docs/adr-001-strategy-parameter-governance.md);
+# the explore/exploit dual path and
 # its second ranking face are deleted — there is no other authority to
 # disagree with anymore (#100/#101 die at the root).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -324,7 +326,8 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
     ranks by the authoritative scorer (priority_ratio.py — specs/phase-4/
     contract.md §1). #107 rebuilt that scorer as ONE Thompson ranker (sampled
-    case posterior + LAMBDA_DH·ΔH, seeded by posterior_rng(ws) — the same
+    case posterior + W_DOWNSTREAM·downstream_term, seeded by posterior_rng(ws)
+    — the same
     seed DECIDE ranks with), so the audit and DECIDE share a single ranking
     face and an authority_mismatch is structurally impossible (#100/#101 die
     at the root; the second face is deleted with the phase gate).

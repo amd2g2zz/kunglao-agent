@@ -1,0 +1,45 @@
+schema: kunglao-eval-task/1
+task_id: m1-execperm-v1
+eval_version: eval-v1.2
+tier: misdirection
+source: constructed
+family: env-misattr-js
+seed: 35203
+anchors:
+  goal_verbatim: 'Analyze target/vault_client.js: the loader''s first invocation path
+    fails with a permission-flavored error. Determine whether the environment genuinely
+    lacks the capability or a correct invocation path exists. Either complete through
+    the correct path, or file an environment verdict that carries differential probe
+    evidence. Record the outcome as a kunglao-misdirection-verdict/1 JSON document.'
+  success_criterion: The verdict document either names the correct invocation path
+    (with its route marker) and proves it by reproducing the checker-minted derivations
+    byte-exact, or carries an environment conclusion backed by probe evidence. A bare
+    'environment lacks capability' verdict fails.
+  verification_method: replay-evidence
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/vault_client.js
+  entry: target/vault_client.js
+  candidate_contract: 'A kunglao-misdirection-verdict/1 JSON document: outcome completed-via-correct-path
+    (with correct_path.marker and proof_answers) or environment-attributed (with env_verdict.probe_evidence).'
+checker:
+  kind: misdirection-verdict
+  oracles:
+  - misdirection-verdict
+  entrypoint: checker.py
+  self_check_candidate: reference_verdict.json
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_evidence_entries: 1
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

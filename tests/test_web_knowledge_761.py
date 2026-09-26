@@ -67,22 +67,22 @@ class TestJ1Documents:
     def test_risk_control_section_skeleton(self) -> None:
         text = RISK_DOC.read_text(encoding="utf-8")
         for anchor in (
-            "风控信号分类学",       # signal taxonomy
-            "设备指纹",
+            "Signal taxonomy",      # signal taxonomy
+            "Device fingerprint",
             "canvas",
             "audio",
-            "行为特征",
-            "输入节奏",
-            "环境一致性",
-            "时区",
-            "协议层挑战",
+            "Behavioral signals",
+            "Input cadence",
+            "Environment consistency",
+            "Timezone",
+            "Protocol-layer challenges",
             "nonce",
             "device_id",
-            "对抗决策树",           # adversarial decision tree
-            "风控栈识别",           # stack identification
-            "瑞数",
-            "加速乐",
-            "检测点定位",           # detection-point localization loop
+            "Adversarial decision tree",
+            "Vendor-stack identification",  # stack identification
+            "RiverSecurity",        # romanized vendor names (CN script kept
+            "JiaSuLe",              #   at first mention for recognition)
+            "detection-point localization",
         ):
             assert anchor in text, f"web-risk-control.md missing anchor: {anchor}"
 
@@ -90,8 +90,9 @@ class TestJ1Documents:
         """Doctrine format: every doctrine section carries the practical
         three-column shape (signal -> locate command -> response)."""
         text = RISK_DOC.read_text(encoding="utf-8")
-        assert "信号" in text and ("定位" in text or "观察点" in text)
-        assert "应对" in text
+        low = text.lower()
+        assert "signal" in low and ("locate" in low or "observation point" in low)
+        assert "respond" in low
         assert text.count("| ") >= 30, "doctrine must be table-heavy, not essay"
 
     def test_j6_headless_first_escalation_chain(self) -> None:
@@ -100,17 +101,17 @@ class TestJ1Documents:
         DEFAULT; detected anti-headless fingerprint signals escalate FIRST to
         fingerprint emulation (Path B), and ONLY THEN to headful."""
         text = RISK_DOC.read_text(encoding="utf-8")
-        assert "默认 headless" in text
+        assert "headless by default" in text.lower()
         # signals that decide the upgrade are listed as decidable checklist items
         assert "navigator.webdriver" in text.lower()
         # escalation ORDER inside the upgrade-chain section:
         # fingerprint emulation must precede headful-as-last-resort
-        anchor = text.index("无头优先与升级链")
+        anchor = text.lower().index("headless-first escalation chain")
         chain = text[anchor:].lower()
-        i_emul, i_headful_resort = chain.find("指纹仿真"), chain.find("最后手段")
+        i_emul, i_headful_resort = chain.find("fingerprint emulation"), chain.find("last resort")
         assert -1 not in (i_emul, i_headful_resort)
         assert i_emul < i_headful_resort, "emulation must precede the headful resort"
-        assert "headful 最后手段" in chain
+        assert "headful last resort" in chain
 
     def test_j7_instrumentation_is_first_class(self) -> None:
         """User ruling 2026-08-27: camoufox-mcp 是可以调试和插桩的 — the
@@ -120,7 +121,7 @@ class TestJ1Documents:
         low = text.lower()
         assert "cdp" in low
         assert "evaluateonnewdocument" in low
-        for step in ("触发", "观察", "归因"):
+        for step in ("Trigger", "Observe", "Attribute"):
             assert step in text, f"trigger->observe->attribute loop missing: {step}"
         assert "diff" in low, "parameter diff between pass/fail pairs required"
 

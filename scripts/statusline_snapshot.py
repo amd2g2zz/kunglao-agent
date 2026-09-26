@@ -102,6 +102,12 @@ from entropy_face import SNAPSHOT_REL
 # heartbeat tick report carries the same computed values).
 from rank_face import face as _rank_face
 
+# Issue 134: the rho/Platt calibration face is single-sourced in
+# calibration_face (reliability curve + ECE + current gap over the settled
+# (rho, z) ledger pairs, plus the #127 rho_sampler liveness status). The
+# snapshot ships it verbatim; PRODUCE only — no gate may consume it.
+from calibration_face import face as _calibration_face
+
 # issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
 # rate-limited WARN): absent-source degradations are NORMAL in an idle
 # workspace, and this module's writes are hook-embedded (token-zero
@@ -141,6 +147,7 @@ TOSS_WINDOW_S = 120                                # dispatch -> toss window
 STALL_TICKS_DEFAULT = 6                            # mirrors noop breaker (#634)
 ACTIVITY_WINDOW_S = 300                            # recent-events window (1 tick)
 AUDIT_STALE_MINUTES = 60                           # audit age WARN line
+WAITING_STALE_MIN = 20                             # #244 waiting heartbeat WARN (pulse STUCK_MIN)
 D_SLOPE_NOMINAL = 0.05                             # healthy settle rate / tick
 FLASH_EVERY_N_TICKS = 10                           # periodic flash cadence
 MILESTONES = (0.25, 0.50, 0.75)
@@ -773,6 +780,7 @@ def _perf_face(ws: Path) -> dict:
     read fail-open (missing source = the field stays None/0; the renderer
     hides absent segments, it never renders a placeholder)."""
     out: dict = {"claims": _perf_claims(ws), "win_rate": None,
+                 "hit_rate": None,
                  "heartbeat_age_min": None,
                  "workers": {"total": 0, "active": 0,
                              "last_activity_age_s": None}}
@@ -788,6 +796,22 @@ def _perf_face(ws: Path) -> dict:
     except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
         warn("winrate_face", f"{type(exc).__name__}: {exc}")
     try:
+        # issue-135 prediction hit-rate (PRODUCE-only display face; ranker
+        # and gate consumption stays v0.2 issue 129). Latest rolling window
+        # wins; 0.0 is a REAL zero (every committed prediction wrong —
+        # alarm state), so the None checks are explicit, never an `or` chain.
+        from prediction_hit_rate import face as _phr_face
+        f = _phr_face(ws) or {}
+        if int(f.get("n_scored") or 0) > 0:
+            windowed = f.get("windowed") or []
+            hr = windowed[-1].get("hit_rate") if windowed else None
+            if hr is None:
+                hr = (f.get("overall") or {}).get("hit_rate")
+            out["hit_rate"] = (round(float(hr), 4)
+                               if hr is not None else None)
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("hit_rate_face", f"{type(exc).__name__}: {exc}")
+    try:
         hb = ws / "runs" / ".heartbeat.json"
         out["heartbeat_age_min"] = round(max(
             0.0, (datetime.datetime.now(datetime.timezone.utc).timestamp()
@@ -802,9 +826,20 @@ def _perf_face(ws: Path) -> dict:
         active = [s for s in states
                   if s.get("status") not in lib.TERMINAL_WORKER_STATUSES
                   and s.get("status") != lib.WAITING_WORKER_STATUS]
+        # #244 floor: waiting workers are pulse-exempt by design, so the
+        # statusline carries their count + how many went heartbeat-quiet
+        # (a quiet waiting file = a worker the settle→dispose beat should
+        # have disposed — the 傻等 face).
+        waiting = [s for s in states
+                   if s.get("status") == lib.WAITING_WORKER_STATUS]
         now_dt = datetime.datetime.now(datetime.timezone.utc)
+        stale_waiting = [s for s in waiting
+                         if (now_dt - s.get("mtime")).total_seconds()
+                         > WAITING_STALE_MIN * 60]
         last = max((s.get("mtime") for s in states), default=None)
         out["workers"] = {"total": len(states), "active": len(active),
+                          "waiting": len(waiting),
+                          "stale_waiting": len(stale_waiting),
                           "last_activity_age_s": (round(
                               (now_dt - last).total_seconds(), 1)
                               if last is not None else None)}
@@ -974,6 +1009,17 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # health bit. Producer-owned like every other face: the renderer never
     # reads the ledger. Additive fields — readers probe the field set.
     rank = _rank_face(ws, now=now)
+    # Issue 134: the rho/Platt calibration face (curve + ECE + current gap
+    # + rho_sampler liveness status). Producer-owned like every other face;
+    # additive field — readers probe the field set. The face is fail-open
+    # by contract; the try keeps the snapshot's own never-breaks guarantee.
+    try:
+        calibration = _calibration_face(ws)
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("calibration_face", f"{type(exc).__name__}: {exc}")
+        calibration = {"schema": "rho-calibration/1", "status": "NO_DATA",
+                       "n_samples": 0, "n_pairs": 0, "n": 0, "bins": [],
+                       "ece": None, "current_gap": None, "platt": None}
 
     return {
         "schema": SCHEMA_VERSION,
@@ -1014,6 +1060,9 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # while the ranking result itself stays untouched (fail-open).
         "rank": rank["rank"],
         "rank_log": rank["rank_log"],
+        # Issue 134: rho/Platt calibration face + rho_sampler liveness —
+        # PRODUCE only (no gating; consumption is v0.2 #129/#135).
+        "calibration": calibration,
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,

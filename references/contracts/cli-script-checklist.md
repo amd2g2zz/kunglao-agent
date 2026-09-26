@@ -17,7 +17,9 @@ Before writing any new script, check in this order:
 2. `tools/_index-<category>.md` — the domain's one-line contract skeletons; see whether an existing tool already covers the same capability
 3. `tools/_INDEX.yaml` — the machine contract; confirm tool name/subcommands/input-output
 
-Matching tool found → **prefer solving it with that tool's CLI** (see each tool's `--help` / `input_output` contract); do not write a new script. Only when nothing matches do you proceed to items 1-8 below to write one. The `toolfirst` gate in `hooks/worker_budget.py` checks that every dispatch carries a `tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)` marker — hitting a registered tool's capability keywords without the marker gets REJECTed.
+Matching tool found → **prefer solving it with that tool's CLI** (see each tool's `--help` / `input_output` contract); do not write a new script. T1_DIRECT: if a registered tool directly covers the task, execute it first before any decomposition. Only when nothing matches do you proceed to items 1-8 below to write one, carrying `tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)`. The `toolfirst` gate in `hooks/worker_budget.py` is ADVISORY: a capability-keyword hit without the marker only logs a `toolfirst_advisory` ledger row and proceeds — it does not reject; the citation (or explicit opt-out) is still the expected dispatch shape.
+
+Before writing the script, run `python tools/tool-search.py --find <keywords>` and cite the outcome in the plan (`tool-search: <keywords> -> <hit|none>`) — the plan-check toolsearch gate REJECTS an uncited script-writing plan (issue #243). Ladder: toolbox → wrap system CLI → installed lib → agent-do install → hand-roll LAST; a workspace-proven script carries `promotion: <why>`.
 
 **Hard encoding / naming conventions (issues #317, #314 A1-A3 — missing any one is caught by a mechanical test):**
 

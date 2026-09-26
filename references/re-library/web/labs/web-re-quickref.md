@@ -19,34 +19,145 @@ family: labs
 ## Hook & breakpoint quick reference
 
 Hooks answer one question first: *where does the interesting value cross a
-boundary?* Group the hooks by the boundary they watch.
+boundary?* Group the hooks by the boundary they watch. Every wrapper below is
+self-contained: paste it into the console or deliver it at page load (via
+`evaluate_js`, or earlier via an `inject_hook_preset` preset when one covers
+the boundary), then reproduce the action once and read the log + stack.
 
 **Request boundaries** (capture parameters before they leave the page):
 
 ```javascript
-// XHR: wrap open/send on the prototype, log method/url/body + stack
-// fetch: wrap window.fetch, log url/options + stack
+// XHR: wrap open/send on the prototype — log method/url/body + stack
+(function () {
+  const rawOpen = XMLHttpRequest.prototype.open;
+  const rawSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.reqDesc = method + " " + url;
+    return rawOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    console.log("[xhr]", this.reqDesc, body);
+    console.trace();                       // the stack is the evidence
+    return rawSend.apply(this, arguments);
+  };
+})();
+
+// fetch: wrap window.fetch — log url/options + stack
+const rawFetch = window.fetch;
+window.fetch = function (input, init) {
+  const url = typeof input === "string" ? input : input.url;
+  console.log("[fetch]", url, init && init.body);
+  console.trace();
+  return rawFetch.apply(this, arguments);
+};
+
 // WebSocket: wrap the constructor, then send() and the message listener
-// jQuery: wrap $.ajax, log url/data (legacy sites still route through it)
+const RawWebSocket = window.WebSocket;
+window.WebSocket = function (url, protocols) {
+  console.log("[ws open]", url);
+  console.trace();
+  const sock = protocols !== undefined ? new RawWebSocket(url, protocols)
+                                       : new RawWebSocket(url);
+  const rawWsSend = sock.send.bind(sock);
+  sock.send = function (data) {
+    console.log("[ws send]", String(data).slice(0, 512));
+    return rawWsSend(data);
+  };
+  sock.addEventListener("message", (ev) =>
+    console.log("[ws recv]", String(ev.data).slice(0, 512)));
+  return sock;
+};
+window.WebSocket.prototype = RawWebSocket.prototype;
+
+// jQuery: wrap $.ajax — legacy sites still route every request through it
+if (window.jQuery) {
+  const rawAjax = jQuery.ajax;
+  jQuery.ajax = function (url, settings) {
+    const opts = typeof url === "object" ? url : settings || {};
+    console.log("[jquery ajax]", opts.url || url, opts.data);
+    console.trace();
+    return rawAjax.apply(this, arguments);
+  };
+}
 ```
 
 **Algorithm boundaries** (watch values enter and leave crypto code):
 
 ```javascript
 // JSON.parse / JSON.stringify wraps — serialization often precedes signing
+const rawParse = JSON.parse;
+JSON.parse = function (text, reviver) {
+  console.log("[JSON.parse]", String(text).slice(0, 512));
+  return rawParse.call(JSON, text, reviver);
+};
+const rawStringify = JSON.stringify;
+JSON.stringify = function (value, replacer, space) {
+  const out = rawStringify.call(JSON, value, replacer, space);
+  console.log("[JSON.stringify]", String(out).slice(0, 512));
+  return out;
+};
+
 // atob / btoa wraps — cheap Base64 layers surface immediately
-// eval / new Function proxy — packed code exposes its plaintext at execution
+const rawAtob = window.atob.bind(window);
+const rawBtoa = window.btoa.bind(window);
+window.atob = function (s) {
+  const out = rawAtob(s);
+  console.log("[atob]", s, "→", out);
+  return out;
+};
+window.btoa = function (s) {
+  console.log("[btoa]", s);
+  return rawBtoa(s);
+};
+
+// eval / Function-constructor wraps — packed code exposes its plaintext
+// the moment it executes; this is the console face of the eval proxy
+const rawEval = window.eval;
+window.eval = function (src) {
+  console.log("[eval]", String(src).slice(0, 512));
+  console.trace();
+  return rawEval(src);
+};
+const RawFunctionCtor = Function;
+window.Function = function (...args) {
+  console.log("[Function ctor]", String(args[args.length - 1]).slice(0, 512));
+  console.trace();
+  return Reflect.construct(RawFunctionCtor, args);
+};
+window.Function.prototype = RawFunctionCtor.prototype;
 ```
 
 **State boundaries**:
 
 ```javascript
-// document.cookie via Object.defineProperty setter + console.trace —
-//   finds dynamically generated cookies (the setter fires with a stack)
-// setTimeout / setInterval guards — skip callbacks whose source contains a
-//   debugger statement (anti-debug tripwire neutralized, page keeps living)
-// canvas toDataURL / toBlob wraps and navigator property overrides —
-//   observe the fingerprint surface when detection is fingerprint-driven
+// document.cookie setter wrap — the setter fires with a stack and exposes
+// dynamically generated cookies (the classic cookie-setter trap)
+const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+Object.defineProperty(document, "cookie", {
+  get() { return cookieDesc.get.call(document); },
+  set(v) { console.log("[cookie set]", v); console.trace();
+           cookieDesc.set.call(document, v); }
+});
+
+// setTimeout guard — skip callbacks whose source contains a debugger
+// statement: the anti-debug tripwire is neutralized, the page keeps living
+const rawSetTimeout = window.setTimeout;
+window.setTimeout = function (fn, delay, ...rest) {
+  if (String(fn).includes("debugger")) {
+    console.log("[setTimeout guard] debugger callback dropped");
+    return 0;
+  }
+  return rawSetTimeout.call(window, fn, delay, ...rest);
+};
+
+// canvas toDataURL wrap — observe the fingerprint surface when detection is
+// fingerprint-driven (pair with navigator property overrides as needed)
+const rawToDataURL = HTMLCanvasElement.prototype.toDataURL;
+HTMLCanvasElement.prototype.toDataURL = function (...args) {
+  const out = rawToDataURL.apply(this, args);
+  console.log("[canvas]", this.width + "x" + this.height, out.slice(0, 96));
+  return out;
+};
 ```
 
 **Injection order with the camoufox supply** (verified tool face):
@@ -81,8 +192,8 @@ opening the browser; the steps below gather evidence for it.
 - **Step 5 — Verify by replay.** Reproduce the parameter offline from the
   same inputs; `verify_signer_offline` is the independent check. A claimed
   algorithm that fails replay is a hypothesis, not a fact — the replay is
-  the checker in maker-checker terms. Record the identified algorithm as a
-  fact with the captured I/O pair and the replay command.
+  the verification. Record the identified algorithm as a fact with the
+  captured I/O pair and the replay command.
 
 Two follow-through paths when the producer hides behind a virtual machine:
 
@@ -166,10 +277,10 @@ then what, then who reaches it:
 Re-index after every further peel: each transformation invalidates the
 previous graph. Semantic queries over stale trees are confident nonsense.
 
-Methodology note: the analysis system registers this capability pair as
-`js:semantic-query` / `js:call-graph`; the dispatching worker owns when and
-how the query carrier runs (worker contract), not whether it runs —
-manual-grep chaining in place of the graph is the anti-pattern.
+Methodology note: this capability pair is registered as
+`js:semantic-query` / `js:call-graph` — route the recovered tree through
+graph queries rather than chaining manual greps; grep chaining in place of
+the graph is the anti-pattern.
 
 ## Crypto-algorithm signatures
 
@@ -196,9 +307,9 @@ padding with Base64 output; signing compositions are usually a plain
 concatenation of parameters, timestamp, and secret (sorted-key and
 nested-hash variants exist — replay each variant rather than guessing).
 
-kunglao bookkeeping: the algorithm identification is a numeric-style fact —
-carry the evidence (I/O pair, lengths, replay command) in the fact file, not
-just the family name.
+Evidence discipline: an algorithm identification is only as good as its
+captured I/O pair — carry the evidence (lengths, replay command) next to
+the family label, never the label alone.
 
 ## Anti-patterns
 
@@ -214,7 +325,7 @@ just the family name.
    Exhaust boundary hooks, interpreter traces, and sandbox variants before
    accepting a per-request-browser fallback.
 4. **Skipping the replay check.** An algorithm explanation without offline
-   reproduction is an unverified hypothesis. The replay is the checker.
+   reproduction is an unverified hypothesis. The replay is the check.
 5. **Shipping the automation.** The deliverable is a standalone protocol
    script (Node or Python) that survives a day in a headless container;
    browser automation is scaffolding for evidence collection, never the
@@ -242,3 +353,26 @@ Index only — open on demand when the main workflow dead-ends:
 - **Stacked protections** — pinning/RASP/obfuscation/encryption as
   orthogonal layers over any route, plus the recon order
   ([stacked-protections.md](../../android/protections/stacked-protections.md)).
+
+## Captured-param cipher-shape classifier (mechanical)
+
+Before touching JS to hunt an algorithm, classify the captured value's
+shape — charset × decoded length × entropy rank the family candidates and
+tell you what to look for in the code:
+
+```bash
+python tools/crypto/cipher_identify.py "e10adc3949ba59abbe56e057f20f883e"
+#   charset=hex_lower, decoded 16 bytes -> md5(high), md4/ntlm(low)
+
+python tools/crypto/cipher_identify.py --in captured_param.txt
+#   base64 decodable, 16-aligned, entropy ~8 -> aes(high) with key/iv hunt
+#   base64url x3 dot segments                -> jwt(high): decode claims,
+#                                               sign input = segments 1+2
+```
+
+Read the `next_check` of the top candidate as the search target in the JS:
+hash families -> the concatenation order and any secret prefix/suffix;
+block ciphers -> the key schedule and mode; `base64-text` -> stop, it is
+an encoding, not encryption. The classifier never proves anything — the
+proof is the differential verification of the recovered function against
+captured samples (`tools/web/sign_candidate_verify.py emit` + `apply`).

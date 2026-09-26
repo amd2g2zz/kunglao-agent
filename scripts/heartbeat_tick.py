@@ -105,7 +105,7 @@ SCRIPTS = SKILL_DIR / "scripts"
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
 from liveness_policy import (  # noqa: E402
-    HEARTBEAT_STALE_MINUTES, MISSION_SETTLE_MIN, RENEW_MARGIN_LOW_MINUTES)
+    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -209,7 +209,8 @@ def _all_workers_waiting(ws: Path, *, now: 'datetime.datetime | None' = None) ->
 
 
 def noop_breaker(ws: Path, current_hash: str,
-                 threshold: int | None = None) -> dict:
+                 threshold: int | None = None,
+                 premise_hash: str | None = None) -> dict:
     """#634 Part B: no-progress circuit breaker state machine.
 
     Same content hash as the previous tick → consecutive_noop += 1; any
@@ -219,7 +220,11 @@ def noop_breaker(ws: Path, current_hash: str,
     explained by workers WAITING (zero active, >=1 waiting) the breaker
     stays quiet with reason "all-workers-waiting" — idle spin-down, not a
     stall. Pure state helper — main() owns persistence+rc.
-    """
+
+    H1c (autoresearch thin-base): `premise_hash` (premise_digest) rides the
+    persisted state as EVIDENCE of what the loop was metabolizing — it
+    never participates in the equality (premise churn must not reset the
+    no-op counter; see state_fingerprint)."""
     import json as _json
     import os
     ws = Path(ws)
@@ -235,10 +240,23 @@ def noop_breaker(ws: Path, current_hash: str,
         count = int(prev.get("count", 0)) + 1
     else:
         count = 1
+    # issue 380 P3-3: the persisted premise_hash gets a READER — compare the
+    # incoming digest against the previously persisted one and persist the
+    # comparison verdict alongside the evidence. The RETURN shape is
+    # untouched (the issue 275 trace contract pins it); the verdict lives in
+    # runs/.heartbeat-noop.json for postmortems. Evidence only: premise
+    # churn must never gate (or reset) the trip.
+    prev_premise = prev.get("premise_hash")
+    premise_changed = bool(prev_premise and premise_hash
+                           and prev_premise != premise_hash)
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(_json.dumps(
-            {"hash": current_hash, "count": count}), encoding="utf-8")
+        payload = {"hash": current_hash, "count": count}
+        if premise_hash is not None:
+            # H1c: evidence only — the premise digest never gates the trip.
+            payload["premise_hash"] = premise_hash
+            payload["premise_changed"] = premise_changed
+        state_path.write_text(_json.dumps(payload), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001 — telemetry must not break the tick
         warn("noop_breaker_state_write", f"{type(exc).__name__}: {exc}")
     if count >= n and _all_workers_waiting(ws):
@@ -248,13 +266,36 @@ def noop_breaker(ws: Path, current_hash: str,
 
 
 def state_fingerprint(ws: Path) -> str:
-    """#634 Part B hash input: register + _INDEX + mission ledger. Any real
-    state advance changes at least one of these."""
+    """#634 Part B hash input — H1c (autoresearch thin-base): the breaker
+    sees OUTPUT, not churn.
+
+    Equality input = claim-register.yaml + facts/_INDEX.md (real output
+    surfaces). Changes vs the pre-H1 input (register + _INDEX + mission
+    ledger):
+      - runs/mission_ledger.yaml is EXCLUDED: the tick itself appends V_m
+        history to it once per settle window (cockpit sample) with zero
+        loop output — machinery churn alone reset the no-op counter, so the
+        breaker never tripped through a pure burn (H1 premise (c): the
+        campaign's no-output metabolism fooled the breaker).
+      - premise-state is deliberately OUT of the equality input: it is
+        hashed (below) but as OBSERVABILITY, not as a reset trigger.
+        runs/env-state.json carries tick-fresh ts fields (env_state_probe
+        rewrites it every tick) and blockers/*.md bodies are rewritten by
+        premise metabolism/premise_expiry — hashing either into the
+        equality input would reset the counter on machinery cadence and
+        the breaker could never trip. Metabolizing a blocker (rewriting
+        state around a false premise) is churn: it must not reset the
+        no-op counter; a real state advance (claim-register change) still
+        does.
+
+    The premise digest (blockers/*.md contents only, issue 380 P3-3) is
+    exposed via premise_digest() so the breaker state can carry it as
+    evidence (what the loop was metabolizing) without it gating the trip.
+    """
     import hashlib
     ws = Path(ws)
     h = hashlib.sha256()
-    for rel in ("claim-register.yaml", "facts/_INDEX.md",
-                "runs/mission_ledger.yaml"):
+    for rel in ("claim-register.yaml", "facts/_INDEX.md"):
         p = ws / rel
         if p.exists():
             h.update(rel.encode("utf-8"))
@@ -262,38 +303,46 @@ def state_fingerprint(ws: Path) -> str:
     return h.hexdigest()
 
 
+def premise_digest(ws: Path) -> str:
+    """H1c: the premise-state hash — blockers/*.md contents ONLY
+    (issue 380 P3-3: runs/env-state.json was hashed here too, but env_state_probe
+    rewrites it every tick, so the persisted digest churned every tick and
+    carried no signal; the digest must be stable under tick cadence and
+    move only when premise metabolism rewrites a blocker).
+
+    Evidence-side only: it rides the persisted breaker state
+    (runs/.heartbeat-noop.json) so a postmortem can see premise churn, and
+    it NEVER participates in the no-op equality (hashing it there would
+    reset the counter on cadence rewrites — blocker bodies via
+    premise_expiry). The persisted value now has a READER: noop_breaker
+    compares it against the incoming digest and reports premise_changed."""
+    import hashlib
+    ws = Path(ws)
+    h = hashlib.sha256()
+    bdir = ws / "blockers"
+    if bdir.is_dir():
+        for p in sorted(bdir.glob("*.md")):
+            try:
+                h.update(f"blockers/{p.name}".encode("utf-8"))
+                h.update(p.read_bytes())
+            except OSError as exc:
+                warn("premise_digest_blocker_read",
+                     f"{type(exc).__name__}: {p.name}: {exc}")
+                continue
+    return h.hexdigest()
+
+
 def _mission_history_due(ws: Path) -> bool:
-    """#8: True when a new V_m history point is due (cadence gate for
-    mission_ledger.value_m in the cockpit block below).
-
-    value_m appends history on EVERY call — un-gated, the 5-min tick cadence
-    would spam runs/mission_ledger.yaml and flatten the d_slope that
-    statusline computes over the last-5 window. The gate samples at most
-    once per MISSION_SETTLE_MIN (liveness_policy, rationale there).
-
-    Gate rule (reads the history schema mission_ledger owns: entries are
-    {ts, v_m} for samples, {ts, action: repin, ...} for repins):
-      - no dated V_m entry yet          -> due (first sample after init)
-      - newest V_m entry older than the window -> due
-      - newest V_m entry undated        -> not due (hand-seeded/repin-era
-        ledger, cadence unknown — zero-noise: never spam an unknown ledger)
-      - any read/parse failure          -> not due (gate never fails the tick)
-    """
+    """issue 8 cockpit cadence gate — now a DELEGATE (issue 380 P3-7): the rule
+    lives in mission_ledger.history_due so the
+    eval runner's settle face shares the exact same semantics (a second
+    un-gated sampler was the finding). Kept as a named wrapper to
+    preserve the tick's monkeypatch/import face."""
     try:
         import mission_ledger as _ml
-        led = _ml.load(ws) or {}
-        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
-                if isinstance(h, dict) and "v_m" in h]
-        if not hist:
-            return True
-        ts = hist[-1].get("ts")
-        if not ts:
-            return False
-        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        age = datetime.datetime.now(datetime.timezone.utc) - last
-        return age >= datetime.timedelta(minutes=MISSION_SETTLE_MIN)
     except Exception:  # noqa: BLE001 — the gate must never fail the tick
         return False
+    return _ml.history_due(ws)
 
 
 def _run_mechanisms(ws: Path, runner) -> dict:
@@ -387,19 +436,6 @@ def main(argv: list[str] | None = None) -> int:
     report["oracle_registered"] = _oracle_registered(ws)
     if not report["oracle_registered"]:
         print(ORACLE_MISSING_LINE)
-    # #127: detector liveness — DORMANT detectors (evaluated, never fired)
-    # surface as a ONE-TIME WARN (the #600 DORMANT_SENTINEL generalized to
-    # every detector emitting the detector_eval/detector_fired pair). The
-    # report carries the names; the nag line prints from dormant_warn.
-    # Fail-open like every watcher: a crashed liveness read never fails
-    # the tick.
-    try:
-        import detector_liveness as _dl
-        dormant = _dl.dormant_warn(ws)
-        if dormant:
-            report["detector_dormant"] = dormant
-    except Exception as exc:  # noqa: BLE001 — liveness evidence must not fail the tick
-        warn("detector_liveness", f"{type(exc).__name__}: {exc}")
     # #878: registry-driven mechanism scheduling — the tick is the ONLY time
     # host, so the advisory children are no longer hand-wired here. The
     # scheduler walks mechanisms.yaml (schema gate: trigger/cost_class/
@@ -416,6 +452,27 @@ def main(argv: list[str] | None = None) -> int:
                                   "ran": [], "skipped": [], "dropped": []}}
     report["mechanisms"] = payload.pop("mechanisms")
     report.update(payload)
+    # H1a (autoresearch thin-base): the tick's forensics faces ride the
+    # ledger event bus. `events_seen` = the wake classes this pass consumed
+    # (settlement/stall/plan_review); no event -> the faces are skipped and
+    # the report simply omits them ("delete nothing — gate the faces behind
+    # the event trigger"). Liveness core (selfcheck/reconcile/renew/
+    # heartbeat-check/oracle) stays unconditional.
+    tick_events = set((report.get("mechanisms") or {}).get("events_seen") or [])
+    # #127: detector liveness — DORMANT detectors (evaluated, never fired)
+    # surface as a ONE-TIME WARN (the #600 DORMANT_SENTINEL generalized to
+    # every detector emitting the detector_eval/detector_fired pair). The
+    # report carries the names; the nag line prints from dormant_warn.
+    # Fail-open like every watcher: a crashed liveness read never fails
+    # the tick. H1a: runs only when this pass saw a semantic event.
+    if tick_events:
+        try:
+            import detector_liveness as _dl
+            dormant = _dl.dormant_warn(ws)
+            if dormant:
+                report["detector_dormant"] = dormant
+        except Exception as exc:  # noqa: BLE001 — liveness evidence must not fail the tick
+            warn("detector_liveness", f"{type(exc).__name__}: {exc}")
     # #759 H1: THINK seat contract — a seat that REPORTS waiting with an
     # artifact substitutes action_taken (idle != EMPTY, #711 E1); anything
     # else keeps the orchestrator-filled #237 contract. Guarded: a scheduler
@@ -454,7 +511,8 @@ def main(argv: list[str] | None = None) -> int:
     # the loop prompt, mirroring how BLOCKED forces self-recovery.
     breaker_rc = None
     try:
-        br = noop_breaker(ws, state_fingerprint(ws))
+        br = noop_breaker(ws, state_fingerprint(ws),
+                          premise_hash=premise_digest(ws))
         if br["tripped"]:
             report["idle_circuit_breaker"] = {
                 "tripped": True,
@@ -479,10 +537,11 @@ def main(argv: list[str] | None = None) -> int:
     # claims' answers_question -> PQ answered (idempotent, every tick);
     # value_m() appends the V_m history point that feeds V_m/d_slope, gated
     # by _mission_history_due so the trajectory samples once per window.
-    settlement_hosted = False
+    # (H1a: the old `settlement_hosted` flag only proved ledger EXISTENCE —
+    # true every tick — and gated nothing anymore; the snapshot face moved
+    # to the real event gate `tick_events` above.)
     try:
         if (ws / "runs" / "mission_ledger.yaml").exists():
-            settlement_hosted = True
             import mission_ledger as _ml
             _ml.update(ws)
             if _mission_history_due(ws):
@@ -507,15 +566,19 @@ def main(argv: list[str] | None = None) -> int:
     # :416) — re-serialize here so the face lands in
     # runs/.heartbeat-tick.json, the same re-write pattern the #634
     # breaker uses. Fail-open like every report field.
-    try:
-        import entropy_face
-        _h = entropy_face.face(ws)
-        report["h_bits"] = _h["h_bits"]
-        report["h_pq"] = _h["h_pq"]
-        report["h_trend"] = _h["h_trend"]
-        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
-        warn("entropy_face", f"{type(exc).__name__}: {exc}")
+    # H1a (autoresearch thin-base): EVENT-GATED — the entropy face rides the
+    # ledger event bus (settlement/stall/plan_review), not bare tick
+    # cadence; with no event the report omits the face (nothing deleted).
+    if tick_events:
+        try:
+            import entropy_face
+            _h = entropy_face.face(ws)
+            report["h_bits"] = _h["h_bits"]
+            report["h_pq"] = _h["h_pq"]
+            report["h_trend"] = _h["h_trend"]
+            out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+            warn("entropy_face", f"{type(exc).__name__}: {exc}")
 
     # Issue 218: the Thompson rank face rides the same report — ONE
     # computation (scripts/rank_face.py) shared with the statusline snapshot:
@@ -524,14 +587,32 @@ def main(argv: list[str] | None = None) -> int:
     # decision-side while the ranking result itself stays untouched. Its own
     # block (not folded into the entropy try) so neither face can take the
     # other down; fail-open like every report field.
-    try:
-        import rank_face
-        _r = rank_face.face(ws)
-        report["rank"] = _r["rank"]
-        report["rank_log"] = _r["rank_log"]
-        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
-        warn("rank_face", f"{type(exc).__name__}: {exc}")
+    # H1a: EVENT-GATED (same trigger as the entropy face).
+    if tick_events:
+        try:
+            import rank_face
+            _r = rank_face.face(ws)
+            report["rank"] = _r["rank"]
+            report["rank_log"] = _r["rank_log"]
+            out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+            warn("rank_face", f"{type(exc).__name__}: {exc}")
+
+    # step 11d (#342): the verify-backlog face rides the same report —
+    # PARTIAL-fact count + the stalest partial's age in ticks, the
+    # timeliness twin of the VERIFY_STALE anti-starvation event. Same face
+    # contract as h_bits/rank: ONE computation shared with the display
+    # consumers (scripts/verify_backlog_face.py), own try block so neither
+    # face can take the other down, fail-open like every report field.
+    # H1a: EVENT-GATED (same trigger as the entropy face).
+    if tick_events:
+        try:
+            import verify_backlog_face
+            _vb = verify_backlog_face.face(ws)
+            report["verify_backlog"] = _vb["verify_backlog"]
+            out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 — a report face never fails the tick
+            warn("verify_backlog_face", f"{type(exc).__name__}: {exc}")
 
     # step 11c (#142 refinement, event-driven): when this tick HOSTED a
     # settlement/rollup (mission ledger present), that IS a semantic event
@@ -542,7 +623,10 @@ def main(argv: list[str] | None = None) -> int:
     # settlement event and writes nothing; beyond this, writes stay
     # event-only (tool use via heartbeat_touch) — stale is truthful.
     # Fail-open like every display dependency.
-    if settlement_hosted:
+    # H1a: the pre-H1 gate was ledger EXISTENCE (true on every initialized
+    # workspace, i.e. every tick) — the honest event gate is the bus: the
+    # snapshot writes only when this pass consumed a semantic event.
+    if tick_events:
         try:
             import statusline_snapshot as _sls
             _sls.write_snapshot(ws)

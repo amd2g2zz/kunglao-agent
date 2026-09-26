@@ -52,6 +52,16 @@ def _make_ws(tmp_path, claims=None) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "runs").mkdir()
+    # #240: the convergence CLI hard-errors without the task_spec marker.
+    # #306: the oracle-anchor stamp too — a claimless register + a
+    # question-less AND anchor-less task_spec is the degenerate pair the
+    # emptiness probe refuses, so the factory models a healthy post-intake
+    # workspace (what init's intake writes) not a rotted one.
+    (ws / "task_spec.yaml").write_text(
+        "primary_questions: []\n"
+        "goal_verbatim: retrieve the family config\n"
+        "success_criterion: family named with evidence\n"
+        "verification_method: static\n", encoding="utf-8")
     write_claims_register(ws, claims or [], defaults=True)
     return ws
 

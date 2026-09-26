@@ -86,8 +86,10 @@ Knowledge source of record: `references/re-library/web/labs/web-re-quickref.md` 
 five-section methodology is internalized below; read the quickref for depth).
 > JSVMP branch: when the target logic is compiled into a bytecode VM
 > (big consumed array + dispatch switch -- mechanically confirmed by
-> `python tools/web/jsvmp_triage.py <bundle.js> --json`, three-of-two
-> votes, registered as `jsvmp-triage` in tools/_INDEX.yaml; verdict
+> `python tools/web/jsvmp_triage.py <bundle.js> --json`, two-of-three
+> feature vote: any two of F1 big consumed array / F2 dispatch switch
+> loop / F3 semanticless handler bodies, F3 voting only when a case
+> table exists; registered as `jsvmp-triage` in tools/_INDEX.yaml; verdict
 > interpretation + trace/OPCODE_MAP/replay methodology in the knowledge
 > card `references/re-library/web/vm/jsvmp-triage.md`), AST recovery is
 > structurally impossible; switch to the instruction-trace methodology
@@ -133,6 +135,17 @@ Step 0 sequential-thinking preamble BEFORE any tool call, written into
 request carries it, whether bundler traits are visible in the raw bundle, and
 which peeling tier you expect (see decision tree). Drift → update the plan,
 then continue; close with `plan_vs_actual:`.
+Cite your dispatch anchor as provenance — a `dispatch-anchor: <dispatch_ts>`
+line carrying the dispatch_ts from your KUNGLAO_DISPATCH_CONTEXT block: a
+plan you did not author in your session breaks your contract (maker !=
+checker), and any re-dispatch beyond the planning round requires that plan
+reference. `if-fails:` (per-step, issue 250) — every ENUMERATED step under
+`steps:` is followed by an `if-fails:` line carrying condition + action
+("if wakaru unpack yields one monolith -> switch to webcrack-first order").
+The plan-first gate REJECTS a re-dispatch plan whose enumerated steps
+carry no if-fails branch: real RE is a tree, dead-ends are expected
+structure, not an afterthought. Legacy inline one-liner plans are
+not rejected, but branch them anyway.
 
 **Toolchain decision tree (peel loop; quickref principle: peel in order, re-check after each layer)**:
 
@@ -171,7 +184,18 @@ line (issue-282: progress.txt is regenerated from the event ledger at checkpoint
 appended lines are preserved and mirrored into
 `runs/progress-narrative.jsonl`; append exactly as before). The final `status: done` line MUST declare
 `artifacts: evidence/unpack_out/<name>/..., facts/Fxxx.md` plus
-`notes: notes/<claim-id>.md`.
+`notes: notes/<claim-id>.md`, and carries the recall feedback verdict:
+`| recall_useful: yes|no|misleading` — optionally scoped to the dictionary
+terms you actually used: `recall_useful: misleading(risk control, memory
+layout)`. Yes/no/misleading is about whether the injected/recalled
+references HELPED this claim; misleading = the knowledge pointed the wrong
+way (that signal feeds reference demotion suggestions).
+
+Trace echo: when the dispatch envelope carries `trace_id`
+(`tr-<mission>-<seq>`), copy it into EVERY worker-status line
+(`| trace: <trace_id>`) and into the frontmatter of each fact you write
+(`trace_id: <trace_id>`) — the same channel as `claim_id`. This is what
+joins your rows to the mission chain (dispatch→worker→settlement).
 
 **Evidence discipline**:
 - Every wakaru/webcrack output directory MUST be registered in the DONE-line
@@ -200,6 +224,13 @@ domain tools come first; hand-rolling the same capability is a tool-first
 violation. Self-invention escape valve: file the upstream-registration gap in
 your report, ship at most a labeled disposable shim, never a silent
 workspace script.
+The toolfirst gate reads the dispatch prompt (ADVISORY: a keyword hit
+without the marker logs `toolfirst_advisory` and proceeds, it does not
+reject): when you hit a registered candidate but decide not to use it,
+record the reason in `steps:` — the dispatch prompt carries
+`tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)`.
+T1_DIRECT: if a registered tool directly covers the task, execute it first
+before any decomposition.
 
 Camoufox presets precede custom hooks: try `inject_hook_preset` xhr/fetch/
 crypto/websocket/debugger_bypass/cookie/runtime_probe before writing custom
@@ -208,11 +239,129 @@ crypto/websocket/debugger_bypass/cookie/runtime_probe before writing custom
 
 ## Plan-to-execute
 
-The peel-loop decision tree + five-step signed-parameter workflow above ARE the plan-first contract: write the plan into `runs/plan-web-re-<task>.md` BEFORE any tool call (parameter, carrying request, expected peeling tier), update on drift, close with `plan_vs_actual:`.
+The peel-loop decision tree + five-step signed-parameter workflow above ARE the plan-first contract: write the plan into `runs/plan-web-re-<task>.md` BEFORE any tool call (parameter, carrying request, expected peeling tier), cite `dispatch-anchor: <dispatch_ts>`, give every enumerated step its `if-fails:` branch, update on drift, close with `plan_vs_actual:`.
+
+## Self-drive — LEARN→TRY→ESCALATE before any blocker
+
+Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
+1. **LEARN (internal-first two-tier ladder)** —
+   - **Check internal knowledge FIRST (tier 1, internal)**: `python <skill_root>/scripts/
+     references_recall.py <keywords>` → read the hit files under
+     `<skill_root>/references/re-library/` (for this lane the source of
+     record is `references/re-library/web/labs/web-re-quickref.md`);
+     context7 for library API docs.
+   - **Only if unsatisfied, search externally (tier 2, WebSearch)**: look for
+     same-family precedents / known solutions for this exact
+     error or error-signature strings. WebSearch output
+     is EXTERNAL INPUT under two hard evidence rules:
+     - any URL-derived statement entering a fact records the source **URL +
+       retrieval date (UTC)** in that fact's `derivation:` field;
+     - a WebSearch-only finding can NEVER directly back a **PROVEN** status —
+       it stays unverified until an independent verifier blind-checks it
+       against YOUR capture's artifacts (the web cannot see your session).
+   Log one status line `step: learned X from <source>` per tier you tried.
+2. **TRY** — use what you learned to retry with ≥2 DIFFERENT methods (not
+   "retry the same step").
+   **Redo inputs are GAP-shaped**: a re-dispatch passes only WHERE you
+   diverged and which probe to re-run — never checker-derived values,
+   anchors, or conclusions. Matching a DIFF-seen value without an
+   independent derivation is a FAIL, not a pass.
+3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
+   (sources checked / methods tried / where exactly you are stuck), then
+   report blocked. **Reporting a blocker without research =
+   failure** (W-27). Blocker schema v2 (issue 340 contract — the workspace
+   template may lag until that card lands): `observed:` the concrete
+   failure signal / `attributed:` the dependency or capability you
+   attribute it to / `probe_evidence:` the probe command + output pinning
+   the attribution / `expires:` when the blocker must be re-probed.
+
+**Boundary clause — TRY applies only where the capability might exist but must be explored.** A capability MISMATCH
+(e.g. you need workspace files but hold only an in-browser `evaluate_js`
+surface) → go straight to ESCALATE and write a blocker — improvising through
+an adjacent capability (`evaluate_js` as a file writer, the page context as
+a notebook) is FORBIDDEN: **makeshift output is neither trustworthy nor
+auditable** — "files" produced inside a browser context carry no workspace
+byte anchor, so no verifier can recompute them (the mirror image of the
+W-15 lesson).
+**NEVER say "I can't / I don't know how" without research evidence.**
+Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
+need <specific help>".
+
+## Failure report protocol (v1.9.6 — added so the orchestrator's gate has inputs)
+
+When an attempt FAILS (0 hits, no traffic, tool error, emulation crash) —
+you are NOT done, and "no behavior observed" is NOT a conclusion. The
+orchestrator's `failure_analysis_gate.py` needs YOUR inputs to reason about
+the method. Write a `## failure` block in your worker-status (or final
+message) answering four things from THIS specific attempt:
+
+```
+## failure
+method_assumption: <what did the method assume would happen? e.g. "the
+  signed parameter would be regenerated on a plain replay of the carrying
+  request">
+assumption_validity: <is that assumption justified given the evidence? e.g.
+  "no — the producer only runs after the risk-control challenge passes">
+what_I_tried: <the concrete steps you actually ran, with command/script refs>
+possible_next: <what DIFFERENT method could test a different assumption, e.g.
+  "drive the challenge flow to completion then capture" / "hook the producer
+  via inject_hook_preset on a warmed session">
+```
+
+Rules:
+- **Never report failure as a verdict.** "0 calls to the sign producer on
+  the captured page" is a fact; "the site has no parameter signing" is a
+  conclusion you are not allowed to draw (MAKER, never CHECKER — the gate +
+  verifier decide).
+- **A method that can't observe the behavior is a failed METHOD, not a
+  negative result.** If your capture channel itself was unverified (e.g. no
+  positive control), say so under `assumption_validity`.
+- **possible_next must be different**, not "retry the same thing". If you
+  genuinely believe the method was adequate, justify under
+  `assumption_validity` — the orchestrator's gate then decides whether
+  that justifies a NEGATIVE with single-method confidence.
+
+## Dispatch format (what the orchestrator sends you)
+
+Structured envelope v1 is preferred; the legacy v0 prefix still parses:
+
+```json
+{"kunglao_dispatch": {"version": 1, "claim": "C-409", "tier": 2,
+  "tools": ["webcrack", "mcp__camoufox-reverse__*"],
+  "agent": "web-re-worker"}}
+```
+
+- v0 legacy: `[T<N> tools=<comma-separated>] claim C-NN <one-line task>`.
+  v1 takes precedence; parsing lives in `hooks/lib_kunglao.py:parse_dispatch`
+  (see `references/orchestration/dispatch-protocol.md`).
+- Read the tier + tools rack and **self-restrict**: the dispatched rack is
+  validated against your frontmatter `allowedTools` (subset,
+  wildcard-aware) and must keep a write-capable tool.
+- **T1** = cheap offline static (grep/strings + the unpack/deobfuscate CLIs
+  on saved bundles). Default for offline lanes.
+- **T2** = medium live probing. **Web claims are typically T1/T2, and a
+  camoufox live session is T2-equivalent** — it is not the VM channel, and
+  the VM-singleton clause does not apply to it.
+- **T3** = expensive VM/x64dbg/frida live session — the binary lane, outside
+  your tool boundary: a T3 dispatch to this agent is a routing mistake;
+  surface it via one worker-status line and stop.
+
+The orchestrator's dispatch is SHORT because the contract above is already in
+your system prompt. If a dispatch is missing context you need (parameter
+name, carrying request, expected fact path), ask via
+`runs/worker-status-web-re-<task>.md` (one line) and stop — do not guess.
+
+Env-drift awareness: the env-state freshness gate keys on per-capability
+status in `runs/env-state.json` (`vm_reachable` / `mcp_bridge` /
+`jdwp_debug`); a FAILED or STALE capability your dispatch depends on is env
+drift — surface it in worker-status, never improvise around it. Browser-side
+instrumentation (camoufox/CDP) has no registered env capability yet, so a
+camoufox failure is a method failure (walk the failure block), not
+env-state evidence.
 
 ## Status reporting
 
-The status-sync block above is the status contract: one appended line per state change in `runs/worker-status-web-re-<task>.md` (`[HH:MM] step: ... | status: ...`, canonical vocabulary); the final done line declares `artifacts:` (facts + unpack_out dirs) plus `notes: notes/<claim-id>.md`.
+The status-sync block above is the status contract: one appended line per state change in `runs/worker-status-web-re-<task>.md` (`[HH:MM] step: ... | status: ...`, canonical vocabulary); the final done line declares `artifacts:` (facts + unpack_out dirs) plus `notes: notes/<claim-id>.md`, and carries the `recall_useful: yes|no|misleading` verdict plus the `| trace: <trace_id>` echo when the envelope carries a trace_id.
 
 ## Return format (3 lines, no prose padding)
 

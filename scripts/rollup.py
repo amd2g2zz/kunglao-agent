@@ -162,6 +162,63 @@ def _queue_notes_due(workspace: Path, claim_id: str, terminal_status: str) -> bo
         return False  # fail-open: the rollup's other steps must not block
 
 
+def _capture_confirmed_with_diff(workspace: Path, claim_id: str) -> int:
+    """Scan runs/verify-redteam-*.md naming the claim for CONFIRMED
+    verdicts carrying DIFF items; each verdict lands EXACTLY ONE
+    ``confirmed_with_diff`` signal row with the DIFF count — idempotent
+    across rollups via append_once's signal_id (the record_event idiom:
+    identity = source file + claim + diff count, so a later rollup for
+    another claim re-globbing the same file dedupes; an evolving verdict
+    with a changed count lands again, outcome_capture's posture).
+
+    The DIFF marker is LINE-ANCHORED (an optional markdown heading/bullet
+    prefix, then DIFF at item start — "## DIFF-1", "DIFF: ...", "- DIFF"):
+    the red-team contract reports divergences as DIFF items, and prose
+    mentions ("no DIFF found") are not divergences. A CONFIRMED verdict
+    with zero DIFF items is a clean pass — no row (the kind is
+    confirmed_WITH_DIFF). Fail-open: any read/parse failure is zero rows,
+    never a broken rollup."""
+    try:
+        import hashlib
+        import re
+        import signals_stream
+        runs = workspace / "runs"
+        if not runs.is_dir():
+            return 0
+        verdict_re = re.compile(
+            r"RED-TEAM VERDICT\s*[:\-]?\s*CONFIRMED", re.IGNORECASE)
+        diff_re = re.compile(r"^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+|\d+[.)][ \t]+)?"
+                             r"DIFF\b", re.MULTILINE)
+        claim_re = re.compile(r"(?:claim\s*[:=]?\s*|target\s*[:=]?\s*)(C-\d+)",
+                              re.IGNORECASE)
+        landed = 0
+        for p in sorted(runs.glob("verify-redteam-*.md")):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not verdict_re.search(text):
+                continue
+            row_claim = claim_id
+            m = claim_re.search(text)
+            if m:
+                row_claim = m.group(1)
+            diffs = len(diff_re.findall(text))
+            if diffs < 1:
+                continue  # CONFIRMED without DIFF items = clean pass
+            signal_id = hashlib.sha256("|".join(
+                ["confirmed_with_diff", p.name, row_claim,
+                 str(diffs)]).encode("utf-8")).hexdigest()
+            signals_stream.append_once(workspace, "confirmed_with_diff",
+                                       signal_id, claim=row_claim,
+                                       diffs=diffs, source=p.name)
+            landed += 1
+        return landed
+    except Exception as exc:  # noqa: BLE001 — signal never breaks rollup
+        warn("confirmed_with_diff", f"{type(exc).__name__}: {exc}")
+        return 0
+
+
 def _checkpoint_commit(workspace: Path, claim_id: str, terminal_status: str) -> str:
     """Shared #534 workspace-git checkpoint hook.
 
@@ -216,6 +273,28 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # so a verify-redteam row gets read by the NEGATIVE red-team-CONFIRMED gate).
     captured = _oc.capture(workspace)
 
+    # Step 1.5: the red-team CONFIRMED-WITH-DIFF face lands as a
+    # structured signal row (runs/signals.jsonl) — the C-603 class routed
+    # verdict divergences as text annotations only. Each verdict file
+    # contributes EXACTLY ONE row across all rollups (signal_id dedup, the
+    # record_event idiom); the DIFF count rides the row as the
+    # negative-reward penalty input (the v0.2 controller applies the
+    # penalty; the DATA lands now). Fail-open.
+    _capture_confirmed_with_diff(workspace, claim_id)
+
+    # unified-reward face: snapshot the lessons library BEFORE
+    # aggregation so the self_distill emission adapter can diff-exactly the
+    # lesson files this rollup wrote (adapter seam; aggregate_lessons itself
+    # is untouched). Fail-open: a snapshot failure disables only the diff
+    # face (task rows still emit), never the rollup.
+    _u366_lib = lessons_library if lessons_library is not None else None
+    try:
+        import reward_settlement as _rs366
+        _u366_before = _rs366.snapshot_lessons(_u366_lib)
+    except Exception as exc:  # noqa: BLE001 — emission adapter degrades only
+        warn("unified_reward_snapshot", f"{type(exc).__name__}: {exc}")
+        _u366_before = None
+
     # Step 2: aggregate analyses -> lessons library / reflect queue.
     agg_res = _fag.aggregate_lessons(
         workspace,
@@ -249,6 +328,33 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         except Exception as exc:  # noqa: BLE001 — settlement never breaks rollup
             mission_settlement = f"error: {exc!r}"
 
+    # Step 4.5/4.6 (unified reward): emission adapters land unified rows
+    # (task + self_distill), then the ONE deterministic settlement engine
+    # settles the pending rows. Additive face on the rollup tick — never a
+    # replacement for steps 1-4; fully caged (the terminal transition must
+    # not break).
+    unified_reward: dict = {"settlement": "skipped:no-adapter"}
+    try:
+        import reward_settlement as _rs366
+        unified_reward = _rs366.rollup_face(
+            workspace, claim_id, status_upper,
+            lessons_before=_u366_before, library=_u366_lib)
+    except Exception as exc:  # noqa: BLE001 — settlement never breaks rollup
+        unified_reward = {"settlement": f"error: {exc!r}"}
+        warn("unified_reward", f"{type(exc).__name__}: {exc}")
+
+    # Step 4.7 (issue 391): settlement-event retry gap-notes — advisory
+    # reflection for same-unit retries, derived ONLY from the settled
+    # ledger rows (FAIL settlements reflect; PASS emits nothing). Caged:
+    # reflection never breaks the terminal transition.
+    gap_notes_res: dict = {"emitted": 0, "reason": "skipped:not-run"}
+    try:
+        import gap_notes as _gn391
+        gap_notes_res = _gn391.emit_gap_notes(workspace)
+    except Exception as exc:  # noqa: BLE001 — reflection never breaks rollup
+        gap_notes_res = {"emitted": 0, "reason": f"error: {exc!r}"}
+        warn("gap_notes_391", f"{type(exc).__name__}: {exc}")
+
     _append_ledger(workspace, {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": "rollup",
@@ -261,6 +367,12 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit": ck,
         "mission_settlement": mission_settlement,
+        "unified_settled": (
+            unified_reward.get("settled", 0)
+            if isinstance(unified_reward, dict) else 0),
+        "gap_notes_emitted": (
+            gap_notes_res.get("emitted", 0)
+            if isinstance(gap_notes_res, dict) else 0),
         "ts": utc_now_iso(),
     })
 
@@ -274,6 +386,8 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit_called": True,
         "mission_settlement": mission_settlement,
+        "unified_reward": unified_reward,
+        "gap_notes": gap_notes_res,
     }
 
 

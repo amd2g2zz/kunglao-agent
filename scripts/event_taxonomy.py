@@ -171,6 +171,7 @@ EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
     "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
+    "approach_demoted",   # issue 302 D1: approach-class demotion decision face (target_ladder)
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
@@ -188,6 +189,7 @@ EMIT_ACTIONS = [
     "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
+    "context_manifest",  # issue 293 dispatch-assembly context inventory (cards/plan/siblings/providers)
     "converge",
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
@@ -198,6 +200,8 @@ EMIT_ACTIONS = [
     "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
+    "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
+    "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "failure_blocked",
     "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
@@ -209,6 +213,13 @@ EMIT_ACTIONS = [
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
+    "granularity_reject",  # issue 293 claim_granularity --check monolithic verdict face
+    "guard_dormant",  # issue 304 fix-as-guard: a wired guard with zero fire records across the settlement window (WARN-level finding, ledger-deduped)
+    "guard_fired",  # issue 304 fix-as-guard fire record: a wired guard's check FIRED (detail JSON carries the guard identity: check_reference)
+    "guard_missing",  # issue 304 fix-settlement refusal face: the fix record carries no wired guard evidence (GUARD_MISSING)
+    "guard_unresolved",  # issue 304 fix-settlement refusal face: guard evidence present but file/anchor not found (GUARD_UNRESOLVED)
+    "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
+    "harness_drift",  # exp3 Part A, boundary widened by the P1 audit: a spawned session escaped its workspace and modified the integrity surface (harness: agents/hooks/skills/scripts; graded: eval/v1/tasks/**) — drift detected at session exit, files restored from HEAD, session row marked harness_contaminated (eval_loop_runner)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
@@ -222,6 +233,9 @@ EMIT_ACTIONS = [
     "install_failed",     # #700 toolchain_install per-item install events
     "install_reference_scan",  # #752 upgrade end-step sweep — stale cross-install refs reported+rewired (WARN-only face)
     "intent_unparsed",   # #105 dispatch intent declaration unparseable/declined (fail-open face)
+    "investment_arc_close",  # issue 293 hypothesis-campaign arc close: value attribution lands HERE only
+    "investment_arc_open",   # issue 293 hypothesis-campaign arc open: budget/max_runs/stop_condition face
+    "ladder_reject",      # issue 293 target_ladder settlement-gate block face (walk/inventory/siblings)
     "ladder_required",
     "lesson_burn",
     "lesson_citation",
@@ -237,6 +251,7 @@ EMIT_ACTIONS = [
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
     "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
     "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
+    "mint_refused",       # issue 293 guarded-mint refusal face (hypothesis_bridge / target_ladder / claim_granularity)
     "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
@@ -253,6 +268,7 @@ EMIT_ACTIONS = [
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
+    "probe_infra_dead",  # issue 303 D2 dead-instrument routing: a probe that cannot prove liveness produced NO evidence — infra repair item, never a business observation
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
@@ -265,19 +281,28 @@ EMIT_ACTIONS = [
     "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
+    "rollout_settled",    # unified-reward tick face: adapters + settlement summary per rollup run
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
+    "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
     "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
+    "split_units_minted",  # issue 293 claim_granularity split fan-out mint face (parent SUPERSEDED rides detail)
     "stale_plan_on_new_evidence",
     "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
+    "task_terminal_settlement",
+    "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
+    "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
+    "toolfirst_advisory",  # H1 thin-base: demoted tool-first REJECT (missing_marker/self_attestation) — logged, dispatch proceeds
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
+    "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face
@@ -289,6 +314,7 @@ EMIT_ACTIONS = [
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
+    "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_guard_waiver_used",  # #820 waiver consumption audit face
     "zero_output_break",  # #823 A4 same-type action thrash circuit face

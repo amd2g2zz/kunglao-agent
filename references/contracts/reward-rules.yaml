@@ -1,0 +1,174 @@
+schema: reward-rules/1
+version: 2
+description: >
+  Deterministic settlement rules for the unified rollout ledger (#366).
+  THE reward currency contract: reward_settlement.py reads ONLY this table
+  and only machine-recorded signals. Settlement rewards are NEVER model
+  opinions (owner ruling 2026-09-23) — signals produced by a model enter
+  the ledger marked advisory and are excluded from rule matching by
+  construction; no rule below names a model source. Every rule requires at
+  least two distinct signals (multi-signal anti-pollution: recall_useful
+  is a model self-report, no single signal settles a band alone).
+  Rules are evaluated in declared `order`; the FIRST full match settles.
+
+  version 2 (#379): fine-grained tier bands over MECHANICAL dimensions —
+  the episode settlement refines the v1 polarity bands with a tiered
+  scalar (tier_table below), plus the round-credit formula and the
+  experience 3-tuple. Zero free weights except the ONE cost parameter k,
+  earned from the exp1-7 measured cost distribution (cited in
+  cost_reference below). The /1 rows above remain foldable unchanged;
+  settled() interface unchanged; adapters unchanged.
+bands:
+  SETTLED_GREEN: {reward: 1.0, polarity: positive}
+  SETTLED_RED:   {reward: 0.0, polarity: negative}
+  ADVERSE:       {reward: 0.0, polarity: negative}
+  HELPED:        {reward: 0.5, reward_full: 1.0, polarity: positive}
+  NEUTRAL:       {reward: 0.0, polarity: none}
+rules:
+  - rule_id: task/oracle-green
+    kind: task
+    order: 1
+    requires:
+      - {type: oracle_verdict, equals: pass}
+      - {type: claim_terminal, in: [PROVEN, VERIFIED]}
+    band: SETTLED_GREEN
+    reward: 1.0
+    evidence: [runs/oracle-status.json, claim-register.yaml]
+    never_demoted: true   # the oracle checker verdict is the hard currency
+
+  - rule_id: task/oracle-red
+    kind: task
+    order: 2
+    requires:
+      - {type: oracle_verdict, equals: fail}
+      - {type: claim_terminal, in: [NEGATIVE, REFUTED]}
+    band: SETTLED_RED
+    reward: 0.0
+    evidence: [runs/oracle-status.json, claim-register.yaml]
+
+  - rule_id: self_distill/adverse
+    kind: [self_distill, hybrid_distill]
+    order: 3
+    requires:
+      - {type: misleading_declaration, equals: true}
+      - {type: zero_recall, equals: true}
+      - {type: no_citation, equals: true}
+    band: ADVERSE
+    reward: 0.0
+    evidence: [verdict surface, recall telemetry, lessons telemetry]
+
+  - rule_id: self_distill/helped
+    kind: [self_distill, hybrid_distill]
+    order: 4
+    requires:
+      - {type: distill_consumption, min_count: 1}
+      - {type: downstream_positive_reference, equals: true}
+    optional:
+      - {type: distill_reuse, min_count: 2}
+    band: HELPED
+    reward: 0.5
+    reward_full: 1.0     # when every optional predicate holds too
+    evidence: [distill engine consumption rows, convergence ledger]
+
+# --- v2: the tiered scalar (episode settlement, #379) --------------------
+# scalar_settlement.py consumes THIS section + the machine signals on the
+# task-kind rows. Pure if-then over the dimensions — no judgment slots, no
+# numeric weights: each tier is an ENTRY CONDITION, evaluated FIRST-MATCH
+# in severity_order. The tier scalar refines WITHIN the v1 band (it can
+# never raise a SETTLED_RED row or lower a SETTLED_GREEN row's ledger
+# reward); the v1 bands stay the polarity currency.
+tier_table:
+  scalars:
+    GOLD: 1.0
+    SILVER: 0.7
+    BRONZE: 0.4
+    NEUTRAL: 0.0
+    RED: 0.0
+  severity_order: [RED, GOLD, SILVER, BRONZE, NEUTRAL]
+  red_override: true      # an oracle-fail is RED regardless of the other dims
+  min_machine_signals: 2  # anti-pollution: no single signal settles a tier
+  expensive_rule: tier/bronze-expensive   # the INEFFICIENT fold (see below)
+  partial_rule: tier/partial-dense
+  dimensions:
+    outcome:
+      source: >
+        oracle_verdict (runs/oracle-status.json via oracle_runner) +
+        checker probe sub-scores (static X/Y and replay N/M from the
+        kunglao-eval evidence faces, scripts/eval_checker.py) + chain
+        dense layers-completed/N (kunglao-eval-chain-scores/1,
+        scripts/eval_chain_grader.py). PASS / partial(p) / FAIL; a FAIL
+        verdict with >0 mechanical progress (any sub-score) is partial(p).
+    difficulty:
+      source: >
+        unit_manifest (eval/v1/tasks/<tier>/<task_id>/task.yaml): the
+        chain gradient / tier resistance marker; hard vs standard.
+    evidence:
+      source: >
+        rerun_discipline: evidence_class on the fact frontmatter
+        (rerun-reproducible vs asserted-only; the rerun/replay
+        discipline's recorded grade).
+    cost:
+      source: >
+        cost_telemetry session_cost (USD, session cost report) compared
+        against the unit-class reference in cost_reference below keyed by
+        strategy_arm unit_class.
+    tuple_s:
+      source: >
+        unit_manifest family + tier (+ the difficulty dimension) — the
+        situation features of the experience 3-tuple.
+    tuple_a:
+      source: >
+        strategy_arm + method_choices (the eval results row's arm face /
+        the loop runner's governed-iteration choices).
+
+# --- v2: the ONE free parameter k, earned from measured data -------------
+cost_reference:
+  measured_source: >
+    exp1-7 measured cost distribution (issue #379 record + README
+    Benchmarks, 12-unit L1 eval matrix, measured 2026-09-25): plain
+    cc-default arm ~$11.4 total over 12 units = ~$0.95/unit (issue band
+    ~$1-2/unit); kunglao loop arm ~$120-135 per 12-unit campaign =
+    $5-15/unit; exp7 measured that at a labeled $30/session cap the
+    budget-bound unit passes — the pass-but-expensive boundary is real
+    and sits at 3x the loop class median.
+  unit_class_median_usd:
+    cc-default: 1.5     # measured ~$0.95-2/unit
+    loop: 10.0          # measured $5-15/unit, median of the band
+  k: 3.0                # INEFFICIENT above k * class median
+  note: >
+    k = 3 anchors the loop class at $30/session — exactly the exp7
+    measured higher-cap boundary. cost <= median keeps GOLD/SILVER
+    reachable; median < cost <= k*median falls to BRONZE; cost > k*median
+    is the issue's INEFFICIENT tier (pass-but-expensive), folded into the
+    BRONZE scalar 0.4 and named tier/bronze-expensive — the documented
+    per-rollout efficiency discount.
+
+# --- v2: round credit settlement (#379 spec) ------------------------------
+round_credit:
+  formula: >
+    r_i = sum(artifacts created in dispatch i that are oracle-verified OR
+    cited-by-deliverable OR oracle-backed refutations) - attributed waste
+    (decoy-follow walls traced to dispatch i).
+  attribution: >
+    provenance-exact via the fact frontmatter creator field (the dispatch
+    trace id the worker echo'd at creation). NO positional discount: the
+    round index orders rows, it never weights them.
+  positional_discount: false
+  untraced:
+    counted: false
+    note: >
+      an artifact with no creator field is listed credit:untraced and
+      counts toward no dispatch.
+  band: ROUND_CREDIT    # polarity none — feeds no Beta prior; the scalar
+                        # posterior reads episode tier scalars only.
+
+# --- v2: the experience 3-tuple (settlement output) -----------------------
+experience_tuple:
+  note: >
+    (s, a, r) extracted AT settlement (the tuple's birth certificate):
+    s = situation features (family x tier x difficulty, unit manifest);
+    a = strategy/action (strategy arm + key method choices);
+    r = the settled tier scalar. The tuple store is the RL experience
+    base; the contextual Q table (M1) is its soft-Q view. Extracted as
+    the settlement document's experience_tuple field — never derived
+    retroactively.

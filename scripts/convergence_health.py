@@ -109,6 +109,38 @@ STALLED_REMEDY_MARKER = "remedy: decompose"
 STALLED_REMEDY_MINT_CMD = ("python scripts/target_ladder.py <workspace> "
                            "--mint <stuck-claim>")
 
+# #341: the value-divergence input. rotation_induction appends one
+# operator_action row (action=runtime_value_rotation) per fired join; the
+# verdict face renders it (never a threshold input — no detector rewrite).
+# Local literal, import-light face (the STALLED_REMEDY_MARKER pattern);
+# drift against scripts/rotation_induction.py is pinned by twin test.
+ROTATION_ACTION = "runtime_value_rotation"
+
+
+def _rotation_events(ledger: list) -> list:
+    """The runtime_value_rotation operator_action rows in the ledger (raw
+    list — event rows are excluded from the snapshot trajectory by the
+    `type` filter, so they never perturb flatline/churn)."""
+    return [e for e in ledger
+            if isinstance(e, dict)
+            and e.get("type") == "operator_action"
+            and e.get("action") == ROTATION_ACTION]
+
+
+def _rotation_note(rot: list) -> str:
+    """The action-text sentence for rotation-flagged claims. Empty string
+    when none — prior action texts stay byte-identical."""
+    if not rot:
+        return ""
+    claims = sorted({str(e.get("claim_id") or "").strip() for e in rot}
+                    - {""})
+    if not claims:
+        return ""
+    return (" Value-rotation flagged: " + ", ".join(claims)
+            + " — a re-hook-only dispatch is REJECTED; carry "
+            "`rotation-experiment: rotation-characterization` "
+            "(references/re-library/dynamic/rotation-characterization.md).")
+
 
 def _resolve_ws(arg):
     """#863 Family C: delegate to the ws_layout single source; this
@@ -253,11 +285,26 @@ def _queued_count(ledger: list) -> int | None:
     return len(set(ledger[-1].get("open_ids") or []) - set(tail_dispatched))
 
 
+def _rotation_face(rot: list) -> dict:
+    """The additive rotation_events result face: {} when none — prior
+    output shapes untouched (the queued_claims absence pattern)."""
+    if not rot:
+        return {}
+    return {"rotation_events": {
+        "count": len(rot),
+        "claims": sorted(
+            {str(e.get("claim_id") or "").strip() for e in rot} - {""}),
+    }}
+
+
 def assess(ledger: list, ws=None) -> dict:
     # #1: rollup/operator-action rows share the ledger but are events, not
     # snapshots — no open_count, so they must not enter the trajectory.
     snaps = [e for e in ledger if "type" not in e and "open_count" in e]
     non_snapshot_rows = len(ledger) - len(snaps)
+    # #341: the value-divergence face — read from the RAW rows (before the
+    # snapshot filter); rendered additively, never a threshold input.
+    rot_events = _rotation_events(ledger)
 
     ledger = _dedup_consecutive(snaps)
     # #2: queued (never dispatched) count; None on old-format rows, which
@@ -303,7 +350,7 @@ def assess(ledger: list, ws=None) -> dict:
                 f"escalate tier (T1→T2→T3) / reformulate the claim / decompose into smaller / "
                 f"DEFER with rationale / escalate to user with a specific question. "
                 f"Re-dispatching the same claim >3x without a status change is FORBIDDEN."
-            )
+                + _rotation_note(rot_events))
         elif verdict == "STALLED":
             stuck_ids = [s["claim"] for s in stuck]
             queued_note = ""
@@ -320,7 +367,7 @@ def assess(ledger: list, ws=None) -> dict:
                 f"`{STALLED_REMEDY_MARKER}` for a stuck claim is admitted at the gate; "
                 f"{STALLED_REMEDY_MINT_CMD} registers the split's sub-claims — "
                 f"minting breaks the flatline mechanically."
-            )
+                + _rotation_note(rot_events))
         else:
             action = (
                 f"Converging: open_count {first_open}→{last_open} over {rounds} rounds "
@@ -357,6 +404,9 @@ def assess(ledger: list, ws=None) -> dict:
     # carries dispatch evidence; absent on old-format rows (prior shape kept)
     if queued is not None:
         r = {**r, "queued_claims": queued}
+    # #341: the value-divergence face — {} when none, so pure-snapshot
+    # ledgers keep their exact prior output shape (the queued_claims pattern)
+    r = {**r, **_rotation_face(rot_events)}
     # #127 detector liveness telemetry (helper owns the ws=None / fail-open
     # branches — assess stays under the complexity budget)
     _emit_liveness_telemetry(ws, r)
@@ -485,6 +535,12 @@ def _human(r: dict) -> str:
                      f"{r['remedy']['mint_cmd']}; a dispatch carrying "
                      f"`{r['remedy']['dispatch_marker']}` for a stuck claim "
                      f"is gate-admitted")
+    rot = r.get("rotation_events")
+    if rot:
+        lines.append(f"rotation flags: {rot['count']} value-rotation "
+                     f"event(s) — claims: {', '.join(rot['claims'])} "
+                     "(re-hook-only dispatch REJECTED; carry "
+                     "`rotation-experiment: rotation-characterization`)")
     ch = r.get("churn") or {}
     if ch.get("facts_delta"):
         lines.append(f"facts grown:   +{ch['facts_delta']} (open D{ch.get('open_delta', 0):+d})")

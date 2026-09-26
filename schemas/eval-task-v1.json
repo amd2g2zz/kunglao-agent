@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "eval-task-v1.json",
+  "title": "kunglao-agent #299/#332 eval task unit (eval-v1 smoke / eval-v1.1 release)",
+  "description": "One eval task = workspace scaffold + the three #191 anchors (goal_verbatim / success_criterion / verification_method) + a mechanical checker contract (runner-style: METRIC emission, arithmetic verdict, evidence archive) + the metric set (ttc_seconds, dispatch_count, pass_at_k_contribution, converged). Smoke tier carries constructed targets only — ground truth by construction, held out from the #298 distillation corpus.",
+  "type": "object",
+  "required": ["schema", "task_id", "eval_version", "tier", "source", "family", "seed", "anchors", "workspace_scaffold", "checker", "ground_truth", "contamination"],
+  "properties": {
+    "schema": { "const": "kunglao-eval-task/1" },
+    "task_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" },
+    "eval_version": { "type": "string", "enum": ["eval-v1", "eval-v1.1", "eval-v1.2", "eval-v1.3", "eval-v1.4"] },
+    "tier": {
+      "description": "smoke = 3-5 constructed targets, minutes-scale, runnable per release train. release (#332) = one ladder, two halves: the NATIVE families (arm-native-kdf, win-pe-kdf, smc-x86, mod-crypto-native — real arm64/PE/x86_64 artifacts, rungs L0/L1/L2, +L2p UPX) and the WEB/NET packaging-ladder families (web-pack-sign, net-verify-license, req-sign, mod-crypto-js) on the shared mod-crypto generator core, anti-debug stamped, minutes-scale. misdirection (eval-v1.2) = adversarial trap units minted from the catalogued failure modes: env-misattribution bait, key-rotation bait, decoy-marker units, plus distillation transfer pairs. toolflex (eval-v1.3) = tool-combination-flexibility units: chain-necessity (no single tool suffices) with >= 2 valid tool combinations and PATH-shadow blocked-path variants. chain (eval-v1.4) = multi-layer decryption-chain units: 2-5 nested protection stages per unit (obfuscation/packing, junk-code, encrypted config with runtime-derived keys, custom ARX/Feistel cipher core, decoy-path, anti-debug gate + rotation), pass requires peeling ALL layers, dense per-layer grading (layers-completed 0..N) via scripts/eval_chain_grader.py, anti-shortcut audit recorded per unit in manifest.json. historical-replay (#294) and public-corpus are later lanes.",
+      "enum": ["smoke", "release", "misdirection", "toolflex", "chain"]
+    },
+    "source": {
+      "description": "constructed targets only in this lane; smoke tier refuses anything else.",
+      "enum": ["constructed", "historical-replay", "public-corpus"]
+    },
+    "family": {
+      "description": "mechanism family (registered in scripts/eval_targets.py FAMILIES).",
+      "type": "string"
+    },
+    "seed": {
+      "description": "generator-stamped variant seed (scripts/eval_targets.py derive_cfg) — deterministic re-mint, divergence across variants.",
+      "type": "integer"
+    },
+    "anchors": {
+      "type": "object",
+      "required": ["goal_verbatim", "success_criterion", "verification_method"],
+      "properties": {
+        "goal_verbatim": { "type": "string", "minLength": 1 },
+        "success_criterion": { "type": "string", "minLength": 1 },
+        "verification_method": {
+          "description": "#191 enum (oracle_anchors.METHOD_OPTIONS).",
+          "enum": ["reproduction", "replay-evidence", "static", "manual"]
+        }
+      }
+    },
+    "workspace_scaffold": {
+      "type": "object",
+      "required": ["language", "files", "entry", "candidate_contract"],
+      "properties": {
+        "language": { "type": "string" },
+        "files": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "entry": { "type": "string" },
+        "candidate_contract": {
+          "description": "The shape an arm's re-implementation must expose — the surface the #236 bare-LLM control arm executes on.",
+          "type": "string", "minLength": 1
+        }
+      }
+    },
+    "checker": {
+      "description": "Mechanical checker contract (the autoresearch.sh pattern): METRIC emission, arithmetic verdict, evidence archive, structured failure signals.",
+      "type": "object",
+      "required": ["kind", "oracles", "entrypoint", "metrics", "thresholds"],
+      "properties": {
+        "kind": {
+          "enum": ["constant-hit", "pair-match", "replay-roundtrip",
+                   "misdirection-verdict", "rotation-verdict"]
+        },
+        "oracles": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "enum": ["constant-hit", "pair-match", "replay-roundtrip",
+                     "misdirection-verdict", "rotation-verdict"]
+          }
+        },
+        "entrypoint": { "type": "string", "const": "checker.py" },
+        "metrics": {
+          "description": "exactly the four contract metrics.",
+          "type": "array",
+          "items": {
+            "enum": ["ttc_seconds", "dispatch_count", "pass_at_k_contribution", "converged"]
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "min_constant_hits": {
+              "description": "static face: candidate source must carry >= this many of the variant's constants.",
+              "type": "integer", "minimum": 0
+            },
+            "min_pair_ratio": {
+              "description": "replay face: ceil(ratio * count) pairs must reproduce (the #301 C2 11-of-14 shape generalized).",
+              "type": "number", "exclusiveMinimum": 0, "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["file", "space_bits"],
+      "properties": {
+        "file": { "const": "ground_truth.json" },
+        "space_bits": {
+          "description": "answer-space width; the 1/k guessing baseline is p = 2^-space_bits (arithmetic, no run).",
+          "type": "integer", "minimum": 1
+        }
+      }
+    },
+    "contamination": {
+      "type": "object",
+      "required": ["held_out", "distiller_excluded", "provenance"],
+      "properties": {
+        "held_out": { "const": true },
+        "distiller_excluded": {
+          "description": "eval tasks NEVER enter the #298 distillation corpus (path contract in scripts/eval_dataset.py EVAL_CORPUS_PREFIXES).",
+          "const": true
+        },
+        "provenance": {
+          "description": "smoke lane: constructed targets only — no real workspace/target data.",
+          "const": "constructed"
+        }
+      }
+    }
+  }
+}

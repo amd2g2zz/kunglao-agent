@@ -190,8 +190,8 @@ def test_android_aliases_in_gate_keyword_map():
 
 
 def test_gate_map_keeps_generic_words_out():
-    """_TOOLFIRST_STOPWORDS discipline: generic prose never joins the gate
-    trigger set — ambiguous terms are route-side lighting ONLY."""
+    """issue 380 P2 distinctive-trigger discipline: generic prose never joins the
+    gate trigger set — ambiguous terms are route-side lighting ONLY."""
     kw = wbg._load_tool_index_keywords(wbg._SKILL_ROOT)
     for generic in ("app", "apk", "java", "加密", "登录", "tls", "okhttp",
                     "frida", "xposed", "certificate", "network library",
@@ -248,11 +248,14 @@ def test_redline_english_variant_without_marker_still_passes():
 
 
 def test_redline_existing_reject_semantics_unchanged():
-    """The pre-#54 faces fire exactly as before: keyword hit without marker
-    still rejects (existing semantics — only WHICH keywords are visible
-    changed), stopword discipline intact."""
+    """The pre-#54 faces fire exactly as before — H1 AMENDED: the gate is
+    advisory-only, so a keyword hit without marker now PROCEEDS; the pin is
+    that the DETECTION and the demand text are unchanged (same keyword hit,
+    same tool named, same `tool-catalog` escape hatch) and stopword
+    discipline is intact."""
     ok, reason = wbg.check_tool_first({}, "decode the crypto layer", "")
-    assert ok is False
+    assert ok is True, "H1: advisory-only — the dispatch proceeds"
+    assert "crypto-tool" in reason
     assert "tool-catalog" in reason
     ok2, _msg = wbg.check_tool_first(
         {}, "[T1 tools=grep] claim C-001 static overview of imports", "")

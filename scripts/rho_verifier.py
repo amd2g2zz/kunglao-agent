@@ -189,11 +189,28 @@ def sample_and_pair(ws, z=None, emit=True):
                                "lexical": out.get("lexical"),
                                "cost": cost},
                               ensure_ascii=False))
+        # #134: the sampler rides the #127 liveness vocabulary — every
+        # checkpoint sample is a detector_eval (detector="rho_sampler");
+        # a SETTLED anchor is the detector_fired it exists for, so a
+        # sampler whose pairs never settle is a loud DORMANT finding
+        # (detector_liveness.liveness_report), never silence. Record-only:
+        # nothing intercepts these rows (shadow contract preserved).
+        kunglao_log.emit(
+            Path(ws), actor="rho_verifier", action="detector_eval",
+            detail=json.dumps({"detector": "rho_sampler",
+                               "rho": out["rho"], "z": z,
+                               "backend": out["backend"]},
+                              ensure_ascii=False))
         # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
         # terminal anchor fired: mission complete/failed) is a transition, so it
         # earns a result digest; plain per-checkpoint sampling rows stay lean
         # (no per-heartbeat spam).
         if z is not None:
+            kunglao_log.emit(
+                Path(ws), actor="rho_verifier", action="detector_fired",
+                detail=json.dumps({"detector": "rho_sampler",
+                                   "rho": out["rho"], "z": z},
+                                  ensure_ascii=False))
             kunglao_log.emit_result_digest(
                 Path(ws), actor="rho_verifier",
                 verdict="mission_complete" if float(z) >= 1.0 else "mission_failed",

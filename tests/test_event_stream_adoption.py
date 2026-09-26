@@ -476,6 +476,17 @@ class TestConvergenceDecisionEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        # #240: the convergence CLI hard-errors without the task_spec marker.
+        # #306: the payload face needs the oracle-anchor stamp too (a
+        # claimless register + question-less AND anchor-less task_spec is
+        # the degenerate pair) — the anchor stamp keeps this seed a
+        # legitimate feature-unused CONVERGED.
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions: []\n"
+            "goal_verbatim: retrieve the family config\n"
+            "success_criterion: family named with evidence\n"
+            "verification_method: static\n",
+            encoding="utf-8")
         rc = cc.main([str(ws), "--json"])
         rows = _actions(events, "converge")
         assert rows, f"every round's DECISION must emit; got {events}"
@@ -500,6 +511,8 @@ class TestConvergenceDecisionEmit:
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
             {"id": "C-1", "status": "OPEN"}]}, sort_keys=False),
             encoding="utf-8")
+        # #240: the convergence CLI hard-errors without the task_spec marker
+        (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
         rc_with_emit = cc.main([str(ws), "--json"])  # emit fires (captured)
         rows = _actions(events, "converge")
         assert rows, f"emit must fire on the healthy path; got {events}"
@@ -586,6 +599,8 @@ class TestFailOpenEmit:
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
             {"id": "C-1", "status": "OPEN"}]}, sort_keys=False),
             encoding="utf-8")
+        # #240: the convergence CLI hard-errors without the task_spec marker
+        (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
         healthy = cc.main([str(ws), "--json"])  # healthy baseline rc
         assert _actions(events, "converge"), "sanity: healthy path emits"
 

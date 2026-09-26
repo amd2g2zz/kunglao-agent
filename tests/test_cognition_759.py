@@ -202,9 +202,9 @@ def test_t2_weights_reflect_in_ranking(tmp_path):
 
 
 def test_t2_score_is_exact_multiplier_of_unweighted_formula():
-    """#107: the composite is (Thompson sample + LAMBDA_DH*dH) * worth — the
-    worth multiplier stays an exact identity over the raw sample (score is
-    stored at 6dp, the json face still rounds to 3)."""
+    """#107+#294: the composite is (Thompson sample + W_DOWNSTREAM*term) *
+    worth — the worth multiplier stays an exact identity over the raw
+    sample (score is stored at 6dp, the json face still rounds to 3)."""
     import random
 
     import priority_ratio as pr

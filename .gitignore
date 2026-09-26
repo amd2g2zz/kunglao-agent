@@ -87,3 +87,9 @@ docs/superpowers/
 
 # GC-harness lifecycle registries (identity/status/linkage only, local-only)
 .agent/
+
+# #358 distillation scratch (untracked; source clones never committed)
+.scratch-sources/
+
+# #364 campaign distillation scratch (untracked; D1 workspace material never committed)
+.scratch-d1/

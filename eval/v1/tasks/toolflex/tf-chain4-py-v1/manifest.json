@@ -1,0 +1,504 @@
+{
+  "schema": "kunglao-eval-tf-manifest/1",
+  "task_id": "tf-chain4-py-v1",
+  "family": "tf-chain4",
+  "seed": 35603,
+  "k": 4,
+  "roles": [
+    {
+      "role": "open",
+      "implements": [
+        "unlock",
+        "peel"
+      ]
+    },
+    {
+      "role": "derive",
+      "implements": [
+        "sprout",
+        "distill"
+      ]
+    },
+    {
+      "role": "expand",
+      "implements": [
+        "weave",
+        "braid"
+      ]
+    },
+    {
+      "role": "seal",
+      "implements": [
+        "seal",
+        "cap"
+      ]
+    }
+  ],
+  "minimum_required_set": {
+    "open": [
+      "unlock",
+      "peel"
+    ],
+    "derive": [
+      "sprout",
+      "distill"
+    ],
+    "expand": [
+      "weave",
+      "braid"
+    ],
+    "seal": [
+      "seal",
+      "cap"
+    ]
+  },
+  "minimal_chain": [
+    "unlock",
+    "sprout",
+    "weave",
+    "seal"
+  ],
+  "valid_combinations": [
+    [
+      "unlock",
+      "sprout",
+      "weave",
+      "seal"
+    ],
+    [
+      "unlock",
+      "sprout",
+      "weave",
+      "cap"
+    ],
+    [
+      "unlock",
+      "sprout",
+      "braid",
+      "seal"
+    ],
+    [
+      "unlock",
+      "sprout",
+      "braid",
+      "cap"
+    ],
+    [
+      "unlock",
+      "distill",
+      "weave",
+      "seal"
+    ],
+    [
+      "unlock",
+      "distill",
+      "weave",
+      "cap"
+    ],
+    [
+      "unlock",
+      "distill",
+      "braid",
+      "seal"
+    ],
+    [
+      "unlock",
+      "distill",
+      "braid",
+      "cap"
+    ],
+    [
+      "peel",
+      "sprout",
+      "weave",
+      "seal"
+    ],
+    [
+      "peel",
+      "sprout",
+      "weave",
+      "cap"
+    ],
+    [
+      "peel",
+      "sprout",
+      "braid",
+      "seal"
+    ],
+    [
+      "peel",
+      "sprout",
+      "braid",
+      "cap"
+    ],
+    [
+      "peel",
+      "distill",
+      "weave",
+      "seal"
+    ],
+    [
+      "peel",
+      "distill",
+      "weave",
+      "cap"
+    ],
+    [
+      "peel",
+      "distill",
+      "braid",
+      "seal"
+    ],
+    [
+      "peel",
+      "distill",
+      "braid",
+      "cap"
+    ]
+  ],
+  "tool_usage": {
+    "unlock": "{tool} {blob}",
+    "peel": "{tool} --blob {blob}",
+    "sprout": "{tool} {state}",
+    "distill": "{tool} --state {state}",
+    "weave": "{tool} {state}",
+    "braid": "{tool} --in {state}",
+    "seal": "{tool} {state} {payload}",
+    "cap": "{tool} --state {state} --payload {payload}"
+  },
+  "blocked_variant_names": [
+    "block-unlock",
+    "block-sprout",
+    "block-weave",
+    "block-seal"
+  ],
+  "threat_model": "execution-level chain necessity: every single-tool baseline (that tool alone + mechanical naive completion) fails the unit checker. Tool sources are readable by design; source-reading reimplementation is a trace-visible path outside the gate's scope.",
+  "session_surface": {
+    "bare-cc-default": "the session subprocess inherits the environment: prepend the variant's shadow dir to PATH before launch (see eval_tf_shadow.prepend_path); every tool shell sees it",
+    "kunglao-loop": "eval_loop_runner.launch_session inherits the parent env: the same exported PATH reaches the session and its dispatched children \u2014 no runner code change",
+    "harness": "checker/solver subprocesses take the prepended env explicitly (env= kwarg)",
+    "shadow-limitation": "KUNGLAO-TF-SHADOW blocks name invocation only; absolute-path bypass is flagged by the graders (bypass_detected / f2_reroute)"
+  },
+  "shared_contract_note": "union tf-chain2/3/4 into scripts/eval_contract.py FAMILY_CONTRACT (suffix .txt, response_language text-answer, target_surface text) at the dev merge-sync when not already present; strict conformance activates with the module.",
+  "chain_necessity": [
+    {
+      "tool": "braid",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "cap",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "distill",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "peel",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "seal",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "sprout",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "unlock",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "weave",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    }
+  ],
+  "chain_necessity_ok": true,
+  "blocked_variants": [
+    {
+      "variant": "block-unlock",
+      "blocked_tool": "unlock",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "peel",
+        "sprout",
+        "weave",
+        "seal"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-sprout",
+      "blocked_tool": "sprout",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "unlock",
+        "distill",
+        "weave",
+        "seal"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-weave",
+      "blocked_tool": "weave",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "unlock",
+        "sprout",
+        "braid",
+        "seal"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-seal",
+      "blocked_tool": "seal",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "unlock",
+        "sprout",
+        "weave",
+        "cap"
+      ],
+      "reroute_verdict": "PASS"
+    }
+  ]
+}

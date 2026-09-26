@@ -97,12 +97,12 @@ class TestToolfirstDualEmit:
         ws = _ws(tmp)
         ok, _reason = wbg.check_tool_first(
             {'workspace': str(ws)}, "decode the crypto blob", "")
-        assert ok is False
-        rows = [e for e in events if e["action"] == "toolfirst_reject"]
-        assert rows, "reject face must emit toolfirst_reject"
+        assert ok is True, "H1: the reject is demoted to advisory — proceeds"
+        rows = [e for e in events if e["action"] == "toolfirst_advisory"]
+        assert rows, "H1: the reject face emits toolfirst_advisory"
         payload = json.loads(rows[-1]["detail"])
         # mode is the FINE-GRAINED face: missing_marker (no marker) vs
-        # self_attestation (dishonest marker) — both reject the dispatch
+        # self_attestation (dishonest marker) — advisory since H1, same payload
         assert payload["mode"] == "missing_marker"
         assert payload["tool"] == "crypto-tool"
         assert payload["keywords"]
@@ -136,7 +136,9 @@ class TestToolfirstDualEmit:
         assert rows and json.loads(rows[-1]["detail"])["mode"] == "no_match"
 
     def test_emit_failure_never_moves_gate_rc(self, tmp, keywords, monkeypatch):
-        """Fail-open contract (#459): observability must not gate decisions."""
+        """Fail-open contract (#459): observability must not gate decisions.
+        H1: the advisory emit crash must likewise leave the gate's (always
+        proceed) decision identical."""
         import kunglao_log
         ws = {'workspace': str(_ws(tmp))}
 
@@ -146,10 +148,10 @@ class TestToolfirstDualEmit:
         monkeypatch.setattr(kunglao_log, "emit", _boom)
         ok_pass, _r1 = wbg.check_tool_first(ws, "decode the crypto blob",
                                             "tool-catalog: crypto-tool")
-        ok_rej, _r2 = wbg.check_tool_first(ws, "decode the crypto blob", "")
+        ok_adv, _r2 = wbg.check_tool_first(ws, "decode the crypto blob", "")
         rec = wbg.toolfirst_pass_record(ws, "C-001", "decode the crypto blob",
                                         "tool-catalog: crypto-tool")
-        assert ok_pass is True and ok_rej is False and rec is False, (
+        assert ok_pass is True and ok_adv is True and rec is False, (
             "gate decisions identical with the emit crashed")
 
     def test_ws_none_stays_silent(self, events, keywords):
@@ -161,6 +163,81 @@ class TestToolfirstDualEmit:
         assert wbg.toolfirst_pass_record({}, "C-001", "decode the crypto blob",
                                          "tool-catalog: crypto-tool") is False
         assert not [e for e in events if e["action"].startswith("toolfirst")]
+
+
+# ---------- issue 380 Package 4 F3/F4: one emitter, three faces --------------
+
+class TestEmitConsolidation:
+    """issue 380 Package 4 F3/F4: all three toolfirst emit faces
+    (check_tool_first advisory, toolfirst_pass_record advisory,
+    toolfirst_pass_record pass) ride ONE emitter (_toolfirst_emit) —
+    identical payload shape, only action / claim / extra differ. The
+    unreachable `action='toolfirst_reject'` default is gone (action is
+    required); the taxonomy word itself stays registered (append-only
+    history)."""
+
+    def test_three_faces_share_one_payload_shape(self, tmp, events, keywords):
+        ws = _ws(tmp)
+        # face 1 — check_tool_first advisory (reject demoted mid-battery)
+        ok, _r = wbg.check_tool_first({'workspace': str(ws)},
+                                      "decode the crypto blob", "")
+        assert ok is True
+        # face 2 — approval-point advisory (same evaluation, pass action)
+        assert wbg.toolfirst_pass_record(
+            {'workspace': str(ws)}, "C-001",
+            "decode the crypto blob", "") is True
+        # face 3 — approval-point matched pass
+        assert wbg.toolfirst_pass_record(
+            {'workspace': str(ws)}, "C-002", "decode the crypto blob",
+            "tool-catalog: crypto-tool") is True
+        adv = [e for e in events if e["action"] == "toolfirst_advisory"]
+        passes = [e for e in events if e["action"] == "toolfirst_pass"]
+        assert adv and len(passes) == 2, (adv, passes)
+        base = {"mode", "keywords", "tool"}
+        assert set(json.loads(adv[-1]["detail"])) == base
+        adv_pass = json.loads(passes[0]["detail"])
+        assert set(adv_pass) == base | {"advisory"}
+        assert adv_pass["advisory"] is True
+        assert set(json.loads(passes[1]["detail"])) == base
+        for row in (adv[-1], passes[0], passes[1]):
+            assert row["actor"] == "hook:worker_budget"
+            assert json.loads(row["detail"])["mode"]
+        assert adv[-1].get("claim") is None, (
+            "the mid-battery advisory face carries no claim")
+        assert passes[0]["claim"] == "C-001"
+        assert passes[1]["claim"] == "C-002"
+
+    def test_single_emit_site_in_gates_module(self):
+        """F3 structural pin: no hand-rolled kunglao_log.emit payload blocks
+        remain in check_tool_first / toolfirst_pass_record — the advisory
+        and pass faces ride _toolfirst_emit. (The toolfirst_search face in
+        record_tool_search_citations is a different emitter, untouched.)"""
+        src = (REPO_ROOT / "hooks" / "worker_budget_gates.py").read_text(
+            encoding="utf-8")
+
+        def fn_body(name):
+            start = src.index(f"def {name}(")
+            nxt = src.find("\ndef ", start + 1)
+            return src[start:nxt if nxt > 0 else len(src)]
+
+        for name in ("check_tool_first", "toolfirst_pass_record"):
+            assert "kunglao_log.emit(" not in fn_body(name), (
+                f"{name} still hand-rolls a kunglao_log.emit payload — "
+                "route it through _toolfirst_emit")
+        assert "kunglao_log.emit(" in fn_body("_toolfirst_emit")
+
+    def test_action_param_is_required_taxonomy_word_stays(self):
+        import inspect
+
+        sig = inspect.signature(wbg._toolfirst_emit)
+        assert sig.parameters["action"].default is inspect.Parameter.empty, (
+            "F4: the unreachable toolfirst_reject default is gone — "
+            "action is a required parameter")
+        import emit_gate
+        import event_taxonomy as et
+        assert "toolfirst_reject" in et.EMIT_ACTIONS, (
+            "the taxonomy word stays (append-only history)")
+        assert emit_gate.emitter_files(REPO_ROOT, "toolfirst_reject")
 
 
 # ---------- operation label (claim attribute) --------------------------------

@@ -3,26 +3,30 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 7daf97e436f088f6c41c503a0813efd677748624240205954cfae0447116ef17
-  references/_index-android.md: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
+  references/_INDEX.md: 45b91bc410b897333b1c4f33ccdf9d2dae0f1b8e2d0d1f74ee46de167c5bd3d7
+  references/_index-android.md: e8ba4d25faa8f170ca06c4ce1ec53a58c06dd14c1d166354072f92116288dd31
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
+  references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
-  references/_index-malware.md: 9ca74cb65468f24574835a1132415d585399fc65efa5633a417453c0594f4eb9
-  references/_index-method.md: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
+  references/_index-malware.md: cc69c42ba836f1a4d6f2c0ca09880ba2c20d43eeda216ef4ff2f4017093c0ef8
+  references/_index-method.md: 8b1562980160c237677325d341f02a015eae1861d6e498dd46964c239f5548be
   references/_index-patterns.md: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
-  references/_index-research.md: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
-  references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
-  references/_index-web.md: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
+  references/_index-research.md: 2a9f7aca1353aded49c13b4fedb9bb61ad83d5fc62940218fc058181e05271d5
+  references/_index-tools.md: 5f1d7d7c8a9d7a9a26e471278cbb561fbc083dd0e0cc8628506995fb92b740f9
+  references/_index-web.md: 738dc9d371e0a707aa4391f696f1b5069e46333a5bdb8a011c4d6a9a0c02aa40
   references/contracts/agent-three-state-charter.md: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
-  references/contracts/cli-script-checklist.md: 4af55a6056c899c383c550c6cb0da3c931bcd8d2de8db44ff999071ddb3a33da
+  references/contracts/cli-script-checklist.md: d7c31daa16a0c63d75140cb5e3addd4f52aacac1d47696f280e26133edccfce2
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   references/contracts/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
+  references/contracts/distill-pipeline.md: 2b3623ba627e8128890f83d132c11e381a0a754539577012382720cc9a9bda9b
   references/contracts/downstream-contract.md: 41bebf10cda98fedcb0dcfc05f0f8606ba79b4047f5d5b1c6beba5cb04462c6c
   references/contracts/error-response-taxonomy.md: a5710b439bc5b1df49ca68097979ccb780fbad173f25c7c9b91db542f1fa53f7
+  references/contracts/external-distilled/complexity-routed-model-tiers.md: 7164c6d5dfa3e0dc8950dcc30d5f7234730bea36ad2023532b6b236b2141eff3
+  references/contracts/external-distilled/distillation-deviation-ledger.md: c96f205f6145590f1b7dbadfcf5af7753f793edfcce1e695d65b9240b602dfeb
   references/contracts/machine-check-contract.md: c0eb7ca471af3b37030d11223c25d4ba31c44515193372063727ad8819926c1b
   references/contracts/wal-protocol.md: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
-  references/contracts/xml-injection-standard.md: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
+  references/contracts/xml-injection-standard.md: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   references/governance/decision-rights.md: 5398a15f656d14d8ffac960b1f1e4a18a0c54e364f7ffeb920c811234e326eef
   references/governance/excerpt-lint.md: 785595a3d600621ddcb1de949078c00ded8db00351e9c3aa9e7ecb487a173ec6
   references/governance/guardrails.md: ca5c30a76f8ed534866c20fdbb81f385d15dfdebbdaae28bc05d966d1f250600
@@ -31,48 +35,57 @@ files:
   references/orchestration/anomaly-baseline.md: 5ee9c0b28421bb83060d4065166e53aad4353c3f541ccbc4f72ccf0b14d414f1
   references/orchestration/dispatch-protocol.md: ce6bc3a9b6879de8c0c4ecd2fef593dbcf7b2e2786909a6907aab76cc7a59360
   references/orchestration/dynamic-re-tool-priority.md: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
-  references/orchestration/failure-modes/case-book.md: 7b09aa71f51ee7d12d5561d4e39cdc27a48a415f569e5d73a98e46f4dab72663
+  references/orchestration/failure-modes/case-book.md: e46588267603c53b0a8e4c6424c7b25025917b831acc8cb1b1667e6ee3d53417
   references/orchestration/failure-modes/failure-modes-lifecycle.md: 0332834698a1cd382e29a1c65311687bae48ea755857b0a16f7e4e89507f8559
   references/orchestration/failure-modes/failure-modes-monitoring.md: 01850b4d29076534c32457f4f01808ade205576dd0c004e8c0f459359cb8e8c0
   references/orchestration/failure-modes/failure-modes-state.md: 647ad4f1dfe7500f4e993e85f30bdf2b4021e0ae486c31b2f691f5d92282529e
-  references/orchestration/failure-modes/failure-modes.md: 6dd3335289a05b55b399649e3e2921d2db0b063e4a2fbc0338b823d37d45cbe5
+  references/orchestration/failure-modes/failure-modes.md: fad4078467afed3d89f8d5103799f814f252606f61a2c859c3a924f8801b26d9
   references/orchestration/malware-phase-routing.md: 000a9b97bd2939fe1ae112a94a84520556fde979cee87f53498ed07fce993de9
   references/orchestration/method-constraints.md: 9315e142347621cdc650b4e372165b875f291ba9a7990eb667ba7c2c1adc8f9a
   references/orchestration/operational-mechanics.md: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
   references/orchestration/tool-inventory.md: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
   references/orchestration/verify-static-vs-dynamic.md: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
-  references/re-library/android/emulation/android-fingerprint-apis.md: 4863eb94450f1ac2922ab3285e32387afee1f18884294d6bbdff09ba03ee0fba
+  references/re-library/android/case-distilled/_GAP-REPORT-D1.md: 6c302fe057bb987bac009451fc98aac34de1db3b2c4cfc52fc62916a5a92c98c
+  references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md: a4a89356ff6d90b842389932c7d9e075b439a29dfbd71f2fdf60e628369466da
+  references/re-library/android/case-distilled/case-emulation-campaign-discipline.md: 2cd8500cdc47e6d68ec5285779b0f211ab3b0e3feb442b386409897bbd992c17
+  references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md: e5e90fa46b1e5e98a3d13a2675aa2dc1700d41fe1fa04f28052e3da977c8681a
+  references/re-library/android/case-distilled/case-identity-channel-epistemics.md: 548bcecc852dfb77d02657644c2bc30d6ca3ce220541d9d371e0b4c714311607
+  references/re-library/android/case-distilled/case-kill-evidence-counterplay.md: c6b65a07ce13e98dd3f26588ef050a32c7e866b733aafbd146756fcfd11171d2
+  references/re-library/android/case-distilled/case-observation-claim-discipline.md: c06d35420def091c71821f9caa3272231761a265876621fbe0c8d835884c5e4d
+  references/re-library/android/emulation/android-fingerprint-apis.md: 4e6d985eb5719125be3a3eb7200908e7addf0cab30fd259dc9d1d51502546dbd
   references/re-library/android/emulation/android-fingerprint-seeds.yaml: 73fb6a3e638c3a9d0ab85488f2abd3b15842f0291408019e3937ad9f61e8cc1d
-  references/re-library/android/emulation/unidbg-algo-recovery.md: f85f27f62e8d14df6951bcc1579e39be5f824afa009955205e39acacc3bda6ac
-  references/re-library/android/emulation/unidbg-env-filling.md: c49b8af99dac162a66318ee0305bdf2396d3750e6d8b25f5656b14998bc1b064
-  references/re-library/android/emulation/unidbg-harness-bringup.md: 66a53d3cce67c0acc3f6e9fd32cb4791a53f92d0e3de5f7100e8b7ffb0357401
+  references/re-library/android/emulation/unidbg-algo-recovery.md: 34000c4bcb606832d9dbb48c954f723014e56ba361d698ce2b483da0253ba160
+  references/re-library/android/emulation/unidbg-env-filling.md: a5264f4e27e33eb890a32369cc4eca61d5513d034f99bab91ed34fa2e1cb5f4e
+  references/re-library/android/emulation/unidbg-harness-bringup.md: f99ef964fbd7d0081e5effc454d4d454118d402cdc2140333bce559d69b5301b
   references/re-library/android/protections/stacked-protections.md: eb66735fa1136b8cac7c4b022bccff09f97228c99ed7f58cc4da0307e53d13ba
   references/re-library/android/signing/native-sign-recovery.md: 59929cc294922c92d29c2ecb815863cab8547302c79e5aeeefb18a345196fa37
-  references/re-library/android/signing/signature-check-bypass.md: 649be93b846682fe1608d478aa87819a100bf33364fc9c80692aef8012fb5917
+  references/re-library/android/signing/signature-check-bypass.md: 699382fe89752677e404d5282e177c4f0e83679e8e1f8af828290275f412fe30
   references/re-library/anti-analysis/catalog/anti-analysis.md: 0cfc71a76c06aa2610159ba12dd5f7e524d7bacde31f1065558d3c8e4e71d955
+  references/re-library/dynamic/rotation-characterization.md: 9c2704fc3ea74611a739b7d3e3b63663af3e18f74ffa6edaf38930fb8541ee6a
   references/re-library/languages/compiled/languages-compiled.md: 4ba5b98c4023333d88e5d51174edc5fcdef58a450bee6df0236fe86cbb1699d3
   references/re-library/languages/compiled/languages-go.md: d058807151a662a5192d15be3f753d96ed547d7b230525436ddbb19baf656a45
   references/re-library/languages/platforms/languages-platforms.md: 1ca19c9ad3dcbdf9eb2ae9a9dd9f51f36ced646441aa7a0275321e3776c7027a
   references/re-library/languages/scripting/languages.md: d3aeb437d448b938944850d23a40b07a31a0d189eb292860e6b1159009c89cf8
-  references/re-library/malware/reporting/detection-engineer.md: 71fd57de2dba889eb1925752c97e60db2cea6b5cf55847d92aca8c84d4bea76a
-  references/re-library/malware/reporting/malware-report-writer.md: a73d41b781f841bbabb7b99902db078afc29d60e51606f84d87202809023c0b2
-  references/re-library/malware/triage/malware-triage.md: 2fa00553d6ea1ed6ddfca670f4b0c9405338875044f61be488f2d03ce793f567
-  references/re-library/malware/workflow/malware-analysis-workflow.md: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
-  references/re-library/malware/workflow/malware-analysis.md: fb8b92ca465c12a630d34ac96a1204b84bc139e2496800cead807da1f0a61e65
-  references/re-library/malware/workflow/malware-dynamic-analysis.md: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  references/re-library/malware/reporting/detection-engineer.md: 0311155b9b6bdd0c896aa99c4d0731a6bff323c3683dd542de84cb1ec76f4f85
+  references/re-library/malware/reporting/malware-report-writer.md: 7570e3f7e0fae0f5aadd6582755731da78472b989aba3a453ee81a2536d8ce77
+  references/re-library/malware/triage/malware-triage.md: 36bd4d0eb8d86f7ce8775c2791f1c67e452232cf4b8a60c0f6ed91d889110da5
+  references/re-library/malware/workflow/malware-analysis-workflow.md: f1f58db4d1831a5435e996f2f3db5f5bb28b41bf1400f10fb9416ee17b5abdc3
+  references/re-library/malware/workflow/malware-analysis.md: 92fa1e3d3aeecc9fe018b48ef5e76c2c441d9cdec426c849fcb5b04e0fb3253c
+  references/re-library/malware/workflow/malware-dynamic-analysis.md: 167ed958c6ebc9055fef0bf66d08a081eb091f72f0fbb391ee492088e77515ba
+  references/re-library/method/case-distilled/case-dispatch-budget-partition.md: c89dbf51bc3070cbd90848951a71f45eb74ddf48a8a774570b689fd3d6f118a9
   references/re-library/method/formats/wire-format-recognition.md: cf42e502c06e9b33dbc66a414f759f037002d6c59b10a2928a6dd94ab8206e93
   references/re-library/method/process/dynamic-observation-ladders.md: c74d142926e606872313b3cc9d0e9cdab0bb86256ab60438a6c26c3fd49a038a
   references/re-library/method/process/falsifier-library.md: 9ba3198ecd2a46f2008ed46955fb1ee4c32e9dc0d2728b86a94cba73d3a57756
-  references/re-library/method/process/field-notes.md: 50e633dc5ce2001cca3cb99dd1430996e12d95bb63f320477f9f19aaf652c224
-  references/re-library/method/process/ida-scripting-overlays.md: 25b510f09766ec0368dec0c40d8b0de117a3ab7aaeef98ed1e4921df5be488c2
+  references/re-library/method/process/field-notes.md: 893e8384b0bc33df29cbe1f462193f507a5fb00cc2c4dd4c28289843a870c90f
+  references/re-library/method/process/ida-scripting-overlays.md: f7f4e767f4e758a616c12a6dbf373ff14fb27f113ea05f40c261d371af785a4c
   references/re-library/method/process/loop-stage-gates.md: 4b5658029ba7896cb3be638174e6859cf9bcc5c3b14efde8f0779f1ac2067fa3
-  references/re-library/method/process/phishing-case-study.md: 152993836c2646ed394179248a8a5dd9df27489dd1b5d152ee0e2891822b51f7
+  references/re-library/method/process/phishing-case-study.md: de922118fb6f4aec256384536463cdebc58f1ac898fc11f7d0234a695719602a
   references/re-library/method/process/verification-safety.md: b2737cf8b717b0d7897383863cc17b015188a4e945e32ab9a1d98196d73fec9e
   references/re-library/patterns/catalog/patterns.md: 21eb4b7e61db599d4a92dc39b5a6b31a85f48889ff13aaa085b7aae4cd5a4b21
-  references/re-library/patterns/debugging/patterns-debugging.md: 9009c257d26d2cfe95394ac6ddbee9efeefbd2983d3f831992a4f969a13ca103
+  references/re-library/patterns/debugging/patterns-debugging.md: 451be392f3c0cb4445ccfb477a17588f65ed77ea5f525a45db2d04e21d67d3fa
   references/re-library/patterns/decode/patterns-decode.md: 0a3b2fca6a4f157665008f0974f3d8fe76016dca50fcf7df818b1c5f72f49a2c
   references/re-library/patterns/simulation/patterns-simulation.md: 35cdbeb743c8b18baa4f3e343c86e1909687eb5128e3fee47056a29572394c78
-  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 385fdb310f5176f8fa57d717d4ea2cdb4f80229fc0adf2c1dd36863c836a7481
+  references/re-library/patterns/vm/vm-deobfuscation-routing.md: 87aa11332da91f36da2a47b55aeaafcaaeaeeb4ac27f49f08d984666ad0b287f
   references/re-library/patterns/vm/vm-protection-anatomy.md: 6df22f57c4f1600e78242c28aff2f4d7ce7b10047f4f45c647b0e6c085490ad5
   references/re-library/platforms/catalog/platforms.md: d6108a8c43586be7d3bcb679fe4c48a6735aaba1582f663853840e0389041605
   references/re-library/platforms/elf/platforms-elf.md: 589b3227da632491a565eba0a456606054dfd5a25cb4937369a9dbdcfb606da3
@@ -80,16 +93,23 @@ files:
   references/re-library/platforms/kernel/platforms-kernel.md: 9d49c7c6e3aaf6b74a9d1b59d27145d2f3d5900073bbb891d95000ceb6990015
   references/re-library/research/osint/multi-search-engine-config.json: 120f98289429b9763f548266d65a48faf4d50acb39d893260386cf3c5f370d25
   references/re-library/research/osint/multi-search-engine-refs.md: d00092e098ba6a85ba8cd3c15e1c706600a24f22f1dbff1e38d5ccdd9e672d16
-  references/re-library/research/osint/multi-search-engine.md: 95e57956ed165c6fa5347154b9d4604d4b656779b8bac9b8df1037b423350c64
+  references/re-library/research/osint/multi-search-engine.md: d77f7ec914544f664d9088b9866031eed2a3b9d384e70a0fd73acf05543ae7a3
   references/re-library/tools/crypto/tools-crypto.md: 42c9ece21b2f8a4b06790376949396e34437fd43bf7edca42d2f6ffcd4349a21
   references/re-library/tools/dynamic/tools-dynamic.md: a4b31f50557d2caa50ef91963291440bfb95725e89aa6b75a1282bce8c428f68
-  references/re-library/tools/shelf/kunglao-toolshelf.md: 0f00b770201e53ae9d8fac57f57bb29d32dbe8e424b4ab97adfaaed0df62155e
+  references/re-library/tools/shelf/kunglao-toolshelf.md: 27cedfa69dfa48e6b81de7123210aabff2ed6b71f300506d7f771ab76eb7de82
   references/re-library/tools/static/tools-advanced.md: dea1a7b538317f7276cd58bceda6693762f5ea5bf8f89f0c62489342f7581573
   references/re-library/tools/static/tools.md: 0b5d7010b1d14c4e9baa2e2077f81a4201ef699ddb7961216a38c7196c242ee2
-  references/re-library/web/crawler/web-crawler-engineering.md: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
-  references/re-library/web/labs/web-re-quickref.md: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
-  references/re-library/web/risk-control/web-risk-control.md: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
-  references/re-library/web/vm/jsvmp-triage.md: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
+  references/re-library/web/crawler/web-crawler-engineering.md: 689985fae98f76d1101d1273881ed0173cfc1bf0e4a475a3743400d8280e2c52
+  references/re-library/web/external-distilled/_GAP-REPORT.md: cc1cc3e7abac349ec5190d95abb3300f529bff3361e6879a1e31275cc6fd740d
+  references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
+  references/re-library/web/external-distilled/external-delivery-verification-gates.md: 2ceda5a3d365003edccb14876b950a3d9709be97d79d6701d12ecab361037bbc
+  references/re-library/web/external-distilled/external-env-stub-generation.md: 3689222e622fe7e608e9a54ebaaffac71038a61c84fc4bf0e8689a0b2fc9e25d
+  references/re-library/web/external-distilled/external-minimal-intervention-observation.md: 3d7b5437ad12df2dbc4a5ea0642de8c555cde23c3301a66f2bc8c40f75df9b6f
+  references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: 4b8c39f0b2eb8d56745d464bd3e52c2c51564b2b6b9ab7c672ec898adaa788f7
+  references/re-library/web/external-distilled/external-protocol-failure-ladder.md: 8f7e0db5d5a3810b85e6d36bc942481697f6bc67fd06f1f9221ba2c453cf5a4c
+  references/re-library/web/labs/web-re-quickref.md: 92e252f23d836aa750e932bb5fcf6450e5a2ece37272c4bbad4f658e2892df2a
+  references/re-library/web/risk-control/web-risk-control.md: 394e9effb99aca994724396e6fbde133db754717a54a4e4ef4daafcd17dee8ba
+  references/re-library/web/vm/jsvmp-triage.md: 5046ef868e09cdf2e1eba59caa8bbbf13ba9169071d9bb30be1c4cb3f8b70565
   references/schemas/schema.md: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
   references/schemas/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
 symptom_map:

@@ -60,22 +60,12 @@ Auto-integration mode (issue #602, --auto flag):
 from __future__ import annotations
 
 
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
+# issue 275 batch-3 fail-open tracer — single home in _scriptlib (issue 292);
+# the per-module copy (message token + rate-limit state) is the factory's
+# per-tag binding, byte-identical to the former private def.
+from _scriptlib import make_warn
 
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] plan_drift_detector WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+warn = make_warn("plan_drift_detector")
 import gate_telemetry as _gt
 from status_defs import TERMINAL
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
@@ -538,6 +528,40 @@ def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
             warn("_emit_stale_plan_warns", f"{type(exc).__name__}: {exc}")
 
 
+def _emit_verdict(workspace: Path, drifts: list, rc: int) -> None:
+    """issue 293: the drift REJECT verdict is a decision record — tagged
+    (actor=plan_drift_detector) + persisted, under the issue-127
+    ``detector_fired`` word (a detector FIRED on the pathology it exists
+    for). detail carries the detector name + counters per the word
+    contract; exit carries the rc (1 drift / 2 hard pause).
+
+    Deliberately NO clean-face event: a fresh check emits nothing — the
+    issue-459 anchor pins that face (test_fresh_plan_emits_nothing), and a
+    clean check changes no state; the fired face is the decision.
+    Fail-open: observability never changes the verdict (kunglao_record
+    posture)."""
+    if not drifts:
+        return
+    by_type: dict = {}
+    for d in drifts:
+        by_type[d["type"]] = by_type.get(d["type"], 0) + 1
+    payload = {
+        "detector": "plan_drift_detector",
+        "drifts": len(drifts),
+        "by_type": by_type,
+        "items": [{"type": d["type"], "claim_id": d.get("claim_id")}
+                  for d in drifts[:5]],
+    }
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="plan_drift_detector",
+             action="detector_fired",
+             detail=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+             exit=rc)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        warn("_emit_verdict", f"{type(exc).__name__}: {exc}")
+
+
 # --- issue-281: bounded-window plan-repair verification --------------------
 #
 # The plan-drift REJECT instructs a repair ("update global_plan.txt ...")
@@ -873,6 +897,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
             print(f"    ... and {len(items) - 5} more")
     _print_stale_plan_warns(stale_plan_warns)
     plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
+    _emit_verdict(workspace, drifts, 2 if len(drifts) >= 3 else 1)  # issue 293 verdict
     # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
     # per the docstring contract that the implementation previously lacked.
     # (#497: STALE_PLAN_ON_NEW_EVIDENCE warns are NOT drift warnings for

@@ -94,25 +94,34 @@ LEGACY_ACTORS = frozenset({
     "anomaly_detector", "ask_for_direction", "ask_for_direction_gate",
     "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
     "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",
+    "claim_granularity",  # issue 293 tagged decision emission (split fan-out + verdict)
     "complete_teardown", "completion_gate", "convergence_check",
     "convergence_health",  # #127 detector liveness telemetry (detector_eval/detector_fired)
     "dead_letter",  # issue-234 dispatch-failure 3-strike writer (must_ask escalation face)
     "decision_pending", "digest_build", "dispatch_context", "dual_gate",
     "env_check", "env_check_gate", "env_repair_l1", "env_state_probe",
     "event_taxonomy", "external_kicker", "failure_analysis",
-    "failure_analysis_gate", "heartbeat_tick", "heartbeat_touch",
+    "failure_analysis_gate",
+    "fix_guard",  # issue 304 fix-as-guard: dormancy sweep writer (guard_dormant face)
+    "heartbeat_tick", "heartbeat_touch",
     "hypothesis_bridge",  # issue-252 family-ledger sync + bridge lint writer
     "hypothesis_seeder", "infeasible_proposal", "infeasible_signal",
+    "instrument_menu",  # issue 243 menu/beat faces (handroll_warn + promotion emit)
     "hook", "hook_activation", "hypothesis", "init", "kunglao-decide",
     "kunglao_record", "kunglao_resume", "kunglao_status", "kunglao_upgrade",
     "kubectl_test", "lessons_telemetry", "lint", "log_setup", "loop_state",
     "migrate_facts", "mission_ledger", "mission_stall", "notes_writer",
     "nursery", "operator", "oracle_runner",  # #146 retirement coverage WARN face
     "orchestrator_tool_guard", "outcome_capture",
-    "plan_drift", "plan_drift_detector", "priority", "priority_ratio",
+    "plan_drift", "plan_drift_detector", "plan_epistemics", "priority",
+    "priority_ratio", "progress_timeline",  # issue 293 tagged decision emission
     "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
-    "rollup", "retract_claim", "rho_verifier", "scan_worker_budget",
+    "reward_settlement",  # unified-reward tick face (rollout_settled summary emit)
+    "rollup",
+    "rotation_induction",  # issue-341 same-slot value-join induction writer
+    "retract_claim", "rho_verifier", "scan_worker_budget",
     "statusline_snapshot",  # #883 statusline health-snapshot writer (event-driven, #142)
+    "target_ladder",  # issue 293 tagged decision emission (sibling fan-out + settlement gate)
     "telemetry", "think_seat", "toolchain_install", "tuition_curve",
     "update_index", "upgrade", "user", "user_signal", "verdict_scorer",
     "verify_status_watch", "verifier", "violation_capture",

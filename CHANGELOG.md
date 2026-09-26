@@ -6,6 +6,182 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [Unreleased]
+
+### Added
+
+- **Multi-layer decryption-chain eval tier (#370)**: the capability
+  ladder gains units where the answer sits behind 2-6 nested protection
+  stages and pass REQUIRES peeling every layer — obfuscation (custom
+  string-table/packer loader), 花指令 junk-code (provably-inert opaque
+  predicates + no-op forests that pollute naive decompilation), encrypted
+  config (key derived at RUNTIME from machine-fingerprint constants via
+  a seeded ARX KDF — never a literal), a custom ARX cipher core with
+  planted non-standard constants (stock crypto fails every pair by
+  construction), a 伪装层 decoy-path (a WORKING parallel implementation
+  whose outputs are well-formed garbage; branch selection keyed to an
+  integrity fold), and an anti-debug gate that silently steers to the
+  decoy when tripped plus 3-lane core rotation (7 units: 2×L1, 3×L2,
+  2×L3 across js/py/go under `eval/v1/tasks/chain/`, eval-v1.4). Every
+  unit's manifest records the mint-time anti-shortcut audit — naive
+  strings/constant scans re-run against the committed artifact FAIL to
+  yield the answer, the honeypot is the only key-shaped literal, decoy
+  outputs differ from truth on every pair — and mint refuses a unit
+  whose audit would pass. Grading upgrades from binary to dense:
+  `scripts/eval_chain_grader.py` scores layers-completed (0..N) from the
+  analysis workspace's layer artifacts via mechanical checkpoint ops
+  (digest/exec/markers/clean), while the final answer face reuses the
+  mechanical replay checker; the decoy-following trajectory scores
+  partial by construction, making decoy cost visible to the scheduling
+  experiments.
+- **Unified RLVA reward (#366)**: one rollout ledger + one deterministic
+  settlement engine + model-score whitelist — the whole RLVA reward is ONE
+  accounting system (owner ruling 2026-09-23). WRITE: `scripts/rollout_ledger.py`
+  owns `runs/rollout-ledger.jsonl` (append-only JSONL, one row schema
+  `{rollout_id, kind, anchor, ts, signals[], reward, settlement}`; kinds are a
+  centrally-registered open enum — `task` / `self_distill` live now,
+  `hybrid_distill` pre-registered for #365, whose distill_rollout rows MUST
+  conform to this schema; appends take an flock on
+  `runs/.rollout-ledger.lock`; the byte prefix is invariant — settlements are
+  AMENDMENT rows and the fold is last-wins). SETTLE: `scripts/reward_settlement.py`
+  is the ONLY place reward is computed — a deterministic rules-table engine
+  over `references/contracts/reward-rules.yaml` (versioned; every rule cites
+  its band, reward and evidence requirement). Multi-signal anti-pollution:
+  no rule has fewer than two required signals; adverse (0.0) needs
+  misleading-declaration AND zero-recall AND no-citation; helped (0.5, full
+  1.0) needs consumption AND downstream positive reference; single-signal or
+  partial-evidence rows settle NEUTRAL (`<kind>/pending`) pending
+  corroboration; a signal-set change reopens a settled rollout
+  (DEFERRED→wake→PROVEN upgrades its band). U3 whitelist: model-produced
+  scores enter only as signals marked `advisory` — excluded from rule
+  matching by construction — and the engine's import surface is
+  allowlist-pinned by test (no model-call path, no shell-out). TASK rollouts
+  keep the oracle checker verdict as hard currency (`task/oracle-green`
+  reward 1.0, never demoted; red 0.0). EMISSION ADAPTERS (domain state
+  untouched): the rollup tick gained an additive face — task rows from the
+  oracle-status/claim-closure surfaces, self_distill rows diffed from the
+  lessons library — then the engine settles pending rows and emits ONE
+  registered event (`rollout_settled`); a failed settlement face never
+  blocks the terminal transition. U4 prior feed: `compute_priors` gains one
+  additive source namespace (`rollout_ledger`) reading settled rows through
+  THE one interface (`rollout_ledger.settled(kind, window)`) —
+  SETTLED_GREEN/HELPED → alpha, SETTLED_RED/ADVERSE → beta, NEUTRAL →
+  nothing; the prior math itself is untouched.
+>>>>>>> origin/dev
+- **Runtime-state rotation induction (#341)**: runtime values (keys, tokens, sessions, nonces, cookies) are no longer recorded as timeless truths. WRITE side: a dynamic-source fact about a volatile subject must carry `temporal_scope: runtime`, `subject_slot`, `value_fingerprint` (sha256 of the value only), `captured_at` (ISO ts) — `hooks/write_guard.py` gains a runtime-fact leg (`scripts/runtime_facts.check_fact_postimage`) that REJECTS the fact otherwise; static-source facts are never required to carry the fields. JOIN side: the `rotation_induction` mechanism (registered in `scripts/mechanisms.yaml`, tick channel, cheap) groups runtime facts by (claim_id, `subject_slot`); ≥2 distinct `value_fingerprint`s under one slot emit `runtime_value_rotation` (EMIT_ACTIONS-registered), auto-file the rotation hypothesis as the COMPETITOR of the implicit static premise, and write a pending synthesis note recording the fingerprint series — idempotent on an unchanged fingerprint set, a grown set refires with the fuller series (superseding note, hypothesis never duplicated). GATE side: a dispatch on a rotation-flagged claim without the `rotation-experiment: rotation-characterization` marker is REJECTED with guidance pointing at the new reference card `references/re-library/dynamic/rotation-characterization.md` (derivation-point hook / T,T+Δ double capture / trigger-isolation matrix / rotation-input source trace). HEALTH face: the rotation event feeds the convergence ledger (operator_action row) and `convergence_health`'s verdict face renders `rotation_events` + names the marker requirement in the STALLED/SPINNING action text. Hygiene pinned by test: fingerprints only — raw key material never reaches events/ledger/hypotheses/notes/state.
+- **Premise epistemics (#340)**: environment premises become clocks with
+  evidence, not facts. Blocker schema v2 (`templates/state/blocker.md`)
+  mandates `observed` / `attributed` / `probe_evidence` / `expires`, and
+  the write gate (`hooks/write_guard.py` + new `scripts/blocker_lint.py`)
+  rejects any new blocker carrying an environment-capability attribution
+  ("no root", "unavailable", "not supported", "cannot use", ...) without
+  non-empty differential probe evidence — error text alone is never
+  sufficient; legacy-shape blockers are rejected on write per the
+  no-backcompat ruling (2026-09-01). The premise-probe reconciliation
+  gate (`check_env_premise` in `hooks/worker_budget_sinks.py`, the
+  `check_env_fresh` seam) marks a premise SUSPECT (append-only history
+  line) and schedules a one-shot on-demand capability re-probe (the #474
+  `toolchain.py --capability` channel) whenever a dispatch-needed
+  capability (`_env_caps_needed` vocabulary) shows liveness PASS in
+  `runs/env-state.json` while an active blocker claims it unavailable —
+  emitting the new registered event `env_premise_contradiction` and
+  letting the dispatch proceed (the probe wins, the premise loses).
+  The `premise_expiry` mechanism (new `scripts/premise_gate.py`,
+  declared in `scripts/mechanisms.yaml`) invalidates env-class blockers
+  unverified for > `expires` ticks (default 12,
+  `KUNGLAO_PREMISE_EXPIRY_TICKS`) with an append-only
+  stale-marker history line, forcing re-derivation on next need.
+
+- **Replay ruler (#294)**: offline policy evaluation for the DECIDE rank
+  face — the convergence loop's first feedback signal for ordering
+  quality. The harness (`scripts/replay_ruler.py`) consumes a COPY of a
+  historical convergence ledger + event stream (explicitly named
+  workspace, read-only source, sandboxed writes only — never a live
+  workspace), replays the rank face under parameterized score
+  configurations through a serial-dispatch counterfactual whose
+  completion clock is the ledger's own observed durations, and emits
+  per-configuration deterministic TTC + order digests. The rank score
+  gains the downstream-blocker term (#294): a bounded, decaying
+  downstream_count over claim_deps/depends_on/obstacle_for reverse edges
+  (`DOWNSTREAM_DECAY`/`DOWNSTREAM_CAP`/`W_DOWNSTREAM`, named free
+  parameters pending the #295 earn-in), recorded on `rank_feeds` events
+  under `feeds.downstream` with the #251 component convention; the seed
+  contract holds unchanged. The λ epistemology check is now mechanical:
+  the harness scans historical `rank_feeds` for the dh_pq nonzero rate
+  and compares λ=0.25 vs λ=0 TTCs on the same replay (no parameter
+  change — #295 owns that). D_t (w_oracle·oracle_pass +
+  w_impl·checks_impl + w_ev·pq_cov) is derived from persisted mission
+  factor vectors with the relevance coupling: activity with flat D_t
+  reports FLAT reward, never shaped progress. Anti-starvation is pinned
+  by test: the decay/cap bound keeps leaf claims dispatchable, and
+  starvation-by-construction is shown visible to the #249 STALLED
+  detector.
+- **Frozen-sampling marker (#266)**: `priority_ratio.frozen_sampling_markers`
+  scans a rank_feeds event tail for K (`FROZEN_SAMPLE_K`) consecutive
+  runs with equal rng_base while the recorded round advances — the #251
+  contract makes a moving round move the seed, so such a run is the old
+  frozen-sampler defect re-emerging; equal base at equal rounds (the
+  contract replaying an unchanged tick) never marks. Pure tail function
+  (tail-replay safe, idempotent); the replay ruler reports it as
+  `frozen_check`.
+
+- **State persistence format stamps + on-demand priors (#137)**: workspaces
+  now self-describe their persisted state so historical-format replay
+  (#294) reads by field, not by inference. NEW writes to the convergence
+  ledger (snapshot + operator_action rows) and the case bank carry a
+  `schema` stamp (`convergence-ledger/2`, `case-bank/2` — the same
+  `<name>/<rev>` convention as `posteriors-schema/1` and
+  `task-terminal-settlement/1`, which were already stamped); legacy rows
+  without the stamp stay readable — absence = legacy, and historical
+  files are never rewritten (the #135/#136 tolerance pattern). Plus the
+  on-demand cross-workspace prior face: `scripts/compute_priors.py` sums
+  Beta alpha/beta observations from EXPLICITLY-NAMED workspaces' case
+  banks and posterior ledgers into one aggregate prior
+  (`aggregate-prior/1`) — pure (filesystem verified byte-identical),
+  deterministic (same inputs -> same prior), loud on bad inputs
+  (nonexistent path / unknown posteriors schema / degraded ledger raise,
+  never a silent scan or a silent zero; the one aggregate keeps a single
+  Beta(1,1) base). The graduation-gate DESIGN SPEC (five mechanical
+  criteria: engagement >= N, >= K positives with zero negative
+  attribution, hash-only privacy, #294 replay non-regression, human
+  review = the PR — same shape for every artifact type, wired to the
+  existing release train, no new organs) lands as docs/adr-002 (shape
+  per the #295 ADR-001 precedent) with the workspace
+  directory-convention section; the gate MACHINERY itself is v0.2
+  scope.
+### Changed
+
+- **Checker lane-universal (#355)**: the red-team checker is defined by its
+  FUNCTION — adversarial verification — not by any material domain, so ALL
+  evidence gets red-team checking on every lane. `agents/kunglao-redteam.md`
+  drops the #342 `lane: malware|web` declaration and carries a lane-contract
+  note (adversarial checking is lane-universal; the lane-specific evidence
+  sets and machine-check methods remain METHOD guidance, never admission
+  restrictions), and `hooks/dispatch_gate._lane_gate` /
+  `_agent_lane_declaration` document the #355 semantics: a lane-absent agent
+  is permitted on every lane, the `lane:` axis binds maker-type agents only
+  (the four malware-lane specialists' contracts unchanged), and the
+  declaration is file truth — the dispatch payload cannot influence it, with
+  plugin-qualified subagent ids (`kunglao-agent:ghidra-light`) now resolving
+  to their bare segment so a crafted payload id cannot dodge the lane gate
+  or the #760 tools-rack face through an unresolvable filename. The four
+  lanes #342 left refused (algorithm/protocol/data/app) are admitted;
+  blind_gate promotion semantics are untouched (PROVEN still requires
+  sign-off + dispatched-verifier evidence); deploy-manifest shas regenerated.
+
+- **README rewrite (#333)**: the README now leads with the RLVR positioning —
+  the oracle verdict as the only trusted currency (`oracle_case_admission.py`
+  quantified verification contracts), context as the policy surface, Thompson
+  sampling (`priority_ratio.py`), terminal credit (`terminal_settlement.py`),
+  and replay-based measurement (`replay_ruler.py`) closing the loop — followed
+  by a benchmark how-to (the smoke tier runnable today; the #332 release tier
+  landing in v0.1.6; the #236 control-arm A/B with its five metrics; the #294
+  replay ruler) and the v0.2 pi-agent migration direction with its measured
+  adoption gates and pre-committed falsifiers (#319) plus the workbench
+  (#320). Quickstart, subcommands, toolchain, channel, configuration, safety,
+  development, and internals essentials preserved; the opening one-liner is
+  reworded and kept in lockstep with the plugin-manifest description.
+
 ## [0.1.5.post2] - 2026-09-19
 
 The post2 batch: seventeen changes to the strategy-learning pipeline. The

@@ -1,0 +1,53 @@
+schema: kunglao-eval-task/1
+task_id: chain-l2-go-v1
+eval_version: eval-v1.4
+tier: chain
+source: constructed
+family: chain-go
+seed: 37005
+anchors:
+  goal_verbatim: 'Analyze target/chain_bundle.go: a multi-stage protected derivation.
+    Peel the obfuscation loader, derive the runtime key, decrypt the config, restore
+    the custom ARX core from the recovered constants, and re-expose the derivation
+    reproducing the captured pairs byte-exact. Record layer artifacts as you peel
+    — grading is per-layer dense.'
+  success_criterion: A derive() re-implementation reproducing every published and
+    checker-minted pair byte-exact through the restored core; stock-crypto and honeypot/decoy-keyed
+    candidates fail every pair by construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: go
+  files:
+  - target/chain_bundle.go
+  entry: target/chain_bundle.go
+  candidate_contract: 'A Go program reading one JSON object per line on stdin ({"i":
+    N, "payload": hex, "lane": R}) and printing {"i": N, "out": hex} per line.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_candidate.go
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 64
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+chain:
+  gradient: L2
+  mechanisms:
+  - custom-cipher-core
+  - encrypted-config
+  - junk-code
+  - obfuscation
+  manifest: manifest.json
+  dense_grader: scripts/eval_chain_grader.py

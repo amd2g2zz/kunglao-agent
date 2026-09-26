@@ -4,8 +4,14 @@
 RED: the weighted formula score = [0.45·L + 0.30·D + 0.25·N]/cost is
 DISCARDED (owner ruling, issue #107). The rebuilt value function:
 
-    score = (Thompson case face + LAMBDA_DH · ΔH_PQ) · worth
+    score = (Thompson case face + W_DOWNSTREAM · downstream_term) · worth
     rank by Thompson sample; stable tie-break claim_id
+
+(#295 governed removal, ADR-001 docs/adr-001-strategy-parameter-
+governance.md: the LAMBDA_DH·ΔH_PQ face is GONE — EXP-B proved ΔH ≡ 0 on
+612/612 real rank events and #294 proved λ-invariance byte-identical, so
+the removal is a runtime no-op on history. A PQ categorical in the
+ledger no longer lifts any score.)
 
 The candidate filter is UNCHANGED (OPEN + attempts<3 + terminal-fact
 parents) — the demolition only replaced the VALUE function, not the
@@ -78,13 +84,14 @@ def _posteriors_ws(base, name="ws", cases=(), pqs=None):
 # ---------- the rebuilt formula ----------
 
 def test_thompson_composite_formula_not_weighted():
-    """score == (Thompson case face + LAMBDA_DH·ΔH)·worth exactly; the
-    weighted-era term fields are gone (owner ruling: 之前的不要了)."""
+    """score == (Thompson case face + W_DOWNSTREAM·downstream_term)·worth
+    exactly (no ΔH face — #295 removal); the weighted-era term fields are
+    gone (owner ruling: 之前的不要了)."""
     claims = [_claim("C-1", statement="c2 config extract")]
     out = pr.priority_ratio(claims, _deps(), _evidence())
     assert len(out) == 1
     a = out[0]
-    expected = round(_replica_sample("C-1") + pr.LAMBDA_DH * 0.0, 6)
+    expected = round(_replica_sample("C-1"), 6)
     assert a.score == expected
     assert a.weight == 1.0
     for stale in ("leverage", "discriminator", "novelty", "gap_bucket",
@@ -92,16 +99,17 @@ def test_thompson_composite_formula_not_weighted():
         assert not hasattr(a, stale), f"Action must not carry {stale}"
 
 
-def test_pq_categorical_entropy_enters_score():
-    """ΔH is mechanical on the categorical: a uniform 2-candidate PQ has
-    H=1 bit, so the score rises by exactly LAMBDA_DH over the ΔH=0 case
-    (the Thompson sample is invariant — the seed digest covers cases only)."""
+def test_pq_categorical_entropy_is_rank_inert():
+    """#295 removal pin: a populated PQ categorical (uniform 2-candidate,
+    H=1 bit) does NOT move the score — the ΔH face is gone (ADR-001).
+    The Thompson sample is invariant (the seed digest covers cases only),
+    so the score is byte-identical to the no-categorical case."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _posteriors_ws(_tmp_base(), pqs={"q1": {"candidates": {"a": 1, "b": 1}}})
     a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
     bare = pr.priority_ratio(claims, _deps(), _evidence())[0]
-    assert "dh_pq" in a.feeds and "1.0 bit" in a.feeds["dh_pq"]
-    assert a.score == round(bare.score + pr.LAMBDA_DH * 1.0, 6)
+    assert "dh_pq" not in a.feeds, "the dh_pq feed was removed by #295"
+    assert a.score == bare.score, "no ΔH lift may survive the #295 removal"
 
 
 def _tmp_base():

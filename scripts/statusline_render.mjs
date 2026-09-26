@@ -245,6 +245,26 @@ function rankBadge(snap) {
   return rank.stale ? PALETTE.amber(text) : PALETTE.cyan(text);
 }
 
+// Issue 134 rho/Platt calibration chip: how well the dense progress proxy
+// (rho) predicts the mechanical terminal anchor (z_self) — pure view over
+// the producer's calibration face. ACTIVE = cyan `ρ-z e=<ece> n=<pairs>`
+// (the data face is alive), DORMANT = amber `ρ-z DORMANT` (the sampler
+// fires but pairs never settle — the loud #127 finding), NO_DATA/absent =
+// hidden (the renderer hides absent segments, never a placeholder).
+function calibrationBadge(snap) {
+  const cal = snap.calibration && typeof snap.calibration === 'object'
+    ? snap.calibration
+    : null;
+  if (!cal) return '';
+  if (cal.status === 'DORMANT') return PALETTE.amber('ρ-z DORMANT');
+  if (cal.status !== 'ACTIVE') return '';
+  const ece = Number(cal.ece);
+  const n = Number(cal.n_pairs);
+  const text = `ρ-z e=${Number.isFinite(ece) ? ece.toFixed(2) : '?'}`
+    + ` n=${Number.isFinite(n) ? n : '?'}`;
+  return PALETTE.cyan(text);
+}
+
 // #212 difficulty badge: calibrated tier preferred (the mounted calibration
 // output), the raw-signals calibration score as fallback, the legacy string
 // key last. Absent data = hidden segment, never a placeholder.
@@ -277,12 +297,27 @@ function perfSegments(perf) {
     const text = `W${Math.round(wr * 100)}%`;
     segs.push(wr >= 0.5 ? PALETTE.green(text) : PALETTE.amber(text));
   }
+  // #135 prediction hit-rate (cockpit display only — PRODUCE-only face).
+  // Absent (null/undefined) hides; an explicit 0 is the alarm state and
+  // MUST render (Number(null) is 0, so null is filtered by identity).
+  const hr = perf.hit_rate;
+  if (hr !== null && hr !== undefined && Number.isFinite(Number(hr))) {
+    const pct = Math.round(Number(hr) * 100);
+    const text = `HR${pct}%`;
+    segs.push(pct >= 50 ? PALETTE.green(text)
+                        : (pct > 0 ? PALETTE.amber(text)
+                                   : PALETTE.red(text)));
+  }
   const workers = perf.workers && typeof perf.workers === 'object' ? perf.workers : null;
   if (workers && Number(workers.total) > 0) {
     const active = Number.isFinite(Number(workers.active)) ? Number(workers.active) : 0;
     segs.push(active > 0
       ? PALETTE.cyan(`w${active}/${Number(workers.total)}`)
       : PALETTE.dim(`w0/${Number(workers.total)}`));
+    // #244 floor: heartbeat-quiet waiting workers (傻等 face) — amber when
+    // a wait went quiet past its claim's settlement window.
+    const sw = Number(workers.stale_waiting);
+    if (Number.isFinite(sw) && sw > 0) segs.push(PALETTE.amber(`sw${sw}`));
   }
   return segs;
 }
@@ -351,6 +386,7 @@ function renderKunglao(snapPath, nowMs) {
 
   const badge = entropyBadge(snap);
   const rankSeg = rankBadge(snap);
+  const calSeg = calibrationBadge(snap);
   const dots = healthDots(snap.health, down);
   const chip = taskChip(snap.now);
   const diff = difficultyBadge(snap);
@@ -371,6 +407,7 @@ function renderKunglao(snapPath, nowMs) {
   if (valueSeg) parts.push(valueSeg);
   if (badge) parts.push(badge);
   if (rankSeg) parts.push(rankSeg);
+  if (calSeg) parts.push(calSeg);
   if (diff) parts.push(diff);
   if (dots) parts.push(dots);
   if (perfSegs.length) parts.push(...perfSegs);

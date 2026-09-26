@@ -62,13 +62,16 @@ def load_protocol():
 
 def _make_ws(tmp_path, claims=({"id": "C-1", "status": "OPEN"},)) -> Path:
     """Minimal kunglao workspace: claim-register + runs/. decide()/pulse both
-    need the register (convergence_check exits 64 without it)."""
+    need the register (the convergence CLI exits 64 without register +
+    task_spec, #240)."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     text = "claims:\n"
     for c in claims or ():
         text += f"- id: {c['id']}\n  status: {c.get('status', 'OPEN')}\n"
     (ws / "claim-register.yaml").write_text(text, encoding="utf-8")
+    # #240: the convergence CLI hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     return ws
 
 
@@ -382,6 +385,8 @@ def test_worker_pulse_flags_w15(tmp_path):
     (ws / "runs").mkdir()
     (ws / "claim-register.yaml").write_text(
         "claims:\n- id: C-1\n  status: OPEN\n", encoding="utf-8")
+    # #240: the convergence pulse hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     _write_status(ws, "w1", DONE_DECLARED)
     pulse, decision = wp._build_pulse(ws)
     assert "w15=" in pulse, (
