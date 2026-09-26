@@ -655,18 +655,31 @@ class TestHarnessEscapeGate:
     def _fake_root(self, tmp_path: Path) -> Path:
         """A synthetic harness root: the four surface dirs + a git HEAD —
         restore proves itself against a real checkout, never the live
-        repo tree (parallel-safe)."""
+        repo tree (parallel-safe). P1: the root also carries a
+        graded-surface task unit (eval/v1/tasks/...) so the tamper faces
+        exercise the real boundary, not a stand-in directory."""
         import subprocess as sp
 
         root = tmp_path / "repo"
         for rel in ("agents/kunglao-redteam.md", "hooks/gate.py",
-                    "skills/kunglao-agent/SKILL.md", "scripts/runner.py"):
+                    "skills/kunglao-agent/SKILL.md", "scripts/runner.py",
+                    "eval/v1/tasks/smoke/py-x-v1/ground_truth.json",
+                    "eval/v1/tasks/smoke/py-x-v1/checker.py",
+                    "eval/v1/tasks/smoke/py-x-v1/task.yaml",
+                    "eval/v1/tasks/smoke/py-x-v1/reference_candidate.py",
+                    "eval/v1/tasks/smoke/py-x-v1/target/sample.py",
+                    "eval/v1/tasks/smoke/py-x-v1"
+                    "/reference_workspace/layer_out/1.py"):
             p = root / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(f"original {rel}\n", encoding="utf-8")
         pyc = root / "scripts" / "__pycache__"
         pyc.mkdir(parents=True)
         (pyc / "runner.pyc").write_bytes(b"\x00")
+        gpyc = root / "eval" / "v1" / "tasks" / "smoke" / "py-x-v1" \
+            / "__pycache__"
+        gpyc.mkdir(parents=True)
+        (gpyc / "checker.pyc").write_bytes(b"\x00")
 
         def git(*args: str) -> None:
             r = sp.run(["git", "-C", str(root), *args],
@@ -694,6 +707,111 @@ class TestHarnessEscapeGate:
         assert any(k.startswith("agents/") for k in h)
         assert any(k.startswith("hooks/") for k in h)
         assert any(k.startswith("scripts/") for k in h)
+
+    # ------------------------------------------------- graded surface
+    GRADED_UNIT = "eval/v1/tasks/smoke/py-x-v1"
+
+    def test_graded_surface_covers_full_tasks_tree(self, tmp_path):
+        """P1: the GRADING surface — ground_truth.json, the per-unit
+        checker.py, the task spec, chain/reference goldens AND the target
+        samples — is hashed beside the harness surface. FULL tree, not
+        answer-files-only: a name allowlist silently misses future task
+        files (the same wrong-asset class this gate closes)."""
+        root = self._fake_root(tmp_path)
+        g = lr.graded_surface_hashes(root)
+        assert f"{self.GRADED_UNIT}/ground_truth.json" in g
+        assert f"{self.GRADED_UNIT}/checker.py" in g
+        assert f"{self.GRADED_UNIT}/task.yaml" in g
+        assert f"{self.GRADED_UNIT}/reference_candidate.py" in g
+        assert f"{self.GRADED_UNIT}/target/sample.py" in g
+        assert (f"{self.GRADED_UNIT}"
+                f"/reference_workspace/layer_out/1.py") in g
+        assert not any("__pycache__" in k for k in g), \
+            "pycache is not graded surface either"
+        # the integrity surface is exactly the union of the two scopes
+        integrity = lr.integrity_surface_hashes(root)
+        assert set(integrity) == \
+            set(g) | set(lr.harness_surface_hashes(root))
+
+    def test_graders_are_in_the_integrity_surface(self):
+        """The four graders live inside scripts/ (already harness
+        surface) — pinned here so a later HARNESS_DIRS narrowing cannot
+        silently unwatch the graders themselves."""
+        integrity = lr.integrity_surface_hashes()
+        for grader in ("scripts/eval_checker.py",
+                       "scripts/eval_chain_grader.py",
+                       "scripts/eval_dataset.py",
+                       "scripts/eval_targets.py"):
+            assert grader in integrity
+
+    def test_ground_truth_tamper_detected_reverted_marked(self, tmp_path,
+                                                          monkeypatch):
+        """THE flip-face: editing ground_truth.json turns FAIL
+        into PASS undetected — the gate must fire, restore, and mark
+        exactly as it does for the harness surface."""
+        root = self._fake_root(tmp_path)
+        target = root / self.GRADED_UNIT / "ground_truth.json"
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET", str(target))
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert "ESCAPE-JUNK" not in target.read_text(encoding="utf-8"), \
+            "the ground-truth escape write was reverted from HEAD"
+        sess = row["loop"]["session"]
+        assert sess["harness_contaminated"] is True
+        assert sess["harness_drift_files"] == \
+            [f"{self.GRADED_UNIT}/ground_truth.json"]
+        ev = json.loads((tmp_path / "harness-events.jsonl")
+                        .read_text(encoding="utf-8").splitlines()[-1])
+        assert ev["action"] == "harness_drift"
+        assert ev["drifted"] == [f"{self.GRADED_UNIT}/ground_truth.json"]
+        assert ev["restored"] == ev["drifted"]
+
+    def test_checker_tamper_detected_reverted_marked(self, tmp_path,
+                                                     monkeypatch):
+        """P1: the per-unit checker is the other flip-face — same
+        gate contract (detect + restore + mark) on checker.py."""
+        root = self._fake_root(tmp_path)
+        target = root / self.GRADED_UNIT / "checker.py"
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET", str(target))
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert "ESCAPE-JUNK" not in target.read_text(encoding="utf-8")
+        sess = row["loop"]["session"]
+        assert sess["harness_contaminated"] is True
+        assert sess["harness_drift_files"] == \
+            [f"{self.GRADED_UNIT}/checker.py"]
+        ev = json.loads((tmp_path / "harness-events.jsonl")
+                        .read_text(encoding="utf-8").splitlines()[-1])
+        assert ev["restored"] == [f"{self.GRADED_UNIT}/checker.py"]
+
+    def test_clean_session_with_graded_surface_no_false_positive(
+            self, tmp_path, monkeypatch):
+        """The graded tree is READ-ONLY during a run: a well-behaved
+        session writing only runs/ + facts/ inside its workspace must not
+        trip the gate even with the tasks tree hashed (the false-positive
+        face of the wider boundary)."""
+        root = self._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert row["loop"]["session"]["harness_contaminated"] is False
+        assert row["loop"]["session"]["harness_drift_files"] == []
+        assert not (tmp_path / "harness-events.jsonl").exists()
+        # legitimate workspace writes landed inside the workspace...
+        ws_runs = list((tmp_path / "workspaces").glob("*/runs"))
+        assert ws_runs, "the stub's runs/ writes landed in the workspace"
+        # ...and the graded tree still carries HEAD bytes
+        gt = root / self.GRADED_UNIT / "ground_truth.json"
+        assert gt.read_text(encoding="utf-8") == \
+            f"original {self.GRADED_UNIT}/ground_truth.json\n"
 
     def test_drift_reports_changed_added_deleted(self):
         before = {"a.md": "1", "b.md": "2", "c.md": "3"}
