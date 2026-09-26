@@ -1103,30 +1103,46 @@ def plan_author_violation(plan_path: Path, plan_text: str, ws: Path,
 
 # H2 (#294): generic category/capability words are routine prose too
 # ('static overview of imports' is an adjective, not a disasm tool) — they
-# would false-positive REJECT normal dispatches. Stopworded out of the trigger
-# set; the remaining keywords (crypto/ghidra/recon/decompile/vtable/...) are
-# distinctive enough to be safe signals.
+# would false-positive REJECT normal dispatches.
 # #340: category ids renamed aux→auxiliary / pipeline→pipelines (id == dir
-# name); _load_tool_index_keywords derives keywords from those ids, so the
-# plural forms joined the trigger set — a dispatch citing the REAL paths
-# (tools/pipelines/build_evidence_index.py, tools/auxiliary/...) would
-# REJECT without a marker. Both plural forms stopworded; the legacy
-# singulars stay (capability domains aux:*/pipeline:* still emit them).
-_TOOLFIRST_STOPWORDS = frozenset(
-    {'static', 'pipeline', 'pipelines', 'aux', 'auxiliary',
-     'annotate', 'decode',
-     # H1 (autoresearch thin-base) misfire fix: the web category tokens
-     # mapped the GENERIC prose "web" (every web unit name: "web-pack-sign")
-     # and "triage" onto jsvmp_triage — the campaign's non-JSVMP obfuscated
-     # units (web-pack-sign-l1a: javascript-obfuscator STRONG, NOT JSVMP)
-     # drew `tool-catalog: jsvmp_triage` demands and dispatch rejections.
-     # "js" is the same class (capability domain token -> wakaru-unbundle):
-     # every ".js" target path in dispatch prose matched it (live sweep
-     # ledgers: net-verify-license-l1a, web-pack-sign-l1a all drew
-     # wakaru-unbundle missing_marker rows). Same discipline as the original
-     # table: DISTINCTIVE terms only — generic prose stays OUT of the
-     # trigger set; wakaru keeps its distinctive "unbundle" keyword.
-     'web', 'triage', 'js'})
+# name) — the plural forms misfired on the REAL paths (tools/pipelines/...).
+# H1 (autoresearch thin-base): the web category tokens (web/triage/js)
+# mapped every web unit name and .js path onto jsvmp_triage /
+# wakaru-unbundle — the campaign's non-JSVMP obfuscated units drew bogus
+# `tool-catalog:` demands and dispatch rejections.
+#
+# #380 P2 (finding 4): those were three rounds of the SAME whack-a-mole —
+# a per-token blocklist chasing one class: CATEGORY-LEVEL tokens (registry
+# category ids, capability domain halves, generic verbs) are routine prose.
+# The class is now demoted WHOLESALE at the trigger layer: a keyword fires
+# the gate only when DISTINCTIVE (_is_distinctive_trigger below) —
+#   (a) a name-carried compound ('xref-scan', 'java-source', 'yara-scan':
+#       hyphenated registry ops, not routine prose), or
+#   (b) a curated RE-jargon single in _TOOLFIRST_TRIGGER_SINGLES (proper
+#       tool names ghidra/ida, the domain-carried crypto, adjudicated verb
+#       jargon decompile/deobfuscate/disasm/recon/unbundle/vtable), or
+#   (c) an explicit alias-table entry (_TOOL_KEYWORD_ALIASES /
+#       _ANDROID_KEYWORD_ALIASES) — the jsvmp pattern: a name-carried term
+#       the registry fields do not carry, restored deliberately.
+# Category-level tokens (web/js/android/static/aux*/pipeline*/triage/
+# decode/annotate/diff/identify/sanitize — and any FUTURE registry token of
+# the same class) can never rejoin the trigger set by accreting registry
+# entries; a genuine new trigger lands in the alias tables explicitly. The
+# old _TOOLFIRST_STOPWORDS blocklist is gone.
+_TOOLFIRST_TRIGGER_SINGLES = frozenset(
+    {'crypto', 'decompile', 'deobfuscate', 'disasm', 'ghidra', 'ida',
+     'recon', 'unbundle', 'vtable'})
+
+
+def _is_distinctive_trigger(kw: str) -> bool:
+    """#380 P2: the structural trigger discipline — see the block comment
+    above _TOOLFIRST_TRIGGER_SINGLES. A keyword may fire the toolfirst gate
+    only when it is DISTINCTIVE (name-carried): a hyphenated registry
+    compound, a curated RE-jargon single, or a key from the explicit
+    curation surfaces (alias tables / registry provider names — the jsvmp
+    pattern, recorded in _CURATED_TRIGGER_KEYS)."""
+    return ('-' in kw or kw in _TOOLFIRST_TRIGGER_SINGLES
+            or kw in _CURATED_TRIGGER_KEYS)
 
 # ---------- issue #54: android toolchain lighting aliases (keyword DATA) ------
 # LIGHTING ONLY (#54 owner ruling: 不能强制 — we cannot force tool choice).
@@ -1143,7 +1159,8 @@ _TOOLFIRST_STOPWORDS = frozenset(
 # that names no alias (e.g. the #54 repro "分析这个APK的登录加密逻辑" itself)
 # still passes silently (no_match).
 #
-# Discipline (_TOOLFIRST_STOPWORDS spirit): DISTINCTIVE terms only — provider
+# Discipline (#380 P2 structural trigger discipline, was the
+# _TOOLFIRST_STOPWORDS spirit): DISTINCTIVE terms only — provider
 # names derived from the registry's own `provider:` field (jadx/baksmali/
 # apkid/gitnexus/dexdc) plus CJK android-RE compounds. Generic prose ("app",
 # "apk", "java", "加密", "tls", "okhttp", "frida") stays OUT of the trigger
@@ -1184,6 +1201,14 @@ _NEGATION_RE = re.compile(r'\b(?:not|no)\b|不是|非')
 _ASCII_BOUNDARY = r'(?<![A-Za-z0-9_]){kw}(?![A-Za-z0-9_])'
 
 
+# Keys contributed by the EXPLICIT curation surfaces — the alias tables
+# above plus the android registry `provider:` names — refreshed by
+# _load_tool_index_keywords on each load. These are name-carried by
+# construction (the jsvmp pattern) and skip the structural distinctiveness
+# gate in _is_distinctive_trigger.
+_CURATED_TRIGGER_KEYS: frozenset = frozenset()
+
+
 def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
     """#294: map a lowercase keyword -> tool name, from tools/_INDEX.yaml.
 
@@ -1193,21 +1218,31 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
     a keyword keep the first-registered tool (informational only; the gate
     only needs ONE candidate name to cite in its REJECT message).
 
+    The MAP stays whole (verify_tool_catalog resolves citations against it);
+    the TRIGGER set is the distinctive-only view built in _toolfirst_evaluate
+    (#380 P2) — auto-derived category/domain/verb tokens are structurally
+    excluded there.
+
     #54 android lighting: entries whose capability is an android:* tag also
     contribute their `provider` name plus the distinctive aliases in
     _ANDROID_KEYWORD_ALIASES — same first-registered-wins rule, so registry
     order decides e.g. 反编译 -> jadx-decompile (the high-quality
-    android:java-source provider) over dexdc-decompile. Coverage only: the
-    gate's REJECT semantics are unchanged.
+    android:java-source provider) over dexdc-decompile. Provider and alias
+    keys are CURATED (recorded in _CURATED_TRIGGER_KEYS) and trigger
+    directly. Coverage only: the gate's REJECT semantics are unchanged.
     """
+    global _CURATED_TRIGGER_KEYS
     index_path = skill_root / 'tools' / '_INDEX.yaml'
     if not index_path.exists():
+        _CURATED_TRIGGER_KEYS = frozenset()
         return {}
     try:
         data = yaml.safe_load(index_path.read_text(encoding='utf-8')) or {}
     except yaml.YAMLError:
+        _CURATED_TRIGGER_KEYS = frozenset()
         return {}
     out: dict[str, str] = {}
+    curated: set[str] = set()
     for entry in (data.get('tools') or []):
         if not isinstance(entry, dict):
             continue
@@ -1228,12 +1263,16 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
             provider = str(entry.get('provider') or '').strip().lower()
             if provider and provider not in out:
                 out[provider] = name
+                curated.add(provider)
             for alias in _ANDROID_KEYWORD_ALIASES.get(cap_l, ()):
                 if alias and alias not in out:
                     out[alias] = name
+                curated.add(alias)
         for alias in _TOOL_KEYWORD_ALIASES.get(cap_l, ()):
             if alias and alias not in out:
                 out[alias] = name
+            curated.add(alias)
+    _CURATED_TRIGGER_KEYS = frozenset(curated)
     return out
 
 
@@ -1278,11 +1317,15 @@ def _toolfirst_evaluate(text_lower: str, cited: str | None) -> dict:
     keywords = _load_tool_index_keywords(_SKILL_ROOT)
     kw_re = {kw: _re630.compile(_ASCII_BOUNDARY.format(kw=_re630.escape(kw)))
              for kw in keywords}
-    stopworded = {kw: tn for kw, tn in keywords.items()
-                  if kw not in _TOOLFIRST_STOPWORDS}
-    hits = sorted(kw for kw in stopworded
+    # #380 P2: structural trigger discipline (distinctive-only) — replaces
+    # the per-token _TOOLFIRST_STOPWORDS blocklist. The keyword MAP stays
+    # whole (verify_tool_catalog resolves citations against it); only the
+    # TRIGGER set is filtered.
+    triggers = {kw: tn for kw, tn in keywords.items()
+                if _is_distinctive_trigger(kw)}
+    hits = sorted(kw for kw in triggers
                   if kw_re[kw].search(text_lower))
-    tool_of = lambda kw: stopworded[kw]  # noqa: E731
+    tool_of = lambda kw: triggers[kw]  # noqa: E731
 
     if cited is not None:
         if cited.startswith('none'):
@@ -1407,8 +1450,12 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     face still emits at the approval point (toolfirst_pass_record) so the
     row describes a real dispatch (#754).
 
-    Returns (ok, reason). ok is always True post-H1: this gate is
-    advisory-only; it never blocks a dispatch.
+    Returns (ok, reason) — CONTRACT (#380 P2 finding 3): `ok` is the
+    CONSTANT True for every mode, forever. This gate is advisory-only
+    post-H1 and never blocks a dispatch; the tuple shape is kept ONLY so
+    the sink battery stays shape-uniform with the enforcing gates — callers
+    and readers must NOT branch on ok (mode-level detail lives in
+    _toolfirst_evaluate; the demand/citation payload rides in `reason`).
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     text_lower = f'{desc}\n{prompt}'.lower()
@@ -1422,6 +1469,7 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
         # eligibility — reject face only — is owned HERE: the helper
         # formats and emits whatever its caller decided, #380 P4 F3.)
         _toolfirst_emit(ws, ev, action='toolfirst_advisory')
+    # constant-True contract above: (True, reason) for every mode.
     return (True, ev['reason'])
 
 

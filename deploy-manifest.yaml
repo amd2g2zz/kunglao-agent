@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 6e615d1c61d708a4fb2193b35f5bfa479194f9a30bcb33ea8d1159c8ae0de31d
+    sha256: 7cc391ba79a1bfdb8255265dc701746ab34c00051a6e1a878d6742897899cff3
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 1964af08d8edd99978649ec498fb80739690b6f096305a56aadcbdb34c9ca6c5
+    sha256: 21f3641c584e1f2b3a41bfef0334620b3d38aacad86df3e56df5223f15b68945
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 9fd512902248324fd12b39a267064d071b487efc62674dd4c9d9e3395131789d
+    sha256: 7ab39d6833b09210e8f45c1478dd175d5c7eb25f546558079dbb9457b1e44aa1
   - src: scripts/_boot.py
     dest: .claude/scripts/_boot.py
     kind: scaffold
@@ -547,7 +547,7 @@ files:
   - src: scripts/instrument_menu.py
     dest: .claude/scripts/instrument_menu.py
     kind: scaffold
-    sha256: a5dafbb76042955d0e1e7f90fb0676c24ae946931723a316ccb02ad806d9541b
+    sha256: bf3cd267091af5f4dfaec030ade060e54a5f2830dcb86a82f579e187783f7aec
   - src: scripts/intake_promise.py
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
@@ -1051,7 +1051,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: f2a0900fe2ab0f29e23318f3d7f16ccd6d3b8f63491e8ce5dc91706e0a0a29a9
+    sha256: df773b790bea406a9326cfe8c928af2113814b21f12a3d0c3a06dd93146f99a4
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1103,7 +1103,7 @@ files:
   - src: references/contracts/cli-script-checklist.md
     dest: .claude/references/contracts/cli-script-checklist.md
     kind: asset
-    sha256: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
+    sha256: d7c31daa16a0c63d75140cb5e3addd4f52aacac1d47696f280e26133edccfce2
   - src: references/contracts/cold-start-contract.md
     dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
@@ -1147,7 +1147,7 @@ files:
   - src: references/contracts/xml-injection-standard.md
     dest: .claude/references/contracts/xml-injection-standard.md
     kind: asset
-    sha256: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
+    sha256: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   - src: references/governance/decision-rights.md
     dest: .claude/references/governance/decision-rights.md
     kind: asset

@@ -16,7 +16,7 @@ files:
   references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
   references/_index-web.md: 1743007abc6f48863793cbeb6fcee16e88edbf95f035627e3f8abed5456b3544
   references/contracts/agent-three-state-charter.md: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
-  references/contracts/cli-script-checklist.md: 25a83ca0e554ed78754d4962f00438eddbe13ee273a802c5087cfdf79f18e775
+  references/contracts/cli-script-checklist.md: d7c31daa16a0c63d75140cb5e3addd4f52aacac1d47696f280e26133edccfce2
   references/contracts/cold-start-contract.md: 64e2cd4829336d1bafcf8f91f6393faedcc18dffba8503a9b8a63b0ce9bb0b9f
   references/contracts/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
   references/contracts/distill-pipeline.md: 4054911491b68e2869249a32afbcc432e200f7b680bd13541192a5fc54cfc4fb
@@ -26,7 +26,7 @@ files:
   references/contracts/external-distilled/distillation-deviation-ledger.md: c96f205f6145590f1b7dbadfcf5af7753f793edfcce1e695d65b9240b602dfeb
   references/contracts/machine-check-contract.md: c0eb7ca471af3b37030d11223c25d4ba31c44515193372063727ad8819926c1b
   references/contracts/wal-protocol.md: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
-  references/contracts/xml-injection-standard.md: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
+  references/contracts/xml-injection-standard.md: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   references/governance/decision-rights.md: 5398a15f656d14d8ffac960b1f1e4a18a0c54e364f7ffeb920c811234e326eef
   references/governance/excerpt-lint.md: 785595a3d600621ddcb1de949078c00ded8db00351e9c3aa9e7ecb487a173ec6
   references/governance/guardrails.md: ca5c30a76f8ed534866c20fdbb81f385d15dfdebbdaae28bc05d966d1f250600
