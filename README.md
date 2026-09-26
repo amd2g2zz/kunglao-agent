@@ -67,14 +67,14 @@ Measured on the built-in 12-unit L1 eval matrix: static reverse-engineering targ
 | Runtime | pass@1 | Session cost |
 |---|---|---|
 | kunglao v0.1.5.post2 | 5/12 | ~$135 total (13 sessions) |
-| **kunglao v0.1.6 (this release)** | **10/12** | ~$120 total across 4 governed iteration rounds |
+| **kunglao v0.1.6 (this release)** | **11/12** | ~$120 total across 4 governed iteration rounds |
 | plain Claude Code (default harness, no plugin) | 12/12 | ~$11.4 total |
 
 Reading the table honestly:
 
-- v0.1.6 vs v0.1.5.post2 is a measured +5 units on identical harness, units, and caps (same runner, same checker, same oracle).
-- The 12 units are single-session-tractable: a frontier model with default tools saturates them, and plain Claude Code does so at the lowest cost. kunglao's loop does not beat that ceiling on static single-session units — the remaining 2 units are budget-bound in loop mode, not capability-bound (documented).
-- At a labeled higher cap ($30, wall unchanged), the two budget-bound units pass: pass@1 = 12/12 with labeled higher-cap — the gap is an efficiency gap (cost per unit), documented as a v0.2 target.
+- v0.1.6 vs v0.1.5.post2 is a measured +6 units on identical harness, units, and caps (same runner, same checker, same oracle).
+- The 12 units are single-session-tractable: a frontier model with default tools saturates them, and plain Claude Code does so at the lowest cost. kunglao's loop does not beat that ceiling on static single-session units — the remaining unit is budget-bound in loop mode, not capability-bound (documented).
+- At a labeled higher cap ($30, wall unchanged), the remaining budget-bound unit passes: pass@1 = 12/12 with labeled higher-cap — the gap is an efficiency gap (cost per unit), documented as a v0.2 target.
 - Where kunglao differentiates is not static single-session units. It is long-horizon layered work — the chain tier (2-6 nested protection layers) where both runtimes pass but kunglao's L3 passes were authored by specialist workers through claim decomposition — plus verification discipline (oracle + blind red-team on every claim) and the dynamic lanes (Android/Windows/Linux VM work) opening in v0.2.
 
 Methodology: identical harness for all rows (same runner, same checker, same units); pass@1, k=1; exhausted counts as fail; harness-surface integrity gate active; no runtime patching during measurement.
