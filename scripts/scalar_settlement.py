@@ -55,6 +55,7 @@ RULE_RED = "tier/red"
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
 TIER_BRONZE = "BRONZE"
+TIER_TRACE = "TRACE"    # v3 validator output-scale name (issue 390/396)
 TIER_NEUTRAL = "NEUTRAL"
 TIER_RED = "RED"
 MEASURED_TIERS = frozenset({TIER_GOLD, TIER_SILVER, TIER_BRONZE, TIER_RED})
@@ -565,6 +566,218 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
                         meta.get("status") or "").strip().upper()
                         in _REFUTATION_STATUSES})
     return out
+
+
+# --- deterministic validator (settlement v3 face, issues 390 + 396) -------
+#
+# issue 396 (owner redesign 2026-09-26) demotes the issue-390 owner-ruled
+# to the VERIFIER'S OUTPUT SCALE and resitles judgment in the verifier
+# subagent (a separate face). THIS layer stays purely mechanical — three
+# passes over a parsed verifier verdict doc (the XML->dict adapter lives
+# with the verifier face):
+#   1. citation resolution — every evidence citation must resolve to a
+#      real ledger rollout id / fact id; ONE unresolvable citation
+#      rejects the WHOLE verdict doc (fail-closed hallucination wall);
+#   2. rail clamping — verifier-emitted credit scalars clamp into the
+#      declared rails below;
+#   3. oracle non-overridability — pass locks reward at 1.0 (the checker
+#      verdict is the hard currency); a fail caps at the TRACE rail top.
+# Plus the anti-surrender floor (rubric line, enforced mechanically):
+# refuted-with-replay-evidence = low positive (TRACE canonical); surrender
+# with no replay evidence settles 0.0. The rails live HERE (validator's
+# own config, per the issue-396 rescope) — the rules yaml is not rewritten.
+
+OUTPUT_RAILS: dict[str, dict] = {
+    # Declared reference bands, NOT tuned weights — zero free parameters;
+    # the placement fraction is measured, not learned (issue-390 ruling kept
+    # as the scale definition). Anti-farming stays structural: TRACE
+    # 0.01 vs pass 1.0 keeps a 100x differential (85x vs the 0.85 pass
+    # floor) — no farming incentive.
+    "GOLD": {"range": [0.85, 1.0]},
+    "SILVER": {"range": [0.55, 0.85]},
+    "BRONZE": {"range": [0.15, 0.55]},
+    "TRACE": {"range": [0.0, 0.05], "canonical": 0.01},
+    "NEUTRAL": {"range": [0.0, 0.0]},
+    "RED": {"range": [0.0, 0.0]},
+}
+TRACE_CANONICAL = float(OUTPUT_RAILS["TRACE"]["canonical"])
+FAIL_CREDIT_CAP = float(OUTPUT_RAILS["TRACE"]["range"][1])  # 0.05
+ORACLE_PASS_LOCK = 1.0   # task/oracle-green never_demoted carries over
+RULE_TRAJECTORY_CREDIT = "trajectory/verifier-credit"
+
+
+def clamp_credit(scalar) -> float:
+    """Clamp a verifier-emitted credit scalar into [0, 1] (the union of
+    the declared rails). Deterministic; no judgment; tolerant of None or
+    non-numeric input (settles 0.0 — never raises on verifier noise)."""
+    try:
+        s = float(scalar)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(max(s, 0.0), 1.0)
+
+
+def rail_of(scalar: float, oracle_verdict=None) -> str:
+    """Name the declared rail a settled scalar lands in (audit face).
+    0.0 names RED on an oracle-fail trajectory, NEUTRAL otherwise."""
+    s = clamp_credit(scalar)
+    if s <= 0.0:
+        return (TIER_RED if str(oracle_verdict or "").strip().lower()
+                == "fail" else TIER_NEUTRAL)
+    for tier in (TIER_GOLD, TIER_SILVER, TIER_BRONZE, TIER_TRACE):
+        lo, hi = OUTPUT_RAILS[tier]["range"]
+        if lo <= s <= hi:
+            return tier
+    return TIER_NEUTRAL  # unreachable after clamping
+
+
+def resolve_citations(actions: list[dict], resolvable_ids) -> dict:
+    """Hallucination wall: every evidence citation on every credited
+    action must resolve to a REAL id (ledger rollout ids, fact ids from
+    facts/*.md provenance, round-credit artifact ids). ONE unresolvable
+    citation rejects the WHOLE verdict document — fail-closed.
+    Returns {"ok", "unresolved": {action_id: [ids...]}}."""
+    resolvable = {str(i) for i in (resolvable_ids or set())}
+    unresolved: dict[str, list[str]] = {}
+    for action in (actions or []):
+        if not isinstance(action, dict):
+            continue
+        aid = str(action.get("action_id") or "")
+        missing = sorted({str(c) for c in (action.get("evidence") or [])
+                          if str(c) not in resolvable})
+        if missing:
+            unresolved[aid] = missing
+    return {"ok": not unresolved, "unresolved": unresolved}
+
+
+def oracle_lock(oracle_verdict, scalar,
+                has_reproducible_evidence: bool) -> dict:
+    """Oracle non-overridability + the anti-surrender floor.
+    - pass: reward locks at 1.0 (verifier credit cannot lower it);
+    - fail: reward caps at the TRACE rail top (verifier credit cannot
+      raise a fail into pass territory) AND floors at the TRACE
+      canonical 0.01 when the trajectory carries rerun-reproducible
+      evidence (refuted-with-replay-evidence = low positive; surrender
+      with no evidence settles 0.0);
+    - no verdict: clamped scalar passes through (no lock, no cap).
+    Deterministic enforcement of a rubric line — no judgment here."""
+    s = clamp_credit(scalar)
+    v = str(oracle_verdict or "").strip().lower()
+    if v == "pass":
+        return {"reward": ORACLE_PASS_LOCK, "locked": True,
+                "floor_applied": False, "capped": False}
+    if v == "fail":
+        floor = TRACE_CANONICAL if has_reproducible_evidence else 0.0
+        reward = min(max(s, floor), FAIL_CREDIT_CAP)
+        return {"reward": reward, "locked": False,
+                "floor_applied": bool(s < floor),
+                "capped": bool(s > FAIL_CREDIT_CAP)}
+    return {"reward": s, "locked": False, "floor_applied": False,
+            "capped": False}
+
+
+def validate_verdict_doc(doc, resolvable_ids, oracle_verdict,
+                         has_reproducible_evidence: bool) -> dict:
+    """The deterministic validator over a parsed verifier verdict doc.
+    Three mechanical passes (citation resolution -> rail clamping ->
+    oracle non-overridability + anti-surrender floor). ok=False means
+    nothing settles: the caller MUST NOT write a settlement. Pure —
+    same inputs, same output, no sampling slot (the determinism posture:
+    verifier judgment is sampled; the validator never is)."""
+    errors: list[str] = []
+    if not isinstance(doc, dict) or not isinstance(doc.get("actions"),
+                                                   list):
+        return {"ok": False, "errors": ["verdict doc: missing actions[]"],
+                "actions": [], "reward": 0.0, "tier": None,
+                "locked": False, "floor_applied": False, "capped": False}
+    cites = resolve_citations(doc["actions"], resolvable_ids)
+    if not cites["ok"]:
+        for aid, ids in cites["unresolved"].items():
+            errors.append(f"unresolved citations on {aid}: {ids}")
+    actions_out = []
+    for action in doc["actions"]:
+        if not isinstance(action, dict):
+            errors.append(f"verdict doc: non-mapping action {action!r}")
+            continue
+        credit = clamp_credit(action.get("credit"))
+        actions_out.append({"action_id": str(action.get("action_id") or ""),
+                            "credit": credit, "rail": rail_of(credit)})
+    if not actions_out:
+        errors.append("verdict doc: zero credited actions")
+    lock = oracle_lock(oracle_verdict, doc.get("trajectory_credit"),
+                       has_reproducible_evidence)
+    ok = not errors
+    return {"ok": ok, "errors": errors, "actions": actions_out,
+            "reward": lock["reward"] if ok else 0.0,
+            "tier": (rail_of(lock["reward"], oracle_verdict) if ok
+                     else None),
+            "locked": lock["locked"], "floor_applied": lock["floor_applied"],
+            "capped": lock["capped"]}
+
+
+def resolvable_registry(ws) -> set:
+    """Every id a verdict citation may legitimately reference: ledger
+    rollout ids + fact ids (facts/*.md frontmatter provenance)."""
+    ws = Path(ws)
+    ids = {str(r.get("rollout_id")) for r in rl.read(ws)}
+    ids |= {str(a["id"]) for a in fact_artifacts(ws)}
+    return ids
+
+
+def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
+                                oracle_verdict,
+                                has_reproducible_evidence: bool,
+                                now=None) -> dict:
+    """Validate + settle a trajectory segment (settlement v3). Fail-closed:
+    an invalid verdict doc writes NOTHING. Re-application with changed
+    inputs (late evidence joining the signal set) appends an AMENDMENT
+    row through the SAME rl.settle path — the ledger stays append-only
+    and the audit chain ('where did this score come from') stays
+    answerable. Prior settlement lineage (v1 band/reward/rule_id) is
+    carried forward so hard-currency provenance survives; ``reward`` and
+    ``tier`` carry the v3 authoritative scalar."""
+    ws = Path(ws)
+    validation = validate_verdict_doc(verdict_doc,
+                                      resolvable_registry(ws),
+                                      oracle_verdict,
+                                      has_reproducible_evidence)
+    if not validation["ok"]:
+        return {"settled": False, "reason": "validation failed",
+                "validation": validation}
+    existing = rl.fold(ws, str(rollout_id)) or {}
+    base_st = existing.get("settlement") or {}
+    ts = now or _now()
+    # order-preserving merge: identical re-application must produce a
+    # byte-identical settlement or the ledger dedupe would churn
+    refs = list(base_st.get("evidence_refs") or [])
+    for ref in (f"action:{a['action_id']}={a['credit']}"
+                for a in validation["actions"]):
+        if ref not in refs:
+            refs.append(ref)
+    amended = dict(base_st)
+    amended.update({
+        "reward": validation["reward"],
+        "band": str(base_st.get("band") or "TRAJECTORY"),
+        "rule_id": str(base_st.get("rule_id") or RULE_TRAJECTORY_CREDIT),
+        "trajectory_rule_id": RULE_TRAJECTORY_CREDIT,
+        "tier": validation["tier"],
+        "tier_reward": validation["reward"],
+        "verifier_credit": clamp_credit(
+            verdict_doc.get("trajectory_credit")),
+        "oracle_locked": validation["locked"],
+        "anti_surrender_floor": validation["floor_applied"],
+        "trajectory_actions": validation["actions"],
+        "evidence_refs": refs,
+        "settled_ts": ts,
+    })
+    res = rl.settle(ws, str(rollout_id), amended)
+    if res.get("appended"):
+        return {"settled": True, "validation": validation,
+                "settlement": amended}
+    warn("apply_trajectory_settlement",
+         f"{rollout_id}: {res.get('reason')}")
+    return {"settled": False, "reason": res.get("reason"),
+            "validation": validation}
 
 
 if __name__ == "__main__":  # pragma: no cover — library module
