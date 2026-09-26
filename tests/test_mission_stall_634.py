@@ -231,3 +231,58 @@ def test_h1c_ledger_and_envstate_churn_do_not_reset_counter(tmp_path):
         encoding="utf-8")
     r = ht.noop_breaker(ws, ht.state_fingerprint(ws), threshold=6)
     assert r["consecutive_noop"] == 4  # churn ignored: counter keeps counting
+
+
+# ---------- issue 380 P3-3: the premise digest gets stable inputs + a reader ---
+# The persisted premise_hash was write-only AND changed every tick (the
+# env-state ts churn inside the hash) — churn-every-tick evidence carries
+# no signal. Fix: digest blockers/*.md ONLY (stable under tick cadence)
+# and give the breaker a READER: it compares the incoming digest against
+# the persisted one and reports premise_changed.
+
+def test_premise_digest_is_blockers_only_stable_under_tick_churn(tmp_path):
+    ht = _h1_load_tick()
+    ws = _mk_ws(tmp_path)
+    (ws / "blockers").mkdir(exist_ok=True)
+    (ws / "blockers" / "B-1.md").write_text("premise: VM online\n",
+                                            encoding="utf-8")
+    d0 = ht.premise_digest(ws)
+    # the tick-cadence churn face: env-state rewrites every tick
+    env = ws / "runs" / "env-state.json"
+    env.write_text(json.dumps({"ts": "rewritten-every-tick"}), "utf-8")
+    assert ht.premise_digest(ws) == d0, \
+        "env-state churn no longer moves the digest (stable evidence)"
+    (ws / "blockers" / "B-1.md").write_text("premise: VM offline\n",
+                                            encoding="utf-8")
+    assert ht.premise_digest(ws) != d0, "blocker metabolism still visible"
+
+
+def test_breaker_reads_persisted_premise_hash(tmp_path):
+    """The persisted digest has a READER: each tick compares the incoming
+    digest against the previously persisted one and persists the verdict
+    in runs/.heartbeat-noop.json. The RETURN shape stays untouched (the
+    issue 275 trace contract pins it)."""
+    ht = _h1_load_tick()
+    ws = _mk_ws(tmp_path)
+    h0 = ht.state_fingerprint(ws)
+    (ws / "blockers").mkdir(exist_ok=True)
+    (ws / "blockers" / "B-1.md").write_text("premise: A\n", encoding="utf-8")
+
+    def _state():
+        return json.loads((ws / "runs" / ".heartbeat-noop.json")
+                          .read_text(encoding="utf-8"))
+
+    ht.noop_breaker(ws, h0, threshold=6,
+                    premise_hash=ht.premise_digest(ws))
+    assert _state()["premise_changed"] is False, \
+        "no prior digest to differ from"
+    (ws / "blockers" / "B-1.md").write_text("premise: B\n", encoding="utf-8")
+    r2 = ht.noop_breaker(ws, h0, threshold=6,
+                         premise_hash=ht.premise_digest(ws))
+    assert _state()["premise_changed"] is True, \
+        "the persisted digest now has a reader: the next tick's comparison"
+    assert r2["consecutive_noop"] == 2, "evidence only — never gates the trip"
+    ht.noop_breaker(ws, h0, threshold=6,
+                    premise_hash=ht.premise_digest(ws))
+    assert _state()["premise_changed"] is False, \
+        "stable premise reads unchanged"
