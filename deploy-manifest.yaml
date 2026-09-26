@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: e6a0bb51ac8ac9f3b157ed231288eebbfcf09e2b1d51aa4ad6f864ef7339e466
+    sha256: 7a4d0bab24c2fa0eaca1a08d34868692eb3372faa1ff5d4a56636bb636cc747e
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 7f45515e62a4485873508d1f53fe6f8f6f1153c45925d727b7c5f6ebc984fc4b
+    sha256: 2982e46c80b9594ef6f5cbb60729eff7c87d996bffc766625598f0adb95bba84
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -1332,6 +1332,10 @@ files:
     dest: .claude/references/re-library/malware/workflow/malware-dynamic-analysis.md
     kind: asset
     sha256: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  - src: references/re-library/method/case-distilled/case-dispatch-budget-partition.md
+    dest: .claude/references/re-library/method/case-distilled/case-dispatch-budget-partition.md
+    kind: asset
+    sha256: c89dbf51bc3070cbd90848951a71f45eb74ddf48a8a774570b689fd3d6f118a9
   - src: references/re-library/method/formats/wire-format-recognition.md
     dest: .claude/references/re-library/method/formats/wire-format-recognition.md
     kind: asset
@@ -1548,6 +1552,22 @@ files:
     dest: .claude/templates/scripts/stage-unpack.py.tmpl
     kind: asset
     sha256: 2ef2bfb1d63017bbf1381a0fec0673c40167963ea24bb137807168e5fc41ec9c
+  - src: templates/selfcheck/README.md
+    dest: .claude/templates/selfcheck/README.md
+    kind: asset
+    sha256: de8057dbe9001ed625ffcd5255835d66aa9925fbdd15f533c3bac511d9aab27c
+  - src: templates/selfcheck/probe-crypto.md
+    dest: .claude/templates/selfcheck/probe-crypto.md
+    kind: asset
+    sha256: 330fbc441e56adf3a3964ad5ebd58b571c821b76f25b8ba81bc4cf55460c8599
+  - src: templates/selfcheck/probe-kdf.md
+    dest: .claude/templates/selfcheck/probe-kdf.md
+    kind: asset
+    sha256: 769a81bccb6b338b799711ed189ab41a347bfaea5046e9693ce762d1513a2a6e
+  - src: templates/selfcheck/probe-sign.md
+    dest: .claude/templates/selfcheck/probe-sign.md
+    kind: asset
+    sha256: ca6d7081b8128a8b9e7bd4291b6a8948c92e7eb2a5375dd223b18bbdf563414e
   - src: templates/state/blocker.md
     dest: .claude/templates/state/blocker.md
     kind: asset
