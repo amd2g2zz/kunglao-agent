@@ -527,6 +527,40 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     )
 
 
+def _collect_gap_notes(ws: Path, claim_id: str) -> list[tuple[str, str]]:
+    """#391 settlement gap-notes: the prior FAILED attempts of THIS unit
+    (claim-keyed read face — different units are unaffected). Fail-open:
+    any problem -> [] (reflection must never block dispatch)."""
+    try:
+        import gap_notes as _gn
+        return _gn.read_notes(ws, claim_id)
+    except Exception as exc:  # noqa: BLE001 — reflection never blocks
+        warn("gap_note_collect", f"{type(exc).__name__}: {exc}")
+        return []
+
+
+def _gap_note_guidance(notes: list[tuple[str, str]]) -> str:
+    """#391 advisory gap-note block. The notes quote machine-recorded
+    settlement signals (oracle verdict, checker sub-scores, decoy walls,
+    evidence class, cost vs class reference) — context supply for a
+    same-unit retry, NEVER a reward signal: the settlement matcher
+    provably ignores advisory carriers."""
+    inner = "\n".join(
+        f'<prior-attempt-note file="{label}">\n{text}\n'
+        f"</prior-attempt-note>"
+        for label, text in notes)
+    return (
+        f'<kunglao-facts advisory="true">\n'
+        f"recall_inject: settlement gap-notes (#391) - prior FAILED "
+        f"attempts on this same unit.\n"
+        f"ADVISORY context only: derived from machine-recorded settlement "
+        f"signals; never a reward signal — the settlement matcher ignores "
+        f"advisory carriers.\n"
+        f"{inner}\n"
+        f"</kunglao-facts>"
+    )
+
+
 def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
            ) -> None:
     """#814: fail-open ≠ fail-silent — every recall path leaves a trace
@@ -550,6 +584,53 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
         warn("_trace_2", f"{type(exc).__name__}: {exc}")
 
 
+def _gap_notes_for_claim(ws: Path, prompt_text: str,
+                         is_claim: bool) -> list[tuple[str, str]]:
+    """#391: prior gap-notes for the dispatch's unit, [] for non-claim
+    dispatches and non-claim-shaped prompts."""
+    if not is_claim:
+        return []
+    _tier, _tools, claim_id = load_hooks_lib().parse_dispatch(prompt_text)
+    if not claim_id:
+        return []
+    return _collect_gap_notes(ws, claim_id)
+
+
+def _injection_context(ws: Path, prompt_text: str, is_claim: bool,
+                       queries: list[str],
+                       files: list[str]) -> str | None:
+    """Dedup gate + block assembly for one dispatch: the recall guidance
+    plus, for same-unit retries, the #391 settlement gap-note block.
+
+    H1a content dedup: the SAME (recall + gap-note) set for the SAME
+    worker is not new knowledge — silent skip (no row, no payload).
+    Gap-note files are digest-named and immutable, so a new attempt's
+    note is a new set member: the retry re-dispatch re-injects. Every
+    role goes through this one gate — there are no exemptions.
+    """
+    notes = _gap_notes_for_claim(ws, prompt_text, is_claim)
+    note_labels = [label for label, _text in notes]
+    if not files and not note_labels:
+        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
+               + ",".join(queries[:3]))
+        return None  # no knowledge to inject
+    key = _worker_key(prompt_text)
+    injected_set = files + note_labels
+    if _content_unchanged(ws, key, injected_set):
+        return None
+    _record_injection(ws, key, injected_set)
+    blocks: list[str] = []
+    if files:
+        blocks.append(_guidance(queries, files[:MAX_FILES]))
+        _trace(ws, "injected", "recall_injected",
+               "files:" + ",".join(files[:MAX_FILES]), files=len(files))
+    if notes:
+        blocks.append(_gap_note_guidance(notes))
+        _trace(ws, "injected", "gap_notes_injected",
+               "notes:" + ",".join(note_labels), files=len(note_labels))
+    return "\n".join(blocks)
+
+
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     """Hook decision for a PreToolUse(Agent) dispatch payload (#268/#761 J4).
 
@@ -563,8 +644,12 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     red-team verification dispatch (#761 J4 — adversarial knowledge BEFORE
     the checker plans its attacks). H1a: recall is DISPATCH-SCOPED for every
     role (no exemptions), deduped by content — a repeat dispatch whose
-    recall file set is unchanged for that worker (runs/.recall-inject.json,
+    injected set is unchanged for that worker (runs/.recall-inject.json,
     per-worker injected-set hash) is silent; a changed set re-injects.
+    #391: a same-unit retry claim dispatch additionally injects the prior
+    FAILED attempts' settlement gap-notes (runs/gap-notes/<claim>/) as an
+    advisory <kunglao-facts> block — context supply only, never a reward
+    kind; the settlement matcher ignores advisory carriers.
     """
     ws = _resolve_workspace(payload)
     if ws is None:
@@ -596,21 +681,11 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
             if f not in seen:
                 seen.add(f)
                 files.append(f)
-    if not files:
-        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
-               + ",".join(queries[:3]))
-        return 0, "", None  # no knowledge to inject
-    # H1a content dedup: the SAME recall set for the SAME worker is not new
-    # knowledge — silent skip (no row, no payload). A changed set (index
-    # grew, different claim, different task) re-injects. Every role goes
-    # through this one gate — there are no exemptions.
-    key = _worker_key(prompt_text)
-    if _content_unchanged(ws, key, files):
-        return 0, "", None
-    _record_injection(ws, key, files)
-    _trace(ws, "injected", "recall_injected",
-           "files:" + ",".join(files[:MAX_FILES]), files=len(files))
-    return 0, "", _guidance(queries, files[:MAX_FILES])
+    # H1a dedup + #391 same-unit retry gap-notes: one gate, one payload
+    # (see _injection_context). Advisory context supply only — never a
+    # reward kind; the settlement matcher ignores advisory carriers.
+    return 0, "", _injection_context(ws, prompt_text, is_claim, queries,
+                                     files)
 
 
 def main() -> int:

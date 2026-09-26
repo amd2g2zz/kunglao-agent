@@ -343,6 +343,18 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         unified_reward = {"settlement": f"error: {exc!r}"}
         warn("unified_reward", f"{type(exc).__name__}: {exc}")
 
+    # Step 4.7 (#391): settlement-event retry gap-notes — advisory
+    # reflection for same-unit retries, derived ONLY from the settled
+    # ledger rows (FAIL settlements reflect; PASS emits nothing). Caged:
+    # reflection never breaks the terminal transition.
+    gap_notes_res: dict = {"emitted": 0, "reason": "skipped:not-run"}
+    try:
+        import gap_notes as _gn391
+        gap_notes_res = _gn391.emit_gap_notes(workspace)
+    except Exception as exc:  # noqa: BLE001 — reflection never breaks rollup
+        gap_notes_res = {"emitted": 0, "reason": f"error: {exc!r}"}
+        warn("gap_notes_391", f"{type(exc).__name__}: {exc}")
+
     _append_ledger(workspace, {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": "rollup",
@@ -358,6 +370,9 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "unified_settled": (
             unified_reward.get("settled", 0)
             if isinstance(unified_reward, dict) else 0),
+        "gap_notes_emitted": (
+            gap_notes_res.get("emitted", 0)
+            if isinstance(gap_notes_res, dict) else 0),
         "ts": utc_now_iso(),
     })
 
@@ -372,6 +387,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "checkpoint_commit_called": True,
         "mission_settlement": mission_settlement,
         "unified_reward": unified_reward,
+        "gap_notes": gap_notes_res,
     }
 
 
