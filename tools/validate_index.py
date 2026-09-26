@@ -89,9 +89,17 @@ _CAPABILITY_TAGS = frozenset({
     "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
     "js:semantic-query",  # #751: graph RAG queries over a js source tree
     "js:unbundle",
+    "js:env-diagnose",    # wave-2 distillation: Node-VM sandbox missing-
+                          # browser-env diagnosis (the env-patch list)
+    "js:sign-verify",     # wave-2 distillation: differential verification
+                          # of candidate signer functions vs captured I/O
+    "js:obfuscation-detect",  # wave-2 distillation: technique inventory +
+                              # registered-tool routing (advisory, no proof)
     "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
+    "crypto:identify",    # wave-2 distillation: captured-param cipher-shape
+                          # classifier (hypothesis ranking, never decode)
     # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
     # capabilities joined the closed vocabulary (1:1 from the entries'
     # capability fields — no invented semantics).

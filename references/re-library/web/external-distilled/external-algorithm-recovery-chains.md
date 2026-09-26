@@ -113,3 +113,20 @@ signature workflow), [web-risk-control.md](../risk-control/web-risk-control.md)
 (backward endpoint tracing + challenge-bundle shapes),
 [falsifier-library](../../method/process/falsifier-library.md) (kill
 experiments per hypothesis family).
+
+## Tool section — candidate classification before recovery (registered CLI)
+
+The candidate-discovery step above starts cheaper than reading JS.
+Reach for it when: a captured parameter's algorithm family is unknown —
+classify the shape first with `tools/crypto/cipher_identify.py`
+(tag `crypto:identify`) and let its `next_check` aim the JS read:
+
+```bash
+python tools/crypto/cipher_identify.py "e10adc3949ba59abbe56e057f20f883e"
+# charset=hex_lower, decoded 16 bytes -> md5(high) + md4/ntlm(low)
+```
+
+Each candidate carries a `next_check` — that is the search target for the
+writer→builder→entry decomposition (concatenation order and secret
+prefix/suffix for hash families; key schedule and mode for block ciphers).
+The classifier ranks hypotheses; it never proves one.

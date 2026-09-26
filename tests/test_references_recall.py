@@ -491,3 +491,45 @@ class TestCaseDistilledRecall:
     def test_case_distilled_gap_report_recallable(self) -> None:
         paths = self._paths("case distillation gap report android")
         assert "re-library/android/case-distilled/_GAP-REPORT-D1.md" in paths
+
+
+# ---------- web risk-control v2 recall alignment (feat/373) ----------
+
+
+@pytest.mark.skipif(not REAL_INDEX.is_file(), reason="repo references/_INDEX.md missing")
+class TestWebRiskControlRecall:
+    """The reworked web risk-control card must be recallable by vendor names
+    (CN + international) and by the domain keywords of its v2 surface:
+    vendor identification, per-vendor handling, and decision heuristics."""
+
+    _CARD = "re-library/web/risk-control/web-risk-control.md"
+
+    def _paths(self, query: str) -> set:
+        idx = rr.build_index(REAL_INDEX)
+        r = rr.recall(list(idx.entries), list(idx.scenes), query)
+        assert r.kind == "scored", (query, r.kind)
+        return set(r.files)
+
+    def test_cn_vendor_riversecurity_query(self) -> None:
+        assert self._CARD in self._paths("瑞数")
+
+    def test_cn_vendor_jiasule_query(self) -> None:
+        assert self._CARD in self._paths("加速乐")
+
+    def test_intl_vendor_geetest_query(self) -> None:
+        assert self._CARD in self._paths("geetest")
+
+    def test_intl_vendor_datadome_query(self) -> None:
+        assert self._CARD in self._paths("datadome")
+
+    def test_fingerprint_token_query(self) -> None:
+        assert self._CARD in self._paths("cf_clearance")
+
+    def test_vendor_identification_query(self) -> None:
+        assert self._CARD in self._paths("风控栈识别 vendor identification")
+
+    def test_handling_path_query(self) -> None:
+        assert self._CARD in self._paths("厂商处理路径 挑战机制")
+
+    def test_heuristics_query(self) -> None:
+        assert self._CARD in self._paths("启发式 decision heuristics")
