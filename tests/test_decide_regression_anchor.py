@@ -84,6 +84,22 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # path was touched (convergence_check.py and anomaly_detector.py are
 # byte-identical to origin/dev).
 #
+# 2026-09-27 DATA-coupled freeze refresh (issue 393 references P1
+# structural repair): 13 re-library cards + case-book.md were repaired
+# (double-frontmatter merge, malware skill-residue de-skilling, issue-ref
+# and bookkeeping-vocabulary strips, toolshelf invocations, phishing card
+# rewrite + case-book relocation, structural heading fixes), changing the
+# anomaly baseline corpus (anomaly_detector design D2 source 1: every .md
+# under references/re-library/). Lexical-rarity statistics shifted, moving
+# anomalies[].score past the frozen precision on 2 of 31 cases
+# (drain_blocked_contradiction, order_discovery_beats_contradiction).
+# Case-by-case verification of capture_current() vs the previous anchor,
+# run programmatically over all 31 cases: drift is score-only (4 score
+# fields total; zero changes in action, decision order, phase fields,
+# anomaly counts, fact_ids, top_dimension). No ranker or decide() code
+# path was touched (convergence_check.py and anomaly_detector.py
+# byte-identical to origin/dev).
+#
 # 2026-09-23 DATA-coupled freeze refresh (issue 358 external-distillation
 # wave 1): ten external-distilled reference cards + one gap report landed
 # under references/re-library/, growing the anomaly baseline corpus

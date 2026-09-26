@@ -1,23 +1,12 @@
 ---
 name: multi-search-engine
-description: MCP tool integration for 17 search engines. When programmatically querying multiple search
-  engines.
+description: Multi search engine integration with 17 engines (8 CN + 9 Global). Supports advanced search
+  operators, time filters, site search, privacy engines, and WolframAlpha knowledge queries. No API keys
+  required. When programmatically querying multiple search engines.
 domain: research
 family: osint
 ---
 # Multi Search Engine
-
-Multi search engine integration, 17 engines supported.
-
----
-name: multi-search-engine
-description: "Multi search engine integration with 17 engines (8 CN + 9 Global). Supports advanced search operators, time filters, site search, privacy engines, and WolframAlpha knowledge queries. No API keys required."
-description_zh: "集成 17 个搜索引擎（8 国内 + 9 国际），无需 API"
-description_en: "Multi search engine integration with 17 engines (8 CN + 9 Global), no API keys"
-version: 2.0.1
----
-
-# Multi Search Engine v2.0.1
 
 Integration of 17 search engines for web crawling without API keys.
 
@@ -112,13 +101,3 @@ web_fetch({"url": "https://www.wolframalpha.com/input?i=100+USD+to+CNY"})
 - Conversion: `100 USD to CNY`
 - Stocks: `AAPL stock`
 - Weather: `weather in Beijing`
-
-## Documentation
-
-- `references/advanced-search.md` - Domestic search guide
-- `references/international-search.md` - International search guide
-- `CHANGELOG.md` - Version history
-
-## License
-
-MIT
