@@ -79,6 +79,11 @@ assets:
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl
+    # AR stack (exp8): I3 self-check probe shapes — registered families
+    # crypto/kdf/sign get an exact-shape probe template injected by the runner
+    - templates/selfcheck/probe-crypto.md
+    - templates/selfcheck/probe-kdf.md
+    - templates/selfcheck/probe-sign.md
   tools:
     # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
     # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they

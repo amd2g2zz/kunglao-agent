@@ -3,13 +3,13 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
+  references/_INDEX.md: 06781251a841b900c5e3939d206f616472dd916ae0cb2cd09cfb456226334f6e
   references/_index-android.md: 0c615e6ff0b690451bc0678d7574d83ce2e7c090c535ef6651537cb56bbf1584
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
   references/_index-malware.md: 9ca74cb65468f24574835a1132415d585399fc65efa5633a417453c0594f4eb9
-  references/_index-method.md: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
+  references/_index-method.md: cb78ee8071ff897f860b3df31d6d0892307331c745a7fdffc9e07447038240c3
   references/_index-patterns.md: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   references/_index-research.md: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
@@ -72,6 +72,7 @@ files:
   references/re-library/malware/workflow/malware-analysis-workflow.md: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
   references/re-library/malware/workflow/malware-analysis.md: fb8b92ca465c12a630d34ac96a1204b84bc139e2496800cead807da1f0a61e65
   references/re-library/malware/workflow/malware-dynamic-analysis.md: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  references/re-library/method/case-distilled/case-dispatch-budget-partition.md: c89dbf51bc3070cbd90848951a71f45eb74ddf48a8a774570b689fd3d6f118a9
   references/re-library/method/formats/wire-format-recognition.md: cf42e502c06e9b33dbc66a414f759f037002d6c59b10a2928a6dd94ab8206e93
   references/re-library/method/process/dynamic-observation-ladders.md: c74d142926e606872313b3cc9d0e9cdab0bb86256ab60438a6c26c3fd49a038a
   references/re-library/method/process/falsifier-library.md: 9ba3198ecd2a46f2008ed46955fb1ee4c32e9dc0d2728b86a94cba73d3a57756
