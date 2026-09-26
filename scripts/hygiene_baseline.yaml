@@ -560,7 +560,7 @@ files:
     r1: 3
   tests/test_decide_regression_anchor.py:
     r1: 63
-    r2: 37
+    r2: 38
   tests/test_decide_schema_routing.py:
     r1: 6
   tests/test_decide_state_machine.py:
