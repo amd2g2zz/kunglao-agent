@@ -742,7 +742,7 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
 
 
 def test_check_tool_first_bool_face_is_documented_constant():
-    """#380 P2 finding 3: post-H1 the bool face is a CONSTANT True for every
+    """issue 380 P2 finding 3: post-H1 the bool face is a CONSTANT True for every
     evaluation mode — the tuple shape is kept only so the sink battery stays
     uniform with the enforcing gates; the demand payload lives in `reason`,
     and the docstring contracts the invariant (readers must not branch on
