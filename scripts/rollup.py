@@ -343,7 +343,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         unified_reward = {"settlement": f"error: {exc!r}"}
         warn("unified_reward", f"{type(exc).__name__}: {exc}")
 
-    # Step 4.7 (#391): settlement-event retry gap-notes — advisory
+    # Step 4.7 (issue 391): settlement-event retry gap-notes — advisory
     # reflection for same-unit retries, derived ONLY from the settled
     # ledger rows (FAIL settlements reflect; PASS emits nothing). Caged:
     # reflection never breaks the terminal transition.

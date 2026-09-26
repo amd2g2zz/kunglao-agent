@@ -109,7 +109,7 @@ def test_recall_and_gap_notes_share_one_channel(tmp_path):
 
 def test_dispatch_without_notes_is_unchanged(tmp_path):
     """No gap-notes for the unit -> no gap-note block (recall-only or
-    silent exactly as before #391)."""
+    silent exactly as before issue 391)."""
     ws = _kunglao_ws(tmp_path)
     runner = _recall_runner(("re-library/mock/reference.md",))
     rc, stderr, ctx = evaluate(_payload(ws, CLAIM), recall_runner=runner)

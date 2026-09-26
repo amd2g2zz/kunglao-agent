@@ -2,7 +2,7 @@
 """gap_notes.py — settlement-event retry gap-notes (issue 391).
 
 A minimal reflective loop between attempts of the SAME unit, riding the
-settlement events of #379/#388 — context-only, advisory. Measured problem:
+settlement events of issues 379/388 — context-only, advisory. Measured problem:
 attempts within a unit do not inherit evidence (pass@3 data: a unit burned
 2x3600s before attempt 3 passed); attempt N re-derives what attempt N-1
 already falsified.
