@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 7a4d0bab24c2fa0eaca1a08d34868692eb3372faa1ff5d4a56636bb636cc747e
+    sha256: 1964af08d8edd99978649ec498fb80739690b6f096305a56aadcbdb34c9ca6c5
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -1047,11 +1047,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 77a78c47de50f33ecc8ddf9b264532c54e085b292ff19c310b62c1a95c4a7743
+    sha256: 06781251a841b900c5e3939d206f616472dd916ae0cb2cd09cfb456226334f6e
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 0d31451300ceebf9ca580cae2097f53cf386040ff86f79a0df4688f77a4ae972
+    sha256: f2a0900fe2ab0f29e23318f3d7f16ccd6d3b8f63491e8ce5dc91706e0a0a29a9
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1075,7 +1075,7 @@ files:
   - src: references/_index-method.md
     dest: .claude/references/_index-method.md
     kind: asset
-    sha256: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
+    sha256: cb78ee8071ff897f860b3df31d6d0892307331c745a7fdffc9e07447038240c3
   - src: references/_index-patterns.md
     dest: .claude/references/_index-patterns.md
     kind: asset
