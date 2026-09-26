@@ -124,8 +124,12 @@ source) BEFORE executing. The plan carries:
   anti-analysis.md; failure → failure-modes-*.md).
 - `goal:` one sentence. `preflight:` verify-first checklist. Check
   `tools/_INDEX.yaml` FIRST — a matching registered tool is tried via its
-  CLI before any new script. The dispatch carries `tool-catalog: <name>` or
-  `tool-catalog: none (reasoning: <why not>)` (the toolfirst gate checks it).
+  CLI before any new script. T1_DIRECT: if a registered tool directly
+  covers the task, execute it first before any decomposition. The dispatch
+  carries `tool-catalog: <name>` or `tool-catalog: none (reasoning: <why
+  not>)` — the toolfirst gate is ADVISORY (a keyword hit without the
+  marker logs `toolfirst_advisory` and proceeds, it does not reject); the
+  citation or explicit opt-out is still the expected shape.
 - `steps:` per step: tool + command + **expected output** (if it wouldn't
   really produce that → verify now). `fallback:` ≥1 per step.
 - `if-fails:` EVERY enumerated step carries one (condition + action) — the

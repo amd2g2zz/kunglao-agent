@@ -1159,7 +1159,8 @@ def _is_distinctive_trigger(kw: str) -> bool:
 # that names no alias (e.g. the #54 repro "分析这个APK的登录加密逻辑" itself)
 # still passes silently (no_match).
 #
-# Discipline (_TOOLFIRST_STOPWORDS spirit): DISTINCTIVE terms only — provider
+# Discipline (#380 P2 structural trigger discipline, was the
+# _TOOLFIRST_STOPWORDS spirit): DISTINCTIVE terms only — provider
 # names derived from the registry's own `provider:` field (jadx/baksmali/
 # apkid/gitnexus/dexdc) plus CJK android-RE compounds. Generic prose ("app",
 # "apk", "java", "加密", "tls", "okhttp", "frida") stays OUT of the trigger

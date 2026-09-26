@@ -224,11 +224,13 @@ domain tools come first; hand-rolling the same capability is a tool-first
 violation. Self-invention escape valve: file the upstream-registration gap in
 your report, ship at most a labeled disposable shim, never a silent
 workspace script.
-The toolfirst gate reads the dispatch prompt: when you hit a registered
-candidate but decide not to use it, record the reason in `steps:` — the
-dispatch prompt needs a `tool-catalog: <name>` or
-`tool-catalog: none (reasoning: <why not>)` marker, which the worker_budget
-toolfirst gate checks.
+The toolfirst gate reads the dispatch prompt (ADVISORY: a keyword hit
+without the marker logs `toolfirst_advisory` and proceeds, it does not
+reject): when you hit a registered candidate but decide not to use it,
+record the reason in `steps:` — the dispatch prompt carries
+`tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)`.
+T1_DIRECT: if a registered tool directly covers the task, execute it first
+before any decomposition.
 
 Camoufox presets precede custom hooks: try `inject_hook_preset` xhr/fetch/
 crypto/websocket/debugger_bypass/cookie/runtime_probe before writing custom
