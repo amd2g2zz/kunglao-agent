@@ -1047,11 +1047,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
+    sha256: 77a78c47de50f33ecc8ddf9b264532c54e085b292ff19c310b62c1a95c4a7743
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 18368e228cb378c0a14db01adf1493a433e1043dfb91f4f6593244d55ad5aee3
+    sha256: 0d31451300ceebf9ca580cae2097f53cf386040ff86f79a0df4688f77a4ae972
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1223,7 +1223,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 005ec54f5578028c3bc0816dc0de6aafd149c56f8e1f5d7cb5a6e041eb0ce5f8
+    sha256: 8ad30f84704eb445473cd8999c06378d86a7a693e7e8953a65ae0640e45377f8
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -1611,7 +1611,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b3108bf1cb27c94f5e098ffbd7366431e2cfdb70a504a3015e52a090a2a6d8a2
+    sha256: 7179874541bd13fb4452e9e0289b12db3457ae158b291fb1fffe0074895d31c8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

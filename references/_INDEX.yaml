@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
+  references/_INDEX.md: 77a78c47de50f33ecc8ddf9b264532c54e085b292ff19c310b62c1a95c4a7743
   references/_index-android.md: 0c615e6ff0b690451bc0678d7574d83ce2e7c090c535ef6651537cb56bbf1584
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -72,6 +72,7 @@ files:
   references/re-library/malware/workflow/malware-analysis-workflow.md: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
   references/re-library/malware/workflow/malware-analysis.md: fb8b92ca465c12a630d34ac96a1204b84bc139e2496800cead807da1f0a61e65
   references/re-library/malware/workflow/malware-dynamic-analysis.md: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  references/re-library/method/case-distilled/case-dispatch-budget-partition.md: c89dbf51bc3070cbd90848951a71f45eb74ddf48a8a774570b689fd3d6f118a9
   references/re-library/method/formats/wire-format-recognition.md: cf42e502c06e9b33dbc66a414f759f037002d6c59b10a2928a6dd94ab8206e93
   references/re-library/method/process/dynamic-observation-ladders.md: c74d142926e606872313b3cc9d0e9cdab0bb86256ab60438a6c26c3fd49a038a
   references/re-library/method/process/falsifier-library.md: 9ba3198ecd2a46f2008ed46955fb1ee4c32e9dc0d2728b86a94cba73d3a57756
