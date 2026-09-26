@@ -943,7 +943,7 @@ files:
   - src: scripts/tc_journal.py
     dest: .claude/scripts/tc_journal.py
     kind: scaffold
-    sha256: de92fc0cff940bc9dc253266ab77388c1959417c0cb3be42db0d24a1a1cca55c
+    sha256: 1eb1ef4afb7e40dfcf935ce745ab0eeb578832d5d520f0a3a02f19beb486134c
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
@@ -1627,7 +1627,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 81e6e9f211802c387c52190ab03f1f440e818af6484921247806ee33d705a5c7
+    sha256: c81dbd25042de702423b567bfdb6ed61ce43d9931332ea6832fcd793d30d7f73
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

@@ -372,13 +372,15 @@ class TestSituationStream:
         res = ssig.append_snapshot(tmp_path, trigger="terminal")
         assert res["row"]["tick"] == 1
 
-    def test_fail_open_never_raises(self, tmp_path):
-        # a read-only workspace root must not explode the caller
-        ro = tmp_path / "ro"
-        ro.mkdir()
-        ro.chmod(0o444)
-        try:
-            res = ssig.append_snapshot(ro, trigger="terminal")
-            assert res["appended"] is False
-        finally:
-            ro.chmod(0o755)
+    def test_fail_open_never_raises(self, tmp_path, monkeypatch):
+        """The append face swallows any internal failure (telemetry must
+        never break the producer). Deterministic: forces the snapshot
+        derivation to raise instead of relying on filesystem permissions
+        (root CI bypasses permission bits)."""
+        def boom(_ws):
+            raise RuntimeError("snapshot exploded")
+        monkeypatch.setattr(ssig, "snapshot", boom)
+        res = ssig.append_snapshot(tmp_path, trigger="terminal")
+        assert res["appended"] is False
+        assert res["row"] == {}
+        assert not (tmp_path / "runs" / "situation-stream.jsonl").exists()

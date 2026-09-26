@@ -14,7 +14,7 @@ worker-return) — never inside tool dispatch. Two write faces:
                               that knows its calls writes these);
   harvest_from_log            the zero-instrumentation derivation face:
                               derive journal rows FROM THE EXISTING
-                              kunglao-log tool_call events (action ==
+                              kunglao_log tool_call events (action ==
                               "tool_call", the structured-log observability face)
                               at worker return. The log schema carries no
                               args, so derived rows carry
@@ -142,7 +142,7 @@ def _identity(row: dict) -> tuple:
 
 
 def from_kunglao_log(ws) -> list[dict]:
-    """Derive journal rows from the EXISTING kunglao-log tool_call events
+    """Derive journal rows from the EXISTING kunglao_log tool_call events
     (runs/logs/kunglao-*.jsonl, action == "tool_call"). The log schema
     carries no args: derived rows carry args_sha256=None (documented
     absence). dispatch_id falls back to the row's claim, then

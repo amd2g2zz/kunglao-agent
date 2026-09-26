@@ -4,7 +4,7 @@
 Pins the cheapest recording face: one JSONL line per tool call
 (tool name, args hash, return status, files touched, ts), written by a
 RETURN-TIME aggregation (worker exit / loop runner) — never inside tool
-dispatch. Includes the derivation face from the existing kunglao-logs
+dispatch. Includes the derivation face from the existing kunglao_log day files
 tool_call events (no new instrumentation) and its idempotence at any
 wall-clock distance. All fixtures are SYNTHETIC (privacy rule).
 """
