@@ -67,6 +67,7 @@ def warn(op: str, reason: str) -> None:
     print(f"[kunglao-agent] recall_inject WARN (fail-open): "
           f"{op}: {reason}",
           file=sys.stderr)
+import hashlib
 import json
 import re
 import subprocess
@@ -173,22 +174,56 @@ from tier_rules import tier_for_claim  # noqa: E402
 # workspace passes naturally because a first injection is always new content.
 RECALL_DEDUP_STATE = Path("runs") / ".recall-inject.json"
 
+# Digest base for the recalled file paths (#380 Package 4 F2): recall
+# returns references/-relative paths (e.g. `re-library/tools/dynamic/
+# tools-dynamic.md`), so content identity resolves against the skill's
+# references dir. A module constant so tests can point it at a fixture
+# library without touching the real re-library.
+REFERENCES_DIR = SKILL_DIR / "references"
+
 
 def _worker_key(prompt_text: str) -> str:
-    """Stable per-worker dispatch identity: the claim id for claim
-    dispatches, else a short hash of the dispatch text (redteam plans,
-    one-off verifiers)."""
-    m = re.search(r"claim[ \t]+(C-[0-9]+)", prompt_text, re.IGNORECASE)
-    if m:
-        return "claim:" + m.group(1).upper()
-    import hashlib
+    """Stable per-worker dispatch identity (#380 Package 4 F1): the claim id
+    via lib_kunglao.parse_dispatch — the #861 single source (v1 JSON
+    envelope takes precedence, v0 prefix retained), so v1 dispatches key
+    dedup state by CLAIM, not by text hash — else (text parses as no
+    dispatch at all) a short hash of the dispatch text (redteam plans,
+    one-off verifiers). The retired local prose regex (`claim[ \\t]+C-NN`)
+    only saw v0 dispatches and silently re-injected unchanged recall to
+    re-dispatched v1 workers whose prompt tail had moved."""
+    _tier, _tools, claim_id = load_hooks_lib().parse_dispatch(prompt_text)
+    if claim_id:
+        return "claim:" + claim_id.upper()
     return "text:" + hashlib.sha256(
         prompt_text.encode("utf-8")).hexdigest()[:16]
 
 
+def _file_digest(rel_path: str) -> str:
+    """sha256 of a recalled reference file's bytes — the content half of the
+    dedup pair (#380 Package 4 F2: name-only hashing never noticed a
+    reference file revised in place, so the same worker starved of the new
+    doctrine). Fail-open posture for unreadable paths (deleted file,
+    injected fixtures): a FIXED sentinel '-' — stable across runs, so
+    dedup still works, and distinct from any real sha256 hex, so a file
+    that appears or changes after being unreadable shifts the set hash
+    (the re-inject direction: recall must never starve a dispatch)."""
+    try:
+        return hashlib.sha256(
+            (REFERENCES_DIR / rel_path).read_bytes()).hexdigest()
+    except OSError:
+        return "-"
+
+
 def _recall_set_hash(files: list[str]) -> str:
-    import hashlib
-    return hashlib.sha256("\n".join(files).encode("utf-8")).hexdigest()
+    """Content-aware dedup hash (#380 Package 4 F2): sha256 over one
+    `<path>:<content-sha256>` line per recalled file. Collision behavior:
+    inner digests and the outer hash are both sha256 (second-preimage
+    resistant); the PATH is part of every line, so two distinct files with
+    byte-identical content never collapse into one pair, and the hash
+    changes whenever a path is added, removed, or its content moves. File
+    order follows the recall engine's deterministic per-query order."""
+    return hashlib.sha256("\n".join(
+        f"{f}:{_file_digest(f)}" for f in files).encode("utf-8")).hexdigest()
 
 
 def _content_unchanged(ws: Path, key: str, files: list[str]) -> bool:
