@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_scalar_settlement_379.py — two-level settlement + 3-tuple (#379).
+"""tests/test_scalar_settlement_379.py — two-level settlement + 3-tuple (issue 379).
 
 Acceptance checkboxes covered here (issue 379 + implementation spec):
   - every tier constructible from synthetic dimensions (pure if-then, no
@@ -668,6 +668,6 @@ class TestFactProvenanceFace:
         assert ss.fact_artifacts(ws) == []
 
     def test_creator_is_a_known_frontmatter_key(self, tmp_path):
-        """lint_facts #532 known-key table grew by exactly this key."""
+        """lint_facts issue-532 known-key table grew by exactly this key."""
         import lint_facts
         assert "creator" in lint_facts.KNOWN_FRONTMATTER_KEYS

@@ -159,7 +159,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "depends_on", "alternatives", "supersedes", "superseded_by", "iocs",
     "hypothesis",
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
-    "creator",  # #379 round-credit provenance: the dispatch id that created this fact
+    "creator",  # issue-379 round-credit provenance: the dispatch id that created this fact
     "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
     "assumptions",  # issue 250: '<topic>=<polarity>' premises (semantic refutation)
     "temporal_scope",  # issue 341: 'runtime' for volatile runtime-state facts

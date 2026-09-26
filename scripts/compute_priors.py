@@ -28,7 +28,7 @@ tests/test_compute_priors_137.py):
     polarity: SETTLED_GREEN/HELPED -> +1 alpha, SETTLED_RED/ADVERSE ->
     +1 beta, NEUTRAL/pending -> nothing. Read through the ONE interface
     (reward_settlement.prior_observations over rollout_ledger.settled).
-  - runs/rollout-ledger.jsonl settled EPISODE TIER SCALARS (#379,
+  - runs/rollout-ledger.jsonl settled EPISODE TIER SCALARS (issue 379,
     reward-rules v2) contribute a separate Normal-Gamma posterior under
     sources.scalar_ledger (n / mean / posterior) — the exponential-family
     form for a continuous scalar, NOT folded into the Beta counts.
@@ -132,7 +132,7 @@ def _rollout_ledger_obs(ws: Path) -> tuple[int, int]:
 
 
 def _scalar_ledger_obs(ws: Path) -> dict:
-    """Episode tier scalars (#379, reward-rules v2) as a Normal-Gamma
+    """Episode tier scalars (issue 379, reward-rules v2) as a Normal-Gamma
     posterior — the exponential-family conjugate form for a CONTINUOUS
     observation, deliberately NOT Beta-Bernoulli (that family counts
     binary outcomes, and squashing the {0, 0.4, 0.7, 1.0} tier scalars
@@ -189,7 +189,7 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         ua, ub = _rollout_ledger_obs(p)  # unified-reward prior feed (additive)
         rl_alpha += ua
         rl_beta += ub
-        sc = _scalar_ledger_obs(p)  # #379 scalar feed (additive, Normal-Gamma)
+        sc = _scalar_ledger_obs(p)  # issue-379 scalar feed (additive, Normal-Gamma)
         sc_n_total += sc["n"]
         sc_sum += sc["mean"] * sc["n"]
         sc_posts.append(sc["posterior"])

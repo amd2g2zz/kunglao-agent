@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""scalar_settlement.py — two-level settlement + 3-tuple extraction (#379).
+"""scalar_settlement.py — two-level settlement + 3-tuple extraction (issue 379).
 
 Level 1 — EPISODE settlement (reward-rules.yaml v2 ``tier_table``): the
 fine-grained tiered scalar (GOLD 1.0 / SILVER 0.7 / BRONZE 0.4 /
@@ -44,7 +44,7 @@ import rollout_ledger as rl
 
 # the round-credit rollout kind — the ledger's OPEN ENUM registration API
 # (a new kind is one register_kind entry, never an ad-hoc string).
-rl.register_kind("round_credit", "per-dispatch round credit row (#379)")
+rl.register_kind("round_credit", "per-dispatch round credit row (issue 379)")
 
 KIND_ROUND_CREDIT = "round_credit"
 BAND_ROUND_CREDIT = "ROUND_CREDIT"
@@ -529,7 +529,7 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
     Provenance channel: the fact frontmatter ``creator`` field (the
-    dispatch id the worker echo'd at creation; falls back to the #879
+    dispatch id the worker echo'd at creation; falls back to the issue-879
     trace_id when creator itself is absent — both are worker echo
     channels, trace_id is mission-stable so it attributes to the mission,
     not the dispatch). Status/verify_status are the oracle faces;
