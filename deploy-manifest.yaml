@@ -259,7 +259,7 @@ files:
   - src: scripts/compute_priors.py
     dest: .claude/scripts/compute_priors.py
     kind: scaffold
-    sha256: 8c3eabe2132c7d22173b9862b59deb5a442584b50f92ce5612fb98ff55d3c650
+    sha256: c321341e24194c860e4b7634177ee42b74e84db859c7f350da17f0b10cd010f2
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -635,7 +635,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 56f1527c39eaab2374b46d1e5be43004d230146095064ba934411d38eebcb45d
+    sha256: 6dcd46bf3997db9c123ac9c1054bb3a6ad8ac877c8eaa3462ce2c668b1d84ed0
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -888,6 +888,10 @@ files:
     dest: .claude/scripts/runtime_facts.py
     kind: scaffold
     sha256: 37b7c86da394c5b59a05c3fcc9ab0e6f7212fd7282742a6955075b2f1c3c8c7a
+  - src: scripts/scalar_settlement.py
+    dest: .claude/scripts/scalar_settlement.py
+    kind: scaffold
+    sha256: 3a8e1875b176ae48789ef6a376b27561b7c218ae109cdebfca0a21a450bdb29e
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1139,7 +1143,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: 415725a4e628234103393564b9caf59b9e7b4020104ab1f9032460530f5c20a0
+    sha256: da7a71311ae350fcc98fc3613f61542c9dcc2b4e3e6095477612b0fd3936dd6d
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset
@@ -1507,7 +1511,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: f7aaaa11a7375d0acf1415d6f4c63cd665e76acc25f40f7ffcf1a57e52a8389b
+    sha256: a7a6abdd5a66b434699c33e2aaea7b13fbb315d5310a07c10d253b20b250e948
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
@@ -1611,7 +1615,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 7179874541bd13fb4452e9e0289b12db3457ae158b291fb1fffe0074895d31c8
+    sha256: 81e6e9f211802c387c52190ab03f1f440e818af6484921247806ee33d705a5c7
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
