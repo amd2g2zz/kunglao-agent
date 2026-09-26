@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 2982e46c80b9594ef6f5cbb60729eff7c87d996bffc766625598f0adb95bba84
+    sha256: 5b4b92007660ace7cc86e4d4d04f8a50c3ab079176b153c5035b0871636b3055
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: cb00784b0a9d955e7ca1a2441eadc5c2269f28c2d8eb97e5021737312fb33cb3
+    sha256: 8638adbc6145ead683a99120f03a13d8a647bad2cf75d40eea9da8f9f8158e85
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
