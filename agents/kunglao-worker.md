@@ -195,7 +195,7 @@ derivation summary is bounced back. THINK-role agents cite this
 section as the single source and add no variants.
 
 <!-- contract: status-sync -->
-## Status write order (§1c) — write files or you failed
+## Status reporting (§1c write order) — write files or you failed
 
 A worker that returns "done" without writing files has FAILED (the
 W-15 lesson: it reported F001-F007 byte-verified but wrote zero files;
