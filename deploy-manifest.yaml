@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 4f2cf8a3bc093499fad2ff493872ec542e9ec64411e4f24dee18bb79836fed90
+    sha256: 2beb33038a56c6d1c422b7c2b131fb20abd9e997ae37aadd1f520ff1ecd3cf5c
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -468,6 +468,10 @@ files:
     dest: .claude/scripts/fixture_excerpt_lint.py
     kind: scaffold
     sha256: 1b60070200058e9626f438d8a1f6be3225cde48d5ae01514e0ac4ad4c3a439e1
+  - src: scripts/gap_notes.py
+    dest: .claude/scripts/gap_notes.py
+    kind: scaffold
+    sha256: 74ad60923026116782773c1b92e75d00a7d8962d315935e5d7ce2e10d8b4d681
   - src: scripts/gate_telemetry.py
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
@@ -875,7 +879,7 @@ files:
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: 294dfd343ebfef7bb4de9efdcf0a74fce5bc1c7ee421b227b5326d17f6757442
+    sha256: 4c64045b6dd16b257bfc200d8c6e00e215e83623fa70052173e1e3cea4750c58
   - src: scripts/rotation_induction.py
     dest: .claude/scripts/rotation_induction.py
     kind: scaffold
@@ -1615,7 +1619,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 81e6e9f211802c387c52190ab03f1f440e818af6484921247806ee33d705a5c7
+    sha256: 817d85465bf11961735dcad0ae7a3e383114b76a9909b441b725d08055b002dc
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
