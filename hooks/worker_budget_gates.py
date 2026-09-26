@@ -1331,34 +1331,56 @@ def _toolfirst_evaluate(text_lower: str, cited: str | None) -> dict:
             'reason': 'no tool-catalog keyword match'}
 
 
-def _toolfirst_emit(ws, ev: dict, action: str = 'toolfirst_reject') -> None:
-    """#880: the tool-first gate's REJECT face reaches the unified ledger
-    (dual_gate._emit mirror shape: detail = JSON payload). Fail-open —
-    observability never gates a decision (#459 contract).
+# F4 (#380 P4): the REJECT-face action word is retired from code — no
+# caller passes it — but stays registered in the event taxonomy
+# (event_taxonomy.EMIT_ACTIONS, append-only history: legacy ledger rows
+# still carry it). Kept as this quoted literal so the emit_gate
+# forward-side emitter proof (emit_gate.emitter_files) keeps finding its
+# producer file; test_observability_birth_880 pins both directions.
+TOOLFIRST_REJECT_ACTION = 'toolfirst_reject'
 
-    H1 (autoresearch thin-base): the REJECT face is demoted to ADVISORY —
-    check_tool_first passes `action='toolfirst_advisory'` for the
-    missing_marker/self_attestation modes and PROCEEDS; the row format is
-    unchanged (mode/keywords/tool payload), only the action name and the
-    gate outcome differ. The PASS face deliberately does NOT emit here:
-    check_tool_first runs mid-battery, BEFORE gates that may still reject
-    the dispatch (heartbeat #754 pins "a rejected dispatch emits no
-    lifecycle noise" — test_heartbeat_bootstrap). The pass row fires at the
-    APPROVAL point via toolfirst_pass_record instead, so ledger rows
-    describe real dispatches.
+
+def _toolfirst_emit(ws, ev: dict, action: str, claim: str | None = None,
+                    extra: dict | None = None) -> bool:
+    """#880: the tool-first gate's faces reach the unified ledger through
+    THIS ONE emitter (dual_gate._emit mirror shape: detail = JSON payload)
+    — all three call sites (check_tool_first advisory, toolfirst_pass_record
+    advisory + pass) share the identical payload shape; only action /
+    claim / extra differ (#380 Package 4 F3: the two hand-rolled copies of
+    this payload in toolfirst_pass_record are gone).
+
+    F4: `action` is a REQUIRED parameter — the old unreachable
+    `toolfirst_reject` default is deleted; the taxonomy word itself stays
+    registered (event_taxonomy.EMIT_ACTIONS, append-only history).
+
+    The caller owns emit eligibility (which face/mode may emit — the
+    helper formats and emits only). `claim` rides the row when given;
+    `extra` merges into the {mode, keywords, tool} payload (immutable
+    merge) for the advisory flag.
+
+    Fail-open — observability never gates a decision (#459 contract): any
+    error warns and returns False, never raises. Returns True when the
+    emit call completed (kunglao_log.emit itself never raises; ledger
+    write failures degrade to its stderr warning, exactly like the
+    pre-consolidation blocks counted them).
     """
-    if not ws or ev['mode'] != 'reject':
-        return
+    if not ws:
+        return False
     try:
         import kunglao_log
-        kunglao_log.emit(
-            Path(ws), 'hook:worker_budget', action,
-            detail=json.dumps({'mode': ev['detail_mode'],
-                               'keywords': ev['keywords'],
-                               'tool': ev['tool']},
-                              ensure_ascii=False))
+        payload = {'mode': ev['detail_mode'],
+                   'keywords': ev['keywords'],
+                   'tool': ev['tool']}
+        if extra:
+            payload = {**payload, **extra}
+        kwargs = {'detail': json.dumps(payload, ensure_ascii=False)}
+        if claim:
+            kwargs['claim'] = claim
+        kunglao_log.emit(Path(ws), 'hook:worker_budget', action, **kwargs)
+        return True
     except Exception as exc:  # noqa: BLE001 — logging never breaks the gate
         warn("_toolfirst_emit", f"{type(exc).__name__}: {exc}")
+        return False
 
 
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
@@ -1396,7 +1418,9 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
         cited = (m.group(1).strip() if m else '')
     ev = _toolfirst_evaluate(text_lower, cited)
     if ev['mode'] == 'reject':
-        # H1: demote REJECT to ADVISORY — log the row, PROCEED.
+        # H1: demote REJECT to ADVISORY — log the row, PROCEED. (Emit
+        # eligibility — reject face only — is owned HERE: the helper
+        # formats and emits whatever its caller decided, #380 P4 F3.)
         _toolfirst_emit(ws, ev, action='toolfirst_advisory')
     return (True, ev['reason'])
 
@@ -1493,34 +1517,12 @@ def toolfirst_pass_record(paths: dict, claim_id: str | None,
         # check_tool_first and the whole gate battery — the approval-point
         # face carries the advisory payload (mode/keywords/tool + advisory
         # flag) instead of skipping. No claim-operation label: only the
-        # `matched` mode attributes an operation.
-        try:
-            import kunglao_log
-            kunglao_log.emit(
-                Path(ws), 'hook:worker_budget', 'toolfirst_pass',
-                claim=str(claim_id),
-                detail=json.dumps({'mode': ev['detail_mode'],
-                                   'keywords': ev['keywords'],
-                                   'tool': ev['tool'],
-                                   'advisory': True},
-                                  ensure_ascii=False))
-            return True
-        except Exception as exc:  # noqa: BLE001 — logging never breaks the dispatch
-            warn("toolfirst_pass_record", f"{type(exc).__name__}: {exc}")
-            return False
-    emitted = False
-    try:
-        import kunglao_log
-        kunglao_log.emit(
-            Path(ws), 'hook:worker_budget', 'toolfirst_pass',
-            claim=str(claim_id),
-            detail=json.dumps({'mode': ev['detail_mode'],
-                               'keywords': ev['keywords'],
-                               'tool': ev['tool']},
-                              ensure_ascii=False))
-        emitted = True
-    except Exception as exc:  # noqa: BLE001 — logging never breaks the dispatch
-        warn("toolfirst_pass_record", f"{type(exc).__name__}: {exc}")
+        # `matched` mode attributes an operation. (#380 P4 F3: the row
+        # goes through the one shared emitter, shape unchanged.)
+        return _toolfirst_emit(ws, ev, action='toolfirst_pass',
+                               claim=str(claim_id), extra={'advisory': True})
+    emitted = _toolfirst_emit(ws, ev, action='toolfirst_pass',
+                              claim=str(claim_id))
     if ev['mode'] == 'matched' and ev['keywords']:
         set_claim_operation(ws, claim_id, ev['keywords'], ev['tool'])
     return emitted

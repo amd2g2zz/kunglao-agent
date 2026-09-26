@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 88e74215b2bd61deeee2d36aab734814917b30010fbd931aceeb6160baf45a81
+    sha256: 4f2cf8a3bc093499fad2ff493872ec542e9ec64411e4f24dee18bb79836fed90
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 10a538c620abef3d00a6dfab6e046abe89fed87277ead10d667862ffe4fc7709
+    sha256: 6e615d1c61d708a4fb2193b35f5bfa479194f9a30bcb33ea8d1159c8ae0de31d
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
