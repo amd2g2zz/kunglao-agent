@@ -55,4 +55,21 @@ and resolve the 5 drift types it reports.
 **Addresses M6** (state drift). v1.9 fix: convergence_check.py surface-level
 check of open/blocked claims per turn; health check detects flatline.
 
+
+## Case 6 — Same-topic contradiction froze the wrong routing conclusion
+
+A phishing engagement left two promoted conclusions (F035 and F040) both
+PROVEN on the same routing topic, drawing opposite conclusions, with no
+supersedes link between them. The fact base froze the wrong routing
+conclusion and it propagated into downstream answers — the root cause of the
+`fact_contradiction_gate` incident (#47). Fix: the contradiction gate now
+runs globally before completion (`scripts/fact_contradiction_gate.py`), and
+a same-topic pair that disagrees must carry an explicit supersedes link —
+see the technique card
+[`re-library/method/process/phishing-case-study.md`](../../re-library/method/process/phishing-case-study.md).
+
+**Addresses** same-topic fact-base contamination. v-next fix:
+`scripts/fact_contradiction_gate.py` (global scan) + completion-gate global
+recomputation.
+
 recall_useful: pending

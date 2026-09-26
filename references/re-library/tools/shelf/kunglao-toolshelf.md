@@ -1,6 +1,6 @@
 ---
 name: kunglao-toolshelf
-description: 'The repo''s own toolshelf of `tools/` CLIs (#866 four-face registration): static triage
+description: 'The repo''s own toolshelf of `tools/` CLIs: static triage
   (die_probe, pe_analyze, disasm_dump, overlay_scan, shellcode_scan, stack-strings, extract-syscalls,
   go-buildinfo-carve, binary-sweep, call-site-args, c_normalize, opaque_pred, disasm_constant_check, yara-scan,
   yara-gen), ghidra family (run_ghidra_postscript, ghidra_job async + ghidra_diff), crypto-tool, android
@@ -13,13 +13,14 @@ family: shelf
 ---
 # kunglao-agent in-repo toolshelf (tools/ CLIs)
 
-> The repo's own toolshelf, registered on the four discovery faces (#866): the execution
+> The repo's own toolshelf, registered on the four discovery faces: the execution
 > registry `tools/_INDEX.yaml` (machine contract, consumed by the toolfirst dispatch gate),
 > the per-category contract docs `tools/_index-<category>.md`, this teaching page, and the
 > `references/_INDEX.md` recall corpus. Registration != mandatory use — selection stays with
-> the worker; value ranking is learned (#881), not hardcoded. Contract entries with directly
-> copyable invocations live in `tools/_index-<category>.md`; this page is the when-to-reach
-> overview. Stems below are the exact CLI file names under `tools/`.
+> the worker; value ranking is learned, not hardcoded. One copyable invocation per family
+> lives below; the full per-tool contract entries (every flag, every invocation) live in
+> `tools/_index-static.md`, `_index-ghidra.md`, `_index-crypto.md`, `_index-pipelines.md`,
+> and `_index-auxiliary.md`. Stems below are the exact CLI file names under `tools/`.
 
 ## static triage (tools/static/)
 
@@ -41,7 +42,13 @@ family: shelf
 | `yara-gen` | YARA rule generation from extracted traits | turning confirmed byte traits into detection rules |
 | `c_normalize` | Ghidra decompiled-C idiom normalization (x-(x/N)*N -> x%N, dead stores) | decompiler output is noisy before pattern reading |
 | `opaque_pred` | z3 opaque-predicate truth check + MBA simplification | branch conditions that never vary; MBA expressions |
-| `web_gitnexus_demo` | end-to-end #751 semantic-index-layer regression demo (wakaru/webcrack/gitnexus pipeline, `--selfcheck` offline) | verifying the js recovery + graph-query layer works on this host |
+| `web_gitnexus_demo` | end-to-end semantic-index-layer regression demo (wakaru/webcrack/gitnexus pipeline, `--selfcheck` offline) | verifying the js recovery + graph-query layer works on this host |
+
+One copyable invocation (die_probe, the first probe of any new sample):
+
+```bash
+python tools/static/die_probe.py --binary <sample-PE> --die <path-to-diec.exe>
+```
 
 ## ghidra family (tools/ghidra/)
 
@@ -51,11 +58,23 @@ family: shelf
 | `ghidra_job` | async job protocol over the wrapper: submit / poll / fetch / cancel (+ `job_store.py`, the dir-backed job lib both CLIs share) | Ghidra runs too long to block on — dispatch async, keep polling |
 | `ghidra_diff` | binary diff over Ghidra Version Tracking (GhidraBindiff.java -> bindiff.v1 artifact + query subcommands) | two samples/variants need function-level diffing (added/changed/removed) |
 
+One copyable invocation (one-shot Ghidra recon):
+
+```bash
+python tools/ghidra/run_ghidra_postscript.py --tool ghidra-recon --binary <abs-sample> --out <abs-output.json>
+```
+
 ## crypto (tools/crypto/)
 
 | CLI | What it answers | Reach for when |
 |---|---|---|
 | `crypto-tool` | 8-family decode CLI (chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | encoded/encrypted layer identified among the supported families |
+
+One copyable invocation (chacha decode):
+
+```bash
+python tools/crypto/crypto-tool.py chacha --in <ciphertext-file> --key <32-byte-hex> --nonce <12-byte-hex>
+```
 
 ## android providers (registered capability providers)
 
@@ -64,6 +83,12 @@ family: shelf
 | `apk_mem_gate` | memory-aware jadx dispatch estimator (verdict gates jadx) | before any jadx decompile of a large APK |
 | `baksmali_index` | DEX enumeration + xref (1:1 bytecode truth) | smali-level truth needed over decompiled source |
 | `dexdc_scanner` | DEX index/taint via the PyO3 wheel (no JVM) | jadx blocked by memory budget or JVM unavailable |
+
+One copyable invocation (the memory gate that decides the jadx dispatch):
+
+```bash
+python tools/static/apk_mem_gate.py <workspace> <target>   # verdict gates the jadx call
+```
 
 ## pipelines + auxiliary (tools/pipelines/, tools/auxiliary/)
 
@@ -75,3 +100,10 @@ family: shelf
 | `capture_golden` | captures byte-exact golden master fixtures (`tests/fixtures/golden/`) | locking CLI behavior before a refactor (phase-0 freeze flow) |
 | `measure_cold_start` | cold-start token baseline over workspace state files | measuring init/context cost of a workspace layout |
 | `sanitize` | sample-content prompt-injection sanitizer (zero-width/homoglyph/markers) | before feeding sample-derived text to any LLM worker |
+
+One copyable invocation (evidence registration, required before facts cite raw evidence):
+
+```bash
+python tools/pipelines/build_evidence_index.py <workspace> --write
+```
+

@@ -1,6 +1,3 @@
-#### 6-pre. Anti-forgetting protocol (v1.8.2) — the four failure modes observed in practice
----
-
 # kunglao-agent failure modes (F1-F18) - INDEX
 
 The 18 failure modes are split into 3 domain files (progressive disclosure):
