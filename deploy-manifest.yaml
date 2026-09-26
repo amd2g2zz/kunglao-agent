@@ -891,7 +891,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: 3a8e1875b176ae48789ef6a376b27561b7c218ae109cdebfca0a21a450bdb29e
+    sha256: dc92657acbdd6f1ff04559e6f2d28aa80c996846801a1c06af3da716416fc379
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
