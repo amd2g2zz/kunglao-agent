@@ -36,6 +36,10 @@ no mocked telemetry. The runner's ONLY jobs:
                          workspace's answer into candidate form);
     5. RESULTS           kunglao-eval-results/1 rows with arm=loop —
                          comparable with the #236 bare rows.
+    6. EXPERIENCE        issue 396 v0.1.6 recording face at worker-return
+                         and terminal (see _record_experience): tc journal,
+                         situation snapshot, triples.csv — pure recording,
+                         zero decision impact.
 
 Budget/cancellation: budget exhaustion is a TERMINAL metric row
 (loop.status=exhausted), never a crash, on BOTH kill faces — the runner's
@@ -679,6 +683,27 @@ def settle_factor_sample(workspace: Path) -> bool:
         return False
 
 
+# ------------------------------------------------------ experience record
+def _record_experience(ws: Path, trigger: str) -> None:
+    """issue 396 v0.1.6 RECORDING face (zero decision impact): at the
+    worker-return / terminal lifecycle points, journal the session's
+    tool-call rows (tc_journal), append one mainline situation snapshot
+    (state_signature), and at the terminal regenerate the derived
+    (s, a, r) triple view (experience_triples). Runs AFTER measurement
+    and settlement faces — pure telemetry, fail-open: any recording
+    failure is a WARN, never a broken harvest or a changed verdict."""
+    try:
+        import experience_triples
+        import state_signature
+        import tc_journal
+        tc_journal.harvest_from_log(ws)
+        state_signature.append_snapshot(ws, trigger=trigger)
+        if trigger == "terminal":
+            experience_triples.extract(ws)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        _warn_fail_open("experience_recording", exc)
+
+
 # ------------------------------------------------------------------- init
 def _default_type() -> str:
     return DEFAULT_TYPES.get(sys.platform, "linux")
@@ -1266,6 +1291,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     status = _session_status(rec, budget_usd)
 
     settle_factor_sample(ws)  # I4 (exp8): late dispatches must be counted
+    _record_experience(ws, "worker_return")  # 396 recording (fail-open)
     metrics = harvest(ws, baseline_rounds=baseline_rounds)
     cand = extract_candidate(ws, task)
 
@@ -1336,6 +1362,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         # a redo that lands no gradeable candidate leaves the original
         # FAIL standing: SKIP must stay harness-only per the accounting
         # ruling, and the attempt still ended on a failing deliverable
+
+    _record_experience(ws, "terminal")  # 396 recording (fail-open)
 
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
