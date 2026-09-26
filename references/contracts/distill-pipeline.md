@@ -122,6 +122,29 @@ skeletons and reference tables serve these — reframe their emphasis
 accordingly. The strip test decides admission: remove every concrete value;
 whatever decision rules survive is the card.
 
+### Source-tag standard (owner ruling, 2026-09-26)
+
+What may and may not appear inside a card body as provenance, resolving the
+tension between the exemplar behavior (the simulation card carries 15
+`**Source:**` tags) and the noise ban read strictly:
+
+- **ALLOWED — external provenance tags.** `**Source:** <public event or
+  publication, year>` at the end of a technique section
+  (`**Source:** PlaidCTF 2017`, `**Source:** BSidesSF 2026 "stubborn-elf"`).
+  These tell the reader where the technique was observed in the wild —
+  recall value, no operational coupling.
+- **BANNED — internal citations.** Issue/PR tracker numbers (`#884`),
+  internal bookkeeping vocabulary ("queue source / queue attestation /
+  queue cluster / queue delta", "N article(s)", "tetralogy", "attested",
+  "corpus"), internal decision/finding ids (J6/J7, C-NN/F-NN as
+  provenance), and internal dates ("ruling 2026-08-27"). These couple the
+  public technique face to private workflow state; curation is human, the
+  card body stays self-contained.
+- **Rule of thumb:** a provenance line a reader outside the project can
+  act on is ALLOWED; one that only makes sense with access to the
+  project's tracker is BANNED.
+
+
 ## Wave artifacts
 
 Per wave: private scratch ledger (S-id ↔ source, HEAD, license, retrieval
