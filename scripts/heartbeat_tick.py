@@ -105,7 +105,7 @@ SCRIPTS = SKILL_DIR / "scripts"
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
 from liveness_policy import (  # noqa: E402
-    HEARTBEAT_STALE_MINUTES, MISSION_SETTLE_MIN, RENEW_MARGIN_LOW_MINUTES)
+    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -240,12 +240,22 @@ def noop_breaker(ws: Path, current_hash: str,
         count = int(prev.get("count", 0)) + 1
     else:
         count = 1
+    # issue 380 P3-3: the persisted premise_hash gets a READER — compare the
+    # incoming digest against the previously persisted one and persist the
+    # comparison verdict alongside the evidence. The RETURN shape is
+    # untouched (the issue 275 trace contract pins it); the verdict lives in
+    # runs/.heartbeat-noop.json for postmortems. Evidence only: premise
+    # churn must never gate (or reset) the trip.
+    prev_premise = prev.get("premise_hash")
+    premise_changed = bool(prev_premise and premise_hash
+                           and prev_premise != premise_hash)
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"hash": current_hash, "count": count}
         if premise_hash is not None:
             # H1c: evidence only — the premise digest never gates the trip.
             payload["premise_hash"] = premise_hash
+            payload["premise_changed"] = premise_changed
         state_path.write_text(_json.dumps(payload), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001 — telemetry must not break the tick
         warn("noop_breaker_state_write", f"{type(exc).__name__}: {exc}")
@@ -278,7 +288,7 @@ def state_fingerprint(ws: Path) -> str:
         no-op counter; a real state advance (claim-register change) still
         does.
 
-    The premise digest (blockers/*.md contents + runs/env-state.json) is
+    The premise digest (blockers/*.md contents only, issue 380 P3-3) is
     exposed via premise_digest() so the breaker state can carry it as
     evidence (what the loop was metabolizing) without it gating the trip.
     """
@@ -294,12 +304,18 @@ def state_fingerprint(ws: Path) -> str:
 
 
 def premise_digest(ws: Path) -> str:
-    """H1c: the premise-state hash — blockers/*.md contents + the
-    runs/env-state.json content hash. Evidence-side only: it rides the
-    persisted breaker state (runs/.heartbeat-noop.json) so a postmortem can
-    see premise churn, and it NEVER participates in the no-op equality
-    (hashing it there would reset the counter on tick-cadence rewrites:
-    env-state ts fields every tick, blocker bodies via premise_expiry)."""
+    """H1c: the premise-state hash — blockers/*.md contents ONLY
+    (issue 380 P3-3: runs/env-state.json was hashed here too, but env_state_probe
+    rewrites it every tick, so the persisted digest churned every tick and
+    carried no signal; the digest must be stable under tick cadence and
+    move only when premise metabolism rewrites a blocker).
+
+    Evidence-side only: it rides the persisted breaker state
+    (runs/.heartbeat-noop.json) so a postmortem can see premise churn, and
+    it NEVER participates in the no-op equality (hashing it there would
+    reset the counter on cadence rewrites — blocker bodies via
+    premise_expiry). The persisted value now has a READER: noop_breaker
+    compares it against the incoming digest and reports premise_changed."""
     import hashlib
     ws = Path(ws)
     h = hashlib.sha256()
@@ -313,49 +329,20 @@ def premise_digest(ws: Path) -> str:
                 warn("premise_digest_blocker_read",
                      f"{type(exc).__name__}: {p.name}: {exc}")
                 continue
-    env = ws / "runs" / "env-state.json"
-    if env.exists():
-        try:
-            h.update(b"runs/env-state.json")
-            h.update(env.read_bytes())
-        except OSError as exc:
-            warn("premise_digest_envstate_read",
-                 f"{type(exc).__name__}: {exc}")
     return h.hexdigest()
 
 
 def _mission_history_due(ws: Path) -> bool:
-    """#8: True when a new V_m history point is due (cadence gate for
-    mission_ledger.value_m in the cockpit block below).
-
-    value_m appends history on EVERY call — un-gated, the 5-min tick cadence
-    would spam runs/mission_ledger.yaml and flatten the d_slope that
-    statusline computes over the last-5 window. The gate samples at most
-    once per MISSION_SETTLE_MIN (liveness_policy, rationale there).
-
-    Gate rule (reads the history schema mission_ledger owns: entries are
-    {ts, v_m} for samples, {ts, action: repin, ...} for repins):
-      - no dated V_m entry yet          -> due (first sample after init)
-      - newest V_m entry older than the window -> due
-      - newest V_m entry undated        -> not due (hand-seeded/repin-era
-        ledger, cadence unknown — zero-noise: never spam an unknown ledger)
-      - any read/parse failure          -> not due (gate never fails the tick)
-    """
+    """issue 8 cockpit cadence gate — now a DELEGATE (issue 380 P3-7): the rule
+    lives in mission_ledger.history_due so the
+    eval runner's settle face shares the exact same semantics (a second
+    un-gated sampler was the finding). Kept as a named wrapper to
+    preserve the tick's monkeypatch/import face."""
     try:
         import mission_ledger as _ml
-        led = _ml.load(ws) or {}
-        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
-                if isinstance(h, dict) and "v_m" in h]
-        if not hist:
-            return True
-        ts = hist[-1].get("ts")
-        if not ts:
-            return False
-        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        age = datetime.datetime.now(datetime.timezone.utc) - last
-        return age >= datetime.timedelta(minutes=MISSION_SETTLE_MIN)
     except Exception:  # noqa: BLE001 — the gate must never fail the tick
         return False
+    return _ml.history_due(ws)
 
 
 def _run_mechanisms(ws: Path, runner) -> dict:

@@ -110,6 +110,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -161,18 +162,45 @@ T1_DIRECT_LINE = (
     "it first before any decomposition (tool-catalog: <name> if "
     "applicable).")
 
-# I3 (exp8): family -> self-check probe shape (exactly three entries —
-# crypto/kdf/sign only). Evidence: mod-crypto-l1 delivered a candidate
-# graded 0/20 — a wrong deliverable an in-session probe would have caught.
-FAMILY_PROBE_SHAPES = {
-    "mod-crypto-native": "crypto",
-    "arm-native-kdf": "kdf",
-    "req-sign": "sign",
-}
-
-# I3 (exp8): the per-family probe snippets live beside the other templates.
+# I3 (exp8) + issue 380 P3-5: family -> self-check probe shape, DERIVED from
+# the per-family template convention — no hard special-case map keyed on
+# family strings (the special-case-instead-of-algorithm disease). A
+# family is registered by shipping templates/selfcheck/probe-<shape>.md
+# whose header names the shape and the family it is injected for:
+#   <!-- probe shape: crypto (pair-match) — injected for family X -->
+# Adding family issue 4 is adding a template file — zero code change — and the
+# map can never drift from the templates it points at.
 SELFCHECK_TEMPLATE_DIR = (Path(__file__).resolve().parent.parent
                           / "templates" / "selfcheck")
+
+_PROBE_HEADER_RE = re.compile(
+    r"probe shape:\s*(?P<shape>\S+).*?injected for family\s+(?P<family>\S+)")
+
+
+def derive_family_probe_shapes(template_dir: Path) -> dict[str, str]:
+    """The template-convention reader (issue 380 P3-5): parse every
+    probe-*.md header in ``template_dir`` into {family: shape}.
+    Fail-open: an absent dir, an unreadable file or a headerless
+    template contributes nothing (never raises)."""
+    shapes: dict[str, str] = {}
+    tdir = Path(template_dir)
+    if not tdir.is_dir():
+        return shapes
+    for p in sorted(tdir.glob("probe-*.md")):
+        try:
+            head = p.read_text("utf-8", errors="replace")[:512]
+        except OSError:
+            continue
+        m = _PROBE_HEADER_RE.search(head)
+        if m:
+            shapes[m.group("family")] = m.group("shape")
+    return shapes
+
+
+# I3 (exp8): exactly three registered families today — crypto/kdf/sign.
+# Evidence: mod-crypto-l1 delivered a candidate graded 0/20 — a wrong
+# deliverable an in-session probe would have caught.
+FAMILY_PROBE_SHAPES = derive_family_probe_shapes(SELFCHECK_TEMPLATE_DIR)
 
 # the loop prompt's mandated deliverable (the extractor's primary face)
 DELIVERABLE_DIR = ("runs", "deliverables")
@@ -191,6 +219,18 @@ RC_OK, RC_REFUSED = 0, 2
 def _fail(msg: str) -> None:
     print(f"FAILURE code=BAD_TASK detail={msg}", file=sys.stderr)
     print("VERDICT REFUSED", file=sys.stderr)
+
+
+def _warn_fail_open(op: str, exc: Exception) -> None:
+    """issue 380 P3-9: fail-open telemetry degradations keep their liveness
+    posture (never raise, never change the return shape) but leave ONE
+    trace — the shared _boot.warn idiom: a stderr WARN naming the
+    operation + reason, rate-limited to once per op until the reason
+    changes (the issue 275 batch-3 pattern). Incident-path prints
+    (kill/restore) stay raw and loud ON PURPOSE: every incident's remedy
+    failure must be visible, not rate-limited away."""
+    from _boot import warn
+    warn(op, f"{type(exc).__name__}: {exc}")
 
 
 # ----------------------------------------------------------------- launch
@@ -463,6 +503,38 @@ def _harness_drift_event(out: Path, task: str, drifted: list[str],
         fh.write(json.dumps(row) + "\n")
 
 
+def run_session_guarded(workspace: Path, prompt: str, out: Path,
+                        task_name: str, *, budget_usd: float,
+                        wall_cap_s: float, session_cmd: str | None = None,
+                        plugin_dir: Path | None = None,
+                        plugin: bool = True,
+                        note: str = "") -> tuple[dict, list[str], list[str]]:
+    """issue 380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
+    route through here so the harness-drift handling can no longer
+    diverge (the finding: main printed stdout+stderr, redo printed only
+    stderr, and redo contamination never fed the summary counter). Hash
+    the harness surface -> launch -> hash again -> on drift restore from
+    HEAD + emit the loud event row + the loud log pair. Returns
+    (session_record, drifted, restored). ``note`` tags the log lines
+    (e.g. " (gap-redo session)")."""
+    pre = integrity_surface_hashes()
+    rec = launch_session(workspace, prompt, budget_usd=budget_usd,
+                         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
+                         plugin_dir=plugin_dir, plugin=plugin)
+    drifted = harness_drift(pre, integrity_surface_hashes())
+    restored: list[str] = []
+    if drifted:
+        restored = restore_harness(drifted)
+        _harness_drift_event(out, task_name, drifted, restored)
+        print(f"HARNESS_DRIFT task={task_name}{note} files={len(drifted)} "
+              f"restored={len(restored)} action={HARNESS_DRIFT_ACTION} "
+              f"(session escaped its workspace; surface restored from "
+              f"HEAD; row marked harness_contaminated)", file=sys.stderr)
+        print(f"HARNESS_DRIFT task={task_name}{note} files={len(drifted)} "
+              f"restored={len(restored)}")
+    return rec, drifted, restored
+
+
 # ---------------------------------------------------------- wall partition
 def wall_partition_block(wall_cap_s: float) -> str:
     """M1 (exp5) + I1 (exp8): the WALL_BUDGET_PARTITION contract block.
@@ -581,27 +653,29 @@ def prompt_injection_blocks(task_dir: Path,
 # ------------------------------------------------------- factor settle (I4)
 def settle_factor_sample(workspace: Path) -> bool:
     """I4 (exp8): append ONE final factor-vector history sample at session
-    end. Diagnosis (exp4, all 7 units): dispatch signals landed in
+    end — THROUGH THE SHARED CADENCE GATE (issue 380 P3-7: this used to call
+    mission_ledger.value_m() directly, an un-gated second sampler
+    distorting the d_slope windows; it now calls mission_ledger.settle(),
+    the same gate the heartbeat cockpit's _mission_history_due uses).
+
+    Diagnosis (exp4, all 7 units): dispatch signals landed in
     runs/signals.jsonl (3-10 rows) but the mission-ledger history's last
-    point predated them — the only sampler is heartbeat_tick's
-    value_m call behind the MISSION_SETTLE_MIN (30 min) cadence gate, and
-    the init-time sample plus one early tick left the cursor at 0 while
-    the real dispatches happened at 60-90% wall, after the last sample.
-    The runner owns the session lifetime, so it settles the ledger once
-    before harvesting: every signal since the last cursor — including the
-    late dispatches — lands in the dispatch-tick face. Fail-open
-    telemetry: no ledger (cc-default arm) or a degraded sample returns
-    False and never breaks the harvest."""
+    point predated them — the init-time sample plus one early tick left
+    the cursor behind while the real dispatches happened at 60-90% wall.
+    The gate's pending-signals rule keeps the I4 live-effect: a settle
+    with NEW signal rows since the newest point's cursor is ALWAYS due,
+    so late dispatches are counted; not-due only ever means "nothing
+    pending AND a fresh sample" — no accounting is ever dropped.
+    Fail-open telemetry: no ledger (cc-default arm) or a degraded sample
+    returns False and never breaks the harvest."""
     ws = Path(workspace)
     if not (ws / "runs" / "mission_ledger.yaml").is_file():
         return False
     try:
         import mission_ledger as ml
-        ml.value_m(ws)
-        return True
+        return ml.settle(ws) is not None
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
-        print(f"[eval_loop_runner] factor settle degraded: {exc}",
-              file=sys.stderr)
+        _warn_fail_open("factor_settle", exc)
         return False
 
 
@@ -703,42 +777,25 @@ def init_cc_default_workspace(task_dir: Path,
 
 
 # ----------------------------------------------------------------- prompt
-def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
-                      *, wall_cap_s: float | None = None,
-                      layer_paths: list[str] | None = None,
-                      include_t1_direct: bool = True,
-                      probe_block: str = "") -> str:
-    """The loop brief: the anchors verbatim + the candidate contract + the
-    mandated deliverable path. Structurally cannot leak ground truth: this
-    function never receives it (same leakage posture as the #236 bare
-    prompt — thresholds, oracles and the checker's existence stay
-    checker-side). ``wall_cap_s`` (M1, exp5) injects the runner-owned
-    WALL_BUDGET_PARTITION block as a first-class section directly after
-    the opening directive — the session cannot partition a cap it was
-    never told. ``layer_paths`` (I2, exp8) injects the chain
-    LAYER_CHECKPOINTS block (exact grader paths). ``probe_block`` (I3,
-    exp8) injects the family SELF_CHECK block. ``include_t1_direct``
-    (I5, exp8) adds the T-1 affirmative one-liner."""
+def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
+                        extras: list[str], gap_block: str = "") -> str:
+    """issue 380 P3-1: the SHARED task-brief renderer — the anchors verbatim +
+    the analysis-subject listing + the candidate contract + the mandated
+    deliverable tail, preceded by the caller's ``extras`` blocks (each
+    followed by a blank line) and, when present, the redo's ``gap_block``.
+    Both builders route through here so their ~15-line tails cannot drift
+    silently (the finding: build_loop_prompt / build_redo_prompt carried
+    byte-identical tails that were maintained twice); the extraction is
+    pinned byte-identical to the pre-refactor prompts
+    (TestPromptRenderHelperByteIdentity)."""
     anchors = task["anchors"]
     ws = task["workspace_scaffold"]
     files = "\n".join(f"  - {f}" for f in ws["files"])
-    extras: list[str] = []
-    if wall_cap_s is not None:
-        extras.append(wall_partition_block(wall_cap_s))
-    if layer_paths:
-        extras.append(layer_checkpoints_block(layer_paths))
-    if probe_block:
-        extras.append(probe_block)
-    if include_t1_direct:
-        extras.append(T1_DIRECT_LINE)
     injected = "".join(f"{block}\n\n" for block in extras)
     return (
-        "/kunglao-agent Run the full kunglao-agent orchestrator loop on "
-        "THIS workspace (your current directory) until CONVERGED or until "
-        "further rounds cannot improve the result. Work fully "
-        "autonomously: no questions, no user input — every decision is "
-        "yours to make from the anchors below.\n\n"
+        opening
         + injected
+        + (f"{gap_block}\n\n" if gap_block else "")
         + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
         f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
@@ -749,6 +806,54 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
         f"re-implementation as ONE source file to "
         f"{deliverable_rel} in this workspace (create the directory if "
         f"needed). This file is how the delivered answer is collected.")
+
+
+def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
+                      *, wall_cap_s: float | None = None,
+                      layer_paths: list[str] | None = None,
+                      include_t1_direct: bool = True,
+                      probe_block: str = "") -> str:
+    """The loop brief: the anchors verbatim + the candidate contract + the
+    mandated deliverable path, plus the injected contract blocks.
+
+    Leakage posture (issue 380 P3-6 — documented choice: PROCEDURAL, not
+    structural). The old docstring claimed "structurally cannot leak
+    ground truth: this function never receives it". That stopped being
+    true when I2 (exp8) added ``layer_paths`` — path strings lifted from
+    the grader's ground_truth.json by chain_layer_paths. The structural
+    fix (a whitelisted GraderSurface view type) was rejected: the pinned
+    call sites pass plain path lists, so a wrapper type around the same
+    strings would be ceremony, not invariant. The invariant is therefore
+    PROCEDURAL and pinned by test_chain_prompt_leaks_no_ground_truth:
+    chain_layer_paths reads ONLY each op's ``path`` field — digests,
+    probe payloads and expected outputs are never read, so nothing
+    gradeable can travel into the prompt; thresholds, oracles and the
+    checker's derived answers stay checker-side (the same posture as the
+    issue 236 bare prompt).
+
+    ``wall_cap_s`` (M1, exp5) injects the runner-owned
+    WALL_BUDGET_PARTITION block as a first-class section directly after
+    the opening directive — the session cannot partition a cap it was
+    never told. ``layer_paths`` (I2, exp8) injects the chain
+    LAYER_CHECKPOINTS block (exact grader paths). ``probe_block`` (I3,
+    exp8) injects the family SELF_CHECK block. ``include_t1_direct``
+    (I5, exp8) adds the T-1 affirmative one-liner."""
+    extras: list[str] = []
+    if wall_cap_s is not None:
+        extras.append(wall_partition_block(wall_cap_s))
+    if layer_paths:
+        extras.append(layer_checkpoints_block(layer_paths))
+    if probe_block:
+        extras.append(probe_block)
+    if include_t1_direct:
+        extras.append(T1_DIRECT_LINE)
+    opening = (
+        "/kunglao-agent Run the full kunglao-agent orchestrator loop on "
+        "THIS workspace (your current directory) until CONVERGED or until "
+        "further rounds cannot improve the result. Work fully "
+        "autonomously: no questions, no user input — every decision is "
+        "yours to make from the anchors below.\n\n")
+    return _render_task_prompt(opening, task, deliverable_rel, extras)
 
 
 # --------------------------------------------------------------- gap redo
@@ -850,37 +955,24 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     prompt: anchors and contract only — the gap adds shape, not answers.
     I2/I3/I5 (exp8): the chain LAYER_CHECKPOINTS block, the family
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
-    same task under the same prompt contract."""
-    anchors = task["anchors"]
-    ws = task["workspace_scaffold"]
-    files = "\n".join(f"  - {f}" for f in ws["files"])
+    same task under the same prompt contract. (issue 380 P3-1: the shared
+    tail renders through _render_task_prompt.)"""
     extras: list[str] = [wall_partition_block(wall_cap_s)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
     extras.append(T1_DIRECT_LINE)
-    injected = "".join(f"{block}\n\n" for block in extras)
-    return (
+    opening = (
         "/kunglao-agent GAP-REDO round in THIS workspace: the previous "
         "session's delivered candidate FAILED the mechanical final "
         "check. Do not restart the analysis from scratch — this "
         "workspace already holds that session's state; target the GAP "
         "below, re-derive the failing faces from the raw target "
         "material, and update the SAME deliverable path. Work fully "
-        "autonomously: no questions, no user input.\n\n"
-        f"{injected}"
-        f"{gap_block}\n\n"
-        f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
-        f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
-        f"VERIFICATION METHOD: {anchors['verification_method']}\n\n"
-        f"ANALYSIS SUBJECT — the task's material, already in this "
-        f"workspace (also under bins/):\n{files}\n\n"
-        f"DELIVERABLE CONTRACT: {ws['candidate_contract']}\n\n"
-        f"MANDATORY FINAL STEP: before you finish, write the complete "
-        f"re-implementation as ONE source file to "
-        f"{deliverable_rel} in this workspace (create the directory if "
-        f"needed). This file is how the delivered answer is collected.")
+        "autonomously: no questions, no user input.\n\n")
+    return _render_task_prompt(opening, task, deliverable_rel, extras,
+                               gap_block=gap_block)
 
 
 # ---------------------------------------------------------------- harvest
@@ -979,8 +1071,7 @@ def _oracle_face(ws: Path) -> tuple[int, int]:
             if str(case.get("status") or "").lower() == "pass":
                 green += 1
     except (OSError, json.JSONDecodeError) as exc:
-        print(f"[eval_loop_runner] oracle face unreadable: {exc}",
-              file=sys.stderr)
+        _warn_fail_open("oracle_face", exc)
     return green, total
 
 
@@ -994,8 +1085,7 @@ def _proven_face(ws: Path) -> int:
             if str((c or {}).get("status") or "").upper() == "PROVEN":
                 proven += 1
     except (OSError, yaml.YAMLError) as exc:
-        print(f"[eval_loop_runner] claim register unreadable: {exc}",
-              file=sys.stderr)
+        _warn_fail_open("claim_register", exc)
     return proven
 
 
@@ -1087,7 +1177,19 @@ def _post_cap_status(rec: dict, budget_usd: float) -> str:
     stop (print mode exits rc=1 with a cost report at/over the cap) is
     BUDGET EXHAUSTION — the same TERMINAL exhausted row as the runner's
     wall-cap kill, never a crash (the 2026-09-24 sweep mislabeled 9/12
-    units this way). Any other rc!=0 is a genuine session_error."""
+    units this way).
+
+    HEURISTIC, EXPLICITLY DOCUMENTED (issue 380 P3-8): the adapter sees no
+    structured budget-stop discriminator to consume — the CLI's json
+    result face carries the cost report but no field distinguishing
+    "stopped BY the cap" from "crashed WHILE at/over the cap" — so
+    ``cost >= budget`` on rc!=0 IS the structured signal consumption,
+    with a known mislabel: a genuine crash whose partial spend happens
+    to read at/over the cap is classified exhausted. pass@k accounting
+    caveat: that inflates the exhausted bucket and deflates session_error
+    (both remain non-PASS measurement rows; the verdict is unaffected —
+    only the loop.status flavor moves). Any other rc!=0 is a genuine
+    session_error."""
     cost = (rec.get("session_cost") or {}).get("total_cost_usd")
     if cost is not None and float(cost) >= budget_usd:
         return "exhausted"
@@ -1156,23 +1258,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
         return row
     baseline_rounds = count_snapshot_rows(ws)
-    pre_surface = integrity_surface_hashes()
-    rec = launch_session(ws, prompt, budget_usd=budget_usd,
-                         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-                         plugin_dir=plugin_dir,
-                         plugin=(arm != "cc-default"))
-    post_surface = integrity_surface_hashes()
-    drifted = harness_drift(pre_surface, post_surface)
+    rec, drifted, _restored = run_session_guarded(
+        ws, prompt, out, tdir.name, budget_usd=budget_usd,
+        wall_cap_s=wall_cap_s, session_cmd=session_cmd,
+        plugin_dir=plugin_dir, plugin=(arm != "cc-default"))
     contaminated = bool(drifted)
-    if drifted:
-        restored = restore_harness(drifted)
-        _harness_drift_event(out, tdir.name, drifted, restored)
-        print(f"HARNESS_DRIFT task={tdir.name} files={len(drifted)} "
-              f"restored={len(restored)} action={HARNESS_DRIFT_ACTION} "
-              f"(session escaped its workspace; surface restored from "
-              f"HEAD; row marked harness_contaminated)", file=sys.stderr)
-        print(f"HARNESS_DRIFT task={tdir.name} files={len(drifted)} "
-              f"restored={len(restored)}")
     status = _session_status(rec, budget_usd)
 
     settle_factor_sample(ws)  # I4 (exp8): late dispatches must be counted
@@ -1198,13 +1288,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     # dispatch-theater floor; the redo session reuses the SAME workspace
     # and receives the CHECKER GAP (gap-shape only) built by the runner's
     # own extraction — never the checker stream pasted wholesale.
-    gap_redo: dict = {"ran": False, "reason": "", "decision": None,
+    # issue 380 P3-4: the reason is stored ONCE — inside the decision (the
+    # row-level duplicate gap_redo["reason"] is gone)
+    gap_redo: dict = {"ran": False, "decision": None,
                       "session": None, "verdict_replaced": False}
     redo_decision = gap_redo_decision(res["verdict"], rec,
                                       wall_cap_s=wall_cap_s,
                                       budget_usd=budget_usd)
     gap_redo["decision"] = redo_decision
-    gap_redo["reason"] = redo_decision["reason"]
     if redo_decision["allowed"]:
         redo_wall = redo_decision["remaining_wall_s"]
         redo_budget = redo_decision["remaining_budget_usd"]
@@ -1216,21 +1307,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
               file=sys.stderr)
-        pre_redo = integrity_surface_hashes()
-        redo_rec = launch_session(ws, redo_prompt, budget_usd=redo_budget,
-                                  wall_cap_s=redo_wall,
-                                  session_cmd=session_cmd,
-                                  plugin_dir=plugin_dir,
-                                  plugin=(arm != "cc-default"))
-        redo_drifted = harness_drift(pre_redo,
-                                     integrity_surface_hashes())
-        if redo_drifted:
-            redo_restored = restore_harness(redo_drifted)
-            _harness_drift_event(out, tdir.name, redo_drifted,
-                                 redo_restored)
-            print(f"HARNESS_DRIFT task={tdir.name} (gap-redo session) "
-                  f"files={len(redo_drifted)} "
-                  f"restored={len(redo_restored)}", file=sys.stderr)
+        redo_rec, redo_drifted, _redo_restored = run_session_guarded(
+            ws, redo_prompt, out, tdir.name, budget_usd=redo_budget,
+            wall_cap_s=redo_wall, session_cmd=session_cmd,
+            plugin_dir=plugin_dir, plugin=(arm != "cc-default"),
+            note=" (gap-redo session)")
         status = _session_status(redo_rec, redo_budget)
         gap_redo["ran"] = True
         gap_redo["session"] = {
@@ -1330,10 +1411,14 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         "refused": sum(1 for r in rows if r["verdict"] == "REFUSED"),
         "exhausted": sum(1 for r in rows
                          if r.get("loop", {}).get("status") == "exhausted"),
+        # issue 380 P3-2: BOTH guarded faces count — redo contamination is no
+        # longer silently dropped from the tier summary
         "harness_contaminated": sum(
             1 for r in rows
             if r.get("loop", {}).get("session", {})
-            .get("harness_contaminated")),
+            .get("harness_contaminated")
+            or ((r.get("loop", {}).get("gap_redo") or {})
+                .get("session") or {}).get("harness_contaminated")),
         "gap_redo": sum(1 for r in rows if r.get("gap_redo")),
         "wall_seconds": round(time.time() - started, 2),
     }

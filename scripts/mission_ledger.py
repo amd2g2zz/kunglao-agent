@@ -559,6 +559,86 @@ def value_m(ws, now=None) -> dict:
             "blocked": n_blocked, "unattempted": n_unattempted}
 
 
+# ------------------------------------------------------ issue 380 P3: settle API
+# The V_m cadence gate LIVES HERE now (was heartbeat_tick's private
+# _mission_history_due) so every host that samples the mission history —
+# the heartbeat cockpit block AND the eval runner's session-end settle —
+# shares ONE cadence semantic instead of growing a second un-gated
+# sampler (the issue 380 P3-7 finding: settle_factor_sample called value_m()
+# directly, distorting the d_slope windows the gate exists to protect).
+
+MISSION_HISTORY_MIN_GAP_MIN = 30  # heartbeat cadence (liveness_policy's
+# MISSION_SETTLE_MIN); duplicated as a module default ONLY for the
+# fail-open path — the real constant is imported below when available.
+
+try:
+    from liveness_policy import MISSION_SETTLE_MIN as _MISSION_SETTLE_MIN
+except ImportError:  # pragma: no cover — the policy module is repo-local
+    _MISSION_SETTLE_MIN = MISSION_HISTORY_MIN_GAP_MIN
+
+
+def history_due(ws) -> bool:
+    """True when a new V_m history point is DUE under the shared cadence
+    gate (issue 8 origin; issue 380 P3-7 made it the single source both hosts use).
+
+    value_m appends history on EVERY call — un-gated, a 5-min tick cadence
+    would spam runs/mission_ledger.yaml and flatten the d_slope that
+    statusline computes over the last-5 window. The gate samples at most
+    once per MISSION_SETTLE_MIN (liveness_policy), EXCEPT when the signal
+    stream has new rows since the newest point's cursor: a settle that
+    would drop pending dispatch accounting loses information, not just
+    cadence, so it is always due (the issue 334 settle face's live-effect —
+    late dispatches must be counted). The gate is therefore
+    information-lossless: it suppresses only no-new-signal samples inside
+    the window.
+
+    Gate rule (reads the history schema this module owns: entries are
+    {ts, v_m, ...} samples, {ts, action: repin, ...} repins):
+      - no V_m entry yet                         -> due (first sample)
+      - new signal rows since the newest cursor  -> due (pending accounting)
+      - newest V_m entry older than the window   -> due
+      - newest V_m entry undated                 -> not due (hand-seeded/
+        repin-era ledger, cadence unknown — zero-noise: never spam an
+        unknown ledger)
+      - any read/parse failure                   -> not due (the gate
+        never fails its host)
+    """
+    try:
+        import signals_stream
+        import datetime
+        led = load(ws) or {}
+        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
+                if isinstance(h, dict) and "v_m" in h]
+        if not hist:
+            return True
+        newest = hist[-1]
+        try:
+            cursor = int(newest.get("signals_rows") or 0)
+        except (TypeError, ValueError):
+            cursor = 0
+        if signals_stream.count_rows(ws) > cursor:
+            return True
+        ts = newest.get("ts")
+        if not ts:
+            return False
+        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        age = datetime.datetime.now(datetime.timezone.utc) - last
+        return age >= datetime.timedelta(minutes=_MISSION_SETTLE_MIN)
+    except Exception:  # noqa: BLE001 — the gate must never fail its host
+        return False
+
+
+def settle(ws) -> dict | None:
+    """Explicit V_m settle face (issue 380 P3-7): ONE history point under the
+    shared cadence gate (history_due). Hosts (heartbeat cockpit, eval
+    runner session-end) call THIS, never value_m directly, so no second
+    un-gated sampler can reappear. Returns the value_m result, or None
+    when the gate says not due (no sample, no state change)."""
+    if not history_due(ws):
+        return None
+    return value_m(ws)
+
+
 # The epoch kwarg below is a pure passthrough to kunglao_log.emit — the
 # column IS the tick axis (the convergence ledger's raw snapshot-row
 # count; emit inherits it whenever the kwarg is omitted). This module is

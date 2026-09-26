@@ -124,7 +124,7 @@ files:
   scripts/eval_dataset.py:
     r1: 3
   scripts/eval_loop_runner.py:
-    r1: 5
+    r1: 4
   scripts/eval_native_sources.py:
     r1: 1
   scripts/eval_native_targets.py:
@@ -159,7 +159,7 @@ files:
   scripts/heartbeat_loop_prompt.py:
     r1: 4
   scripts/heartbeat_tick.py:
-    r1: 40
+    r1: 39
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
