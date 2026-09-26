@@ -135,7 +135,7 @@ Mechanical aid: `hooks/worker_pulse.py` injects a
 a final state). Slot accounting self-heals: `scripts/reconcile_workers.py`
 excludes `done` workers from `[active_workers]`.
 
-## kunglao-monitor runs in the background (2026-08-12)
+## kunglao-monitor runs in the background
 
 `scripts/kunglao-monitor.py` (M5 MONITOR) runs as a BACKGROUND process. Its
 output (TickOutput) is advisory: it never blocks the loop's scheduled tick
@@ -145,7 +145,7 @@ tick proceeds on file state (`worker-status-*.md` freshness,
 gate. Do not design the tick loop around monitor results, and never block a
 scheduled action waiting for the monitor process to produce output.
 
-## Liveness thresholds single source (#597, 2026-08-24)
+## Liveness thresholds single source (#597)
 
 Every liveness/staleness minutes constant (worker stuck 20, heartbeat stale
 35, activation/env-state TTL 30, kicker dead-session + renewal margin 10)
@@ -167,7 +167,7 @@ subagent-model switch, smoke-test one dispatch (e.g. `/kunglao-agent verify
 starts; only then enter the convergence loop. If 400 [1210] appears, revert
 the model setting — it is a proxy-side rejection, not a kunglao defect.
 
-## Specialist bootstrap tolerance + dual-probe protocol (v1.9.29, 2026-08-05)
+## Specialist bootstrap tolerance + dual-probe protocol (v1.9.29)
 
 **Incident (C-332, 2026-08-05):** a freshly-dispatched verdict-scorer was
 killed as "B1c dead" after 6 minutes with no status file. Its final output
@@ -315,7 +315,7 @@ calls:** the hook is a safety net; this section is the entry steer. Workers
 that read it before any x64dbg call pick the right tool on the first try
 instead of leaking host-channel attempts.
 
-## VM-worker session cleanup (v1.9.29, 2026-08-05) — zombie root cause
+## VM-worker session cleanup (v1.9.29) — zombie root cause
 
 **Incident (C-331 + C-333, 2026-08-05):** two VM-session workers showed
 `completed` TaskOutput (facts written, all deliverables landed) but **stayed
@@ -355,11 +355,12 @@ self-drive (kunglao-worker.md §6d):
    precedent / known solution / error-signature search.
 2. **TRY**: retry with ≥2 different methods using what you found. Boundary
    (#760 I2): TRY only applies when the capability MIGHT exist and needs
-   exploring. 能力不匹配 (capability mismatch — e.g. needing a filesystem when Improvising through an adjacent capability (makeshift output) is forbidden.
+   exploring. A capability mismatch (e.g. needing a filesystem when
    the only execution surface is a decompiler's in-process Python) goes
-   STRAIGHT to ESCALATE: 用邻近能力凑合 (stopgap)
-   (IDA py_eval as a shell, a decompiler as a file reader/writer) is
-   FORBIDDEN — stopgap output is neither trustworthy nor auditable.
+   STRAIGHT to ESCALATE: improvising through an adjacent capability
+   (makeshift output — a stopgap, e.g. IDA py_eval as a shell, a decompiler
+   as a file reader/writer) is FORBIDDEN — stopgap output is neither
+   trustworthy nor auditable.
 3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
    MUST carry the lookup record (what sources were checked / what methods
    were tried / where it is stuck).
@@ -372,5 +373,3 @@ independent verifier blind-checks it against the sample's own artifacts. A
 worker that reports "I can't" without lookup evidence = failure (W-27).
 Workers MUST mark uncertain evidence `confidence: low` + `unverified-part` —
 silent conclusions are forbidden (anti analysis-error).
-
-recall_useful: pending

@@ -167,9 +167,13 @@ class TestJ1IndexedAndRecalled:
         assert res.files[0] == "re-library/web/risk-control/web-risk-control.md", res.files[:5]
 
     def test_recall_hits_crawler_by_cjk_dictionary(self) -> None:
+        """#395 EN-normalized the index-emitted description face (generation
+        lint gate rejects CJK in card descriptions), so the recall query
+        targets the English face; the card's CN identity (爬虫) lives in the
+        card body, which the recall engine does not index."""
         idx = _real_index()
         entries, scenes = list(idx.entries), list(idx.scenes)
-        res = rr.recall(entries, scenes, "爬虫")
+        res = rr.recall(entries, scenes, "crawler")
         assert "re-library/web/crawler/web-crawler-engineering.md" in res.files[:3], res.files[:5]
 
     def test_scenario_map_routes_antibot(self) -> None:

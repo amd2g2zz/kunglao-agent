@@ -111,5 +111,5 @@ def stage_gate_check(anchors, evidence):
 
 - Static-clean as a suspicion trigger, not a conclusion: [falsifier-library.md](falsifier-library.md)
 - Evidence typing at write time (what an item's type may move): [verification-safety.md](verification-safety.md#evidence-type-vocabulary)
-- Phase structure these gates sit between: [malware-analysis.md](malware-analysis.md#six-phase-analysis-flow)
+- Phase structure these gates sit between: [malware-analysis.md](../../malware/workflow/malware-analysis.md#six-phase-analysis-flow)
 - Anchors for packed/hardened forms: [stacked-protections.md](../../android/protections/stacked-protections.md)

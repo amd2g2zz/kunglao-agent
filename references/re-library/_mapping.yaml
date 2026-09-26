@@ -32,8 +32,131 @@ scenarios:
   Android emulation harness (unidbg): android (unidbg-env-filling, unidbg-harness-bringup, unidbg-algo-recovery,
     android-fingerprint-apis)
   Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
-  Action error / tool-VM-install failure response: error-response-taxonomy
-  Ask-the-user / irreversible-action decision: agent-three-state-charter
+  Action error / tool-VM-install failure response: contracts/error-response-taxonomy
+  Ask-the-user / irreversible-action decision: contracts/agent-three-state-charter
+when_to_read:
+  references/re-library/web/external-distilled/_GAP-REPORT.md: Before extending the external-distilled
+    lane or judging a follow-up adoption.
+  references/re-library/android/emulation/android-fingerprint-apis.md: When a task asks whether the sample
+    collects fingerprint identifiers and where they flow.
+  references/re-library/anti-analysis/catalog/anti-analysis.md: When a binary detects debuggers, VMs, or
+    instrumentation.
+  references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md: When a recovered
+    function computes an unknown digest or cipher, or constants match no standard algorithm.
+  references/re-library/method/case-distilled/case-dispatch-budget-partition.md: Before tuning orchestrator
+    dispatch timing or designing partial-credit eval surfaces.
+  references/re-library/android/case-distilled/_GAP-REPORT-D1.md: Before extending the android case-distilled
+    lane or judging a follow-up adoption.
+  references/re-library/android/case-distilled/case-emulation-campaign-discipline.md: When planning or
+    resuming a unidbg-class campaign, or handing one between sessions.
+  references/re-library/android/case-distilled/case-hardened-dispatch-recovery.md: When a stripped native
+    library hides its handler table behind computed calls or flattening.
+  references/re-library/android/case-distilled/case-identity-channel-epistemics.md: When a server rejects
+    requests unpredictably or a key chain has one unexplained link.
+  references/re-library/android/case-distilled/case-kill-evidence-counterplay.md: When a hook kills the
+    target or a previously survivable hook starts dying.
+  references/re-library/android/case-distilled/case-observation-claim-discipline.md: When two sampling
+    windows disagree or a negative-capability conclusion must be written.
+  references/re-library/malware/reporting/detection-engineer.md: When turning analysis findings into
+    Sigma/Suricata/YARA rules or defanged IOCs.
+  references/re-library/method/process/dynamic-observation-ladders.md: When hooks fire never or partially,
+    tracing crashes the target, or observation stays empty.
+  references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: When planning a
+    signature or encryption recovery task and choosing where to enter.
+  references/re-library/web/external-distilled/external-delivery-verification-gates.md: When a recovered
+    signer or protocol is about to be declared working or delivered.
+  references/re-library/web/external-distilled/external-env-stub-generation.md: When a recovered signer must
+    run outside the browser and the environment needs stubbing.
+  references/re-library/web/external-distilled/external-minimal-intervention-observation.md: When planning
+    dynamic instrumentation on a target that may detect hooks, or when hook output looks empty.
+  references/re-library/web/external-distilled/external-peel-ordering-family-adapters.md: When a peel chain
+    silently no-ops or generic deobfuscation stalls on one obfuscation family.
+  references/re-library/web/external-distilled/external-protocol-failure-ladder.md: When a built protocol
+    request returns unexpected results.
+  references/re-library/method/process/falsifier-library.md: When registering a hypothesis candidate or
+    choosing the experiment that discriminates two candidates.
+  references/re-library/method/process/field-notes.md: After triage, when diving into a specific binary
+    type or quirk.
+  references/re-library/method/process/ida-scripting-overlays.md: When the IDA lane returns empty lists,
+    decompilation fails, or a headless IDA batch runs.
+  references/re-library/web/vm/jsvmp-triage.md: When a deobfuscated web bundle may hide a bytecode VM —
+    choose AST recovery vs the instruction-trace methodology.
+  references/re-library/tools/shelf/kunglao-toolshelf.md: When choosing an in-repo CLI for a RE task or
+    checking what the shelf already covers.
+  references/re-library/languages/compiled/languages-compiled.md: When reversing a non-C compiled binary
+    (Go, Rust, Swift).
+  references/re-library/languages/compiled/languages-go.md: When analyzing a statically-linked Go binary.
+  references/re-library/languages/platforms/languages-platforms.md: When the binary is tied to a specific
+    platform or framework (Android, Electron, SGX).
+  references/re-library/languages/scripting/languages.md: When facing a scripting or esoteric language
+    target.
+  references/re-library/method/process/loop-stage-gates.md: When moving a target between analysis stages or
+    writing a stage-completion claim.
+  references/re-library/malware/workflow/malware-analysis-workflow.md: As the single entry point
+    orchestrating a malware analysis task across phases.
+  references/re-library/malware/workflow/malware-analysis.md: When performing end-to-end six-phase malware
+    analysis.
+  references/re-library/malware/workflow/malware-dynamic-analysis.md: When executing a sample in a sandbox
+    to observe runtime behavior and capture traffic.
+  references/re-library/malware/reporting/malware-report-writer.md: When writing or structuring a malware
+    analysis report or executive summary.
+  references/re-library/malware/triage/malware-triage.md: When performing initial assessment and family
+    classification of a sample.
+  references/re-library/research/osint/multi-search-engine-refs.md: When performing OSINT with precise
+    multi-engine query operators.
+  references/re-library/research/osint/multi-search-engine.md: When programmatically querying multiple
+    search engines without API keys.
+  references/re-library/android/signing/native-sign-recovery.md: When a captured request carries a computed
+    signature generated in native code.
+  references/re-library/patterns/debugging/patterns-debugging.md: When validation logic is hidden or
+    symbolic solving is needed.
+  references/re-library/patterns/decode/patterns-decode.md: When a sample uses layered decryption or
+    obfuscated strings.
+  references/re-library/patterns/simulation/patterns-simulation.md: When a sample contains a custom
+    VM/emulator or shellcode to simulate.
+  references/re-library/patterns/catalog/patterns.md: When identifying which general RE pattern category a
+    sample falls under.
+  references/re-library/method/process/phishing-case-study.md: When two promoted conclusions under the same
+    topic key disagree.
+  references/re-library/platforms/elf/platforms-elf.md: When reversing Linux/Android ELF binaries.
+  references/re-library/platforms/hardware/platforms-hardware.md: When reversing embedded hardware, RISC-V,
+    ARM64, or microcontrollers.
+  references/re-library/platforms/kernel/platforms-kernel.md: When analyzing kernel-mode code (drivers,
+    rootkits, minifilters).
+  references/re-library/platforms/catalog/platforms.md: When analyzing binaries for non-desktop platforms
+    (macOS/iOS, IoT, CAN bus).
+  references/re-library/dynamic/rotation-characterization.md: On any rotation-flagged dispatch —
+    characterize the rotation instead of re-hooking.
+  references/re-library/android/signing/signature-check-bypass.md: When a repackaged or resigned APK crashes
+    or hangs at launch.
+  references/re-library/android/protections/stacked-protections.md: When hooks fail, captures come back
+    empty, or a decompile stays unreadable — suspect a protection layer.
+  references/re-library/tools/static/tools-advanced.md: When facing heavily packed or obfuscated binaries.
+  references/re-library/tools/crypto/tools-crypto.md: When identifying, decoding, or cracking
+    encrypted/encoded data.
+  references/re-library/tools/dynamic/tools-dynamic.md: When performing runtime analysis or function
+    hooking.
+  references/re-library/tools/static/tools.md: When setting up a static reversing workspace.
+  references/re-library/android/emulation/unidbg-algo-recovery.md: When the algorithm family is ambiguous, a
+    constant byte-search keeps missing, or the rewrite needs a cheaper oracle than device round-trips.
+  references/re-library/android/emulation/unidbg-env-filling.md: When an emulation harness crashes, stalls
+    on a syscall, or runs clean but answers wrong.
+  references/re-library/android/emulation/unidbg-harness-bringup.md: When a harness plan must pick a hook
+    framework, an instruction hook throws or is ignored, or a packed SO refuses to load.
+  references/re-library/method/process/verification-safety.md: Before invoking candidate functions, applying
+    bypass patches, or typing a new evidence item's state transition.
+  references/re-library/patterns/vm/vm-deobfuscation-routing.md: When an opaque one-line JS or flattened
+    native target needs a recovery-lane decision.
+  references/re-library/patterns/vm/vm-protection-anatomy.md: When a hardened native function decompiles
+    into a dispatch loop with semantic-free case bodies.
+  references/re-library/web/crawler/web-crawler-engineering.md: After access is solved on a web target —
+    designing sustainable collection ops or triaging a CAPTCHA surface.
+  references/re-library/web/labs/web-re-quickref.md: Before opening the browser on a web target (injected
+    into web workspace CLAUDE.md at init).
+  references/re-library/web/risk-control/web-risk-control.md: When a request is blocked or challenged —
+    classify the signal, identify the vendor stack, pick the handling path.
+  references/re-library/method/formats/wire-format-recognition.md: When a captured request or response body
+    is unreadable bytes, or a framed stream must be parsed before decoding.
 population_b:
 - from: references/agent-three-state-charter.md
   to: references/contracts/agent-three-state-charter.md

@@ -137,7 +137,7 @@ def classify(shape, trace):
 
 - Deobfuscated-form VM triage (three-feature vote): [jsvmp-triage.md](../../web/vm/jsvmp-triage.md)
 - Variant-judgment falsifier family: [falsifier-library.md](../../method/process/falsifier-library.md)
-- Concrete flattening/MBA countermeasure patterns (tool-level, verify currency): [anti-analysis.md](anti-analysis.md#control-flow-flattening-advanced)
+- Concrete flattening/MBA countermeasure patterns (tool-level, verify currency): [anti-analysis.md](../../anti-analysis/catalog/anti-analysis.md#control-flow-flattening-advanced)
 - Flattening inside a sign-recovery ladder: [native-sign-recovery.md](../../android/signing/native-sign-recovery.md)
 - Unpacking before this card applies: [stacked-protections.md](../../android/protections/stacked-protections.md)
 

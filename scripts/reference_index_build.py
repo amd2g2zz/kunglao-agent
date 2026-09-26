@@ -40,6 +40,7 @@ Exit codes: 0 = written/verified; 1 = drift (with --check) or refusal
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -55,13 +56,31 @@ DOMAIN_FILE = "_index-{domain}.md"
 HAND_BEGIN = "<!-- BEGIN hand: top-level references -->"
 HAND_END = "<!-- END hand: top-level references -->"
 
+# Generation-time lint gate (#395 anti noise-laundering): the index emits
+# card frontmatter and mapping display strings byte-for-byte, so anything
+# banned in a card's description is banned HERE — a noisy card edit must
+# either propagate cleanly or fail the regen loudly, never launder through.
+_CJK_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+_ISSUE_REF_RE = re.compile(r"#\d+")
+_ISO_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
+
+# Depth bands (size proxy, deterministic): DEEP >= 150 lines, PART 60-149,
+# STUB < 60. Line counts are recomputed at generation time, so the column
+# can never drift from the cards it describes.
+DEEP_MIN_LINES = 150
+PART_MIN_LINES = 60
+
 GLOBAL_HEADER = """# references/ Domain Index — progressive disclosure entry point
 
 > Orchestrator: read this file once per round, pick a domain, dispatch
 > the worker, worker reads `_index-<domain>.md`, then loads specific
 > files. GENERATED FILE — regenerate with
 > `python scripts/reference_index_build.py`; entries byte-match card
-> frontmatter. Hand edits outside the marked hand region are overwritten.
+> frontmatter; `When to read` cells come from the mapping's
+> `when_to_read:` block and `Depth` cells are recomputed from each card's
+> line count (DEEP >= 150, PART 60-149, STUB < 60). Generation refuses
+> CJK chars, issue refs and internal dates in index-emitted text.
+> Hand edits outside the marked hand region are overwritten.
 
 ## Domain table
 
@@ -84,8 +103,8 @@ INDEXFILES_HEADER = """
 RELIB_HEADER = """
 ## re-library/ (Reverse Engineering Knowledge Base)
 
-| File | Category | Purpose | When to read |
-|------|----------|---------|--------------|
+| File | Category | Purpose | When to read | Depth |
+|------|----------|---------|--------------|-------|
 """
 
 DOMAIN_HEADER = """# {domain} domain index (file level)
@@ -99,6 +118,43 @@ DOMAIN_HEADER = """# {domain} domain index (file level)
 def _refusal(message: str) -> int:
     print(f"reference_index_build: refusal: {message}", file=sys.stderr)
     return 1
+
+
+# ------------------------------------------------------- generation-time lint
+
+def _lint_display_text(where: str, field: str, value: object) -> None:
+    """Reject noise in a display-emitted string (frontmatter description /
+    name, mapping domain purposes, scenario labels and expressions)."""
+    if not isinstance(value, str):
+        return
+    cjk = _CJK_RE.search(value)
+    if cjk:
+        raise Refusal(
+            f"{where}: {field} carries a CJK char {cjk.group(0)!r} — "
+            "index-emitted text must be English-uniform")
+    issue_ref = _ISSUE_REF_RE.search(value)
+    if issue_ref:
+        raise Refusal(
+            f"{where}: {field} carries an issue ref {issue_ref.group(0)!r} — "
+            "internal tracker numbers stay out of the index face")
+    date = _ISO_DATE_RE.search(value)
+    if date:
+        raise Refusal(
+            f"{where}: {field} carries an internal date {date.group(0)!r} — "
+            "card fixes must propagate or fail loudly, not date-stamp the index")
+
+
+def _lint_frontmatter(rel_path: str, fm: dict) -> None:
+    for field in ("name", "description"):
+        _lint_display_text(rel_path, f"frontmatter {field}", fm.get(field))
+
+
+def _lint_mapping(doc: dict) -> None:
+    for domain, purpose in (doc.get("domains") or {}).items():
+        _lint_display_text("mapping domains", str(domain), purpose)
+    for label, expr in (doc.get("scenarios") or {}).items():
+        _lint_display_text("mapping scenarios", str(label), label)
+        _lint_display_text("mapping scenarios", str(label), expr)
 
 
 # ------------------------------------------------------------- data loading
@@ -115,6 +171,7 @@ def _load_mapping(root: Path) -> dict:
     for key in ("domains", "scenarios", "cards"):
         if not doc.get(key):
             raise Refusal(f"mapping block {key!r} is missing or empty")
+    _lint_mapping(doc)
     return doc
 
 
@@ -129,6 +186,7 @@ def _card_frontmatter(root: Path, rel_path: str) -> dict:
     fm = yaml.safe_load(text.split("---\n", 2)[1])
     if not isinstance(fm, dict) or not fm.get("description"):
         raise Refusal(f"{rel_path}: frontmatter lacks a description")
+    _lint_frontmatter(rel_path, fm)
     return fm
 
 
@@ -139,6 +197,35 @@ def _current_face(root: Path, row: dict) -> str:
         if rel and (root / rel).is_file():
             return rel
     raise Refusal(f"{row.get('from')}: neither mapping path exists on disk")
+
+
+def _depth_band(root: Path, rel_path: str) -> str:
+    """Deterministic depth/size cell: DEEP/PART/STUB + line count."""
+    n_lines = len((root / rel_path).read_text(encoding="utf-8").splitlines())
+    if n_lines >= DEEP_MIN_LINES:
+        band = "DEEP"
+    elif n_lines >= PART_MIN_LINES:
+        band = "PART"
+    else:
+        band = "STUB"
+    return f"{band} ({n_lines})"
+
+
+def _when_to_read(doc: dict, row: dict) -> str:
+    """The mapping-declared one-line read trigger; empty cells refuse.
+    Keyed by the mapping `to` path, falling back to `from` pre-move."""
+    wtr = doc.get("when_to_read") or {}
+    entry = ""
+    for key in ("to", "from"):
+        candidate = wtr.get(row.get(key, ""), "")
+        if isinstance(candidate, str) and candidate.strip():
+            entry = candidate
+            break
+    if not entry.strip():
+        raise Refusal(
+            f"{row.get('from')}: mapping when_to_read cell is missing or "
+            "empty — populate it in references/re-library/_mapping.yaml")
+    return entry.strip()
 
 
 class Refusal(Exception):
@@ -204,7 +291,8 @@ def _render_global(root: Path, doc: dict) -> str:
         fm = _card_frontmatter(root, face)
         rel_in_refs = face[len("references/"):]
         out.append(f"| `{rel_in_refs}` | {row['domain']} | "
-                   f"{_esc(fm['description'])} |  |\n")
+                   f"{_esc(fm['description'])} | {_esc(_when_to_read(doc, row))} | "
+                   f"{_depth_band(root, face)} |\n")
 
     out.append(_preserved_hand_region(root / INDEX_REL))
     return "".join(out)

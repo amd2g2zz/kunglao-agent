@@ -7,11 +7,11 @@ every-turn check; this file carries the case evidence and step-by-step protocols
 ## Why convergence-driven (not notification-driven)
 
 Cross-workspace research (8 sessions / 6 workspaces / 3 sample types) showed
-every "傻等" / "kunglao-agent 笨了" complaint traces to one root cause: the
+every "sit idle waiting" / "kunglao-agent is dumb" complaint traces to one root cause: the
 orchestrator was event-reactive — it acted when poked (worker notification /
 user prompt), then idled with open claims + free slots. The agent itself
-diagnosed this in 2026-07-28 (asst[2676]): "Loop 是 notification-driven 不是
-converge-driven… 没有'自动检查还有没有 open claim 并继续 dispatch'的内驱力."
+diagnosed this in 2026-07-28 (asst[2676]): "The loop is notification-driven, not
+convergence-driven... it has no inner drive to 'automatically check whether open claims remain and keep dispatching.'"
 
 Prior v1.8.x fixes only added rules; the architecture stayed one-shot reactive.
 v1.9 makes convergence-driven dispatch the core behavior, with an executable
@@ -51,7 +51,7 @@ skill's setup.sh? Dispatched a worker to fix it?"
 
 `general-purpose` is allowed ONLY when no specialist fits.
 
-*Case evidence*: 2026-07-28 — "kunglao-agent 没有自己专有的 subagent 都是通用 agent".
+*Case evidence*: 2026-07-28 — "kunglao-agent has no dedicated subagents of its own, they are all general-purpose agents".
 The specialists exist; the orchestrator kept picking general-purpose.
 
 *Ask before dispatching*: "Is there a specialist agent whose exact job this
@@ -61,13 +61,13 @@ is? If yes, why am I not using it?"
 
 Claude Code's cost warnings are noise to you. They are NEVER a stop reason.
 
-If the user says "不要考虑成本" / "don't care about cost" / "跑不完才是最大成本":
+If the user says "don't factor in cost" / "don't care about cost" / "not finishing is the biggest cost":
 write `cost_override=true` into `analysis_state.txt`. All subsequent cost
 warnings in this session are info-only. You may stop for cost ONLY if the
-user explicitly says "stop for cost" / "成本超了停下".
+user explicitly says "stop for cost" / "the cost has overrun, stop".
 
-*Case evidence*: 2026-07-28 + 2026-07-30 — the user said "对于成本提示而中断才是最大的成本"
-and "跑不完就是最大的成本" across multiple sessions. The agent kept stopping.
+*Case evidence*: 2026-07-28 + 2026-07-30 — the user said "interrupting over cost warnings is the biggest cost"
+and "not finishing IS the biggest cost" across multiple sessions. The agent kept stopping.
 
 *Ask when a cost warning fires*: "Did the user authorize stopping for cost?
 If not, this is noise — keep dispatching."
@@ -80,8 +80,8 @@ You are a daemon, not a one-shot. Every turn:
 - A worker reporting "stuck" / "blocked" / "waiting for X" → that is YOUR
   signal to provide X, reroute, or absorb the task. Do not leave it alone.
 
-*Case evidence*: 2026-07-28 — "监视列表好像只有一个对象,不是应该所有 subagent 都应该被
-监视" + "似乎不会监视 subagent 的动态只会傻等,哪怕犯错了也不管".
+*Case evidence*: 2026-07-28 — "the watch list seems to track only one object; shouldn't every subagent be
+watched" + "it seems to never watch subagent activity and just sits idle waiting, ignoring even failures".
 
 *Ask each turn*: "Have I checked EVERY active worker's status file? Is any
 stuck or waiting on me?"
@@ -95,9 +95,9 @@ dopamine hit of "✅ committed" is not progress.
 After every housekeeping action, re-run the convergence check. "What's
 next?" is always grounded in `claim-register.yaml`, never in your last commit.
 
-*Case evidence*: 2026-07-28, the agent's own diagnosis (asst[2676]): "每次 worker 完成,
-我 commit + 更新 _INDEX + 写 progress.txt。这些记录了状态,没改变状态。但
-commit 的 ✅ 给了一种推进感,欺骗自己以为任务往前走了。"
+*Case evidence*: 2026-07-28, the agent's own diagnosis (asst[2676]): "every time a worker completes,
+I commit + update _INDEX + write progress.txt. These record state, they don't change it. But
+the commit's ✅ gave a feeling of progress, deceiving myself into thinking the task had moved forward."
 
 *Ask after housekeeping*: "Did the open-claim count actually drop? If not,
 I made notes, not progress."
@@ -164,8 +164,6 @@ carries single-method confidence — a different method can overturn it).
 analysis (`covers_attempt` versioning).
 
 Why questions, not a taxonomy: the user explicitly rejected a fixed failure-type
-checklist ("以上我只是举例并不是只有这些问题"). A menu of 5 failure modes
+checklist ("the above was just examples — these are not the only problems"). A menu of 5 failure modes
 becomes a checklist the agent picks from without thinking. The 3 questions
 force reasoning; the gate enforces that the reasoning happens before the next action.
-
-recall_useful: pending

@@ -40,6 +40,9 @@ def _root(tmp_path: Path) -> Path:
         "schema": rib.MAPPING_SCHEMA,
         "domains": {"web": "Web RE knowledge"},
         "scenarios": {"Demo scenario": "web (demo-card)"},
+        "when_to_read": {
+            "references/re-library/web/labs/demo-card.md": "when the demo runs",
+        },
         "cards": [{"from": "references/re-library/demo-card.md",
                    "to": "references/re-library/web/labs/demo-card.md",
                    "domain": "web", "family": "labs"}],
@@ -167,3 +170,102 @@ def test_exit_codes_via_subprocess(tmp_path: Path):
             "--root", str(tmp_path)]
     done = subprocess.run(argv, capture_output=True, text=True, check=False)
     assert done.returncode == 0
+
+
+# ------------------------------------------------ frontmatter lint gate (#395)
+
+def _root_with_card(tmp_path: Path, fm_body: str) -> Path:
+    relib = tmp_path / "references" / "re-library"
+    relib.mkdir(parents=True)
+    (relib / "demo-card.md").write_text(
+        "---\n" + fm_body + "\n---\n\nbody\n", encoding="utf-8")
+    doc = {
+        "schema": rib.MAPPING_SCHEMA,
+        "domains": {"web": "Web RE knowledge"},
+        "scenarios": {"Demo scenario": "web (demo-card)"},
+        "when_to_read": {
+            "references/re-library/web/labs/demo-card.md": "when the demo runs",
+        },
+        "cards": [{"from": "references/re-library/demo-card.md",
+                   "to": "references/re-library/web/labs/demo-card.md",
+                   "domain": "web", "family": "labs"}],
+    }
+    (relib / "_mapping.yaml").write_text(
+        yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return tmp_path
+
+
+CLEAN_FM = ("name: demo-card\n"
+            "description: covers the demo scenario; not for the other case.\n"
+            "domain: web\nfamily: labs\n")
+
+
+def test_lint_clean_frontmatter_passes(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM)
+    assert _run(tmp_path) == 0
+
+
+def test_lint_rejects_cjk_in_description(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM.replace(
+        "covers the demo scenario", "covers the 演示 scenario"))
+    assert _run(tmp_path) == 1
+    _run(tmp_path)
+    assert _run(tmp_path, "--check") == 1  # generation-time, not write-time only
+
+
+def test_lint_rejects_issue_ref_in_description(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM.replace(
+        "description: covers the demo scenario; not for the other case.",
+        'description: "covers the demo scenario (issue #123); not for the other case."'))
+    assert _run(tmp_path) == 1
+
+
+def test_lint_rejects_internal_date_in_description(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM.replace(
+        "covers the demo scenario", "covers the demo scenario per 2026-08-27 ruling"))
+    assert _run(tmp_path) == 1
+
+
+def test_lint_rejects_cjk_in_name(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM.replace(
+        "name: demo-card", "name: demo-卡"))
+    assert _run(tmp_path) == 1
+
+
+def test_lint_rejects_noisy_mapping_display_strings(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM)
+    map_path = tmp_path / "references" / "re-library" / "_mapping.yaml"
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8"))
+    doc["domains"]["web"] = "Web RE 知识库"
+    map_path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    assert _run(tmp_path) == 1
+
+
+def test_lint_missing_when_to_read_refuses(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM)
+    map_path = tmp_path / "references" / "re-library" / "_mapping.yaml"
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8"))
+    doc["when_to_read"] = {}  # cell must be populated for every .md card
+    map_path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    assert _run(tmp_path) == 1
+
+
+def test_when_to_read_and_depth_cells_emitted(tmp_path: Path):
+    _root_with_card(tmp_path, CLEAN_FM)
+    assert _run(tmp_path) == 0
+    text = (tmp_path / "references" / "_INDEX.md").read_text(encoding="utf-8")
+    line = next(l for l in text.splitlines() if l.startswith("| `re-library/"))
+    cells = [c.strip() for c in line.strip("|").split("|")]
+    assert len(cells) == 5
+    assert cells[3] == "when the demo runs"
+    assert cells[4] == "STUB (9)"  # --- + 6 fm lines + blank + body, per fixture
+
+
+def test_real_tree_when_to_read_fully_populated():
+    """Acceptance for #395: no empty When-to-read cell in the committed index."""
+    map_path = ROOT / "references" / "re-library" / "_mapping.yaml"
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8"))
+    wtr = doc.get("when_to_read") or {}
+    missing = [row["to"] for row in doc["cards"]
+               if row["to"].endswith(".md") and not wtr.get(row["to"], "").strip()]
+    assert not missing, f"cards without when_to_read: {missing}"

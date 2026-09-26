@@ -1,11 +1,12 @@
 
-**Heuristic - 5 self-check questions before any orchestrator action**:
-  1. Is this host-channel (mcp__x64dbg__start_session, mcp__frida__spawn, etc.)? If yes -> BLOCK (Hard prohibition #5).
-  2. Does this load the sample on the host? If yes -> BLOCK.
-  3. Is the agent's verdict self-stamped (verifier_id == worker_id)? If yes -> BLOCK (F-8, see section 1b maker-checker).
-  4. Did I re-issue the same dispatch without backtrack? If yes -> REDIRECT to backtrack_gate.py (F-11).
-  5. Am I waiting on user direction (fan-wen)? If yes -> DECIDE myself (see F-13 + section 9 rule 5 - just decide per priority_ratio.py / section 8 / section 9).
 # Orchestrator Guardrails (kunglao-agent §1-§6 reference)
+
+> **Heuristic - 5 self-check questions before any orchestrator action**:
+>   1. Is this host-channel (mcp__x64dbg__start_session, mcp__frida__spawn, etc.)? If yes -> BLOCK (Hard prohibition #5).
+>   2. Does this load the sample on the host? If yes -> BLOCK.
+>   3. Is the agent's verdict self-stamped (verifier_id == worker_id)? If yes -> BLOCK (F-8, see section 1b maker-checker).
+>   4. Did I re-issue the same dispatch without backtrack? If yes -> REDIRECT to backtrack_gate.py (F-11).
+>   5. Am I waiting on user direction (fan-wen)? If yes -> DECIDE myself (see F-13 + section 9 rule 5 - just decide per priority_ratio.py / section 8 / section 9).
 
 > The non-negotiable addendum to "You are the ORCHESTRATOR". These rules
 > exist because they are the rules most frequently violated in practice —
@@ -223,7 +224,7 @@ for each worker in active-worker registry:
 
 **Why the registry is load-bearing.** Without it, the orchestrator
 watches one worker at a time (the last dispatched) and ignores others.
-The user flagged "你的监视列表好像只有一个对象" — that's the bug.
+The user flagged "your watch list seems to track only one object" — that's the bug.
 The registry prevents pathological single-focus.
 
 1. Every orchestrator turn: read ALL registered `worker-status-*.md`
@@ -455,7 +456,7 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   reason to idle.
 
 - **§6.1b — heartbeat must be REGISTERED, not claimed (v1.9.25/26, anti-spoofed-startup).**
-  "监控已启动" ("monitoring started") is a claim the orchestrator currently
+  "Monitoring started" is a claim the orchestrator currently
   cannot self-verify. **Heartbeat registration is fused into /loop itself
   (v1.9.26)**: Phase 0 generates a unified heartbeat prompt —
   `python scripts/heartbeat_loop_prompt.py <ws>` — whose first action is
@@ -515,5 +516,3 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   counting basis; no collapsed multi-basis figures, no category renames
   like "70 BPF_CALL" → "70 helper calls" per the global rule
   `~/.claude/rules/common/numeric-fidelity.md`).
-
-recall_useful: pending

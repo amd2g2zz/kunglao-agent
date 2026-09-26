@@ -89,10 +89,10 @@ grep -aicE "frida|gum-js-loop|ptrace|xposed|emulator" extracted/lib/*/libtarget.
 ## Cross-references
 
 - Detector-class countermeasures (anti-debug / anti-DBI / anti-VM):
-  [anti-analysis.md](anti-analysis.md#anti-dbi-dynamic-binary-instrumentation)
+  [anti-analysis.md](../../anti-analysis/catalog/anti-analysis.md#anti-dbi-dynamic-binary-instrumentation)
 - Pinning bypass by invoking through the seam:
-  [languages-platforms.md](languages-platforms.md#frida-android-certificate-pinning-bypass)
+  [languages-platforms.md](../../languages/platforms/languages-platforms.md#frida-android-certificate-pinning-bypass)
 - Payload-encryption dimension detail (opaque-body triage):
   [wire-format-recognition.md](../../method/formats/wire-format-recognition.md)
 - The main route the layers stack onto:
-  [native-sign-recovery.md](native-sign-recovery.md#the-boundary-first-ladder)
+  [native-sign-recovery.md](../signing/native-sign-recovery.md#the-boundary-first-ladder)

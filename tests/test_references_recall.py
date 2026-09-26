@@ -500,7 +500,14 @@ class TestCaseDistilledRecall:
 class TestWebRiskControlRecall:
     """The reworked web risk-control card must be recallable by vendor names
     (CN + international) and by the domain keywords of its v2 surface:
-    vendor identification, per-vendor handling, and decision heuristics."""
+    vendor identification, per-vendor handling, and decision heuristics.
+
+    #395 EN-normalized the index-emitted description face (generation-time
+    lint gate rejects CJK in card descriptions), so recall queries target
+    the romanized vendor names and English domain keywords that now carry
+    that face; the CN script vendor names remain queryable via the card
+    body, which the recall engine does not index.
+    """
 
     _CARD = "re-library/web/risk-control/web-risk-control.md"
 
@@ -511,10 +518,10 @@ class TestWebRiskControlRecall:
         return set(r.files)
 
     def test_cn_vendor_riversecurity_query(self) -> None:
-        assert self._CARD in self._paths("瑞数")
+        assert self._CARD in self._paths("RiverSecurity")
 
     def test_cn_vendor_jiasule_query(self) -> None:
-        assert self._CARD in self._paths("加速乐")
+        assert self._CARD in self._paths("JiaSuLe")
 
     def test_intl_vendor_geetest_query(self) -> None:
         assert self._CARD in self._paths("geetest")
@@ -529,7 +536,7 @@ class TestWebRiskControlRecall:
         assert self._CARD in self._paths("风控栈识别 vendor identification")
 
     def test_handling_path_query(self) -> None:
-        assert self._CARD in self._paths("厂商处理路径 挑战机制")
+        assert self._CARD in self._paths("vendor handling path challenge mechanisms")
 
     def test_heuristics_query(self) -> None:
         assert self._CARD in self._paths("启发式 decision heuristics")

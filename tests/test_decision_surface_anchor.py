@@ -72,10 +72,11 @@ class TestMutualAnchor:
 class TestTaxonomyLockstep:
     def test_every_error_class_appears_in_taxonomy_table(self) -> None:
         """Class-name lockstep: each ErrorClass value must exist as a row in
-        the taxonomy's classification table. UNCLASSIFIED is labelled in
-        Chinese in the doc (未分类) — mapped explicitly, not guessed."""
+        the taxonomy's classification table. UNCLASSIFIED carries a row label
+        that differs from the raw enum value — mapped explicitly, not guessed.
+        (#395 EN-normalized the doc; the label map tracks the doc face.)"""
         tax = TAXONOMY.read_text(encoding="utf-8")
-        label = {"UNCLASSIFIED": "未分类"}
+        label = {"UNCLASSIFIED": "Unclassified"}
         for cls in er.ErrorClass:
             needle = label.get(cls.value, cls.value)
             assert needle in tax, (

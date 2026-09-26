@@ -103,13 +103,13 @@ emulator.map(PROBE_ADDR, 0x1000, perms="r--")    # garbage tolerated: the probe
 ## Cross-references
 
 - Output-shape falsifier table behind families 1 and 3:
-  [native-sign-recovery.md](native-sign-recovery.md#closure-summary)
+  [native-sign-recovery.md](../../android/signing/native-sign-recovery.md#closure-summary)
 - Protobuf-class parse loop behind family 4:
-  [wire-format-recognition.md](wire-format-recognition.md#protobuf-class-parsing-without-a-schema)
+  [wire-format-recognition.md](../formats/wire-format-recognition.md#protobuf-class-parsing-without-a-schema)
 - Three-of-two variant discrimination behind family 10:
-  [jsvmp-triage.md](jsvmp-triage.md#three-feature-thresholds)
+  [jsvmp-triage.md](../../web/vm/jsvmp-triage.md#three-feature-thresholds)
 - Flattening/VMP countermeasures once the variant is confirmed:
-  [anti-analysis.md](anti-analysis.md#control-flow-flattening-advanced)
+  [anti-analysis.md](../../anti-analysis/catalog/anti-analysis.md#control-flow-flattening-advanced)
 - Layered-defense orthogonality behind the family 11 peel-loop:
   [stacked-protections.md](../../android/protections/stacked-protections.md)
 - Observation-channel discipline (SVC floor, JNI-boundary channel, windowing)
@@ -119,6 +119,6 @@ emulator.map(PROBE_ADDR, 0x1000, perms="r--")    # garbage tolerated: the probe
   [vm-protection-anatomy.md](../../patterns/vm/vm-protection-anatomy.md)
 - Stubbing-loop context for the family 16 counter (probe-memory allocation)
   and the family 17 fake-content discipline:
-  [native-sign-recovery.md](native-sign-recovery.md#the-incremental-stubbing-loop-emulation-half)
+  [native-sign-recovery.md](../../android/signing/native-sign-recovery.md#the-incremental-stubbing-loop-emulation-half)
 - Which evidence type may update what after a falsifier fires:
   [verification-safety.md](verification-safety.md#evidence-type-vocabulary)

@@ -1,11 +1,11 @@
 ---
 name: case-distilled-gap-report-D1
-description: '#364 internal campaign distillation wave (D1, android risk-control lane, desensitized):
+description: 'Internal campaign distillation wave (D1, android risk-control lane, desensitized):
   algorithmic clustering record (TF-IDF + spherical k-means, silhouette-selected k) and per-cluster
   verdicts, six case-distilled cards with dedup lines, overlap rows citing our cards, abandoned
-  case-specific rows, candidate tool adoptions (route through #359), and the desensitization audit
-  result with blocklist extension categories. Read before extending the android case-distilled lane
-  or judging a follow-up adoption.'
+  case-specific rows, candidate tool adoptions with their routing targets, and the desensitization
+  audit result with blocklist extension categories. Read before extending the android case-distilled
+  lane or judging a follow-up adoption.'
 domain: android
 family: case-distilled
 source_id: D1

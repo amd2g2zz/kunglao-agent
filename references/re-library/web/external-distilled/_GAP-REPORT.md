@@ -1,6 +1,6 @@
 ---
 name: external-distilled-gap-report
-description: '#358 external distillation wave-1 gap report (desensitized): per-source three-valued verdicts
+description: 'External distillation wave-1 gap report (desensitized): per-source three-valued verdicts
   (landed / overlap / abandoned-case-specific) with what landed where, cluster-card dedup lines, the recorded
   delivery-shape conflict row, and candidate capability adoptions (undefined-path diagnostic runner, residue-metric
   family classifier, machine runtime-contract audit face). Read before extending the external-distilled lane or
