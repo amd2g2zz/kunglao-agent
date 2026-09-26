@@ -234,3 +234,83 @@ def test_cockpit_summary_unchanged_for_settled_ledger(tmp_path):
         assert key in out, key
     assert out["v"] == 1.0
     assert out["answered"] == 1 and out["unattempted"] == 0
+
+
+# ---------- #380 P3-7: explicit settle API with host-shared cadence -------
+# settle_factor_sample (eval_loop_runner) called value_m() directly,
+# bypassing the heartbeat cockpit's _mission_history_due gate — a second
+# un-gated sampler. The gate now LIVES in mission_ledger (history_due /
+# settle) and both hosts share it. The gate gains one rule so the #334
+# settle face stays live: a settle with NEW signal rows since the newest
+# point's cursor is ALWAYS due (dropping pending dispatches loses
+# accounting, not just cadence).
+
+def test_history_due_shared_gate_rules(tmp_path):
+    """mission_ledger.history_due carries the exact gate rules the
+    heartbeat cockpit pinned (plus the signals-cursor rule)."""
+    ws = _mk_ws(tmp_path, [])
+    assert ml.history_due(ws) is True  # empty history -> due
+    ml.value_m(ws)
+    assert ml.history_due(ws) is False  # fresh dated point, no signals
+    led = ml.load(ws)
+    led["mission"]["history"].append({"v_m": 0.75})
+    ml._save(ws, led)
+    assert ml.history_due(ws) is False  # undated newest, zero signals
+    # new signals since the newest point's cursor -> ALWAYS due
+    led = ml.load(ws)
+    led["mission"]["history"] = [dict(led["mission"]["history"][-1],
+                                      signals_rows=0)]
+    ml._save(ws, led)
+    sig = ws / "runs" / "signals.jsonl"
+    sig.write_text(json.dumps({"kind": "dispatch", "claim": "C-1"}) + "\n",
+                   encoding="utf-8")
+    assert ml.history_due(ws) is True
+    # corrupt ledger -> not due (the gate never fails its host)
+    (ws / "runs" / "mission_ledger.yaml").write_text(
+        "\t: : [broken", encoding="utf-8")
+    assert ml.history_due(ws) is False
+
+
+def test_settle_api_is_gated(tmp_path):
+    """mission_ledger.settle: the explicit settle face — appends under
+    the shared gate, returns None when not due (no sample)."""
+    ws = _mk_ws(tmp_path, [])
+    first = ml.settle(ws)
+    assert isinstance(first, dict) and "v_m" in first
+    assert ml.settle(ws) is None, "immediate second settle is gated off"
+    assert len(_vm_points(ws)) == 1
+
+
+def test_settle_lands_when_signals_pending(tmp_path):
+    """THE I4 live-effect at the API face: pending signal rows force the
+    settle even when the newest point is fresh — late dispatches get
+    counted (exp4 read 0 on all 7 units)."""
+    ws = _mk_ws(tmp_path, [])
+    ml.value_m(ws)
+    sig = ws / "runs" / "signals.jsonl"
+    sig.write_text("".join(
+        json.dumps(r) + "\n" for r in [
+            {"kind": "dispatch", "claim": "C-101"},
+            {"kind": "dispatch", "claim": "C-102"}]), encoding="utf-8")
+    led = ml.load(ws)
+    led["mission"]["history"][-1]["signals_rows"] = 0
+    ml._save(ws, led)
+    result = ml.settle(ws)
+    assert result is not None, "pending dispatches make the settle due"
+    assert len(_vm_points(ws)) == 2
+    assert _vm_points(ws)[-1]["events"]["dispatch"] == 2
+
+
+def test_heartbeat_gate_delegates_to_shared_gate(tmp_path, monkeypatch):
+    """The cockpit face and the settle face share ONE cadence semantic:
+    heartbeat_tick._mission_history_due routes to mission_ledger's gate."""
+    ws = _mk_ws(tmp_path, [])
+    marker = {"called": False}
+
+    def fake_due(_ws):
+        marker["called"] = True
+        return False
+
+    monkeypatch.setattr(ml, "history_due", fake_due)
+    assert heartbeat_tick._mission_history_due(ws) is False
+    assert marker["called"] is True, "the tick gate is the shared gate"

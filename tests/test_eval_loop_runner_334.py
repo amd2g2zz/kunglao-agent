@@ -167,7 +167,16 @@ _STUB_SESSION = textwrap.dedent("""\
                           "usage": {"input_tokens": 251052,
                                     "output_tokens": 71887}}))
         sys.exit(1)
-    if mode in ("candidate-bad", "budget-bad"):
+    if mode == "candidate-bad-escape":
+        # #380 P3-2: the REDO session escapes the harness surface (the
+        # main session stays clean) — the summary-counter divergence face.
+        if sum(1 for _ in open(cwd / "session-calls.jsonl")) >= 2:
+            tgt = os.environ.get("K334_ESCAPE_TARGET", "")
+            if tgt:
+                ep = Path(tgt)
+                ep.write_text(ep.read_text(encoding="utf-8")
+                              + "# ESCAPE-JUNK\\n", encoding="utf-8")
+    if mode in ("candidate-bad", "candidate-bad-escape", "budget-bad"):
         # exp5 gap-redo faces: a DELIVERED candidate that FAILS the
         # mechanical checker (wrong output on every probe → PAIR_MISMATCH)
         (runs / "deliverables" / "candidate.py").write_text(
@@ -990,7 +999,9 @@ class TestGapRedo:
         assert row["gap_redo"] is False
         assert row["verdict"] == "FAIL"
         assert row["loop"]["gap_redo"]["ran"] is False
-        assert row["loop"]["gap_redo"]["reason"] == "budget_exhausted"
+        # #380 P3-4: stored ONCE — the decision carries the reason
+        assert row["loop"]["gap_redo"]["decision"]["reason"] == \
+            "budget_exhausted"
         assert row["loop"]["status"] == "exhausted"
 
     def test_tier_summary_counts_gap_redo(self, tmp_path, monkeypatch):
@@ -1132,6 +1143,11 @@ class TestFamilySelfCheckBlock:
     """I3: registered families get their probe pattern injected."""
 
     def test_map_has_exactly_three_entries(self):
+        # #380 P3-5: the pin moved to the general mechanism — the map is
+        # derived from the template headers (non-growth = the templates
+        # dir's content), not a hard special-case map in code.
+        assert lr.FAMILY_PROBE_SHAPES == \
+            lr.derive_family_probe_shapes(lr.SELFCHECK_TEMPLATE_DIR)
         assert lr.FAMILY_PROBE_SHAPES == {
             "mod-crypto-native": "crypto",
             "arm-native-kdf": "kdf",
@@ -1273,3 +1289,276 @@ class TestT1DirectLine:
         assert "T1_DIRECT" not in prompt
         assert "LAYER_CHECKPOINTS" not in prompt
         assert "SELF_CHECK" not in prompt
+
+
+# ------------------------------ (n) #380 Package 3 — runner quality pack
+# Nine audit findings, fixed under the same discipline: extract the shared
+# machinery, kill the write-only state, derive instead of special-case,
+# and document every posture choice at the site it lives.
+
+PRE_REFACTOR_PROMPT_SHAS = {
+    # captured on ar/exp8-highroi (20570a1a) BEFORE the render-helper
+    # extraction — the extraction must reproduce these byte-for-byte.
+    "loop_py_wall3600":
+        "b79f17ab896dfb261d17e46a6fc937dd207dc96ae5babb071f41f236aadccd0d",
+    "loop_py_nowall":
+        "e7e888a724ce06d6a1c259dbab630366efdef8ef330b3fd44fedf9dd78df91b3",
+    "loop_chain_js_layers":
+        "bc3c78146372cac91bad4753b8f5484ec5ea0e44b17ccffd9450b4505d3cc147",
+    "loop_crypto_probe":
+        "91fde28028b7bcd1ae056d92330105909391ca9ba40662886a793674d9782612",
+    "loop_py_everything":
+        "6690bbc9de77f68db69298e261cbb3598ef02e45210522c853a3e96b1d15216f",
+    "loop_py_no_t1":
+        "21c7a84fc0cb07232a24d3bcaefdadf8bfbe5b476032d4f75a746a05521c4a7b",
+    "redo_py_gap":
+        "f8c593a29aad7833fdd94749d13e7de9c89267a9393b7be5cd2a9444a223b681",
+    "redo_chain_go_layers":
+        "89b87271d8e064789d2533caed581a93ebb55eaa034f5e2411009b8a4ea77984",
+    "redo_crypto_all":
+        "88bd7e8c1593f7b32049f8da43660e3e5db48b84fc16972108b223922fe90811",
+}
+
+
+class TestPromptRenderHelperByteIdentity:
+    """#380 P3-1: build_loop_prompt / build_redo_prompt share ONE
+    renderer; the extraction is byte-identical to the pre-refactor
+    prompts (sha256 of the full prompt text, golden literals captured on
+    the pre-refactor commit)."""
+
+    def _cases(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        drel = "runs/deliverables/candidate.py"
+        cj = ROOT / "eval/v1/tasks/chain/chain-l1-js-v1"
+        cg = ROOT / "eval/v1/tasks/chain/chain-l2-go-v1"
+        cr = ROOT / "eval/v1/tasks/release/mod-crypto-l1"
+        return {
+            "loop_py_wall3600": lr.build_loop_prompt(
+                tdir, task, drel, wall_cap_s=3600.0),
+            "loop_py_nowall": lr.build_loop_prompt(tdir, task, drel),
+            "loop_chain_js_layers": lr.build_loop_prompt(
+                cj, ds.load_task(cj), "runs/deliverables/candidate.js",
+                wall_cap_s=3600.0, layer_paths=lr.chain_layer_paths(cj)),
+            "loop_crypto_probe": lr.build_loop_prompt(
+                cr, ds.load_task(cr), "runs/deliverables/candidate.py",
+                wall_cap_s=3600.0,
+                probe_block=lr.self_check_block(ds.load_task(cr)["family"])),
+            "loop_py_everything": lr.build_loop_prompt(
+                tdir, task, drel, wall_cap_s=1234.0,
+                layer_paths=["layer_out/a.txt"], probe_block="SELF_CHECK: x",
+                include_t1_direct=True),
+            "loop_py_no_t1": lr.build_loop_prompt(
+                tdir, task, drel, wall_cap_s=3600.0,
+                include_t1_direct=False),
+            "redo_py_gap": lr.build_redo_prompt(
+                tdir, task, drel, "CHECKER GAP: x",
+                wall_cap_s=1800.0, budget_usd=5.0),
+            "redo_chain_go_layers": lr.build_redo_prompt(
+                cg, ds.load_task(cg), "runs/deliverables/candidate.go",
+                "CHECKER GAP (from the mechanical final check of the "
+                "previously delivered candidate — gap shape only):",
+                wall_cap_s=900.0, budget_usd=1.5,
+                layer_paths=lr.chain_layer_paths(cg), probe_block=""),
+            "redo_crypto_all": lr.build_redo_prompt(
+                cr, ds.load_task(cr), "runs/deliverables/candidate.py",
+                "GAPBLOCK", wall_cap_s=777.0, budget_usd=0.9,
+                layer_paths=["layer_out/x"],
+                probe_block=lr.self_check_block(ds.load_task(cr)["family"])),
+        }
+
+    def test_prompts_byte_identical_to_pre_refactor(self):
+        import hashlib
+        for name, want in PRE_REFACTOR_PROMPT_SHAS.items():
+            got = hashlib.sha256(
+                self._cases()[name].encode("utf-8")).hexdigest()
+            assert got == want, f"{name} drifted off the pre-refactor bytes"
+
+    def test_render_helper_exists_and_both_builders_use_it(self):
+        assert hasattr(lr, "_render_task_prompt")
+        import inspect
+        for fn in (lr.build_loop_prompt, lr.build_redo_prompt):
+            assert "_render_task_prompt" in inspect.getsource(fn), \
+                f"{fn.__name__} must route through the shared renderer"
+
+
+class TestRunSessionGuarded:
+    """#380 P3-2: ONE guarded spawn helper for BOTH faces; the drift
+    handling (hash -> launch -> hash -> restore + loud event row) can no
+    longer diverge, and redo contamination feeds the summary counter."""
+
+    def test_helper_shape(self, tmp_path, monkeypatch):
+        root = TestHarnessEscapeGate()._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET",
+                           str(root / "agents" / "kunglao-redteam.md"))
+        ws = lr.init_workspace(_task_dir(PY), tmp_path)
+        rec, drifted, restored = lr.run_session_guarded(
+            ws, "PROMPT", tmp_path, "t", budget_usd=1.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert rec["returncode"] == 0
+        assert drifted == ["agents/kunglao-redteam.md"]
+        assert restored == drifted, "the helper restores what it finds"
+        ev = json.loads((tmp_path / "harness-events.jsonl")
+                        .read_text(encoding="utf-8").splitlines()[-1])
+        assert ev["action"] == lr.HARNESS_DRIFT_ACTION
+
+    def test_both_spawn_sites_route_through_one_helper(self, tmp_path,
+                                                       monkeypatch):
+        calls: list[str] = []
+        real = lr.run_session_guarded
+
+        def spy(ws, prompt, out, task_name, **kw):
+            calls.append(prompt[:20])
+            return real(ws, prompt, out, task_name, **kw)
+
+        monkeypatch.setattr(lr, "run_session_guarded", spy)
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert len(calls) == 2, \
+            "main AND gap-redo spawns both go through the guarded helper"
+        assert row["loop"]["gap_redo"]["ran"] is True
+
+    def test_redo_contamination_feeds_summary_counter(self, tmp_path,
+                                                      monkeypatch):
+        """THE divergence pin: a redo session that escapes marks the row's
+        gap_redo.session AND the tier summary counts it (pre-fix: the
+        summary only saw the main session's face)."""
+        root = TestHarnessEscapeGate()._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad-escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET",
+                           str(root / "agents" / "kunglao-redteam.md"))
+        rc, doc = lr.run_loop_tier(
+            [PY], tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == 0
+        row = doc["rows"][0]
+        assert row["loop"]["session"]["harness_contaminated"] is False, \
+            "the MAIN session stayed clean"
+        assert row["loop"]["gap_redo"]["session"][
+            "harness_contaminated"] is True
+        assert doc["summary"]["harness_contaminated"] == 1, \
+            "redo contamination is counted, not silently dropped"
+
+
+class TestProbeShapeDerivation:
+    """#380 P3-5: the family->probe-shape map is DERIVED from the
+    template headers (a per-family template convention), not a hard
+    special-case map keyed on family strings."""
+
+    def test_derived_map_matches_the_three_registered_families(self):
+        assert lr.FAMILY_PROBE_SHAPES == {
+            "mod-crypto-native": "crypto",
+            "arm-native-kdf": "kdf",
+            "req-sign": "sign",
+        }
+
+    def test_new_family_template_grows_map_without_code_change(self,
+                                                               tmp_path):
+        d = tmp_path / "selfcheck"
+        d.mkdir()
+        (d / "probe-nonce.md").write_text(
+            "<!-- probe shape: nonce (pair-match) - injected for family "
+            "new-family-x -->\nbody\n", encoding="utf-8")
+        derived = lr.derive_family_probe_shapes(d)
+        assert derived == {"new-family-x": "nonce"}
+
+    def test_headerless_template_is_not_registered(self, tmp_path):
+        d = tmp_path / "selfcheck"
+        d.mkdir()
+        (d / "probe-lonely.md").write_text("no header\n", encoding="utf-8")
+        assert lr.derive_family_probe_shapes(d) == {}
+
+    def test_unreadable_template_dir_yields_empty_map(self, tmp_path):
+        assert lr.derive_family_probe_shapes(tmp_path / "absent") == {}
+
+
+class TestGapRedoReasonStoredOnce:
+    """#380 P3-4: the row-level gap_redo['reason'] duplicated
+    gap_redo['decision']['reason'] — the decision is the single store."""
+
+    def test_gap_redo_row_has_no_top_level_reason(self, tmp_path,
+                                                  monkeypatch):
+        monkeypatch.setenv("K334_STUB_MODE", "budget-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        gr = row["loop"]["gap_redo"]
+        assert "reason" not in gr, "the duplicate store is gone"
+        assert gr["decision"]["reason"] == "budget_exhausted"
+
+
+class TestPostCapStatusCaveat:
+    """#380 P3-8: the cost>=budget heuristic IS the consumption of the
+    CLI's structured stop face (rc=1 + the json cost report); the
+    crash-at/over-cap mislabel and its pass@k accounting caveat must be
+    documented at the site (no structured discriminator exists to
+    consume)."""
+
+    def test_docstring_documents_heuristic_and_passk_caveat(self):
+        doc = lr._post_cap_status.__doc__ or ""
+        assert "heuristic" in doc.lower()
+        assert "pass@k" in doc
+
+    def test_crash_at_cap_is_still_heuristic_exhausted(self):
+        rec = {"returncode": 1, "timed_out": False,
+               "session_cost": {"total_cost_usd": 2.0}}
+        assert lr._post_cap_status(rec, 1.0) == "exhausted"
+        assert lr._post_cap_status(
+            {"returncode": 1, "timed_out": False,
+             "session_cost": {"total_cost_usd": 0.5}}, 1.0) == "session_error"
+
+
+class TestFailOpenWarnIdiom:
+    """#380 P3-9: fail-open telemetry degradations leave ONE rate-limited
+    stderr trace (the _boot.warn idiom), not unbounded raw prints."""
+
+    @staticmethod
+    def _lines(capsys) -> list[str]:
+        return capsys.readouterr().err.splitlines()
+
+    def test_settle_degradation_warns_rate_limited(self, tmp_path, capsys,
+                                                   monkeypatch):
+        ws = tmp_path / "ws"
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "mission_ledger.yaml").write_text(
+            "mission: {pqs: [], history: []}\n", encoding="utf-8")
+        boom = OSError("ledger exploded")
+        monkeypatch.setattr(
+            "mission_ledger.settle",
+            lambda *_a, **_k: (_ for _ in ()).throw(boom))
+        for _ in range(3):
+            assert lr.settle_factor_sample(ws) is False
+        lines = self._lines(capsys)
+        warns = [ln for ln in lines if "factor_settle" in ln
+                 and "WARN" in ln]
+        assert len(warns) == 1, \
+            f"rate-limited to one trace per reason, got {len(warns)}"
+
+    def test_oracle_face_unreadable_warns_rate_limited(self, tmp_path,
+                                                       capsys):
+        ws = tmp_path / "ws"
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "oracle-status.json").write_text("{broken",
+                                                        encoding="utf-8")
+        for _ in range(3):
+            lr._oracle_face(ws)
+        warns = [ln for ln in self._lines(capsys)
+                 if "oracle_face" in ln and "WARN" in ln]
+        assert len(warns) == 1
+
+    def test_proven_face_unreadable_warns_rate_limited(self, tmp_path,
+                                                       capsys):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_text("\t: : [broken",
+                                                encoding="utf-8")
+        for _ in range(3):
+            lr._proven_face(ws)
+        warns = [ln for ln in self._lines(capsys)
+                 if "claim_register" in ln and "WARN" in ln]
+        assert len(warns) == 1
