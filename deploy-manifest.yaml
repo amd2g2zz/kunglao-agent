@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: f62e9d6014ac3f7df6cfefd85b49167fd98ecf78f455b0ce38bc932ebba8d669
+    sha256: 88e74215b2bd61deeee2d36aab734814917b30010fbd931aceeb6160baf45a81
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: f197495d1d34126b8742e2467ff1414fd8af238125c54d130ce08df0050ae51d
+    sha256: 10a538c620abef3d00a6dfab6e046abe89fed87277ead10d667862ffe4fc7709
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: e49ea52ae8e82f30d6bf56cd7e3cafcff95eb3a740c8e438ca5fc13dbfb837c7
+    sha256: 1964af08d8edd99978649ec498fb80739690b6f096305a56aadcbdb34c9ca6c5
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 8d8636b423473bbe381c18cc9ef134b4801bd57f2d8394c9b606383082d5fbde
+    sha256: 2982e46c80b9594ef6f5cbb60729eff7c87d996bffc766625598f0adb95bba84
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 2985cf0eb1254e49c0ddcdcff59b78762186bf77d5baf1e881b04da79b10e116
+    sha256: cb00784b0a9d955e7ca1a2441eadc5c2269f28c2d8eb97e5021737312fb33cb3
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 63ab658496ef4b526698798e351ada382526aaee5aa393026010d56abc738a8a
+    sha256: c9ecc44c7d7a0f2c7748e6c8fe03a9c21d680f80ed957d4d60c1ef93725ff37c
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -663,7 +663,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: b252c960c201ff3381c6c968fba10ccdf43601e046ec2f263b05409e50bbe90d
+    sha256: b695dc5b553f8b51212fe5d88353d7535cc0bc328325ab5632d24d8e55ea9a6c
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -1047,11 +1047,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: ad0d4bc62dca895e89fbe624323ad587d10f2fbc958a08974c1158bf501946a2
+    sha256: 06781251a841b900c5e3939d206f616472dd916ae0cb2cd09cfb456226334f6e
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 18368e228cb378c0a14db01adf1493a433e1043dfb91f4f6593244d55ad5aee3
+    sha256: f2a0900fe2ab0f29e23318f3d7f16ccd6d3b8f63491e8ce5dc91706e0a0a29a9
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1075,7 +1075,7 @@ files:
   - src: references/_index-method.md
     dest: .claude/references/_index-method.md
     kind: asset
-    sha256: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
+    sha256: cb78ee8071ff897f860b3df31d6d0892307331c745a7fdffc9e07447038240c3
   - src: references/_index-patterns.md
     dest: .claude/references/_index-patterns.md
     kind: asset
@@ -1223,7 +1223,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 005ec54f5578028c3bc0816dc0de6aafd149c56f8e1f5d7cb5a6e041eb0ce5f8
+    sha256: 8ad30f84704eb445473cd8999c06378d86a7a693e7e8953a65ae0640e45377f8
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -1332,6 +1332,10 @@ files:
     dest: .claude/references/re-library/malware/workflow/malware-dynamic-analysis.md
     kind: asset
     sha256: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  - src: references/re-library/method/case-distilled/case-dispatch-budget-partition.md
+    dest: .claude/references/re-library/method/case-distilled/case-dispatch-budget-partition.md
+    kind: asset
+    sha256: c89dbf51bc3070cbd90848951a71f45eb74ddf48a8a774570b689fd3d6f118a9
   - src: references/re-library/method/formats/wire-format-recognition.md
     dest: .claude/references/re-library/method/formats/wire-format-recognition.md
     kind: asset
@@ -1548,6 +1552,22 @@ files:
     dest: .claude/templates/scripts/stage-unpack.py.tmpl
     kind: asset
     sha256: 2ef2bfb1d63017bbf1381a0fec0673c40167963ea24bb137807168e5fc41ec9c
+  - src: templates/selfcheck/README.md
+    dest: .claude/templates/selfcheck/README.md
+    kind: asset
+    sha256: de8057dbe9001ed625ffcd5255835d66aa9925fbdd15f533c3bac511d9aab27c
+  - src: templates/selfcheck/probe-crypto.md
+    dest: .claude/templates/selfcheck/probe-crypto.md
+    kind: asset
+    sha256: 330fbc441e56adf3a3964ad5ebd58b571c821b76f25b8ba81bc4cf55460c8599
+  - src: templates/selfcheck/probe-kdf.md
+    dest: .claude/templates/selfcheck/probe-kdf.md
+    kind: asset
+    sha256: 769a81bccb6b338b799711ed189ab41a347bfaea5046e9693ce762d1513a2a6e
+  - src: templates/selfcheck/probe-sign.md
+    dest: .claude/templates/selfcheck/probe-sign.md
+    kind: asset
+    sha256: ca6d7081b8128a8b9e7bd4291b6a8948c92e7eb2a5375dd223b18bbdf563414e
   - src: templates/state/blocker.md
     dest: .claude/templates/state/blocker.md
     kind: asset
@@ -1591,7 +1611,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b3108bf1cb27c94f5e098ffbd7366431e2cfdb70a504a3015e52a090a2a6d8a2
+    sha256: 7179874541bd13fb4452e9e0289b12db3457ae158b291fb1fffe0074895d31c8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

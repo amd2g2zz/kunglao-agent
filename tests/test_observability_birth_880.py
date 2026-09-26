@@ -97,12 +97,12 @@ class TestToolfirstDualEmit:
         ws = _ws(tmp)
         ok, _reason = wbg.check_tool_first(
             {'workspace': str(ws)}, "decode the crypto blob", "")
-        assert ok is False
-        rows = [e for e in events if e["action"] == "toolfirst_reject"]
-        assert rows, "reject face must emit toolfirst_reject"
+        assert ok is True, "H1: the reject is demoted to advisory — proceeds"
+        rows = [e for e in events if e["action"] == "toolfirst_advisory"]
+        assert rows, "H1: the reject face emits toolfirst_advisory"
         payload = json.loads(rows[-1]["detail"])
         # mode is the FINE-GRAINED face: missing_marker (no marker) vs
-        # self_attestation (dishonest marker) — both reject the dispatch
+        # self_attestation (dishonest marker) — advisory since H1, same payload
         assert payload["mode"] == "missing_marker"
         assert payload["tool"] == "crypto-tool"
         assert payload["keywords"]
@@ -136,7 +136,9 @@ class TestToolfirstDualEmit:
         assert rows and json.loads(rows[-1]["detail"])["mode"] == "no_match"
 
     def test_emit_failure_never_moves_gate_rc(self, tmp, keywords, monkeypatch):
-        """Fail-open contract (#459): observability must not gate decisions."""
+        """Fail-open contract (#459): observability must not gate decisions.
+        H1: the advisory emit crash must likewise leave the gate's (always
+        proceed) decision identical."""
         import kunglao_log
         ws = {'workspace': str(_ws(tmp))}
 
@@ -146,10 +148,10 @@ class TestToolfirstDualEmit:
         monkeypatch.setattr(kunglao_log, "emit", _boom)
         ok_pass, _r1 = wbg.check_tool_first(ws, "decode the crypto blob",
                                             "tool-catalog: crypto-tool")
-        ok_rej, _r2 = wbg.check_tool_first(ws, "decode the crypto blob", "")
+        ok_adv, _r2 = wbg.check_tool_first(ws, "decode the crypto blob", "")
         rec = wbg.toolfirst_pass_record(ws, "C-001", "decode the crypto blob",
                                         "tool-catalog: crypto-tool")
-        assert ok_pass is True and ok_rej is False and rec is False, (
+        assert ok_pass is True and ok_adv is True and rec is False, (
             "gate decisions identical with the emit crashed")
 
     def test_ws_none_stays_silent(self, events, keywords):

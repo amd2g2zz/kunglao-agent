@@ -59,6 +59,14 @@ def _make_ws(tmp_path: Path) -> Path:
     return ws
 
 
+def _emit_settlement_event(ws: Path) -> None:
+    """H1a: the tick's forensics faces (entropy/rank/backlog/detector) are
+    event-gated — one settlement row wakes them for the tick under test
+    (the bus's first read starts at a bounded tail = whole file here)."""
+    import kunglao_log
+    kunglao_log.emit(ws, "test", "claim_settled", detail="h1-face-gate")
+
+
 def _touch_heartbeat(ws: Path) -> None:
     (ws / "runs" / ".heartbeat.json").write_text(json.dumps({
         "started_ts": _iso(datetime.now(timezone.utc) - timedelta(seconds=60)),
@@ -707,11 +715,14 @@ class TestEntropyFace142:
 
     def test_tick_report_carries_entropy_face(self, tmp_path):
         """heartbeat_tick's report face (runs/.heartbeat-tick.json) gains
-        h_bits/h_pq/h_trend — the gear-shift signal decision-side."""
+        h_bits/h_pq/h_trend — the gear-shift signal decision-side. H1a
+        amendment: the face is event-gated, so the fixture emits one settlement
+        row; a no-event tick omits the face (nothing deleted)."""
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         _mission(ws, [_pq("PQ-1")], [1.0])
         _posteriors(ws, {"PQ-1": {"a": 1, "test-tick-face": 1}})
+        _emit_settlement_event(ws)
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
             capture_output=True, text=True, encoding="utf-8",

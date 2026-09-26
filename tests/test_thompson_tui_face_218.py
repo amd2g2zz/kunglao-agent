@@ -56,6 +56,13 @@ def _make_ws(tmp_path: Path) -> Path:
     return ws
 
 
+def _emit_settlement_event(ws: Path) -> None:
+    """H1a: the rank face rides the tick report only when the pass
+    consumed a ledger event — one settlement row wakes it."""
+    import kunglao_log
+    kunglao_log.emit(ws, "test", "claim_settled", detail="h1-face-gate")
+
+
 def _touch_heartbeat(ws: Path) -> None:
     (ws / "runs" / ".heartbeat.json").write_text(json.dumps({
         "started_ts": _iso(datetime.now(timezone.utc) - timedelta(seconds=60)),
@@ -321,6 +328,7 @@ class TestSingleSourceRankFace:
             encoding="utf-8")
         _seed_rank_event(ws, ranked_order=("C-2",), scores={"C-2": 0.61},
                          age_s=120)
+        _emit_settlement_event(ws)  # H1a: the rank face is event-gated
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
             capture_output=True, text=True, encoding="utf-8",

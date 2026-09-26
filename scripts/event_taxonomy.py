@@ -219,6 +219,7 @@ EMIT_ACTIONS = [
     "guard_missing",  # issue 304 fix-settlement refusal face: the fix record carries no wired guard evidence (GUARD_MISSING)
     "guard_unresolved",  # issue 304 fix-settlement refusal face: guard evidence present but file/anchor not found (GUARD_UNRESOLVED)
     "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
+    "harness_drift",  # exp3 Part A: a spawned session escaped its workspace and modified the harness surface (agents/hooks/skills/scripts) — drift detected at session exit, files restored from HEAD, session row marked harness_contaminated (eval_loop_runner)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
@@ -298,6 +299,7 @@ EMIT_ACTIONS = [
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
+    "toolfirst_advisory",  # H1 thin-base: demoted tool-first REJECT (missing_marker/self_attestation) — logged, dispatch proceeds
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
     "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)

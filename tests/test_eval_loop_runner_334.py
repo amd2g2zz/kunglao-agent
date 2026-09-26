@@ -28,8 +28,11 @@ session (budget caps) -> wait -> harvest the ledgers the REAL loop wrote
       (claim-register.yaml), the #136 task_terminal_settlement row
       (runs/logs/kunglao-*.jsonl);
   (e) BUDGET — budget exhaustion is a TERMINAL metric row
-      (loop.status=exhausted), never a crash: the runner kills an
-      over-wall-cap session and still harvests + emits the row;
+      (loop.status=exhausted), never a crash, on BOTH kill faces: the
+      runner kills an over-wall-cap session (timed_out) and the CLI stops
+      itself at/over --max-budget-usd (rc=1 + cost report) — either way
+      the row is still harvested + graded; a sub-budget rc=1 stays
+      session_error (a genuine crash);
   (f) EXTRACTOR — the loop's deliverable maps to checker candidate form
       (runs/deliverables/candidate<suffix> primary, deterministic
       workspace fallback scan, None -> structured BAD_CANDIDATE row);
@@ -86,11 +89,28 @@ _STUB_SESSION = textwrap.dedent("""\
     (cwd / "session-argv.json").write_text(
         json.dumps(sys.argv), encoding="utf-8")
     mode = os.environ.get("K334_STUB_MODE", "candidate")
+    # exp5: every stub invocation APPENDS one call row — the gap-redo
+    # tests count sessions this way (session-argv.json stays last-argv).
+    with (cwd / "session-calls.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"argv": sys.argv, "mode": mode}) + "\\n")
+    if mode == "escape":
+        # exp3 Part A: the workspace-escape face — the session writes to a
+        # HARNESS-SURFACE file OUTSIDE its cwd (the 2026-09-24 incident:
+        # an Edit on the worktree-level agents/kunglao-redteam.md), then
+        # falls through to the normal ledger path (grading still runs).
+        tgt = os.environ.get("K334_ESCAPE_TARGET", "")
+        if tgt:
+            p = Path(tgt)
+            p.write_text(p.read_text(encoding="utf-8") + "# ESCAPE-JUNK\\n",
+                         encoding="utf-8")
     if mode == "slow":
         (cwd / ".convergence_ledger.jsonl").write_text(
             json.dumps({"open_count": 0}) + "\\n", encoding="utf-8")
         time.sleep(60)
         sys.exit(0)
+    if mode == "crash":
+        # rc=1 with NO cost report: a genuine mid-session crash face
+        sys.exit(1)
     runs = cwd / "runs"
     (runs / "logs").mkdir(parents=True, exist_ok=True)
     (runs / "deliverables").mkdir(parents=True, exist_ok=True)
@@ -109,6 +129,16 @@ _STUB_SESSION = textwrap.dedent("""\
     (runs / "mission_ledger.yaml").write_text(
         _y.safe_dump({"mission": {"history": [vec, vec2]}}),
         encoding="utf-8")
+    if mode == "late-dispatch":
+        # exp8 I4: dispatch signals landing AFTER the ledger's last
+        # sample cursor (signals_rows=3) — the settle face must count
+        # the late dispatch (exp4 read 0 ticks on all 7 units).
+        (runs / "signals.jsonl").write_text(
+            json.dumps({"ts": "t1", "kind": "dispatch", "claim": "C-101"}) + "\\n"
+            + json.dumps({"ts": "t2", "kind": "deliver", "claim": "C-101"}) + "\\n"
+            + json.dumps({"ts": "t3", "kind": "verify"}) + "\\n"
+            + json.dumps({"ts": "t4", "kind": "dispatch", "claim": "C-104"}) + "\\n",
+            encoding="utf-8")
     (runs / "oracle-status.json").write_text(json.dumps({
         "schema": "oracle-status/1",
         "cases": {"case-a": {"status": "pass"},
@@ -129,6 +159,28 @@ _STUB_SESSION = textwrap.dedent("""\
     src = sorted((cwd / "bins").glob("*.py"))[0]
     (runs / "deliverables" / "candidate.py").write_text(
         src.read_text(encoding="utf-8"), encoding="utf-8")
+    if mode == "budget":
+        # rc=1 WITH the claude --output-format json cost line: the CLI-side
+        # --max-budget-usd stop face (print mode exits non-zero at/over
+        # the cap — the 2026-09-24 sweep's session_error class)
+        print(json.dumps({"type": "result", "total_cost_usd": 15.14,
+                          "usage": {"input_tokens": 251052,
+                                    "output_tokens": 71887}}))
+        sys.exit(1)
+    if mode in ("candidate-bad", "budget-bad"):
+        # exp5 gap-redo faces: a DELIVERED candidate that FAILS the
+        # mechanical checker (wrong output on every probe → PAIR_MISMATCH)
+        (runs / "deliverables" / "candidate.py").write_text(
+            "def derive(b):\\n"
+            "    return len(b)  # deliberately wrong (test-only stub)\\n",
+            encoding="utf-8")
+    if mode == "budget-bad":
+        # FAIL verdict + CLI-side budget stop: cost >= cap so the
+        # gap-redo decision must deny on budget exhaustion
+        print(json.dumps({"type": "result", "total_cost_usd": 15.14,
+                          "usage": {"input_tokens": 251052,
+                                    "output_tokens": 71887}}))
+        sys.exit(1)
 """)
 
 
@@ -310,6 +362,45 @@ class TestBudgetExhaustion:
             "no deliverable landed before the kill: structured SKIP"
         assert any(f["code"] == "BAD_CANDIDATE" for f in row["failures"])
         assert row["loop"]["session"]["timed_out"] is True
+
+    def test_cli_budget_cap_exit_is_terminal_exhausted_row(
+            self, tmp_path, monkeypatch):
+        """The CLI-side budget face: `claude -p --max-budget-usd` stops the
+        session ITSELF at/over the cap and exits rc=1 (the 2026-09-24
+        sweep's session_error class: 9/12 units rc=1 at $15.0x against a
+        $15.0 cap). The module contract — budget exhaustion is a TERMINAL
+        metric row, never a crash — covers BOTH kill faces: the runner's
+        wall cap AND the CLI's budget stop."""
+        monkeypatch.setenv("K334_STUB_MODE", "budget")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        loop = row["loop"]
+        assert loop["status"] == "exhausted", \
+            "CLI budget-cap exit (rc=1, cost>=cap) is budget exhaustion: " \
+            "the terminal exhausted row, never session_error"
+        assert loop["session"]["timed_out"] is False, \
+            "the runner never fired the wall cap: the CLI stopped itself"
+        assert loop["session"]["returncode"] == 1
+        assert loop["session"]["session_cost"][
+            "total_cost_usd"] == pytest.approx(15.14)
+        assert row["verdict"] == "PASS", \
+            "whatever the loop wrote before the kill is still harvested " \
+            "and graded (the stub's candidate is checker-green)"
+
+    def test_sub_budget_rc1_stays_session_error(self, tmp_path, monkeypatch):
+        """The guard face: rc=1 WITHOUT a budget-cap cost report is a
+        genuine session crash — session_error must survive for it."""
+        monkeypatch.setenv("K334_STUB_MODE", "crash")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert row["loop"]["status"] == "session_error", \
+            "sub-budget rc=1 is a real crash: the misclassification fix " \
+            "must not swallow it"
+        assert row["loop"]["session"]["session_cost"] is None
+        assert row["verdict"] == "SKIP", \
+            "the crash left no deliverable: structured BAD_CANDIDATE row"
 
 
 # ------------------------------------------------------------- (f) extractor
@@ -526,7 +617,7 @@ class TestCcDefaultArm:
         would spawn a real claude session inside a unit test."""
         monkeypatch.setenv("K334_STUB_MODE", "candidate")
 
-        def _ccd_stub(task_dir, root):
+        def _ccd_stub(task_dir, root, *, wall_cap_s=None):
             ws = lr.init_workspace(_task_dir(PY), root)
             return ws, "solve it; deliver to runs/deliverables/candidate.py"
 
@@ -536,3 +627,649 @@ class TestCcDefaultArm:
                                session_cmd=_stub_session_cmd(tmp_path))
         assert row["arm"] == "cc-default"
         assert row["verdict"] in ("PASS", "FAIL", "SKIP")
+
+
+# --------------------------------- (j) harness escape gate (exp3 Part A)
+# The 2026-09-24 sweep caught a spawned analysis session ESCAPING its
+# workspace TWICE (activity log 2026-09-24T04:18:44, session
+# 2026-09-24_68ea2493): an Edit tool call targeting the worktree-level
+# agents/kunglao-redteam.md — a checker permission-widening. Workspace
+# isolation is advisory; bypassPermissions sessions can write anywhere.
+# The gate: hash the harness surface (agents/ hooks/ skills/ scripts/)
+# BEFORE each session spawn and AFTER session exit; on drift emit a loud
+# event row (EMIT_ACTIONS-registered harness_drift), restore the drifted
+# files from HEAD (git checkout --), and mark the session row
+# harness_contaminated (diagnostic — the verdict is unaffected, grading
+# already ran on the workspace's own deliverable).
+
+class TestHarnessEscapeGate:
+    def _fake_root(self, tmp_path: Path) -> Path:
+        """A synthetic harness root: the four surface dirs + a git HEAD —
+        restore proves itself against a real checkout, never the live
+        repo tree (parallel-safe)."""
+        import subprocess as sp
+
+        root = tmp_path / "repo"
+        for rel in ("agents/kunglao-redteam.md", "hooks/gate.py",
+                    "skills/kunglao-agent/SKILL.md", "scripts/runner.py"):
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(f"original {rel}\n", encoding="utf-8")
+        pyc = root / "scripts" / "__pycache__"
+        pyc.mkdir(parents=True)
+        (pyc / "runner.pyc").write_bytes(b"\x00")
+
+        def git(*args: str) -> None:
+            r = sp.run(["git", "-C", str(root), *args],
+                       capture_output=True, text=True)
+            assert r.returncode == 0, r.stderr
+
+        git("init", "-q")
+        git("add", "-A")
+        git("-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-qm", "base")
+        return root
+
+    def test_hashes_cover_four_surface_dirs_skip_pycache(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        h = lr.harness_surface_hashes(root)
+        assert "agents/kunglao-redteam.md" in h
+        assert "hooks/gate.py" in h
+        assert "skills/kunglao-agent/SKILL.md" in h
+        assert "scripts/runner.py" in h
+        assert not any("__pycache__" in k for k in h), \
+            "pycache is not harness surface"
+
+    def test_default_root_is_the_repo(self):
+        h = lr.harness_surface_hashes()
+        assert any(k.startswith("agents/") for k in h)
+        assert any(k.startswith("hooks/") for k in h)
+        assert any(k.startswith("scripts/") for k in h)
+
+    def test_drift_reports_changed_added_deleted(self):
+        before = {"a.md": "1", "b.md": "2", "c.md": "3"}
+        assert lr.harness_drift(before, dict(before)) == []
+        after = {"a.md": "1", "b.md": "X", "d.md": "4"}
+        assert lr.harness_drift(before, after) == \
+            ["b.md", "c.md", "d.md"], \
+            "changed + deleted (c) + added (d) are drift, sorted"
+        after_del = {"a.md": "1", "c.md": "3"}
+        assert lr.harness_drift(before, after_del) == ["b.md"], \
+            "a deleted surface file is drift too"
+
+    def test_restore_reverts_modified_file_from_head(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        p = root / "agents" / "kunglao-redteam.md"
+        before = lr.harness_surface_hashes(root)
+        p.write_text(p.read_text(encoding="utf-8") + "TAMPERED\n",
+                     encoding="utf-8")
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["agents/kunglao-redteam.md"]
+        restored = lr.restore_harness(drifted, root=root)
+        assert restored == drifted
+        assert "TAMPERED" not in p.read_text(encoding="utf-8"), \
+            "git checkout -- put HEAD bytes back"
+
+    def test_restore_reverts_deleted_file_from_head(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        p = root / "skills" / "kunglao-agent" / "SKILL.md"
+        before = lr.harness_surface_hashes(root)
+        p.unlink()
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["skills/kunglao-agent/SKILL.md"]
+        assert lr.restore_harness(drifted, root=root) == drifted
+        assert p.is_file(), "deleted tracked file restored from HEAD"
+
+    def test_restore_removes_untracked_addition(self, tmp_path):
+        root = self._fake_root(tmp_path)
+        before = lr.harness_surface_hashes(root)
+        rogue = root / "agents" / "rogue-tool.md"
+        rogue.write_text("rogue\n", encoding="utf-8")
+        drifted = lr.harness_drift(before, lr.harness_surface_hashes(root))
+        assert drifted == ["agents/rogue-tool.md"]
+        assert lr.restore_harness(drifted, root=root) == drifted
+        assert not rogue.exists(), \
+            "session-created addition removed (not in HEAD to restore)"
+
+    def test_escape_session_detected_reverted_marked(self, tmp_path,
+                                                     monkeypatch):
+        """THE incident face: a session writes OUTSIDE its workspace onto
+        the harness surface — detected, reverted from HEAD, the session
+        row is marked harness_contaminated, the loud event row lands, and
+        the verdict is UNAFFECTED (grading already ran)."""
+        root = self._fake_root(tmp_path)
+        target = root / "agents" / "kunglao-redteam.md"
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET", str(target))
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert "ESCAPE-JUNK" not in target.read_text(encoding="utf-8"), \
+            "the escape write was reverted from HEAD"
+        sess = row["loop"]["session"]
+        assert sess["harness_contaminated"] is True
+        assert sess["harness_drift_files"] == ["agents/kunglao-redteam.md"]
+        assert row["verdict"] == "PASS", \
+            "verdict unaffected: grading already ran"
+        ev = json.loads((tmp_path / "harness-events.jsonl")
+                        .read_text(encoding="utf-8").splitlines()[-1])
+        assert ev["action"] == "harness_drift"
+        assert ev["task"] == PY
+        assert ev["drifted"] == ["agents/kunglao-redteam.md"]
+        assert ev["restored"] == ["agents/kunglao-redteam.md"]
+
+    def test_clean_session_leaves_no_contamination(self, tmp_path,
+                                                   monkeypatch):
+        root = self._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+        row = lr.run_loop_task(PY, tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0,
+                               session_cmd=_stub_session_cmd(tmp_path))
+        assert row["loop"]["session"]["harness_contaminated"] is False
+        assert row["loop"]["session"]["harness_drift_files"] == []
+        assert not (tmp_path / "harness-events.jsonl").exists()
+
+    def test_harness_drift_is_registered_emit_word(self):
+        import event_taxonomy
+        assert "harness_drift" in event_taxonomy.EMIT_ACTIONS
+
+    def test_tier_summary_counts_contaminated_sessions(self, tmp_path,
+                                                       monkeypatch):
+        root = self._fake_root(tmp_path)
+        monkeypatch.setenv(lr.ENV_HARNESS_ROOT, str(root))
+        monkeypatch.setenv("K334_STUB_MODE", "escape")
+        monkeypatch.setenv("K334_ESCAPE_TARGET",
+                           str(root / "agents" / "kunglao-redteam.md"))
+        rc, doc = lr.run_loop_tier([PY], tmp_path, budget_usd=1.0,
+                                   wall_cap_s=60.0,
+                                   session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == 0
+        assert doc["summary"]["harness_contaminated"] == 1
+
+
+# ------------------------------ (k) wall partition injection (exp5 M1)
+# exp4 distillate (case-dispatch-budget-partition Rule 1): 6/7 orchestrated
+# sessions soloed past 60–90% wall before dispatching — the orchestrator
+# cannot partition a cap it was never told. The runner owns the cap, so
+# the cap must COMMUNICATE into each session's prompt as a first-class
+# WALL_BUDGET_PARTITION block. Contract communication, not a behavior rule.
+
+class TestWallPartitionBlock:
+    def test_block_is_first_class_and_derived_from_actual_cap(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "WALL_BUDGET_PARTITION" in block
+        assert "TOTAL WALL CAP: 3600s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 1800s" in block, \
+            "solo cap = 50% of wall (the card's ≤50%-rule)"
+        assert "FINAL DELIVERABLE DUE BY 3300s" in block, \
+            "deliverable due before the 300s checker/harvest reserve"
+        # derived, not hardcoded: a different cap renders different numbers
+        block2 = lr.wall_partition_block(7200.0)
+        assert "TOTAL WALL CAP: 7200s" in block2
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 3600s" in block2
+        assert "FINAL DELIVERABLE DUE BY 6900s" in block2
+
+    def test_loop_prompt_carries_partition_prominently(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        assert "WALL_BUDGET_PARTITION" in prompt
+        # first-class = near the top, before the goal anchors
+        assert prompt.index("WALL_BUDGET_PARTITION") \
+            < prompt.index("GOAL (verbatim)")
+
+    def test_loop_prompt_without_cap_stays_unchanged(self):
+        """Backward-compatible face: no cap → no block (pure prompt
+        builder; existing anchors/contract-only posture unchanged)."""
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py")
+        assert "WALL_BUDGET_PARTITION" not in prompt
+
+    def test_cc_default_prompt_carries_partition_too(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                  wall_cap_s=3600.0)
+        assert "WALL_BUDGET_PARTITION" in prompt
+        assert "WALL_BUDGET_PARTITION" in (ws / "TASK.md").read_text("utf-8"), \
+            "the contract lands in TASK.md as well (the session's own copy)"
+        assert "/kunglao-agent" not in prompt
+
+    def test_e2e_session_receives_partition_in_prompt(self, tmp_path,
+                                                      monkeypatch):
+        """THE M1 pin: the prompt the session ACTUALLY received carries
+        the partition block (stub records its argv)."""
+        monkeypatch.setenv("K334_STUB_MODE", "candidate")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=1.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        argv = json.loads((ws / "session-argv.json").read_text("utf-8"))
+        assert "WALL_BUDGET_PARTITION" in argv[-1]
+        assert "TOTAL WALL CAP: 3600s" in argv[-1]
+
+    def test_partition_adds_no_ground_truth(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in prompt
+
+
+# ------------------------------ (l) gap-redo round (exp5 M2)
+# exp3/exp4 diagnosis: mod-crypto-l1 delivered a candidate the checker
+# failed 0/20 and NO redo round ran in-wall. M2: runner-driven, ONE
+# gap-redo session on checker-FAIL with wall+budget remaining; the redo
+# input is GAP-shape only (which faces failed, counts) — never the
+# checker's derived answer; the redo's verdict replaces (checker-strict).
+
+class TestGapRedo:
+    # ---- pure decision function
+    def test_fail_with_remaining_budget_and_wall_is_allowed(self):
+        rec = {"wall_s": 2980.0,
+               "session_cost": {"total_cost_usd": 8.0}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is True
+        assert d["reason"] == "checker_fail_within_budget"
+
+    def test_pass_verdict_never_redoes(self):
+        rec = {"wall_s": 100.0, "session_cost": {"total_cost_usd": 1.0}}
+        d = lr.gap_redo_decision("PASS", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "not_checker_fail"
+
+    def test_wall_exhausted_denies_redo(self):
+        rec = {"wall_s": 3600.0, "session_cost": {"total_cost_usd": 2.0}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "wall_exhausted"
+
+    def test_budget_exhausted_denies_redo(self):
+        rec = {"wall_s": 100.0,
+               "session_cost": {"total_cost_usd": 14.9}}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is False
+        assert d["reason"] == "budget_exhausted"
+
+    def test_missing_cost_report_reads_as_zero_spent(self):
+        rec = {"wall_s": 100.0, "session_cost": None}
+        d = lr.gap_redo_decision("FAIL", rec, wall_cap_s=3600.0,
+                                 budget_usd=15.0)
+        assert d["allowed"] is True, \
+            "no cost report (stub seam) → assume nothing spent"
+
+    # ---- gap extraction shape (GAP-shape only)
+    def test_gap_block_is_shape_only_never_answers(self, tmp_path):
+        """The CHECKER GAP block carries failure codes/counts and constant
+        NAMES at most — never ground-truth values or published outputs."""
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        res = {
+            "verdict": "FAIL",
+            "failures": [{"code": "PAIR_MISMATCH",
+                          "detail": "pairs 0/16 match "
+                                    "(threshold 16 at ratio 1.0)"}],
+            "evidence": "",
+        }
+        block = lr.render_gap_block(lr.extract_checker_gap(res))
+        assert "CHECKER GAP" in block
+        assert "PAIR_MISMATCH" in block
+        assert "0/16" in block
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in block, "ground-truth constant value leaked"
+        for pair in (gt.get("published_pairs") or []):
+            out = pair.get("out")
+            if out is not None:
+                assert str(out) not in block, "published output leaked"
+
+    # ---- e2e through run_loop_task (stub seam)
+    def test_checker_fail_triggers_exactly_one_gap_redo(self, tmp_path,
+                                                        monkeypatch):
+        """checker-FAIL + budget remaining → exactly ONE redo session
+        (same workspace), its verdict replaces the original, the redo
+        prompt carries the GAP block, and the row is marked."""
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        calls = [json.loads(l) for l in
+                 (ws / "session-calls.jsonl").read_text("utf-8")
+                 .splitlines() if l.strip()]
+        assert len(calls) == 2, "original + exactly one gap-redo session"
+        assert row["gap_redo"] is True
+        loop = row["loop"]
+        assert loop["gap_redo"]["ran"] is True
+        assert loop["gap_redo"]["verdict_replaced"] is True
+        assert loop["gap_redo"]["decision"]["allowed"] is True
+        redo_prompt = calls[1]["argv"][-1]
+        assert "GAP-REDO" in redo_prompt
+        assert "CHECKER GAP" in redo_prompt
+        assert "PAIR_MISMATCH" in redo_prompt
+        assert "WALL_BUDGET_PARTITION" in redo_prompt, \
+            "the redo gets the partition recomputed for its remaining cap"
+        gt = json.loads((Path(__file__).resolve().parents[1]
+                         / "eval/v1/tasks/smoke/py-derive-v1/ground_truth.json")
+                        .read_text("utf-8"))
+        for v in (gt.get("constants") or {}).values():
+            s = v if isinstance(v, str) else str(v)
+            assert s not in redo_prompt, "ground truth leaked into redo"
+        # checker-strict: the stub writes a bad candidate again → FAIL stands
+        assert row["verdict"] == "FAIL"
+        assert loop["session"]["returncode"] == 0, "first session"
+        assert loop["gap_redo"]["session"]["returncode"] == 0, "redo session"
+
+    def test_budget_exhausted_suppresses_redo(self, tmp_path, monkeypatch):
+        """FAIL verdict but session cost ≥ cap → NO redo session; the
+        original FAIL stands and the suppression reason is recorded."""
+        monkeypatch.setenv("K334_STUB_MODE", "budget-bad")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        ws = Path(row["loop"]["workspace"])
+        calls = [json.loads(l) for l in
+                 (ws / "session-calls.jsonl").read_text("utf-8")
+                 .splitlines() if l.strip()]
+        assert len(calls) == 1, "budget-exhausted: no redo session spawned"
+        assert row["gap_redo"] is False
+        assert row["verdict"] == "FAIL"
+        assert row["loop"]["gap_redo"]["ran"] is False
+        assert row["loop"]["gap_redo"]["reason"] == "budget_exhausted"
+        assert row["loop"]["status"] == "exhausted"
+
+    def test_tier_summary_counts_gap_redo(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("K334_STUB_MODE", "candidate-bad")
+        rc, doc = lr.run_loop_tier(
+            [PY], tmp_path, budget_usd=15.0, wall_cap_s=3600.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == 0
+        assert doc["summary"]["gap_redo"] == 1
+
+
+# ------------------------------ (m) EXP-8 high-ROI injections
+# Five contract/injection-level closures, each backed by measured evidence:
+#   I1 deliverable schedule (post2: 5/5 deliverers pass, 7/7 non-deliverers
+#      die; exp5 arm-kdf delivered AT budget death — 0/16 graded on a rush)
+#   I2 layer checkpoints (exp4: 13/14 chain sessions scored 0/N despite
+#      real peels — the layer_out/ convention was invisible)
+#   I3 family self-check (mod-crypto-l1 delivered a 0/20 candidate an
+#      in-session probe would have caught)
+#   I4 factor settle (exp4: dispatch-tick face 0 on all 7 units — the
+#      last value_m sample predated the 60-90%-wall dispatches)
+#   I5 T1_DIRECT affirmative (CC-default 12/12 proves the direct path
+#      exists; the demoted toolfirst advisory left no affirmative)
+
+CHAIN_JS = "chain-l1-js-v1"
+CHAIN_GO = "chain-l2-go-v1"
+CRYPTO = "mod-crypto-l1"
+
+
+def _tier_task_dir(tier: str, task_id: str) -> Path:
+    d = ROOT / "eval" / "v1" / "tasks" / tier / task_id
+    assert d.is_dir(), f"task dir not found: {d}"
+    return d
+
+
+class TestDeliverableScheduleBlock:
+    """I1: the wall-partition block carries the deliverable schedule."""
+
+    def test_block_carries_deliverable_schedule(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "DELIVERABLE_SCHEDULE" in block
+        assert "continuously improve" in block
+        assert "CURRENT on-disk state is what gets graded" in block
+
+    def test_schedule_is_derived_from_actual_cap(self):
+        block = lr.wall_partition_block(3600.0)
+        assert "draft the candidate on disk by 1800s" in block, \
+            "the 50%-wall mark (solo cap) is the draft deadline"
+        block2 = lr.wall_partition_block(7200.0)
+        assert "draft the candidate on disk by 3600s" in block2
+
+    def test_loop_prompt_carries_schedule(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0)
+        assert "DELIVERABLE_SCHEDULE" in prompt
+
+    def test_cc_default_prompt_carries_schedule_too(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        _ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                   wall_cap_s=3600.0)
+        assert "DELIVERABLE_SCHEDULE" in prompt
+
+
+class TestLayerCheckpointsBlock:
+    """I2: chain prompts name the grader's exact layer_out/ paths."""
+
+    def test_js_unit_paths_exact(self):
+        paths = lr.chain_layer_paths(_tier_task_dir("chain", CHAIN_JS))
+        assert paths == ["layer_out/1-unpacked.js", "layer_out/2-config.json"]
+
+    def test_go_unit_paths_exact(self):
+        paths = lr.chain_layer_paths(_tier_task_dir("chain", CHAIN_GO))
+        assert paths == ["layer_out/1-unpacked.json", "layer_out/2-config.json",
+                         "layer_out/3-core.go"]
+
+    def test_non_chain_unit_has_no_paths(self):
+        assert lr.chain_layer_paths(_task_dir(PY)) == []
+        assert lr.chain_layer_paths(_tier_task_dir("release", CRYPTO)) == []
+
+    def test_block_lists_exact_paths(self):
+        block = lr.layer_checkpoints_block(
+            ["layer_out/1-unpacked.js", "layer_out/2-config.json"])
+        assert "LAYER_CHECKPOINTS" in block
+        assert "- layer_out/1-unpacked.js" in block
+        assert "- layer_out/2-config.json" in block
+        assert "a layer counts only if its file exists and verifies" in block
+
+    def test_chain_prompt_carries_block(self):
+        tdir = _tier_task_dir("chain", CHAIN_JS)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.js",
+            wall_cap_s=3600.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        assert "LAYER_CHECKPOINTS" in prompt
+        assert "layer_out/1-unpacked.js" in prompt
+        assert "layer_out/2-config.json" in prompt
+
+    def test_chain_prompt_leaks_no_ground_truth(self):
+        """The block lifts PATH STRINGS only — no digests, no probe
+        payloads, no expected outputs."""
+        tdir = _tier_task_dir("chain", CHAIN_JS)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.js",
+            wall_cap_s=3600.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        gt = json.loads((tdir / "ground_truth.json").read_text("utf-8"))
+        for layer in gt["chain"]["layers"]:
+            for op in layer["ops"]:
+                assert op.get("sha256") not in prompt, "digest leaked"
+        for p in gt["chain"]["probes"]:
+            assert str(p.get("payload")) not in prompt, "payload leaked"
+            assert str(p.get("out")) not in prompt, "expected output leaked"
+
+    def test_non_chain_prompt_has_no_layer_block(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      wall_cap_s=3600.0, layer_paths=[])
+        assert "LAYER_CHECKPOINTS" not in prompt
+
+    def test_redo_prompt_carries_layer_block(self):
+        tdir = _tier_task_dir("chain", CHAIN_GO)
+        task = ds.load_task(tdir)
+        prompt = lr.build_redo_prompt(
+            tdir, task, "runs/deliverables/candidate.go", "CHECKER GAP: x",
+            wall_cap_s=1800.0, budget_usd=5.0,
+            layer_paths=lr.chain_layer_paths(tdir))
+        assert "layer_out/3-core.go" in prompt
+
+
+class TestFamilySelfCheckBlock:
+    """I3: registered families get their probe pattern injected."""
+
+    def test_map_has_exactly_three_entries(self):
+        assert lr.FAMILY_PROBE_SHAPES == {
+            "mod-crypto-native": "crypto",
+            "arm-native-kdf": "kdf",
+            "req-sign": "sign",
+        }
+
+    def test_crypto_block_is_pair_match(self):
+        block = lr.self_check_block("mod-crypto-native")
+        assert block.startswith("SELF_CHECK:")
+        assert "PAIR-MATCH PROBE" in block
+        assert "EVERY pair" in block
+
+    def test_kdf_block_is_static_constant(self):
+        block = lr.self_check_block("arm-native-kdf")
+        assert "STATIC-CONSTANT PROBE" in block
+
+    def test_sign_block_is_sign_verify(self):
+        block = lr.self_check_block("req-sign")
+        assert "SIGN-VERIFY PROBE" in block
+
+    def test_unregistered_family_gets_no_block(self):
+        assert lr.self_check_block("py-derive") == ""
+        assert lr.self_check_block(None) == ""
+
+    def test_missing_template_degrades_to_directive(self, monkeypatch,
+                                                    tmp_path):
+        monkeypatch.setattr(lr, "SELFCHECK_TEMPLATE_DIR", tmp_path)
+        block = lr.self_check_block("mod-crypto-native")
+        assert block.startswith("SELF_CHECK:")
+        assert "PAIR-MATCH" not in block, "snippet absent, directive stays"
+
+    def test_release_unit_prompt_carries_self_check(self):
+        tdir = _tier_task_dir("release", CRYPTO)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.py", wall_cap_s=3600.0,
+            probe_block=lr.self_check_block(task["family"]))
+        assert "SELF_CHECK:" in prompt
+        assert "PAIR-MATCH PROBE" in prompt
+
+    def test_templates_exist_for_every_registered_shape(self):
+        for shape in set(lr.FAMILY_PROBE_SHAPES.values()):
+            p = lr.SELFCHECK_TEMPLATE_DIR / f"probe-{shape}.md"
+            assert p.is_file(), f"missing probe template: {p}"
+
+
+class TestSettleFactorSample:
+    """I4: one final factor-vector sample — late dispatches get counted."""
+
+    @staticmethod
+    def _late_dispatch_ws(tmp_path: Path) -> Path:
+        """Synthetic late-dispatch ledger: the history's last point has
+        cursor 0 (sampled at init), the dispatch signals landed after."""
+        ws = tmp_path / "ws-late"
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "mission_ledger.yaml").write_text(
+            "mission:\n"
+            "  pqs: []\n"
+            "  beta: 0.3\n"
+            "  history:\n"
+            "  - ts: 2026-09-26T00:00:00Z\n"
+            "    v_m: 0.0\n"
+            "    round: 1\n"
+            "    events: {dispatch: 0, verify: 0, confirmed_with_diff: 0,"
+            " toss: 0}\n"
+            "    signals_rows: 0\n", encoding="utf-8")
+        rows = [
+            {"ts": "2026-09-26T00:10:00Z", "kind": "dispatch",
+             "claim": "C-101"},
+            {"ts": "2026-09-26T00:20:00Z", "kind": "dispatch",
+             "claim": "C-102"},
+        ]
+        (ws / "runs" / "signals.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return ws
+
+    def test_synthetic_late_dispatch_is_counted(self, tmp_path):
+        ws = self._late_dispatch_ws(tmp_path)
+        assert lr.settle_factor_sample(ws) is True
+        led = yaml.safe_load(
+            (ws / "runs" / "mission_ledger.yaml").read_text("utf-8"))
+        hist = led["mission"]["history"]
+        assert len(hist) == 2, "one settle sample appended"
+        assert hist[-1]["events"]["dispatch"] == 2, \
+            "the two post-sample dispatches land in the tick face"
+        assert hist[-1]["signals_rows"] == 2
+        assert lr.harvest(ws)["dispatch_count"] == 2
+
+    def test_workspace_without_ledger_is_false(self, tmp_path):
+        ws = tmp_path / "ws-bare"
+        (ws / "runs").mkdir(parents=True)
+        assert lr.settle_factor_sample(ws) is False
+
+    def test_e2e_late_dispatch_counted(self, tmp_path, monkeypatch):
+        """THE I4 pin: a session whose dispatch signals land after the
+        ledger's last sample leaves the run row with the dispatches
+        COUNTED (exp4 read 0 on all 7 units)."""
+        monkeypatch.setenv("K334_STUB_MODE", "late-dispatch")
+        row = lr.run_loop_task(
+            PY, tmp_path, budget_usd=1.0, wall_cap_s=60.0,
+            session_cmd=_stub_session_cmd(tmp_path))
+        m = row["loop"]["metrics"]
+        assert m["dispatch_count"] == 6, \
+            "stub vectors (2 + 3) + the settle sample (1 late dispatch)"
+        led = yaml.safe_load(
+            (Path(row["loop"]["workspace"]) / "runs" / "mission_ledger.yaml")
+            .read_text("utf-8"))
+        assert led["mission"]["history"][-1]["events"]["dispatch"] == 1
+        assert led["mission"]["history"][-1]["events"]["toss"] == 1, \
+            "the late dispatch has no later deliver — derived toss"
+
+
+class TestT1DirectLine:
+    """I5: the T-1 affirmative rides the loop prompts; the control arm
+    stays neutral."""
+
+    def test_loop_prompt_carries_t1_direct(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py")
+        assert "T1_DIRECT:" in prompt
+        assert "tool-catalog:" in prompt
+
+    def test_redo_prompt_carries_t1_direct(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_redo_prompt(tdir, task,
+                                      "runs/deliverables/candidate.py",
+                                      "CHECKER GAP: x",
+                                      wall_cap_s=1800.0, budget_usd=5.0)
+        assert "T1_DIRECT:" in prompt
+
+    def test_cc_default_prompt_stays_neutral(self, tmp_path):
+        tdir = next(d for d in ds.iter_task_dirs(tier="release")
+                    if d.name == "arm-kdf-l0")
+        _ws, prompt = lr.init_cc_default_workspace(tdir, tmp_path,
+                                                   wall_cap_s=3600.0)
+        assert "T1_DIRECT" not in prompt
+        assert "LAYER_CHECKPOINTS" not in prompt
+        assert "SELF_CHECK" not in prompt
