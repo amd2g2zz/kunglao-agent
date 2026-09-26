@@ -143,6 +143,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # re-pin entry below). The oracle-blocking semantics themselves are
 # unanchored by construction (the matrix has no oracle-bearing DRAIN case);
 # covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-26 corpus re-pin (issue 392 references P0): eight high-traffic re-library cards rebuilt (web-re-quickref, web-risk-control, web-crawler-engineering, jsvmp-triage, unidbg-env-filling, unidbg-harness-bringup, unidbg-algo-recovery, field-notes) plus the signature-check-bypass rung-3/4 listings, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-24 corpus anchor refresh: the web risk-control card v2 body edit (vendor-identification + handling + heuristics doctrine) shifts lexical rarity in the anomaly baseline (1 anomaly score float per contradiction case, 0.911170928667564 -> 0.911384002655161, all else byte-equal; score-only verified, captured from the current tree).
 # 2026-09-23 corpus re-pin (#364): the seven android/case-distilled cards + D1 gap report join the references corpus, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-23 DATA-coupled freeze refresh (merge-sync union, wave-2 tool
