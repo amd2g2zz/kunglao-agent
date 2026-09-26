@@ -741,6 +741,23 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
     assert rc == 0, capsys.readouterr().err
 
 
+def test_check_tool_first_bool_face_is_documented_constant():
+    """#380 P2 finding 3: post-H1 the bool face is a CONSTANT True for every
+    evaluation mode — the tuple shape is kept only so the sink battery stays
+    uniform with the enforcing gates; the demand payload lives in `reason`,
+    and the docstring contracts the invariant (readers must not branch on
+    ok)."""
+    for desc, prompt in (
+        ('decode the crypto layer', ''),
+        ('decode the crypto layer', 'tool-catalog: wrong-tool'),
+        ('plain unrelated prose', ''),
+    ):
+        ok, msg = check_tool_first({}, desc, prompt)
+        assert ok is True, (desc, prompt, msg)
+        assert msg
+    assert 'constant' in (check_tool_first.__doc__ or '').lower()
+
+
 # ---------- issue #270: every REJECT carries non-empty additionalContext ----------
 # #235 fixed env_check_gate with corrective guidance; the 12 pre_check gates +
 # snapshot + devreason REJECTed bare (stderr only). Now EVERY REJECT must also

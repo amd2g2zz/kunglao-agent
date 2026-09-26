@@ -100,8 +100,8 @@ _NON_CLI_CHECK_ITEMS = frozenset({
 
 # generic CLI names excluded from the WARN-floor vocabulary ONLY (they stay
 # on the menu): a Python script saying `file`/`strings` is prose, not a
-# make-vs-reuse signal — distinctive terms only (_TOOLFIRST_STOPWORDS
-# discipline, worker_budget_gates).
+# make-vs-reuse signal — distinctive terms only (the #380 P2 structural
+# trigger discipline, worker_budget_gates._is_distinctive_trigger).
 FLOOR_STOPWORDS = frozenset({
     "file", "strings", "cat", "head", "tail", "echo", "find", "sort",
     "date", "env", "test", "sleep", "touch", "uname",
