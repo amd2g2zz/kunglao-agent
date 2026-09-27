@@ -96,7 +96,7 @@ files:
   scripts/entropy_face.py:
     r1: 1
   scripts/env_check.py:
-    r1: 56
+    r1: 57
   scripts/env_manifest.py:
     r1: 22
   scripts/env_repair_l1.py:
@@ -165,7 +165,7 @@ files:
   scripts/hook_activation.py:
     r1: 76
   scripts/hooks_selfcheck.py:
-    r1: 23
+    r1: 38
   scripts/hypothesis_seeder.py:
     r1: 13
   scripts/hypothesis_store.py:
@@ -219,7 +219,7 @@ files:
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 19
+    r1: 20
   scripts/log_setup.py:
     r1: 1
   scripts/loop_scheduler.py:
@@ -227,7 +227,7 @@ files:
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
-    r1: 13
+    r1: 29
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/migrate_facts.py:
@@ -326,7 +326,7 @@ files:
   scripts/status_defs.py:
     r1: 4
   scripts/statusline_snapshot.py:
-    r1: 38
+    r1: 47
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -604,6 +604,9 @@ files:
     r1: 5
   tests/test_deploy_surface_755.py:
     r1: 4
+  tests/test_deploy_truth_412.py:
+    r1: 4
+    r2: 1
   tests/test_detector_utilization_127.py:
     r1: 4
     r2: 1
@@ -666,7 +669,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 28
+    r1: 30
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
@@ -680,7 +683,7 @@ files:
   tests/test_env_ports_wiring.py:
     r1: 2
   tests/test_envcheck_modern_757.py:
-    r1: 16
+    r1: 18
   tests/test_epistemic_pricing_250.py:
     r1: 4
   tests/test_error_response.py:
@@ -845,7 +848,7 @@ files:
   tests/test_init_completeness.py:
     r1: 2
   tests/test_init_deploy_env.py:
-    r1: 11
+    r1: 12
   tests/test_init_exit_codes.py:
     r1: 6
   tests/test_init_git_snapshot_739.py:
@@ -922,11 +925,14 @@ files:
   tests/test_max_retries_604.py:
     r1: 1
   tests/test_mcp_env_e2e.py:
-    r1: 3
+    r1: 4
   tests/test_mcp_prefix_enforcement.py:
     r1: 5
+  tests/test_mcp_scope_408.py:
+    r1: 6
+    r2: 1
   tests/test_mcp_supply.py:
-    r1: 23
+    r1: 28
     r2: 1
   tests/test_mechanism_scheduler_878.py:
     r1: 4
@@ -1011,7 +1017,7 @@ files:
   tests/test_plan_stages_822.py:
     r1: 1
   tests/test_plugin_manifest.py:
-    r1: 11
+    r1: 13
     r2: 2
   tests/test_posteriors_106.py:
     r1: 1
@@ -1030,7 +1036,7 @@ files:
   tests/test_priority_value_terms.py:
     r1: 1
   tests/test_probe_tiers_474.py:
-    r1: 4
+    r1: 5
   tests/test_progress_granularity_14.py:
     r1: 8
   tests/test_progress_report_663.py:
@@ -1190,7 +1196,7 @@ files:
   tests/test_statusline_health_883.py:
     r1: 10
   tests/test_statusline_v2_142.py:
-    r1: 8
+    r1: 9
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
@@ -1245,7 +1251,7 @@ files:
   tests/test_tool_value_881.py:
     r1: 2
   tests/test_toolchain.py:
-    r1: 18
+    r1: 19
   tests/test_toolchain_bug_756.py:
     r1: 5
     r2: 1
@@ -1254,11 +1260,13 @@ files:
   tests/test_toolchain_metadata.py:
     r1: 4
   tests/test_toolchain_needs_first.py:
-    r1: 6
+    r1: 8
   tests/test_toolchain_negotiation.py:
     r1: 8
   tests/test_toolchain_next_action.py:
     r1: 6
+  tests/test_toolchain_ownership_202.py:
+    r1: 3
   tests/test_toolchain_stdio.py:
     r1: 2
   tests/test_tools_structure_340.py:
@@ -1331,7 +1339,7 @@ files:
   tests/test_web_knowledge_761.py:
     r1: 4
   tests/test_web_labs_type_728.py:
-    r1: 2
+    r1: 3
   tests/test_web_lane_verifier_342.py:
     r1: 3
   tests/test_windowed_stalker_template.py:
