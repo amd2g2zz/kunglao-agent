@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 21f3641c584e1f2b3a41bfef0334620b3d38aacad86df3e56df5223f15b68945
+    sha256: e0745d7897e92b25d1e3fc772ccd0bd67a3b1d3f0d5265e54c820c82ca95fb3c
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -123,7 +123,7 @@ files:
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
-    sha256: ecc163ea292943eb45dc5ea7da31756cd5523fc8aa9008cf68f8d06d8115b7dd
+    sha256: cc31169061f2a58be4a5402d31e66834174a548aad88094f8940c6da315a4303
   - src: scripts/_hooks_path.py
     dest: .claude/scripts/_hooks_path.py
     kind: scaffold
@@ -1075,7 +1075,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 490cfcb1df85df4da4161ea57a7cd3467a2b62e468ecf8f8a29c7617c2f332e3
+    sha256: 2187eabe5f7891c0e73e53de3428a8dd2f1fc24350bf2d24f6838dad6c95d7a5
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1131,7 +1131,7 @@ files:
   - src: references/contracts/cold-start-contract.md
     dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
-    sha256: e2397e0f89d4711998be1295c8389bc50bdee05c54c1273341de16a53c6e15f2
+    sha256: d7766aa74effcfa771e258f7bb83f978554f924ff165126c3cce2bb2aa39fd13
   - src: references/contracts/convergence-loop.md
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset
@@ -1183,7 +1183,7 @@ files:
   - src: references/governance/guardrails.md
     dest: .claude/references/governance/guardrails.md
     kind: asset
-    sha256: 33d54810650592c11dd1e5327249023fd87ba7017fbaa7e8ef9e38891d75361b
+    sha256: f3a6e4ba3b95bac18a0d503b0d299beb4e2a14594d5d2203228c349e036f5757
   - src: references/governance/mechanisms.md
     dest: .claude/references/governance/mechanisms.md
     kind: asset
@@ -1243,7 +1243,7 @@ files:
   - src: references/orchestration/verify-static-vs-dynamic.md
     dest: .claude/references/orchestration/verify-static-vs-dynamic.md
     kind: asset
-    sha256: 008b806f34352a0a23fca6fdd903ad6454197b94bb9fff28ef24b1d129654857
+    sha256: d0d09cc4a86ba86db1ee59d28858f1a150c22676da0a3d5f1d4a8d4ccc707878
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
@@ -1519,7 +1519,7 @@ files:
   - src: references/schemas/state-mapping.md
     dest: .claude/references/schemas/state-mapping.md
     kind: asset
-    sha256: b3cffe81e0c4e47746ff1af69667fac6c53f056ac16b3171e860e4e1aeff18de
+    sha256: 43bca1e5717201a544e4246ad1cb07004f00776bc36ae51020778998b2c04dae
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset

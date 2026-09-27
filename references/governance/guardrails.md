@@ -71,7 +71,8 @@ collapses the only mechanism that defeats confirmation bias. Rules:
 4. **Exception**: if verifier subagent is genuinely unavailable (budget
    cap, infra down), the worker may write
    `self_caveat: "unverified — needs verifier pass"`. `verify_status`
-   stays `pending`; fact cannot be cited by `<malware-veri-notes>/scripts/handoff-check.py`.
+   stays `pending`; fact cannot be cited by `<malware-veri-notes>/scripts/handoff-check.py`
+   (external skill — applies only when malware-veri-notes is installed).
 
 §1 is the *tool* boundary (orchestrator vs worker). §1b is the *epistemic*
 boundary (maker vs checker). Both must hold.
