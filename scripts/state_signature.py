@@ -88,7 +88,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 from kunglao_log import iter_jsonl
@@ -122,17 +121,7 @@ W_BUDGET = 0.2
 W_SIDES = 0.0  # RESERVED v0.2: side completion rate (weight 0 = absent)
 
 COST_EVENTS_REL = "cost_events.jsonl"  # tuition_curve single source
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] state_signature WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _now() -> str:

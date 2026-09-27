@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from bisect import bisect_right
 from collections import Counter
 from contextlib import contextmanager
@@ -44,6 +43,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from kunglao_log import iter_jsonl  # (kunglao_log Family-K single source)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 try:  # advisory cross-process lock; POSIX faces only — on platforms without
     # fcntl the re-check-before-write loop below still guards no-append-lost.
@@ -114,8 +114,9 @@ def _parse_event_ts(value) -> datetime | None:
 
 def _warn(reason: str) -> None:
     """The one runtime trace a fail-open skip leaves (issue-275 policy:
-    never silent; mirror of the kunglao_log emit-warning style)."""
-    print(f"[progress_timeline] warning: {reason}", file=sys.stderr)
+    never silent; routed through the canonical warn — process-wide
+    dedupe + the ledger face)."""
+    warn("render_degraded", reason)
 
 
 def _emit_skip(ws, reason: str) -> None:
@@ -259,8 +260,7 @@ def _append_sidecar(ws, entries: list[dict]) -> int:
             for e in entries:
                 f.write(json.dumps(e, sort_keys=True, ensure_ascii=False) + "\n")
     except OSError as exc:
-        print(f"[progress_timeline] warning: cannot write sidecar {p}: {exc}",
-              file=sys.stderr)
+        warn("sidecar_write", f"cannot write sidecar {p}: {exc}")
         return 0
     return len(entries)
 

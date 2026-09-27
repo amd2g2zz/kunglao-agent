@@ -33,11 +33,14 @@ tracer (it must stay dependency-free by its import-order rule); the legacy
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Callable
 
 import yaml
+
+# The tracer factory delegates to the ONE canonical warn
+# (kunglao_log.warn) — explicit tag, process-wide dedupe, ledger face.
+from kunglao_log import warn as _canonical_warn
 
 __all__ = ["make_warn", "register_path", "claims_of", "load_register",
            "load_register_doc", "read_register_claims", "claims_from_text",
@@ -48,28 +51,23 @@ __all__ = ["make_warn", "register_path", "claims_of", "load_register",
 # WARN — the rate-limited fail-open tracer (issue 275 batch-3 policy)
 # ---------------------------------------------------------------------------
 
-# tag -> {op: last reason}. Per-tag state preserves the former per-module
-# `_WARN_LAST` dicts exactly: two modules sharing a process never suppress
-# each other's warnings.
-_WARN_STATE: dict[str, dict[str, str]] = {}
-
 
 def make_warn(tag: str) -> Callable[[str, str], None]:
     """Build the `[kunglao-agent] <tag> WARN (fail-open): op: reason`
-    tracer with one-rate-per-(op, reason) suppression under `tag`.
+    tracer: a thin binding of the canonical `kunglao_log.warn` with the
+    module tag pinned (the tag is the message token the former private
+    copies hard-coded).
 
-    Byte-contract (pinned by tests/test_shared_primitives_292.py): the
-    first (op, reason) prints once to stderr; an identical repeat is
-    suppressed; a changed reason prints again."""
+    Semantics change: dedupe is now PROCESS-WIDE per (op, reason) —
+    one dict in kunglao_log, no per-tag state; two modules sharing a
+    process warning the same (op, reason) suppress to the first print.
+    Byte-contract unchanged (pinned by
+    tests/test_shared_primitives_292.py): the first (op, reason) prints
+    once to stderr; an identical repeat is suppressed; a changed reason
+    prints again."""
 
     def warn(op: str, reason: str) -> None:
-        seen = _WARN_STATE.setdefault(tag, {})
-        if seen.get(op) == reason:
-            return
-        seen[op] = reason
-        print(f"[kunglao-agent] {tag} WARN (fail-open): "
-              f"{op}: {reason}",
-              file=sys.stderr)
+        _canonical_warn(op, reason, tag=tag)
 
     return warn
 

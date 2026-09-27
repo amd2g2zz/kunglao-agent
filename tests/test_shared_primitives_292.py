@@ -30,6 +30,18 @@ from pathlib import Path
 import pytest
 import yaml
 
+@pytest.fixture(autouse=True)
+def _fresh_canonical_warn(monkeypatch):
+    """The tracer delegates to kunglao_log.warn whose dedupe dict is
+    process-wide — fresh state per test keeps the byte-contract assertions
+    order-independent (plan_epistemics and plan_drift_detector share the
+    `cap292_probe` op across their two characterization tests)."""
+    import kunglao_log as _kl
+
+    monkeypatch.setattr(_kl, "_WARN_LAST", {}, raising=False)
+    yield
+
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))

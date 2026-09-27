@@ -37,7 +37,6 @@ machine signals — no model-call path, no judgment slots (U3 extended).
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import rollout_ledger as rl
@@ -66,17 +65,7 @@ NG_MU0 = 0.5     # scalar support midpoint (tiers live in [0, 1])
 NG_KAPPA0 = 1.0  # one pseudo-observation of prior strength (weak)
 NG_A0 = 1.0
 NG_B0 = 1.0
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] scalar_settlement WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _now() -> str:

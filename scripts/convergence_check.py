@@ -122,21 +122,7 @@ from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
 import oracle_anchors  # noqa: E402  # #306: the intake stamp vocabulary (task_spec anchors)
-
-# issue 275 batch-2: fail-open handlers keep their liveness posture (never
-# raise, never change the verdict) but must leave ONE trace — a stderr WARN
-# naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] convergence_check WARN (fail-open): {op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 # #103 exception tiering: the exception family a JUDGMENT-INPUT reader

@@ -39,25 +39,19 @@ Wiring (register_hooks / hook_activation --wire-up, PreToolUse):
     matcher "Edit|Write|MultiEdit" -> this file (uv run --project <skill_root>).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] write_guard WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import locale
 import os
@@ -575,7 +569,7 @@ def _emit_block(ws: Path | None, payload: dict, artifact: str, detail: str) -> N
                          tool=str(payload.get("tool_name") or ""),
                          artifact=artifact, exit=RC_BLOCK, detail=detail[:2000])
     except Exception as exc:  # noqa: BLE001 — logging must never break the gate
-        print(f"write_guard: warning: cannot emit event: {exc}", file=sys.stderr)
+        warn("event_emit", f"cannot emit event: {exc}")
 
 
 def main() -> int:

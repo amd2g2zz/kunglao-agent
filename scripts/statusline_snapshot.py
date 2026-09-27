@@ -107,25 +107,7 @@ from rank_face import face as _rank_face
 # (rho, z) ledger pairs, plus the #127 rho_sampler liveness status). The
 # snapshot ships it verbatim; PRODUCE only — no gate may consume it.
 from calibration_face import face as _calibration_face
-
-# issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
-# rate-limited WARN): absent-source degradations are NORMAL in an idle
-# workspace, and this module's writes are hook-embedded (token-zero
-# contract — hook stderr must stay empty on a healthy write), so those ride
-# the SNAPSHOT ITSELF as a bounded sidecar (_note, keyed by op, drained
-# into the "degraded" field by build_snapshot — the kunglao_log
-# null_reasons precedent). Fault-class degradations (a real crash, not a
-# missing file) keep the rate-limited stderr WARN (warn — the _zof_warn
-# pattern of issue 276; one ws per process, so op is the key).
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] statusline_snapshot WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 _DEGRADED: dict[str, str] = {}
