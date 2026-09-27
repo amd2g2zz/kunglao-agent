@@ -31,7 +31,7 @@ machine-checkable and cannot be skipped by the slash command.
 
 Run after a crash, reboot, or dead session to rebuild the breakpoint from
 mechanical state — never from the dying session's narrative. The brief is
-produced by `scripts/kunglao_resume.py` (also `python scripts/kunglao.py
+produced by `scripts/kunglao_resume.py` (also `uv run --project <SKILL_DIR> python scripts/kunglao.py
 resume <workspace> [--json]`) and covers:
 
 - **health** — claim-register presence, heartbeat liveness
@@ -80,7 +80,7 @@ silently run against it. Never guess.
   known).
 - Consume `$ARGUMENTS` when present: `/kunglao-agent:resume <workspace>`.
 - With the workspace known, run
-  `python scripts/kunglao_resume.py <workspace>` (add `--json` for the
+  `uv run --project <SKILL_DIR> python scripts/kunglao_resume.py <workspace>` (add `--json` for the
   machine-readable brief) and relay the brief, its exit code, and the
   next step. rc 1 → surface the manual reasons and the re-arm advice
   BEFORE any other action. rc 2 → point the operator at

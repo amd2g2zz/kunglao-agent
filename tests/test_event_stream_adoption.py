@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from _factories import stamp_current
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -196,6 +198,7 @@ class TestAskForDirectionGateEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True, exist_ok=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         return ws
 
     def test_type_a_ask_back_emits_with_rc(self, tmp, events):
@@ -336,6 +339,7 @@ class TestPlanDriftWarnEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         plan = ws / "global_plan.txt"
         plan.write_text("# plan v1\nno claim ids here\n", encoding="utf-8")
         an = ws / "analyses" / "failure-C-1.yaml"
@@ -361,6 +365,7 @@ class TestPlanDriftWarnEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         (ws / "global_plan.txt").write_text("# plan v1\n", encoding="utf-8")
         assert pdd.check(ws, active_only=True) == 0
         assert not events, f"no warn, no event; got {events}"
@@ -476,6 +481,7 @@ class TestConvergenceDecisionEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         # #240: the convergence CLI hard-errors without the task_spec marker.
         # #306: the payload face needs the oracle-anchor stamp too (a
         # claimless register + question-less AND anchor-less task_spec is
@@ -513,6 +519,7 @@ class TestConvergenceDecisionEmit:
             encoding="utf-8")
         # #240: the convergence CLI hard-errors without the task_spec marker
         (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+        stamp_current(ws)  # 0.1.6 gate: non-degenerate ws must carry the stamp
         rc_with_emit = cc.main([str(ws), "--json"])  # emit fires (captured)
         rows = _actions(events, "converge")
         assert rows, f"emit must fire on the healthy path; got {events}"
@@ -548,6 +555,7 @@ class TestFailOpenEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         assert afd.check(ws, "should I dispatch?") == 1
         assert afd.check(ws, "git push --force to publish") == 2
 
@@ -601,6 +609,7 @@ class TestFailOpenEmit:
             encoding="utf-8")
         # #240: the convergence CLI hard-errors without the task_spec marker
         (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+        stamp_current(ws)  # 0.1.6 gate: non-degenerate ws must carry the stamp
         healthy = cc.main([str(ws), "--json"])  # healthy baseline rc
         assert _actions(events, "converge"), "sanity: healthy path emits"
 

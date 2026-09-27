@@ -37,6 +37,8 @@ for _p in (str(SCRIPTS), str(HOOKS)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from _factories import stamp_current  # noqa: E402
+
 # The canonical protocol module, loaded by explicit path under the SAME unique
 # name every scripts-side consumer uses ("lib_kunglao_hooks") — the
 # external_kicker.should_kick / state_anchor._load_drift_lib precedent.
@@ -382,6 +384,7 @@ def test_worker_pulse_flags_w15(tmp_path):
     import worker_pulse as wp
     ws = tmp_path / "ws-pulse"
     ws.mkdir()
+    stamp_current(ws)  # 0.1.6 gate: the pulse shells out to convergence_check
     (ws / "runs").mkdir()
     (ws / "claim-register.yaml").write_text(
         "claims:\n- id: C-1\n  status: OPEN\n", encoding="utf-8")

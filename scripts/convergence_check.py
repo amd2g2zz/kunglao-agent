@@ -40,6 +40,9 @@ registry constant block for #99):
      and no oracle-anchor stamp + a claim register with zero claims. Init's
      anchor intake runs before every scaffold write, so a healthy workspace
      can never look like this; hard error, never a verdict)
+  67 = VERSION_MISMATCH (0.1.6 sweep: the workspace format stamp is
+     absent or != the executing skill version — older AND newer refuse;
+     the transactional kunglao_upgrade is the only path forward)
 
 Usage:
   python scripts/convergence_check.py <workspace>          # human-readable
@@ -117,7 +120,8 @@ WORKSPACE_MARKERS = ("claim-register.yaml", "task_spec.yaml")
 from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
                        EXIT_DISPATCH, EXIT_EMPTY_WORKSPACE,
                        EXIT_MISSING_WORKSPACE, EXIT_PARK,
-                       EXIT_SATURATED, EXIT_VERIFY)
+                       EXIT_SATURATED, EXIT_VERIFY,
+                       EXIT_VERSION_MISMATCH)
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
@@ -2279,6 +2283,22 @@ def _require_workspace(raw: str | None) -> Path:
         print(f"ERROR: not a kunglao workspace: {workspace} "
               f"(missing: {', '.join(missing)})", file=sys.stderr)
         raise SystemExit(EXIT_MISSING_WORKSPACE)
+    # 0.1.6 version-consistency gate (owner HARD requirement): the CLI
+    # analysis face refuses any workspace whose format stamp != the
+    # executing skill version — older AND newer — and any marked workspace
+    # with no stamp at all. Severity ladder: EMPTINESS-grade workspaces
+    # keep the 66 face (their remedy is re-init, not upgrade). Direct
+    # decide() callers are NOT gated here (the machine-level API stays
+    # verdict-shaped); their entry surfaces are gated upstream
+    # (cmd_resume runs the exact-match stale gate first).
+    import template_version as _tv
+    mismatch = _tv.version_mismatch(workspace)
+    if mismatch is not None and _degenerate_reason(workspace) is None:
+        print(f"ERROR: {mismatch}. Run: python scripts/kunglao_upgrade.py "
+              f"{workspace} — the transactional upgrade is the only path "
+              f"to a mismatched-workspace analysis entry.",
+              file=sys.stderr)
+        raise SystemExit(EXIT_VERSION_MISMATCH)
     return workspace
 
 

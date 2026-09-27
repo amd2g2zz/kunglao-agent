@@ -73,7 +73,7 @@ analysis; a workspace that is not initialized is refused work.
    the run prints a pending document with decision id `lane` and NO
    default — relay it like the anchors, never guess it.
 1. **Target alignment ** — run
-   `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
+   `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis lane -> analysis target ->
    project type) exit 8
    with a structured pending list on stdout (JSON). Collect the answers via
@@ -128,7 +128,7 @@ analysis; a workspace that is not initialized is refused work.
    deployment (kunglao's BUILT-IN bundled skills only — globally-installed
    skills are a different, future surface). Activation (which hooks FIRE)
    stays a separate orchestrator act:
-   `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
+   `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
    remains the canonical re-registration/repair entry .
 
 Repeat init on an existing workspace resumes idempotently from

@@ -76,7 +76,7 @@ argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | up
 
 **Identity.** kunglao-agent behaves like a human reverse-engineering expert: it plans its own analysis path, derives every fact from raw evidence independently, and converges under mechanical gates — for ANY RE problem (firmware, protocol, web/JS, risk-control, binary triage). The task domain is the user's input, never the product's scope.
 
-**Reference library** — progressive disclosure: read `references/_INDEX.md` (domain index + scenario-to-domain map), then per-domain `_index-<domain>.md`; load by scenario on demand, never wholesale. Programmatic recall: `python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns matching rows, never file contents.
+**Reference library** — progressive disclosure: read `references/_INDEX.md` (domain index + scenario-to-domain map), then per-domain `_index-<domain>.md`; load by scenario on demand, never wholesale. Programmatic recall: `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns matching rows, never file contents.
 
 **Rules bundled with skill:** `<SKILL_DIR>/rules/kunglao-convergence-loop.md` (distilled always-on convergence rules, incl. maker-checker §5) ships WITH the skill. Repo-top `rules/` is the source; its deployment into `~/.claude/rules/common/` is a dev-machine-internal setup convenience, NOT a runtime dependency of this skill.
 
@@ -88,7 +88,7 @@ Search the RE problem space efficiently: each operation has a query (what you lo
 
 Run in order; any FAIL blocks the next step.
 
-0. **env_check (mechanical gate)**: `python <SKILL_DIR>/scripts/env_check.py <WORKSPACE>` — five checks (① AGENT_TEAMS flag ② VM reachability 9876+1337 ③ Ghidra analyzeHeadless ④ hook deployment ⑤ venv + sample sha256), snapshot to `runs/.env-check.json`, exit 0 only when `OVERALL=PASS`. Semantics (=`hooks/env_check_gate.py`; full matrix in `references/contracts/cold-start-contract.md`): ① HARD — flag on = dispatch forbidden; ②③④ FAIL recoverable — static proceeds, T3 dynamic/decompile restricted. Dynamic channel `KUNGLAO_CHANNEL=vmr|ssh|docker|adb|local` — five equivalent control planes; dynamic tasks probe HARD, static-only tasks WARN; `local` is static-only — a dynamic task on `local` is REJECTED. Enter analysis only with `OVERALL=PASS`; fix and re-run.
+0. **env_check (mechanical gate)**: `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/env_check.py <WORKSPACE>` — five checks (① AGENT_TEAMS flag ② VM reachability 9876+1337 ③ Ghidra analyzeHeadless ④ hook deployment ⑤ venv + sample sha256), snapshot to `runs/.env-check.json`, exit 0 only when `OVERALL=PASS`. Semantics (=`hooks/env_check_gate.py`; full matrix in `references/contracts/cold-start-contract.md`): ① HARD — flag on = dispatch forbidden; ②③④ FAIL recoverable — static proceeds, T3 dynamic/decompile restricted. Dynamic channel `KUNGLAO_CHANNEL=vmr|ssh|docker|adb|local` — five equivalent control planes; dynamic tasks probe HARD, static-only tasks WARN; `local` is static-only — a dynamic task on `local` is REJECTED. Enter analysis only with `OVERALL=PASS`; fix and re-run.
 1. **Python env (uv-native)**: probe `uv run --project <SKILL_DIR> python -c "import yaml"`; PASS → record `venv=<SKILL_DIR>/.venv` in `analysis_state.txt`. FAIL → repair at the failing layer (uv install script / `uv sync --locked --project <SKILL_DIR>`); never hand-create the env — uv owns the lock.
 2. **Toolchain**: `scripts/` `hooks/` `templates/` `tools/` exist; `convergence_check.py` executes.
 3. **Cognition baseline**: write env conclusions to `analysis_state.txt` (venv, versions, sample sha256) — later cold starts read this, do not re-probe.
@@ -129,25 +129,25 @@ Run in order; any FAIL blocks the next step.
 Run hook + heartbeat activation before the first dispatch (orchestrator-only, 30-min TTL):
 
 ```bash
-python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --wire-up       # idempotent; before first dispatch
-python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-on  # worker_budget REJECTS dispatch without .heartbeat.json
-python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = /loop prompt → CronCreate */5 * * * *
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --wire-up       # idempotent; before first dispatch
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-on  # worker_budget REJECTS dispatch without .heartbeat.json
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = /loop prompt → CronCreate */5 * * * *
 ```
 
 MUSTs: `--renew` every 30 min; `--reconcile` every tick (self-heals zombie workers); cron acceptance HARD — `heartbeat_loop_prompt.py --verify` non-zero = CronCreate did not take. A PASSING dispatch auto-renews the TTL, flips phase to DISPATCH, and writes the dispatch event.
 
 **Oracle backfill (gate power-on)**: before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker) — without it the completion gate judges nothing. The heartbeat tick reports `oracle_registered`; false + marker still present = backfill skipped — do it now.
 
-**Goal operationalization pre-registration (Phase 0)**: the goal→operationalization translation is a mechanical pre-registration — `<WORKSPACE>/goal-operationalization.yaml`. Before the first dispatch, fill `deliverables:` / `acceptance:` / `not_done:` / `diff_vs_verbatim:` / `generalization:` + `declared_ts:` and pass `python <SKILL_DIR>/scripts/goal_operationalization.py <WORKSPACE>/goal-operationalization.yaml` — the validator refuses an unaudited translation (empty not-done counterexamples, missing diff declaration, `generalization` left `required`/`unknown` without the `fresh-input` probe case, a `not-applicable` claim not declared as a diff entry, missing timestamp). The not-done counterexamples are the load-bearing half: concrete negatives in the "X does not count as done" form — for protocol client simulation the fresh-input case IS the master oracle; replay is the verification ladder, never the closure. Phase 0 also states the oracle behavior statement: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged. After `--stamp-dispatch` the file is append-only — the not_done constitution can grow, never shrink or reword; delivery restates it (`--restatement`); any other drift becomes a re-scope record; ambiguity escalates only through ask_for_direction, never a silent edit.
+**Goal operationalization pre-registration (Phase 0)**: the goal→operationalization translation is a mechanical pre-registration — `<WORKSPACE>/goal-operationalization.yaml`. Before the first dispatch, fill `deliverables:` / `acceptance:` / `not_done:` / `diff_vs_verbatim:` / `generalization:` + `declared_ts:` and pass `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/goal_operationalization.py <WORKSPACE>/goal-operationalization.yaml` — the validator refuses an unaudited translation (empty not-done counterexamples, missing diff declaration, `generalization` left `required`/`unknown` without the `fresh-input` probe case, a `not-applicable` claim not declared as a diff entry, missing timestamp). The not-done counterexamples are the load-bearing half: concrete negatives in the "X does not count as done" form — for protocol client simulation the fresh-input case IS the master oracle; replay is the verification ladder, never the closure. Phase 0 also states the oracle behavior statement: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged. After `--stamp-dispatch` the file is append-only — the not_done constitution can grow, never shrink or reword; delivery restates it (`--restatement`); any other drift becomes a re-scope record; ambiguity escalates only through ask_for_direction, never a silent edit.
 
-**Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault. **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action. **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins. Stop the loop at closeout: `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
+**Tick binding**: run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault. **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action. **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins. Stop the loop at closeout: `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
 ## Phase 2 Dispatch Loop
 
 **Convergence check first, every turn** — before anything else:
 
 ```bash
-python <SKILL_DIR>/scripts/convergence_check.py <WORKSPACE>
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_check.py <WORKSPACE>
 ```
 
 Act on the decision + exit code — it is a command, not a suggestion:
@@ -162,6 +162,7 @@ Act on the decision + exit code — it is a command, not a suggestion:
 | `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes, completion transaction clean | claim loop done — CONVERGED now requires zero global contradictions, zero unconsumed discoveries, and PROVEN provenance (recomputed in `convergence_check.py` + `completion_gate.py`). STOP dispatch; deliver |
 | `CRASHED` | 65 | the check itself crashed — never a decided state | Read the stderr traceback, repair the named file; never dispatch on 65 |
 | `EMPTY_WORKSPACE` | 66 | markers exist but payloads are empty (intake never happened or files rotted) | Re-run init intake: `kunglao-init <ws> --resolve <answers.json>`. Never dispatch, never read as converged |
+| `VERSION_MISMATCH` | 67 | workspace format stamp != executing skill version (older AND newer refuse; missing stamp included) | Run `uv run --project <SKILL_DIR> python scripts/kunglao_upgrade.py <ws>` — the transactional upgrade is the only path forward; never dispatch, never read as converged |
 
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER act before the turn ends — background launches, never awaited inline.
 
@@ -197,7 +198,7 @@ input ready? -> no -> input completeness (path/permission/format)      | yes -> 
 
 Four rules: (1) repair AT the failed layer N — jumping to another tool on a layer failure is INVALID (fallback belongs to the decompiler XOR family, issue 210, chosen by lane — never triggered by a layer failure); (2) gathered facts gate the next action — mechanical gate: `echo '{"python_version": "3.14"}' | python <SKILL_DIR>/scripts/decision_lint.py "pip install idapro"` (exit 1 = BLOCKED); (3) recommending a fallback while the primary is present-and-repairable is decision invalidity; (4) reports name the LAYER, never a "dead" verdict.
 
-**Script discipline**: any reusable logic a worker needs references an existing CLI in `scripts/` or is written as a parameterized CLI there — never inlined as `python -c "..."` or a heredoc in a dispatch prompt; one-off diagnostics may run inline. Check `tools/_INDEX.yaml` before writing new scripts. Checklist → `references/contracts/cli-script-checklist.md`.
+**Script discipline**: any reusable logic a worker needs references an existing CLI in `scripts/` or is written as a parameterized CLI there — never inlined as an inline `python -c` snippet or a heredoc in a dispatch prompt; one-off diagnostics may run inline. Check `tools/_INDEX.yaml` before writing new scripts. Checklist → `references/contracts/cli-script-checklist.md`.
 
 ### The 5 behaviors
 
@@ -209,7 +210,7 @@ Four rules: (1) repair AT the failed layer N — jumping to another tool on a la
 
 ## Convergence health
 
-`python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2).
+`uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2).
 
 **A failed attempt is not a negative result**: run `failure_analysis_gate.py <WORKSPACE> <C-NN>` before re-dispatch or NEGATIVE; `--lessons` aggregates closed-loop analyses into `references/lessons/`.
 

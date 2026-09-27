@@ -88,19 +88,20 @@ def test_warn_rate_limits_per_op_until_reason_changes(capsys, quiet_warn):
 
 # -------------------------------------------------------- heartbeat_tick
 
-def test_module_emit_nameerror_traces_sidecar_not_stderr(capsys,
-                                                         quiet_warn):
-    """The module-level emit (issue 534) can never resolve `ws` — the
-    import-time fail-open records the sidecar (hook-embedded importers
-    keep stderr empty, token-zero) and main() drains it into the tick
-    report."""
+def test_module_import_emits_nothing_and_no_degradation(capsys,
+                                                        quiet_warn):
+    """#413 fix: the #534 module-level emit could never resolve `ws` — it
+    poisoned every tick report with degraded.module_emit: NameError. The
+    import is now SIDE-EFFECT-FREE (no emit, no degradation); the
+    "module wired" row lands in main() with the resolved ws."""
     spec = importlib.util.spec_from_file_location(
         "kunglao_275_tick_fresh", SCRIPTS / "heartbeat_tick.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     err = capsys.readouterr().err
     assert err == "", "import-time degradation must stay off stderr"
-    assert "module_emit" in mod._DEGRADED
+    assert "module_emit" not in mod._DEGRADED, (
+        "the import-time NameError face is gone (#413)")
 
 
 def test_module_emit_sidecar_drains_into_tick_report(quiet_warn, tmp_path,

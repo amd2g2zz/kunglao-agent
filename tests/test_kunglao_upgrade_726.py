@@ -235,7 +235,8 @@ def test_events_emitted(up, tmp_path):
 
 def test_iron_rule_guard_selftest(up, tmp_path, capsys):
     """The guard itself is under test: a migration that touches user data
-    must flip the exit code to 4 (fail loudly, keep the snapshot)."""
+    fails loudly (exit 4) AND — the 0.1.6 transactional requirement — the
+    rollback restores the tampered user data byte-exact."""
     ws = synth_v012_ws(tmp_path)
 
     def evil(ws: Path, dry: bool):
@@ -247,6 +248,8 @@ def test_iron_rule_guard_selftest(up, tmp_path, capsys):
     up.MIGRATIONS = [("9.9.9", evil)]
     rc = up.main([str(ws)])
     assert rc == 4, "user-data mutation under upgrade must exit 4"
+    assert (ws / "facts" / "F001.md").read_text(encoding="utf-8") \
+        == "fact body", "rollback must restore the tampered user data"
     assert list((ws / "runs").glob("upgrade-snapshot.*.json")), \
         "snapshot must survive an iron-rule failure"
 
@@ -259,10 +262,11 @@ def _git(ws: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def test_no_git_workspace_gets_git_snapshot(up, tmp_path, capsys):
-    """#739 + #753 — a legacy no-git workspace is anchored BEFORE migration:
-    the FIRST commit is the pre-upgrade anchor, the hygiene .gitignore is in
-    place, and the usage banner (log / revert / checkout -b exp) prints. The
-    migrated state lands as the second (post-upgrade state) commit."""
+    """#739 + #753 + 0.1.6 transactional sweep — a legacy no-git workspace is
+    snapshotted BEFORE migration: the FIRST commit is the pre-upgrade
+    snapshot, the migrated state lands as the second commit, and the usage
+    banner (log / revert / checkout -b exp) prints. Reverting the migrated
+    state restores the exact pre-upgrade framework scaffold."""
     ws = synth_v012_ws(tmp_path)
     assert not (ws / ".git").exists()
     assert up.main([str(ws)]) == 0
@@ -270,9 +274,13 @@ def test_no_git_workspace_gets_git_snapshot(up, tmp_path, capsys):
     subjects = [s for s in _git(ws, "log", "--format=%s").stdout.splitlines()
                 if s.strip()]
     assert len(subjects) == 2
-    # git log is newest-first: [0] = post-upgrade state, [-1] = the anchor
-    assert "pre-upgrade anchor" in subjects[-1]
-    assert "post-upgrade state" in subjects[0]
+    # git log is newest-first: [0] = migrated state, [-1] = the snapshot
+    assert "kunglao upgrade: 0.1.2 ->" in subjects[0]
+    assert "kunglao upgrade snapshot: pre" in subjects[-1]
+    rev = _git(ws, "revert", "--no-edit", "HEAD")
+    assert rev.returncode == 0, rev.stderr
+    claudemd = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert _stamp_line("0.1.2") in claudemd
     gi = (ws / ".gitignore").read_text(encoding="utf-8")
     for pat in ("bins/", "__pycache__/", "*.pyc", "*.log", "runs/"):
         assert pat in gi, pat
@@ -285,35 +293,46 @@ def test_no_git_workspace_gets_git_snapshot(up, tmp_path, capsys):
 
 
 def test_existing_git_repo_is_left_alone(up, tmp_path):
-    """#739 — an existing repo is never re-initialized: no snapshot commit
-    is layered on top, no .gitignore is written into it."""
+    """#739 + 0.1.6 transactional — an existing repo is never re-initialized
+    and never gets a .gitignore written into it; a CLEAN tree needs no
+    snapshot commit (HEAD is the snapshot), so exactly ONE commit — the
+    migrated state — lands on top of the operator's history."""
     ws = synth_v012_ws(tmp_path)
     for args in (("init",), ("add", "-A"),
                  ("-c", "user.name=t", "-c", "user.email=t@localhost",
                   "commit", "--no-gpg-sign", "-m", "pre-existing")):
         _git(ws, *args)
     assert up.main([str(ws)]) == 0
-    assert _git(ws, "log", "--format=%s").stdout.splitlines() == \
-        ["pre-existing"]
+    subjects = [s for s in _git(ws, "log", "--format=%s").stdout.splitlines()
+                if s.strip()]
+    assert subjects == ["kunglao upgrade: 0.1.2 -> "
+                        + template_version.read_skill_version(),
+                        "pre-existing"]
     assert up.ensure_git_snapshot(ws) == {"status": "existing"}
     assert not (ws / ".gitignore").exists()
 
 
-def test_git_missing_warns_but_upgrade_succeeds(
+def test_git_missing_refuses_unanchored_migration(
         up, tmp_path, capsys, monkeypatch):
-    """#739 — git binary missing: one-line WARN to stderr +
-    git_snapshot_skipped event, no .git — and the upgrade rc stays 0."""
+    """0.1.6 transactional contract supersedes the #739 proceed-without-git
+    posture: with the git binary gone there is NO way to take the
+    pre-migration snapshot, and a migration without a rollback anchor is
+    unrecoverable — the run refuses (rc 6) BEFORE any mutation, with
+    repair guidance. No .git, no scaffold writes."""
     ws = synth_v012_ws(tmp_path)
+    pre_claudemd = (ws / "CLAUDE.md").read_bytes()
 
     def no_git(*_a, **_k):
         raise FileNotFoundError("git binary not found")
 
     monkeypatch.setattr(up, "_run_git", no_git)
-    assert up.main([str(ws)]) == 0
-    assert not (ws / ".git").exists()
+    rc = up.main([str(ws)])
+    assert rc == 6, "unanchored migrations must refuse (no rollback point)"
     captured = capsys.readouterr()
-    assert "WARN" in captured.err
-    assert "git" in captured.err
+    assert "REFUSED" in captured.err
+    assert "git" in captured.err.lower()
+    assert (ws / "CLAUDE.md").read_bytes() == pre_claudemd, \
+        "refusal must precede every mutation"
     actions = [json.loads(line).get("action")
                for log in (ws / "runs" / "logs").glob("kunglao-*.jsonl")
                for line in log.read_text(encoding="utf-8").splitlines()

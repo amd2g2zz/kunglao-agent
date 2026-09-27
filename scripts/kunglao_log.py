@@ -91,6 +91,11 @@ ACTOR_RE = re.compile(
 # (scan_actor_literals, anchored by tests/test_trace_identity_879.py) makes
 # every NEW literal vocabulary-or-red; legacy names stop growing.
 LEGACY_ACTORS = frozenset({
+    # #415/#830 durable tick-sidecar actor labels (runs/.heartbeat.log rows,
+    # NOT ledger actors): "tick" = real cron/main-flow tick, "register" =
+    # registration marker, "hook" = heartbeat_touch pulse. Adopted so the
+    # repo-wide actor-literal anchor stays green.
+    "tick", "register", "hook",
     "anomaly_detector", "ask_for_direction", "ask_for_direction_gate",
     "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
     "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",

@@ -147,9 +147,13 @@ MANIFEST: tuple[MCPItem, ...] = (
     # #728 web (labs): browser JS reverse engineering supply. Upstream-
     # verified registration (README 2026-08-26): python module entrypoint,
     # optional flags --proxy/--geoip/--humanize stay out of the register
-    # template (placeholder-free rule). WARN — labs never FAIL-HARD.
+    # template (placeholder-free rule). Owner ruling (2026-09-27, 51job
+    # live run): camoufox-reverse is REQUIRED on the web lane — without a
+    # fingerprint-spoofing browser, captcha/anti-bot web analysis cannot
+    # run at all ("web项目必须要装啊，不然怎么分析啊"). HARD on web, the
+    # exact register command is the remediation (AGENT-DO tier).
     MCPItem(
-        name="camoufox-reverse", tier="WARN", types=("web",),
+        name="camoufox-reverse", tier="HARD", types=("web",),
         purpose="browser JS reverse engineering (anti-detection Firefox: "
                 "hooks/trace/network capture; optional --proxy/--geoip/"
                 "--humanize flags)",

@@ -102,6 +102,70 @@ def append_tick_log(workspace, actor: str = "tick") -> None:
         fh.write(line + chr(10))
 
 
+def reset_continuity_baseline(workspace: Path, *, force: bool = False,
+                              max_age_hours: int = 24) -> dict:
+    """#415.3: gated continuity-baseline reset for VERIFIED FRESH DEPLOYS.
+
+    Deploy-day reality: a durable cron registered MID-SESSION does not fire
+    until the next Claude Code session, so the sidecar's only rows are
+    hook/register entries and the registration tick ages past the stale
+    line — "wait a day" must not be the only recovery. This face rotates
+    the sidecar (runs/.heartbeat.log -> .heartbeat.log.reset-<ts>) and
+    rebuilds tick_history from one fresh registration tick, so continuity
+    re-arms from NOW.
+
+    Gate (fail-closed by default):
+      - any REAL tick row (actor="tick") in the sidecar -> REFUSE: real
+        cron ticks prove the loop fired; a stall then means a REAL dead
+        cron and the re-arm chain is the remedy, not a reset.
+      - the existing heartbeat state older than max_age_hours -> REFUSE
+        (only a fresh deploy may reset).
+
+    Returns {"status": "reset"|"refused", "reason"?, "rotated_to"?}.
+    """
+    import time as _time
+    log = heartbeat_log_path(workspace)
+    real_ticks = 0
+    if log.exists():
+        for obj in iter_jsonl(
+                log.read_text(encoding="utf-8",
+                              errors="replace").splitlines()):
+            if isinstance(obj, dict) and str(obj.get("actor")) == "tick":
+                real_ticks += 1
+    if real_ticks and not force:
+        return {"status": "refused",
+                "reason": f"{real_ticks} real tick row(s) present — the cron "
+                          f"has fired; a stall is REAL, use the re-arm "
+                          f"chain (heartbeat_tick.py <ws>), not a reset"}
+    state_path = workspace / "runs" / ".heartbeat.json"
+    if not state_path.is_file():
+        return {"status": "refused", "reason": "no heartbeat state — "
+                "nothing to reset (register first)"}
+    try:
+        age_s = _time.time() - state_path.stat().st_mtime
+    except OSError as exc:
+        return {"status": "refused", "reason": f"state unreadable: {exc}"}
+    if age_s > max_age_hours * 3600 and not force:
+        return {"status": "refused",
+                "reason": f"heartbeat state is {int(age_s // 3600)}h old — "
+                          f"only a fresh deploy (<{max_age_hours}h) may "
+                          f"reset; use the re-arm chain instead"}
+    stamp = _time.strftime("%Y%m%dT%H%M%SZ", _time.gmtime())
+    rotated_to = None
+    if log.exists():
+        rotated = workspace / "runs" / f".heartbeat.log.reset-{stamp}"
+        log.replace(rotated)
+        rotated_to = rotated.name
+    from harness_common import utc_now_z
+    now_z = utc_now_z()
+    state = {"ts": now_z, "interval_min": TICK_INTERVAL_DEFAULT_MIN,
+             "tick_history": [now_z],
+             "continuity_baseline_reset": now_z}
+    state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)
+                          + "\n", encoding="utf-8")
+    return {"status": "reset", "rotated_to": rotated_to}
+
+
 def newest_sidecar_ts(workspace) -> str | None:
     """#618: newest durable tick ts from runs/.heartbeat.log (JSONL sidecar,
     #830). None when the sidecar is absent/unreadable — the caller decides
@@ -204,6 +268,7 @@ def evaluate_tick_continuity(state: dict, *,
     # erase history: the old ticks stay in the sidecar, so deletion cannot
     # hide the cadence gap around the incident (D2/D3).
     durable = []
+    skipped_non_tick = 0
     if log_path is not None:
         lp = Path(log_path)
         if lp.exists():
@@ -211,6 +276,18 @@ def evaluate_tick_continuity(state: dict, *,
                     lp.read_text(encoding="utf-8",
                                  errors="replace").splitlines()):
                 if isinstance(obj, dict):
+                    # #415: ONLY real cron/main-flow tick rows count for
+                    # continuity. The sidecar is a shared append-only
+                    # substrate: hook-event pulses (actor="hook",
+                    # heartbeat_touch) and registration markers
+                    # (actor="register") are a DIFFERENT stream — counting
+                    # them made deploy-day quiet gaps look like dead crons
+                    # for ~24h (owner live run, 51job). Unknown/absent
+                    # actors from legacy rows keep the old inclusive read.
+                    actor = str(obj.get("actor") or "tick")
+                    if actor in ("hook", "register"):
+                        skipped_non_tick += 1
+                        continue
                     ts = _parse_hb_ts(obj.get("ts"))
                     if ts is not None:
                         durable.append(ts)

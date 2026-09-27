@@ -67,7 +67,6 @@ release (see the mapping table at the end).
   THE one interface (`rollout_ledger.settled(kind, window)`) —
   SETTLED_GREEN/HELPED → alpha, SETTLED_RED/ADVERSE → beta, NEUTRAL →
   nothing; the prior math itself is untouched.
->>>>>>> origin/dev
 - **Runtime-state rotation induction (#341)**: runtime values (keys, tokens, sessions, nonces, cookies) are no longer recorded as timeless truths. WRITE side: a dynamic-source fact about a volatile subject must carry `temporal_scope: runtime`, `subject_slot`, `value_fingerprint` (sha256 of the value only), `captured_at` (ISO ts) — `hooks/write_guard.py` gains a runtime-fact leg (`scripts/runtime_facts.check_fact_postimage`) that REJECTS the fact otherwise; static-source facts are never required to carry the fields. JOIN side: the `rotation_induction` mechanism (registered in `scripts/mechanisms.yaml`, tick channel, cheap) groups runtime facts by (claim_id, `subject_slot`); ≥2 distinct `value_fingerprint`s under one slot emit `runtime_value_rotation` (EMIT_ACTIONS-registered), auto-file the rotation hypothesis as the COMPETITOR of the implicit static premise, and write a pending synthesis note recording the fingerprint series — idempotent on an unchanged fingerprint set, a grown set refires with the fuller series (superseding note, hypothesis never duplicated). GATE side: a dispatch on a rotation-flagged claim without the `rotation-experiment: rotation-characterization` marker is REJECTED with guidance pointing at the new reference card `references/re-library/dynamic/rotation-characterization.md` (derivation-point hook / T,T+Δ double capture / trigger-isolation matrix / rotation-input source trace). HEALTH face: the rotation event feeds the convergence ledger (operator_action row) and `convergence_health`'s verdict face renders `rotation_events` + names the marker requirement in the STALLED/SPINNING action text. Hygiene pinned by test: fingerprints only — raw key material never reaches events/ledger/hypotheses/notes/state.
 - **Premise epistemics (#340)**: environment premises become clocks with
   evidence, not facts. Blocker schema v2 (`templates/state/blocker.md`)
@@ -204,6 +203,27 @@ release (see the mapping table at the end).
   (#320). Quickstart, subcommands, toolchain, channel, configuration, safety,
   development, and internals essentials preserved; the opening one-liner is
   reworded and kept in lockstep with the plugin-manifest description.
+
+- **Init/upgrade/config v0.1.6 sweep (transactional migration + version gate)**:
+  the upgrade becomes a git TRANSACTION — before any mutation the workspace
+  state is committed (`kunglao upgrade snapshot: pre <target> (from <origin>)`;
+  a dirty repo's uncommitted work is committed AS the snapshot, ending the
+  RC 6 refusal on the migration path — that face survives only on the
+  already-current early-exit refresh), success lands the migrated state as
+  a second commit (`kunglao upgrade: <origin> -> <target>`), and ANY failure
+  (mid-item raise / iron-rule violation / finish-sequence abort) rolls the
+  tree back byte-identical (`git reset --hard` + scoped clean of the
+  migration's own untracked outputs — never a blanket clean of user data).
+  `MIGRATIONS` gains the `0.1.6` entry (deploy-surface refresh: lane-universal
+  redteam agent, blocker-v2 template + reference-card copies, orphan prune of
+  superseded deployed files across ALL manifest trees, ledger/report version
+  stamps) and the deployed-copy orphan guard widens from hooks/agents to
+  every manifest-deployed tree. Version-consistency gate: analysis/decide
+  entry (convergence_check exit 67, init resume intake rc 9, /loop birth rc 9,
+  check-stale/resume gates) now REFUSES any workspace whose format stamp !=
+  the executing skill version — older AND newer, missing stamp included —
+  pointing at the transactional upgrade as the only path forward; only exact
+  match proceeds. No-backcompat cleanup per the 2026-09-01 ruling.
 
 ## [0.1.5.post2] - 2026-09-19
 

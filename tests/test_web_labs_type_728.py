@@ -112,8 +112,9 @@ def test_init_marker_accepts_web(tmp_path):
 # ---------- 2. MCP manifest ----------
 
 def test_camoufox_manifest_entry():
+    # 0.1.6 sweep owner ruling: camoufox-reverse is REQUIRED on web (HARD)
     item = mcp_probe._BY_NAME["camoufox-reverse"]
-    assert item.tier == "WARN"
+    assert item.tier == "HARD"
     assert item.types == ("web",)
     assert "python -m camoufox_reverse_mcp" in item.register
     assert mcp_probe.MANIFEST_GROUPS["web_labs"] == ["camoufox-reverse"]
@@ -126,9 +127,11 @@ def test_scaffold_json_carries_web_labs_group():
 
 
 def test_no_hard_manifest_item_applies_to_web():
+    # 0.1.6 sweep owner ruling: camoufox-reverse IS the one HARD web item
     hard = [i.name for i in mcp_probe.MANIFEST
             if i.tier == "HARD" and "web" in i.types]
-    assert hard == [], f"web must carry zero HARD MCP items, got {hard}"
+    assert hard == ["camoufox-reverse"], (
+        f"web's single REQUIRED MCP supply is camoufox-reverse, got {hard}")
 
 
 def test_desktop_entries_pin_to_desktop_triple():
@@ -137,11 +140,13 @@ def test_desktop_entries_pin_to_desktop_triple():
         assert mcp_probe._BY_NAME[name].types == desktop, name
 
 
-def test_web_mcp_check_is_never_hard_fail():
+def test_web_mcp_check_surfaces_required_supply():
+    # 0.1.6 sweep owner ruling: the required web supply refuses HARD when
+    # missing (init gates on it); FAIL carries the exact register command.
     checks = [c for c in mcp_probe.check_mcp(ROOT, "web")
               if c.name == "camoufox-reverse"]
-    assert checks and checks[0].tier == "WARN"
-    assert checks[0].status in ("PASS", "WARN", "FAIL")  # FAIL is WARN-tier
+    assert checks and checks[0].tier == "HARD"
+    assert checks[0].status in ("PASS", "FAIL")
 
 
 # ---------- 3. CLAUDE.md web template ----------
@@ -269,12 +274,13 @@ def test_setup_web_env_never_overwrites_existing_channel(tmp_path):
 # ---------- 6. toolchain WARN-only face ----------
 
 def test_toolchain_web_has_no_hard_items():
+    # 0.1.6 sweep owner ruling: the ONLY web HARD item is the required
+    # camoufox-reverse MCP supply (unregistered here -> HARD).
     report = toolchain.check(ROOT, "web")
-    hard = [i for i in report.items if i.tier == toolchain.Tier.HARD]
-    assert hard == []
+    hard = [i.name for i in report.items if i.tier == toolchain.Tier.HARD]
+    assert hard == ["mcp:camoufox-reverse"], hard
     names = [i.name for i in report.items]
     assert "channel:docker" in names
-    assert any(n.startswith("mcp:camoufox") for n in names)
 
 
 def test_toolchain_web_docker_absent_is_warn(tmp_path, monkeypatch):
@@ -283,7 +289,11 @@ def test_toolchain_web_docker_absent_is_warn(tmp_path, monkeypatch):
     docker = [i for i in report.items if i.name == "channel:docker"]
     assert docker and docker[0].tier == toolchain.Tier.WARN
     assert docker[0].status == toolchain.Status.WARN
-    assert report.overall_status != toolchain.Status.FAIL
+    # the docker WARN alone never fails the report; only the REQUIRED MCP
+    # supply (mcp:camoufox-reverse, HARD) can — and here (tmp ws, no
+    # registration) it does, which is the owner-ruled contract.
+    hard = [i.name for i in report.items if i.tier == toolchain.Tier.HARD]
+    assert hard == ["mcp:camoufox-reverse"], hard
 
 
 def test_toolchain_rejects_unknown_type():
