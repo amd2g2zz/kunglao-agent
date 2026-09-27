@@ -7,6 +7,11 @@ __pycache__/
 # Virtualenv (created by the documented install command: uv sync --locked)
 .venv/
 
+# Local editable-install build artifacts (#416 made the project buildable)
+*.egg-info/
+build/
+dist/
+
 # Generated release artifact (issue #80) — CI stores it as a workflow artifact
 /release-receipt.json
 

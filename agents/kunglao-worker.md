@@ -419,8 +419,10 @@ fact. Same slot + distinct fingerprints is the rotation input
 `rotation_induction` joins mechanically; fingerprints are the only
 value material that leaves your session.
 
-lint check: `cd <workspace> && python <malware-veri-notes>/scripts/
-lint-notes.py` — your fact must produce 0 ERR lines.
+lint check (when the external malware-veri-notes skill is installed — it is
+user-level, not shipped by this repo or CI): `cd <workspace> && python
+<malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR
+lines.
 
 ## Return format (final message — 3 lines, no prose padding)
 
