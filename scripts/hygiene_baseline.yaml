@@ -140,6 +140,8 @@ files:
   scripts/event_taxonomy.py:
     r1: 116
     r2: 1
+  scripts/exogenous.py:
+    r1: 2
   scripts/external_kicker.py:
     r1: 32
   scripts/fact_contradiction_gate.py:
@@ -305,6 +307,8 @@ files:
     r1: 1
   scripts/retract_claim.py:
     r1: 8
+  scripts/reward_settlement.py:
+    r1: 2
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
@@ -714,6 +718,8 @@ files:
     r2: 1
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
+  tests/test_exogenous_421.py:
+    r1: 2
   tests/test_expected_hashlock_828.py:
     r1: 1
   tests/test_ext_index.py:
@@ -1104,6 +1110,8 @@ files:
     r1: 1
   tests/test_review_hook_install.py:
     r1: 10
+  tests/test_reward_settlement_366.py:
+    r1: 1
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:

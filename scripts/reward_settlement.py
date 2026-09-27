@@ -179,9 +179,41 @@ def settle_workspace(ws, rules_path: Path | str | None = None,
     pending = rl.pending_settlement(ws)
     by_band: dict[str, int] = {}
     settled_n = 0
+    try:
+        import exogenous as exo_mod
+    except Exception as exc:  # noqa: BLE001 — classifier absent -> normal
+        exo_mod = None
+        warn("exogenous_import", f"{type(exc).__name__}: {exc}")
     for row in pending:
         settlement = classify(str(row.get("kind")), row.get("signals") or [],
                               rules_doc)
+        # #421: exogenous-failure classification — a lane-required
+        # component DOWN at action time reclassifies a failed (reward 0.0)
+        # settlement as "<kind>/exogenous": environment-neutral (the band
+        # is outside every polarity list, so the prior feed gets no beta),
+        # visible for audit, carrying a #634-precedent wake_condition.
+        # Conservative: only fires when the env snapshot brackets the
+        # action AND a required component probed fail.
+        if exo_mod is not None and settlement.get("reward") == 0.0:
+            try:
+                import env_state_probe as _esp
+                _ptype = _esp.read_project_type(ws)
+            except Exception:  # noqa: BLE001 — undeclared type -> no caps
+                _ptype = None
+            exo = exo_mod.classify_exogenous(
+                ws, _ptype, row.get("ts") or row.get("anchor_ts"))
+            if exo is not None:
+                kind = str(row.get("kind"))
+                settlement = {
+                    "reward": 0.0,
+                    "band": f"{kind}/exogenous",
+                    "rule_id": f"{kind}/exogenous",
+                    "evidence_refs": list(settlement.get("evidence_refs")
+                                          or []),
+                    "exogenous": exo,
+                    "wake_condition": exo_mod.wake_condition(
+                        exo["component"]),
+                }
         res = rl.settle(ws, str(row.get("rollout_id")), settlement)
         if res.get("appended"):
             settled_n += 1

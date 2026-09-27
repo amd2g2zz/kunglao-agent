@@ -444,6 +444,10 @@ files:
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
     sha256: 9dac9ca8ced2e7471483a6d50da4c2f763fdc205e47bc7cb3c68afa36375a816
+  - src: scripts/exogenous.py
+    dest: .claude/scripts/exogenous.py
+    kind: scaffold
+    sha256: a9a2ec5296279f9316ac3863ca61cc867520872cdda589056e031ce579534836
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
@@ -871,7 +875,7 @@ files:
   - src: scripts/reward_settlement.py
     dest: .claude/scripts/reward_settlement.py
     kind: scaffold
-    sha256: 4a8c9797b630b9ae19c3807575425495a592a3406029dc75ffc59e96ab56b023
+    sha256: 6246043c6cb562d95d45c69b89383711fe71946a2989039f881916a8c34b9703
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
