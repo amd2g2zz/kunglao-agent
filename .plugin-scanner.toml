@@ -19,6 +19,11 @@ ignore_paths = [
   # test scaffolding: generates a Node driver that eval()s a local bundle
   "tests/test_gitnexus_web_751.py",
   "tools/static/web_gitnexus_demo.py",
+  # settlement test battery exercises the engine's eval-finding faces
+  "tests/test_reward_settlement_366.py",
+  # eval-ladder fixtures: fake secret material and dynamic-exec payloads
+  # ARE the graded artifacts under test (2026-09-27, scanner 3.7.1 sweep)
+  "eval/*",
 ]
 
 [rules]
