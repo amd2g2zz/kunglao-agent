@@ -43,7 +43,7 @@ import re
 import sys
 from pathlib import Path
 
-from status_defs import LedgerLineType, ledger_line_type
+from status_defs import LedgerLineType, ledger_line_type, LEDGER_FORMAT
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 import kunglao_log  # noqa: E402  (#104: #534 lifeline, moved off module scope)
 
@@ -129,14 +129,16 @@ def _parse_run(p: Path) -> dict | None:
             return None
         return {"type": "outcome", "ts": utc_now_iso(),
                 "claim_id": _claim_from_redteam(text, p.name),
-                "result": m.group(1).strip(), "checker": "red-team"}
+                "result": m.group(1).strip(), "checker": "red-team",
+                "schema": LEDGER_FORMAT}
     # verify-note path
     m = VERDICT_RE.search(text)
     if not m:
         return None
     return {"type": "outcome", "ts": utc_now_iso(),
             "claim_id": _claim_from_note(text, p.name),
-            "result": m.group(1).strip().lower(), "checker": "verify-note"}
+            "result": m.group(1).strip().lower(), "checker": "verify-note",
+            "schema": LEDGER_FORMAT}
 
 
 def _settle_new(workspace: Path, new_rows: list[dict]) -> None:

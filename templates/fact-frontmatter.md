@@ -100,9 +100,11 @@ sample claim); the credibility letter/number rules above are unchanged.
 
 ## kunglao extension layer (above the schema)
 
-kunglao keeps five fields the schema does not define. They are an explicit
-extension layer — consumed by `scripts/kunglao_verify.py`, NOT part of
-the 12 mandatory fields, but REQUIRED on every kunglao fact:
+kunglao keeps six fields the schema does not define. They are an explicit
+extension layer — consumed by `scripts/kunglao_verify.py` and the #379
+round-credit settlement, NOT part of the 12 mandatory fields; all six are
+known to `lint_facts` (`creator` is optional, the rest are REQUIRED on
+every kunglao fact):
 
 | Field | Meaning |
 |-------|---------|
@@ -111,6 +113,7 @@ the 12 mandatory fields, but REQUIRED on every kunglao fact:
 | `expected` | L1 oracle: sha256 of reproduce stdout, or assignment-class `field=value` assertions |
 | `verified` | date of last L1 pass (`pending` when none yet) |
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
+| `creator` | #379 round-credit provenance: the dispatch id that wrote this fact (`tr-<mission>-d<N>` form; optional; falls back to `trace_id` attribution) |
 
 ### `evidence_class` — the evidence-grade class (claim gate input)
 

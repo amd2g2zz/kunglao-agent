@@ -1,0 +1,365 @@
+{
+  "chain": {
+    "gradient": "L3",
+    "layers": [
+      {
+        "id": "obfuscation",
+        "mechanisms": [
+          "obfuscation"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/1-unpacked.py",
+            "sha256": "04ad653c7a867cd07f8061ab9c9e5ce889b5bda13dfaa14382229ab897dfad82"
+          }
+        ]
+      },
+      {
+        "id": "junk-code",
+        "mechanisms": [
+          "junk-code"
+        ],
+        "ops": [
+          {
+            "lang": "python3",
+            "op": "exec",
+            "path": "layer_out/2-clean.py",
+            "probes": "chain-probes"
+          },
+          {
+            "forbidden": [
+              "_opq_j1bb0",
+              "_w_j1bb0_",
+              "0xd1c3d149",
+              "0x39150335"
+            ],
+            "op": "clean",
+            "path": "layer_out/2-clean.py"
+          }
+        ]
+      },
+      {
+        "id": "encrypted-config",
+        "mechanisms": [
+          "encrypted-config"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/3-config.json",
+            "sha256": "9a64cc6e612a0b45cf01eafe7d6cf3236963795f66edbd42bb7ebd8cf0c9ba1e"
+          }
+        ]
+      },
+      {
+        "id": "custom-cipher-core",
+        "mechanisms": [
+          "anti-debug-gate"
+        ],
+        "ops": [
+          {
+            "lang": "python3",
+            "op": "exec",
+            "path": "layer_out/4-core.py",
+            "probes": "chain-probes"
+          }
+        ]
+      },
+      {
+        "id": "decoy-path",
+        "mechanisms": [
+          "decoy-path"
+        ],
+        "ops": [
+          {
+            "markers": [
+              "c439fe22",
+              "22"
+            ],
+            "op": "markers",
+            "path": "layer_out/5-path.json"
+          }
+        ]
+      },
+      {
+        "id": "anti-debug-gate",
+        "mechanisms": [
+          "anti-debug-gate",
+          "rotation-timer"
+        ],
+        "ops": [
+          {
+            "markers": [
+              "423",
+              "b6a289dd"
+            ],
+            "op": "markers",
+            "path": "layer_out/6-gate.json"
+          }
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "i": 0,
+        "lane": 0,
+        "out": "483100ebbd255b47",
+        "payload": "00000000000000003dd9eb2336c54c3b"
+      },
+      {
+        "i": 1,
+        "lane": 1,
+        "out": "025c9cdc70b5c589",
+        "payload": "00000000000000001191a5d97236dbc5"
+      },
+      {
+        "i": 2,
+        "lane": 2,
+        "out": "c54659ad5e4d57f1",
+        "payload": "0000000000000000fdd0fc3f88fb9911"
+      },
+      {
+        "i": 3,
+        "lane": 0,
+        "out": "c8cb5a03bd4c4c58",
+        "payload": "0000000000000000a3f475156f6277c1"
+      },
+      {
+        "i": 4,
+        "lane": 1,
+        "out": "8cdfeb9ed446f5bc",
+        "payload": "0000000000000000121f7f9b99654057"
+      },
+      {
+        "i": 5,
+        "lane": 2,
+        "out": "896019ff99545286",
+        "payload": "00000000000000005f87e7fb58f62c79"
+      },
+      {
+        "i": 6,
+        "lane": 0,
+        "out": "8a37645d92dee530",
+        "payload": "00000000000000003633d79df2449967"
+      },
+      {
+        "i": 7,
+        "lane": 1,
+        "out": "542517d6897f522b",
+        "payload": "000000000000000013cc761d30ec2c6b"
+      },
+      {
+        "i": 100,
+        "lane": 1,
+        "out": "6186c0841060c1d6",
+        "payload": "0000000000000000f7f1720d8882ecad"
+      },
+      {
+        "i": 101,
+        "lane": 2,
+        "out": "28b78038be16cb75",
+        "payload": "00000000000000006835bd634ca8163f"
+      },
+      {
+        "i": 102,
+        "lane": 0,
+        "out": "fcb94159ec20fbed",
+        "payload": "00000000000000008166675110985309"
+      },
+      {
+        "i": 103,
+        "lane": 1,
+        "out": "973e1f267497548a",
+        "payload": "0000000000000000a9ab1d872abfe5a1"
+      },
+      {
+        "i": 104,
+        "lane": 2,
+        "out": "ae4b64e7c50c488a",
+        "payload": "0000000000000000380c7d9185fcc7bd"
+      },
+      {
+        "i": 105,
+        "lane": 0,
+        "out": "d022b1f633501127",
+        "payload": "000000000000000040400a71cd7cc5b3"
+      },
+      {
+        "i": 106,
+        "lane": 1,
+        "out": "9e9c2a05ffa19065",
+        "payload": "00000000000000000cee1521de923007"
+      },
+      {
+        "i": 107,
+        "lane": 2,
+        "out": "75fabd8f3aee28d0",
+        "payload": "000000000000000030f28d23457544f3"
+      }
+    ]
+  },
+  "core": {
+    "cfg_hex": "d7c9cc4aa79b3fdca2fb41a3ce700035845a221420d15c788fb4f94906ef13c13fc9cb737a4d3bcee760076a41ea55e7bb867fbcc29afb1c2d289ff6da996c89227280a29bb1c3fb96970e85331ef813100394cd332557c12cc224dd24b057fef4d6b63729055b7121cc6e2b6531c4aa1ed61f867216a8b8bdd59aea6c56be67d9277195ff5854cbd4ba82647bca89f8b7a1a8284e138902606c6ee916bcccc25fac62a784828a8c24407f44e7f004cd1d773ce313482e",
+    "config": {
+      "core": {
+        "c0": 3476651305,
+        "c1": 1630351427,
+        "c2": 2063214745,
+        "odd": 1752096423,
+        "odd2": 2468958241,
+        "rot": 24
+      },
+      "gate": {
+        "corrupt": "b6a289dd",
+        "dt_ms": 423
+      },
+      "integ": "5c3614a1",
+      "lanes": 3,
+      "v": 1
+    },
+    "corrupt": 3064105437,
+    "decoy_config": {
+      "core": {
+        "c0": 2896607147,
+        "c1": 1753679715,
+        "c2": 3462814333,
+        "odd": 837160715,
+        "odd2": 682511471,
+        "rot": 17
+      },
+      "v": 0
+    },
+    "decoy_hex": "",
+    "family": "chain-py",
+    "fp": [
+      2551179907,
+      2679493459,
+      1766977259
+    ],
+    "gate_dt_ms": 423,
+    "gradient": "L3",
+    "honeypot": "3c6e467b0df92f352d95fc534efd15632a6a24c5df314c17c8e753474856ea67",
+    "integ": 1547048097,
+    "junk_a": 3519271241,
+    "junk_b": 957678389,
+    "rc": [
+      [
+        397689647,
+        1672211091,
+        2525590317,
+        3082337815
+      ],
+      [
+        4279741547,
+        145617905,
+        2568826317,
+        262928401
+      ],
+      [
+        2552660681,
+        1387352049,
+        390185761,
+        725971651
+      ],
+      [
+        787152685,
+        2968338437,
+        2465233853,
+        2573635791
+      ],
+      [
+        88903527,
+        576656267,
+        1281372073,
+        4066260123
+      ],
+      [
+        2971370937,
+        3415788615,
+        3717492257,
+        343104569
+      ],
+      [
+        1676757947,
+        2820607947,
+        1855608027,
+        546005805
+      ],
+      [
+        2762645755,
+        3929979105,
+        3010027973,
+        2896236247
+      ]
+    ],
+    "rt_key": "935e486727839720f3a9deea1aaaf1aa",
+    "salt": 1182931133,
+    "seed": 37007,
+    "sel_key": 34,
+    "sel_val": 3292134946,
+    "task_id": "chain-l3-py-v1",
+    "unit": {
+      "family": "chain-py",
+      "gradient": "L3",
+      "seed": 37007,
+      "task_id": "chain-l3-py-v1"
+    }
+  },
+  "family": "chain-py",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "lane": 0,
+      "out": "483100ebbd255b47",
+      "payload": "00000000000000003dd9eb2336c54c3b"
+    },
+    {
+      "i": 1,
+      "lane": 1,
+      "out": "025c9cdc70b5c589",
+      "payload": "00000000000000001191a5d97236dbc5"
+    },
+    {
+      "i": 2,
+      "lane": 2,
+      "out": "c54659ad5e4d57f1",
+      "payload": "0000000000000000fdd0fc3f88fb9911"
+    },
+    {
+      "i": 3,
+      "lane": 0,
+      "out": "c8cb5a03bd4c4c58",
+      "payload": "0000000000000000a3f475156f6277c1"
+    },
+    {
+      "i": 4,
+      "lane": 1,
+      "out": "8cdfeb9ed446f5bc",
+      "payload": "0000000000000000121f7f9b99654057"
+    },
+    {
+      "i": 5,
+      "lane": 2,
+      "out": "896019ff99545286",
+      "payload": "00000000000000005f87e7fb58f62c79"
+    },
+    {
+      "i": 6,
+      "lane": 0,
+      "out": "8a37645d92dee530",
+      "payload": "00000000000000003633d79df2449967"
+    },
+    {
+      "i": 7,
+      "lane": 1,
+      "out": "542517d6897f522b",
+      "payload": "000000000000000013cc761d30ec2c6b"
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 37007,
+  "space_bits": 64,
+  "task_id": "chain-l3-py-v1"
+}

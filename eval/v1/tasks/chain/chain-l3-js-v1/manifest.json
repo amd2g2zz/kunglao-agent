@@ -1,0 +1,149 @@
+{
+  "entry": "target/chain_bundle.js",
+  "family": "chain-js",
+  "gradient": "L3",
+  "language": "javascript",
+  "layers": [
+    {
+      "artifact": "layer_out/1-unpacked.js",
+      "checkpoint": "unpack (byte-exact peel)",
+      "id": "obfuscation",
+      "index": 1,
+      "mechanisms": [
+        "obfuscation"
+      ]
+    },
+    {
+      "artifact": "layer_out/2-clean.js",
+      "checkpoint": "junk-stripped (clean decompile achieved)",
+      "id": "junk-code",
+      "index": 2,
+      "mechanisms": [
+        "junk-code"
+      ]
+    },
+    {
+      "artifact": "layer_out/3-config.json",
+      "checkpoint": "config decrypted (byte-exact canonical plaintext)",
+      "id": "encrypted-config",
+      "index": 3,
+      "mechanisms": [
+        "encrypted-config"
+      ]
+    },
+    {
+      "artifact": "layer_out/4-core.js",
+      "checkpoint": "cipher core restored (true path; decoy constants fail the rows; lanes rotated)",
+      "id": "custom-cipher-core",
+      "index": 4,
+      "mechanisms": [
+        "custom-cipher-core",
+        "decoy-path",
+        "rotation-timer"
+      ]
+    },
+    {
+      "artifact": "layer_out/5-path.json",
+      "checkpoint": "true-path-identified (branch condition cited)",
+      "id": "decoy-path",
+      "index": 5,
+      "mechanisms": [
+        "decoy-path"
+      ]
+    },
+    {
+      "artifact": "layer_out/6-gate.json",
+      "checkpoint": "gate bypassed (trip predicate + corrupt constant cited)",
+      "id": "anti-debug-gate",
+      "index": 6,
+      "mechanisms": [
+        "anti-debug-gate"
+      ]
+    }
+  ],
+  "mechanisms": [
+    "anti-debug-gate",
+    "custom-cipher-core",
+    "decoy-path",
+    "encrypted-config",
+    "junk-code",
+    "obfuscation",
+    "rotation-timer"
+  ],
+  "schema": "kunglao-eval-chain-manifest/1",
+  "seed": 37006,
+  "shortcut_audit": {
+    "constant_scan": {
+      "answer_constant_hits": [],
+      "decoy_constant_hits": [
+        3875497551,
+        4095771817,
+        4062922807,
+        2769330343,
+        1577370769
+      ],
+      "naive_method": "constant-scan (hex/decimal) for the answer constants",
+      "note": "answer constants exist only inside the encrypted config; visible decoy constants are bait",
+      "verdict": "FAIL"
+    },
+    "decoy_baseline": {
+      "0": "72d896327f622edc",
+      "1": "9bbd25ff03d8a202",
+      "2": "aa2fd1eb909e9d1c",
+      "3": "e24f6498ea804d5d",
+      "4": "9204725fbeda4eaa",
+      "5": "592653b90eddf085",
+      "6": "010b66571c8b5412",
+      "7": "ea24892d1933271e"
+    },
+    "entry_scan": {
+      "answer_constant_hits": [],
+      "key_shaped_hits": [],
+      "naive_method": "strings/constant-scan of the committed artifact",
+      "verdict": "FAIL"
+    },
+    "junk_pollution": {
+      "markers": [
+        "_opq_j1baf",
+        "_w_j1baf_",
+        "0xa9a0482b",
+        "0xd00627e9"
+      ],
+      "naive_decompile_baseline": "polluted",
+      "stripped_baseline": "clean",
+      "stripped_markers": []
+    },
+    "payload_scan": {
+      "baseline": [
+        "f33340a1e18c40ba",
+        "2401f66d160c79fa",
+        "a150addf39065712",
+        "f127af97cd3f0306",
+        "628aba181c1d2371",
+        "859ea5a2777b60e5",
+        "e53d24925f07e3e6",
+        "fd7aadab3010a597"
+      ],
+      "equals_truth": false,
+      "key_shaped_hits": [
+        "67df8bc79f3be691b1642a4d31d14635cef41bbd6467ad271ac58b6be270be43"
+      ],
+      "naive_answer": "chain_mac keyed with the honeypot",
+      "naive_method": "post-peel strings scan -> first key-shaped literal",
+      "verdict": "FAIL"
+    },
+    "runtime_keys": {
+      "method": "ARX KDF over the fingerprint constants; verified absent as literals",
+      "runtime_key_hex_absent": true
+    },
+    "smoked_at_mint": true
+  },
+  "task_id": "chain-l3-js-v1",
+  "toolchain": "node",
+  "workspace_contract": {
+    "answer": "reference_candidate.js",
+    "answer_seam": "A Node module exporting derive(req) where req = {payload: hex string, lane: int} -> 16-hex lowercase string over the fully-peeled derivation.",
+    "graded_by": "scripts/eval_chain_grader.py --task <id> --workspace <dir>",
+    "layer_dir": "layer_out"
+  }
+}

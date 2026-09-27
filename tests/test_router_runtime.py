@@ -39,6 +39,8 @@ def _make_ws(tmp_path: Path, claims: list[dict] | None = None) -> Path:
     ws.mkdir()
     (ws / "runs").mkdir()
     reg = [{"id": "C-1", "status": "OPEN"}] if claims is None else claims
+    # #240: the convergence CLI now hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
         "claims:\n" + "".join(
             f"- id: {c['id']}\n  status: {c.get('status', 'OPEN')}\n"

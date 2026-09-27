@@ -70,6 +70,10 @@ sys.path.insert(0, str(SCRIPTS))
 # 2026-09-19 regen (issue 281 plan-repair verification): one clause joined
 # the global_plan.txt carrier row (drift-REJECT amendments verified, 3-
 # detection-round escalation) — no other byte changed per fixture.
+# 2026-09-21 regen (issue 240 explicit workspace arg): the loop-enforcement
+# convergence_check line prescribes "$PWD" instead of "." and states the
+# fail-closed identity rule (missing claim-register.yaml/task_spec.yaml ->
+# hard error, never a verdict) — no other byte changed per fixture.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

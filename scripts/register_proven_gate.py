@@ -536,4 +536,24 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             warn("emit_settlements_2", f"{type(exc).__name__}: {exc}")
         if to in NEGATIVE_SETTLEMENTS:
             _burn_lesson_lineage(ws, cid)
+        # #244 settle→dispose: a claim that settled TERMINAL must dispose
+        # its bound waiting pool in the SAME beat — REFUTED re-arms with the
+        # sanitized gap-only redo signal, every other terminal sends stop.
+        # 傻等 (a worker waiting past its claim's settlement) is a contract
+        # violation. Fire-and-forget: disposal never moves the settlement.
+        try:
+            from wait_dispose import dispose_waiting_pool
+            dispose_waiting_pool(ws, cid, to)
+        except Exception as exc:  # noqa: BLE001 — disposal never blocks settle
+            warn("dispose_waiting_pool", f"{type(exc).__name__}: {exc}")
+    # issue 304 (satellite D4): guard liveness at the settlement beat —
+    # a guarded fix whose check has zero fire records across the window
+    # is flagged guard_dormant (WARN-level finding, ledger-deduped,
+    # never a blocker; the acceptance that rejected the settlement lives
+    # in fix_guard.evaluate_guard via failure_analysis_gate).
+    try:
+        from fix_guard import flag_dormant_guards
+        flag_dormant_guards(ws)
+    except Exception as exc:  # noqa: BLE001 — liveness never blocks settlement
+        warn("emit_settlements_guard", f"{type(exc).__name__}: {exc}")
     return count

@@ -1,0 +1,52 @@
+schema: kunglao-eval-task/1
+task_id: chain-l1-py-v1
+eval_version: eval-v1.4
+tier: chain
+source: constructed
+family: chain-py
+seed: 37002
+anchors:
+  goal_verbatim: 'Analyze target/chain_bundle.py: a protected derivation bundle. Peel
+    every protection layer (unpack the loader, recover the runtime key, decrypt the
+    config) and re-expose the final derivation reproducing the captured pairs byte-exact.
+    Work with layer artifacts so partial progress scores.'
+  success_criterion: A derive() re-implementation reproducing every published and
+    checker-minted pair byte-exact, with each peeled layer checkpointed (payload digest,
+    decrypted config digest). Candidates keyed on planted honeypot/decoy material
+    fail the pairs by construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: python
+  files:
+  - target/chain_bundle.py
+  entry: target/chain_bundle.py
+  candidate_contract: 'A Python module exposing derive(payload_hex: str, lane: int
+    = 0) -> 16-hex lowercase string over the fully-peeled derivation.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_candidate.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 64
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+chain:
+  gradient: L1
+  mechanisms:
+  - encrypted-config
+  - junk-code
+  - obfuscation
+  manifest: manifest.json
+  dense_grader: scripts/eval_chain_grader.py

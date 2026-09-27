@@ -126,8 +126,14 @@ def test_decide_annotates_gap(tmp_path, capsys):
     import datetime as dt
     import convergence_check as cc
     ws = _mk_ws(tmp_path)
+    # #306: a key-less task_spec + the claimless register from _mk_ws is
+    # the degenerate pair — stamp the oracle anchors so the D3 face
+    # (heartbeat-gap annotation) stays on the decided-state path.
     (ws / "task_spec.yaml").write_text(
-        yaml.safe_dump({"depth": "standard", "time_budget_minutes": 60}),
+        yaml.safe_dump({"depth": "standard", "time_budget_minutes": 60,
+                        "goal_verbatim": "retrieve the family config",
+                        "success_criterion": "family named with evidence",
+                        "verification_method": "static"}),
         encoding="utf-8")
     old = (dt.datetime.now(dt.timezone.utc)
            - dt.timedelta(minutes=60)).isoformat(timespec="seconds").replace("+00:00", "Z")

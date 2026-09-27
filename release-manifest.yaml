@@ -71,11 +71,19 @@ assets:
     # #162: first adapt-expected template (windowed Stalker tracing)
     - templates/frida/windowed-stalker.js.tmpl
     - templates/frida/rpc-skeleton.js.tmpl   # #165 Frida RPC export-surface skeleton (adapt)
+    # issue 359 wave-2 distillation: Android VM-dynamic face (adapt-expected)
+    - templates/frida/dex-dump-art.js.tmpl
+    - templates/frida/android-bypass-phase1.js.tmpl
     - templates/unidbg/harness.java.tmpl   # #165 unidbg minimal-harness skeleton (adapt)
 
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl
+    # AR stack (exp8): I3 self-check probe shapes — registered families
+    # crypto/kdf/sign get an exact-shape probe template injected by the runner
+    - templates/selfcheck/probe-crypto.md
+    - templates/selfcheck/probe-kdf.md
+    - templates/selfcheck/probe-sign.md
   tools:
     # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
     # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they
@@ -88,6 +96,11 @@ assets:
     - tools/crypto/algorithms.py
     - tools/crypto/crypto-tool.py
     - tools/web/jsvmp_triage.py   # #884: web category, JSVMP triage CLI
+    # issue 359 wave-2 distillation: cipher-shape classifier + web trio
+    - tools/crypto/cipher_identify.py
+    - tools/web/js_obfuscation_detect.py
+    - tools/web/js_env_diagnose.py
+    - tools/web/sign_candidate_verify.py
     - tools/static/disasm_constant_check.py
     - tools/ghidra/DecompileFunctions.java
     # #308: Ghidra async job protocol + binary diff (merged after #320 snapshot)

@@ -85,11 +85,13 @@ def _check_cli_surface() -> dict:
 
 
 def _check_priority_voi() -> dict:
-    """#107: the ranker is the rebuilt Thompson composite — score =
-    (sampled case posterior + LAMBDA_DH*dH) * worth, deterministic under the
-    default seed, with the new feeds diagnostics and no weighted-era fields.
-    (The check token keeps its historical name; the formula it pins changed
-    by owner ruling — "之前的不要了".)"""
+    """#107+#294: the ranker is the rebuilt Thompson composite — score =
+    (sampled case posterior + W_DOWNSTREAM*downstream_term) * worth,
+    deterministic under the default seed, with the feeds diagnostics and
+    no weighted-era fields. (#295 removed the LAMBDA_DH*dH face —
+    docs/adr-001-strategy-parameter-governance.md. The check token keeps
+    its historical name; the formula it pins changed by owner ruling —
+    "之前的不要了".)"""
     try:
         import priority_ratio as pr
         claims = [{"id": "C1", "status": "OPEN", "evidence_tier_attempted": 0,
@@ -99,11 +101,13 @@ def _check_priority_voi() -> dict:
         again = pr.priority_ratio(claims, {}, pr.EvidenceView())[0]
         det = (a.to_dict() == again.to_dict())
         composite = (hasattr(a, "feeds")
-                     and {"thompson_sample", "case_flip_potential", "dh_pq"}
+                     and {"thompson_sample", "case_flip_potential", "downstream"}
                      <= set(a.feeds or {})
+                     and "dh_pq" not in (a.feeds or {})
                      and not hasattr(a, "leverage")
                      and not hasattr(a, "delta_disc"))
-        bounded = 0.0 < a.score < 1.0 + pr.LAMBDA_DH + 1e-9  # Beta sample + dH=0
+        max_dh_free_lift = pr.W_DOWNSTREAM * pr.DOWNSTREAM_CAP
+        bounded = 0.0 < a.score < 1.0 + max_dh_free_lift + 1e-9  # Beta sample + no deps
         return {"name": "priority_voi_formula",
                 "passed": det and composite and bounded,
                 "detail": f"score={a.score} det={det} composite={composite} "

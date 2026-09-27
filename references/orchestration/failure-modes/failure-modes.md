@@ -1,6 +1,3 @@
-#### 6-pre. Anti-forgetting protocol (v1.8.2) — the four failure modes observed in practice
----
-
 # kunglao-agent failure modes (F1-F18) - INDEX
 
 The 18 failure modes are split into 3 domain files (progressive disclosure):
@@ -14,7 +11,7 @@ The 18 failure modes are split into 3 domain files (progressive disclosure):
 ## When to load which
 
 - User reports dispatch issues (stuck, idle, re-issuing) -> load `failure-modes-lifecycle.md`
-- User reports premature-termination (declared "done" with open items, cost-as-stop-reason, self-invented tiers like 备注级 ("note-level")/deferred) -> load the "Termination failures" section of `failure-modes-lifecycle.md` (#54; detector: `scripts/premature_termination_detect.py`)
+- User reports premature-termination (declared "done" with open items, cost-as-stop-reason, self-invented tiers like note-level/deferred) -> load the "Termination failures" section of `failure-modes-lifecycle.md` (#54; detector: `scripts/premature_termination_detect.py`)
 - User reports worker-level problems (false PROVEN, ignored help, backtrack needed) -> load `failure-modes-monitoring.md`
 - User reports a NEGATIVE conclusion (not-on-path / does-not-exist) inferred from a dynamic miss under a self-reported env fault -> load the "Environmental negative-evidence downgrade" section of `failure-modes-monitoring.md` (#56; gate: `scripts/blind_gate.py::check_inference_blind_scope`; generalizes #48)
 - User reports plan/status/progress issues (stale blockers, drifted plan) -> load `failure-modes-state.md`
@@ -56,5 +53,3 @@ python scripts/progress_report.py <ws> && \
 See `failure-modes-state.md` § "Implementation-Bug Class" for script-level bug
 patterns (state drift, race conditions, schema mismatch, phantom entries).
 These complement the F1-F18 LLM-behavior taxonomy.
-
-recall_useful: pending

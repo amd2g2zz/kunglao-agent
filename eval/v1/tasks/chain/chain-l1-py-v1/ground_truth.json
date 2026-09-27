@@ -1,0 +1,291 @@
+{
+  "chain": {
+    "gradient": "L1",
+    "layers": [
+      {
+        "id": "obfuscation",
+        "mechanisms": [
+          "obfuscation",
+          "junk-code"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/1-unpacked.py",
+            "sha256": "d6ad77f8539fea57ca8d8b5d62246549c1cbbeaf4a2667babcedaea4fe43881d"
+          }
+        ]
+      },
+      {
+        "id": "encrypted-config",
+        "mechanisms": [
+          "encrypted-config"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/2-config.json",
+            "sha256": "03126f8adbd30461f5474210b67e88e58b8096489fb919c15010d31576dd3a7a"
+          }
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "i": 0,
+        "lane": 0,
+        "out": "1fd79059668d7c74",
+        "payload": "00000000000000003dd9eb2336c54c3b"
+      },
+      {
+        "i": 1,
+        "lane": 0,
+        "out": "c33d3f7363b1fd66",
+        "payload": "00000000000000001191a5d97236dbc5"
+      },
+      {
+        "i": 2,
+        "lane": 0,
+        "out": "9b9f104f09f04e60",
+        "payload": "0000000000000000fdd0fc3f88fb9911"
+      },
+      {
+        "i": 3,
+        "lane": 0,
+        "out": "923f8bb71af5bbd8",
+        "payload": "0000000000000000a3f475156f6277c1"
+      },
+      {
+        "i": 4,
+        "lane": 0,
+        "out": "5a3af04418d2cf4c",
+        "payload": "0000000000000000121f7f9b99654057"
+      },
+      {
+        "i": 5,
+        "lane": 0,
+        "out": "7ee42cd46bda438b",
+        "payload": "00000000000000005f87e7fb58f62c79"
+      },
+      {
+        "i": 6,
+        "lane": 0,
+        "out": "84799f24a2a2c305",
+        "payload": "00000000000000003633d79df2449967"
+      },
+      {
+        "i": 7,
+        "lane": 0,
+        "out": "e109c66579574fb9",
+        "payload": "000000000000000013cc761d30ec2c6b"
+      },
+      {
+        "i": 100,
+        "lane": 0,
+        "out": "276b4f9160b2b41d",
+        "payload": "0000000000000000a8dcf4e173a977b7"
+      },
+      {
+        "i": 101,
+        "lane": 0,
+        "out": "f458d3c011575473",
+        "payload": "000000000000000035aa718565fd9e71"
+      },
+      {
+        "i": 102,
+        "lane": 0,
+        "out": "478a53e46ef3bfca",
+        "payload": "00000000000000006f482111e8993f8d"
+      },
+      {
+        "i": 103,
+        "lane": 0,
+        "out": "7a16ae698874bd19",
+        "payload": "0000000000000000c3c26e85a7b6cb8f"
+      },
+      {
+        "i": 104,
+        "lane": 0,
+        "out": "95ab5e97538e035d",
+        "payload": "00000000000000002ffe16099ca03dbd"
+      },
+      {
+        "i": 105,
+        "lane": 0,
+        "out": "647f02136f524ad3",
+        "payload": "000000000000000099cb16dfcbc93a7b"
+      },
+      {
+        "i": 106,
+        "lane": 0,
+        "out": "b92fae4d7618d003",
+        "payload": "00000000000000008bd7ec292cf9482b"
+      },
+      {
+        "i": 107,
+        "lane": 0,
+        "out": "530879a8aac6991a",
+        "payload": "0000000000000000b62d606113450c9d"
+      }
+    ]
+  },
+  "core": {
+    "cfg_hex": "6ed8c53faa8b871bacdb0da2db52efcbbd12b10fcbfcc93565b8ad7232a722f7f388c121a7d3806b3195a955204b4811afa976859a83268db6a9d02db801c1b406f6d24ebe8e2b366f6ad778c61c77b81db890423d67f22b6d8ea7eaba5842571376015e97c6b31bf83b53c2aa549edd06cc7da1778f225e7d8013ee1c908d98674a7c19ee61a6415887953de5a68e01e451bac5b4208ebf1493e535",
+    "config": {
+      "core": {
+        "c0": 2958577341,
+        "c1": 769735843,
+        "c2": 2647510493,
+        "odd": 3152161467,
+        "odd2": 2882052089,
+        "rot": 18
+      },
+      "mac_key": "c343a87513814d85e8f40dd32c977651",
+      "v": 1
+    },
+    "corrupt": 1045890627,
+    "decoy_config": {
+      "core": {
+        "c0": 1362080655,
+        "c1": 3513534901,
+        "c2": 2449801465,
+        "odd": 3424329875,
+        "odd2": 1678908477,
+        "rot": 4
+      },
+      "mac_key": "40504a0d61d4cbdfc490f057620fba4b",
+      "v": 0
+    },
+    "decoy_hex": "6ed8c53faa8b871bacdb0da2db52efcbbd12b205c8f6cc3a62bdac7632a722f7f388c522afd7866d3d98aa482e0a1901b7a17285998f2f8db3a4d534b64ccab440eedb4cbf8e2e336c67d978df123ab31dee805a356efc2e6582a5e2b6565959436b1a088fcdbf1bf83b53c2aa549edd06cc7da1208c235d28d914bf1b92d19d304c204ae86df9450ed3c439e1f78750b106bb96b4208ebf1493e435",
+    "family": "chain-py",
+    "fp": [
+      1113880495,
+      4005347313,
+      966746025
+    ],
+    "gate_dt_ms": 629,
+    "gradient": "L1",
+    "honeypot": "c12b3197a7d69bdf3b7ed77d79c8fb01aa26a35bda5bca5b27d070bfb45443ef",
+    "integ": 3825496415,
+    "junk_a": 748478449,
+    "junk_b": 2769492197,
+    "rc": [
+      [
+        667499699,
+        3158513957,
+        1772448213,
+        1991375505
+      ],
+      [
+        2434542593,
+        3363081847,
+        2386374583,
+        1631273645
+      ],
+      [
+        1373419611,
+        3730497045,
+        3246799293,
+        2682780231
+      ],
+      [
+        1928801117,
+        3530226717,
+        2467061051,
+        1579302119
+      ],
+      [
+        1597777943,
+        1245382597,
+        3498782407,
+        1179279049
+      ],
+      [
+        102801343,
+        2205018635,
+        847714317,
+        4190386471
+      ],
+      [
+        622030599,
+        2323827049,
+        649484811,
+        1110309333
+      ],
+      [
+        3099390773,
+        3865337157,
+        1710077797,
+        3322915375
+      ]
+    ],
+    "rt_key": "30abfb5b8f3d1006871c07937a5d5880",
+    "salt": 676320567,
+    "seed": 37002,
+    "sel_key": 240,
+    "sel_val": 2791311088,
+    "task_id": "chain-l1-py-v1",
+    "unit": {
+      "family": "chain-py",
+      "gradient": "L1",
+      "seed": 37002,
+      "task_id": "chain-l1-py-v1"
+    }
+  },
+  "family": "chain-py",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "lane": 0,
+      "out": "1fd79059668d7c74",
+      "payload": "00000000000000003dd9eb2336c54c3b"
+    },
+    {
+      "i": 1,
+      "lane": 0,
+      "out": "c33d3f7363b1fd66",
+      "payload": "00000000000000001191a5d97236dbc5"
+    },
+    {
+      "i": 2,
+      "lane": 0,
+      "out": "9b9f104f09f04e60",
+      "payload": "0000000000000000fdd0fc3f88fb9911"
+    },
+    {
+      "i": 3,
+      "lane": 0,
+      "out": "923f8bb71af5bbd8",
+      "payload": "0000000000000000a3f475156f6277c1"
+    },
+    {
+      "i": 4,
+      "lane": 0,
+      "out": "5a3af04418d2cf4c",
+      "payload": "0000000000000000121f7f9b99654057"
+    },
+    {
+      "i": 5,
+      "lane": 0,
+      "out": "7ee42cd46bda438b",
+      "payload": "00000000000000005f87e7fb58f62c79"
+    },
+    {
+      "i": 6,
+      "lane": 0,
+      "out": "84799f24a2a2c305",
+      "payload": "00000000000000003633d79df2449967"
+    },
+    {
+      "i": 7,
+      "lane": 0,
+      "out": "e109c66579574fb9",
+      "payload": "000000000000000013cc761d30ec2c6b"
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 37002,
+  "space_bits": 64,
+  "task_id": "chain-l1-py-v1"
+}

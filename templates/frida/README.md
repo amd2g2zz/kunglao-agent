@@ -1,8 +1,9 @@
 # templates/frida/ — Frida script templates
 
-CFG (caller→callee call-graph) capture and analysis
-templates, for VM-side dynamic instrumentation (layering: tool
-home = tools/frida/, templates = templates/frida/).
+CFG (caller→callee call-graph) capture and analysis templates and
+Android dynamic-instrumentation templates, for VM-side dynamic
+instrumentation (layering: tool home = tools/frida/, templates =
+templates/frida/).
 
 > **VM-only (hard prohibition #5)**: scripts instantiated from these
 > templates run **on the VM channel only** (`<VM_IP>:1337`) — hooks may be
@@ -16,6 +17,8 @@ home = tools/frida/, templates = templates/frida/).
 | `cfg-hook.js.tmpl` | Frida CFG capture hook: `Interceptor.attach` on every target export, recording (caller, target, args_count, thread_id, ts) into a shared buffer, flushed in batches as JSONL to OUTFILE | TARGET_MODULE, TARGET_EXPORTS (comma-separated list), CALL_DEPTH, OUTFILE, SAMPLE_SHA256 |
 | `cfg-analyze.py.tmpl` | trace reduction analyzer: unique caller→callee edge table + per-callee call counts + top-N callers, writing edges.csv + summary.md (deterministic ordering, idempotent overwrite, explicit inputs/outputs) | TRACE_FILE, SAMPLE_SHA256, OUT_DIR |
 | `windowed-stalker.js.tmpl` | windowed instruction-tracing skeleton: `Stalker.follow` on-enter / `Stalker.unfollow` on-leave, `Stalker.exclude` for the non-target module set, macro census (onCallSummary hot offsets) before micro instruction filtering, memory-op filter shape; Frida ≥16 API audit in-file (legacy static `Memory.read*`/`Memory.write*` → NativePointer instance forms) | TARGET_MODULE, EXCLUDE_MODULES, OUTFILE, SAMPLE_SHA256 |
+| `dex-dump-art.js.tmpl` | generic in-memory DEX dump for hardened Android apps: hooks both ART loading paths (Java `InMemoryDexClassLoader` ByteBuffer ctors + native `art::DexFile::OpenMemory` variants in libart.so), validates the DEX magic before writing, dedups by size+checksum, writes classes_N.dex + a dexdump_manifest.jsonl evidence ledger | OUT_DIR, SAMPLE_SHA256, MIN_DEX_BYTES |
+| `android-bypass-phase1.js.tmpl` | flag-gated first-phase environment bypass: independent root / emulator / proxy / SSL / debug domains, each armable separately with per-domain armed/failed logging and a final SUMMARY line; never blanket-arm — read the sample's checks first | ENABLE_ROOT, ENABLE_EMULATOR, ENABLE_PROXY, ENABLE_SSL, ENABLE_DEBUG (each 0/1) |
 
 ## When to use
 
@@ -32,6 +35,15 @@ home = tools/frida/, templates = templates/frida/).
   set, the offset resolution path, and the memory-op filter predicate are
   the known-variance regions to rework per target (consume: adapt, not
   fill).
+- **dex-dump-art**: Android-hardened samples where the DEX is decrypted at
+  runtime — dump the payload as it is handed to ART instead of fighting the
+  packer statically. Second **adapt-expected** template: the OpenMemory
+  mangled-symbol list and the (base, size) register positions are the
+  known-variance regions per Android version.
+- **android-bypass-phase1**: Android samples whose client-integrity checks
+  gate the code under test (root/emulator/proxy/SSL/debug). Arm only the
+  domains the sample actually checks; the SUMMARY line is the per-case
+  bypass evidence inventory.
 
 ## Instantiation
 

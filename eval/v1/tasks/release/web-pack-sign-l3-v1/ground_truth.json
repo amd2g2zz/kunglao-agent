@@ -1,0 +1,216 @@
+{
+  "schema": "kunglao-eval-ground-truth/1",
+  "task_id": "web-pack-sign-l3-v1",
+  "family": "web-pack-sign",
+  "seed": 33211,
+  "constants": {
+    "key_hex": "1f630651e44b7dfbbd53fca75a95ec518d2f5d5fc619760b9c8d40f1c27758d5",
+    "sep_code": 36
+  },
+  "space_bits": 256,
+  "published_pairs": [
+    {
+      "i": 0,
+      "request": {
+        "method": "POST",
+        "path": "/v1/8fcf8cb5/0",
+        "body": "8e758cf7479ea12b09edbabf",
+        "seq": 0
+      },
+      "out": "f997938982f5cf2607d60ed6016e04105eab74bc227f952909117a8cd5e4d7be"
+    },
+    {
+      "i": 1,
+      "request": {
+        "method": "GET",
+        "path": "/v1/70893037/1",
+        "body": "629f245b9d73d8d34f76539d",
+        "seq": 1
+      },
+      "out": "91a654ad59da1691716fd0fdeb79a0f55af1b949637626903b2ea3ab1bbeb3a8"
+    },
+    {
+      "i": 2,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/7673ada1/2",
+        "body": "974f282dac0d6f331235dcd9",
+        "seq": 2
+      },
+      "out": "a6501f4741520d1de7a5c06dc86a965985cb7be834ffb2684b0b0a4dac55a0bf"
+    },
+    {
+      "i": 3,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/f07ff41f/3",
+        "body": "2b0203d9c81479a1a92afcc7",
+        "seq": 3
+      },
+      "out": "a13e1af96bd1a71b04cfa776e369eaf08afee2e55af5a25250dbb3013d5b662d"
+    },
+    {
+      "i": 4,
+      "request": {
+        "method": "POST",
+        "path": "/v1/1548c61b/4",
+        "body": "d4a65e130b767fb76c7adba7",
+        "seq": 4
+      },
+      "out": "f36457b2b1b8ef8a880d1fcecff58ca0663494f993b2fe97a5c1b6dd3b20bb3b"
+    },
+    {
+      "i": 5,
+      "request": {
+        "method": "GET",
+        "path": "/v1/4322b1cd/5",
+        "body": "bcac06ad65a9dd8b09ebea9f",
+        "seq": 5
+      },
+      "out": "cfb0d32050e0bc145872c3d64dc85f8413917a70f7022766d44ac47944437401"
+    },
+    {
+      "i": 6,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/9ce496a3/6",
+        "body": "8664117baea14237aedca663",
+        "seq": 6
+      },
+      "out": "809fbdf894d68091c86fb15c609f05ac416a6ced78f0565f304673a29c911926"
+    },
+    {
+      "i": 7,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/fbe78ca9/7",
+        "body": "79cb2c2fd17ae433be78e98d",
+        "seq": 7
+      },
+      "out": "fc69d2d6d3ec4c5ce3db5aad5123a1499fd24af5ea2e5bdfe418092762e0b194"
+    },
+    {
+      "i": 8,
+      "request": {
+        "method": "POST",
+        "path": "/v1/21fcb4d1/8",
+        "body": "8e758cf7479ea12b09edbabf",
+        "seq": 8
+      },
+      "out": "885f371f03a697e1bbf1f0d62701db48695ecfb0cc5009a68764bec3577142d3"
+    },
+    {
+      "i": 9,
+      "request": {
+        "method": "GET",
+        "path": "/v1/51584ad7/9",
+        "body": "629f245b9d73d8d34f76539d",
+        "seq": 9
+      },
+      "out": "79914e84788db4aebf61048d49a9206938e4f6350f5257b8746de4a08d868616"
+    },
+    {
+      "i": 10,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/2d6f0049/10",
+        "body": "974f282dac0d6f331235dcd9",
+        "seq": 10
+      },
+      "out": "9f9cda8c3c72c37ec574c5bc334161cfe2651b5dc885556f85abc216565bc267"
+    },
+    {
+      "i": 11,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/6b21ec3d/11",
+        "body": "2b0203d9c81479a1a92afcc7",
+        "seq": 11
+      },
+      "out": "6143585cd550b57838ff2c971ef83227b86a4ae751845730e2cf9f222a673785"
+    }
+  ],
+  "minted_probe_count": 8,
+  "note": "replay-roundtrip runs sign() over published + minted request probes (anti-digest-table); the body digest is the mutated cipher \u2014 stock-crypto signers and key-copy/no-canonicalization cheats fail the minted face.",
+  "core": {
+    "h": [
+      3522745893,
+      3061119863,
+      1157524965,
+      1424900439,
+      4025970827,
+      1226030943,
+      2872487543,
+      541857563
+    ],
+    "k": [
+      1100408539,
+      270884239,
+      1511171429,
+      289963375,
+      2272677045,
+      983859969,
+      544031365,
+      1817256601,
+      2970696705,
+      1694272537,
+      1931658733,
+      590640849,
+      2736216211,
+      362369535,
+      321157699,
+      2256830789,
+      1082972913,
+      3600340017,
+      1613609097,
+      2042791275,
+      3194392281,
+      1485360537,
+      3771022261,
+      1660995669,
+      3611880843,
+      1142064477,
+      1590228299,
+      504709519,
+      1091567289,
+      2761913575,
+      1324151413,
+      2014685083,
+      1810652199,
+      2365963151,
+      162092399,
+      3917450149,
+      3774434537,
+      3087272085,
+      2016880567,
+      1732136801,
+      1175539349,
+      3046805321,
+      648664361,
+      4173360179,
+      2324204053,
+      4229377267,
+      918254393,
+      4036523813,
+      1033049031,
+      1603523241,
+      173742459,
+      3975203451,
+      681038549,
+      377833625,
+      223910727,
+      4921769,
+      1138731819,
+      1460715399,
+      175990113,
+      498008611,
+      2386349117,
+      1160799733,
+      2669699277,
+      3138053717
+    ],
+    "key_hex": "1f630651e44b7dfbbd53fca75a95ec518d2f5d5fc619760b9c8d40f1c27758d5",
+    "sep_code": 36,
+    "sort_headers": false
+  }
+}

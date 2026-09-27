@@ -92,7 +92,7 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, LedgerLineType
+from status_defs import TERMINAL, LedgerLineType, LEDGER_FORMAT
 
 RETRACTED = "RETRACTED"
 RETRACT_REASONS = ("refuted", "superseded")
@@ -256,6 +256,9 @@ def retract_claim(workspace: Path, claim_id: str, reason: str = "refuted",
         _write_reg(reg_path, reg)
         _append_ledger(workspace, {
             "type": LedgerLineType.OPERATOR_ACTION,
+            # issue 137: self-describing format stamp on NEW rows (same
+            # single home as every ledger writer — absence = legacy).
+            "schema": LEDGER_FORMAT,
             "action": "retract",
             "actor": "orchestrator",
             "claim_id": claim_id,

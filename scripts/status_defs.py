@@ -92,6 +92,17 @@ class LedgerLineType:
     OPERATOR_ACTION = "operator_action"
 
 
+# Issue 137: the ledger's self-describing format stamp. New WRITE-side rows
+# (convergence_check._append_ledger snapshots + record_operator_action rows)
+# carry `schema: convergence-ledger/2` — v2 = the dispatched_ids (#2) + stamp
+# era — so historical-format readers (#294 replay) can distinguish row
+# generations by FIELD, not by inference. Legacy rows (no `schema` field)
+# stay readable: absence = legacy, never an error (the #135/#136 tolerance
+# pattern); historical files are NEVER rewritten. Same `<name>/<rev>`
+# convention as posteriors-schema/1 and task-terminal-settlement/1.
+LEDGER_FORMAT = "convergence-ledger/2"
+
+
 def ledger_line_type(row: dict) -> str:
     """Return the LedgerLineType of a ledger row.
 

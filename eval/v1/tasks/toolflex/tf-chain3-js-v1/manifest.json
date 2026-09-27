@@ -1,0 +1,351 @@
+{
+  "schema": "kunglao-eval-tf-manifest/1",
+  "task_id": "tf-chain3-js-v1",
+  "family": "tf-chain3",
+  "seed": 35602,
+  "k": 3,
+  "roles": [
+    {
+      "role": "unwrap",
+      "implements": [
+        "xtract",
+        "scan"
+      ]
+    },
+    {
+      "role": "keymix",
+      "implements": [
+        "mix",
+        "blend"
+      ]
+    },
+    {
+      "role": "emit",
+      "implements": [
+        "emit64",
+        "reemit64"
+      ]
+    }
+  ],
+  "minimum_required_set": {
+    "unwrap": [
+      "xtract",
+      "scan"
+    ],
+    "keymix": [
+      "mix",
+      "blend"
+    ],
+    "emit": [
+      "emit64",
+      "reemit64"
+    ]
+  },
+  "minimal_chain": [
+    "xtract",
+    "mix",
+    "emit64"
+  ],
+  "valid_combinations": [
+    [
+      "xtract",
+      "mix",
+      "emit64"
+    ],
+    [
+      "xtract",
+      "mix",
+      "reemit64"
+    ],
+    [
+      "xtract",
+      "blend",
+      "emit64"
+    ],
+    [
+      "xtract",
+      "blend",
+      "reemit64"
+    ],
+    [
+      "scan",
+      "mix",
+      "emit64"
+    ],
+    [
+      "scan",
+      "mix",
+      "reemit64"
+    ],
+    [
+      "scan",
+      "blend",
+      "emit64"
+    ],
+    [
+      "scan",
+      "blend",
+      "reemit64"
+    ]
+  ],
+  "tool_usage": {
+    "xtract": "{tool} {blob}",
+    "scan": "{tool} --blob {blob}",
+    "mix": "{tool} {state}",
+    "blend": "{tool} --state {state}",
+    "emit64": "{tool} {state} {payload}",
+    "reemit64": "{tool} --key {state} --payload {payload}"
+  },
+  "blocked_variant_names": [
+    "block-xtract",
+    "block-mix",
+    "block-emit64"
+  ],
+  "threat_model": "execution-level chain necessity: every single-tool baseline (that tool alone + mechanical naive completion) fails the unit checker. Tool sources are readable by design; source-reading reimplementation is a trace-visible path outside the gate's scope.",
+  "session_surface": {
+    "bare-cc-default": "the session subprocess inherits the environment: prepend the variant's shadow dir to PATH before launch (see eval_tf_shadow.prepend_path); every tool shell sees it",
+    "kunglao-loop": "eval_loop_runner.launch_session inherits the parent env: the same exported PATH reaches the session and its dispatched children \u2014 no runner code change",
+    "harness": "checker/solver subprocesses take the prepended env explicitly (env= kwarg)",
+    "shadow-limitation": "KUNGLAO-TF-SHADOW blocks name invocation only; absolute-path bypass is flagged by the graders (bypass_detected / f2_reroute)"
+  },
+  "shared_contract_note": "union tf-chain2/3/4 into scripts/eval_contract.py FAMILY_CONTRACT (suffix .txt, response_language text-answer, target_surface text) at the dev merge-sync when not already present; strict conformance activates with the module.",
+  "chain_necessity": [
+    {
+      "tool": "blend",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "emit64",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "mix",
+      "solo_rc": 2,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "reemit64",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "scan",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    },
+    {
+      "tool": "xtract",
+      "solo_rc": 0,
+      "attempts": [
+        {
+          "name": "stock-sha256-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-sha1-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "stock-md5-16",
+          "verdict": "FAIL"
+        },
+        {
+          "name": "zero-state-fold",
+          "verdict": "FAIL"
+        }
+      ],
+      "verdict": "FAIL",
+      "failure_codes": [
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH",
+        "PAIR_MISMATCH"
+      ]
+    }
+  ],
+  "chain_necessity_ok": true,
+  "blocked_variants": [
+    {
+      "variant": "block-xtract",
+      "blocked_tool": "xtract",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "scan",
+        "mix",
+        "emit64"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-mix",
+      "blocked_tool": "mix",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "xtract",
+        "blend",
+        "emit64"
+      ],
+      "reroute_verdict": "PASS"
+    },
+    {
+      "variant": "block-emit64",
+      "blocked_tool": "emit64",
+      "shadow_verified": {
+        "rc": 1,
+        "marker": true
+      },
+      "reroute_chain": [
+        "xtract",
+        "mix",
+        "reemit64"
+      ],
+      "reroute_verdict": "PASS"
+    }
+  ]
+}

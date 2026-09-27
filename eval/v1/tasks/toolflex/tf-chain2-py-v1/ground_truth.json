@@ -1,0 +1,47 @@
+{
+  "schema": "kunglao-eval-ground-truth/1",
+  "task_id": "tf-chain2-py-v1",
+  "family": "tf-chain2",
+  "seed": 35601,
+  "eval_version": "eval-v1.3",
+  "space_bits": 448,
+  "published_pairs": [
+    {
+      "i": 0,
+      "file": "probes/payload-0.bin",
+      "out": "17aa6e36d4c86596"
+    },
+    {
+      "i": 1,
+      "file": "probes/payload-1.bin",
+      "out": "15bc11fcebdf5d7c"
+    },
+    {
+      "i": 2,
+      "file": "probes/payload-2.bin",
+      "out": "7ba857cf82aa2aa0"
+    },
+    {
+      "i": 3,
+      "file": "probes/payload-3.bin",
+      "out": "250dd197e3a7ff37"
+    },
+    {
+      "i": 4,
+      "file": "probes/payload-4.bin",
+      "out": "98bf199d66c44d23"
+    },
+    {
+      "i": 5,
+      "file": "probes/payload-5.bin",
+      "out": "db52c0960e55895a"
+    },
+    {
+      "i": 6,
+      "file": "target/payload.bin",
+      "out": "d3e8b1d5e46a98e4"
+    }
+  ],
+  "minted_probe_count": 0,
+  "note": "TF family (#356): the answer file is graded byte-exact; chain necessity and blocked-variant verification are mint-time gates recorded in manifest.json."
+}

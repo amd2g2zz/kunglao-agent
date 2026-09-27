@@ -1,0 +1,112 @@
+{
+  "entry": "target/chain_bundle.go",
+  "family": "chain-go",
+  "gradient": "L2",
+  "language": "go",
+  "layers": [
+    {
+      "artifact": "layer_out/1-unpacked.json",
+      "checkpoint": "unpack (byte-exact peel)",
+      "id": "obfuscation",
+      "index": 1,
+      "mechanisms": [
+        "obfuscation",
+        "junk-code"
+      ]
+    },
+    {
+      "artifact": "layer_out/2-config.json",
+      "checkpoint": "config decrypted (byte-exact canonical plaintext)",
+      "id": "encrypted-config",
+      "index": 2,
+      "mechanisms": [
+        "encrypted-config"
+      ]
+    },
+    {
+      "artifact": "layer_out/3-core.go",
+      "checkpoint": "cipher core restored (true path; decoy constants fail the rows; lanes rotated)",
+      "id": "custom-cipher-core",
+      "index": 3,
+      "mechanisms": [
+        "custom-cipher-core"
+      ]
+    }
+  ],
+  "mechanisms": [
+    "custom-cipher-core",
+    "encrypted-config",
+    "junk-code",
+    "obfuscation"
+  ],
+  "schema": "kunglao-eval-chain-manifest/1",
+  "seed": 37005,
+  "shortcut_audit": {
+    "constant_scan": {
+      "answer_constant_hits": [],
+      "decoy_constant_hits": [],
+      "naive_method": "constant-scan (hex/decimal) for the answer constants",
+      "note": "answer constants exist only inside the encrypted config; visible decoy constants are bait",
+      "verdict": "FAIL"
+    },
+    "decoy_baseline": {
+      "0": "1bc22f7f073df0f4",
+      "1": "fe3c6c402a92b652",
+      "2": "470fcd932469bc9c",
+      "3": "42c1fd9ec2297c3d",
+      "4": "09f8e805c55f1d70",
+      "5": "f518033a18468320",
+      "6": "bc90a82126aa682a",
+      "7": "2a264c8c9a7ae6b3"
+    },
+    "entry_scan": {
+      "answer_constant_hits": [],
+      "key_shaped_hits": [],
+      "naive_method": "strings/constant-scan of the committed artifact",
+      "verdict": "FAIL"
+    },
+    "junk_pollution": {
+      "markers": [
+        "_opq_j1bae",
+        "_w_j1bae_",
+        "0xcc0b86c9",
+        "0x70f8ecb5"
+      ],
+      "naive_decompile_baseline": "polluted",
+      "stripped_baseline": "clean",
+      "stripped_markers": []
+    },
+    "payload_scan": {
+      "baseline": [
+        "cbce74ee919a5270",
+        "81b6fa4b2799f6b6",
+        "7faae822f56dc8b8",
+        "b4a452fe3bcc518a",
+        "3097b6facda21f08",
+        "4604acd169f91a84",
+        "c449d4ccdb9a124b",
+        "cb9f6f6a888eed9a"
+      ],
+      "equals_truth": false,
+      "key_shaped_hits": [
+        "ae1266fbd81054cd406c6ae71ee8396dc1ff13cf523ca9bb3790da613869b8f5"
+      ],
+      "naive_answer": "chain_mac keyed with the honeypot",
+      "naive_method": "post-peel strings scan -> first key-shaped literal",
+      "verdict": "FAIL"
+    },
+    "runtime_keys": {
+      "method": "ARX KDF over the fingerprint constants; verified absent as literals",
+      "runtime_key_hex_absent": true
+    },
+    "smoked_at_mint": true
+  },
+  "task_id": "chain-l2-go-v1",
+  "toolchain": "go",
+  "workspace_contract": {
+    "answer": "reference_candidate.go",
+    "answer_seam": "A Go program reading one JSON object per line on stdin ({\"i\": N, \"payload\": hex, \"lane\": R}) and printing {\"i\": N, \"out\": hex} per line.",
+    "graded_by": "scripts/eval_chain_grader.py --task <id> --workspace <dir>",
+    "layer_dir": "layer_out"
+  }
+}

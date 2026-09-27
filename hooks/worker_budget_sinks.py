@@ -37,6 +37,10 @@ from worker_budget_gates import (
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
+    check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
+    check_handroll_floor,  # issue 243: >50-line script vs available-CLI WARN floor
+    record_tool_search_citations,  # issue 243: cited --find results -> provenance rows
+    check_rotation_experiment,  # issue #341: rotation-flagged claim requires the experiment-template marker
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
@@ -476,6 +480,51 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     return True, ''
 
 
+def check_env_premise(paths: dict, tier: int = 0,
+                      tools: list[str] | None = None) -> tuple[bool, str]:
+    """#340 scope B: premise-probe reconciliation at the dispatch seam.
+
+    When this dispatch needs capability X (`_env_caps_needed` — the single
+    source of capability names), an ACTIVE env-attribution premise in
+    blockers/*.md claims X unavailable, and runs/env-state.json shows X
+    liveness PASS, two machine-readable records disagree and the probe
+    wins: the premise is marked SUSPECT (append-only history line), a
+    one-shot on-demand capability re-probe is scheduled (the #474 channel,
+    scripts/premise_gate.run_pending_reprobe), and
+    `env_premise_contradiction` is emitted to the event ledger. The
+    dispatch itself is NEVER rejected on the stale premise — routing, not
+    awareness (#340 design axiom).
+
+    Posture: FAIL-OPEN always. Missing/unreadable env-state.json keeps the
+    existing fail-open behavior unchanged (pinned by test); a crashed
+    reconciliation degrades to a stderr WARN. The (True, '') shape is the
+    contract: this check is the channel that kills the false premise, not
+    another gate for the orchestrator to argue with."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    try:
+        needed = _env_caps_needed(tier, tools or [])
+    except Exception:  # noqa: BLE001 — vocabulary failure must not block
+        return True, ''
+    if not needed:
+        return True, ''
+    p = Path(ws) / ENV_STATE_FILE
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        per = data.get('per_capability') if isinstance(data, dict) else None
+        if not isinstance(per, dict):
+            per = {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return True, ''  # missing/corrupt env-state: fail-open (unchanged)
+    try:
+        import premise_gate
+        premise_gate.reconcile_dispatch(Path(ws), needed, per)
+    except Exception as exc:  # noqa: BLE001 — fail-open with one WARN
+        warn("check_env_premise", f"{type(exc).__name__}: {exc}")
+    return True, ''
+
+
 def _declared_trace_id(prompt: str) -> str | None:
     """#879: the v1 envelope's optional `trace_id` (meta passthrough), or
     None. Format-invalid declarations degrade to None (the dispatch row stays
@@ -617,6 +666,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # stale-beyond-2xTTL state follows the FAIL_OPEN/self-heal split
         # (see check_env_fresh). Pure file read (<5ms), no subprocess.
         ('envfresh', check_env_fresh(paths, tier, tools)),
+        # #340 scope B: premise-probe reconciliation — an env premise that
+        # contradicts a liveness PASS in env-state is marked SUSPECT + a
+        # one-shot re-probe is scheduled + env_premise_contradiction is
+        # emitted; the dispatch is NOT blocked on the stale premise (the
+        # probe wins). Fail-open always (see check_env_premise).
+        ('envpremise', check_env_premise(paths, tier, tools)),
         # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
@@ -653,11 +708,27 @@ def pre_check(payload: dict, paths: dict) -> int:
         # where a passing plan gate still let a worker hand-roll a script
         # instead of trying crypto-tool.py for a crypto-decode task.
         ('toolfirst', check_tool_first(paths, desc, prompt)),
+        # issue #243: the tool-search BEAT at the SAME plan-check point — a
+        # plan proposing to WRITE a new script must cite the --find result it
+        # compared against (`tool-search: <keywords> -> <hit|none>`); the
+        # standing make-vs-reuse value comparison the wbtest loop skipped.
+        ('toolsearch', check_tool_search_citation(paths, cid, prompt)),
+        # issue #243 WARN floor: a >50-line workspace script whose capability
+        # words match an available CLI/toolbox name ("readelf exists") —
+        # WARN, never REJECT; the same standing pass carries `promotion:`
+        # notes into the lesson/settlement channel (ladder completion).
+        ('handroll', check_handroll_floor(paths, cid, prompt)),
         # v1.9.33 (#310): agenttype gate — specialist-first as a mechanical
         # check. route_capability recommends the specialist for the claim
         # (task domain x sample features); a deviating dispatch REJECTS
         # without `agent-reasoning:` (same anti-spoof shape as devreason).
         ('agenttype', check_agent_type(paths, cid, prompt, agent_name)),
+        # issue #341: rotation-experiment gate — a dispatch on a claim the
+        # rotation induction has flagged (runtime_value_rotation fired,
+        # runs/.rotation-induction.json) REQUIRES the experiment-template
+        # marker `rotation-experiment:`; a re-hook-only retry is REJECTED
+        # with guidance pointing at the characterization reference card.
+        ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -698,6 +769,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     toolfirst_pass_record(paths, cid,
                           payload.get('tool_input', {}).get('description', ''),
                           prompt)
+    # issue #243: every cited tool-search --find result in the worker's plan
+    # is ONE toolfirst_search provenance row (keywords + result) — the
+    # make-vs-reuse value comparison lands in the ledger, not just in prose.
+    record_tool_search_citations(paths, cid, prompt)
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).

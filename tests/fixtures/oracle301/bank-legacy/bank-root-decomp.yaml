@@ -1,0 +1,5 @@
+# Synthetic #301 sweep fixture: a declared decomposition whose children
+# were never minted -> sweep verdict decompose.
+id: bank-root-decomp
+question: "当前样本存在加密算法"
+decomposition: [bank-child-c1, bank-child-c2]

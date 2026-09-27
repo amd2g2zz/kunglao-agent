@@ -1,0 +1,45 @@
+schema: kunglao-eval-task/1
+task_id: m3-sbox-go-v1
+eval_version: eval-v1.2
+tier: misdirection
+source: constructed
+family: decoy-marker-go
+seed: 35222
+anchors:
+  goal_verbatim: 'Analyze target/sample_kdf.go: planted markers point at the wrong
+    mechanism. Identify the real uint32 pipeline, ignore the decoys, and re-expose
+    an input-agnostic stdin program reproducing the captured pairs byte-exact.'
+  success_criterion: A Go stdin program reproducing every published and checker-minted
+    pair byte-exact on freshly minted inputs.
+  verification_method: reproduction
+workspace_scaffold:
+  language: go
+  files:
+  - target/sample_kdf.go
+  entry: target/sample_kdf.go
+  candidate_contract: 'A Go program, input-agnostic: reads one JSON object per line
+    from stdin ({"i": N, "in": X}) and prints one per line ({"i": N, "in": X, "out":
+    Y}).'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_candidate.go
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 96
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps: []
+  clean_env_guarantee: no anti-debug surface in this unit

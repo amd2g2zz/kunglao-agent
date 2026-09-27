@@ -28,18 +28,29 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   intrinsic exploration: an uncertain arm occasionally ranks first with no
   threshold gate, and bad priors recover by evidence.
 
-  PQ face — the claim's primary_question categorical (#106
-  PQCategorical). ΔH is mechanical: H(categorical), the entropy the
-  categorical still carries — the updatable quantity an observation on
-  that PQ can remove (a peaked distribution has little left to flip).
-  No PQ categorical → ΔH = 0.
+  PQ face — REMOVED (#295, the first ADR-001 governed application). The
+  #106/#107 ΔH_PQ face (case_face + LAMBDA_DH·ΔH) died on replay
+  evidence: EXP-B measured ΔH = 0 on 612/612 real rank events
+  (runs/posteriors.yaml never instantiated in any real workspace,
+  pooled Spearman vs progress +0.068 p=0.16, wrong-signed vs gate
+  fires) and the #294 λ epistemology check produced order digests
+  BYTE-IDENTICAL at every tick for λ=0.25 vs λ=0 — mechanically inert
+  on all real data. The removal is therefore a runtime no-op on
+  history; the old feeds["dh_pq"] diagnostic is gone with it. The
+  λ epistemology HARNESS face (replay_ruler.lambda_check) stays — it
+  reads history, where dh_pq strings legitimately exist. Any
+  re-introduction goes through docs/adr-001-strategy-parameter-
+  governance.md (replay evidence + versioned PR + pins; never runtime
+  self-tuning).
 
-  score = (case_face + LAMBDA_DH · ΔH) · worth        (#759 worth channel)
+  score = (case_face + W_DOWNSTREAM · downstream_term) · worth
+                                                  (#759 worth channel)
 
-  LAMBDA_DH = 0.25 is the ONLY free parameter of the rebuilt formula
-  (#111 integration tests will exercise it). `worth` is the pre-existing
-  #759 user worth ruling (runs/value-weights.yaml) — a sanctioned exogenous
-  multiplier, not a formula DOF; absent weights → 1.0.
+  The composite's free parameters live in the downstream block below,
+  each carrying its earn-in evidence and governance comment. `worth`
+  is the pre-existing #759 user worth ruling (runs/value-weights.yaml)
+  — a sanctioned exogenous multiplier, not a formula DOF; absent
+  weights → 1.0.
 
   rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
   random.Random(0): same inputs → same ranking (anchor-deterministic).
@@ -117,11 +128,55 @@ import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
 import rank_face  # noqa: E402  (issue 218: the emit-failure marker)
 from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 
-# #107: the single free parameter of the rebuilt value function.
-LAMBDA_DH = 0.25
+# #295: LAMBDA_DH is DELETED (the first governed application of
+# docs/adr-001-strategy-parameter-governance.md — see the module
+# docstring's PQ-face note for the removal evidence).
 # #107 conservative flip-potential reading (diagnostic only — see feeds).
 FLIP_POTENTIAL_BASE = 0.5       # P(cflip) at cold start
 FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
+
+# #294 downstream-blocker term: a claim others depend on is worth starting
+# earlier — its sample unblocks a subtree, a leaf's unblocks only itself.
+# THREE named free parameters under the ADR-001 governance procedure
+# (docs/adr-001-strategy-parameter-governance.md — the discipline the
+# removed LAMBDA_DH embodied, now codified). The values
+# below carry their #295 earn-in evidence FROM THE REPLAY RULER
+# (scripts/replay_ruler.py, run 2026-09-21 against three real historical
+# workspaces — offline policy evaluation, read-only):
+#
+#   earn-in evidence (TTC = replayed ticks to drain, serial dispatch,
+#   same-seed configs; anti-starvation: every claim dispatched, zero
+#   stalls attributable to the term):
+#     cc-case    (25 claims, 215 snaps): base TTC 149 -> term 146 (delta -3)
+#     doubao_web (16 claims, 152 snaps): base TTC 142 -> term 137 (delta -5)
+#     wbtest     ( 6 claims,  39 snaps): base TTC  32 -> term  32 (delta  0)
+#   order digests changed on cc-case/doubao_web (the term reorders real
+#   history); identical on wbtest (frontier too small to differentiate).
+#
+#   W_DOWNSTREAM  — the term's weight inside the composite (bounded lift:
+#                   max lift = W_DOWNSTREAM * DOWNSTREAM_CAP < one cold-start
+#                   prior draw, so a leaf is never systematically starved).
+#                   CHANGING THIS VALUE REQUIRES THE ADR-001 GOVERNED
+#                   PROCEDURE — value pins + attached replay evidence; the
+#                   pins are tests/test_replay_ruler_294.py hard asserts
+#                   and silent drift goes red;
+#   DOWNSTREAM_DECAY — geometric decay per dependency-graph level (direct
+#                   dependents count 1, grandchildren DECAY, ...);
+#   DOWNSTREAM_CAP   — hard clamp on the weighted count (a hub cannot
+#                   dominate the sample face no matter how wide its subtree).
+DOWNSTREAM_DECAY = 0.5
+DOWNSTREAM_CAP = 4.0
+W_DOWNSTREAM = 0.1
+
+# #266 frozen-sampling marker: K CONSECUTIVE rank runs whose recorded
+# rng_base is EQUAL while the recorded round ADVANCES. The #251 contract
+# makes the seed move whenever the round moves — a run of advancing rounds
+# with a static base is exactly the old frozen-sampler defect re-emerging
+# (the 53-consecutive wild audit), detectable from the event tail alone.
+# Equal base with EQUAL rounds is the contract's deterministic replay of
+# an unchanged tick, never freezing. The consumer is a pure tail function:
+# no state, idempotent under tail replay.
+FROZEN_SAMPLE_K = 3
 
 _TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 
@@ -150,7 +205,8 @@ class EvidenceView:
     value_claim_overrides: dict[str, float] = field(default_factory=dict)
     # #107: workspace root — the ranker reads runs/posteriors.yaml and
     # oracle/cases/*.yaml through it. None (bare construction, tests) → no
-    # posteriors: every action samples the Beta(1,1) prior and ΔH = 0.
+    # posteriors: every action samples the Beta(1,1) prior. (#295: the
+    # PQ-categorical surface no longer feeds any score term.)
     ws: Path | None = None
 
     @classmethod
@@ -210,7 +266,9 @@ class EvidenceView:
 class Action:
     """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1).
 
-    #107: score = (Thompson case face + LAMBDA_DH·ΔH_PQ) · worth. The
+    #107+#294: score = (Thompson case face + W_DOWNSTREAM·downstream_term)
+    · worth (the #295 governed removal deleted the LAMBDA_DH·ΔH_PQ face —
+    docs/adr-001-strategy-parameter-governance.md). The
     weighted-era term fields (leverage/discriminator/novelty and the old
     lexicographic sort head) are deleted; feeds carries the new diagnostics."""
 
@@ -222,7 +280,7 @@ class Action:
     attempts: int
     cost: float
     weight: float = 1.0  # #759 H2 worth multiplier (exogenous, not a DOF)
-    # #107 diagnostics: thompson_sample / case_flip_potential / dh_pq
+    # #107/#294 diagnostics: thompson_sample / case_flip_potential / downstream
     feeds: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -244,34 +302,22 @@ def is_open(claim: dict) -> bool:
 
 # ---------- action classification (feeds the Action.category + worker hints) ----------
 
-_KEYWORD_MAP: list[tuple[tuple[str, ...], str]] = [
-    (("c2", "mpd", "pegasus", "dead-drop", "dead drop", "c2 配置"), "c2_config_extract"),
-    (("命令表", "command table", "命令分发"), "command_table"),
-    (("协议", "protocol", "runtime 行为", "network io", "网络"), "protocol_restore"),
-    (("持久化", "persistence", "autorun", "注册表"), "persistence"),
-    (("注入", "injection", "reflective", "createremotethread"), "injection"),
-    (("反分析", "anti-analysis", "anti analysis", "garble", "诱饵", "decoy", "cff", "混淆"), "anti_analysis"),
-    (("家族", "family", "归属", "vidar", "wingo", "gsb"), "family_attribution"),
-]
-DEFAULT_ACTION = "evidence_collection"
+# The claim-category vocabulary is REGISTRY-OWNED (scripts/action_space.py,
+# the action-vocabulary issue). Verbatim move (same tuples, same order): the
+# rank output stays byte-identical under default weights, pinned by the
+# frozen capture in tests/test_action_space_12.py. The legacy module names
+# stay as aliases for the existing consumers (value_replay, think_seat, tests).
+import action_space  # noqa: E402  (registry-sourced action field)
+
+_KEYWORD_MAP = action_space.CLAIM_ACTION_KEYWORDS
+DEFAULT_ACTION = action_space.DEFAULT_CLAIM_ACTION
 
 
 def classify_action(claim: dict) -> str:
-    """statement + answers_question keywords → action category; no hit → evidence_collection.
-
-    Scoring: each category accumulates keyword hit counts, the highest
-    wins; ties broken by _KEYWORD_MAP order.
-    """
-    text = " ".join([
-        str(claim.get("statement", "")),
-        str(claim.get("answers_question", "")),
-    ]).lower()
-    best, best_score = DEFAULT_ACTION, 0
-    for keywords, action in _KEYWORD_MAP:
-        score = sum(text.count(k) for k in keywords)
-        if score > best_score:
-            best, best_score = action, score
-    return best
+    """statement + answers_question keywords → action category; no hit →
+    evidence_collection. Single scoring authority:
+    action_space.classify_claim_action (the action registry)."""
+    return action_space.classify_claim_action(claim)
 
 
 # ---------- per-claim int guards (#103, unchanged) ----------
@@ -313,6 +359,53 @@ def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
         for p in parents:
             rev.setdefault(p, []).append(child)
     return rev
+
+
+def downstream_term(claim_id: str, depends_on: dict,
+                    claims: Iterable | None = ()) -> float:
+    """#294: bounded, decaying downstream_count for one claim.
+
+    Reverse edges over claim_deps/depends_on {child: [parents]} PLUS the
+    register's `obstacle_for` fields (the ladder-mint face writes the same
+    edge into claim_deps.yaml, but a register-only row must still count —
+    the graph, not the file layout, is the signal). BFS from claim_id:
+    each dependent at graph distance d contributes DECAY**d; the sum is
+    clamped to DOWNSTREAM_CAP. Deterministic pure function of the dep
+    inputs — no rng, no wall clock (the seed contract is untouched);
+    cycles are cut by a visited set.
+
+    The count is deliberately STATUS-BLIND (settled dependents still
+    count): filtering live-only would need the whole register threaded
+    through every score and would make the term drift mid-round as
+    statuses flip. The cap keeps a stale hub bounded; the replay ruler is
+    where a status-aware variant must EARN its place on data.
+    """
+    rev: dict[str, list[str]] = _reverse_deps(depends_on or {})
+    for c in claims or ():
+        parent = str(c.get("obstacle_for") or "").strip()
+        cid_ = c.get("id")
+        if parent and cid_:
+            rev.setdefault(parent, []).append(str(cid_))
+    if claim_id not in rev:
+        return 0.0
+    total = 0.0
+    seen = {claim_id}
+    frontier = [claim_id]
+    level = 0
+    while frontier:
+        level += 1
+        nxt: list[str] = []
+        for node in frontier:
+            for dep in rev.get(node, ()):
+                if dep in seen:
+                    continue
+                seen.add(dep)
+                total += DOWNSTREAM_DECAY ** (level - 1)
+                nxt.append(dep)
+        if total >= DOWNSTREAM_CAP:
+            break
+        frontier = nxt
+    return min(total, DOWNSTREAM_CAP)
 
 
 # ===================== #496 typed-fact consumption (capability cards) =====================
@@ -639,6 +732,52 @@ def posterior_seed_state(ws) -> tuple[random.Random, int]:
     return random.Random(case_face_seed(ledger, rnd)), rnd
 
 
+# ---------- #266 frozen-sampling consumer (pure tail function) -------------
+
+def frozen_sampling_markers(rows: Iterable) -> list[dict]:
+    """#266: scan a rank_feeds event tail for frozen sampling.
+
+    A RUN is a maximal stretch of consecutive ``rank_feeds`` rows whose
+    ``input_fingerprint.rng_base`` stays EQUAL while ``round`` strictly
+    ADVANCES; a run of length >= FROZEN_SAMPLE_K is a marker (the seed
+    ignored a moving round axis). Rows that break either condition reset
+    the run: a different base (healthy reseed), an equal round (the
+    contract replaying an unchanged tick), a decreasing round, or an
+    unparseable/absent fingerprint (conservative gap — old envelopes with
+    ``epoch: null`` still carry the fingerprint doc inside ``detail``,
+    which is what this consumer keys on). Pure function of the rows:
+    identical tails -> identical markers, forever (tail-replay safe).
+
+    Returns [{"rng_base", "rounds", "length"}, ...] in tail order."""
+    markers: list[dict] = []
+    cur: dict | None = None
+    for e in rows:
+        if not isinstance(e, dict) or e.get("action") != "rank_feeds":
+            continue
+        # #863 Family K: JSON parsing is delegated to kunglao_log's
+        # tolerant single-source reader (a broken detail yields nothing,
+        # next() falls back to None) — never an inline json parse here.
+        parsed = next(iter(kunglao_log.iter_jsonl(
+            [str(e.get("detail") or "")])), None)
+        fp = (parsed or {}).get("input_fingerprint") or {} \
+            if isinstance(parsed, dict) else {}
+        base, rnd = fp.get("rng_base"), fp.get("round")
+        if base is None or rnd is None or not isinstance(rnd, int):
+            cur = None
+            continue
+        if cur is not None and base == cur["rng_base"] \
+                and rnd > cur["rounds"][-1]:
+            cur["rounds"].append(rnd)
+            cur["length"] += 1
+        else:
+            if cur and cur["length"] >= FROZEN_SAMPLE_K:
+                markers.append(cur)
+            cur = {"rng_base": base, "rounds": [rnd], "length": 1}
+    if cur and cur["length"] >= FROZEN_SAMPLE_K:
+        markers.append(cur)
+    return markers
+
+
 # ---------- #157 algorithm event log: rank_feeds (one emit per RUN) --------
 
 def _evidence_digest(evidence: EvidenceView) -> str:
@@ -816,25 +955,22 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             thompson_state = (f"no linked oracle case (oracle/cases/ target_pq "
                               f"!= '{pq or '-'}') -> Beta(1,1) prior sample="
                               f"{round(case_face, 6)} (cold-start exploration)")
-        # ΔH_PQ: H(categorical) — the updatable quantity on the claim's PQ.
-        pq_cat = ledger.pqs.get(pq) if pq else None
-        dh = pq_cat.entropy() if pq_cat is not None else 0.0
-        if pq_cat is not None and str(c.get("boundary_type") or "") == "epistemic":
-            # issue 250: a situational PQ (mint+seed writes ledger.pqs for
-            # situational unknowns) — same LAMBDA_DH term, named source.
-            dh_state = (f"PQ '{pq}' situational categorical "
-                        f"H={round(dh, 6)} bit (epistemic claim)")
-        elif pq_cat is not None:
-            dh_state = f"PQ '{pq}' categorical H={round(dh, 6)} bit"
-        else:
-            dh_state = (f"no PQ categorical for '{pq or '-'}' in "
-                        f"runs/posteriors.yaml -> dH=0")
+        # ΔH_PQ face REMOVED (#295 governed application, ADR-001): the
+        # PQ categorical is no longer read, no entropy is computed, and
+        # no dh_pq feed is emitted. On all real ledgers the removed term
+        # contributed LAMBDA_DH × 0 ≡ 0 at every tick (EXP-B: 612/612
+        # rank events dh_pq=0; #294: λ=0.25 vs λ=0 order digests
+        # byte-identical), so ordering is unchanged byte-for-byte.
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
+        # #294 downstream-blocker term (bounded, decaying; feeds-recorded
+        # like every other component per the #251 auditability convention).
+        dterm = downstream_term(cid, depends_on, claims)
         # stored at 6dp (sort precision; the to_dict/json face still rounds
         # to 3) so the #759 worth multiplier stays an exact identity.
-        score = round((case_face + LAMBDA_DH * dh) * weight, 6)
+        score = round(
+            (case_face + W_DOWNSTREAM * dterm) * weight, 6)
         feeds = {
             "thompson_sample": thompson_state,
             "case_flip_potential": (
@@ -842,7 +978,10 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                 f"by promotion_attempts={attempts_of(c)})"
                 + ("" if linked else
                    f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
-            "dh_pq": dh_state,
+            "downstream": (
+                f"downstream_weighted={round(dterm, 3)} "
+                f"(decay {DOWNSTREAM_DECAY}, cap {DOWNSTREAM_CAP}, "
+                f"weight {W_DOWNSTREAM})"),
         }
         # #103: attempts conversion is per-claim guarded; a dirty raw value
         # scores as 0 and surfaces here as a feed diagnostic instead of

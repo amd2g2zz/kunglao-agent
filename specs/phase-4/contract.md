@@ -14,6 +14,15 @@
 > per posterior state, stable tie-break claim_id. explore_gate /
 > EXPLORE_THRESHOLD / the cheapness face / `explore_mode` are deleted; the
 > sections below describe the REBUILT surfaces (pre-#107 text is history).
+>
+> **Revised 2026-09-22 (issue #295 governed removal, ADR-001)**: the
+> ΔH_PQ face is REMOVED — EXP-B measured ΔH ≡ 0 on 612/612 real rank
+> events and #294 proved the λ=0.25 vs λ=0 order digests byte-identical
+> at every tick (mechanically inert on all real data), so:
+> score = (sampled case posterior + W_DOWNSTREAM·downstream_term) · worth,
+> Thompson-ranked per posterior state, stable tie-break claim_id. The
+> constant-change procedure is docs/adr-001-strategy-parameter-governance.md
+> (replay evidence + versioned PR + pins; never runtime self-tuning).
 
 Source documents (frozen sources, excerpts with line numbers):
 - `docs/design/archive/module-design.md` — all of §M1 (L112-207); M1.1 division L114-125; M1.2 signatures L126-159; M1.3 schema L160-172; M1.4 state machine L173-192; M1.5 error handling L193-199; M1.6 test points L200-205
@@ -38,15 +47,18 @@ def convergence_matrix(open_count, partial_count, free_slots, blocked_count) -> 
 
 def priority_ratio(claims: list[Claim], deps: DepGraph, evidence: EvidenceView,
                    rng: Random | None = None) -> list[Action]:
-    """#107 Thompson ranking: score = (case_face + LAMBDA_DH·ΔH_PQ) · worth
+    """#107+#294 Thompson ranking:
+    score = (case_face + W_DOWNSTREAM·downstream_term) · worth
     case_face = Σ linked oracle cases of ONE Beta posterior Thompson sample
                 (no linkage → one Beta(1,1) prior sample = cold-start exploration)
-    ΔH_PQ     = H of the claim's PQ categorical (posteriors.yaml), else 0
+    downstream_term = #294 bounded decaying count of dependents (ADR-001-governed)
     worth     = #759 value-weights multiplier (exogenous, not a DOF)
-    LAMBDA_DH = 0.25 — the only free parameter
+    (#295 removed LAMBDA_DH·ΔH_PQ — mechanically inert on all real data;
+    re-introduction goes through docs/adr-001-strategy-parameter-governance.md)
     rng=None → Random(0); live callers share posterior_rng(ws)"""
     # deleted with the owner ruling: [0.45L+0.30D+0.25N]/cost, gap_bucket
     # sort head, explore_gate, EXPLORE_THRESHOLD, the cheapness spread
+    # deleted by #295 (ADR-001): the LAMBDA_DH·ΔH_PQ face and the dh_pq feed
 
 def selfcheck(text: str) -> list[str]:
     """scan orchestrator output for ask-back / self-cap violations"""
@@ -126,7 +138,7 @@ decide(ws):
 
 | Test point | Assertion | File |
 |---|---|---|
-| Thompson composite | `score == round((case_face + LAMBDA_DH·ΔH)·worth, 6)`; deterministic under the default seed; ordering = sample descending, tie-break claim_id | tests/test_priority_ratio.py |
+| Thompson composite | `score == round((case_face + W_DOWNSTREAM·downstream_term)·worth, 6)` (no ΔH face — #295/ADR-001); deterministic under the default seed; ordering = sample descending, tie-break claim_id | tests/test_priority_ratio.py |
 | cold-start exploration | no linked oracle case → one Beta(1,1) prior sample; feeds record the fallback flip potential 0.3 | same |
 | flip potential | 0.5 base decayed by promotion_attempts (diagnostic only) | same |
 | dispatchable filter | terminal / attempts≥3 / dep non-terminal excluded (unchanged) | same |

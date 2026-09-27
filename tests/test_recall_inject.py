@@ -503,3 +503,135 @@ def test_failure_gate_blocked_output_recalls_failure_modes(tmp_path, capsys):
     assert "failure-modes" in out, "BLOCKED output must recall the failure-modes references"
     assert "failure-modes-lifecycle.md" in out, "lifecycle domain file must be named"
     assert "failure-modes-state.md" in out, "state domain file must be named"
+
+
+# ---- H1a (autoresearch thin-base): dispatch-scoped recall + content dedup --
+
+def test_first_dispatch_injects_fresh_workspace(tmp_path):
+    """H1a: dispatch-scoped, not event-gated — a fresh workspace with no
+    ledger events still injects (the dispatch itself is the trigger)."""
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True)
+    (ws / "claim-register.yaml").write_text(
+        "claims:\n- id: C-001\n  status: OPEN\n", encoding="utf-8")
+    rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
+    assert rc == 0 and stderr == "" and ctx is not None
+
+
+def test_repeat_dispatch_same_content_is_deduped(tmp_path):
+    """H1a: the same worker (claim) with an unchanged recall file set is
+    silent on re-dispatch — re-injecting unchanged content was the tax."""
+    ws = _kunglao_ws(tmp_path)
+    rc1, _, ctx1 = evaluate(_payload(ws, VM_CLAIM))
+    assert ctx1 is not None  # first dispatch for C-101 injects
+    rc2, _, ctx2 = evaluate(_payload(ws, VM_CLAIM))
+    assert rc2 == 0 and ctx2 is None  # same worker, same content -> deduped
+
+
+def test_changed_content_reinjects(tmp_path):
+    """H1a: the dedup key is the injected FILE SET — when recall returns a
+    changed set for the same worker, the dispatch is re-injected."""
+    ws = _kunglao_ws(tmp_path)
+    rc1, _, ctx1 = evaluate(_payload(ws, VM_CLAIM),
+                            recall_runner=lambda q: (
+                                0, "dynamic-re-tool-priority.md | a | b | c"))
+    assert ctx1 is not None
+    rc2, _, ctx2 = evaluate(_payload(ws, VM_CLAIM),
+                            recall_runner=lambda q: (
+                                0, "tools-dynamic.md | x | y | z"))
+    assert rc2 == 0 and ctx2 is not None, "changed content must re-inject"
+
+
+def test_redteam_dispatch_injects_like_any_role(tmp_path):
+    """H1a owner ruling: recall is dispatch-scoped for EVERY role — no
+    exemptions. A redteam dispatch on a fresh workspace (no events) gets
+    its adversarial recall like everyone else; the J4 injection pin passes
+    unchanged under this design."""
+    ws = _kunglao_ws(tmp_path)
+    redteam_prompt = ("[T2 tools=ghidra] verify-redteam claim C-201 plan "
+                      "attacks against the static analysis conclusion")
+    rc, _, ctx = evaluate(_payload(ws, redteam_prompt))
+    assert rc == 0 and ctx is not None
+
+
+# ---- issue 380 Package 4 F1/F2: dedup key + content hash -------------------
+
+def _v1_prompt(claim: str, agent: str = "w-p4",
+               tail: str = "facts-snapshot: 3 facts") -> str:
+    """A v1 JSON-envelope dispatch — the shape the retired local prose regex
+    (`claim[ \\t]+C-NN`) could not see (the issue 861 bug class)."""
+    return ('{"kunglao_dispatch": {"version": 1, "claim": "%s", "tier": 3, '
+            '"tools": ["mcp__x64dbg__*"], "agent": "%s"}}\n'
+            '%s observe the sample dynamic behavior in the VM'
+            % (claim, agent, tail))
+
+
+def test_v1_envelope_dispatch_keys_by_claim_id(tmp_path):
+    """F1 misfire fixture: v1 JSON-envelope dispatches were keyed by TEXT
+    HASH — the local prose regex only saw v0 dispatches, so a same-claim
+    re-dispatch whose tail moved (facts-snapshot count) re-injected
+    unchanged content. The dedup key must be the claim id via
+    lib_kunglao.parse_dispatch (the issue 861 single source), text-hash
+    only when the text parses as no dispatch at all."""
+    ws = _kunglao_ws(tmp_path)
+    same_files = lambda q: (0, "dynamic-re-tool-priority.md | a | b | c")
+    p1 = _v1_prompt("C-301", tail="facts-snapshot: 3 facts")
+    p2 = _v1_prompt("C-301", tail="facts-snapshot: 9 facts")
+    rc1, _, ctx1 = evaluate(_payload(ws, p1), recall_runner=same_files)
+    assert rc1 == 0 and ctx1 is not None, "first dispatch injects"
+    rc2, _, ctx2 = evaluate(_payload(ws, p2), recall_runner=same_files)
+    assert rc2 == 0 and ctx2 is None, (
+        "same claim (v1 envelope, different text tail) + unchanged set "
+        "must dedup by claim id, not text hash")
+    rc3, _, ctx3 = evaluate(
+        _payload(ws, p2),
+        recall_runner=lambda q: (0, "tools-dynamic.md | x | y | z"))
+    assert rc3 == 0 and ctx3 is not None, "changed file set re-injects"
+
+
+def test_reference_revised_in_place_reinjects(tmp_path, monkeypatch):
+    """F2: dedup hashed the file-NAME set only — a reference file revised
+    in place (same name, new content) was never re-injected to the same
+    worker. The set hash must carry (path, content-digest) pairs."""
+    import recall_inject
+
+    ws = _kunglao_ws(tmp_path)
+    refs = tmp_path / "refs" / "re-library"
+    refs.mkdir(parents=True)
+    fixture = refs / "probe-fixture.md"
+    fixture.write_text("revision 1", encoding="utf-8")
+    monkeypatch.setattr(recall_inject, "REFERENCES_DIR", tmp_path / "refs",
+                        raising=False)
+    runner = lambda q: (0, "re-library/probe-fixture.md | a | b | c")
+    p = VM_CLAIM
+    rc1, _, ctx1 = evaluate(_payload(ws, p), recall_runner=runner)
+    assert rc1 == 0 and ctx1 is not None
+    rc2, _, ctx2 = evaluate(_payload(ws, p), recall_runner=runner)
+    assert rc2 == 0 and ctx2 is None, "unchanged content stays deduped"
+    fixture.write_text("revision 2 — new doctrine", encoding="utf-8")
+    rc3, _, ctx3 = evaluate(_payload(ws, p), recall_runner=runner)
+    assert rc3 == 0 and ctx3 is not None, (
+        "same name, revised content must re-inject")
+
+
+def test_recall_set_hash_carries_content_digest(tmp_path, monkeypatch):
+    """F2 unit pin: the set hash is over (path, content-digest) pairs —
+    identical content at two paths never collapses; unreadable paths hash
+    to a stable sentinel so dedup still works (fail-open) and a file that
+    becomes readable later shifts the hash (re-inject direction)."""
+    import recall_inject
+
+    refs = tmp_path / "r"
+    refs.mkdir()
+    (refs / "a.md").write_text("same bytes", encoding="utf-8")
+    (refs / "c.md").write_text("same bytes", encoding="utf-8")
+    monkeypatch.setattr(recall_inject, "REFERENCES_DIR", refs, raising=False)
+    assert (recall_inject._recall_set_hash(["a.md"])
+            != recall_inject._recall_set_hash(["c.md"])), (
+        "path is part of the pair: same content at two paths never collapses")
+    assert (recall_inject._recall_set_hash(["a.md"])
+            != recall_inject._recall_set_hash(["a.md", "c.md"])), (
+        "set membership moves the hash")
+    assert (recall_inject._recall_set_hash(["missing.md"])
+            == recall_inject._recall_set_hash(["missing.md"])), (
+        "unreadable paths hash to a stable sentinel")

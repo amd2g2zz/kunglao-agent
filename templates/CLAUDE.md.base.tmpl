@@ -32,7 +32,7 @@ The workspace is the source of truth; this file is the index. Drill into a point
 
 The convergence loop runs every round and is the only rule set that survives context compact. Each round:
 
-- Run `uv run --project {{skill_dir}} python {{skill_dir}}/scripts/convergence_check.py .` and surface the verdict before claiming progress; its decision-table action is mandatory.
+- Run `uv run --project {{skill_dir}} python {{skill_dir}}/scripts/convergence_check.py "$PWD"` and surface the verdict before claiming progress; its decision-table action is mandatory. The workspace argument is explicit and fail-validated — a resolved directory without `claim-register.yaml` and `task_spec.yaml` hard-errors ("not a kunglao workspace"), never a verdict.
 - Heartbeat TTL: if `runs/.heartbeat.json` is stale (older than 35 minutes), re-anchor from disk before deciding — never reason over a stale heartbeat.
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.

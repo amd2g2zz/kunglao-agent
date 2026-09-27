@@ -1,0 +1,11 @@
+# Synthetic #301 sweep fixture (no real workspace data).
+id: bank-keep-1
+expected:
+  - field: sha1_k0_hit
+    value: 1
+verification:
+  artifact: "0x179E5C segment constant table hit: SHA-1 family K0=0x5A827999"
+  artifact_kind: constant
+  criterion: constant-hit
+  threshold: {min_hits: 1}
+  feeds_decision: "pq:crypto-family"

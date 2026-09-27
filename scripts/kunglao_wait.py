@@ -13,19 +13,27 @@ Loop, one round (default cadence ~30 min total: 20 s x 90 rounds):
      ``[ts] wait: awaiting signal | status: waiting``
      The append renews the file mtime — the mtime IS the worker heartbeat,
      so every scanner sees fresh state while the worker idles.
-  3. poll ``runs/wait-signal-<id>.json`` (the dispatch gate writes it when
-     a dispatch targets this waiting worker). Present -> parse, DELETE it
-     (a signal is single-shot), append the UNWAIT face
-     ``[ts] unwait: dispatch received (claim <cid>) | status: in-progress``,
-     echo the consumed signal JSON on stdout (the file is gone — stdout is
-     the context face for the agent), exit 0.
+  3. poll ``runs/wait-signal-<id>.json`` (written by the dispatch gate on
+     a re-arming dispatch, or by the settle transaction on a claim
+     settlement — #244). Present -> parse, DELETE it (a signal is
+     single-shot), act on its ``type``:
+       - ``dispatch`` (or type-less, the pre-#244 writer shape): append
+         the UNWAIT face ``[ts] unwait: dispatch received (claim <cid>) |
+         status: in-progress``, echo the signal JSON on stdout, exit 0;
+       - ``stop`` (#244 settlement-confirmed dismissal): append
+         ``[ts] unwait: settlement dismissed (claim <cid>) | status:
+         dismissed``, echo the signal JSON, exit 0 — the claim's settle
+         transaction actively ended the wait, so this is honest terminal
+         telemetry, not a failure.
 
 Timeout lives ONLY inside this loop. After WAIT_MAX_ROUNDS (default 90,
 env KUNGLAO_WAIT_MAX_ROUNDS) signal-less rounds the worker is unscheduled:
-append ``[ts] wait: no signal after N rounds | status: failed | note:
+append ``[ts] wait: no signal after N rounds | status: unscheduled | note:
 self-killed after N wait rounds`` and exit 3 (--claim given) / 4 (no
-claim) — the caller TaskStops itself and frees its slot. Normal work and
-post-UNWAIT paths have NO timeout.
+claim) — the caller TaskStops itself and frees its slot. 'unscheduled'
+(#244) is honest: no signal is a scheduling outcome, not work failure
+('failed' stays reserved for real failures). Normal work and post-UNWAIT
+paths have NO timeout.
 
 NEVER raises: any crash lands a best-effort terminal status line and exits
 3. Stdlib only; timestamps come from harness_common.utc_now_z when the
@@ -78,7 +86,9 @@ POLL_ENV = "KUNGLAO_WAIT_POLL_S"
 ROUNDS_ENV = "KUNGLAO_WAIT_MAX_ROUNDS"
 
 # ---- named exit codes (the agent-facing contract) ----
-EXIT_UNWAITED = 0          # signal consumed -> re-armed, keep working
+EXIT_UNWAITED = 0          # dispatch signal consumed -> re-armed, keep working
+EXIT_DISMISSED = 0         # stop signal consumed -> settlement-confirmed
+                           # dismissal (#244): exit 0, terminal 'dismissed'
 EXIT_SELF_KILL_CLAIM = 3   # timed out unscheduled (claim context given)
 EXIT_SELF_KILL_NO_CLAIM = 4  # timed out unscheduled (no claim context)
 
@@ -86,7 +96,15 @@ RUNS_DIR = Path("runs")
 
 _WAIT_LINE = "[{ts}] wait: awaiting signal | status: waiting"
 _UNWAIT_LINE = "[{ts}] unwait: dispatch received (claim {cid}) | status: in-progress"
-_SELFKILL_LINE = ("[{ts}] wait: no signal after {n} rounds | status: failed | "
+# #244: a `stop` signal is the settlement-confirmed dismissal — the claim's
+# settle transaction actively ended the wait, so the terminal is honest
+# telemetry ('dismissed'), never 'failed' (reserved for real failures).
+_DISMISS_LINE = ("[{ts}] unwait: settlement dismissed (claim {cid}) | "
+                 "status: dismissed")
+# #244: the self-kill is not a failure of the work — the worker simply ran
+# unscheduled past its window. Terminal token reads 'unscheduled'.
+_SELFKILL_LINE = ("[{ts}] wait: no signal after {n} rounds | "
+                  "status: unscheduled | "
                   "note: self-killed after {n} wait rounds")
 _CRASH_LINE = "[{ts}] wait: crashed ({kind}: {exc}) | status: failed"
 
@@ -172,6 +190,16 @@ def run_wait(worker: str, claim: str | None) -> int:
             signal = _consume_signal(worker)
             if signal is not None:
                 cid = signal.get("claim") or claim or "(no claim)"
+                # #244 signal taxonomy: type: dispatch | stop. Type-less
+                # signals (the pre-#244 writer shape) stay dispatch — the
+                # wake contract is unchanged for older producers.
+                stype = str(signal.get("type") or "dispatch")
+                if stype == "stop":
+                    _compact_status_file(
+                        worker,
+                        _DISMISS_LINE.format(ts=_utc_now(), cid=cid))
+                    print(json.dumps(signal, ensure_ascii=False))
+                    return EXIT_DISMISSED
                 _compact_status_file(
                     worker, _UNWAIT_LINE.format(ts=_utc_now(), cid=cid))
                 print(json.dumps(signal, ensure_ascii=False))

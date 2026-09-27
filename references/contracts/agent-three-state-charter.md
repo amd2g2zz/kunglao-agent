@@ -1,120 +1,118 @@
-# Agent 行为三态宪法 — issue #447(v2 校准: issue #497)
+# Agent Three-State Charter (v2 calibration: issue #497, origin #447)
 
-> 单一引用源: agent 在 4 类典型事件中的三态选择 (allowed / must-ask / must-stop)。
-> 全局硬禁止 #1、ask_for_direction_gate、init 协商 — 全部声明为这张表的执行器。
+> Single-source-of-truth: the agent's three-state choice (allowed / must-ask / must-stop) across four classes of typical events.
+> Hard prohibition #1, ask_for_direction_gate, and init negotiation all declare themselves executors of this table.
 
-## 为什么
+## Why
 
-issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互不引用、部分互斥**:
+Issue #447 evidence 1 shows **three texts answer "when to ask the user" without referencing each other, partially contradictorily**:
 
-| 文本 | 措辞 |
+| Text | Wording |
 |---|---|
-| 全局规则 `kunglao-convergence-loop.md` 硬禁止 #1 | "不 mid-iteration 反问 user — 自己决定并记 reasoning,继续" (无条件) |
-| `ask_for_direction_gate.py` | Type A BAD / Type C OK / HARD_PAUSE @ 3+ redirects (有阶梯) |
-| init 协商接口 | 全程无问询协议;非交互 stdin 自动 declined (无) |
+| Global rule `kunglao-convergence-loop.md` hard prohibition #1 | "Don't ask the user mid-iteration — decide yourself, record reasoning, continue" (unconditional) |
+| `ask_for_direction_gate.py` | Type A BAD / Type C OK / HARD_PAUSE at 3+ redirects (laddered) |
+| init negotiation interface | No ask protocol at all; non-interactive stdin auto-declined (nothing) |
 
-→ **同一情境不同会话行为不可预测,用户被迫以"打断"充当规则系统纠错信号**(issue #447 证据 2:VM 修复链 4 次打断)。
+→ **The same situation produces unpredictable behavior across sessions, forcing the user to act as the rule system's correction signal by interrupting** (issue #447 evidence 2: 4 interruptions across the VM-repair chain).
 
-## 三态表 (THE SINGLE SOURCE)
+## The three-state table (THE SINGLE SOURCE)
 
-| 事件分类 | 事件类型 | 状态 | 处理 |
+| Event class | Event type | State | Handling |
 |---|---|---|---|
-| **普通推进** | 默认 case | **allowed** | 自己决定 + 记 reasoning + 继续 |
-| **普通推进** | 收敛签到 (C0-C7 all pass) | **allowed** | convergence check per section 8 |
-| **身份歧义** | 多 VM / 多 toolchain / 多样本歧义 | **must-ask** | emit Type D 信号 + HARD_PAUSE (rc=2) |
-| **身份歧义** | 任务目标歧义 (workflow ≠ evidence) | **must-ask** | emit Type D 信号 + HARD_PAUSE |
-| **授权边界** | 有界授权内新硬错误 (#451 风格; v2 #497 校准) | **allowed** | **强制走梯**: 先走 method-ladder (`failure_analysis_gate --record`, #495 三产物) / env-ladder (自恢复 L1→L2→L3), **走梯后复评**; gate 的 TYPE_D blocker tripwire 无梯耗尽标记时降 rc=1 指引 |
-| **授权边界** | 工具/资源耗尽 — 梯爬完 (梯耗尽标记 = failure_analysis 记录无 `candidates` 且 claim `promotion_attempts >= 3`, #495 字段) | **must-ask** | emit Type D 信号 |
-| **范围变更** | 任务边界扩张(原计划外) | **must-ask** | emit Type D 信号 |
-| **判死宣告** | "这条路走不通/无法继续/dead end" 类陈述句 (v2 #497) | **有证据: allowed / 无证据: NEGATIVE (reject)** | 有障碍 REFUTED(#495 升格 obstacle claim 状态)或能力证伪(failure_analysis `outcome: REFUTED`)证据 → 合法终局; 无证据 → emit Type E + rc=1 强制走梯复评, **不得作为终局**。#233 范围语义钉死: 路径级否定(path-scoped negative)仅由已落定的障碍 claim REFUTED 或能力证伪许可(即本行标准, 不变); 任务级否定(task-scoped negative)仅由 DEFERRED 标准许可(V 信号 + 恢复梯 L1-L3 + 非空尝试清单 + wake_condition, 见 infeasible_signal/infeasible_proposal)。任何 oracle item 的 `closed_by` 都必须引用 register 中终态 claim id(#233 citation protocol)。 |
-| **计划搁浅** | "下一步:"/"next step:" 声明后无工具动作 (v2 #497) | **NEGATIVE** (reject) | Type B 等价: rc=1, 执行该下一步或声明阻塞原因 (事件流轮次窗口判滞) |
-| **不可逆动作** | 删除 VM / 改 vmx / git push --force | **must-stop** | 阻止 + emit Type S + HARD_PAUSE |
-| **不可逆动作** | 公开 release / publish | **must-stop** | 阻止 + emit Type S |
-| **废话反问** | "should I" / "do you want" / 等用户决定 | **NEGATIVE** (reject) | Type A/B violation (ask_for_direction_gate) |
+| **Normal progression** | Default case | **allowed** | Decide yourself + record reasoning + continue |
+| **Normal progression** | Convergence check-in (C0-C7 all pass) | **allowed** | convergence check per section 8 |
+| **Identity ambiguity** | Multiple VMs / multiple toolchains / multiple samples | **must-ask** | emit Type D signal + HARD_PAUSE (rc=2) |
+| **Identity ambiguity** | Task-goal ambiguity (workflow ≠ evidence) | **must-ask** | emit Type D signal + HARD_PAUSE |
+| **Authorization boundary** | New hard error inside bounded authorization (#451 style; v2 calibrated by #497) | **allowed** | **Ladder is mandatory**: first climb the method ladder (`failure_analysis_gate --record`, #495 three artifacts) / env ladder (self-recovery L1→L2→L3), then **re-evaluate after the ladder**; when the gate's TYPE_D blocker tripwire has no ladder-exhaustion mark, it degrades to rc=1 ladder guidance |
+| **Authorization boundary** | Tool/resource exhaustion — ladder climbed out (ladder-exhaustion mark = failure_analysis record has no `candidates` and claim `promotion_attempts >= 3`, #495 fields) | **must-ask** | emit Type D signal |
+| **Scope change** | Task-boundary expansion (beyond the original plan) | **must-ask** | emit Type D signal |
+| **Death declaration** | "This path is unworkable / cannot continue / dead end" style declarative sentence (v2 #497) | **With evidence: allowed / without evidence: NEGATIVE (reject)** | With obstacle REFUTED (#495 obstacle-claim promotion) or capability-disproof (failure_analysis `outcome: REFUTED`) evidence → legitimate terminal state; without evidence → emit Type E + rc=1 forced ladder re-evaluation, **must not be treated as terminal**. #233 pins the scope semantics: a path-scoped negative is licensed only by a settled obstacle claim REFUTED or a capability disproof (this row's standard, unchanged); a task-scoped negative is licensed only by the DEFERRED standard (V signal + recovery ladder L1-L3 + non-empty attempt list + wake_condition, see infeasible_signal/infeasible_proposal). Any oracle item's `closed_by` must cite a terminal-state claim id from the register (#233 citation protocol). |
+| **Plan grounding** | No tool action after a "next step:" declaration (v2 #497) | **NEGATIVE** (reject) | Type B equivalent: rc=1, execute that next step or declare the blocker (turn-window detection on the event stream) |
+| **Irreversible action** | Deleting a VM / editing the vmx / git push --force | **must-stop** | Block + emit Type S + HARD_PAUSE |
+| **Irreversible action** | Public release / publish | **must-stop** | Block + emit Type S |
+| **Back-asking** | "should I" / "do you want" / waiting for the user to decide | **NEGATIVE** (reject) | Type A/B violation (ask_for_direction_gate) |
 
-## 类型字母表
+## Type alphabet
 
-| 类型 | 含义 | 处理 |
+| Type | Meaning | Handling |
 |---|---|---|
-| Type A | 废话反问问句 | REJECT (rc=1) |
-| Type B | 完成-问下一步 | REJECT (rc=1) |
-| Type C | 收敛签到 | ALLOWED |
-| **Type D** | must-ask 触发信号(身份歧义 / 授权边界 / 范围变更) | HARD_PAUSE (rc=2) |
-| **Type E** | 判死宣告(死亡宣告陈述句, v2 #497) | 无证据: REJECT (rc=1) 强制走梯复评; 有障碍 REFUTED / 能力证伪证据: 合法终局 |
-| plan-stall | 计划搁浅("下一步:" 后无动作, v2 #497) | REJECT (rc=1), Type B 等价 |
-| **Type S** | must-stop 触发信号(不可逆动作) | HARD_PAUSE (rc=2) |
+| Type A | Back-asking question | REJECT (rc=1) |
+| Type B | Completion-then-ask-next-step | REJECT (rc=1) |
+| Type C | Convergence check-in | ALLOWED |
+| **Type D** | must-ask trigger signal (identity ambiguity / authorization boundary / scope change) | HARD_PAUSE (rc=2) |
+| **Type E** | Death declaration (fatalistic declarative sentence, v2 #497) | Without evidence: REJECT (rc=1) forcing ladder re-evaluation; with obstacle REFUTED / capability-disproof evidence: legitimate terminal state |
+| plan-stall | Plan grounding (no action after "next step:", v2 #497) | REJECT (rc=1), Type B equivalent |
+| **Type S** | must-stop trigger signal (irreversible action) | HARD_PAUSE (rc=2) |
 
-## 执行器 (谁是这张表的执行者)
+## Executors (who enforces this table)
 
-| 文本 | 角色 |
+| Text | Role |
 |---|---|
-| `scripts/ask_for_direction_gate.py` | Type A/B/C 检测 (RC=1 reject)+ Type D/S 触发时 HARD_PAUSE (rc=2) — 看到 orchestrator **打印后** 的文本。v2 (#497): Type D blocker tripwire 无梯耗尽标记时降 rc=1 走梯指引; 新增 Type E 判死门 + plan-stall 搁浅门(均为陈述句门, rc=1) |
-| `scripts/error_response.py` `_CHARTER_STATE` 表 | 错误分类 → 三态的**派生列**:值域 = 本表三态 (allowed / must-ask / must-stop),符号锚 `CHARTER_SOURCE`/`CHARTER_STATES` 声明在模块内;互指存在由 `tests/test_decision_surface_anchor.py` 锁步断言 (#446 F 类) |
-| `hooks/dispatch_gate.py` | Type S 在 **dispatch prompt 本身** 上拦截 (rc=2 hard pause,worker 运行**前**) — 不可逆动作的承载执行器 |
-| `scripts/kunglao-init.py` 协商接口 | init 阶段 Type D 触发 — pending decisions + RC_PENDING_DECISIONS=8 |
-| 全局 `kunglao-convergence-loop.md` 硬禁止 #1 | **重写为对这张表的引用**,不直接措辞 |
+| `scripts/ask_for_direction_gate.py` | Type A/B/C detection (RC=1 reject) + HARD_PAUSE (rc=2) when Type D/S fires — sees orchestrator text **after** it prints. v2 (#497): Type D blocker tripwire degrades to rc=1 ladder guidance without a ladder-exhaustion mark; adds the Type E death-declaration gate + plan-stall grounding gate (both declarative-sentence gates, rc=1) |
+| `scripts/error_response.py` `_CHARTER_STATE` table | Error class → three-state **derived column**: value domain = this table's three states (allowed / must-ask / must-stop), symbol anchors `CHARTER_SOURCE`/`CHARTER_STATES` declared in-module; mutual reference locked by `tests/test_decision_surface_anchor.py` lockstep assertions (#446 F-class) |
+| `hooks/dispatch_gate.py` | Type S intercepted on the **dispatch prompt itself** (rc=2 hard pause, before the worker runs) — the carrying executor for irreversible actions |
+| `scripts/kunglao-init.py` negotiation interface | Type D fires at init — pending decisions + RC_PENDING_DECISIONS=8 |
+| Global `kunglao-convergence-loop.md` hard prohibition #1 | **Rewritten as a reference to this table**, no direct wording |
 
-> 为什么 Type S 需要两个执行器:`ask_for_direction_gate` 只看打印后的
-> 输出(orchestrator 可能不打印);`dispatch_gate` 在 PreToolUse 时看
-> prompt 本身(worker 运行前拦) — 后者是承载,前者是纵深防御。
+> Why Type S needs two executors: `ask_for_direction_gate` only sees printed
+> output (the orchestrator may not print); `dispatch_gate` sees the prompt
+> itself at PreToolUse (intercepts before the worker runs) — the latter is
+> the carrier, the former is defense in depth.
 
-## 声明优先于推断(检测教义)
+## Declaration over inference (detection doctrine)
 
-优先级:**机械优先,LLM 只兜机械的漏召回**。
+Priority: **mechanical first, LLM backstops the mechanical layer's recall misses**.
 
 ```
-第1优先 机械层(便宜、确定、可审计 — 先跑,覆盖内零漏报)
-├── 声明字段:派发协议 "reversible": false → HARD_PAUSE(references/orchestration/dispatch-protocol.md)
-├── 命令文法:vmrun delete / git push --force(文法有限,可枚举)→ HARD_PAUSE
-├── 结构化状态:claim-register / decision_pending / .hook_state.json
-└── regex 绊线:prose pattern(zh+en,非穷尽)
-        ↓ 机械漏召回(枚举盲区:措辞没对上任何 pattern)
-第2优先 LLM 语义兜底(任何语言,覆盖枚举不到的措辞)
-└── orchestrator 读本宪法(docs 即 prompt),语义识别不可逆/歧义
-    → 识别结果落成结构化声明("reversible": false),又回到机械可查
+Priority 1 — mechanical layer (cheap, deterministic, auditable — runs first, zero misses inside coverage)
+├── Declaration fields: dispatch protocol "reversible": false → HARD_PAUSE (references/orchestration/dispatch-protocol.md)
+├── Command grammar: vmrun delete / git push --force (finite grammar, enumerable) → HARD_PAUSE
+├── Structured state: claim-register / decision_pending / .hook_state.json
+└── regex tripwires: prose patterns (zh+en, non-exhaustive)
+        ↓ mechanical recall miss (enumeration blind spot: wording matches no pattern)
+Priority 2 — LLM semantic backstop (any language, covers wording enumeration cannot)
+└── orchestrator reads this charter (docs are prompt), semantically recognizes irreversible/ambiguous
+    → the recognition lands as a structured declaration ("reversible": false), back to mechanically checkable
 ```
 
-分工:机械层管**确定性拦截** — 命中即拦,结果可审计、零成本;LLM 管
-**召回** — 枚举永远不完,语义理解补盲区。LLM 的判断一旦形成,必须落成
-结构化声明:判断用语义,执行用机械,闭环。
+Division of labor: the mechanical layer handles **deterministic interception** — hit means block, auditable, zero cost; the LLM handles
+**recall** — enumeration is never complete, semantic understanding covers blind spots. Once the LLM's judgment forms, it must land as a
+structured declaration: judge semantically, execute mechanically, closed loop.
 
-用户输入(常为中文)走 intake/decision_pending 结构化 schema 进入系统;
-语言在机械层不是变量,LLM 层天然多语。
+User input (often Chinese) enters the system through the intake/decision_pending structured schema;
+language is not a variable at the mechanical layer, and the LLM layer is naturally multilingual.
 
-## 单调降级原则
+## Monotonic degradation principle
 
-- **allowed** → 不能强制升级到 must-ask(除非 orchestrator 主动声明触发类型)
-- **must-ask** → 不能降级为 allowed(必须问)
-- **must-stop** → 不能绕过(用户必须显式 unlock)
-- **NEGATIVE** (Type A/B) → 不能借"Type C 收敛"绕过(除非 C0-C7 all pass 真实存在)
+- **allowed** → cannot be force-upgraded to must-ask (unless the orchestrator actively declares the trigger type)
+- **must-ask** → cannot be downgraded to allowed (you must ask)
+- **must-stop** → cannot be bypassed (the user must explicitly unlock)
+- **NEGATIVE** (Type A/B) → cannot bypass via "Type C convergence" (unless C0-C7 all pass actually holds)
 
-v2 (#497) 注:授权边界行的 must-ask → allowed 校准是**表级变更**(经
-openspec 流程,见变更记录),不是运行时降级;blocker 家族保留的 must-ask
-升级条件是**结构性标记**(梯耗尽,#495 字段),不是运行时随意升级。判死
-宣告的"有证据 → 合法终局"同样由结构化证据(obstacle claim 状态 /
-failure_analysis outcome)决定,不由 orchestrator 自行声明。
+v2 (#497) note: the authorization-boundary row's must-ask → allowed calibration is a **table-level change** (via the
+openspec process, see change log), not a runtime downgrade; the blocker family's retained must-ask
+escalation condition is a **structural mark** (ladder exhaustion, #495 fields), not an arbitrary runtime escalation. A death
+declaration's "with evidence → legitimate terminal" is likewise decided by structured evidence (obstacle claim status /
+failure_analysis outcome), not by orchestrator self-declaration.
 
-## 不变性
+## Invariants
 
-- 本表是**唯一**的"何时问用户"权威源
-- 任何代码/规则不得**直接**说"问用户" / "不问用户" — 必须引用本表
-- 表格变更须经 openspec 流程(版本 + 变更记录)
+- This table is the **only** authority for "when to ask the user"
+- No code/rule may **directly** say "ask the user" / "don't ask the user" — must reference this table
+- Table changes must pass the openspec process (version + change log)
 
-## 变更记录
+## Change log
 
-- **v2 (#497, openspec/changes/issue-497-decision-grammar-v2/)**:授权边界
-  "有界授权内新硬错误" must-ask → **allowed + 强制走梯**(仅"工具/资源
-  耗尽 — 梯爬完"保留 must-ask,梯耗尽标记 = failure_analysis 无
-  candidates 且 attempts>=3);新增**判死宣告**(Type E)与**计划搁浅**
-  (plan-stall, Type B 等价)两行 — v0.1.1 双轨迹的复发行为是陈述句,
-  问句层执法看不见;执行器 `ask_for_direction_gate.py` 同步。
-- **v1 (#447, openspec/changes/issue-447-three-state-charter/)**:初版
-  三态表 + 类型字母表 + 检测教义。
+- **v2 (#497, openspec/changes/issue-497-decision-grammar-v2/)**: authorization boundary
+  "new hard error inside bounded authorization" must-ask → **allowed + mandatory ladder** (only "tool/resource
+  exhaustion — ladder climbed out" keeps must-ask; ladder-exhaustion mark = failure_analysis without
+  candidates and attempts>=3); adds **death declaration** (Type E) and **plan-stall** rows — the v0.1.1 dual-track relapse behavior is a declarative sentence, invisible to question-level enforcement; the executor
+  `ask_for_direction_gate.py` updated in sync.
+- **v1 (#447, openspec/changes/issue-447-three-state-charter/)**: initial
+  three-state table + type alphabet + detection doctrine.
 
-## 见
+## See
 
-- `scripts/ask_for_direction_gate.py` — Type A/B/D/E 检测 + plan-stall
-- `openspec/changes/issue-447-three-state-charter/` — 完整 spec
-- `openspec/changes/issue-497-decision-grammar-v2/` — v2 校准 spec
-
-recall_useful: pending
+- `scripts/ask_for_direction_gate.py` — Type A/B/D/E detection + plan-stall
+- `openspec/changes/issue-447-three-state-charter/` — full spec
+- `openspec/changes/issue-497-decision-grammar-v2/` — v2 calibration spec

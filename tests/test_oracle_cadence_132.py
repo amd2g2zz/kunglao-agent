@@ -13,11 +13,14 @@ replaces LLM-obedience triggering with a mechanical hook:
      (``<ws>/oracle/client.py``, the #108 load_client contract shape) and
      records posteriors — the test drives ONLY outcome_capture.capture();
      there is no prompt, instruction or LLM artifact anywhere in the path.
-  2. Fail-loud, never silent skip: a broken registered client is ALL-RED
-     (every armed case lands red + ``oracle_cadence_warn`` event), a missing
-     client with armed cases is a loud warn, a refused case set is a loud
-     warn — and capture/settlement/banking still succeed (the cadence never
-     breaks its host, the #110 fail-open precedent).
+  2. Fail-loud, never silent skip: a broken registered client is INFRA-DEAD
+     (issue 303 D2 re-route of the original ALL-RED face: every armed case lands
+     pending with the liveness-absent stamp + ``oracle_cadence_warn`` and
+     ``probe_infra_dead`` events — NEVER red Bernoulli observations, a dead
+     instrument must not update the wrong posterior), a missing client with
+     armed cases is a loud warn, a refused case set is a loud warn — and
+     capture/settlement/banking still succeed (the cadence never breaks its
+     host, the #110 fail-open precedent).
   3. Loud missing-intent: a captured outcome for a claim with NO recorded
      dispatch intent emits the #105 ``intent_unparsed`` word at the
      settlement face (dispatch flow unchanged, no hard reject) and the
@@ -84,6 +87,15 @@ ARMED_CASE = {
          "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    # #301: the quantified verification contract every admitted case
+    # carries (artifact, criterion, threshold, decision coupling).
+    "verification": {
+        "artifact": "auth_algo field layout pinned by facts/F001",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "q1",
+    },
 }
 
 
@@ -248,11 +260,16 @@ def test_duplicate_settlement_does_not_refire_cadence(tmp_path: Path) -> None:
 
 # -------------------------- 2. fail-loud faces (never a silent skip)
 
-def test_broken_client_is_all_red_with_loud_warn(tmp_path: Path,
-                                                 monkeypatch) -> None:
-    """A registered client that cannot even import is ALL-RED (every armed
-    case lands red + posteriors take the red observations) and the
-    ``oracle_cadence_warn`` event hits the durable log — never "skip"."""
+def test_broken_client_is_infra_dead_with_loud_warn(tmp_path: Path,
+                                                    monkeypatch) -> None:
+    """A registered client that cannot even import is a DEAD instrument
+    (issue 303 D2, superseding the issue 132 all-red pin on this face): loudness is
+    preserved — every armed case lands PENDING (the DRAIN probe still
+    blocks pendings), the ``oracle_cadence_warn`` AND the new
+    ``probe_infra_dead`` repair items hit the durable log — but the
+    posterior economy sees NOTHING: a probe that cannot prove it was alive
+    has produced NO evidence at all, and Beta(alpha, beta) must never be
+    fed a red observation on a dead instrument (the doubao lesson)."""
     ws = _mk_ws(tmp_path)
     _write_client(ws, BROKEN_CLIENT)
     calls = _record_emits(monkeypatch)
@@ -261,14 +278,18 @@ def test_broken_client_is_all_red_with_loud_warn(tmp_path: Path,
 
     status = json.loads(
         (ws / "runs" / "oracle-status.json").read_text(encoding="utf-8"))
-    assert status["counts"] == {"red": 1, "green": 0, "pending": 0}
-    led = po.PosteriorLedger.load(ws)
-    assert led.cases[CASE_ID].beta == 2.0 and led.cases[CASE_ID].alpha == 1.0
+    assert status["counts"] == {"red": 0, "green": 0, "pending": 1}
+    assert status["cases"][CASE_ID]["status"] == "pending"
+    # zero posterior movement: the ledger is never born (no observation)
+    assert not (ws / "runs" / "posteriors.yaml").exists()
     durable = [e for e in _log_events(ws)
                if e.get("action") == "oracle_cadence_warn"]
     assert durable and "client_broken" in str(durable[0].get("detail"))
     assert any(c["action"] == "oracle_cadence_warn"
                and "client_broken" in str(c.get("detail")) for c in calls)
+    infra = [e for e in _log_events(ws)
+             if e.get("action") == "probe_infra_dead"]
+    assert infra and "client_broken" in str(infra[0].get("detail"))
 
 
 def test_missing_client_with_armed_cases_is_loud(tmp_path: Path,

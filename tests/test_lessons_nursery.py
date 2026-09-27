@@ -73,6 +73,11 @@ def _record_with_precision(ws, cid, *, tool="frida.attach", err="ENOENT",
         validated_capability="frida runtime observable",
         identified_obstacle="static import shows nothing",
         source="lesson-hit",
+        # issue 304 fix-as-guard: the fixture settles a fix — resolving
+        # guard evidence required at the settlement beat.
+        guard_type="marker-grep",
+        guard_location="scripts/event_taxonomy.py",
+        check_reference="EMIT_ACTIONS",
         trigger_precision={
             "tool": tool,
             "error_signature": err,
@@ -123,7 +128,11 @@ def test_aggregate_skips_lesson_missing_precision(tmp_path):
         assumption="a", validity="not-justified",
         next_method="b", outcome="PROVEN", what_happened="ok",
         validated_capability="x", identified_obstacle="y",
-        source="lesson-hit")
+        source="lesson-hit",
+        # issue 304 fix-as-guard: resolving guard evidence (repo anchor).
+        guard_type="marker-grep",
+        guard_location="scripts/event_taxonomy.py",
+        check_reference="EMIT_ACTIONS")
     lib = tmp_path / "lib"
     q = tmp_path / "q.json"
 
@@ -151,6 +160,10 @@ def test_aggregate_incomplete_precision_subfield_rejected(tmp_path):
         next_method="b", outcome="PROVEN", what_happened="ok",
         validated_capability="x", identified_obstacle="y",
         source="lesson-hit",
+        # issue 304 fix-as-guard: resolving guard evidence (repo anchor).
+        guard_type="marker-grep",
+        guard_location="scripts/event_taxonomy.py",
+        check_reference="EMIT_ACTIONS",
         trigger_precision={"tool": "x", "error_signature": "y", "family": "z"})
     lib = tmp_path / "lib"
     q = tmp_path / "q.json"

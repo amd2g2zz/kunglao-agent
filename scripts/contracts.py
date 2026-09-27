@@ -33,13 +33,25 @@ EXIT_VERIFY = 2
 EXIT_SATURATED = 3
 EXIT_BLOCKED = 4
 EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
-EXIT_MISSING_WORKSPACE = 64  # convergence_check.main(): no claim-register.yaml
+# convergence_check.main(): resolved dir is not a kunglao workspace (#240:
+# missing claim-register.yaml/task_spec.yaml)
+EXIT_MISSING_WORKSPACE = 64
 # #99: the check itself crashed (malformed YAML, unexpected error). 64 is
 # taken by MISSING_WORKSPACE; 65 is the next free byte. A crash must NEVER
 # share EXIT_DISPATCH's byte — pre-#99 a malformed register exited rc=1,
 # which rc-based consumers read as "dispatch now" while stdout was empty.
 # On this exit: stdout carries {"decision": "CRASHED"}, stderr the traceback.
 EXIT_CRASHED = 65
+# #306: emptiness-grade workspace identity — the #240 markers EXIST but
+# both payloads are empty (task_spec: no live primary_questions AND no
+# oracle-anchor stamp; claim-register: zero claims). Init's own intake
+# order makes this unreachable for a healthy workspace: the oracle-anchor
+# interview runs BEFORE every scaffold write (blank anchors refuse the
+# scaffold) and the register is born with the [initialized] header +
+# structural seed claims. So both-payloads-empty means intake never really
+# happened or the contract files rotted after intake — hard error, never
+# a verdict (the #240 family). 66 is the next free byte after CRASHED.
+EXIT_EMPTY_WORKSPACE = 66
 
 # --- plan_drift_detector --auto face (#602 integration remap) -------------
 # The ONLY bytes --auto may exit with: 0 no-drift (proceed) / 2 drift-severe

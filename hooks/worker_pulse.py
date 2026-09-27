@@ -107,10 +107,15 @@ def _check_stale_workers(ws: Path) -> str:
     """Soft mtime-stale detection for the non-dispatch PostToolUse path (#38).
 
     Scans `ws/runs/worker-status-*.md` for in-progress files whose mtime
-    exceeds STUCK_MIN. Returns a human-readable message naming each stale
-    worker + age, or '' if none. NEVER aborts — the hard REJECT is
-    worker_budget's job (check_backtrack_gate). Any OSError / missing runs/
-    dir / protocol import error -> '' (no crash, no false alarm)."""
+    exceeds STUCK_MIN, PLUS stale WAITING workers (#244 floor): the wait
+    loop renews the file mtime every poll, so a waiting file whose mtime
+    went quiet is a worker that DIED waiting — the exact 傻等 shape the
+    settle→dispose contract exists to prevent, and it used to be invisible
+    here (waiting was exempt from every zombie flag). Returns a
+    human-readable message naming each stale worker + age, or '' if none.
+    NEVER aborts — the hard REJECT is worker_budget's job
+    (check_backtrack_gate). Any OSError / missing runs/ dir / protocol
+    import error -> '' (no crash, no false alarm)."""
     runs = ws / "runs"
     if not runs.is_dir():
         return ''
@@ -120,6 +125,7 @@ def _check_stale_workers(ws: Path) -> str:
         return ''
     now = time.time()
     stale = []
+    stale_waiting = []
     try:
         for p in runs.glob("worker-status-*.md"):
             try:
@@ -129,21 +135,33 @@ def _check_stale_workers(ws: Path) -> str:
             if not tokens:
                 continue
             last = tokens[-1].replace("-", "_")
-            if last != "in_progress":
+            if last not in ("in_progress", "waiting"):
                 continue
             try:
                 age_min = (now - p.stat().st_mtime) / 60
             except OSError:
                 continue
             if age_min > STUCK_MIN:
-                stale.append(f"{p.name} (age {age_min:.0f}m)")
+                if last == "waiting":
+                    stale_waiting.append(f"{p.name} (age {age_min:.0f}m)")
+                else:
+                    stale.append(f"{p.name} (age {age_min:.0f}m)")
     except OSError:
         return ''
-    if not stale:
-        return ''
-    return (f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
+    parts = []
+    if stale:
+        parts.append(
+            f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
             f"(> {STUCK_MIN}m no status-file update): " + ", ".join(stale) +
             " - intervene or force a `## backtrack` block.")
+    if stale_waiting:
+        parts.append(
+            f"[worker_pulse] {len(stale_waiting)} stale WAITING worker(s) "
+            f"(> {STUCK_MIN}m no wait heartbeat): " + ", ".join(stale_waiting)
+            + " - a worker waiting past its claim's settlement is a contract "
+              "violation (傻等, #244 settle→dispose); "
+              "intervene or TaskStop it.")
+    return "\n".join(parts)
 
 
 def _resolve_workspace(payload: dict) -> Path | None:

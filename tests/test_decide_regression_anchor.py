@@ -36,6 +36,17 @@ if str(SCRIPTS) not in sys.path:
 import convergence_check  # module under test (== baseline before #443 GREEN)
 import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
+# 2026-09-22 case-hardening (#306 emptiness identity, NO output change):
+# the #306 emptiness probe hard-errors a workspace whose task_spec carries
+# no live primary_questions AND no oracle-anchor stamp while the register
+# holds zero claims — `drain_converged_minimal` was frozen on exactly that
+# degenerate pair (the bug's cleanest repro). The builder now stamps the
+# three oracle anchors into its task_spec (what kunglao-init's intake
+# writes before any scaffold), making the case the minimal LEGITIMATE
+# converged representative. decide()'s output for the case is unchanged
+# (anchors appear in no output field) — verified byte-identical against
+# the frozen anchor; the corpus itself is NOT re-frozen.
+#
 # 2026-09-09 DATA-coupled freeze refresh (the scripts-governance sweep):
 # the anomaly baseline corpus is built FROM references/ (anomaly_detector
 # design D2), and the governance sweep converted nine re-library cards'
@@ -47,10 +58,68 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # fact_ids and top_dimension — only the four anomaly scores changed. No
 # ranker or decide() code path was touched by the sweep.
 #
+# 2026-09-23 DATA-coupled freeze refresh (wave-2 tool reimplementation): the
+# few-shot card appends on four external-distilled cards + two pre-existing
+# cards (vm-deobfuscation-routing, web-re-quickref) grew the anomaly
+# baseline corpus again (design D2 source 1). Lexical-rarity statistics
+# shifted, moving anomalies[].score past the frozen precision on 2 of 31
+# cases (drain_blocked_contradiction, order_discovery_beats_contradiction).
+# Case-by-case verification of capture_current() vs the previous anchor:
+# drift is score-only (zero changes in action, decision order, phase
+# fields, anomaly counts, fact_ids, top_dimension); convergence_check.py
+# and anomaly_detector.py are byte-identical to origin/dev (channel 1
+# trivially green — no code path touched).
+#
+# 2026-09-26 DATA-coupled freeze refresh (AR stack promotion): one new
+# re-library card landed (method/case-distilled/case-dispatch-budget-partition.md),
+# growing the anomaly baseline corpus again (anomaly_detector design D2
+# source 1: every .md under references/re-library/). Lexical-rarity
+# statistics shifted, moving anomalies[].score past the frozen precision on
+# 2 of 31 cases (drain_blocked_contradiction,
+# order_discovery_beats_contradiction). Case-by-case verification of
+# capture_current() vs the previous anchor, run programmatically over all
+# 31 cases: drift is score-only (zero changes in action, decision order,
+# phase fields, anomaly counts, fact_ids, top_dimension — every case
+# identical once anomaly scores are stripped). No ranker or decide() code
+# path was touched (convergence_check.py and anomaly_detector.py are
+# byte-identical to origin/dev).
+#
+# 2026-09-27 DATA-coupled freeze refresh (issue 393 references P1
+# structural repair): 13 re-library cards + case-book.md were repaired
+# (double-frontmatter merge, malware skill-residue de-skilling, issue-ref
+# and bookkeeping-vocabulary strips, toolshelf invocations, phishing card
+# rewrite + case-book relocation, structural heading fixes), changing the
+# anomaly baseline corpus (anomaly_detector design D2 source 1: every .md
+# under references/re-library/). Lexical-rarity statistics shifted, moving
+# anomalies[].score past the frozen precision on 2 of 31 cases
+# (drain_blocked_contradiction, order_discovery_beats_contradiction).
+# Case-by-case verification of capture_current() vs the previous anchor,
+# run programmatically over all 31 cases: drift is score-only (4 score
+# fields total; zero changes in action, decision order, phase fields,
+# anomaly counts, fact_ids, top_dimension). No ranker or decide() code
+# path was touched (convergence_check.py and anomaly_detector.py
+# byte-identical to origin/dev).
+#
+# 2026-09-23 DATA-coupled freeze refresh (issue 358 external-distillation
+# wave 1): ten external-distilled reference cards + one gap report landed
+# under references/re-library/, growing the anomaly baseline corpus
+# (anomaly_detector design D2 source 1: every .md under references/re-library/).
+# Lexical-rarity statistics shifted, moving anomalies[].score in the 3rd
+# decimal on 2 of 31 cases (drain_blocked_contradiction,
+# order_discovery_beats_contradiction). Case-by-case verification of
+# capture_current() vs the previous anchor: drift is score-only (4 score
+# fields total; zero changes in action, decision order, phase fields,
+# anomaly counts, fact_ids, top_dimension). No ranker or decide() code path
+# was touched. Card bodies were also restructured to the stage-5
+# card-format contract (house exemplars: web-re-quickref /
+# jsvmp-triage) — same corpus class.
+#
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
 # ranking layer — priority_ratio is now the Thompson composite
-# (sampled case posterior + LAMBDA_DH*dH_PQ) and the explore/exploit dual
+# (sampled case posterior + W_DOWNSTREAM*downstream_term; the #295
+# governed removal later deleted the LAMBDA_DH*dH_PQ face,
+# docs/adr-001-strategy-parameter-governance.md) and the explore/exploit dual
 # path is deleted. The ranker swap is an INTENTIONAL SEMANTIC change, and
 # its visible face is kunglao-decide's `top_actions`: any ordering change
 # there is DESIGN INTENT, pinned by the rebuilt suites
@@ -90,6 +159,16 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # re-pin entry below). The oracle-blocking semantics themselves are
 # unanchored by construction (the matrix has no oracle-bearing DRAIN case);
 # covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-26 corpus re-pin (issue 392 references P0): eight high-traffic re-library cards rebuilt (web-re-quickref, web-risk-control, web-crawler-engineering, jsvmp-triage, unidbg-env-filling, unidbg-harness-bringup, unidbg-algo-recovery, field-notes) plus the signature-check-bypass rung-3/4 listings, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-24 corpus anchor refresh: the web risk-control card v2 body edit (vendor-identification + handling + heuristics doctrine) shifts lexical rarity in the anomaly baseline (1 anomaly score float per contradiction case, 0.911170928667564 -> 0.911384002655161, all else byte-equal; score-only verified, captured from the current tree).
+# 2026-09-23 corpus re-pin (#364): the seven android/case-distilled cards + D1 gap report join the references corpus, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-23 DATA-coupled freeze refresh (merge-sync union, wave-2 tool
+# reimplementation PR): the four wave-2 Tool-section card appends landed on
+# top of the wave-1 cards, growing the same D2 source-1 corpus once more;
+# anchor re-captured on the merged tree (score-only verified vs the
+# prior anchor; convergence_check.py / anomaly_detector.py byte-identical
+# to dev).
+# 2026-09-23 corpus re-pin (#341): the new rotation-characterization re-library card joins the references corpus, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-09 corpus re-pin (#166 PR E deletions): five dead references removed (optimization-2026-08, long-horizon-architecture archive, awesome-re-resources, malware-analysis-quickstart, search-policy), shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-08 corpus re-pin (#166 FM bring-up): domain/family frontmatter landed on all 49 re-library cards, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
 # 2026-09-08 corpus re-pin (#179): the ida-scripting-overlays card body edit shifts lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
@@ -289,7 +368,15 @@ def _ts(ws: Path, text: str) -> None:
 
 
 def _pq(questions: str = "[]") -> str:
-    return f"primary_questions: {questions}\n"
+    # #306: every corpus task_spec carries the oracle-anchor stamp (what
+    # kunglao-init's intake writes before any scaffold). Without it, a
+    # claimless + question-less task_spec is the DEGENERATE pair the
+    # convergence emptiness probe now refuses (exit 66) — the corpus must
+    # model healthy workspaces. Inert wherever live claims/questions exist.
+    return (f"primary_questions: {questions}\n"
+            "goal_verbatim: retrieve the family config\n"
+            "success_criterion: family named with evidence\n"
+            "verification_method: static\n")
 
 
 def _pq_canonical(qid: str = "q1", need: str = "model_selection") -> str:
@@ -382,6 +469,10 @@ def _c_schema_invalid_beats_dispatch(base: Path) -> Path:
 
 
 def _c_drain_converged_minimal(base: Path) -> Path:
+    """Minimal LEGITIMATE converged (#306): feature-unused primary
+    questions + the oracle-anchor stamp (via _pq) over a claimless
+    register. Pre-#306 this case was frozen on the degenerate anchor-less
+    pair the convergence emptiness probe now refuses."""
     ws = _ws(base, "drain_converged_minimal")
     _reg(ws, [])
     _ts(ws, _pq("[]"))

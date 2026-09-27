@@ -1,0 +1,165 @@
+{
+  "constants": {
+    "key_hex": "e0d06bebe7f7530f1575973f4423600dd74b1beb9ea96221e90d81bb14e0aac7"
+  },
+  "core": {
+    "h": [
+      165756603,
+      4197560599,
+      2095398821,
+      1646095009,
+      3368948691,
+      2912902115,
+      1514290721,
+      4175955971
+    ],
+    "honeypot_hex": "46a2a2638c1f7357c683ccd13e65b03924d5fb990e8eb5a3359eddbf3fa7755f",
+    "k": [
+      1395732991,
+      3893683317,
+      570880605,
+      24543427,
+      4142225247,
+      1128292121,
+      3181049899,
+      1202210661,
+      2891310259,
+      917333227,
+      1277752461,
+      586677581,
+      1694828687,
+      1553562837,
+      1216058461,
+      4116224315,
+      1786104433,
+      1361335029,
+      1559285219,
+      840169599,
+      4109981367,
+      3203034759,
+      2691545825,
+      3448520699,
+      2231695869,
+      1388248373,
+      2904756687,
+      380876121,
+      1745070297,
+      3177863275,
+      1988163833,
+      542484695,
+      1556076963,
+      2938359989,
+      2183170045,
+      1842999083,
+      2114153711,
+      2342051479,
+      1532195779,
+      3208874857,
+      2683261207,
+      3219366037,
+      1580472267,
+      2130792703,
+      2621796209,
+      307310413,
+      3915010839,
+      2780895297,
+      1312682671,
+      757174749,
+      2999131335,
+      1638444921,
+      821253997,
+      1311633239,
+      1747478105,
+      3673566347,
+      3243596751,
+      2453529093,
+      2797826063,
+      3073421501,
+      2896028495,
+      2986770389,
+      939842273,
+      2447840597
+    ],
+    "key_hex": "e0d06bebe7f7530f1575973f4423600dd74b1beb9ea96221e90d81bb14e0aac7",
+    "window_ticks": 25
+  },
+  "deception": {
+    "naive_class": "REHOOK-LOOP",
+    "naive_method": "capture-without-induction",
+    "smoked_at_mint": true,
+    "trap": "per-session"
+  },
+  "derivation_point": "deriveSessionKey",
+  "family": "key-rotation-js",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "out": "0ce02b3c1a238fe902c2825bfb813213d7cf84878eda19b2ba2ac5a64e668cf1",
+      "payload": "00000000000000003dd9eb2336c54c3b",
+      "rotation_index": 0
+    },
+    {
+      "i": 1,
+      "out": "889b2e72fbf024c2dc8616da424c75af467dd4e7b86a2c107bc645b6098c3c7c",
+      "payload": "00000000000000001191a5d97236dbc5",
+      "rotation_index": 1
+    },
+    {
+      "i": 2,
+      "out": "dac0a271e202b1215f402248b1b65355b49e92d2535c7e3fed995ce49b8a9da9",
+      "payload": "0000000000000000fdd0fc3f88fb9911",
+      "rotation_index": 2
+    },
+    {
+      "i": 3,
+      "out": "83cc236a36485bdc2f83b50bf9aaad645df97466c32e789c9bf0a389c209aac3",
+      "payload": "0000000000000000a3f475156f6277c1",
+      "rotation_index": 0
+    },
+    {
+      "i": 4,
+      "out": "2c5478cbe5058ea4378c3e2b19d730bf379a870beaaa069e23af645043a17dfd",
+      "payload": "0000000000000000121f7f9b99654057",
+      "rotation_index": 1
+    },
+    {
+      "i": 5,
+      "out": "8453a85e6182843d7229327683ac8aaf30878ce8b6a198e90114b25f8e84ced7",
+      "payload": "00000000000000005f87e7fb58f62c79",
+      "rotation_index": 2
+    },
+    {
+      "i": 6,
+      "out": "28ab401619c84f60b7beb183b8a537b099d503a8518fe9a920f932f075978633",
+      "payload": "00000000000000003633d79df2449967",
+      "rotation_index": 0
+    },
+    {
+      "i": 7,
+      "out": "e44fd53fcb77b18bca22854226f9e95b35667d3720cd22422dfd135059cf260f",
+      "payload": "000000000000000013cc761d30ec2c6b",
+      "rotation_index": 1
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 35211,
+  "space_bits": 256,
+  "task_id": "m2-session-v1",
+  "transfer": {
+    "pair": "md2",
+    "surface": "js",
+    "variant": "A"
+  },
+  "trigger_class": "per-session",
+  "verdict_rubric": {
+    "evidence_fields": [
+      "probe",
+      "observed",
+      "compared"
+    ],
+    "min_distinct_captures": 2,
+    "min_evidence_entries": 1,
+    "schema": "kunglao-rotation-verdict/1"
+  }
+}

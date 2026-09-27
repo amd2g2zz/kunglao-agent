@@ -293,6 +293,15 @@ def build_dispatch_context(
         tool_tiers_block = _tt.inject_for_workspace(ws)
     except Exception:  # noqa: BLE001 — context build never raises
         tool_tiers_block = None
+    # #243: the instrument menu rides the context (read-only price board,
+    # NOT a command) — toolbox / which-scanned system CLIs / declared deps,
+    # domain-ranked via the #241 domain_family tag. Fail-open optional key;
+    # NOT in VERIFIER_SAFE_KEYS (orchestrator-side, same class as providers).
+    try:
+        import instrument_menu as _im
+        instrument_menu = _im.context_block(ws, claim_id)
+    except Exception:  # noqa: BLE001 — context build never raises
+        instrument_menu = None
     ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
@@ -311,7 +320,80 @@ def build_dispatch_context(
         ctx["providers"] = providers
     if tool_tiers_block is not None:
         ctx["tool_tiers"] = tool_tiers_block
+    if instrument_menu is not None:
+        ctx["instrument_menu"] = instrument_menu
+    _emit_context_manifest(ws, ctx)  # issue 293 field upgrade A
     return ctx
+
+
+def _context_manifest(ctx: dict) -> dict:
+    """The actually-assembled context inventory with source tags (issue 293
+    field upgrade A — the LLM-RL (C,a,r) log: context IS the policy).
+
+    One row per item the dispatch context ACTUALLY loaded, each tagged with
+    the context key it came from:
+      kind "fact_card"   source "fact_snapshot"        facts/F*.md loaded
+      kind "plan"        source "plan_ref"             the plan file
+      kind "claim"       source "sibling_claims"       sibling/child claims
+      kind "capability"  source "validated_capability" the capability tag
+      kind "priority"    source "priority_context"     the top-ranked claim
+      kind "provider"    source "providers"            ranked provider names
+      kind "tool_tier"   source "tool_tiers"           the tier table block
+    The manifest rides `detail` JSON — no new event-row keys, so pre-issue 293
+    readers (.get()-based) stay byte-compatible.
+    """
+    items: list[dict] = []
+    for f in (ctx.get("fact_snapshot") or {}).get("files") or []:
+        items.append({"kind": "fact_card", "ref": str(f),
+                      "source": "fact_snapshot"})
+    if ctx.get("plan_ref"):
+        items.append({"kind": "plan", "ref": str(ctx["plan_ref"]),
+                      "source": "plan_ref"})
+    for s in ctx.get("sibling_claims") or []:
+        if isinstance(s, dict) and s.get("id"):
+            items.append({"kind": "claim", "ref": str(s["id"]),
+                          "source": "sibling_claims"})
+    cap = (ctx.get("validated_capability") or {}).get("capability")
+    if cap:
+        items.append({"kind": "capability", "ref": str(cap),
+                      "source": "validated_capability"})
+    top = (ctx.get("priority_context") or {}).get("top_rank")
+    if top:
+        items.append({"kind": "priority", "ref": str(top),
+                      "source": "priority_context"})
+    for p in (ctx.get("providers") or {}).get("providers") or []:
+        name = p.get("name") if isinstance(p, dict) else p
+        if name:
+            items.append({"kind": "provider", "ref": str(name),
+                          "source": "providers"})
+    if ctx.get("tool_tiers"):
+        items.append({"kind": "tool_tier", "ref": "scene-injected",
+                      "source": "tool_tiers"})
+    # #243: the instrument menu's entries join the manifest inventory
+    # (additive rows — one {kind: instrument} per CLI/toolbox entry/dep).
+    from instrument_menu import manifest_items as _menu_items
+    items.extend(_menu_items(ctx.get("instrument_menu")))
+    return {"kind": "context_manifest",
+            "version": CONTEXT_BLOCK_VERSION,
+            "claim_id": str(ctx.get("claim_id") or ""),
+            "count": len(items),
+            "items": items}
+
+
+def _emit_context_manifest(ws: Path, ctx: dict) -> None:
+    """Emit ONE `context_manifest` event for the assembled context block.
+
+    Fail-open (the context build never raises); actor=dispatch_context; the
+    manifest rides `detail` JSON — schema-additive only."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="dispatch_context",
+             action="context_manifest",
+             claim=str(ctx["claim_id"]) if ctx.get("claim_id") else None,
+             detail=json.dumps(_context_manifest(ctx), ensure_ascii=False,
+                               sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        warn("_emit_context_manifest", f"{type(exc).__name__}: {exc}")
 
 
 def validate_context_shape(ctx: dict) -> None:

@@ -501,7 +501,8 @@ class TestObstaclePromotion:
     def test_obstacle_claim_inherits_answers_question_into_the_pq_face(self, tmp_path) -> None:
         """PIN: once the parent is terminal the obstacle claim is a
         candidate, and its #495-inherited answers_question is the PQ the
-        categorical/#107 dH face keys on — the obstacle's value context is
+        rank face keys on (Thompson oracle-case linkage post-#295 — the
+        dH face is removed, ADR-001) — the obstacle's value context is
         consumed, not dropped, by unblocking."""
         import priority_ratio as pr
         claims = [
@@ -519,9 +520,14 @@ class TestObstaclePromotion:
         out = {a.claim_id: a for a in pr.priority_ratio(claims, deps, ev)}
         assert "C-2" in out, (
             "obstacle claim must become dispatchable once the parent is terminal")
-        assert "PQ-3" in out["C-2"].feeds["dh_pq"], (
-            f"the inherited answers_question must key the dH face; got "
-            f"{out['C-2'].feeds['dh_pq']}")
+        # #295: the dH face is removed (ADR-001) — the inherited
+        # answers_question now surfaces through the Thompson linkage face,
+        # which names the PQ the oracle-case linkage keys on.
+        assert "dh_pq" not in out["C-2"].feeds, (
+            "the dh_pq feed was removed by #295 (ADR-001)")
+        assert "PQ-3" in out["C-2"].feeds["thompson_sample"], (
+            f"the inherited answers_question must key the rank face "
+            f"(Thompson linkage); got {out['C-2'].feeds['thompson_sample']}")
 
 
 # ---------- ③ strategy novelty (minimal interface) ----------------------

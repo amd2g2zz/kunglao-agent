@@ -1064,10 +1064,20 @@ def _agent_frontmatter(agent_name: str | None) -> dict | None:
     """agents/<name>.md frontmatter -> dict (None if unknown/unparseable).
 
     Local twin of route_capability._parse_frontmatter: hooks must not depend
-    on scripts/ private API (#671 boundary); yaml is already imported here."""
+    on scripts/ private API (#671 boundary); yaml is already imported here.
+
+    #355: a plugin-qualified dispatch id ("kunglao-agent:ghidra-light")
+    resolves to its BARE segment — the same convention _waiting_target_id
+    already uses for the wait ledger ("a plugin-qualified dispatch id
+    matches on its bare segment"). Without this, a qualified id failed the
+    agents/<name>.md lookup and silently skipped every frontmatter-keyed
+    face (lane gate, #760 tools rack) — an identity-shaped dodge."""
     if not agent_name:
         return None
-    path = SKILL_DIR / "agents" / f"{agent_name}.md"
+    name = agent_name.strip().rsplit(":", 1)[-1]
+    if not name:
+        return None
+    path = SKILL_DIR / "agents" / f"{name}.md"
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -1184,13 +1194,31 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
 
 # ======================== issue 208 lane routing gate ======================
 # The malware-only agents (pefile-signature / floss-filter / go-symbols /
-# ghidra-light / kunglao-redteam) declare `lane: malware` in their
-# frontmatter. Agent markdown cannot refuse to load — the harness loads a
-# definition, no hook observes that — so the enforceable point is the
-# dispatch: the lane gate refuses to hand a malware-lane-only methodology to
-# a workspace whose task contract declares another lane, with a structured
-# message naming the agent, the lane and the routing fix. Absent/legacy lane
+# ghidra-light) declare `lane: malware` in their frontmatter. Agent
+# markdown cannot refuse to load — the harness loads a definition, no hook
+# observes that — so the enforceable point is the dispatch: the lane gate
+# refuses to hand a malware-lane-only methodology to a workspace whose
+# task contract declares another lane, with a structured message naming
+# the agent, the lane and the routing fix. Absent/legacy lane
 # (= today's workspaces) keeps current behavior; unknown/kept agents pass.
+#
+# #342: a checker may hold MORE than one lane — kunglao-redteam declares
+# `lane: malware|web` so the unified verifier is dispatchable on the web
+# lane (its web face: captured I/O pairs + unpack_out registries +
+# camoufox instrumentation) while the four maker specialists stay
+# malware-only. The declaration is the '|' multi-lane form; the gate
+# refuses when the workspace lane is OUTSIDE the declared set, so the
+# issue-208 refusals (algorithm/protocol/data/app) are preserved verbatim.
+#
+# #355 (supersedes the checker's lane LIST, not the maker contracts): the
+# owner ruled the checker is defined by its FUNCTION — adversarial
+# verification — not by any material domain, and ALL evidence gets
+# red-team checking. kunglao-redteam declares NO `lane:`; the gate treats
+# a lane-absent agent as permitted on every lane, so the four lanes #342
+# left refused (algorithm/protocol/data/app) are now admitted too. The
+# `lane:` axis remains exactly what it was for the four malware-lane
+# maker specialists (ghidra-light / go-symbols / pefile-signature /
+# floss-filter): an opt-in material contract, enforced verbatim.
 
 # The lane enum mirrors scripts/lane_spec.py (the single source). Hooks load
 # standalone and must not import scripts/, so the tuple is repeated here with
@@ -1200,15 +1228,28 @@ MALWARE_LANE = "malware"
 LANE_TASK_SPEC = "task_spec.yaml"
 
 
-def _agent_lane_declaration(agent_name: str | None) -> str | None:
-    """agents/<name>.md frontmatter `lane:` (None when absent/unknown)."""
+def _agent_lane_declaration(agent_name: str | None) -> tuple[str, ...]:
+    """agents/<name>.md frontmatter `lane:` as the declared lane set.
+
+    The issue-208 single-lane form (`lane: malware`) and the #342
+    multi-lane form (`lane: malware|web`) parse identically here; tokens
+    outside LANE_ENUM are dropped and duplicates collapse. An absent,
+    non-scalar or all-unknown value declares NOTHING (empty tuple) — and
+    since #355, nothing declared means lane-UNIVERSAL: the checker-role
+    agents (dispatched by protocol position, never by claim routing —
+    #310) declare no `lane:` at all and are admitted on every lane. The
+    `lane:` axis is a maker-side opt-in material contract; the exemption
+    is file truth, not a runtime identity grant, so the only way to change
+    an agent's lane extent is a reviewable diff to its agents/<name>.md —
+    the dispatch payload cannot influence it."""
     fm = _agent_frontmatter(agent_name)
     if not isinstance(fm, dict):
-        return None
+        return ()
     raw = fm.get("lane")
-    if isinstance(raw, str) and raw.strip().lower() in LANE_ENUM:
-        return raw.strip().lower()
-    return None
+    if not isinstance(raw, str):
+        return ()
+    return tuple(dict.fromkeys(t.strip().lower() for t in raw.split("|")
+                               if t.strip().lower() in LANE_ENUM))
 
 
 def _workspace_lane(ws: Path) -> str | None:
@@ -1232,30 +1273,40 @@ def _workspace_lane(ws: Path) -> str | None:
 
 
 def _lane_gate(payload: dict, prompt_text: str, ws: Path) -> int | None:
-    """Issue 208: refuse a malware-lane-only agent on a non-malware lane.
+    """Issue 208: refuse a lane-bound agent on a lane it does not declare.
+
+    #342: the declaration is a SET (malware-only agents declare one lane;
+    #355: a checker-role agent declares NONE — kunglao-redteam carries no
+    `lane:` at all, so the gate admits it on every lane (the owner ruling:
+    adversarial verification is a function, not a domain — ALL evidence
+    gets red-team checking). The lane contract binds maker-type agents
+    only; the refusal fires only when a NON-EMPTY declaration excludes the
+    workspace lane.
 
     Fires on the structural corridor (pre-activation), independent of the
     dispatch claim-id parse: the lane binding is a routing contract, not a
     session concern. No agent identity / no `lane:` binding / no declared
     workspace lane -> None (pass)."""
     agent_name = _resolve_dispatch_agent(payload, prompt_text)
-    if _agent_lane_declaration(agent_name) != MALWARE_LANE:
+    declared = _agent_lane_declaration(agent_name)
+    if not declared:
         return None
     lane = _workspace_lane(ws)
-    if lane is None or lane == MALWARE_LANE:
+    if lane is None or lane in declared:
         return None  # legacy / undeclared: current malware-lane behavior
     return _reject_with_guidance(
         "lane_routing",
-        f"{agent_name} is a malware-lane-only agent and this workspace "
-        f"declares lane: {lane} — its methodology (binary sample under "
-        f"bins/<sha>, PE/Go/Mach-O structure, packer and Authenticode "
-        f"faces) does not apply to this task's material.",
+        f"{agent_name} is a lane-bound agent "
+        f"({' | '.join(f'lane: {d}' for d in declared)}) and this workspace "
+        f"declares lane: {lane} — its declared methodology does not apply "
+        f"to this task's material.",
         f"dispatch an agent whose contract matches lane: {lane} "
         f"(kunglao-worker is the default executor; web-re-worker owns "
-        f"web/JS claims) — or, if this task really does analyze a binary "
-        f"sample, record `lane: malware` in task_spec.yaml and re-dispatch. "
-        f"The lane comes from the task contract, never from the dispatch: "
-        f"do not switch the workspace lane to unblock one worker.")
+        f"web/JS claims) — or, if this task really does match the agent's "
+        f"declared lanes, record the matching `lane:` in task_spec.yaml and "
+        f"re-dispatch. The lane comes from the task contract, never from "
+        f"the dispatch: do not switch the workspace lane to unblock one "
+        f"worker.")
 
 
 # ===================== #109 hypothesis admission gate =====================
@@ -1572,6 +1623,9 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
         # collapse; new code wires the util).
         from harness_common import utc_now_z
         path.write_text(json.dumps({
+            # #244 taxonomy: the wait signal carries type dispatch | stop;
+            # the gate's wake is the dispatch arm of the vocabulary.
+            "type": "dispatch",
             "claim": claim_id,
             "ts": utc_now_z(),
         }, ensure_ascii=False), encoding="utf-8")
@@ -1750,6 +1804,17 @@ def main() -> int:
     # dispatch ALLOW tail (all teeth passed, worker not yet started).
     # Fail-open: intent_unparsed event only, never a blocked dispatch.
     _record_dispatch_intent(ws, claim_id, prompt_text, payload)
+    # #12 signal stream: the dispatch ALLOW tail is the one point every
+    # dispatch passes — land the structured dispatch row (runs/signals.jsonl)
+    # the Δ-estimator's events block counts. Fail-open: telemetry never
+    # turns an ALLOW into anything else.
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from signals_stream import append as _signal_append
+        _signal_append(ws, "dispatch", claim=claim_id)
+    except Exception as exc:  # noqa: BLE001 — a signal never blocks dispatch
+        print(f"dispatch_gate: signal-stream append failed ({exc!r})",
+              file=sys.stderr, flush=True)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

@@ -1,0 +1,45 @@
+schema: kunglao-eval-task/1
+task_id: m3-keystring-js-v1
+eval_version: eval-v1.2
+tier: misdirection
+source: constructed
+family: decoy-marker-js
+seed: 35223
+anchors:
+  goal_verbatim: 'Analyze target/cipher_bundle.js: planted markers point at the wrong
+    mechanism. Identify the real derivation, ignore the decoys, and re-expose sign(input)
+    reproducing the captured pairs byte-exact.'
+  success_criterion: A sign() re-implementation reproducing every published and checker-minted
+    pair byte-exact — a candidate built on any planted marker (stock tables, honeypot
+    keys, the decoy signer) fails the pairs by construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/cipher_bundle.js
+  entry: target/cipher_bundle.js
+  candidate_contract: A Node module exporting sign(inputString) -> 64-hex-char lowercase
+    string over the true derivation.
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_candidate.js
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps: []
+  clean_env_guarantee: no anti-debug surface in this unit

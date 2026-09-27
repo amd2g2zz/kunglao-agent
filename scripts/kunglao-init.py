@@ -2213,7 +2213,7 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         # material contract (no {{sample_*}} placeholder exists any more).
         "material_section": material_section(sample_name, sample_sha, lane),
         # as_posix(): the skill dir lands in CLAUDE.md BASH command lines
-        # (`python <skill>/scripts/convergence_check.py .`) where backslashes
+        # (`python <skill>/scripts/convergence_check.py "$PWD"`) where backslashes
         # are shell escapes — str(Path) breaks every rendered command on
         # win32 and drifts the portable golden contract (#457 triage #9-#11;
         # same rule as the #367 hook stamping).

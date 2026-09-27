@@ -69,6 +69,9 @@ How to fix:
 ... add `tool-catalog: crypto-tool` ... then re-dispatch.
 </gate-verdict>
 ```
+(Historical example, pre-H1: the toolfirst face is ADVISORY-only since the
+REJECT demotion — it no longer reaches `_reject`; the wrapping format shown
+is unchanged for the live REJECT gates.)
 
 ### `<oracle-sanction>` — oracle / adjudication records
 Producer: the oracle/adjudication pipeline (none wired today; reserved name).

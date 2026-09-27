@@ -1,6 +1,6 @@
 ---
 name: kunglao-agent-failure-modes-state
-description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
+description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. dumb/stuck/mismatched — user shorthand describing the agent, not a literal matcher) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -56,5 +56,3 @@ during S3 hardening — distinct failure modes where the code itself is wrong.
 2. **Schema contract check**: script output fields match declared schema keys exactly
 3. **Phantom reference check**: every hook/gate referenced in paused/active lists exists in the canonical registry
 4. **Race condition check**: state files that undergo read-modify-write have no concurrent writer paths
-
-recall_useful: pending

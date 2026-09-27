@@ -142,8 +142,8 @@ A mis-typed item is a finding about the pipeline, not a free upgrade — re-type
 - Falsifier supply per hypothesis family:
   [falsifier-library.md](falsifier-library.md)
 - The replay gate `direct-verification` points at:
-  [native-sign-recovery.md](native-sign-recovery.md#closure-summary)
+  [native-sign-recovery.md](../../android/signing/native-sign-recovery.md#closure-summary)
 - Static vs dynamic verification strategy split:
   [../verify-static-vs-dynamic.md](../../../orchestration/verify-static-vs-dynamic.md)
 - Protection recon BEFORE patching (order principle):
-  [stacked-protections.md](stacked-protections.md#order-principle-observation-first-analysis-second)
+  [stacked-protections.md](../../android/protections/stacked-protections.md#order-principle-observation-first-analysis-second)

@@ -1,0 +1,365 @@
+{
+  "chain": {
+    "gradient": "L3",
+    "layers": [
+      {
+        "id": "obfuscation",
+        "mechanisms": [
+          "obfuscation"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/1-unpacked.js",
+            "sha256": "1370a09a67feac5c77dd9551a4ef828e5f572da632daff56d40edb0ba6d61be4"
+          }
+        ]
+      },
+      {
+        "id": "junk-code",
+        "mechanisms": [
+          "junk-code"
+        ],
+        "ops": [
+          {
+            "lang": "node",
+            "op": "exec",
+            "path": "layer_out/2-clean.js",
+            "probes": "chain-probes"
+          },
+          {
+            "forbidden": [
+              "_opq_j1baf",
+              "_w_j1baf_",
+              "0xa9a0482b",
+              "0xd00627e9"
+            ],
+            "op": "clean",
+            "path": "layer_out/2-clean.js"
+          }
+        ]
+      },
+      {
+        "id": "encrypted-config",
+        "mechanisms": [
+          "encrypted-config"
+        ],
+        "ops": [
+          {
+            "op": "digest",
+            "path": "layer_out/3-config.json",
+            "sha256": "7a7e0c0a252aa960c1cf3c980bf46bb3e9390b261d0d148b6f5854db7c5f394a"
+          }
+        ]
+      },
+      {
+        "id": "custom-cipher-core",
+        "mechanisms": [
+          "anti-debug-gate"
+        ],
+        "ops": [
+          {
+            "lang": "node",
+            "op": "exec",
+            "path": "layer_out/4-core.js",
+            "probes": "chain-probes"
+          }
+        ]
+      },
+      {
+        "id": "decoy-path",
+        "mechanisms": [
+          "decoy-path"
+        ],
+        "ops": [
+          {
+            "markers": [
+              "859176f4",
+              "f4"
+            ],
+            "op": "markers",
+            "path": "layer_out/5-path.json"
+          }
+        ]
+      },
+      {
+        "id": "anti-debug-gate",
+        "mechanisms": [
+          "anti-debug-gate",
+          "rotation-timer"
+        ],
+        "ops": [
+          {
+            "markers": [
+              "525",
+              "a03e65bf"
+            ],
+            "op": "markers",
+            "path": "layer_out/6-gate.json"
+          }
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "i": 0,
+        "lane": 0,
+        "out": "15c44d9e9e2f8ec7",
+        "payload": "00000000000000003dd9eb2336c54c3b"
+      },
+      {
+        "i": 1,
+        "lane": 1,
+        "out": "c5173509bf854790",
+        "payload": "00000000000000001191a5d97236dbc5"
+      },
+      {
+        "i": 2,
+        "lane": 2,
+        "out": "fe8ad0454f72a3db",
+        "payload": "0000000000000000fdd0fc3f88fb9911"
+      },
+      {
+        "i": 3,
+        "lane": 0,
+        "out": "a8e3c30ce2049999",
+        "payload": "0000000000000000a3f475156f6277c1"
+      },
+      {
+        "i": 4,
+        "lane": 1,
+        "out": "7bce76d0d22c88cf",
+        "payload": "0000000000000000121f7f9b99654057"
+      },
+      {
+        "i": 5,
+        "lane": 2,
+        "out": "6df48427b3db2008",
+        "payload": "00000000000000005f87e7fb58f62c79"
+      },
+      {
+        "i": 6,
+        "lane": 0,
+        "out": "c7d0c1db8fdfe4bb",
+        "payload": "00000000000000003633d79df2449967"
+      },
+      {
+        "i": 7,
+        "lane": 1,
+        "out": "bdfe352600a4da30",
+        "payload": "000000000000000013cc761d30ec2c6b"
+      },
+      {
+        "i": 100,
+        "lane": 1,
+        "out": "cf3878e523ce999d",
+        "payload": "0000000000000000872210a9c4e53aaf"
+      },
+      {
+        "i": 101,
+        "lane": 2,
+        "out": "3eb6ea16275c748d",
+        "payload": "0000000000000000b62e511de0abb005"
+      },
+      {
+        "i": 102,
+        "lane": 0,
+        "out": "98fdf172f3e4e906",
+        "payload": "00000000000000003e7c985f1e6d8717"
+      },
+      {
+        "i": 103,
+        "lane": 1,
+        "out": "c71d99ae0c7bb8ab",
+        "payload": "0000000000000000f9408c7567b051f5"
+      },
+      {
+        "i": 104,
+        "lane": 2,
+        "out": "a9914963551f620c",
+        "payload": "00000000000000001a82dd15cc0c6729"
+      },
+      {
+        "i": 105,
+        "lane": 0,
+        "out": "467aa00d3a791b53",
+        "payload": "00000000000000004456b8b9f05b8959"
+      },
+      {
+        "i": 106,
+        "lane": 1,
+        "out": "e1911d12a9dcfda4",
+        "payload": "0000000000000000017c0dcb55ec76db"
+      },
+      {
+        "i": 107,
+        "lane": 2,
+        "out": "d51e5d4d6f90f983",
+        "payload": "0000000000000000b68c36b173504a1b"
+      }
+    ]
+  },
+  "core": {
+    "cfg_hex": "0f8f3c705ee76512aa821db7dbffdb711a13f6be5e220892ae3298a9f0eee7f3c915072b72bd729f10ac865167fc0081438edf17b4aa3e911efc3226b1e47cacded250a7dd3a68003bf210ccde385516482df79c4bb8c5646a9d514dfc8cf04c483c95e1b0bd51ce770b3a89ed104ad214f564d0675a3c46d05329b2580019189dd3ad3c85bc5a7ac2722307e4c08da486b447d12e3a27b4d2e58fb57a515719082d9a6d6b6e13874ba08bc7167b13c56ef2604ef5",
+    "config": {
+      "core": {
+        "c0": 1548660433,
+        "c1": 3271160951,
+        "c2": 1998588057,
+        "odd": 2062446647,
+        "odd2": 446411491,
+        "rot": 3
+      },
+      "gate": {
+        "corrupt": "a03e65bf",
+        "dt_ms": 525
+      },
+      "integ": "e09d5017",
+      "lanes": 3,
+      "v": 1
+    },
+    "corrupt": 2688443839,
+    "decoy_config": {
+      "core": {
+        "c0": 3875497551,
+        "c1": 4095771817,
+        "c2": 4062922807,
+        "odd": 2769330343,
+        "odd2": 1577370769,
+        "rot": 26
+      },
+      "v": 0
+    },
+    "decoy_hex": "",
+    "family": "chain-js",
+    "fp": [
+      1695295203,
+      1676127543,
+      3051441069
+    ],
+    "gate_dt_ms": 525,
+    "gradient": "L3",
+    "honeypot": "67df8bc79f3be691b1642a4d31d14635cef41bbd6467ad271ac58b6be270be43",
+    "integ": 3768406039,
+    "junk_a": 2845853739,
+    "junk_b": 3490064361,
+    "rc": [
+      [
+        1094493037,
+        721202259,
+        4047745281,
+        2326551627
+      ],
+      [
+        1766164229,
+        783789411,
+        3689401643,
+        4104647317
+      ],
+      [
+        2600946889,
+        3209407403,
+        2980071119,
+        1953514381
+      ],
+      [
+        2533342425,
+        3659974993,
+        358312947,
+        1308685973
+      ],
+      [
+        2813956567,
+        4120570889,
+        1503243245,
+        771057841
+      ],
+      [
+        1908374615,
+        3000559423,
+        655784413,
+        3496495749
+      ],
+      [
+        3052866443,
+        4088617313,
+        1417555845,
+        355539481
+      ],
+      [
+        3572321601,
+        179799917,
+        3659735905,
+        1759640061
+      ]
+    ],
+    "rt_key": "14c1398bbc39a0cbd243600e67b56ef5",
+    "salt": 810168811,
+    "seed": 37006,
+    "sel_key": 244,
+    "sel_val": 2240902900,
+    "task_id": "chain-l3-js-v1",
+    "unit": {
+      "family": "chain-js",
+      "gradient": "L3",
+      "seed": 37006,
+      "task_id": "chain-l3-js-v1"
+    }
+  },
+  "family": "chain-js",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "lane": 0,
+      "out": "15c44d9e9e2f8ec7",
+      "payload": "00000000000000003dd9eb2336c54c3b"
+    },
+    {
+      "i": 1,
+      "lane": 1,
+      "out": "c5173509bf854790",
+      "payload": "00000000000000001191a5d97236dbc5"
+    },
+    {
+      "i": 2,
+      "lane": 2,
+      "out": "fe8ad0454f72a3db",
+      "payload": "0000000000000000fdd0fc3f88fb9911"
+    },
+    {
+      "i": 3,
+      "lane": 0,
+      "out": "a8e3c30ce2049999",
+      "payload": "0000000000000000a3f475156f6277c1"
+    },
+    {
+      "i": 4,
+      "lane": 1,
+      "out": "7bce76d0d22c88cf",
+      "payload": "0000000000000000121f7f9b99654057"
+    },
+    {
+      "i": 5,
+      "lane": 2,
+      "out": "6df48427b3db2008",
+      "payload": "00000000000000005f87e7fb58f62c79"
+    },
+    {
+      "i": 6,
+      "lane": 0,
+      "out": "c7d0c1db8fdfe4bb",
+      "payload": "00000000000000003633d79df2449967"
+    },
+    {
+      "i": 7,
+      "lane": 1,
+      "out": "bdfe352600a4da30",
+      "payload": "000000000000000013cc761d30ec2c6b"
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 37006,
+  "space_bits": 64,
+  "task_id": "chain-l3-js-v1"
+}

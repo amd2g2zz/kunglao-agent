@@ -42,7 +42,7 @@ code that never touches the requests you care about.
 
 | Observable in the unpacked APK | Framework | dex tooling yield | Route |
 |---|---|---|---|
-| `libflutter.so` + `libapp.so` under `lib/<abi>/` | Flutter (Dart AOT) | None — business logic lives in the Dart snapshot, not the dex | Dart snapshot toolchain (class/symbol recovery + generated hook scaffolding); see [field-notes.md](field-notes.md#flutter-apk-dart-aot) |
+| `libflutter.so` + `libapp.so` under `lib/<abi>/` | Flutter (Dart AOT) | None — business logic lives in the Dart snapshot, not the dex | Dart snapshot toolchain (class/symbol recovery + generated hook scaffolding); see [field-notes.md](../../method/process/field-notes.md#flutter-apk-dart-aot) |
 | `libhermes.so` under `lib/<abi>/` + a shipped JS bundle asset | React Native on Hermes | None — app logic is Hermes bytecode inside the bundle | Hermes bytecode disassembler/decompiler, then the web-RE path on the recovered JS |
 | `libil2cpp.so` under `lib/<abi>/` (+ its metadata asset) | Unity IL2CPP | None — C# compiled to native; the dex is only the engine host | IL2CPP bridge tooling (metadata → symbol mapping), then native analysis on the recovered symbols |
 | `classes*.dex` only — none of the above present | Java/Kotlin host app | High — primary logic is dex | Conventional dex path (jadx/baksmali) plus JNI boundary work where declared |
@@ -253,7 +253,7 @@ TIMING = {
 
 ## Prefix-by-Prefix Hash Reversal (Nullcon 2026)
 
-See [patterns-decode.md](patterns-decode.md#prefix-hash-brute-force) for the full technique. This section covers language-specific considerations.
+See [patterns-decode.md](../../patterns/decode/patterns-decode.md#prefix-hash-brute-force) for the full technique. This section covers language-specific considerations.
 
 **Language-specific notes:**
 - Hash algorithm may be uncommon (MD2, custom) — don't need to identify it, just match outputs by running the binary

@@ -67,6 +67,7 @@ def warn(op: str, reason: str) -> None:
     print(f"[kunglao-agent] recall_inject WARN (fail-open): "
           f"{op}: {reason}",
           file=sys.stderr)
+import hashlib
 import json
 import re
 import subprocess
@@ -156,6 +157,104 @@ def queries_for_redteam(prompt_text: str) -> list[str]:
 # #671: module-level membership via the hygiene authority (was bare insert).
 ensure_scripts_path()
 from tier_rules import tier_for_claim  # noqa: E402
+
+
+# ---- H1a (autoresearch thin-base): dispatch-scoped recall + content dedup --
+# Recall is DISPATCH-SCOPED: every dispatched agent gets recall (any role —
+# a dispatch's context needs are determined by the dispatch itself, never by
+# whether a clock tick or an event fired; events are the control variable
+# for the continuous observability faces, not for dispatch context). The
+# calibration's 115 injection rows were per-tick re-injections of UNCHANGED
+# content — that was the tax form. So re-injection is deduped by CONTENT:
+# per worker (claim id for claim dispatches, text hash otherwise), the hash
+# of the injected file set lives in runs/.recall-inject.json and a repeat
+# dispatch with the SAME recall set is silent. No role exemptions: a
+# special-case table for redteam would be the #294 misfire's disease
+# (special cases instead of an algorithm) recurring in a new organ — a fresh
+# workspace passes naturally because a first injection is always new content.
+RECALL_DEDUP_STATE = Path("runs") / ".recall-inject.json"
+
+# Digest base for the recalled file paths (#380 Package 4 F2): recall
+# returns references/-relative paths (e.g. `re-library/tools/dynamic/
+# tools-dynamic.md`), so content identity resolves against the skill's
+# references dir. A module constant so tests can point it at a fixture
+# library without touching the real re-library.
+REFERENCES_DIR = SKILL_DIR / "references"
+
+
+def _worker_key(prompt_text: str) -> str:
+    """Stable per-worker dispatch identity (#380 Package 4 F1): the claim id
+    via lib_kunglao.parse_dispatch — the #861 single source (v1 JSON
+    envelope takes precedence, v0 prefix retained), so v1 dispatches key
+    dedup state by CLAIM, not by text hash — else (text parses as no
+    dispatch at all) a short hash of the dispatch text (redteam plans,
+    one-off verifiers). The retired local prose regex (`claim[ \\t]+C-NN`)
+    only saw v0 dispatches and silently re-injected unchanged recall to
+    re-dispatched v1 workers whose prompt tail had moved."""
+    _tier, _tools, claim_id = load_hooks_lib().parse_dispatch(prompt_text)
+    if claim_id:
+        return "claim:" + claim_id.upper()
+    return "text:" + hashlib.sha256(
+        prompt_text.encode("utf-8")).hexdigest()[:16]
+
+
+def _file_digest(rel_path: str) -> str:
+    """sha256 of a recalled reference file's bytes — the content half of the
+    dedup pair (#380 Package 4 F2: name-only hashing never noticed a
+    reference file revised in place, so the same worker starved of the new
+    doctrine). Fail-open posture for unreadable paths (deleted file,
+    injected fixtures): a FIXED sentinel '-' — stable across runs, so
+    dedup still works, and distinct from any real sha256 hex, so a file
+    that appears or changes after being unreadable shifts the set hash
+    (the re-inject direction: recall must never starve a dispatch)."""
+    try:
+        return hashlib.sha256(
+            (REFERENCES_DIR / rel_path).read_bytes()).hexdigest()
+    except OSError:
+        return "-"
+
+
+def _recall_set_hash(files: list[str]) -> str:
+    """Content-aware dedup hash (#380 Package 4 F2): sha256 over one
+    `<path>:<content-sha256>` line per recalled file. Collision behavior:
+    inner digests and the outer hash are both sha256 (second-preimage
+    resistant); the PATH is part of every line, so two distinct files with
+    byte-identical content never collapse into one pair, and the hash
+    changes whenever a path is added, removed, or its content moves. File
+    order follows the recall engine's deterministic per-query order."""
+    return hashlib.sha256("\n".join(
+        f"{f}:{_file_digest(f)}" for f in files).encode("utf-8")).hexdigest()
+
+
+def _content_unchanged(ws: Path, key: str, files: list[str]) -> bool:
+    """True when this worker's last injection carried the SAME file set
+    (content dedup — the recall knowledge did not move). Fail-open:
+    unreadable state -> False (inject; recall must never starve a
+    dispatch)."""
+    try:
+        state = json.loads(
+            (Path(ws) / RECALL_DEDUP_STATE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (state.get("workers") or {}).get(key) == _recall_set_hash(files)
+
+
+def _record_injection(ws: Path, key: str, files: list[str]) -> None:
+    """Persist the injected-set hash for the worker. Telemetry — never
+    breaks the dispatch (fail-open)."""
+    try:
+        path = Path(ws) / RECALL_DEDUP_STATE
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            state = {}
+        workers = state.get("workers") or {}
+        workers[key] = _recall_set_hash(files)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": 1, "workers": workers}),
+                        encoding="utf-8")
+    except OSError as exc:
+        warn("recall_dedup_state_write", f"{type(exc).__name__}: {exc}")
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -428,6 +527,40 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     )
 
 
+def _collect_gap_notes(ws: Path, claim_id: str) -> list[tuple[str, str]]:
+    """#391 settlement gap-notes: the prior FAILED attempts of THIS unit
+    (claim-keyed read face — different units are unaffected). Fail-open:
+    any problem -> [] (reflection must never block dispatch)."""
+    try:
+        import gap_notes as _gn
+        return _gn.read_notes(ws, claim_id)
+    except Exception as exc:  # noqa: BLE001 — reflection never blocks
+        warn("gap_note_collect", f"{type(exc).__name__}: {exc}")
+        return []
+
+
+def _gap_note_guidance(notes: list[tuple[str, str]]) -> str:
+    """#391 advisory gap-note block. The notes quote machine-recorded
+    settlement signals (oracle verdict, checker sub-scores, decoy walls,
+    evidence class, cost vs class reference) — context supply for a
+    same-unit retry, NEVER a reward signal: the settlement matcher
+    provably ignores advisory carriers."""
+    inner = "\n".join(
+        f'<prior-attempt-note file="{label}">\n{text}\n'
+        f"</prior-attempt-note>"
+        for label, text in notes)
+    return (
+        f'<kunglao-facts advisory="true">\n'
+        f"recall_inject: settlement gap-notes (#391) - prior FAILED "
+        f"attempts on this same unit.\n"
+        f"ADVISORY context only: derived from machine-recorded settlement "
+        f"signals; never a reward signal — the settlement matcher ignores "
+        f"advisory carriers.\n"
+        f"{inner}\n"
+        f"</kunglao-facts>"
+    )
+
+
 def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
            ) -> None:
     """#814: fail-open ≠ fail-silent — every recall path leaves a trace
@@ -451,6 +584,53 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
         warn("_trace_2", f"{type(exc).__name__}: {exc}")
 
 
+def _gap_notes_for_claim(ws: Path, prompt_text: str,
+                         is_claim: bool) -> list[tuple[str, str]]:
+    """#391: prior gap-notes for the dispatch's unit, [] for non-claim
+    dispatches and non-claim-shaped prompts."""
+    if not is_claim:
+        return []
+    _tier, _tools, claim_id = load_hooks_lib().parse_dispatch(prompt_text)
+    if not claim_id:
+        return []
+    return _collect_gap_notes(ws, claim_id)
+
+
+def _injection_context(ws: Path, prompt_text: str, is_claim: bool,
+                       queries: list[str],
+                       files: list[str]) -> str | None:
+    """Dedup gate + block assembly for one dispatch: the recall guidance
+    plus, for same-unit retries, the #391 settlement gap-note block.
+
+    H1a content dedup: the SAME (recall + gap-note) set for the SAME
+    worker is not new knowledge — silent skip (no row, no payload).
+    Gap-note files are digest-named and immutable, so a new attempt's
+    note is a new set member: the retry re-dispatch re-injects. Every
+    role goes through this one gate — there are no exemptions.
+    """
+    notes = _gap_notes_for_claim(ws, prompt_text, is_claim)
+    note_labels = [label for label, _text in notes]
+    if not files and not note_labels:
+        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
+               + ",".join(queries[:3]))
+        return None  # no knowledge to inject
+    key = _worker_key(prompt_text)
+    injected_set = files + note_labels
+    if _content_unchanged(ws, key, injected_set):
+        return None
+    _record_injection(ws, key, injected_set)
+    blocks: list[str] = []
+    if files:
+        blocks.append(_guidance(queries, files[:MAX_FILES]))
+        _trace(ws, "injected", "recall_injected",
+               "files:" + ",".join(files[:MAX_FILES]), files=len(files))
+    if notes:
+        blocks.append(_gap_note_guidance(notes))
+        _trace(ws, "injected", "gap_notes_injected",
+               "notes:" + ",".join(note_labels), files=len(note_labels))
+    return "\n".join(blocks)
+
+
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     """Hook decision for a PreToolUse(Agent) dispatch payload (#268/#761 J4).
 
@@ -462,7 +642,14 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     rc is ALWAYS 0 — this hook injects knowledge, never rejects.
     Trigger faces: claim dispatch (`[T<N> tools=...] claim C-NN`, #268) and
     red-team verification dispatch (#761 J4 — adversarial knowledge BEFORE
-    the checker plans its attacks).
+    the checker plans its attacks). H1a: recall is DISPATCH-SCOPED for every
+    role (no exemptions), deduped by content — a repeat dispatch whose
+    injected set is unchanged for that worker (runs/.recall-inject.json,
+    per-worker injected-set hash) is silent; a changed set re-injects.
+    #391: a same-unit retry claim dispatch additionally injects the prior
+    FAILED attempts' settlement gap-notes (runs/gap-notes/<claim>/) as an
+    advisory <kunglao-facts> block — context supply only, never a reward
+    kind; the settlement matcher ignores advisory carriers.
     """
     ws = _resolve_workspace(payload)
     if ws is None:
@@ -472,7 +659,8 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
         return 0, "", None
 
     is_claim = _is_claim_dispatch(prompt_text)
-    if not is_claim and not REDTEAM_RE.search(prompt_text):
+    is_redteam = bool(REDTEAM_RE.search(prompt_text))
+    if not is_claim and not is_redteam:
         # #814: fail-open ≠ fail-silent — 留痕后放行
         _trace(ws, "skipped", "recall_skip",
                "not_a_claim_or_redteam_dispatch")
@@ -493,13 +681,11 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
             if f not in seen:
                 seen.add(f)
                 files.append(f)
-    if not files:
-        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
-               + ",".join(queries[:3]))
-        return 0, "", None  # no knowledge to inject
-    _trace(ws, "injected", "recall_injected",
-           "files:" + ",".join(files[:MAX_FILES]), files=len(files))
-    return 0, "", _guidance(queries, files[:MAX_FILES])
+    # H1a dedup + #391 same-unit retry gap-notes: one gate, one payload
+    # (see _injection_context). Advisory context supply only — never a
+    # reward kind; the settlement matcher ignores advisory carriers.
+    return 0, "", _injection_context(ws, prompt_text, is_claim, queries,
+                                     files)
 
 
 def main() -> int:

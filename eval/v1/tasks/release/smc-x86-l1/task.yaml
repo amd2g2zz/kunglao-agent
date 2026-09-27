@@ -1,0 +1,44 @@
+schema: kunglao-eval-task/1
+task_id: smc-x86-l1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: smc-x86
+seed: 33203
+anchors:
+  goal_verbatim: Analyze the freestanding x86_64 ELF target/smc_payload.elf (self-decrypting
+    payload gated on anti-debug checks), recover the mod-crypto implementation, and
+    re-implement payload_derive byte-exact.
+  success_criterion: A re-implementation carrying the mutated constants that reproduces
+    every published and checker-minted probe (byte-exact hex).
+  verification_method: reproduction
+workspace_scaffold:
+  language: c/x86_64-freestanding
+  files:
+  - target/smc_payload.elf
+  - reference.py
+  entry: target/smc_payload.elf
+  candidate_contract: 'A Python module exposing payload_derive(data: bytes) -> str
+    (lowercase hex, 16 bytes out = the decrypted payload''s mod-crypto transform).'
+checker:
+  kind: pair-match
+  oracles:
+  - constant-hit
+  - pair-match
+  entrypoint: checker.py
+  self_check_candidate: reference.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 5
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 384
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

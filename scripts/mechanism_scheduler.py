@@ -362,6 +362,14 @@ def _gate_always(ws: Path, events: set) -> bool:
     return True
 
 
+def _gate_events_seen(ws: Path, events: set) -> bool:
+    """H1 (autoresearch thin-base): the event-bus gate — true iff this pass
+    consumed at least one ledger row mapping to a wake class (settlement /
+    stall / plan_review). The tick is still the ONLY host (the bus is read
+    by the same pass), but the mechanism fires on EVENTS, not cadence."""
+    return bool(events)
+
+
 def _gate_loop_unregistered(ws: Path, events: set) -> bool:
     """True while the /loop cron is not proven registered (#461 marker)."""
     try:
@@ -401,6 +409,7 @@ def _gate_policy_due(ws: Path, events: set) -> bool:
 
 GATES = {
     "always": _gate_always,
+    "events_seen": _gate_events_seen,
     "loop_unregistered": _gate_loop_unregistered,
     "session_dead": _gate_session_dead,
     "policy_due": _gate_policy_due,

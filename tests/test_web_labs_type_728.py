@@ -65,7 +65,23 @@ GENERIC_SNAKE_ALLOWLIST = frozenset({
     "network_capture", "type_web", "pre_inject", "search_code",
     "function_path", "hook_code", "pre_inject_hooks", "request_id",
     "camoufox_reverse_mcp",
+    # wave-2 distillation: literal output-field tokens appearing in the
+    # quickref's classifier example (values from the tool's JSON contract,
+    # not tool names)
+    "captured_param", "hex_lower", "next_check",
 })
+
+# Registered tools/_INDEX.yaml names are verified capabilities by
+# definition — the doc-scan must accept them wherever a card demonstrates
+# a registered CLI (wave-2 appends demonstrate cipher_identify and
+# sign_candidate_verify in the quickref).
+_INDEX_PATH = ROOT / "tools" / "_INDEX.yaml"
+
+
+def _registered_tool_names() -> set[str]:
+    import yaml
+    data = yaml.safe_load(_INDEX_PATH.read_text(encoding="utf-8")) or {}
+    return {t.get("name", "") for t in data.get("tools", [])}
 
 QUICKREF = ROOT / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md"
 QUICKREF_SECTIONS = (
@@ -183,7 +199,8 @@ def test_web_docs_mention_only_verified_camoufox_tools():
     unknown = {t for t in snake
                if t not in VERIFIED_CAMOUFOX_TOOLS
                and t not in VERIFIED_CAMOUFOX_PRESETS
-               and t not in GENERIC_SNAKE_ALLOWLIST}
+               and t not in GENERIC_SNAKE_ALLOWLIST
+               and t not in _registered_tool_names()}
     assert unknown == set(), f"unverified camoufox tool names: {sorted(unknown)}"
 
 

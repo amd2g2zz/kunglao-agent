@@ -1,0 +1,102 @@
+{
+  "entry": "target/chain_bundle.js",
+  "family": "chain-js",
+  "gradient": "L1",
+  "language": "javascript",
+  "layers": [
+    {
+      "artifact": "layer_out/1-unpacked.js",
+      "checkpoint": "unpack (byte-exact peel)",
+      "id": "obfuscation",
+      "index": 1,
+      "mechanisms": [
+        "obfuscation",
+        "junk-code"
+      ]
+    },
+    {
+      "artifact": "layer_out/2-config.json",
+      "checkpoint": "config decrypted (byte-exact canonical plaintext)",
+      "id": "encrypted-config",
+      "index": 2,
+      "mechanisms": [
+        "encrypted-config"
+      ]
+    }
+  ],
+  "mechanisms": [
+    "encrypted-config",
+    "junk-code",
+    "obfuscation"
+  ],
+  "schema": "kunglao-eval-chain-manifest/1",
+  "seed": 37001,
+  "shortcut_audit": {
+    "constant_scan": {
+      "answer_constant_hits": [],
+      "decoy_constant_hits": [],
+      "naive_method": "constant-scan (hex/decimal) for the answer constants",
+      "note": "answer constants exist only inside the encrypted config; visible decoy constants are bait",
+      "verdict": "FAIL"
+    },
+    "decoy_baseline": {
+      "0": "e1e9191fc08ab78d",
+      "1": "6262e6fd12fbb52b",
+      "2": "191a004f6aa15f87",
+      "3": "e710e7241384d71d",
+      "4": "39e5d16a3f696982",
+      "5": "b24b5faf66ab5db9",
+      "6": "6bfc249a17d738b8",
+      "7": "3787d67c6f85c2e1"
+    },
+    "entry_scan": {
+      "answer_constant_hits": [],
+      "key_shaped_hits": [],
+      "naive_method": "strings/constant-scan of the committed artifact",
+      "verdict": "FAIL"
+    },
+    "junk_pollution": {
+      "markers": [
+        "_opq_j1baa",
+        "_w_j1baa_",
+        "0x76b54421",
+        "0x44e73ce7"
+      ],
+      "naive_decompile_baseline": "polluted",
+      "stripped_baseline": "clean",
+      "stripped_markers": []
+    },
+    "payload_scan": {
+      "baseline": [
+        "1bbf830c32644189",
+        "7ad53b7587925fa5",
+        "0b3c6054ad3baa81",
+        "ce442bc38f2607f4",
+        "58d5476107ce276b",
+        "5eed964efd899830",
+        "541b1daea37f7628",
+        "4eaf3107462f8c16"
+      ],
+      "equals_truth": false,
+      "key_shaped_hits": [
+        "e791121b679f85c76717e291ab6ae963d0da55c97978d571fa106705c8a563c9"
+      ],
+      "naive_answer": "chain_mac keyed with the honeypot",
+      "naive_method": "post-peel strings scan -> first key-shaped literal",
+      "verdict": "FAIL"
+    },
+    "runtime_keys": {
+      "method": "ARX KDF over the fingerprint constants; verified absent as literals",
+      "runtime_key_hex_absent": true
+    },
+    "smoked_at_mint": true
+  },
+  "task_id": "chain-l1-js-v1",
+  "toolchain": "node",
+  "workspace_contract": {
+    "answer": "reference_candidate.js",
+    "answer_seam": "A Node module exporting derive(req) where req = {payload: hex string, lane: int} -> 16-hex lowercase string over the fully-peeled derivation.",
+    "graded_by": "scripts/eval_chain_grader.py --task <id> --workspace <dir>",
+    "layer_dir": "layer_out"
+  }
+}

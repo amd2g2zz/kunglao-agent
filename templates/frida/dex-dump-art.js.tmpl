@@ -1,0 +1,229 @@
+/**
+ * dex-dump-art.js — generic in-memory DEX dump for hardened Android targets
+ * (template: templates/frida/dex-dump-art.js.tmpl, issue 359).
+ *
+ * Requires: frida >= 17 (module API: Process.getModuleByName(mod)
+ * .getExportByName(name); the two-argument Module.getExportByName form was
+ * removed in 17).
+ *
+ * Capability: every packer eventually hands the decrypted DEX to the ART
+ * runtime. Instead of per-packer signatures, intercept the two standard
+ * loading paths and write out whatever passes through:
+ *   1. Java layer   — dalvik.system.InMemoryDexClassLoader(ByteBuffer, ...)
+ *   2. Native layer — art::DexFile::OpenMemory variants inside libart.so
+ *
+ * Dumps are validated against the DEX magic before writing and deduplicated
+ * by (size + header checksum), so repeated loads of the same DEX produce a
+ * single file.
+ *
+ * VM-ONLY ARTIFACT (hard prohibition #5): run inside the analysis VM via
+ * the VM channel (<VM_IP>:1337) only. Never against host processes.
+ *
+ * Output:
+ *   {{OUT_DIR}}/classes_<n>.dex            dumped DEX files
+ *   {{OUT_DIR}}/dexdump_manifest.jsonl     one JSON line per dump:
+ *     {"file", "size", "source": "inmem"|"openmemory", "checksum",
+ *      "sample_sha256", "ts"}
+ *
+ * WHAT THE ANALYST MUST FILL / VERIFY (all marked TODO in the body):
+ *   * OpenMemory symbol — the mangled name varies by Android/ART version;
+ *     the candidate list below covers common ones, but verify which exists
+ *     in THIS sample's libart.so (frida can enumerate exports) and extend
+ *     the list if the attach log says "no OpenMemory symbol found"
+ *   * dump dir — {{OUT_DIR}} must be writable by the target app on the VM
+ *     device (app-private dirs or /sdcard with storage permission)
+ *   * packers that load DEX from a raw fd or via hidden APIs may need an
+ *     extra hook (e.g. art::DexFile::Open with fd) — extend, do not assume
+ *
+ * Usage (inside the VM):
+ *   frida -U -f <package> -l dex-dump-art.js --no-pause
+ *   frida -U --attach-pid <pid> -l dex-dump-art.js
+ *   (then trigger the packed component; pulled DEX files land in {{OUT_DIR}})
+ */
+'use strict';
+
+var OUT_DIR = '{{OUT_DIR}}';
+var SAMPLE_SHA256 = '{{SAMPLE_SHA256}}';
+var MIN_DEX_BYTES = parseInt('{{MIN_DEX_BYTES}}', 10) || 4096;
+
+var dumped = {};   // size + checksum -> outfile (dedup)
+var counter = 0;
+
+function log(msg) {
+  console.log('[dex-dump] ' + msg);
+}
+
+function isDexMagic(ptr) {
+  try {
+    return ptr.readU32() === 0x0a786564; // "dex\n" little-endian
+  } catch (_) {
+    return false;
+  }
+}
+
+function dexChecksum(ptr) {
+  try {
+    return ptr.add(8).readU32(); // checksum field per DEX header spec
+  } catch (_) {
+    return 0;
+  }
+}
+
+function dumpDex(base, size, source) {
+  if (size < MIN_DEX_BYTES || !isDexMagic(base)) {
+    return;
+  }
+  var checksum = dexChecksum(base);
+  var key = size + ':' + checksum;
+  if (dumped[key]) {
+    log('skip duplicate dex (size ' + size + ', checksum ' + checksum + ')');
+    return;
+  }
+  var name = 'classes_' + (counter++) + '.dex';
+  var path = OUT_DIR + '/' + name;
+  try {
+    var JFile = Java.use('java.io.File');
+    var dir = JFile.$new(OUT_DIR);
+    if (!dir.exists()) {
+      dir.mkdirs();
+    }
+    var buf = base.readByteArray(size);
+    var bos = Java.use('java.io.FileOutputStream').$new(path);
+    bos.write(buf);
+    bos.close();
+    dumped[key] = path;
+    log('written ' + path + ' (' + size + ' bytes, via ' + source +
+        ', checksum ' + checksum + ')');
+    manifestLine({ file: path, size: size, source: source,
+                   checksum: checksum, sample_sha256: SAMPLE_SHA256,
+                   ts: Date.now() });
+  } catch (e) {
+    log('write failed: ' + e);
+  }
+}
+
+function manifestLine(obj) {
+  try {
+    var fos = Java.use('java.io.FileOutputStream').$new(
+      OUT_DIR + '/dexdump_manifest.jsonl', true);
+    fos.write((JSON.stringify(obj) + '\n').getBytes());
+    fos.close();
+  } catch (e) {
+    log('manifest write failed: ' + e);
+  }
+}
+
+// ---- path 1: Java layer — InMemoryDexClassLoader -------------------------
+Java.perform(function () {
+  try {
+    var Loader = Java.use('dalvik.system.InMemoryDexClassLoader');
+    // constructor overloads all take a ByteBuffer (or array) first
+    Loader.$init.overloads.forEach(function (ov) {
+      if (ov.argumentTypes.length === 0) return;
+      if (ov.argumentTypes[0].className !== 'java.nio.ByteBuffer' &&
+          ov.argumentTypes[0].className !== '[Ljava.nio.ByteBuffer;') return;
+      ov.implementation = function (buf) {
+        try {
+          var single = buf;
+          if (Array.isArray(buf)) {
+            log('bytebuffer-array ctor with ' + buf.length + ' entries ' +
+                '(TODO: dump each entry if this packer uses it)');
+            single = buf[0];
+          }
+          if (single !== null) {
+            var dup = single.duplicate();
+            var size = dup.remaining();
+            if (size >= MIN_DEX_BYTES) {
+              var bytes = Java.array('byte', new Array(size).fill(0));
+              dup.get(bytes);
+              // DEX magic "dex\n" on the first four Java bytes
+              if (bytes[0] === 0x64 && bytes[1] === 0x65 &&
+                  bytes[2] === 0x78 && bytes[3] === 0x0a) {
+                // header checksum (offset 8..12) — signed Java bytes,
+                // reassemble unsigned little-endian
+                var checksum = ((bytes[8] & 0xff) |
+                                ((bytes[9] & 0xff) << 8) |
+                                ((bytes[10] & 0xff) << 16) |
+                                ((bytes[11] & 0xff) << 24)) >>> 0;
+                var key = size + ':' + checksum;
+                if (dumped[key]) {
+                  log('skip duplicate dex (size ' + size + ', checksum ' +
+                      checksum + ')');
+                } else {
+                  var JFile = Java.use('java.io.File');
+                  var dir = JFile.$new(OUT_DIR);
+                  if (!dir.exists()) dir.mkdirs();
+                  var name = 'classes_' + (counter++) + '.dex';
+                  var path = OUT_DIR + '/' + name;
+                  var fos = Java.use('java.io.FileOutputStream').$new(path);
+                  fos.write(bytes);
+                  fos.close();
+                  dumped[key] = path;
+                  log('written ' + path + ' (' + size +
+                      ' bytes, via inmem, checksum ' + checksum + ')');
+                  manifestLine({ file: path, size: size, source: 'inmem',
+                                 checksum: checksum,
+                                 sample_sha256: SAMPLE_SHA256,
+                                 ts: Date.now() });
+                }
+              } else {
+                log('rejected non-DEX payload (' + size + ' bytes)');
+              }
+            }
+          }
+        } catch (e) {
+          log('inmem dump failed: ' + e);
+        }
+        return ov.apply(this, arguments);
+      };
+    });
+    log('InMemoryDexClassLoader hooks armed');
+  } catch (e) {
+    log('InMemoryDexClassLoader hook failed: ' + e);
+  }
+});
+
+// ---- path 2: Native layer — art::DexFile::OpenMemory variants -------------
+// TODO(adapt): verify which mangled symbol exists in THIS sample's libart
+// (enumerate with: Process.getModuleByName('libart.so').enumerateExports())
+// and extend the candidate list for the target's Android version.
+(function armNative() {
+  var candidates = [
+    '_ZN3art7DexFile10OpenMemoryEPKhmRKNSt3__112basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEEjPNS_6MemMapEPKNS_4OatDexFileEPS9_PNS3_10unique_ptrIKNS_16DexFileVerifierENS9_ISB_EEEE',
+    '_ZN3art7DexFile10OpenMemoryEPKhmRKNSt3__112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEjPNS_6MemMapEPKNS_4OatDexFileEPS5_PKNS_10OatDexFileE',
+    '_ZN3art7DexFile10OpenMemoryEPKhmjPNS_6MemMapE',
+    'OpenMemory'
+  ];
+  var libart = Process.getModuleByName('libart.so');
+  var attached = 0;
+  candidates.forEach(function (sym) {
+    var addr = null;
+    try {
+      addr = libart.getExportByName(sym);
+    } catch (_) {
+      return;
+    }
+    Interceptor.attach(addr, {
+      onEnter: function (args) {
+        // TODO(adapt): (base, size) register positions shift by ABI/version;
+        // the common ARM64 layout is x0=base, x1=size — verify against the
+        // disassembly of THIS libart build before trusting dumps.
+        this.base = args[0];
+        this.size = args[1].toInt32 ? args[1].toInt32() : parseInt(args[1]);
+      },
+      onLeave: function (retval) {
+        if (this.base && this.size > 0) {
+          dumpDex(this.base, this.size, 'openmemory');
+        }
+      }
+    });
+    attached++;
+    log('OpenMemory variant armed: ' + sym);
+  });
+  if (attached === 0) {
+    log('no OpenMemory symbol found — enumerate libart exports and extend ' +
+        'the candidate list (see TODO at top of armNative)');
+  }
+})();
+
+log('dex-dump ready: out=' + OUT_DIR + ' min_bytes=' + MIN_DEX_BYTES);

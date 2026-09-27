@@ -224,6 +224,24 @@ def record_event(ws: Path, event: dict) -> int:
 
         # Atomic append via O_APPEND (no temp file, no read-modify-write)
         _append_single_line(p, json.dumps(rec, ensure_ascii=False) + "\n")
+        # Signal stream: the delivery path lands a structured row
+        # (runs/signals.jsonl) instead of only text annotations — the
+        # Δ-estimator's input face. record_event is idempotent (duplicates
+        # returned above), so the signal row is idempotent too. Fail-open:
+        # telemetry never breaks the RECORD write (issue 275 class).
+        _signal_kind = {"fact_written": "deliver",
+                        "fact_verified": "verify"}.get(et)
+        if _signal_kind:
+            try:
+                import signals_stream
+                signals_stream.append(
+                    ws, _signal_kind,
+                    claim=str(payload.get("claim_id")
+                              or payload.get("claim") or "") or None,
+                    fact_id=str(payload.get("fact_id") or "") or None,
+                    event_id=eid)
+            except Exception as exc:  # noqa: BLE001 — signal never breaks RECORD
+                warn("signal_stream_append", f"{type(exc).__name__}: {exc}")
         return seq
 
 

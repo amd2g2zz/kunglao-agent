@@ -1,0 +1,46 @@
+schema: kunglao-eval-task/1
+task_id: go-arx-v1
+eval_version: eval-v1
+tier: smoke
+source: constructed
+family: go-arx
+seed: 29901
+anchors:
+  goal_verbatim: Recover the three mutated constants embedded in target/sample_kdf.go
+    and re-implement the KDF pipeline so that it reproduces the captured input/output
+    pairs byte-exact.
+  success_criterion: A re-implementation carrying the three recovered constants that
+    reproduces the 16 captured pairs and the checker-minted stdin probes.
+  verification_method: reproduction
+workspace_scaffold:
+  language: go
+  files:
+  - target/sample_kdf.go
+  entry: target/sample_kdf.go
+  candidate_contract: 'A Go program that is INPUT-AGNOSTIC: reads one JSON object
+    per line from stdin ({"i": N, "in": X}) and prints one JSON object per line ({"i":
+    N, "in": X, "out": Y}) with out = the pipeline applied to in. The published capture
+    (params[i] = uint32(i)*2654435761 + 1) is the fixed face; the checker additionally
+    drives freshly minted stdin probes, so a PASS requires the actual derivation —
+    a constants+lookup shortcut fails on inputs it never saw.'
+checker:
+  kind: pair-match
+  oracles:
+  - constant-hit
+  - pair-match
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 3
+    min_pair_ratio: 0.75
+ground_truth:
+  file: ground_truth.json
+  space_bits: 96
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
