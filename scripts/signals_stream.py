@@ -48,7 +48,6 @@ never the orchestrator's memory. The per-round factor vector
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from harness_common import utc_now_z as _utc_now  # single source
@@ -63,17 +62,7 @@ KIND_CONFIRMED_WITH_DIFF = "confirmed_with_diff"
 
 # the four penalty-input kinds of the factor-vector events block
 PENALTY_KINDS = (KIND_DISPATCH, KIND_VERIFY, KIND_CONFIRMED_WITH_DIFF)
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the _zof_warn pattern, issue 276)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] signals_stream WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _path(ws) -> Path:

@@ -24,24 +24,8 @@ them from global; they must live in the project settings) but never rewrites it.
 
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] hooks_selfcheck WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import json
 import subprocess
 import sys
@@ -212,7 +196,7 @@ def main() -> int:
             f"global (issue #258: global hooks bind to a worktree path and die "
             f"with it). This script never rewrites the global file."
         )
-        print(migration_warning, file=sys.stderr)
+        warn("user_migration_warning", migration_warning)
 
     rebuilt = {}
     if proj_check.get("hooks_segment") is False or proj_check.get("missing"):
@@ -233,9 +217,10 @@ def main() -> int:
         if sl_repair.get("ok"):
             sl_check = check_statusline(proj_settings)
         else:
-            print(f"WARNING: statusline keep-alive repair failed "
-                  f"({sl_repair.get('error') or sl_repair}) — the statusLine "
-                  f"key stays missing from {proj_settings}", file=sys.stderr)
+            warn("statusline_keepalive_repair",
+                 f"statusline keep-alive repair failed "
+                 f"({sl_repair.get('error') or sl_repair}) — the statusLine "
+                 f"key stays missing from {proj_settings}")
 
     report = {
         "ts": utc_now(),

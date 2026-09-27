@@ -33,7 +33,6 @@ process rewards.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import yaml
@@ -47,17 +46,7 @@ BANDS = ("SETTLED_GREEN", "SETTLED_RED", "ADVERSE", "HELPED", "NEUTRAL")
 NEUTRAL_BAND = "NEUTRAL"
 POLARITY_ALPHA_BANDS = frozenset({"SETTLED_GREEN", "HELPED"})
 POLARITY_BETA_BANDS = frozenset({"SETTLED_RED", "ADVERSE"})
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] reward_settlement WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def repo_rules_path() -> Path:

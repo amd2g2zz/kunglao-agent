@@ -45,7 +45,6 @@ Fail-open on reads (missing/dirty ledger = empty), loud on write rejections
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from harness_common import utc_now_z as _utc_now
@@ -65,17 +64,7 @@ ROLLOUT_KINDS: dict[str, str] = {
     KIND_SELF_DISTILL: "self-distillation rollout, lesson/card unit",
     KIND_HYBRID_DISTILL: "hybrid distill rollout — producer is the distill engine",
 }
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] rollout_ledger WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def register_kind(kind: str, note: str = "") -> bool:

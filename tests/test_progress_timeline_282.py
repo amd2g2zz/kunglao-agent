@@ -511,7 +511,9 @@ def test_unreadable_ledger_warns_on_stderr(tmp_path, capsys):
     status = pt.render_and_repair(ws)
     assert status["status"] == "skipped"
     err = capsys.readouterr().err
-    assert "warning" in err and "unreadable" in err
+    # the fail-open trace moved onto the canonical warn face (logging-arch
+    # batch): the standardized token replaces the old lowercase "warning:".
+    assert "WARN (fail-open)" in err and "unreadable" in err
 
 
 def test_damaged_marker_does_not_pollute_the_sidecar(tmp_path):

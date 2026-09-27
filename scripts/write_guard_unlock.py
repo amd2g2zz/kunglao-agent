@@ -24,6 +24,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+
 
 def _ledger(ws, action, artifact, detail):
     try:
@@ -31,7 +33,7 @@ def _ledger(ws, action, artifact, detail):
         kunglao_log.emit(ws, actor="operator", action=action,
                          artifact=artifact, detail=str(detail)[:2000])
     except Exception as exc:  # noqa: BLE001 — log never breaks the CLI
-        print(f"write_guard_unlock: warning: {exc}", file=sys.stderr)
+        warn("unlock", f"{exc}")
 
 
 def _waiver_path(ws: Path) -> Path:

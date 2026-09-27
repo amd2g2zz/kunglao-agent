@@ -89,7 +89,11 @@ def test_module_imports_stay_pure_no_probing():
             imported |= {a.name.split(".")[0] for a in node.names}
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
-    assert imported <= {"__future__", "re", "dataclasses", "sys", "json"}, imported
+    # kunglao_log joins the allowlist with the logging-architecture batch:
+    # the sanctioned fail-open trace sink (stdlib-only, no repo probing) —
+    # warn() must be reachable without breaking the no-probing posture.
+    assert imported <= {"__future__", "re", "dataclasses", "sys", "json",
+                        "kunglao_log"}, imported
 
 
 # ---------- finding 2 (issue 225): case/separator-folded package match ----------

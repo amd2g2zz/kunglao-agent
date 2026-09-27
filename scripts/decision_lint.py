@@ -30,6 +30,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+
 # idapro binding wheels ship for CPython 3.8-3.13; 3.14 has no wheel and
 # the binding refuses to import against it.
 _MAX_IDAPRO_PY = (3, 13)
@@ -193,8 +195,9 @@ def _read_facts(raw: bytes) -> dict | None:
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        print(f"warning: facts stdin is not valid UTF-8 ({exc}) — no facts "
-              f"read; an unreadable fact set never blocks", file=sys.stderr)
+        warn("facts_stdin_utf8",
+             f"facts stdin is not valid UTF-8 ({exc}) — no facts read; an "
+             f"unreadable fact set never blocks")
         return {}
     try:
         facts = json.loads(text or "{}")

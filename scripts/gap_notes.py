@@ -41,7 +41,6 @@ note. PASS settlements emit nothing — only failures reflect.
 from __future__ import annotations
 
 import re
-import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -70,17 +69,7 @@ REFUTED_ARTIFACT_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 # context budget: the read face returns the most recent notes only.
 MAX_NOTES_PER_DISPATCH = 4
 _DIGEST_LEN = 12
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] gap_notes WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _now() -> str:

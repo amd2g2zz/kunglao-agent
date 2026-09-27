@@ -56,6 +56,8 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, replace
+
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from pathlib import Path
 
 import yaml
@@ -376,8 +378,8 @@ def _derive_from_task_spec(ws: Path) -> EnvManifest:
         import toolchain as tc
         spec = tc.load_task_spec(Path(ws))
     except ValueError as exc:
-        print(f"WARNING: {exc} — env manifest stays conservative "
-              f"(VM required)", file=sys.stderr)
+        warn("manifest_conservative_fallback",
+             f"{exc} — env manifest stays conservative (VM required)")
         return DEFAULT_MANIFEST
     if spec is None:
         return DEFAULT_MANIFEST
@@ -461,14 +463,14 @@ def layout_conventions(base: Path) -> LayoutConventions:
     try:
         raw = load_manifest(path.parent)
     except ValueError as exc:
-        print(f"WARNING: {exc} — layout falls back to default conventions "
-              f"", file=sys.stderr)
+        warn("layout_default_fallback",
+             f"{exc} — layout falls back to default conventions ")
         return DEFAULT_LAYOUT
     try:
         return _parse_layout(raw.get("layout"))
     except ValueError as exc:
-        print(f"WARNING: {exc} — layout falls back to default conventions "
-              f"", file=sys.stderr)
+        warn("layout_default_fallback",
+             f"{exc} — layout falls back to default conventions ")
         return DEFAULT_LAYOUT
 
 
@@ -483,8 +485,8 @@ def vm_requirement_for(ws: Path) -> tuple[bool, str] | None:
     try:
         m = resolve(ws)
     except ValueError as exc:
-        print(f"WARNING: {exc} — 'VM required' line stays unconditional "
-              f"", file=sys.stderr)
+        warn("vm_line_unconditional",
+             f"{exc} — 'VM required' line stays unconditional ")
         return None
     if m.source == "default":
         return None
