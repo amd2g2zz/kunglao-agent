@@ -33,18 +33,6 @@ TOOL_SEARCH = REPO_ROOT / "tools" / "tool-search.py"
 
 import subagent_review as sr  # noqa: E402
 
-FAKE_CLAUDE_JSON = {
-    "mcpServers": {
-        "camoufox": {
-            "type": "stdio", "command": "uvx", "args": ["camoufox-mcp"],
-            "env": {"CAMOUFOX_API_KEY": "sk-e2e-do-not-leak"},
-        },
-        "gitnexus": {"type": "stdio", "command": "gitnexus",
-                     "args": ["mcp"]},
-    },
-    "projects": {},
-}
-
 CLI_FIXTURE = '''#!/usr/bin/env python3
 """alpha_tool.py - fixture CLI."""
 if __name__ == "__main__":
@@ -63,14 +51,20 @@ def run_py(script: Path, *args: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def mock_env(tmp_path: Path) -> dict:
-    """The mock mcp face + the sandbox repo root consuming it."""
+    """The mock mcp face + the sandbox repo root consuming it.
+
+    #408: all mock servers live in the WORKSPACE .mcp.json (project scope)
+    — the user-global ~/.claude.json surface is deleted and never read."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    claude_json = tmp_path / "fake-claude.json"
-    claude_json.write_text(json.dumps(FAKE_CLAUDE_JSON), encoding="utf-8")
-    # third registration surface: playwright lives in the workspace .mcp.json
     (ws / ".mcp.json").write_text(
         json.dumps({"mcpServers": {
+            "camoufox": {
+                "type": "stdio", "command": "uvx", "args": ["camoufox-mcp"],
+                "env": {"CAMOUFOX_API_KEY": "sk-e2e-do-not-leak"},
+            },
+            "gitnexus": {"type": "stdio", "command": "gitnexus",
+                         "args": ["mcp"]},
             "playwright": {"type": "stdio", "command": "npx",
                            "args": ["@playwright/mcp"]}}}),
         encoding="utf-8")
@@ -85,23 +79,24 @@ def mock_env(tmp_path: Path) -> dict:
     # tool-search requires the INTERNAL index to exist next to the ext one
     (root / "tools" / "_INDEX.yaml").write_text(
         "schema: tools-index/1\ntools: []\n", encoding="utf-8")
-    return {"ws": ws, "claude_json": claude_json, "root": root}
+    return {"ws": ws, "root": root}
 
 
 def test_mock_mcp_face_artifact_to_evidence_e2e(mock_env: dict) -> None:
     """The one-chain test (#515 acceptance 3): config → probe artifact in
-    evidence/ → ext index → --find hit → Gate 5 tools_used resolution."""
-    ws, claude_json, root = (mock_env["ws"], mock_env["claude_json"],
-                             mock_env["root"])
+    evidence/ → ext index → --find hit → Gate 5 tools_used resolution.
+    #408: the probe inventory rides the workspace .mcp.json only."""
+    ws, root = mock_env["ws"], mock_env["root"]
 
     # -- 1. probe: enumerate the mock face, artifact lands in evidence/ --
-    r = run_py(MCP_PROBE, str(ws), "--mcp-inventory",
-               "--claude-json", str(claude_json))
+    r = run_py(MCP_PROBE, str(ws), "--mcp-inventory")
     assert r.returncode == 0, r.stderr
     inv = json.loads(r.stdout)
     names = {s["name"] for s in inv["servers"]}
-    assert names == {"camoufox", "gitnexus", "playwright"}, (
-        "the three mock servers must enumerate (global + workspace surfaces)")
+    assert names == {"camoufox", "gitnexus", "playwright",
+                     "camoufox-reverse"}, (
+        "the three mock servers + the plugin-carried camoufox-reverse must "
+        "enumerate (#408 surfaces: workspace + plugin)")
     assert "sk-e2e-do-not-leak" not in r.stdout, "secret hygiene on the e2e face"
     evidence = ws / "evidence"
     evidence.mkdir()

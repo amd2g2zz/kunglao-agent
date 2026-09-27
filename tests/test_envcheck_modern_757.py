@@ -23,6 +23,7 @@ import pytest
 import toolchain as tc  # pytest.ini pythonpath = . hooks scripts tools
 import init_channel_default as icd
 import platform_paths  # noqa: F401 — mirrors test_env_check imports
+import mcp_probe  # #408: the approval writer used by the workspace-surface pin
 
 
 # ---------------------------------------------------------------------------
@@ -444,14 +445,20 @@ class TestT2McpRegistered:
 
     def test_web_camoufox_missing_fail_names_register_command(
             self, monkeypatch, tmp_path):
-        """web 缺 camoufox → FAIL（T3 将其降级为 degraded，不 blocking）。"""
+        """web camoufox FAIL shape, post-#408: the server ships with the
+        plugin, so the reachable FAIL is the #408 pending-forever approval
+        trap — a workspace-scope entry with no workspace approval flag
+        FAILs naming the sudo-free remediation."""
         import env_check
         ws = _mk_ws(tmp_path, "web")
-        _claude_json(monkeypatch, tmp_path, {})
+        (ws / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {
+                "camoufox-reverse": {"command": "python"}}}),
+            encoding="utf-8")
         status, detail = env_check.check_mcp_registered(ws, "web")
         assert status == "FAIL"
         assert "camoufox-reverse" in detail
-        assert "claude mcp add camoufox-reverse" in detail
+        assert "enableAllProjectMcpServers" in detail
 
     def test_android_no_hard_expectation_info_pass(self, monkeypatch, tmp_path):
         import env_check
@@ -463,7 +470,9 @@ class TestT2McpRegistered:
 
     def test_desktop_either_decompiler_mcp_warn_unverified(
             self, monkeypatch, tmp_path):
-        """#474 同口径: 注册 ≠ capability — 上限就是 WARN unverified。"""
+        """#474 同口径: 注册 ≠ capability — 上限就是 WARN unverified。
+        #408: seeds ride the workspace .mcp.json (the deleted user-global
+        surface stays invisible)."""
         import env_check
         for i, servers in enumerate((
                 {"ghidra": {"command": "b"}},
@@ -471,7 +480,12 @@ class TestT2McpRegistered:
                 {"GHIDRA": {}},  # case-insensitive matching
         ), start=1):
             ws = _mk_ws(tmp_path / f"d{i}", "windows")
-            _claude_json(monkeypatch, tmp_path / f"c{i}", servers)
+            (ws / ".mcp.json").write_text(
+                json.dumps({"mcpServers": servers}), encoding="utf-8")
+            settings = ws / ".claude" / "settings.json"
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            settings.write_text(json.dumps(
+                {"enableAllProjectMcpServers": True}), encoding="utf-8")
             status, detail = env_check.check_mcp_registered(ws, "windows")
             assert status == "WARN", (servers, detail)
             assert "unverified" in detail.lower()
@@ -486,14 +500,16 @@ class TestT2McpRegistered:
         assert "Ghidra" in detail and "ida-pro-vm" in detail
 
     def test_workspace_dotjson_surface_counts(self, monkeypatch, tmp_path):
-        """workspace <ws>/.mcp.json 是第三注册面（#316）。"""
+        """workspace <ws>/.mcp.json 是 sanctioned 注册面（#316/#408）:
+        a case-insensitive workspace entry + the workspace approval flag
+        verifies."""
         import env_check
         ws = _mk_ws(tmp_path, "web")
-        _claude_json(monkeypatch, tmp_path, {})
         (ws / ".mcp.json").write_text(
             json.dumps({"mcpServers": {
                 "Camoufox-Reverse": {"command": "python"}}}),
             encoding="utf-8")
+        mcp_probe.ensure_project_mcp_approval(ws)
         status, _detail = env_check.check_mcp_registered(ws, "web")
         assert status == "PASS"
 
@@ -766,7 +782,7 @@ def test_camoufox_fail_detail_delegates_to_fix_text(monkeypatch, tmp_path):
         tc.FIXES, "mcp:camoufox-reverse",
         tc.ToolMeta(fix="SENTINEL-CAMOUFOX-FIX", description="d", url=None))
     import mcp_probe
-    monkeypatch.setattr(mcp_probe, "registered_names", lambda *a, **k: set())
+    monkeypatch.setattr(mcp_probe, "registered_names", lambda *a, **k: {})
     status, detail = env_check.check_mcp_registered(tmp_path, "web")
     assert status == "FAIL"
     assert "SENTINEL-CAMOUFOX-FIX" in detail

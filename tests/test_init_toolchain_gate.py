@@ -252,23 +252,19 @@ def test_retry_idempotent_after_cleanup(gate_ws):
 
 # ---------- #407: MCP-first decompiler gate (ida-pro-vm provider) ----------
 
-def _write_ida_pro_vm_claude_json(path):
-    import json
-    path.write_text(json.dumps({
-        "mcpServers": {
-            "sequential-thinking": {"type": "stdio", "command": "st", "args": []},
-            "ida-pro-vm": {"type": "http", "url": "http://localhost:13337"},
-        },
-    }), encoding="utf-8")
-
-
 def test_init_decompiler_passes_via_ida_pro_vm_mcp(gate_ws, tmp_path):
     """#407: ida-pro-vm registered -> the decompiler + mcp:ghidra HARD checks
     PASS (MCP-first): the toolchain gate must NOT refuse on them, even in the
-    hostile env where every CLI tool is absent."""
-    claude_json = tmp_path / "claude.json"
-    _write_ida_pro_vm_claude_json(claude_json)
-    r = _run_init(gate_ws, ["--type", "windows"], claude_json=claude_json)
+    hostile env where every CLI tool is absent. #408: the registration rides
+    the workspace .mcp.json (the user-global surface is deleted)."""
+    (gate_ws / ".mcp.json").write_text(json.dumps({
+        "mcpServers": {
+            "sequential-thinking": {"type": "stdio", "command": "st",
+                                    "args": []},
+            "ida-pro-vm": {"type": "http", "url": "http://localhost:13337"},
+        },
+    }), encoding="utf-8")
+    r = _run_init(gate_ws, ["--type", "windows"])
     out = r.stdout + r.stderr
     assert "[FAIL] decompiler" not in out, \
         f"decompiler must PASS via ida-pro-vm MCP: {out}"

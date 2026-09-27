@@ -297,9 +297,13 @@ class TestDecompilerLaneConditional:
             self, clean_env, ws, monkeypatch):
         """Acceptance: a task declaring the ida-pro-vm MCP lane passes the
         decompiler face with NO local IDA — and the local ladder is never
-        even consulted (never a local install/license demand)."""
+        even consulted (never a local install/license demand). #408: the
+        registration rides the workspace .mcp.json."""
         srv, port = _listener()
         with srv:
+            (ws / ".mcp.json").write_text(json.dumps(
+                {"mcpServers": {"ida-pro-vm": {}, "sequential-thinking": {}}}),
+                encoding="utf-8")
             monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(_isolated_registry(
                 ws.parent, {"ida-pro-vm": {}, "sequential-thinking": {}})))
             monkeypatch.setattr(
@@ -354,10 +358,14 @@ class TestDecompilerLaneConditional:
 
         def fake_attempt(argv):
             attempts.append(list(argv))
-            data = json.loads(reg.read_text(encoding="utf-8"))
+            # #408: the sanctioned registration surface is the workspace
+            # .mcp.json (the AGENT-DO actuator sweep lands in the toolchain
+            # stream — the re-verify face reads project scope only).
+            data = json.loads((ws / ".mcp.json").read_text(
+                encoding="utf-8")) if (ws / ".mcp.json").exists() else {}
             data.setdefault("mcpServers", {})["ida-pro-vm"] = {
                 "type": "http", "url": f"http://127.0.0.1:{port}"}
-            reg.write_text(json.dumps(data), encoding="utf-8")
+            (ws / ".mcp.json").write_text(json.dumps(data), encoding="utf-8")
             return True, ""
 
         monkeypatch.setattr(tc, "_attempt_mcp_register", fake_attempt)
@@ -513,9 +521,13 @@ class TestMcpAgentDoFace:
         monkeypatch.setenv("KUNGLAO_AGENT_DO", "1")
 
         def fake_attempt(argv):
-            data = json.loads(reg.read_text(encoding="utf-8"))
+            # #408: the sanctioned registration surface is the workspace
+            # .mcp.json (the AGENT-DO actuator sweep lands in the toolchain
+            # stream — the re-verify face reads project scope only).
+            data = json.loads((ws / ".mcp.json").read_text(
+                encoding="utf-8")) if (ws / ".mcp.json").exists() else {}
             data.setdefault("mcpServers", {})["sequential-thinking"] = {}
-            reg.write_text(json.dumps(data), encoding="utf-8")
+            (ws / ".mcp.json").write_text(json.dumps(data), encoding="utf-8")
             return True, ""
 
         monkeypatch.setattr(tc, "_attempt_mcp_register", fake_attempt)

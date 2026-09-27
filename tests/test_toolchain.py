@@ -851,7 +851,9 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
     FAIL; honest capability verdict is #474's --capability business, not the
     registry read)."""
     _only_st_claude_json(kunglao_ws)
-    (kunglao_ws.parent / "fake-claude.json").write_text(json.dumps({
+    # #408: MCP registrations ride the workspace .mcp.json — the legacy
+    # fake ~/.claude.json (KUNGLAO_CLAUDE_JSON poison) stays ignored.
+    (kunglao_ws / ".mcp.json").write_text(json.dumps({
         "mcpServers": {
             "sequential-thinking": {},
             "gitnexus": {},

@@ -346,38 +346,57 @@ def check_vm_channel(ctx: dict) -> tuple[str, str] | None:
 
 def _mcp_decompiler_supply(ws: Path) -> bool:
     """MCP-first decompiler supply face (#407 口径): ghidra OR ida-pro-vm in
-    any registration surface. Fail-open on config read errors."""
+    a #408 surface (workspace .mcp.json / plugin-carried). Fail-open on
+    config read errors."""
     try:
         import mcp_probe
-        registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+        registered = mcp_probe.registered_names(None, ws)
         return "ghidra" in registered or "ida-pro-vm" in registered
     except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
         return False
 
 
 def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
-    """MCP registration row (#757 T2 / issue F2) — mcp_probe 口径.
+    """MCP registration row (#757 T2 / issue F2) — mcp_probe 口径, #408 scope.
 
-    Three registration surfaces via mcp_probe.registered_names (user-level
-    ~/.claude.json global + project-scoped, workspace <ws>/.mcp.json;
-    KUNGLAO_CLAUDE_JSON injects the user surface for tests):
+    Registration surfaces: workspace <ws>/.mcp.json + plugin-carried servers
+    ONLY (#408 — the ~/.claude.json probe path is deleted; the probe never
+    reads it):
 
-    - web           : camoufox-reverse expected — the ONLY manifest member for
-                      labs (#728). Missing -> FAIL (+ register command; T3
-                      grades it degraded, never blocking).
+    - web           : camoufox-reverse expected — it SHIPS WITH THE PLUGIN
+                      (#408), so the row PASSes by plugin carriage; a
+                      workspace-scope entry without the workspace approval
+                      flag (`enableAllProjectMcpServers`) is the #408
+                      pending-forever trap -> FAIL naming the sudo-free fix.
     - android       : NO hard MCP expectation -> PASS with info (gitnexus is
                       verified by the toolchain face).
     - windows/linux : ghidra/ida-pro-vm either registered -> WARN "capability
                       unverified" (#474 same口径: a registry read cannot reach
                       into the MCP session; tools verify post-connect).
                       Neither -> FAIL naming Ghidra install / ida-pro-vm MCP.
+    Any workspace-scope registration without the approval flag FAILs on
+    every type — pending-forever approval is a direct blocker, not a nit.
     """
     ptype = project_type if project_type in init_state.VALID_TYPES else "windows"
     try:
         import mcp_probe
-        found = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+        found = mcp_probe.registered_names(None, ws)
     except Exception as exc:  # noqa: BLE001 — registry unreadable ≠ crash
         return ("FAIL", f"MCP registry probe failed ({exc}) — supply unverified")
+    # #408 CRITICAL: approval state rides EVERY verdict. Workspace-scope
+    # servers + no `enableAllProjectMcpServers` = they hang "pending
+    # approval" forever (the approval record lives in ~/.claude.json, which
+    # may be root-owned — unreadable by construction now).
+    ws_scoped = [n for n, srcs in found.items() if "workspace" in srcs]
+    if ws_scoped and not mcp_probe.project_mcp_approval(ws):
+        return ("FAIL",
+                f"workspace-scope MCP server(s) "
+                f"{', '.join(sorted(ws_scoped)[:4])} pending approval "
+                f"FOREVER — the approval record lives in ~/.claude.json "
+                f"(may be root-owned). Sudo-free fix: set "
+                f"\"enableAllProjectMcpServers\": true in "
+                f"{ws / '.claude' / 'settings.json'} (re-run "
+                f"scripts/hooks_selfcheck.py — it auto-repairs this)")
     if ptype == "web":
         if "camoufox-reverse" in found:
             return ("PASS",
