@@ -41,3 +41,49 @@ subcommands:
     missing-args: "single positional — a missing workspace is the zero-args case"
     example: "/kunglao-agent:upgrade ~/cases/synth-dropper"
     next-step: "legacy workspace behind the skill package → /kunglao-agent:upgrade"
+# CLI face (issue #416): the same operations behind the `kunglao` console
+# script (scripts/kunglao.py, registered under [project.scripts] in
+# pyproject.toml; `uv sync` in the repo root installs it). The slash-command
+# registry above is the #456 UX single source, linted by
+# tests/test_subcommand_zeroarg_ux.py — this `cli:` map is its CLI-face
+# sibling, linted by tests/test_entry_registration_416.py against the
+# router's actual add_parser set. Fields per record: usage (console command
+# line), summary (router --help wording), slash (operator slash-command face
+# that owns the operation).
+cli:
+  decide:
+    usage: "kunglao decide <workspace> [--json]"
+    summary: "convergence decision (M1)"
+    slash: "driven inside /kunglao-agent:analysis"
+  tick:
+    usage: "kunglao tick <workspace>"
+    summary: "heartbeat tick chain (M5)"
+    slash: "driven inside /kunglao-agent:analysis"
+  verify:
+    usage: "kunglao verify <workspace> <fact_id> [--json]"
+    summary: "M3 VERIFY (L1 mechanical + L2 redteam)"
+    slash: "driven inside /kunglao-agent:analysis"
+  record:
+    usage: "kunglao record <workspace> --event '<json>'"
+    summary: "M4 RECORD (ledger idempotent append)"
+    slash: "driven inside /kunglao-agent:analysis"
+  health:
+    usage: "kunglao health <workspace>"
+    summary: "convergence health (M5)"
+    slash: "driven inside /kunglao-agent:analysis"
+  resume:
+    usage: "kunglao resume <workspace> [--json]"
+    summary: "crash/reboot recovery brief (read-only)"
+    slash: "/kunglao-agent:resume"
+  check-stale:
+    usage: "kunglao check-stale <workspace> [--resolve]"
+    summary: "stale-workspace gate (rc 0/5) - run before analysis/resume on a workspace whose template stamp may trail the skill"
+    slash: "guards /kunglao-agent:analysis"
+  upgrade:
+    usage: "kunglao upgrade <workspace> [--dry-run]"
+    summary: "workspace framework-scaffold migration"
+    slash: "/kunglao-agent:upgrade"
+  analysis:
+    usage: "kunglao analysis <workspace>"
+    summary: "analysis entry gate (rc 0 clear / 5 stale / 6 heartbeat verify failed)"
+    slash: "/kunglao-agent:analysis"

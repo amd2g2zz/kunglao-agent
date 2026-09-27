@@ -119,7 +119,8 @@ def mark_dependents(ws: Path, dry_run: bool = False) -> list:
         import plan_epistemics as _pe
         undermined = _pe.semantic_undermined(ws)
     except Exception as exc:  # noqa: BLE001 — observability, then continue
-        print(f"  ! semantic face unavailable ({exc}) — structural walk only")
+        print(f"  ! semantic face unavailable ({exc}) — structural walk only",
+              file=sys.stderr)
 
     semantic_ids = set()
     for row in undermined:
