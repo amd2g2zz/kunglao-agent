@@ -5,7 +5,7 @@ Phase 1 of the RLVR unification froze the CURRENT numerical outputs of the
 RLVR statistical surface as golden pins; the Phase-2 numpy migration must
 reproduce them BIT-EXACTLY. A pin failure is a STOP, never a tolerance
 tweak; replacing a golden requires an owner ruling on a new sealed segment
-(issue #420 constraint section). Pins are written against the hand-rolled
+(issue 420 constraint section). Pins are written against the hand-rolled
 implementations and PASS on them.
 
 Pinned categories (issue 420 Phase 1 item 3):
