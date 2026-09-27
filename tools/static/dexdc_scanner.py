@@ -61,6 +61,17 @@ from common import write_evidence  # noqa: E402  (#863 Family J: single source)
 
 # UTF-8 stdout contract (#317): non-ASCII output must not crash a GBK console.
 
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] dexdc_scanner WARN (fail-open): "
+          f"{op}: {reason}", file=sys.stderr)
+
 PYO3_MODULE = "dex_decompiler"
 CLI_BINARY = "dex-decompile"
 DEFAULT_SEEDS_FILE = (Path(__file__).resolve().parent.parent.parent /
@@ -87,8 +98,8 @@ def detect() -> dict[str, Any]:
         return {"face": "pyo3",
                 "version": getattr(module, "__version__", None),
                 "module": module, "bin": None}
-    except ImportError:
-        pass
+    except ImportError as exc:
+        warn("pyo3_face_import", f"{type(exc).__name__}: {exc}")
     bin_path = shutil.which(CLI_BINARY)
     if bin_path:
         version = None
@@ -96,8 +107,8 @@ def detect() -> dict[str, Any]:
             rc, out, _ = _run([bin_path, "--version"], timeout=10)
             if rc == 0:
                 version = out.strip() or None
-        except (OSError, subprocess.TimeoutExpired):
-            pass
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            warn("cli_version_probe", f"{type(exc).__name__}: {exc}")
         return {"face": "cli", "version": version, "module": None,
                 "bin": bin_path}
     return {"face": None, "version": None, "module": None, "bin": None}
@@ -164,7 +175,8 @@ def _load_seeds(seeds: list[str] | None, seeds_file: Path | None) -> list[str]:
         entries = data.get("seeds") if isinstance(data, dict) else None
         return [str(e.get("api")) for e in entries if e.get("api")] \
             if isinstance(entries, list) else []
-    except (OSError, ValueError, yaml.YAMLError, ImportError):
+    except (OSError, ValueError, yaml.YAMLError, ImportError) as exc:
+        warn("taint_seeds_load", f"{type(exc).__name__}: {exc}")
         return []
 
 
