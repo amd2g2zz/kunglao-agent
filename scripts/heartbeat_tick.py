@@ -86,12 +86,9 @@ def _note(op: str, reason: str) -> None:
         _DEGRADED[op] = reason
 
 
-# #534: observability lifeline — module-level emit on load.
-try:
-    kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
-                             detail="module wired")
-except NameError as exc:
-    _note("module_emit", f"{type(exc).__name__}: {exc}")
+# #534 fix: emit moved into main() after ws resolution — module-level
+# emit always failed (ws only defined inside main()). The _note degradation
+# channel remains available for genuine import-order failures.
 from pathlib import Path
 
 import hook_activation as ha
@@ -360,6 +357,10 @@ def main(argv: list[str] | None = None) -> int:
               "creates one (run kunglao init first)", file=sys.stderr)
         return 2
     ws = _resolve_ws(ws_arg)
+    # #534: emit now fires here (inside main, after ws resolved) — fires once per
+    # tick with the real workspace, replacing the broken module-level emit above.
+    kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
+                     detail="module wired")
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.
