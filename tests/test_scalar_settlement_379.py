@@ -125,7 +125,12 @@ class TestRulesFileV2:
         ALLOW = {"__future__", "json", "sys", "os", "re", "time",
                  "datetime", "pathlib", "typing", "yaml",
                  "rollout_ledger", "harness_common", "kunglao_log",
-                 "reward_settlement"}  # the sibling U2/U3 engine itself
+                 "reward_settlement",  # the sibling U2/U3 engine itself
+                 # issue 420: numpy for the ordered-float reductions in the
+                 # Normal-Gamma pooling (_seq_sum — np.add.accumulate,
+                 # input order, bit-pinned by test_rlvr_bitexact.py). Not a
+                 # model-call path; the U3 wall is unchanged.
+                 "numpy"}
         tree = ast.parse(
             (SCRIPTS / "scalar_settlement.py").read_text(encoding="utf-8"))
         imported: list[str] = []

@@ -40,6 +40,8 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np  # issue 420: ordered-float reductions only (see _seq_sum)
+
 import rollout_ledger as rl
 
 # the round-credit rollout kind — the ledger's OPEN ENUM registration API
@@ -461,6 +463,24 @@ def scalar_observations(ws, kind: str = "task",
     return out
 
 
+def _seq_sum(values) -> float:
+    """Input-order float64 reduction — the settlement determinism axiom
+    ("float sums in input order") as a numpy primitive (issue 420).
+
+    np.add.accumulate is strictly left-to-right IEEE-754 double addition;
+    the prepended 0.0 seed makes it bit-identical to a Python in-order
+    sum for every finite input, and — unlike builtin sum(), which
+    switched floats to Neumaier compensation in 3.12 — identical on
+    every interpreter. np.sum / np.add.reduce are FORBIDDEN on this
+    path: pairwise summation reorders the bits, and the pins in
+    tests/test_rlvr_bitexact.py are the wall.
+    """
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 0:
+        return 0.0
+    return float(np.add.accumulate(np.concatenate(([0.0], arr)))[-1])
+
+
 def _ng_from_stats(n: int, xbar: float, m2: float,
                    mu0: float, kappa0: float, a0: float, b0: float) -> dict:
     """Normal-Gamma conjugate update from sufficient statistics
@@ -485,12 +505,21 @@ def normal_gamma_update(observations: list[float],
     """Normal-Gamma conjugate update over scalar observations (the
     exponential-family posterior for a continuous reward; NOT
     Beta-Bernoulli — that family counts binary outcomes). Documented weak
-    prior (mu=0.5, one pseudo-observation). Pure and deterministic."""
+    prior (mu=0.5, one pseudo-observation). Pure and deterministic.
+
+    numpy adoption (issue 420, the pattern-setter): the mean and the
+    sum of squared deviations run through ``_seq_sum`` — input-order,
+    bit-identical to the former hand-rolled loop, pinned by
+    tests/test_rlvr_bitexact.py. The per-element ``** 2`` stays Python
+    float pow on purpose: the pins ride on libm pow rounding, and
+    np.square / x*x is an IEEE multiply that differs from pow by 1 ulp
+    on some inputs (no behavior change is the adoption contract)."""
     n = len(observations)
     if n == 0:
         return _ng_from_stats(0, 0.0, 0.0, mu0, kappa0, a0, b0)
-    xbar = sum(float(x) for x in observations) / n
-    m2 = sum((float(x) - xbar) ** 2 for x in observations)
+    arr = np.asarray(observations, dtype=np.float64)
+    xbar = _seq_sum(arr) / n
+    m2 = _seq_sum([d ** 2 for d in (arr - xbar).tolist()])
     return _ng_from_stats(n, xbar, m2, mu0, kappa0, a0, b0)
 
 
@@ -518,9 +547,14 @@ def merge_normal_gamma_posts(posts: list[dict],
         stats.append((n_i, xbar_i, m2_i))
     if not stats:
         return _ng_from_stats(0, 0.0, 0.0, mu0, kappa0, a0, b0)
-    n_all = sum(n for n, _, _ in stats)
-    xbar_all = sum(n * x for n, x, _ in stats) / n_all
-    m2_all = sum(m2 + n * (x - xbar_all) ** 2 for n, x, m2 in stats)
+    # numpy adoption (issue 420): the pooled float reductions run through
+    # _seq_sum (input order, bit-identical to the former builtin sum);
+    # n_all stays an exact integer count; the pooled terms keep scalar
+    # `** 2` (libm pow) semantics per the pin wall.
+    n_all = int(sum(n for n, _, _ in stats))
+    xbar_all = _seq_sum([n * x for n, x, _ in stats]) / n_all
+    m2_all = _seq_sum([m2 + n * (x - xbar_all) ** 2
+                       for n, x, m2 in stats])
     return _ng_from_stats(n_all, xbar_all, m2_all, mu0, kappa0, a0, b0)
 
 
