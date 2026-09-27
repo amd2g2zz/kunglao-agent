@@ -213,7 +213,7 @@ def verify_manifest(archive: Path) -> int:
                         print(f"  SHA MISMATCH: {entry['path']}")
                         bad += 1
             except KeyError:
-                print(f"  NOT FOUND: {entry['path']}")
+                print(f"  NOT FOUND: {entry['path']}", file=sys.stderr)
                 bad += 1
     if bad == 0:
         total = sum(len(v) for k, v in manifest["zones"].items()

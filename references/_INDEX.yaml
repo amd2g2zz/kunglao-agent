@@ -17,7 +17,7 @@ files:
   references/_index-web.md: 865322c3e66bea4354021d5c9abacbfe1557dcc3f2ccdb890b29f486a557f722
   references/contracts/agent-three-state-charter.md: 8719241ce2e1479d770b317598cad3acfd453899dda4b02015851a7acea2cfce
   references/contracts/cli-script-checklist.md: 5119b9be3a005d8a55a73df276eacf3298dfbbea121fe72867fe663a475fc5a5
-  references/contracts/cold-start-contract.md: e2397e0f89d4711998be1295c8389bc50bdee05c54c1273341de16a53c6e15f2
+  references/contracts/cold-start-contract.md: d7766aa74effcfa771e258f7bb83f978554f924ff165126c3cce2bb2aa39fd13
   references/contracts/convergence-loop.md: 4b1414f33ba3219b65b949ba3d2d7f74c85e50e9782aab5467144df4d35dd459
   references/contracts/distill-pipeline.md: 2964b9f9f3d5099441d0b296271f82b941083d00d4e4c284fdddc36be4a460eb
   references/contracts/downstream-contract.md: 6b753a2089cfa7420188bbc907424e5db1de5f6bf7012386124524c7d40e2f9b
@@ -29,7 +29,7 @@ files:
   references/contracts/xml-injection-standard.md: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   references/governance/decision-rights.md: df3711f0f534e54a04f6841f8e0c08bfc8a69ff8f287a5dd9760dac3053f4163
   references/governance/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
-  references/governance/guardrails.md: 33d54810650592c11dd1e5327249023fd87ba7017fbaa7e8ef9e38891d75361b
+  references/governance/guardrails.md: f3a6e4ba3b95bac18a0d503b0d299beb4e2a14594d5d2203228c349e036f5757
   references/governance/mechanisms.md: 70c8771900fc9e47ee7179f1a8f1d8ee5a5a688be09faa0aade054e360bf997f
   references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/orchestration/anomaly-baseline.md: 0ea89669d45fd8ae5ebe9855b591451c8ea6bf239adfc60f81552f356749ae8b
@@ -44,7 +44,7 @@ files:
   references/orchestration/method-constraints.md: 9482e8bbf9a1a1e8ef245866d668d16b64dfde1c95bbd2dcf44d31381965c8f0
   references/orchestration/operational-mechanics.md: af9f2d019f7eed73744568e6ce927d833ffb8beae625db08f2aabb8cf926dd7f
   references/orchestration/tool-inventory.md: 0fefef7fe4a9ac16821a9ab6f78059c437401c6499a5bf6d132654068a529fb6
-  references/orchestration/verify-static-vs-dynamic.md: 008b806f34352a0a23fca6fdd903ad6454197b94bb9fff28ef24b1d129654857
+  references/orchestration/verify-static-vs-dynamic.md: d0d09cc4a86ba86db1ee59d28858f1a150c22676da0a3d5f1d4a8d4ccc707878
   references/re-library/android/case-distilled/_GAP-REPORT-D1.md: eb60a9708ac9f51c9e85088c68a4e2ad148540a253ead91457debf2fdd2b8444
   references/re-library/android/case-distilled/case-constant-fingerprint-attribution.md: a4a89356ff6d90b842389932c7d9e075b439a29dfbd71f2fdf60e628369466da
   references/re-library/android/case-distilled/case-emulation-campaign-discipline.md: 2cd8500cdc47e6d68ec5285779b0f211ab3b0e3feb442b386409897bbd992c17
@@ -111,7 +111,7 @@ files:
   references/re-library/web/risk-control/web-risk-control.md: 0129992b369681e7ec29afbe5c23714b907cc0001c5a79201ae3d374d871aa3b
   references/re-library/web/vm/jsvmp-triage.md: 5046ef868e09cdf2e1eba59caa8bbbf13ba9169071d9bb30be1c4cb3f8b70565
   references/schemas/schema.md: 6de2410a46b805a46296ee0b78b55bb80d57a3132c3c2a3a69dd9b666724c61c
-  references/schemas/state-mapping.md: b3cffe81e0c4e47746ff1af69667fac6c53f056ac16b3171e860e4e1aeff18de
+  references/schemas/state-mapping.md: 43bca1e5717201a544e4246ad1cb07004f00776bc36ae51020778998b2c04dae
 symptom_map:
   F1: references/orchestration/failure-modes/failure-modes-lifecycle.md
   F5: references/orchestration/failure-modes/failure-modes-lifecycle.md

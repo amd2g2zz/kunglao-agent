@@ -21,10 +21,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] anomaly_detector WARN (fail-open): "
+          f"{op}: {reason}", file=sys.stderr)
+
+
 try:
     import yaml  # type: ignore
-except ImportError:  # pragma: no cover
+except ImportError as exc:  # pragma: no cover — optional soft dependency
     yaml = None
+    warn("yaml_soft_dep", f"{type(exc).__name__}: {exc}")
 
 
 DEFAULT_THRESHOLD = 0.7
@@ -253,7 +266,8 @@ def _load_baseline() -> BaselineCorpus:
     """
     try:
         project_root = Path(__file__).resolve().parents[1]  # scripts/ -> root
-    except IndexError:
+    except IndexError as exc:
+        warn("baseline_project_root", f"{type(exc).__name__}: {exc}")
         return BaselineCorpus()
 
     term_freq: Dict[str, int] = {}
@@ -266,7 +280,9 @@ def _load_baseline() -> BaselineCorpus:
         for md in sorted(re_lib.rglob("*.md")):
             try:
                 _ingest_re_library_doc(md, term_freq, pair_freq, path_freq)
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 — fail-open, recorded
+                warn(f"baseline_doc_ingest:{md.name}",
+                     f"{type(exc).__name__}: {exc}")
                 continue  # skip unreadable docs (fail-open)
 
     # Source 2: prior samples (~/.kunglao/samples/) — not yet shipped (#358).
@@ -387,7 +403,8 @@ def _extract_sample_refs(fact_text: str) -> List[str]:
         for m in re.finditer(r"```yaml\s*(.*?)```", fact_text, re.DOTALL):
             try:
                 parsed = yaml.safe_load(m.group(1)) or {}
-            except yaml.YAMLError:
+            except yaml.YAMLError as exc:
+                warn("fact_yaml_block", f"{type(exc).__name__}: {exc}")
                 continue
             if isinstance(parsed, dict):
                 refs = parsed.get("sample_refs")
@@ -425,7 +442,8 @@ def _taint_seed_map() -> dict:
                                 str(e.get("risk", "mid")))
                 for e in (entries or [])
                 if isinstance(e, dict) and e.get("api")}
-    except Exception:  # noqa: BLE001 - fail-open, no table = no scoring
+    except Exception as exc:  # noqa: BLE001 - fail-open, no table = no scoring
+        warn("taint_seed_table", f"{type(exc).__name__}: {exc}")
         return {}
 
 
@@ -446,7 +464,8 @@ def observe_taint(ws, threshold=None) -> List[dict]:
     try:
         data = json.loads((ws / "evidence" / "dexdc_taint.json")
                           .read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        warn("taint_evidence_read", f"{type(exc).__name__}: {exc}")
         return []
     if not isinstance(data, dict) or data.get("status") != "ok":
         return []

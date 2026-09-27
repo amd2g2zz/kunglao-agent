@@ -167,7 +167,8 @@ def _gate5_subagent_review(verbose: bool = True) -> bool:
         sys.path.insert(0, str(REPO_ROOT / "devkit"))
         from subagent_review import check as _subagent_check
     except Exception as exc:
-        print(f"  [fail] subagent_review import error: {exc!r}")
+        print(f"  [fail] subagent_review import error: {exc!r}",
+              file=sys.stderr)
         return False
     rc = _subagent_check()
     # subagent_review.check() returns 0 (pass) or 2 (HARD_PAUSE).
@@ -194,7 +195,8 @@ def _gate6_agents_contract(verbose: bool = True) -> bool:
         sys.path.insert(0, str(REPO_ROOT / "devkit"))
         from agents_lint import check as _agents_check
     except Exception as exc:
-        print(f"  [fail] agents_lint import error: {exc!r}")
+        print(f"  [fail] agents_lint import error: {exc!r}",
+              file=sys.stderr)
         return False
     rc = _agents_check()
     # agents_lint.check() returns 0 (pass) or 1 (violations).
@@ -223,7 +225,8 @@ def _gate7_doc_sync(verbose: bool = True) -> bool:
         sys.path.insert(0, str(REPO_ROOT / "devkit"))
         from doc_sync import check as _doc_sync_check
     except Exception as exc:
-        print(f"  [fail] doc_sync import error: {exc!r}")
+        print(f"  [fail] doc_sync import error: {exc!r}",
+              file=sys.stderr)
         return False
     rc = _doc_sync_check()
     # doc_sync.check() returns 0 (pass), 1 (violations), 2 (HARD_PAUSE).
@@ -284,7 +287,8 @@ def _gate8_governance_binding(verbose: bool = True) -> bool:
         sys.path.insert(0, str(REPO_ROOT / "devkit"))
         from governance_binding import check as _gov_check
     except Exception as exc:
-        print(f"  [fail] governance_binding import error: {exc!r}")
+        print(f"  [fail] governance_binding import error: {exc!r}",
+              file=sys.stderr)
         return False
     rc = _gov_check()
     # governance_binding.check() returns 0 (pass) or 1 (violations).
@@ -306,7 +310,8 @@ def _gate9_discovery_face(verbose: bool = True) -> bool:
         sys.path.insert(0, str(REPO_ROOT / "devkit"))
         from discovery_gate import check as _discovery_check
     except Exception as exc:
-        print(f"  [fail] discovery_gate import error: {exc!r}")
+        print(f"  [fail] discovery_gate import error: {exc!r}",
+              file=sys.stderr)
         return False
     rc = _discovery_check()
     # discovery_gate.check() returns 0 (pass) or 1 (violations).
