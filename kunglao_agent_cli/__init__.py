@@ -30,7 +30,6 @@ the repo root creates an editable install).
 """
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -53,11 +52,14 @@ def load_script_module(filename: str):
 
     scripts/ is inserted on sys.path first so the target's own top-level
     sibling imports (kunglao_verify, _entry, _boot, _hooks_path, ...) keep
-    resolving exactly as when the file is run directly. Modules are cached
-    in sys.modules under a deterministic package-private name, so repeated
-    loads (and tests monkeypatching the target) share one module object.
-    Loading never runs the target: every entry script gates execution behind
-    its __main__ guard (#370 contract).
+    resolving exactly as when the file is run directly, and the by-path
+    load itself DELEGATES to hooks/_path_hygiene.load_module_by_path — the
+    repo's single by-path load authority (#863 Family B), bridged via
+    scripts/_hooks_path (#671: hooks/ is appended, never inserted, so
+    the scripts/ domain keeps rank). The loader is get-or-create on the
+    module name, so repeated loads (and tests monkeypatching the target)
+    share one module object. Loading never runs the target: every entry
+    script gates execution behind its __main__ guard (#370 contract).
     """
     scripts = scripts_dir()
     path = scripts / filename
@@ -66,12 +68,5 @@ def load_script_module(filename: str):
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     modname = "kunglao_agent_cli._target_" + Path(filename).stem.replace("-", "_")
-    if modname in sys.modules:
-        return sys.modules[modname]
-    spec = importlib.util.spec_from_file_location(modname, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"kunglao_agent_cli: cannot build import spec for {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[modname] = module
-    spec.loader.exec_module(module)
-    return module
+    from _hooks_path import load_module_by_path  # #863 Family B delegation
+    return load_module_by_path(modname, path)
