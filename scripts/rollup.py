@@ -141,7 +141,9 @@ def _queue_notes_due(workspace: Path, claim_id: str, terminal_status: str) -> bo
         due_path.write_text(yaml.safe_dump({"due": entries}, allow_unicode=True),
                             encoding="utf-8")
         return True
-    except OSError:
+    except OSError as exc:
+        warn("notes_due_queue_write",
+             f"{type(exc).__name__}: {exc}")
         return False  # fail-open: the rollup's other steps must not block
 
 

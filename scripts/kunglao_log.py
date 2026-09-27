@@ -741,7 +741,7 @@ def emit_result_digest(ws, actor: str, *, claim: str | None = None,
          trace_id=trace_id)
 
 
-def iter_jsonl(lines):
+def iter_jsonl(lines, source: str | None = None):
     """Tolerant JSONL line reader (#863 Family K single source).
 
     Yields parsed values from `lines`, skipping blank lines and lines that
@@ -751,7 +751,12 @@ def iter_jsonl(lines):
     to specific shapes stays with the consumer, byte-equivalent with the
     pre-consolidation loops. Accepts any iterable of str (lists, generators,
     ``reversed(...)``).
-    """
+
+    `source` (optional) names the origin for the record-only tier:
+    when given, dropped-row count is rate-limited-WARNed once at stream
+    end (`jsonl_drop:<source>`); without it the reader stays fully silent
+    (byte-compatible with every pre-existing caller)."""
+    dropped = 0
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -759,15 +764,19 @@ def iter_jsonl(lines):
         try:
             row = json.loads(stripped)
         except ValueError:
+            dropped += 1
             continue
         yield row
+    if source is not None and dropped:
+        warn(f"jsonl_drop:{source}", f"{dropped} unparseable row(s) skipped")
 
 
 def _all_rows(ws: Path) -> list[dict]:
     """Every parseable row across ALL day files, chronological order.
 
     Shared by tail / unattributed_rate / actor_violations — one read path,
-    one tolerance rule (unparseable lines are skipped)."""
+    one tolerance rule (unparseable lines are skipped; record-only:
+    per-file drops and unreadable files leave a rate-limited WARN)."""
     logs = Path(ws) / "runs" / "logs"
     rows: list[dict] = []
     if not logs.is_dir():
@@ -775,9 +784,10 @@ def _all_rows(ws: Path) -> list[dict]:
     for p in sorted(logs.glob("kunglao-*.jsonl")):
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        except OSError as exc:
+            warn(f"day_file_read:{p.name}", f"{type(exc).__name__}: {exc}")
             continue
-        rows.extend(iter_jsonl(text.splitlines()))
+        rows.extend(iter_jsonl(text.splitlines(), source=p.name))
     return rows
 
 

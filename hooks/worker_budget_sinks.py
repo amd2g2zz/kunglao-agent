@@ -499,7 +499,8 @@ def check_env_premise(paths: dict, tier: int = 0,
         return True, ''
     try:
         needed = _env_caps_needed(tier, tools or [])
-    except Exception:  # noqa: BLE001 — vocabulary failure must not block
+    except Exception as exc:  # noqa: BLE001 — vocabulary failure must not block
+        warn('gate_error:env_caps_vocab', f'{type(exc).__name__}: {exc}')
         return True, ''
     if not needed:
         return True, ''
