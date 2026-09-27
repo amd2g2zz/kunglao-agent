@@ -118,12 +118,20 @@ def _is_worker_status_target(rel: Path) -> bool:
 
 
 def _ws_has_live_workers(ws: Path) -> bool:
-    """The #37 canonical worker-liveness source; failure -> not armed."""
+    """The #37 canonical worker-liveness source.
+
+    FAIL_CLOSED (owner ruling 2026-09-28): a liveness-scan ERROR treats
+    the workspace as ARMED (was: not armed) — a guard that cannot see
+    must not wave writes through; the status-first checks then run on
+    their own merits. The accepted tradeoff: a lib outage blocks the
+    affected writes until the wiring is fixed."""
     try:
         n, _stuck = load_hooks_lib().scan_active_workers(ws)
         return bool(n)
-    except Exception:  # noqa: BLE001 — liveness outage must not block writes
-        return False
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn("gate_error:worker_liveness_scan",
+             f"{type(exc).__name__}: {exc}")
+        return True
 
 
 def _load_status_first_state(ws: Path) -> dict:

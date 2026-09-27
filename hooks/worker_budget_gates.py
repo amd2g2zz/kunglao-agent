@@ -291,17 +291,26 @@ def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
     cache — reconcile can clear or leave that cache stale, so reading it made the
     gate and convergence_check disagree on the active count.
 
-    FAIL_OPEN: workspace key missing or scan raises -> allow (a hook must never
-    block dispatch on its own scan failure; that would deadlock the loop).
+    FAIL_POSTURE (owner ruling 2026-09-28): a scan ERROR is fail-closed —
+    the gate REJECTS with the cause (a gate that cannot see must not wave
+    the dispatch through; a buggy gate blocking dispatches until fixed is
+    the accepted tradeoff). A missing workspace key stays a no-op pass
+    (nothing to scan — not an error).
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     if not ws:
         return True, ''
     try:
         n, _stuck = load_hooks_lib().scan_active_workers(Path(ws))
-    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN, verdict unchanged
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
         warn('gate_error:active_workers_scan', f'{type(exc).__name__}: {exc}')
-        return True, ''  # FAIL_OPEN — never block dispatch on scan failure
+        # A gate that cannot see must not wave the dispatch through: the
+        # scan error REJECTS, carrying the cause (blocks dispatches until
+        # the wiring is fixed — the accepted tradeoff).
+        return (False, f'ACTIVE-WORKERS GATE: scan failed '
+                       f'({type(exc).__name__}: {exc}) — '
+                       'gate error is fail-closed; repair the hooks lib '
+                       'wiring before dispatching.')
     if n >= MAX_WORKERS:
         return (False, f'active_workers={n} >= {MAX_WORKERS}')
     return (True, f'active_workers={n}')
@@ -682,17 +691,14 @@ def _prompt_plan_ref(key: str, prompt: str) -> str | None:
 def _plan_contingency_violations(plan_text: str) -> list[str]:
     """#250: per-step if-fails violations of a plan document.
 
-    Thin re-export of plan_epistemics.lint_plan_contingency, import-guarded
-    fail-open (a broken epistemics module must never hard-block dispatch on
-    a defect it cannot name) — consistent with the gate battery's FAIL_OPEN
-    posture for infrastructure errors."""
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import plan_epistemics
-        return plan_epistemics.lint_plan_contingency(plan_text)
-    except Exception:
-        return []
+    Thin re-export of plan_epistemics.lint_plan_contingency. Owner ruling
+    2026-09-28: an infra ERROR here is a gate error — it PROPAGATES to
+    check_worker_plan, which fail-closes with the cause (was: swallowed
+    to [] = silent pass)."""
+    from _path_hygiene import ensure_scripts_path
+    ensure_scripts_path()
+    import plan_epistemics
+    return plan_epistemics.lint_plan_contingency(plan_text)
 
 
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
@@ -769,7 +775,14 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
         # steps carry no if-fails branch is a linear happy-path pipeline
         # (every step assumes the previous succeeded). Legacy inline
         # plans (zero enumerated entries) pass unchanged.
-        contingencies = _plan_contingency_violations(plan_text)
+        try:
+            contingencies = _plan_contingency_violations(plan_text)
+        except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+            warn('gate_error:plan_contingency', f'{type(exc).__name__}: {exc}')
+            return (False, (
+                f'PLAN GATE: contingency lint failed '
+                f'({type(exc).__name__}: {exc}) — gate error is '
+                'fail-closed; repair plan_epistemics before dispatching.'))
         if contingencies:
             return (False, (
                 f'{plan_path.name} is a linear happy-path plan '
@@ -1660,9 +1673,12 @@ def check_tool_search_citation(paths: dict, cid: str | None,
         return (True, '')  # FAIL_OPEN — mirrors check_worker_plan
     try:
         import instrument_menu as _im
-    except Exception as exc:  # noqa: BLE001 — a broken beat must not block
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
         warn("check_tool_search_citation", f"{type(exc).__name__}: {exc}")
-        return (True, f'toolsearch gate unavailable: {type(exc).__name__}')
+        return (False, f'TOOL-SEARCH GATE: unavailable '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair the instrument_menu wiring '
+                       'before dispatching.')
     key = cid.replace('-', '')
     if not _anchor_log_ts_list(Path(ws), key):
         return (True, (f'first dispatch of {cid}: tool-search beat not '
@@ -1951,8 +1967,12 @@ def check_zero_output_circuit(workspace: str | Path, cid: str | None = None,
             'this gate re-checks freshness on every dispatch), or remove '
             'the state file manually as the last-resort escape hatch.'
         ))
-    except Exception:
-        return (True, 'zero-output circuit error - fail-open')
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn('gate_error:zero_output_circuit', f'{type(exc).__name__}: {exc}')
+        return (False, f'ZERO-OUTPUT CIRCUIT: state check failed '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; inspect runs/zero-output-fingerprint.json '
+                       'or repair the gate before dispatching.')
 
 
 # ---------- issue #341: rotation-experiment dispatch gate (C) ----------
@@ -1975,34 +1995,39 @@ ROTATION_REFERENCE_CARD = ('references/re-library/dynamic/'
 
 def load_rotation_flags(ws) -> dict:
     """claim_id -> [subject_slot, ...] from the induction's fired flags.
-    FAIL-OPEN: an absent/corrupt state file means no flags (the induction
-    is advisory; a broken flag store must not block dispatches)."""
+
+    Owner ruling 2026-09-28: a corrupt/unreadable flag store is a gate
+    error, not an empty store — read errors other than bare absence
+    propagate to the caller (the single caller is
+    check_rotation_experiment, which fail-closes). An ABSENT store is
+    the designed no-op (the advisory induction never ran -> no flags);
+    a well-formed but empty store also means no flags."""
+    import json as _json
+    from pathlib import Path as _Path
     try:
-        import json as _json
-        from pathlib import Path as _Path
-        data = _json.loads(
-            (_Path(ws) / ROTATION_STATE_REL).read_text(encoding='utf-8'))
-        rotations = data.get('rotations') if isinstance(data, dict) else None
-        if not isinstance(rotations, dict):
-            return {}
-        flags: dict = {}
-        for key, rec in rotations.items():
-            if not isinstance(rec, dict) or not rec.get('fired'):
-                continue
-            claim, _, slot = str(key).partition('|')
-            claim, slot = claim.strip(), slot.strip()
-            if claim and slot:
-                flags.setdefault(claim, []).append(slot)
-        return flags
-    except (OSError, ValueError):
+        raw = (_Path(ws) / ROTATION_STATE_REL).read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return {}  # never ran — designed no-op, not an error
+    data = _json.loads(raw)
+    rotations = data.get('rotations') if isinstance(data, dict) else None
+    if not isinstance(rotations, dict):
         return {}
-    except Exception:  # noqa: BLE001 — flag-store outage must not block dispatch
-        return {}
+    flags: dict = {}
+    for key, rec in rotations.items():
+        if not isinstance(rec, dict) or not rec.get('fired'):
+            continue
+        claim, _, slot = str(key).partition('|')
+        claim, slot = claim.strip(), slot.strip()
+        if claim and slot:
+            flags.setdefault(claim, []).append(slot)
+    return flags
 
 
 def check_rotation_experiment(paths: dict, cid, prompt: str) -> tuple:
     """(ok, msg) — a dispatch on a rotation-flagged claim REQUIRES the
-    `rotation-experiment:` marker; anything else passes silently."""
+    `rotation-experiment:` marker; anything else passes silently. A
+    flag-store READ ERROR is fail-closed (owner ruling 2026-09-28): the
+    gate cannot see the flags, so it REJECTS with the cause."""
     try:
         if not cid:
             return (True, '')
@@ -2027,6 +2052,9 @@ def check_rotation_experiment(paths: dict, cid, prompt: str) -> tuple:
             'trigger-isolation matrix (per-process / per-session / '
             'per-request / timer), rotation-input source trace.'
         ))
-    except Exception as exc:  # noqa: BLE001 — gate error must not crash the checks loop
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
         warn('gate_error:rotation_check', f'{type(exc).__name__}: {exc}')
-        return (True, '')
+        return (False, f'reject: rotation gate error '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair the rotation flag store '
+                       'before dispatching.')

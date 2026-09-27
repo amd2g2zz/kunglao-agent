@@ -11,7 +11,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: ec999adaea7ead9b65bad9a57dee09e5eee6a89663060ee7bb5fdb8213b63a0a
+    sha256: 97dd38245d8f1fefebbc6d518b8e47ae7789a99457214809a2a3ae39922947e9
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: dcffd63cae0840b3db555b4877d273d3a3e508b34fe5c78a3bf097208fa0bd1b
+    sha256: b732323dffcbd1ca48d0b61c591c93e746284245fdde29ce0ee9dc4f41457ed8
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 8a5729bca35cd484ef53849f1ab93622e60e0e74c800a237389727fba5da0b97
+    sha256: 7cf39873fff0fae75d7a63e74d2c85f73a86da013e3c99e12c9fbc5c41fde5b4
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 0557fba8f034a6a52b465b83d9c4f3777d60b2d02c564e370b4337d7600ee617
+    sha256: b447cdd486d19d024c77c7992065b4f2dd2d144fe5bd242c497cb80b0bf6514e
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 4ced443ecc464f2c5030f6664e1fa21f4d5015c7823b4338dababfedb4bafc65
+    sha256: 621af6f0fa48a93541402ce78373f55c6f6060b8ba637128c097daeb956f1cdc
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -443,7 +443,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 8638adbc6145ead683a99120f03a13d8a647bad2cf75d40eea9da8f9f8158e85
+    sha256: 36919b54f607823d23a55e72ead374776fb0edfabcd382a306436e763767e57f
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold

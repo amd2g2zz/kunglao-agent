@@ -10,9 +10,11 @@ Tiers covered:
   A. data-loss tier: write/read failures recorded (rollup due-queue,
      retry counter, claim operation label, journal read, log-reader
      drop counting)
-  B. gate silent-pass tier: worker_budget gates keep (True, '') / False
-     verdicts byte-identically — a warn-only change; freeze tests pin
-     verdict identity with the warn patched out
+  B. gate silent-pass tier: the #417 record-only pins were FLIPPED by
+     the owner ruling 2026-09-28 — a gate ERROR now REJECTS with the
+     cause (see tests/test_gate_failclosed.py); the warn stays pure
+     telemetry and the freeze tests still pin verdict identity across
+     warn patch-out
   B(6): eval telemetry parse-failure recording (eval_loop_runner)
 """
 from __future__ import annotations
@@ -65,7 +67,10 @@ def test_rollup_notes_due_success_no_warn(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# A2/B5 — worker_budget_gates: verdicts frozen, silence converted to warn
+# A2/B5 — worker_budget_gates gate-error sites: FLIPPED fail-closed by the
+# owner ruling 2026-09-28 (was: record-only keep-passing). The warn stays;
+# the verdict now REJECTS with the cause. Freeze assertions pin verdict
+# identity across warn patch-out (warn remains pure telemetry).
 # ---------------------------------------------------------------------------
 
 def test_check_workers_lt_3_scan_failure_warn_and_frozen_verdict(
@@ -79,7 +84,8 @@ def test_check_workers_lt_3_scan_failure_warn_and_frozen_verdict(
 
     gates._WARN_LAST.clear()
     live = gates.check_workers_lt_3({"workspace": "/tmp/ws"})
-    assert live == (True, '')
+    assert live[0] is False  # FAIL_CLOSED: the error no longer passes
+    assert "RuntimeError" in live[1] and "ACTIVE-WORKERS GATE" in live[1]
     err = _stderr(capsys)
     assert "gate_error:active_workers_scan" in err
     assert "RuntimeError" in err
@@ -88,7 +94,7 @@ def test_check_workers_lt_3_scan_failure_warn_and_frozen_verdict(
     # the warn is pure telemetry, never a verdict input.
     monkeypatch.setattr(gates, "warn", _noop_warn)
     frozen = gates.check_workers_lt_3({"workspace": "/tmp/ws"})
-    assert frozen == (True, '')
+    assert frozen == live
 
 
 def test_reset_retry_counter_write_failure_warns(tmp_path, monkeypatch, capsys):
@@ -131,17 +137,20 @@ def test_check_rotation_experiment_gate_error_frozen(monkeypatch, capsys):
     gates._WARN_LAST.clear()
     live = gates.check_rotation_experiment(
         {"workspace": "/tmp/ws"}, "C-7", "no marker prompt")
-    assert live == (True, '')
+    assert live[0] is False  # FAIL_CLOSED flip (owner ruling 2026-09-28)
+    assert "reject: rotation gate error" in live[1]
+    assert "KeyError" in live[1]
     assert "gate_error:rotation_check" in _stderr(capsys)
 
     monkeypatch.setattr(gates, "warn", _noop_warn)
     frozen = gates.check_rotation_experiment(
         {"workspace": "/tmp/ws"}, "C-7", "no marker prompt")
-    assert frozen == (True, '')
+    assert frozen == live
 
 
 # ---------------------------------------------------------------------------
-# B5 — worker_budget_sinks env-caps vocabulary failure: verdict frozen
+# B5 — worker_budget_sinks env-caps vocabulary failure: FLIPPED fail-closed
+# (owner ruling 2026-09-28; was record-only keep-passing in #417)
 # ---------------------------------------------------------------------------
 
 def test_check_env_premise_vocab_failure_frozen(monkeypatch, capsys):
@@ -151,12 +160,14 @@ def test_check_env_premise_vocab_failure_frozen(monkeypatch, capsys):
     monkeypatch.setattr(sinks, "_env_caps_needed", _boom)
     sinks._B3_WARN_LAST.clear()
     live = sinks.check_env_premise({"workspace": "/tmp/ws"}, 0, tools=["adb"])
-    assert live == (True, '')
+    assert live[0] is False  # FAIL_CLOSED flip: the error no longer passes
+    assert "ENV-PREMISE GATE" in live[1]
+    assert "TypeError" in live[1]
     assert "gate_error:env_caps_vocab" in _stderr(capsys)
 
     monkeypatch.setattr(sinks, "warn", _noop_warn)
     frozen = sinks.check_env_premise({"workspace": "/tmp/ws"}, 0, tools=["adb"])
-    assert frozen == (True, '')
+    assert frozen == live
 
 
 # ---------------------------------------------------------------------------
@@ -336,11 +347,14 @@ def test_tuition_cost_failure_warns(tmp_path, monkeypatch, capsys):
 
 # ---------------------------------------------------------------------------
 # freeze — gate verdict identity is pinned independently of warn plumbing
+# (verdicts flipped fail-closed by the owner ruling 2026-09-28; the freeze
+# now pins REJECT-identity across warn patch-out)
 # ---------------------------------------------------------------------------
 
 def test_gate_verdict_freeze_warn_is_pure_telemetry(monkeypatch):
-    """The warn patch-out changes NOTHING about returned verdicts: the
-    batch is record-only (zero decision-behavior change)."""
+    """The warn patch-out changes NOTHING about returned verdicts. Since
+    the 2026-09-28 ruling the gate-error verdict is REJECT with the
+    cause carried in the reason — the warn stays pure telemetry."""
     class _BoomLib:
         @staticmethod
         def scan_active_workers(_ws):
@@ -357,5 +371,5 @@ def test_gate_verdict_freeze_warn_is_pure_telemetry(monkeypatch):
         m.setattr(sinks, "warn", _noop_warn)
         v1 = gates.check_workers_lt_3({"workspace": "/tmp/ws"})
         v2 = sinks.check_env_premise({"workspace": "/tmp/ws"}, 0, tools=[])
-    assert v1 == (True, '')
-    assert v2 == (True, '')
+    assert v1[0] is False and "RuntimeError" in v1[1]
+    assert v2[0] is False and "ValueError" in v2[1]

@@ -495,19 +495,26 @@ def check_env_premise(paths: dict, tier: int = 0,
     dispatch itself is NEVER rejected on the stale premise — routing, not
     awareness (#340 design axiom).
 
-    Posture: FAIL-OPEN always. Missing/unreadable env-state.json keeps the
-    existing fail-open behavior unchanged (pinned by test); a crashed
-    reconciliation degrades to a stderr WARN. The (True, '') shape is the
-    contract: this check is the channel that kills the false premise, not
-    another gate for the orchestrator to argue with."""
+    Posture (owner ruling 2026-09-28): the DESIGNED no-op paths keep their
+    pass — missing workspace, no needed caps, missing/unreadable
+    env-state.json (pinned by test). An ERROR is fail-closed: a crashed
+    vocabulary lookup or reconciliation REJECTS the dispatch with the
+    cause (a gate that cannot see must not wave the action through; a
+    buggy gate blocking dispatches until fixed is the accepted
+    tradeoff). The (True, '') shape remains the contract for every
+    non-error path: this check is the channel that kills the false
+    premise, not another gate for the orchestrator to argue with."""
     ws = paths.get('workspace')
     if not ws:
         return True, ''
     try:
         needed = _env_caps_needed(tier, tools or [])
-    except Exception as exc:  # noqa: BLE001 — vocabulary failure must not block
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
         warn('gate_error:env_caps_vocab', f'{type(exc).__name__}: {exc}')
-        return True, ''
+        return (False, f'ENV-PREMISE GATE: capability vocabulary failed '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair _env_caps_needed before '
+                       'dispatching.')
     if not needed:
         return True, ''
     p = Path(ws) / ENV_STATE_FILE
@@ -521,8 +528,12 @@ def check_env_premise(paths: dict, tier: int = 0,
     try:
         import premise_gate
         premise_gate.reconcile_dispatch(Path(ws), needed, per)
-    except Exception as exc:  # noqa: BLE001 — fail-open with one WARN
-        warn("check_env_premise", f"{type(exc).__name__}: {exc}")
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn("gate_error:env_premise_reconcile", f'{type(exc).__name__}: {exc}')
+        return (False, f'ENV-PREMISE GATE: reconciliation crashed '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair premise_gate wiring before '
+                       'dispatching.')
     return True, ''
 
 
