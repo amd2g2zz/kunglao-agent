@@ -16,3 +16,5 @@ jobs:
           plugin_dir: "."
           min_score: 80
           fail_on_severity: high
+          config: ".plugin-scanner.toml"
+          trust_repository_policy: true
