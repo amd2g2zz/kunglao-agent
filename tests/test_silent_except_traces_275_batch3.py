@@ -109,9 +109,13 @@ def test_every_converted_file_carries_the_rate_limited_helper():
             and "from _scriptlib import" in src
         has_sidecar = "_IMPORT_DEGRADED: list[str] = []" in src \
             and "_IMPORT_DEGRADED.append(" in src
-        assert has_warn or has_binding or has_sidecar, path
+        # The helper may be the canonical kunglao_log import —
+        # ONE implementation (process-wide dedupe + ledger face), pinned by
+        # tests/test_logging_arch_406.py.
+        has_import = "from kunglao_log import warn" in src
+        assert has_warn or has_binding or has_sidecar or has_import, path
         assert ("_WARN_LAST" in src) or ("_B3_WARN_LAST" in src) \
-            or has_binding or has_sidecar, path
+            or has_binding or has_sidecar or has_import, path
 
 
 # ------------------------------------------------------------ helper shape
@@ -119,7 +123,10 @@ def test_every_converted_file_carries_the_rate_limited_helper():
 def test_warn_names_module_op_reason(capsys, fresh_warn):
     kl.warn("op_x", "ValueError: boom")
     err = capsys.readouterr().err
-    assert ("[kunglao-agent] kunglao_log WARN (fail-open): "
+    # The module token is derived from the CALLER's file —
+    # called directly from this test module, the tag is this file's stem;
+    # the stable contract is the standardized face + op + reason.
+    assert ("WARN (fail-open): "
             "op_x: ValueError: boom") in err
 
 
@@ -183,7 +190,9 @@ def test_heartbeat_touch_statusline_degrade_warns_once(
     deployed = ws / ".claude" / "scripts" / "statusline_snapshot.py"
     deployed.parent.mkdir(parents=True)
     deployed.write_text("x = 1\n", encoding="utf-8")
-    monkeypatch.setattr(ht, "_WARN_LAST", {})
+    # hooks/heartbeat_touch.py routes through the canonical
+    # kunglao_log.warn — the dedupe state lives THERE now.
+    monkeypatch.setattr(kl, "_WARN_LAST", {})
     monkeypatch.setattr(ht, "load_module_by_path", _boom)
 
     assert ht._write_statusline_snapshot(ws) is None
@@ -191,7 +200,7 @@ def test_heartbeat_touch_statusline_degrade_warns_once(
     err = capsys.readouterr().err
     lines = [ln for ln in err.splitlines()
              if "[kunglao-agent] heartbeat_touch WARN (fail-open): "
-             "_write_statusline_snapshot" in ln]
+             "heartbeat_touch.statusline_deployed_load" in ln]
     assert len(lines) == 1
 
 

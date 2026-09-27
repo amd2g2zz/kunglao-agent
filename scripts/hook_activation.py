@@ -79,16 +79,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] hook_activation WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -264,11 +255,11 @@ def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:
         }
         runs.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(
+        warn(
+            "activation_expired",
             f"WARNING: activation expired {gap_seconds // 60} min ago — hooks asleep "
-            f"({len(record['hooks_affected'])} hook(s)). Re-arm: hook_activation.py {workspace} --renew",
-            file=sys.stderr,
-        )
+            f"({len(record['hooks_affected'])} hook(s)). Re-arm: "
+            f"hook_activation.py {workspace} --renew")
     except (OSError, ValueError, TypeError) as exc:
         warn("_emit_hook_slept_once", f"{type(exc).__name__}: {exc}")
 
@@ -927,10 +918,11 @@ def _register_statusline_warn(ws: Path | None) -> None:
         if res.get("ok"):
             print(f"OK: statusline registered -> {res['command']}")
         else:
-            print(f"WARN: statusline registration self-check failed "
-                  f"({res.get('target')})", file=sys.stderr)
+            warn("statusline_register_selfcheck",
+                 f"statusline registration self-check failed "
+                 f"({res.get('target')})")
     except Exception as exc:  # noqa: BLE001 — cosmetic, never blocks wiring
-        print(f"WARN: statusline registration failed ({exc})", file=sys.stderr)
+        warn("statusline_register", f"statusline registration failed ({exc})")
 
 
 
@@ -1070,10 +1062,11 @@ def register_hooks(workspace: Path | None = None,
     """
     settings_path = _resolve_registration_target(workspace, global_opt_in)
     if global_opt_in:
-        print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
-              f"{settings_path} — hooks must live in the project-level "
-              f".claude/settings.json; global deployment is "
-              f"explicit opt-in ONLY.", file=sys.stderr)
+        warn("user_global_wiring",
+             f"wiring kunglao-agent hooks into the USER-GLOBAL "
+             f"{settings_path} — hooks must live in the project-level "
+             f".claude/settings.json; global deployment is "
+             f"explicit opt-in ONLY.")
 
     existing = {}
     if settings_path.exists():

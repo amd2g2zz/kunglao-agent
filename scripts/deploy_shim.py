@@ -54,6 +54,8 @@ import re
 import shutil
 import subprocess
 import sys
+
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -120,8 +122,8 @@ def _record(ws: Path | None, item: str, reprobe: str) -> None:
     try:
         env_manifest.record_installed(ws, item, "device-adb", reprobe)
     except (ValueError, OSError) as exc:
-        print(f"deploy-shim: WARNING installed-ledger write failed "
-              f"({exc})", file=sys.stderr)
+        warn("installed_ledger_write",
+             f"installed-ledger write failed ({exc})")
 
 
 def deploy(tool: str, local: Path, port: int | None = None,

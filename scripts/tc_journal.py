@@ -32,24 +32,13 @@ gate, or settlement face (pinned by test_experience_freeze_396).
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from kunglao_log import iter_jsonl
 
 SCHEMA = "tc-journal/1"
 JOURNAL_REL = "runs/tc-journal.jsonl"
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] tc_journal WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _now() -> str:

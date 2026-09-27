@@ -22,6 +22,8 @@ import importlib
 import sys
 from pathlib import Path
 
+import kunglao_log as kl406  # migrated modules' warn IS this canonical function
+
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -40,7 +42,7 @@ def test_baseline_doc_ingest_failure_warns(monkeypatch, capsys):
         raise OSError("unreadable doc")
 
     monkeypatch.setattr(ad, "_ingest_re_library_doc", _boom)
-    ad._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     corpus = ad._load_baseline()
     assert corpus.term_freq == {} or isinstance(corpus.term_freq, dict)
     assert "baseline_doc_ingest:" in _stderr(capsys)
@@ -48,7 +50,7 @@ def test_baseline_doc_ingest_failure_warns(monkeypatch, capsys):
 
 def test_extract_sample_refs_broken_yaml_warns(capsys):
     import anomaly_detector as ad
-    ad._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     # broken fence AND no line-level sample_refs fallback anywhere, so
     # the only escape is the YAMLError branch under test
     refs = ad._extract_sample_refs("prose\n```yaml\nkey: [broken\n```\n")
@@ -59,7 +61,7 @@ def test_extract_sample_refs_broken_yaml_warns(capsys):
 def test_taint_seed_map_unreadable_warns(tmp_path, monkeypatch, capsys):
     import anomaly_detector as ad
     monkeypatch.setattr(ad, "TAINT_SEEDS_FILE", tmp_path)  # a directory
-    ad._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     assert ad._taint_seed_map() == {}
     err = _stderr(capsys)
     assert "taint_seed_table" in err
@@ -67,7 +69,7 @@ def test_taint_seed_map_unreadable_warns(tmp_path, monkeypatch, capsys):
 
 def test_observe_taint_missing_evidence_warns(tmp_path, capsys):
     import anomaly_detector as ad
-    ad._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     assert ad.observe_taint(tmp_path) == []
     err = _stderr(capsys)
     assert "taint_evidence_read" in err
@@ -78,7 +80,7 @@ def test_yaml_soft_dep_warn_on_import_without_yaml(capsys):
     degradation is recorded, yaml stays None, module state restored after."""
     import anomaly_detector as ad
     saved = sys.modules.get("yaml")
-    ad._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     sys.modules["yaml"] = None
     try:
         reloaded = importlib.reload(ad)

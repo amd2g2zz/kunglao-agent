@@ -22,6 +22,23 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
 
+# ---------- fresh canonical warn state per test ----------
+# kunglao_log.warn dedupes process-wide (one dict per process, per
+# (op, last-reason)); without a per-test reset, two tests exercising the
+# same (op, reason) would suppress each other's expected WARN output.
+# Autouse + cheap (one monkeypatch op). Import guarded: collection must
+# never depend on scripts/ being importable.
+@pytest.fixture(autouse=True)
+def _fresh_canonical_warn_state(monkeypatch):
+    try:
+        import kunglao_log as _kl
+    except ImportError:  # pragma: no cover
+        yield
+        return
+    monkeypatch.setattr(_kl, "_WARN_LAST", {}, raising=False)
+    yield
+
+
 # ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture

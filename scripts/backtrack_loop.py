@@ -78,21 +78,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
-
-# issue 275 batch-2: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace — a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] backtrack_loop WARN (fail-open): {op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 

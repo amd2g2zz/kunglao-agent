@@ -54,6 +54,11 @@ def quiet_warn(monkeypatch):
     per-test."""
     for mod in _MODULES:
         monkeypatch.setattr(mod, "_WARN_LAST", {}, raising=False)
+    # Migrated modules (convergence_check / statusline_snapshot /
+    # backtrack_loop) route through the canonical kunglao_log.warn — its
+    # process-wide dict is the state that must be fresh per test.
+    import kunglao_log as _kl
+    monkeypatch.setattr(_kl, "_WARN_LAST", {}, raising=False)
     monkeypatch.setattr(sls, "_DEGRADED", {}, raising=False)
     yield
 

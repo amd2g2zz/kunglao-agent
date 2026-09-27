@@ -316,6 +316,7 @@ EMIT_ACTIONS = [
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
+    "warn",               # the centralized warn()'s ledger face (one row per dedupe window, actor=telemetry)
     "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_guard_waiver_used",  # #820 waiver consumption audit face
