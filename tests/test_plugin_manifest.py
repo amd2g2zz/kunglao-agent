@@ -39,7 +39,7 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1.5.post2"
+EXPECTED_VERSION = "0.1.6"
 # The Claude plugin manifests carry the STRICT X.Y.Z semver form of the
 # same release: the HOL plugin-scanner (ai-plugin-scanner-action, scanner
 # 2.0.1116) gates "Claude required fields and semver" on
@@ -48,7 +48,7 @@ EXPECTED_VERSION = "0.1.5.post2"
 # prerelease "0.1.5-post1" (CLAUDE_VERSION_BAD_SEMVER, -5 pts) matches.
 # Mapping: pyproject "0.1.5.post1" (tag v0.1.5.post1) <-> plugin face
 # "0.1.5". (Issue 258; scan-regression fix for PR 268.)
-PLUGIN_VERSION = "0.1.5"
+PLUGIN_VERSION = "0.1.6"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).

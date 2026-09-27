@@ -6,7 +6,7 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [Unreleased]
+## [0.1.6] - 2026-09-27
 
 ### Added
 
@@ -149,6 +149,29 @@ release (see the mapping table at the end).
   per the #295 ADR-001 precedent) with the workspace
   directory-convention section; the gate MACHINERY itself is v0.2
   scope.
+- **Settlement validator (#397)**: the deterministic walls around every
+  settled reward — fail-closed citation resolution (a verdict doc citing one
+  unresolvable id writes NOTHING), output rails with the TRACE 0.01 scale
+  (evidence-producing failure earns trace credit; surrender earns zero),
+  oracle non-overridability, and the amendment path that lets late evidence
+  reopen settled rows without rewriting history.
+- **Experience recording face (#401)**: canonical state signatures
+  (discretized workspace states with a deterministic V(s) anchor), per-round
+  tool-call journals, and regenerable experience triples `(s, a, r)` in CSV
+  plus a read-only Q report of per-cell means — the banking half of the
+  loop, shipped behavior-frozen so benchmarks measure what flies.
+- **Retry gap-notes (#399)**: a FAIL settlement emits a structured gap-note
+  from machine signals only (advisory-marked, excluded from reward matching
+  by construction); the same-unit retry dispatch reads what its predecessors
+  hit, so attempt N is not a repeat of attempt 1.
+- **References quality waves (#398/#400/#403)**: the 8 highest-traffic
+  technique cards rebuilt to exemplar band with runnable code
+  (web-re-quickref, risk-control, crawler, jsvmp, the three unidbg cards,
+  signature-check-bypass shipping its cited listings), 98 broken relative
+  links repaired to zero, the imported-skill residue de-skilled, contracts
+  EN-uniform, and an index-generator lint gate that refuses CJK/issue-ref/
+  date noise at generation time with When-to-read + depth metadata populated.
+
 ### Changed
 
 - **Checker lane-universal (#355)**: the red-team checker is defined by its
