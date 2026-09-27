@@ -1287,7 +1287,15 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                            "harness_drift_files": []},
                        "workspace": None, "deliverable": None,
                        "prompt_sha256": None}
+        # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
+        # stdout file for the pass@k arithmetic — a parsed downstream
+        # face. The mirror on stderr records the SKIP reason on the
+        # diagnostics channel (record-only batch).
         print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
+        print(f"[kunglao-agent] eval_loop WARN (fail-open): "
+              f"verdict_skip_init_failed: {tdir.name} ({arm}) "
+              f"[mirrored on stdout per the autoresearch.sh contract]",
+              file=sys.stderr)
         return row
     baseline_rounds = count_snapshot_rows(ws)
     rec, drifted, _restored = run_session_guarded(
