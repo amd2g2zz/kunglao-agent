@@ -240,7 +240,7 @@ Never call an analysis tool directly — analysis tools produce evidence; worker
 
 Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no agent teams, no teammates; workers never message each other; SendMessage orchestrator↔worker pings stay allowed (sanctioned channel); TaskStop on delivery.
 
-**Own synthesis notes** (combining facts across workers) MUST pass `<malware-veri-notes>/scripts/verify-note.py` or be marked `synthesis: true` + source — no self-stamping.
+**Own synthesis notes** (combining facts across workers) MUST pass `<malware-veri-notes>/scripts/verify-note.py` — when the external malware-veri-notes skill is installed (user-level; not shipped by this repo or CI) — or be marked `synthesis: true` + source — no self-stamping.
 
 ## Phase 4 Completion Transaction
 
@@ -283,7 +283,7 @@ Read `references/orchestration/failure-modes/failure-modes.md` (index; 18 F-rows
 
 **Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — rank via `priority_ratio.py`, dispatch the top within ≤3 workers + tier gate (background, fire-and-continue); deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
 
-**Read/write boundary**: read state — always allowed; read evidence — for VERIFY reproduction and cross-fact patterns; read evidence AND write facts from it — FORBIDDEN unless through a worker, or marked `synthesis: true` + source and passed through `verify-note.py`.
+**Read/write boundary**: read state — always allowed; read evidence — for VERIFY reproduction and cross-fact patterns; read evidence AND write facts from it — FORBIDDEN unless through a worker, or marked `synthesis: true` + source and — when the external malware-veri-notes skill is installed — passed through `verify-note.py`.
 
 ## Hard prohibitions
 

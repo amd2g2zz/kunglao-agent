@@ -1,3 +1,10 @@
+# PEP 517 backend: required for [project.scripts] to install at all (#416).
+# Packages are listed EXPLICITLY — repo-root auto-discovery would choke on
+# scripts/ hooks/ tests/ skills/ (not packages) and must never be attempted.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "kunglao-agent"
 version = "0.1.6"
@@ -17,6 +24,21 @@ dependencies = [
     "jinja2>=3.1",  # #156 --html face template (guarded import: the JSON
                     # face — the primary artifact — renders without it)
 ]
+
+# Console scripts (issue #416): the `kunglao` CLI family was previously only
+# invokable as `python scripts/<file>.py`, so doc references to bare
+# `kunglao ...` had no backing surface. Wrappers live in kunglao_agent_cli/
+# (registration only, zero logic); targets load from scripts/ by file path
+# because hyphenated filenames are illegal module paths. Entry points resolve
+# against a repository checkout — the supported shape is `uv sync` in the
+# repo root (editable install).
+[project.scripts]
+kunglao = "kunglao_agent_cli.kunglao_cli:main"
+kunglao-init = "kunglao_agent_cli.kunglao_init_cli:main"
+kunglao-verify = "kunglao_agent_cli.kunglao_verify_cli:main"
+kunglao-upgrade = "kunglao_agent_cli.kunglao_upgrade_cli:main"
+heartbeat-tick = "kunglao_agent_cli.heartbeat_tick_cli:main"
+convergence-check = "kunglao_agent_cli.convergence_check_cli:main"
 
 # Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:
 # `uv sync` installs dependency groups by default, so a fresh clone can run
@@ -41,6 +63,12 @@ dev = [
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).
 # Do not add [tool.pytest.ini_options] here — two configs would split authority.
+
+# setuptools packaging scope (issue #416): EXACTLY the wrapper package.
+# Everything else in the repo stays a plain directory — auto-discovery is
+# never allowed to sweep scripts/ hooks/ tests/ into a wheel.
+[tool.setuptools]
+packages = ["kunglao_agent_cli"]
 
 # Static-analysis gate (v0.1.2 plan R2 Task 0.3): blunder-level ruleset,
 # zero-noise by design — style rules deliberately NOT enabled (existing

@@ -2,6 +2,10 @@
 """_entry.py — the shared __main__ dispatcher for kunglao-* entry scripts
 (#585, limited first wave: the 8 entry scripts).
 
+#416: shared main-guard helper (#585) — NOT a CLI router; see kunglao.py
+(the 9-subcommand unified entry). Renaming is out of scope — too many
+importers — so the disclaimer lives here instead.
+
 The dispatcher replaces ONLY the module-execution tail (main guard + sys.exit(main()))
 boilerplate. The #370 router contract is untouched: entry modules keep their
 module-level main(argv) (or their sibling-module import) — run() calls it.
