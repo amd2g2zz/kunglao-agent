@@ -60,16 +60,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] external_kicker WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 

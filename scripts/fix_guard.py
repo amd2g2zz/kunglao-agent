@@ -92,17 +92,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # posture: settlements are rare; the ledger is the organ; the scan is
 # capped). This constant IS the live bound passed to kunglao_log.tail.
 LEDGER_SCAN_LIMIT = 100_000
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] fix_guard WARN (fail-open): {op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 # ------------------------------------------------------------ pure faces

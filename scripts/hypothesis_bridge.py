@@ -201,9 +201,9 @@ def _emit(ws: Path, action: str, detail: str) -> None:
         from kunglao_log import emit
         emit(Path(ws), actor="hypothesis_bridge", action=action, detail=detail)
     except Exception as exc:  # noqa: BLE001 — logging must never break the bridge
-        print(f"hypothesis_bridge: WARN emit unavailable for {action} "
-              f"({type(exc).__name__}: {exc})",
-              file=sys.stderr, flush=True)
+        warn("emit_unavailable",
+             f"emit unavailable for {action} "
+             f"({type(exc).__name__}: {exc})")
 
 
 def _emit_arc_event(ws: Path, action: str, hyp_id: str, payload: dict) -> None:
@@ -215,9 +215,9 @@ def _emit_arc_event(ws: Path, action: str, hyp_id: str, payload: dict) -> None:
              hypothesis_ref=hyp_id,
              detail=json.dumps(payload, ensure_ascii=False, sort_keys=True))
     except Exception as exc:  # noqa: BLE001 — logging must never break the bridge
-        print(f"hypothesis_bridge: WARN emit unavailable for {action} "
-              f"({type(exc).__name__}: {exc})",
-              file=sys.stderr, flush=True)
+        warn("emit_unavailable",
+             f"emit unavailable for {action} "
+             f"({type(exc).__name__}: {exc})")
 
 
 def _existing_arm_texts(claims: list[dict], hyp_id: str) -> dict[str, str]:

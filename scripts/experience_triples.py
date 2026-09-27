@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import csv
 import json
-import sys
 from pathlib import Path
 
 import rollout_ledger as rl
@@ -69,17 +68,6 @@ CSV_HEADER = ("grain", "rollout_id", "s_signature", "s_hash", "a_arm",
 Q_REPORT_SCHEMA = "q-report/1"
 
 _STRATEGY_LOG_REL = "runs/strategy-log.jsonl"
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] experience_triples WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
 
 
 def _last_signal(signals: list[dict], type_: str):

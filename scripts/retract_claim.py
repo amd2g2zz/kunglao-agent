@@ -64,16 +64,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] retract_claim WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -383,8 +374,9 @@ def main(argv: list | None = None) -> int:
         # #879: a superseded withdrawal without a successor edge leaves the
         # "谁替代谁" question open — visible WARN, not a hard block (the
         # edge can land later via the register).
-        print("WARN: --reason superseded without --superseded-by — no "
-              "lineage edge will be recorded (#879)", file=sys.stderr)
+        warn("superseded_without_lineage",
+             "--reason superseded without --superseded-by — no "
+             "lineage edge will be recorded (#879)")
 
     r = retract_claim(ws, args.claim_id, reason=args.reason, by=args.by,
                       dry_run=args.dry_run,

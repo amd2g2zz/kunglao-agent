@@ -21,16 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    """Rate-limited stderr WARN (the issue 276 _zof_warn pattern)."""
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] anomaly_detector WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 try:
