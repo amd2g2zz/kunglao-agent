@@ -1,7 +1,7 @@
 ---
 name: web-crawler-engineering
-description: 'Sustainable web-crawler collection engineering (爬虫工程): session persistence (cookie-pool
-  tiers, login-state 登录态 stewardship), rate disguise (human-cadence pacing, per-domain budgets), IP strategy
+description: 'Sustainable web-crawler collection engineering: session persistence (cookie-pool
+  tiers, login-state stewardship), rate disguise (human-cadence pacing, per-domain budgets), IP strategy
   (residential vs datacenter tiers, sticky-vs-rotate semantics, egress quality checks), CAPTCHA triage
   (slider / click-select / re-challenge classification and response), slider gap matching (canny-edge-first
   localization, vendor discrimination), failure budgets and site profiling. After access is solved on a

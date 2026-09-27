@@ -41,7 +41,7 @@ Deliverable: the boundary method — class name, method name, JNI signature;
 everything later hooks or re-implements exactly this signature. If the
 matching `Java_...` symbol is missing from the `.so`, the library registers
 handlers dynamically — resolve via `JNI_OnLoad` / `RegisterNatives` first
-(see [languages-platforms.md](languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms))
+(see [languages-platforms.md](../../languages/platforms/languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms))
 before assuming the boundary is unrecoverable.
 
 ### Step 2 — Confirm parameters dynamically (multi-sample, never single)
@@ -196,7 +196,7 @@ sig(ts="1717000060") != sig(ts="1717000000")   # next minute  -> differs
 
 ## Cross-references
 
-- Dynamic JNI registration: [languages-platforms.md](languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms)
-- Tooling: [tools.md](tools.md#unicorn-emulation), [tools-dynamic.md](tools-dynamic.md#frida-dynamic-instrumentation)
-- Flattening countermeasures + framework-level hiding: [anti-analysis.md](../../anti-analysis/catalog/anti-analysis.md), [languages-platforms.md](languages-platforms.md#framework-first-routing-android)
+- Dynamic JNI registration: [languages-platforms.md](../../languages/platforms/languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms)
+- Tooling: [tools.md](../../tools/static/tools.md#unicorn-emulation), [tools-dynamic.md](../../tools/dynamic/tools-dynamic.md#frida-dynamic-instrumentation)
+- Flattening countermeasures + framework-level hiding: [anti-analysis.md](../../anti-analysis/catalog/anti-analysis.md), [languages-platforms.md](../../languages/platforms/languages-platforms.md#framework-first-routing-android)
 - VM-protected target anatomy (this card's hardest input): [vm-protection-anatomy.md](../../patterns/vm/vm-protection-anatomy.md)

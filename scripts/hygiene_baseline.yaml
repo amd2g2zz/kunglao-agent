@@ -283,6 +283,10 @@ files:
     r1: 5
   scripts/recov_metrics.py:
     r1: 1
+  scripts/reference_index_build.py:
+    r1: 1
+  scripts/reference_link_walk.py:
+    r1: 1
   scripts/references_recall.py:
     r1: 18
   scripts/refutation_propagate.py:
@@ -568,7 +572,7 @@ files:
   tests/test_decision_pending.py:
     r1: 1
   tests/test_decision_surface_anchor.py:
-    r1: 1
+    r1: 2
   tests/test_decision_teeth.py:
     r1: 19
     r2: 7
@@ -1053,8 +1057,12 @@ files:
     r1: 1
   tests/test_redteam_antitemplate_827.py:
     r1: 1
+  tests/test_reference_index_build.py:
+    r1: 2
+  tests/test_reference_link_walk.py:
+    r1: 1
   tests/test_references_recall.py:
-    r1: 5
+    r1: 6
   tests/test_refresh_deployed_783.py:
     r1: 1
   tests/test_refutation_propagate.py:
@@ -1321,7 +1329,7 @@ files:
   tests/test_warn_delegation_863f.py:
     r1: 1
   tests/test_web_knowledge_761.py:
-    r1: 3
+    r1: 4
   tests/test_web_labs_type_728.py:
     r1: 2
   tests/test_web_lane_verifier_342.py:

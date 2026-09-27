@@ -508,7 +508,7 @@ inverted = [(d, n) for n, d in fraction_table]
 
 **Detection:** Challenge mentions fractions, prime factorization, or provides a list of rational numbers.
 
-## Java malware dynamic analysis — Docker + jdb-mcp (2026-08-03 lesson)
+## Java malware dynamic analysis — Docker + jdb-mcp
 
 **Do NOT run Java samples directly on the host or in the analysis VM.** The
 correct isolation path is: **package the sample into a Docker container

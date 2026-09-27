@@ -71,5 +71,3 @@ see the technique card
 **Addresses** same-topic fact-base contamination. v-next fix:
 `scripts/fact_contradiction_gate.py` (global scan) + completion-gate global
 recomputation.
-
-recall_useful: pending

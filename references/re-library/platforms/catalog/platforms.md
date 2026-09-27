@@ -280,7 +280,7 @@ gdb-multiarch -ex 'target remote :1234' ./arm_binary
 # Ghidra: Right-click → Processor Options → ARM/Thumb mode
 ```
 
-**ARM64/AArch64:** See [platforms-hardware.md](platforms-hardware.md#arm64aarch64-reversing-and-exploitation) for AArch64 calling convention, ROP gadgets, and qemu-aarch64-static emulation.
+**ARM64/AArch64:** See [platforms-hardware.md](../hardware/platforms-hardware.md#arm64aarch64-reversing-and-exploitation) for AArch64 calling convention, ROP gadgets, and qemu-aarch64-static emulation.
 
 **MIPS (routers, embedded):**
 ```bash
@@ -297,7 +297,7 @@ qemu-mipsel -L /usr/mipsel-linux-gnu/ ./mipsel_binary   # Little-endian
 # lui + addiu pair — loads 32-bit constant (upper 16 + lower 16)
 ```
 
-**RISC-V:** See main [tools.md](tools.md#risc-v-binary-analysis-ehax-2026) for Capstone disassembly and [platforms-hardware.md](platforms-hardware.md#risc-v-advanced) for advanced extensions and debugging.
+**RISC-V:** See main [tools.md](../../tools/static/tools.md#risc-v-binary-analysis-ehax-2026) for Capstone disassembly and [platforms-hardware.md](../hardware/platforms-hardware.md#risc-v-advanced) for advanced extensions and debugging.
 
 ### RTOS Analysis
 

@@ -311,6 +311,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
 
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |
+| `reference_link_walk.py` | relative-link integrity walker for references/ — resolves every markdown link from its referencing file's directory (fenced blocks ignored), `--check` exits 1 on any broken link, `--fix` path-corrects bare-filename links that resolve uniquely under the tree (anchors preserved; ambiguous or unresolvable targets reported, never invented) | tests |
 
 ## #866 unwired-live disposition ledger (PR 866-b, 2026-09-02)
 

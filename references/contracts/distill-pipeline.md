@@ -43,11 +43,11 @@ Per-cluster verdict against the standing bar, with recorded rationale:
 **Methodology focus, three layers in priority order (owner ruling,
 2026-09-23, binding on every card):**
 
-1. **怎么规划** — why the path was ordered this way (what made each step the
+1. **Planning rationale** — why the path was ordered this way (what made each step the
    right next step given what was known at that point).
-2. **遇到情况下一步怎么做** — decision rules as branch tables: situation →
+2. **Situation→next-action decision rules** — decision rules as branch tables: situation →
    next action. The situation-action pair is the payload.
-3. **隐含思路** — the mental model / invariant behind choices (e.g.
+3. **Implicit mental model** — the mental model / invariant behind choices (e.g.
    "execution-form must be unwrapped before structural passes" is a boundary
    prior, not a step). Mine these from how the sources SEQUENCE their work,
    not only from what they state.

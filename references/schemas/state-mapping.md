@@ -11,13 +11,17 @@ both consumers must implement.
 | claim-register workflow state | fact `status` (claim strength) | `verify_status` (verifier gate) | `confidence` | `confidence_zh` |
 |---|---|---|---|---|
 | OPEN | OPEN | pending | (omit) | (omit) |
-| STAMP (claimed, unverified) | INFERRED | pending | medium | 倾向于 |
-| INFERRED (maker produced, no L1 yet) | INFERRED | pending | medium | 倾向于 |
-| PARTIALLY-VERIFIED (L1 passed, L2 pending) | INFERRED | partial | medium | 倾向于 |
-| PARTIALLY-VERIFIED + `boundary_type: pure_negative` | NEGATIVE | partial | high | 不支持 |
-| PROVEN (maker + independent checker passed) | PROVEN | passes | high | 可确认 |
+| STAMP (claimed, unverified) | INFERRED | pending | medium | 倾向于 (leans-toward) |
+| INFERRED (maker produced, no L1 yet) | INFERRED | pending | medium | 倾向于 (leans-toward) |
+| PARTIALLY-VERIFIED (L1 passed, L2 pending) | INFERRED | partial | medium | 倾向于 (leans-toward) |
+| PARTIALLY-VERIFIED + `boundary_type: pure_negative` | NEGATIVE | partial | high | 不支持 (does-not-support) |
+| PROVEN (maker + independent checker passed) | PROVEN | passes | high | 可确认 (confirms) |
 | DEFERRED | DEFERRED | pending | (omit) | (omit) |
-| REFUTED | REFUTED | passes | high | 可确认 |
+| REFUTED | REFUTED | passes | high | 可确认 (confirms) |
+
+Note: `confidence_zh` values are the schema's literal five-verb glosses, pinned by
+`scripts/lint_facts.py` (`VALID_CONFIDENCE_ZH` / `CONFIDENCE_ZH_RULES`) — they stay Chinese
+by contract; the parenthesized English is the semantic translation, not a legal value.
 
 Notes:
 - `PARTIALLY-VERIFIED` and `STAMP` are workflow states and MUST NOT appear in
@@ -85,5 +89,3 @@ required on every kunglao fact, validated for key presence by
   slugged filename from the start.
 - `claim-register.yaml` `fact:` fields keep the old ids for now (kunglao_verify
   resolves `facts/<id>.md`); update together with the file rename.
-
-recall_useful: pending

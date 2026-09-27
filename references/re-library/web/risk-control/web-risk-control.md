@@ -3,11 +3,11 @@ name: web-risk-control
 description: 'Anti-bot / risk-control doctrine for web targets: signal taxonomy (device fingerprint /
   behavioral / environment-consistency / protocol-layer challenges), adversarial decision tree
   bypass→emulate→real with the headless-first escalation chain, vendor-stack identification
-  (JiaSuLe 加速乐 jsl_clearance, RiverSecurity 瑞数 $_ts, Aliyun WAF acw_sc, GeeTest 极验, Tencent TCaptcha,
-  NetEase YiDun NECaptcha, Shumei 数美 smid, DingXiang 顶象, Cloudflare cf_clearance/turnstile, Akamai
+  (JiaSuLe jsl_clearance, RiverSecurity $_ts, Aliyun WAF acw_sc, GeeTest, Tencent TCaptcha,
+  NetEase YiDun NECaptcha, Shumei smid, DingXiang, Cloudflare cf_clearance/turnstile, Akamai
   _abck/bmak, PerimeterX HUMAN _px3, DataDome, Kasada x-kpsdk, self-built stacks), per-vendor challenge
-  mechanisms and per-vendor handling paths (厂商处理路径/挑战机制), operator heuristics
-  (启发式; observed signal → verdict → first action → escalation), active-challenge parameter chains (slider backward endpoint tracing, known-library hash
+  mechanisms and per-vendor handling paths, operator heuristics
+  (observed signal → verdict → first action → escalation), active-challenge parameter chains (slider backward endpoint tracing, known-library hash
   reimplementation, challenge-bundle obfuscation passes), and the detection-point localization
   trigger→observe→attribute loop with camoufox/CDP instrumentation. When a request is blocked /
   challenged / a signed parameter is rejected on a web target — classify the signal, identify the

@@ -342,7 +342,7 @@ python tools/static/rust-dep-strings.py --in <sample> --json
 
 ## Swift Binary Reversing
 
-See [platforms.md](platforms.md#swift-binary-reversing) for full Swift reversing guide including demangling, runtime structures, and Ghidra integration. Key quick reference:
+See [platforms.md](../../platforms/catalog/platforms.md#swift-binary-reversing) for full Swift reversing guide including demangling, runtime structures, and Ghidra integration. Key quick reference:
 
 ```bash
 # Detect Swift binary

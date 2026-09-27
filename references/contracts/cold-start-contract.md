@@ -1,6 +1,7 @@
 
-**Heuristic**: are you cold-starting a fresh iteration? If yes, read 9 files in order. If not (mid-iteration), skip this file.
 # Cold-Start Contract (DESIGN §13)
+
+> **Heuristic**: are you cold-starting a fresh iteration? If yes, read 9 files in order. If not (mid-iteration), skip this file.
 
 ## Cold start vs mid-iteration
 
@@ -82,8 +83,8 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
 - **Every heartbeat tick MUST run `--reconcile`** — ground-truth rebuild of
   `[active_workers]` from `.wt-*/` worker-status files (last status line ==
   in-progress). Self-heals accounting even when hooks are unwired. This is the
-  v1.9.18 fix for "槽位空出来没补充" (zombie count blocking dispatch) and
-  "心跳没生效" (worker_pulse never fired).
+  v1.9.18 fix for "free slots never backfilled" (zombie count blocking dispatch) and
+  "heartbeat not firing" (worker_pulse never fired).
 - Activation **expires after 30 minutes** — renew on every heartbeat tick:
   `hook_activation.py <ws> --renew`. Expired = hooks sleep (no enforcement).
 - **v1.9.28 mechanical gate (root-cause fix for recurring 'dispatch without
@@ -126,5 +127,3 @@ dynamic analysis — switch KUNGLAO_CHANNEL to vmr/ssh/docker/adb").
 Execution layer: vmr-shell skill (snapshots), ssh-mcp (`npm i -g ssh-mcp`;
 run-command / sftp-upload / sftp-download) with CLI ssh fallback; docker
 and adb flow through the existing skill layer.
-
-recall_useful: pending
