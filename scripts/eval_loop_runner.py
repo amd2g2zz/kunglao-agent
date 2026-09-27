@@ -354,7 +354,8 @@ def _session_cost(stdout_text: str) -> dict | None:
             continue
         try:
             doc = json.loads(s)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            _warn_fail_open("session_cost_parse", exc)
             continue
         if isinstance(doc, dict) and (
                 "total_cost_usd" in doc or "usage" in doc):
@@ -586,7 +587,8 @@ def chain_layer_paths(task_dir: Path) -> list[str]:
     try:
         gt = json.loads(
             (Path(task_dir) / "ground_truth.json").read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        _warn_fail_open("chain_layer_paths_read", exc)
         return []
     chain = gt.get("chain")
     if not isinstance(chain, dict) or not isinstance(
@@ -902,7 +904,8 @@ def extract_checker_gap(res: dict) -> dict:
         return gap
     try:
         doc = json.loads(Path(ev_path).read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        _warn_fail_open("gap_evidence_read", exc)
         return gap
     faces = doc.get("faces") or {}
     static = faces.get("static") or {}
@@ -1016,7 +1019,8 @@ def _iter_jsonl(path: Path) -> list[dict]:
             continue
         try:
             row = json.loads(line)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            _warn_fail_open("telemetry_jsonl_parse", exc)
             continue
         if isinstance(row, dict):
             rows.append(row)
@@ -1041,7 +1045,8 @@ def _convergence_face(ws: Path) -> tuple[bool, str]:
     if start is not None:
         try:
             doc = json.loads("\n".join(out_lines[start:]))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            _warn_fail_open("convergence_face_parse", exc)
             doc = {}
     decision = doc.get("decision") if isinstance(doc, dict) else None
     if decision is None:
@@ -1072,7 +1077,8 @@ def _factor_face(ws: Path) -> tuple[int, int, float]:
             (ws / "runs" / "mission_ledger.yaml").read_text("utf-8")) or {}
         vectors = [v for v in (led.get("mission", {}).get("history") or [])
                    if isinstance(v, dict)]
-    except (OSError, yaml.YAMLError):
+    except (OSError, yaml.YAMLError) as exc:
+        _warn_fail_open("factor_ledger_read", exc)
         vectors = []
     count = len(vectors)
     dispatch = sum(int((v.get("events") or {}).get("dispatch") or 0)
@@ -1143,7 +1149,8 @@ def harvest(workspace: Path, *, baseline_rounds: int = 0) -> dict:
     green, total = _oracle_face(ws)
     try:
         tokens_cost = float(tuition_curve.cost_state(ws)["spent"])
-    except (OSError, KeyError, ValueError, TypeError):
+    except (OSError, KeyError, ValueError, TypeError) as exc:
+        _warn_fail_open("tuition_cost_read", exc)
         tokens_cost = 0.0
 
     return {
