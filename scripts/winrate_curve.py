@@ -54,6 +54,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np  # issue 420: exact integer aggregation (see _wins)
 import yaml
 
 from kunglao_log import iter_jsonl  # #863 Family K single source
@@ -121,29 +122,41 @@ def _rate(pos: int, neg: int):
     return round(pos / (pos + neg), 4) if (pos + neg) else None
 
 
+def _wins(stream: list[dict]) -> np.ndarray:
+    """Scored stream -> int64 win indicators (POSITIVE=1, else 0).
+    numpy adoption (issue 420): counts are integers, so vectorized
+    aggregation is exact — the float rounding stays in _rate (Python
+    round), pinned by tests/test_rlvr_bitexact.py."""
+    return np.fromiter(
+        (1 if o["roi_class"] == ROI_POSITIVE else 0 for o in stream),
+        dtype=np.int64, count=len(stream))
+
+
 def _cumulative(stream: list[dict]) -> list[dict]:
-    """Running rate after each scored settlement (index is 1-based)."""
-    pts, pos, neg = [], 0, 0
-    for i, obs in enumerate(stream, start=1):
-        if obs["roi_class"] == ROI_POSITIVE:
-            pos += 1
-        else:
-            neg += 1
-        pts.append({"index": i, "positive": pos, "negative": neg,
-                    "rate": _rate(pos, neg)})
-    return pts
+    """Running rate after each scored settlement (index is 1-based).
+    Running counts via np.add.accumulate over exact int64 — identical
+    integers to the former hand-rolled loop; rates still go through
+    _rate so no float behavior moves."""
+    if not stream:
+        return []
+    pos_run = np.add.accumulate(_wins(stream))
+    return [{"index": i, "positive": int(p), "negative": i - int(p),
+             "rate": _rate(int(p), i - int(p))}
+            for i, p in enumerate(pos_run, start=1)]
 
 
 def _windowed(stream: list[dict], window: int) -> list[dict]:
     """Per-window rate over consecutive chunks; [start, end) are 0-based
     scored-stream indices and the last window may be partial (its own
-    counts stand — a short window is still an honest observation)."""
+    counts stand — a short window is still an honest observation).
+    Window counts are exact int64 slice sums (issue 420 adoption)."""
+    wins = _wins(stream)
     pts = []
     for wi, start in enumerate(range(0, len(stream), window)):
-        chunk = stream[start:start + window]
-        pos = sum(1 for o in chunk if o["roi_class"] == ROI_POSITIVE)
-        neg = len(chunk) - pos
-        pts.append({"index": wi, "start": start, "end": start + len(chunk),
+        chunk = wins[start:start + window]
+        pos = int(chunk.sum())
+        neg = int(chunk.size) - pos
+        pts.append({"index": wi, "start": start, "end": start + int(chunk.size),
                     "positive": pos, "negative": neg,
                     "rate": _rate(pos, neg)})
     return pts

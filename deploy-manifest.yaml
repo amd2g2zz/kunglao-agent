@@ -903,7 +903,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: d50c7cb0a4c26a932099a67f563d981bc71e15265daa7e06d9459b6f8fe732e6
+    sha256: ecd81cfa092ad1366a9e6437c82547add250a92ab131022608e070ecf0953e6d
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1039,7 +1039,7 @@ files:
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
-    sha256: 85767db13b8a3a26ba7cdebaa56bde15ad49981fccb0353f31bb3010818548a4
+    sha256: 8c185ecc523a1ba791bc384f275de9d111768f8de3e9be9cd2c0b8b3d2307825
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
