@@ -580,6 +580,10 @@ files:
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
     sha256: 5c23561cd4277b439c343ff3e9f5a1f28fc8e8d5503065e5652688b727efb7ac
+  - src: scripts/jadx_exec.py
+    dest: .claude/scripts/jadx_exec.py
+    kind: scaffold
+    sha256: b93fe96091624f40e96a7f631e19bf4847d8cae69eab9d9bdb63758f3bc52792
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
@@ -927,7 +931,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: ecd81cfa092ad1366a9e6437c82547add250a92ab131022608e070ecf0953e6d
+    sha256: 3e1e738e805baefc79d12b64e1ac419eb3263ac7b1b2d2d0fac6730abac46e1d
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1195,7 +1199,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: da7a71311ae350fcc98fc3613f61542c9dcc2b4e3e6095477612b0fd3936dd6d
+    sha256: 6f25a91b70d1c6dd48e4fa63ca7e20173bbec9fc9e7f8e09c1ea12f6e40e0dee
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset
@@ -1667,7 +1671,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: dd9a23d0015897b9b62219980baf5f252562e9e71ad2299a85484a6e96604d60
+    sha256: 0821e8cec44ed6d630f324fb4f28a7b3e301dba9ffc4a1451383543ee393fab5
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

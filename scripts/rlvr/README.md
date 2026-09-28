@@ -89,8 +89,9 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 | `scalar_observations()` | `rlvr.scalar` (the Normal-Gamma observation feed) |
 | `normal_gamma_update()`, `merge_normal_gamma_posts()`, `_ng_from_stats()` | `rlvr.scalar` (THE Normal-Gamma math; numpy-backed per the pattern below) |
 | `fact_artifacts()` | `rlvr.scalar` |
+| `question_claims()` — the issue-433 citation chokepoint's claim-provenance half | `rlvr.scalar` |
 | `clamp_credit()`, `rail_of()`, `resolve_citations()`, `oracle_lock()`, `validate_verdict_doc()`, `resolvable_registry()`, `apply_trajectory_settlement()` | `rlvr.scalar` (settlement v3 validator) |
-| `KIND_ROUND_CREDIT`, `BAND_ROUND_CREDIT`, `RULE_*`, `TRACE_CANONICAL`, `FAIL_CREDIT_CAP`, `ORACLE_PASS_LOCK` | `rlvr.scalar` |
+| `KIND_ROUND_CREDIT`, `BAND_ROUND_CREDIT`, `RULE_*`, `TRACE_CANONICAL`, `FAIL_CREDIT_CAP`, `ORACLE_PASS_LOCK`, `ROUND_CREDIT_FULL`, `DEMOTION_*` (the issue-433 value ladder) | `rlvr.scalar` |
 
 ### priors — from `scripts/compute_priors.py`
 
