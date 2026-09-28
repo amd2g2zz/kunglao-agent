@@ -511,7 +511,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 77d341b331403798e506c86c7628687071d96b061d9ca127f1bd5d3584912033
+    sha256: 62b6d716ceadba1bcddf562745368bef3562242f201b54a3964639805d34fefa
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -563,7 +563,7 @@ files:
   - src: scripts/intake_promise.py
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
-    sha256: 6126d304dee52ecd6a29ae069c89b2e87cfa0b59025c6d30acdffc673e393fb7
+    sha256: 73ae813372dd6dacadd1ec461fb291342365442c14f655c8349bec098e76583d
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold

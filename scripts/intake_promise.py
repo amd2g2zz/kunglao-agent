@@ -162,9 +162,9 @@ def _obligation_lane(task_spec, ws: Path) -> str:
         if isinstance(declared, str) and declared.strip():
             return declared.strip()
     except Exception as exc:  # noqa: BLE001 — fail-open to the legacy default
-        print(f"intake-promise: WARN lane probe failed ({type(exc).__name__}: "
-              f"{exc}) — defaulting to the malware lane obligation",
-              file=sys.stderr)
+        print(f"intake-promise: WARN (fail-open) lane probe failed "
+              f"({type(exc).__name__}: {exc}) — defaulting to the malware "
+              f"lane obligation", file=sys.stderr)
     return "malware"
 
 

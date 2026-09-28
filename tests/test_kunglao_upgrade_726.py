@@ -257,7 +257,9 @@ def test_iron_rule_guard_selftest(up, tmp_path, capsys):
 # ------------------------------------------------------------- #739 git snapshot
 
 def _git(ws: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(ws), *args],
+    # commit-creating git calls (revert) need an identity on bare CI boxes
+    identity = ("-c", "user.name=t", "-c", "user.email=t@localhost")
+    return subprocess.run(["git", "-C", str(ws), *identity, *args],
                           capture_output=True, text=True)
 
 

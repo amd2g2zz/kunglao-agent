@@ -510,8 +510,8 @@ def _framework_project_root() -> Path | None:
     try:
         candidates.append(Path(canonical_install_root()))
     except Exception as exc:  # noqa: BLE001 — resolver must never raise at wire time
-        print(f"hook_activation: WARN canonical install root probe failed: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"hook_activation: WARN (fail-open) canonical install root "
+              f"probe failed: {type(exc).__name__}: {exc}", file=sys.stderr)
     candidates.extend(reversed(Path(__file__).resolve().parents))
     for c in candidates:
         if (c / "pyproject.toml").is_file():
