@@ -51,7 +51,7 @@ files:
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
-    sha256: bc577dd5def82b48076e1c762527b8d5b2dfdf71947e23735a267d4e84548677
+    sha256: c7eba040bf3440e5f57598189895bbd56626e4afda618cbebe79775e493500ba
   - src: hooks/state_anchor.py
     dest: .claude/hooks/state_anchor.py
     kind: hook

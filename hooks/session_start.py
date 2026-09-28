@@ -145,7 +145,10 @@ def main(stdin_stream=None) -> int:
             if isinstance(payload, dict):
                 return main_with_payload(payload)
         except (json.JSONDecodeError, ValueError):
-            pass  # not a payload — fall through to the legacy argv face
+            # not a payload — the legacy argv face below takes over (the
+            # assignment keeps the handler non-silent: input-shape dispatch,
+            # never a swallowed fault; #275-batch3 zero-silent contract)
+            data = ""
     import argparse
     ap = argparse.ArgumentParser(description="SessionStart hook")
     ap.add_argument("workspace", type=Path, nargs="?")
