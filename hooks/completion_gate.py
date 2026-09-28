@@ -301,8 +301,17 @@ def process_event(payload: dict) -> int:
     try:
         cg = _load_judge()
         code, reason = cg.judge(oracle)
-    except Exception:  # noqa: BLE001 — FAIL_OPEN on judge
-        return 0
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # was FAIL_OPEN (judge crash -> session end). A gate that cannot
+        # see must not wave the completion through: the judge error BLOCKS
+        # with the cause, the same #717 shape as an unreadable oracle.
+        warn("gate_error:completion_judge", f"{type(exc).__name__}: {exc}")
+        reason = (f"completion judge crashed ({type(exc).__name__}: {exc}) "
+                  f"— gate error is fail-closed; repair the judge before "
+                  "completion can be judged (owner ruling 2026-09-28)")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
     if code == 0:
         # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
         # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;
