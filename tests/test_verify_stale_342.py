@@ -47,7 +47,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import convergence_check as cc  # noqa: E402
-from _factories import write_claims_register, write_worker_status  # noqa: E402
+from _factories import stamp_current, write_claims_register, write_worker_status  # noqa: E402
 from liveness_policy import TICK_INTERVAL_DEFAULT_MIN  # noqa: E402
 
 ENV_N = "KUNGLAO_VERIFY_STALE_TICKS"
@@ -97,6 +97,7 @@ def _make_ws(tmp_path: Path, *, index_rows: list[str],
     write_claims_register(ws, [{"id": "C-001", "status": "OPEN"}])
     (ws / "task_spec.yaml").write_text(
         "primary_questions:\n  - q1: sample family\n", encoding="utf-8")
+    stamp_current(ws)
     fdir = ws / "facts"
     fdir.mkdir(exist_ok=True)
     (fdir / "_INDEX.md").write_text(

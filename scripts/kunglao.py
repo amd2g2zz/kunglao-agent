@@ -208,7 +208,12 @@ def cmd_check_stale(args) -> int:
         }
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
-    if ws_key < skill_key:
+    if ws_v != skill_v:
+        # 0.1.6 sweep: EXACT-match gate (string equality — a .post agent
+        # or workspace is a mismatch too; the semver tuple is kept only
+        # for the unparseable-stamp face above). A workspace stamped
+        # OLDER **or NEWER** than the skill refuses (the #5 pending-merge
+        # recovery path still applies on the mismatch side).
         # #5: a pending manual-merge marker means a previous upgrade run
         # already REFUSED here — repeating "run /upgrade first" would loop
         # forever (the merge refusal is exactly what keeps the stamp stale).
@@ -246,7 +251,8 @@ def cmd_check_stale(args) -> int:
             "workspace_stamp": ws_v,
             "skill_version": skill_v,
             "advice": f"run /kunglao-agent:upgrade {ws} first "
-                      f"(stamp {ws_v} < skill {skill_v})",
+                      f"(stamp {ws_v} != skill {skill_v} — exact match "
+                      f"required; upgrade is the only path forward)",
         }
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
@@ -341,9 +347,11 @@ def _gate_stale_workspace(ws: Path) -> int:
             file=sys.stderr,
         )
         return RC_STALE_WORKSPACE
-    if ws_key < skill_key:
+    if ws_v != skill_v:
         print(
-            f"kunglao: workspace stamp {ws_v} trails skill version {skill_v} — "
+            f"kunglao: workspace stamp {ws_v} != skill version {skill_v} "
+            f"(exact match required, older AND newer refuse — the "
+            f"transactional upgrade is the only path forward): "
             f"run /kunglao-agent:upgrade {ws} first.",
             file=sys.stderr,
         )

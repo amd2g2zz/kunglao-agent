@@ -7,6 +7,7 @@ is never read or written; no claude process is spawned and no schtasks task
 is registered (command construction is asserted as strings; the true
 kill->kick E2E is a documented manual step in the PR).
 """
+import hook_activation
 import json
 import os
 import shutil
@@ -133,13 +134,17 @@ def test_ensure_project_hooks_exact_commands(tmp_path):
     # bare `python` can resolve to 2.x and kill every hook; this machine's
     # /usr/local/bin/python is 2.7.17). Script paths stay absolute inside the
     # skill's hooks dir (#269); the project root is the skill root.
-    skill_root = Path(hook_dir).parent.as_posix()
+    # 0.1.6 sweep (#6): the env project is the FRAMEWORK root (the real
+    # skill install with pyproject — a tmp hooks dir ships none) and the
+    # command carries the explicit `python` token; script paths stay in
+    # the target hooks dir.
+    skill_root = hook_activation._framework_project_root().as_posix()
     assert commands == [
-        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/dispatch_gate.py",
-        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/heartbeat_touch.py",
-        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_pulse.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} python {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} python {Path(hook_dir).as_posix()}/dispatch_gate.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} python {Path(hook_dir).as_posix()}/heartbeat_touch.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} python {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} python {Path(hook_dir).as_posix()}/worker_pulse.py",
     ]
 
 

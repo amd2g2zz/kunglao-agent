@@ -62,6 +62,14 @@ def _make_ws(tmp_path, claims=None) -> Path:
         "goal_verbatim: retrieve the family config\n"
         "success_criterion: family named with evidence\n"
         "verification_method: static\n", encoding="utf-8")
+    # 0.1.6 version gate: the decide face refuses a workspace whose stamp
+    # != the executing skill version — carry the current stamp.
+    if SCRIPTS.is_dir() and str(SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS))
+    import template_version
+    (ws / "CLAUDE.md").write_text(
+        template_version.stamp_line(template_version.read_skill_version())
+        + "\n", encoding="utf-8")
     write_claims_register(ws, claims or [], defaults=True)
     return ws
 

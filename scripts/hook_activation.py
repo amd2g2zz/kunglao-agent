@@ -501,6 +501,24 @@ class HookWiringSelfcheckError(RuntimeError):
     (fail-closed); the CLI maps it to exit 1, init to RC_HOOK_WIRING."""
 
 
+def _framework_project_root() -> Path | None:
+    """The nearest directory owning pyproject.toml, probing the executing
+    install root first (#6): hooks must run in an env carrying the
+    framework dependency set — never in a workspace (which ships no
+    project) and never in an ephemeral uv env."""
+    candidates: list[Path] = []
+    try:
+        candidates.append(Path(canonical_install_root()))
+    except Exception as exc:  # noqa: BLE001 — resolver must never raise at wire time
+        print(f"hook_activation: WARN (fail-open) canonical install root "
+              f"probe failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    candidates.extend(reversed(Path(__file__).resolve().parents))
+    for c in candidates:
+        if (c / "pyproject.toml").is_file():
+            return c
+    return None
+
+
 def build_hook_entry(hook_dir: Path, hook_file: str,
                     matcher: str | None = None,
                     *, project: Path | None = None) -> dict:
@@ -515,10 +533,22 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     python can resolve to 2.x and kill every registered hook; uv uses the
     skill's own project venv (python 3.11+).
     """
-    # #783: deployed copies run under the WORKSPACE project root so an
-    # upgrade of the skill package never mutates existing workspaces;
-    # legacy (undeployed) callers fall back to the installing skill dir.
-    project_root = Path(project).resolve() if project else Path(hook_dir).parent
+    # 0.1.6 sweep (#6, 51job live run): the hooks' INTERPRETER ENV is the
+    # FRAMEWORK project — the executing install root (pyproject + uv.lock +
+    # .venv carrying the framework dependency set, PyYAML at minimum) —
+    # NEVER the workspace: a workspace ships no pyproject/uv.lock, so
+    # `uv run --project <workspace>` built an ephemeral empty env and any
+    # hook with a lazy third-party import (write_guard: `import yaml`)
+    # fail-closed-BLOCKED legitimate writes. The SCRIPT path stays the
+    # workspace deployed copy (upgrade isolation #783 unchanged); only the
+    # env project changed. The explicit `python` token is the invocation
+    # standard's canonical form.
+    project_root = _framework_project_root()
+    if project_root is None:
+        # no framework project found (never expected in-tree): fall back to
+        # the historical resolution rather than refusing to wire at all
+        project_root = (Path(project).resolve() if project
+                        else Path(hook_dir).parent)
     p = (Path(hook_dir) / hook_file).as_posix()
     # #811: hooks inherit the invoking shell's locale — a GBK console turns
     # every encoding-less IO in the hook into a decode bomb. PYTHONUTF8=1
@@ -526,7 +556,8 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # call sites before the #811 explicit-encoding sweep reaches them.
     hooks = [{"type": "command",
               "command": (f"PYTHONUTF8=1 "
-                          f"uv run --project {project_root.as_posix()} {p}")}]
+                          f"uv run --project {project_root.as_posix()} "
+                          f"python {p}")}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -692,12 +723,18 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
     # the declared mode comes from the registration contract (deployed_project),
     # so a checker handed the same wrong mode still fails; bare-skill fallback
     # recomputes from the executing install as before.
+    # #6 (0.1.6 sweep): the ENV project in the canonical form is the
+    # FRAMEWORK root (same resolution the writer uses) — the SCRIPT path
+    # stays the deployed hooks dir. A workspace-project form is the
+    # ephemeral-env trap this sweep removed.
+    framework = _framework_project_root()
     if deployed_project is not None:
         d = deployed_project.resolve() / ".claude" / "hooks"
-        prefix = f"uv run --project {deployed_project.resolve().as_posix()} "
     else:
         d = _canonical_hooks_dir()
-        prefix = f"uv run --project {d.parent.as_posix()} "
+    prefix = (f"uv run --project {framework.as_posix()} python "
+              if framework is not None else
+              f"uv run --project {d.parent.as_posix()} python ")
     for c in cmds:
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
@@ -709,7 +746,8 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                 and body[len(prefix):].startswith(d.as_posix() + "/")):
             mismatches.append(
                 f"shape: command for {base} is not canonical (must be "
-                f"uv-form into the declared hooks dir {d}): {c}")
+                f"uv-form --project the FRAMEWORK root + python, into the "
+                f"declared hooks dir {d}): {c}")
 
     return {"ok": not mismatches, "layer": layer, "target": str(target),
             "mismatches": mismatches, "present": present, "missing": missing}

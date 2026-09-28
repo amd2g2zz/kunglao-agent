@@ -35,9 +35,15 @@ def test_register_invokes_ws_local_when_copies_materialized(tmp_path: Path) -> N
 
     cmds = _commands(tmp_path)
     assert cmds, "registry must not be empty"
+    # 0.1.6 sweep (#6): the ENV project is the FRAMEWORK root (a workspace
+    # ships no pyproject — the old workspace form built an ephemeral empty
+    # env); the SCRIPT path stays the workspace deployed copy (#783 upgrade
+    # isolation preserved on the script axis).
     for c in cmds:
-        assert f"uv run --project {tmp_path.as_posix()}" in c, (
-            f"#783: project root must be the workspace -- {c}")
+        assert f"uv run --project {ha._framework_project_root()}" in c and             " python " in c, (
+            f"#6: env project must be the framework root -- {c}")
+        assert f"{tmp_path.as_posix()}/.claude/hooks/" in c, (
+            f"#783: the script path stays the workspace copy -- {c}")
         assert "/.claude/hooks/" in c.replace("\\", "/"), (
             f"script path must be the ws-local copy -- {c}")
 

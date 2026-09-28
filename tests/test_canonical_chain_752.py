@@ -34,6 +34,7 @@ the real ~/.claude tree is NEVER touched.
 from __future__ import annotations
 
 import json
+import re
 import pathlib
 import sys
 from pathlib import Path
@@ -398,7 +399,10 @@ def test_v012_state_rewire_zero_stale_references(fake_home, monkeypatch):
     hook_activation.register_hooks(workspace=ws)
 
     blob = target.read_text(encoding="utf-8")
-    assert "python " not in blob.replace("python -", "") or \
+    # 0.1.6 invocation standard: bare `python ` is legal ONLY inside the
+    # canonical `uv run --project <framework> python <script>` form.
+    residue = re.sub(r"uv run --project \S+ python", "", blob)
+    assert "python " not in residue or \
         PROD_NAME not in blob, "legacy python entries must be replaced"
     assert f"/skills/{PROD_NAME}/" not in blob
     import install_reference  # noqa: E402

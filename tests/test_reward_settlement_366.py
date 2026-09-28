@@ -276,6 +276,9 @@ class TestNoModelCallPath:
         "datetime", "pathlib", "typing", "yaml",
         "rollout_ledger", "harness_common", "kunglao_log",
         "outcome_capture", "failure_analysis_gate",
+        # #421: exogenous classification — a mechanical file-reader over
+        # runs/env-state.json (component-state face); no model-call path.
+        "exogenous", "env_state_probe",
     }
     FORBIDDEN_FRAGMENTS = (
         "llm", "model", "judge", "score_", "anthropic", "openai",

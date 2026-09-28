@@ -220,7 +220,7 @@ def category_regression() -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     junit = out_dir / "junit.xml"
 
-    cmd = ["python", "-m", "pytest", "-q", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-q", "--junitxml", str(junit),
            "-m", "not replay", "--tb=short",
            "-p", "tests.v013_acceptance.conftest",
            "-n", "auto"]  # pytest-xdist parallel
@@ -256,7 +256,7 @@ def category_integration() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_integration_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and integration", str(target),
            "--tb=short"]
     try:
@@ -291,7 +291,7 @@ def category_fault() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_fault_injection_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and fault", str(target),
            "--tb=long"]
     try:
@@ -414,7 +414,7 @@ def category_smoke() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_smoke_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and smoke", str(target), "--tb=short"]
     try:
         import pytest_timeout  # noqa: F401
