@@ -326,21 +326,25 @@ class TestBackstopDepth:
 class TestGuidance:
     def test_guidance_line_present_for_max(self, tmp_path):
         from _factories import seed_difficulty
-        from heartbeat_loop_prompt import build_prompt
+        from heartbeat_loop_prompt import build_prompt, constitution
         seed_difficulty(tmp_path, "max")
-        prompt = build_prompt(str(tmp_path))
-        assert "difficulty max" in prompt
-        assert "consistency sweep of associated tasks" in prompt
-        assert "2 red-team rounds" in prompt
+        text = constitution(str(tmp_path))
+        assert "difficulty max" in text
+        assert "consistency sweep of associated tasks" in text
+        assert "2 red-team rounds" in text
+        # event-wakeup restructure (issue 434): the difficulty line is
+        # session-static — it rides the constitution, not the cron body
+        # (the per-tick re-injection is gone).
+        assert "difficulty max" not in build_prompt(str(tmp_path))
 
     def test_guidance_line_absent_for_easy(self, tmp_path):
         """No complexification: an easy workspace carries NO difficulty line."""
         from _factories import seed_difficulty
-        from heartbeat_loop_prompt import build_prompt
+        from heartbeat_loop_prompt import constitution
         seed_difficulty(tmp_path, "easy")
-        prompt = build_prompt(str(tmp_path))
-        assert "difficulty easy" not in prompt
-        assert "consistency sweep of associated tasks" not in prompt
+        text = constitution(str(tmp_path))
+        assert "difficulty easy" not in text
+        assert "consistency sweep of associated tasks" not in text
 
     def test_guidance_unit_easy_is_empty(self, tmp_path):
         from _factories import seed_difficulty

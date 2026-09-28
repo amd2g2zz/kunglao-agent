@@ -45,8 +45,11 @@ def test_registry_exists_in_wire_up_settings() -> None:
     """The writer exports WIRE_UP_HOOK_FILES — the single source."""
     files = wire_up_settings.WIRE_UP_HOOK_FILES
     assert isinstance(files, frozenset), "registry must be a frozenset (immutable)"
-    # the 9 distinct files the registrations write today (#372 baseline 8
-    # + #532 write_guard on the Edit|Write|MultiEdit matcher)
+    # the distinct files the registrations write today (#372 baseline 8
+    # + #532 write_guard on the Edit|Write|MultiEdit matcher
+    # + the event-wakeup topology's five faces (issue 434): the Stop
+    # WORKGUARD, the SubagentStop closure feed, SessionStart, PreCompact
+    # and UserPromptSubmit)
     assert files == frozenset({
         "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
         "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
@@ -54,6 +57,11 @@ def test_registry_exists_in_wire_up_settings() -> None:
         "orchestrator_tool_guard.py",  # #608 Bash maker-checker WARN
         "violation_capture.py",        # #718 Bash violation recorder
         "bash_fact_guard.py",          # #809 Bash facts-write lint recorder
+        "workguard_gate.py",           # issue 434 Stop WORKGUARD
+        "round_closure.py",            # issue 434 SubagentStop closure feed
+        "session_start.py",            # issue 434 SessionStart constitution
+        "compact_continuity.py",       # issue 434 PreCompact continuity
+        "user_signal_capture.py",      # issue 434 UserPromptSubmit observation
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -181,7 +189,12 @@ KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
              "state_anchor.py", "completion_gate.py", "write_guard.py",
              "orchestrator_tool_guard.py",
              "violation_capture.py",
-             "bash_fact_guard.py"}  # #809
+             "bash_fact_guard.py",  # #809
+             # issue 434 (event-wakeup topology): the five new registry
+             # faces are deployment gates restored by the full wire-up —
+             # deliberately skipped by both narrow subsets.
+             "workguard_gate.py", "round_closure.py", "session_start.py",
+             "compact_continuity.py", "user_signal_capture.py"}
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 
