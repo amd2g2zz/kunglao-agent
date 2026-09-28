@@ -434,9 +434,16 @@ def _gate_error_reject(ws: Path | None, gate: str, claim_id: str | None,
     msg = f"gate error (fail-closed) - {type(exc).__name__}: {exc}"
     warn(f"gate_error:{gate}", f"{type(exc).__name__}: {exc}")
     if ws is not None:
-        _emit_trace(ws, f"{gate}_gate_error", claim_id,
-                    f"reason=gate_error; exc={type(exc).__name__}: {exc}",
-                    trace_id=trace_id)
+        # literal action strings: the #880 orphan scanner cannot see
+        # f-string emissions, and each face must stay registered
+        if gate == "top1":
+            _emit_trace(ws, "top1_gate_error", claim_id,
+                        f"reason=gate_error; exc={type(exc).__name__}: {exc}",
+                        trace_id=trace_id)
+        elif gate == "capability":
+            _emit_trace(ws, "capability_gate_error", claim_id,
+                        f"reason=gate_error; exc={type(exc).__name__}: {exc}",
+                        trace_id=trace_id)
         try:
             row = {
                 "ts": datetime.now(tz=timezone.utc).isoformat(

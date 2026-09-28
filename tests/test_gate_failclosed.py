@@ -27,6 +27,7 @@ import sys
 import types
 from pathlib import Path
 
+import kunglao_log
 import worker_budget_gates as gates
 import worker_budget_sinks as sinks
 
@@ -46,7 +47,7 @@ def test_workers_lt_3_scan_error_rejects(monkeypatch, capsys):
             raise RuntimeError("scan exploded")
 
     monkeypatch.setattr(gates, "load_hooks_lib", lambda: _BoomLib)
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_workers_lt_3({"workspace": "/tmp/ws"})
     assert ok is False  # (a) rejected
     assert "RuntimeError" in msg and "scan exploded" in msg  # (b) cause
@@ -59,7 +60,7 @@ def test_rotation_experiment_error_rejects(monkeypatch, capsys):
         raise KeyError("flag store corrupted")
 
     monkeypatch.setattr(gates, "load_rotation_flags", _boom)
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_rotation_experiment(
         {"workspace": "/tmp/ws"}, "C-7", "no marker prompt")
     assert ok is False
@@ -76,7 +77,7 @@ def test_rotation_experiment_corrupt_store_rejects_for_real(tmp_path,
     (tmp_path / "runs").mkdir()
     (tmp_path / "runs" / ".rotation-induction.json").write_text(
         "{corrupt json", encoding="utf-8")
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_rotation_experiment(
         {"workspace": str(tmp_path)}, "C-9", "no marker prompt")
     assert ok is False
@@ -91,7 +92,7 @@ def test_load_rotation_flags_missing_store_is_empty(tmp_path):
 
 def test_tool_search_citation_import_error_rejects(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "instrument_menu", None)
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_tool_search_citation({"workspace": "/tmp/ws"},
                                                "C-1", "prompt")
     assert ok is False
@@ -114,7 +115,7 @@ def test_zero_output_circuit_belief_hash_error_rejects(tmp_path, monkeypatch,
     runs.mkdir()
     (runs / "zero-output-fingerprint.json").write_text(
         json.dumps({"belief_hash": "x"}), encoding="utf-8")
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_zero_output_circuit(tmp_path, "C-1", [])
     assert ok is False
     assert "ZERO-OUTPUT CIRCUIT" in msg
@@ -131,7 +132,7 @@ def test_env_premise_vocab_error_rejects(monkeypatch, capsys):
         raise TypeError("vocab broken")
 
     monkeypatch.setattr(sinks, "_env_caps_needed", _boom)
-    sinks._B3_WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = sinks.check_env_premise({"workspace": "/tmp/ws"}, 0,
                                       tools=["adb"])
     assert ok is False  # no silent pass
@@ -146,7 +147,7 @@ def test_env_premise_reconcile_crash_rejects(tmp_path, monkeypatch, capsys):
         json.dumps({"per_capability": {"vmr-shell": {"status": "PASS"}}}),
         encoding="utf-8")
     monkeypatch.setitem(sys.modules, "premise_gate", None)
-    sinks._B3_WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     # tier=2 + vmr-shell: the same needed-cap shape the #340 tests use
     ok, msg = sinks.check_env_premise({"workspace": str(tmp_path)}, 2,
                                       tools=["vmr-shell"])
@@ -336,7 +337,7 @@ def test_plan_contingency_infra_error_rejects(tmp_path, monkeypatch, capsys):
         "dispatch-anchor: t\ngoal: g\npreflight: p\nsteps:\n"
         "  1. do the thing -> expect evidence\nfallback: report blocker\n",
         encoding="utf-8")
-    gates._WARN_LAST.clear()
+    kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_worker_plan(
         {"workspace": str(tmp_path), "state": tmp_path / "analysis_state.txt",
          "register": tmp_path / "claim-register.yaml",

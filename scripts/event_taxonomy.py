@@ -304,7 +304,6 @@ EMIT_ACTIONS = [
     "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
     "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
     "toolfirst_search",   # issue 243 provenance: one row per cited tool-search --find result (keywords -> hit|none)
-    "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face (legacy vocabulary; face flipped fail-closed 2026-09-28)
     "top1_gate_error",    # owner ruling 2026-09-28: _top1_enforcement gate ERROR -> durable fail-closed REJECT
     "top1_reject",
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face

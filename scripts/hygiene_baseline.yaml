@@ -138,7 +138,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 1
   scripts/event_taxonomy.py:
-    r1: 116
+    r1: 115
     r2: 1
   scripts/external_kicker.py:
     r1: 32
