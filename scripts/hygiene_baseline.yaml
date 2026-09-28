@@ -159,7 +159,7 @@ files:
   scripts/heartbeat.py:
     r1: 29
   scripts/heartbeat_loop_prompt.py:
-    r1: 4
+    r1: 3
   scripts/heartbeat_tick.py:
     r1: 43
   scripts/heartbeat_touch.py:

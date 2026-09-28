@@ -415,6 +415,16 @@ def main(argv: list[str] | None = None) -> int:
               "creates one (run kunglao init first)", file=sys.stderr)
         return 2
     ws = _resolve_ws(ws_arg)
+    # event-wakeup topology: capture the PRE-tick durable-activity stamp
+    # BEFORE this tick appends its own row - the watchdog's heartbeat-gap
+    # verdict must see the cadence that LED HERE, not the bookkeeping this
+    # tick is about to write (its own row can never mask a real gap).
+    try:
+        import loop_watchdog as _lw
+        _pre_tick_activity = _lw.last_activity(ws)
+    except Exception:  # noqa: BLE001 - watchdog is fail-open, never fatal
+        _pre_tick_activity = None
+        _lw = None
     # #415.3: the gated fresh-deploy reset face — early exit, it is not a
     # tick (nothing else in this run may execute off a reset).
     if parsed.reset_continuity:
@@ -528,6 +538,27 @@ def main(argv: list[str] | None = None) -> int:
             first_failure = {"step": report[name].get("script", name), "rc": rc}
     report["alert"] = first_failure is not None
     report["first_failure"] = first_failure
+
+    # event-wakeup topology: the cron heartbeat demotes to a TRUE watchdog -
+    # the loop guidance fires ONLY when an expected event did not arrive
+    # (cadence gap / silent worker / failed maintenance step). A quiet
+    # verdict makes this wake a NO-OP for the LLM (the loop prompt reads
+    # report["watchdog"]). Fail-open: a watchdog error never fails the tick.
+    try:
+        if _lw is None:
+            import loop_watchdog as _lw
+        report["watchdog"] = _lw.evaluate(
+            ws,
+            failed_steps=[name for name, rc in
+                          (("selfcheck", rc_sc), ("renew", rc_renew),
+                           ("heartbeat", rc_hb)) if rc != 0],
+            activity=_pre_tick_activity)
+        if report["watchdog"].get("fired"):
+            print("*** WATCHDOG: expected event(s) missed - "
+                  + "; ".join(report["watchdog"]["reasons"])
+                  + " - act on these reasons only (event-wakeup topology) ***")
+    except Exception as exc:  # noqa: BLE001 - watchdog never fails the tick
+        warn("loop_watchdog", f"{type(exc).__name__}: {exc}")
 
     out = ws / "runs" / ".heartbeat-tick.json"
     try:

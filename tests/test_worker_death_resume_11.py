@@ -306,13 +306,19 @@ def test_resume_guidance_present_in_report_and_summary(tmp_path: Path) -> None:
 
 
 def test_heartbeat_loop_prompt_carries_death_resume_instruction() -> None:
-    """#11: the tick prompt (orchestrator decision contract) must say what a
-    worker-death event means: dispatch a RESUME claim, continue-from."""
-    from heartbeat_loop_prompt import build_prompt
-    prompt = build_prompt("/tmp/ws-nonexistent-11")
-    assert ".worker-death-" in prompt, \
-        "heartbeat loop prompt must reference the death-record surface"
-    assert "resume" in prompt.lower()
+    """#11: the tick decision contract must say what a worker-death event
+    means: dispatch a RESUME claim, continue-from. Event-wakeup restructure
+    (issue 434): the decision contract is the session CONSTITUTION now —
+    the death-resume instruction rides it (the cron body is the watchdog
+    face)."""
+    from heartbeat_loop_prompt import build_prompt, constitution
+    text = constitution("/tmp/ws-nonexistent-11")
+    assert ".worker-death-" in text, \
+        "session constitution must reference the death-record surface"
+    assert "resume" in text.lower()
+    # and the watchdog cron body keeps referencing the stuck-worker face
+    # (the missed-pulse reason that surfaces death records)
+    assert "stuck-worker" in build_prompt("/tmp/ws-nonexistent-11")
 
 
 # ---------- 4. guards ---------------------------------------------------------
