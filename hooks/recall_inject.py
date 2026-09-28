@@ -48,25 +48,19 @@ registration entry, #445) alongside dispatch_gate):
     "command": "uv run --project <skill_root> <skill_root>/hooks/recall_inject.py"}]}
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] recall_inject WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import hashlib
 import json
 import re
@@ -573,7 +567,7 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
         mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
     except Exception as exc:  # noqa: BLE001
-        warn("_trace", f"{type(exc).__name__}: {exc}")
+        warn("recall_inject.trace_emit", f"{type(exc).__name__}: {exc}")
     try:
         mod = load_module_by_path(
             "recall_metrics_recall814",
@@ -581,7 +575,7 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
         mod.record(ws, kind=kind, query=detail[:80], files=files,
                    reason=action)
     except Exception as exc:  # noqa: BLE001
-        warn("_trace_2", f"{type(exc).__name__}: {exc}")
+        warn("recall_inject.trace_metrics", f"{type(exc).__name__}: {exc}")
 
 
 def _gap_notes_for_claim(ws: Path, prompt_text: str,

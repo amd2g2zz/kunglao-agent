@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_B3_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _B3_WARN_LAST.get(op) == reason:
-        return
-    _B3_WARN_LAST[op] = reason
-    print(f"[kunglao-agent] worker_budget_sinks WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # worker_budget.py aggregator + tests consume these via module attrs
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
@@ -840,8 +834,8 @@ def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:
             continue
         r = _tep.evaluate_streak(rec['consecutive_failures'], tool=tool)
         if r['action'] == 'warn':
-            print(f'[kunglao-agent] tool-error WARN: {r["message"]} — switch '
-                  f'approach or repair the environment', file=sys.stderr)
+            warn("tool_error", f'tool-error WARN: {r["message"]} — switch '
+                                f'approach or repair the environment')
         elif r['action'] == 'disable_escalate':
             print(f'[kunglao-agent] tool-error DISABLE: {r["message"]} '
                   f'({r.get("blocker_note", "")})', file=sys.stderr)
@@ -1083,10 +1077,11 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
             except Exception:  # noqa: BLE001 — unparseable prompt: not a claim dispatch
                 expected = None
             if expected:
-                print(f'[kunglao-agent] #234 dispatch-failure WARN: claim '
-                      f'{expected} was dispatched but worker {worker_id} has '
-                      f'no [active_workers] entry — strike not recorded '
-                      f'(reconcile runs/.kunglao-state)', file=sys.stderr)
+                warn("dispatch_failure",
+                     f'#234 dispatch-failure WARN: claim '
+                     f'{expected} was dispatched but worker {worker_id} has '
+                     f'no [active_workers] entry — strike not recorded '
+                     f'(reconcile runs/.kunglao-state)')
             return
         final = _worker_final_status(ws, worker_id, tool_result)
         if final not in DISPATCH_FAILURE_STATUSES:
@@ -1109,9 +1104,10 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
                     # review r2 LOW: the artifact write can fail — the
                     # strike counted, but the escalation surface did not
                     # land; say so instead of pointing at a missing file.
-                    print(f'[kunglao-agent] #234 must-ask escalation WARN '
-                          f'on {claim_id}: '
-                          f'{escalation.get("reason")}', file=sys.stderr)
+                    warn("must_ask_escalation",
+                         f'#234 must-ask escalation WARN '
+                         f'on {claim_id}: '
+                         f'{escalation.get("reason")}')
             else:
                 print(f'[kunglao-agent] #234: dispatch failure recorded on '
                       f'{claim_id} (promotion_attempts={r["attempts"]})',

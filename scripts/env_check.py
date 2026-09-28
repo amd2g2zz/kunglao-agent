@@ -67,16 +67,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] env_check WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -925,7 +916,7 @@ def run(ws: Path) -> tuple[int, dict]:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
-        print(f"WARN: cannot write {out}: {exc}", file=sys.stderr)
+        warn("snapshot_write", f"cannot write {out}: {exc}")
     for name, row in graded.items():
         print(f"[{row['status']}] {name}: {row['detail']}")
     if degraded:

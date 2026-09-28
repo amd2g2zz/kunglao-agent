@@ -24,6 +24,7 @@ from pathlib import Path
 
 import kunglao_log
 import rollup
+import kunglao_log as kl406  # the modules' warn IS this canonical function (logging-arch batch)
 import tc_journal
 import worker_budget_gates as gates
 import worker_budget_sinks as sinks
@@ -48,7 +49,7 @@ def test_rollup_notes_due_write_failure_warns(tmp_path, monkeypatch, capsys):
         raise OSError("disk full")
 
     monkeypatch.setattr(Path, "write_text", _raiser)
-    rollup._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     ok = rollup._queue_notes_due(tmp_path, "C-914", "FAILED")
     assert ok is False  # return shape unchanged
     err = _stderr(capsys)
@@ -77,7 +78,7 @@ def test_check_workers_lt_3_scan_failure_warn_and_frozen_verdict(
 
     monkeypatch.setattr(gates, "load_hooks_lib", lambda: _BoomLib)
 
-    gates._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     live = gates.check_workers_lt_3({"workspace": "/tmp/ws"})
     assert live == (True, '')
     err = _stderr(capsys)
@@ -99,7 +100,7 @@ def test_reset_retry_counter_write_failure_warns(tmp_path, monkeypatch, capsys):
         raise OSError("readonly fs")
 
     monkeypatch.setattr(gates, "_write_retry_counter", _boom)
-    gates._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     ok = gates.reset_retry_counter(tmp_path, "w1", "C-1")
     assert ok is False
     err = _stderr(capsys)
@@ -115,7 +116,7 @@ def test_set_claim_operation_read_failure_warns(tmp_path, monkeypatch, capsys):
         raise OSError("reg vanished")
 
     monkeypatch.setattr(Path, "read_text", _raiser)
-    gates._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     ok = gates.set_claim_operation(tmp_path, "C-1", ["probe"], "probe")
     assert ok is False
     err = _stderr(capsys)
@@ -128,7 +129,7 @@ def test_check_rotation_experiment_gate_error_frozen(monkeypatch, capsys):
         raise KeyError("flags corrupted")
 
     monkeypatch.setattr(gates, "load_rotation_flags", _boom)
-    gates._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     live = gates.check_rotation_experiment(
         {"workspace": "/tmp/ws"}, "C-7", "no marker prompt")
     assert live == (True, '')
@@ -149,7 +150,7 @@ def test_check_env_premise_vocab_failure_frozen(monkeypatch, capsys):
         raise TypeError("vocab broken")
 
     monkeypatch.setattr(sinks, "_env_caps_needed", _boom)
-    sinks._B3_WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     live = sinks.check_env_premise({"workspace": "/tmp/ws"}, 0, tools=["adb"])
     assert live == (True, '')
     assert "gate_error:env_caps_vocab" in _stderr(capsys)
@@ -236,7 +237,7 @@ def test_tc_journal_read_failure_warns(tmp_path, monkeypatch, capsys):
         return real_read(self, *a, **k)
 
     monkeypatch.setattr(Path, "read_text", _raiser)
-    tc_journal._WARN_LAST.clear()
+    kl406._WARN_LAST.clear()
     assert tc_journal.read(tmp_path) == []
     err = _stderr(capsys)
     assert "journal_read" in err
