@@ -31,6 +31,9 @@ scripts/rlvr/
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
+├── posteriors.py        # γ Discounted-TS posterior store (issue 428) —
+│                        #   append-only runs/posterior-store.jsonl + fold/read
+│                        #   γ decay + pseudo-count priors + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
 └── README.md            # this document
 ```
@@ -40,6 +43,16 @@ tools, and hooks alike). `rlvr/__init__.py` carries the ONE export map —
 a single `__all__` plus explicit submodule re-exports — so the public
 surface is enumerable in one file and drift against it is a test
 failure, not folklore.
+
+### posteriors — γ Discounted-TS store (landed W2-T1, issue 428)
+
+| face | home |
+|---|---|
+| `SCHEMA`, `STORE_REL`, `LOCK_REL`, `row_schema_lint()` | `rlvr.posteriors` (append-only store, ledger-isomorphic with rollout_ledger) |
+| `record()`, `read()` | `rlvr.posteriors` (loud-result writes; schema-enforced fail-open reads) |
+| `fold()`, `PosteriorView` | `rlvr.posteriors` (THE γ decay face — replay `(α,β) ← γ·(α,β)+obs` in input order; raw counts never rewritten) |
+| `gamma_constant()`, `OutcomeAdaptiveGamma`, `default_schedule()` | `rlvr.posteriors` (declared schedules; defaults = EX-2-calibrated constants) |
+| `GAMMA_FLOOR_DEFAULT`, `ADAPTIVE_EMA_LAMBDA_DEFAULT`, `PRIOR_ALPHA/BETA_DEFAULT` | `rlvr.posteriors` (measured in experiments/ex2-gamma-calibration.md) |
 
 ## Face map: final home of every current public face
 
