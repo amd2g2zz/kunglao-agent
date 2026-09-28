@@ -243,6 +243,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `method_families.py` | method-family action vocabulary (#432): closed registry loader (fail-closed), envelope field validation helper, other() quarantine + triage face, dispatch-history reindex, family health signals — the RL kernel's Q-cell action symbols | hooks (worker_budget_sinks battery), CLI (`--validate/--triage/--reindex/--health`), q_report, tests |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
 | `contracts.py` | cross-process contract registry (#102) — exit-code registry (convergence 0-5 + 64/65, plan_drift --auto trio `PLAN_DRIFT_AUTO_RCS`), event field schema (`EVENT_FIELD="action"`), gate-subprocess legal rc sets; single definition imported by every producer/consumer face (drift of this class can no longer pass CI) | hooks, lib(2: convergence_check, event_taxonomy), tests |

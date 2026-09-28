@@ -49,6 +49,21 @@ import sys
 import time
 from pathlib import Path
 
+# #432: the method-family vocabulary owner (scripts/ sibling — importable
+# because the _esp406 bootstrap above already put scripts/ on sys.path; the
+# deploy manifest ships method_families.py + method_families.yaml with the
+# other scripts). THE single field-validation chokepoint lives in this
+# file's pre_check (the facts-snapshot/devreason field-validation zone);
+# dispatch_gate.py deliberately stays method_family-free so the envelope
+# contract has ONE owner (a second leg there would resurrect the
+# two-vocabularies drift the closed registry exists to prevent). A partial
+# deployment without the module degrades the gate to a fail-closed REJECT
+# (never a crash, never a silent open) — _method_family_gate checks None.
+try:
+    import method_families as _mf432
+except Exception:  # noqa: BLE001 — partial-deploy lifeline shape
+    _mf432 = None
+
 """worker_budget_sinks — Pre+Post ToolUse entry points (pre_check / post_check / main).
 
 #568: extracted from worker_budget.py. Sinks orchestrate the gates over
@@ -289,6 +304,21 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'STALE: run one heartbeat_tick to refresh the snapshot, then '
             're-dispatch; (3) if L1 cannot repair (VM lease gone), fix the '
             'root cause (re-lease the VM / re-attach the device) and re-init.'
+        ),
+    },
+    'methodfamily': {
+        'additionalContext': (
+            '#432 method-family vocabulary gate: the dispatch did not '
+            'declare a countable APPROACH. Fix: add "method_family": '
+            '"<token>" to the kunglao_dispatch v1 envelope (or a '
+            '`method-family: <token>` line on v0 prompts). The token names '
+            'the approach — the Q(state signature, method family) key — '
+            'NEVER the tool chain. Registered tokens live in '
+            '<skill>/scripts/method_families.yaml (mined vocabulary; see '
+            'method_families.derivation.md). No registered approach fits? '
+            'Declare other(<one-line what this actually is>) — the line is '
+            'quarantined, triaged via `python scripts/method_families.py '
+            '--triage <ws>`, and promoted only by a reviewed registry diff.'
         ),
     },
 }
@@ -551,7 +581,8 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
-                        prompt: str = '') -> None:
+                        prompt: str = '',
+                        method_family: str | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -561,11 +592,16 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     must not block an already-approved dispatch. The fail-CLOSED side is
     the TTL itself — if the linkage stops working, the activation expires
     within 30 min and the sleeping hooks reject further dispatches.
+
+    #432: method_family rides the detail as `method_family=<token>` so
+    the unified log is replay-re-indexable (scripts/method_families.reindex
+    scans this face; consumers parse by substring, appending is safe).
     """
     ws = paths.get('workspace')
     if not ws:
         return
     ws_path = Path(ws)
+    fam = f' method_family={method_family}' if method_family else ''
     try:
         if _ha_link is not None:
             _ha_link.dispatch_linkage(ws_path)
@@ -574,7 +610,8 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                 ws_path, 'hook:worker_budget', 'dispatch', claim=cid,
                 trace_id=_declared_trace_id(prompt),
                 detail=f'tier={tier} tools={",".join(tools)} '
-                       f'agent={agent_name or "?"} (#461 linkage: renew + '
+                       f'agent={agent_name or "?"}{fam} '
+                       f'(#461 linkage: renew + '
                        f'arm + phase=DISPATCH)')
     except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
         print(f'[kunglao-agent] dispatch linkage WARN (fail-open): '
@@ -606,6 +643,51 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
             ws, claim_id, payload, prompt_text)
     except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
         return False
+
+
+def _method_family_gate(paths: dict, prompt: str, cid: str | None,
+                        row_agent: str, tier: int,
+                        tools: list) -> tuple[int | None, str | None]:
+    """#432: the method-family vocabulary gate — the single validation
+    chokepoint for the dispatch's method_family declaration (v1 envelope
+    field or v0 prose marker; ONE contract, two declaration faces).
+
+    Fail-closed on missing/unregistered tokens and on a registry the
+    validator cannot read (2026-09-28 owner ruling posture); the
+    other(<one-line>) escape passes and is quarantined for triage.
+    Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
+    turns an ALLOW into anything else. Returns (rc, token): rc=2 means
+    REJECT already emitted; token feeds the lifecycle row so the unified
+    log is replay-re-indexable. Callers pass cid=None to skip (the leg
+    fires only on a recognized dispatch shape — a plain Agent prompt is
+    not a kunglao dispatch and keeps the pre-#432 behavior)."""
+    if cid is None:
+        return (None, None)
+    if _mf432 is None:
+        # partial deployment without the registry module — the gate cannot
+        # see, so it must not wave the dispatch through (fail-closed)
+        return (_reject(
+            'methodfamily',
+            'method-family registry module unavailable (scripts/'
+            'method_families.py not importable) — fail-closed per the '
+            '2026-09-28 owner ruling; repair the deployment.', paths), None)
+    mf_meta = None
+    try:
+        mf_meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
+    except Exception:  # noqa: BLE001 — envelope meta is best-effort;
+        # the v0 prose marker below still declares the field.
+        mf_meta = None
+    mf_value = _mf432.declared_value(mf_meta, prompt)
+    mf_ok, mf_msg = _mf432.validate_method_family(mf_value)
+    if not mf_ok:
+        return (_reject('methodfamily', mf_msg, paths), None)
+    _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
+                            row_agent, tier, tools)
+    mf_other = _mf432.parse_other_detail(mf_value)
+    if mf_other is not None:
+        _mf432.append_quarantine_row(paths.get('workspace'), cid,
+                                     mf_other, row_agent)
+    return (None, mf_value)
 
 
 def pre_check(payload: dict, paths: dict) -> int:
@@ -764,6 +846,14 @@ def pre_check(payload: dict, paths: dict) -> int:
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    # #432 method-family vocabulary gate — the single validation
+    # chokepoint (see _method_family_gate). Placed as the LAST validation
+    # leg before the ALLOW-tail side effects: dispatches REJECTED by any
+    # battery gate keep their pre-#432 faces byte-identical.
+    mf_rc, mf_value = _method_family_gate(paths, prompt, cid, row_agent,
+                                          tier, tools)
+    if mf_rc is not None:
+        return mf_rc
     worker_id = agent_name or f'w{int(time.time())}'
     # #880: the toolfirst PASS face fires here (approval point) with the
     # (keyword->tool) attribution payload, and a MATCHED evaluation persists
@@ -785,7 +875,8 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #237 H1: the row carries the shared-resolver identity (row_agent), so
     # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
     # — the marker plan_drift_detector's D3 corroboration matches.
-    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt)
+    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
+                        method_family=mf_value)
     # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
     # approval point — it is what arms the plan-author gate on this claim's
     # NEXT dispatch, so a pre-written plan can no longer pass as worker work.

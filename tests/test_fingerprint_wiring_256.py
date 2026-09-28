@@ -76,7 +76,7 @@ def _dispatch_payload(claim: str = "C-001", tools: str = "grep") -> dict:
     JSON brace once in this file's history."""
     envelope = json.dumps({"kunglao_dispatch": {
         "version": 1, "claim": claim, "tier": 1, "tools": [tools],
-        "agent": "w-test"}})
+        "agent": "w-test", "method_family": "static-decompile"}})
     return {"tool_input": {
         "name": "w-test",
         "description": "",
@@ -379,7 +379,8 @@ class TestProductionBatteryRegistration:
             "description": "",
             "prompt": ('{"kunglao_dispatch": {"version": 1, '
                        '"claim": "C-001", "tier": 1, "tools": ["grep"], '
-                       '"agent": "w-test"}}\n'
+                       '"agent": "w-test", '
+                       '"method_family": "static-decompile"}}\n'
                        'facts-snapshot: 1 facts'),
         }}
         rc = sinks.pre_check(payload, _paths(ws))
