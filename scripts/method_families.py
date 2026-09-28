@@ -50,6 +50,8 @@ import argparse
 import json
 import re
 import sys
+
+from kunglao_log import warn
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -203,8 +205,10 @@ def _append_jsonl(path: Path, row: dict) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError:
-        pass  # fail-open: bookkeeping never blocks an approved dispatch
+    except OSError as exc:
+        # fail-open: bookkeeping never blocks an approved dispatch, but the
+        # skip is recorded (canonical warn, process-deduped per #419)
+        warn("method_family_bookkeeping", f"{type(exc).__name__}: {exc}")
 
 
 def append_quarantine_row(ws, claim: str | None, detail: str,

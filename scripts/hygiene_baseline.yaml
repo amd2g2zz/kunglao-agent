@@ -235,7 +235,7 @@ files:
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/method_families.py:
-    r1: 4
+    r1: 5
   scripts/migrate_facts.py:
     r1: 7
   scripts/mission_ledger.py:
