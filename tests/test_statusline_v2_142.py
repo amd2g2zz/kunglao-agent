@@ -169,7 +169,10 @@ class TestProducerSchema142:
         # #133/#129 phase-2 slots: named now, populated later.
         assert snap["v_oracle_gap"] is None
         assert snap["baseline_inv_k"] is None
-        assert set(snap["health"]) == {"oracle", "retro", "dormant"}
+        # #412: the health set extends with component activation truth —
+        # hooks armed / MCP ok / scheduler fresh (never green when broken).
+        assert set(snap["health"]) == {"oracle", "retro", "dormant",
+                                       "hooks", "mcp", "scheduler"}
         assert set(snap["now"]) == {"claim", "op"}
 
     def test_v_hist_last_8_normalized_points(self, tmp_path):

@@ -153,10 +153,10 @@ def _stub_non_hook_checks(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolated_claude_json(tmp_path, monkeypatch):
-    """#757: env_check now reads MCP registration surfaces — point the user
-    ~/.claude.json at an isolated file carrying a ghidra registration so the
-    desktop mcp_registered row lands on its deterministic WARN-unverified
-    branch and real-machine configs can never leak into these verdicts."""
+    """#408: the user-global ~/.claude.json MCP surface is DELETED. The
+    legacy KUNGLAO_CLAUDE_JSON override is pinned as a POISON path — the
+    probe must never read it; the sanctioned workspace .mcp.json seed is
+    written by _kunglao_ws (the initialized-workspace constructor)."""
     p = tmp_path / ".claude.json"
     p.write_text(json.dumps({"mcpServers": {"ghidra": {"command": "b"}}}),
                  encoding="utf-8")
@@ -223,6 +223,16 @@ def test_all_pass_exit_0(monkeypatch, tmp_path):
     monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", fake_ghidra)
     # hooks: PROJECT-level <ws>/.claude/settings.json (#258/#269)
     _write_settings(ws)
+    # #408: the mcp_registered row's deterministic WARN-unverified branch —
+    # ghidra registered in the workspace .mcp.json (the sanctioned surface)
+    # + the workspace approval flag merged into the project settings.
+    (ws / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"ghidra": {"command": "b"}}}),
+        encoding="utf-8")
+    settings = ws / ".claude" / "settings.json"
+    merged = json.loads(settings.read_text(encoding="utf-8"))
+    merged["enableAllProjectMcpServers"] = True
+    settings.write_text(json.dumps(merged), encoding="utf-8")
     # venv: the probe dispatches through uv (issue 207 —
     # `uv run --project <skill_root> python -c "import yaml"`); a fake uv on
     # PATH + a rc=0 run is the whole fixture. No venv binary path is read.
@@ -265,6 +275,10 @@ def test_user_level_settings_alone_does_not_satisfy_hooks(monkeypatch, tmp_path,
     ws = _kunglao_ws(tmp_path)
     monkeypatch.delenv(FLAG_NAME, raising=False)
     _write_settings(isolated_home)  # user-global only — must NOT satisfy check ④
+    # #408 note: _kunglao_ws seeds the MCP approval flag in the project
+    # settings; this hooks-target regression needs the project file ABSENT,
+    # so drop it (the mcp row is degraded-class and unasserted here).
+    (ws / ".claude" / "settings.json").unlink(missing_ok=True)
     assert not (ws / ".claude" / "settings.json").exists(), \
         "test setup: project-level settings must be absent"
     assert not (ws.parent / ".claude" / "settings.json").exists(), \

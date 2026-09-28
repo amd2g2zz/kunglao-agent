@@ -710,35 +710,49 @@ def test_hook_wiring_runs_in_framework_env(up, tmp_path):
     assert probe.returncode == 0, probe.stderr
 
 
-def test_camoufox_required_on_web_lane(tmp_path):
-    """Owner ruling: camoufox-reverse is REQUIRED on the web lane (HARD);
-    the register command is the remediation (AGENT-DO)."""
+def test_camoufox_required_on_web_lane(tmp_path, monkeypatch):
+    """Owner ruling (51job live run): camoufox-reverse is REQUIRED on the
+    web lane (HARD). #408/#423 merge semantics: the remediation is plugin
+    CARRIAGE (.claude-plugin/plugin.json mcpServers), never a user-level
+    `claude mcp add` — the FAIL face only exists when carriage AND
+    workspace registration are BOTH absent."""
     import mcp_probe
     ws = tmp_path / "ws"
     ws.mkdir()
-    checks = {c.name: c for c in
-              mcp_probe.check_mcp(ws, "web", claude_json=tmp_path / "no.json")}
+    # default face: the repo's own plugin carriage satisfies supply
+    checks = {c.name: c for c in mcp_probe.check_mcp(ws, "web")}
     cam = checks["camoufox-reverse"]
-    assert cam.status == "FAIL" and cam.tier == "HARD"
-    assert cam.fix == ("claude mcp add camoufox-reverse -- "
-                       "python -m camoufox_reverse_mcp")
-    # registered in the workspace .mcp.json -> satisfied
+    assert cam.status == "PASS" and cam.tier == "HARD"
+    assert "plugin-carried" in cam.detail, cam.detail
+    # carriage removed (plugin disabled / manifest drift) -> HARD FAIL
+    monkeypatch.setattr(mcp_probe, "plugin_declared_servers",
+                        lambda root=None: {})
+    checks1 = {c.name: c for c in mcp_probe.check_mcp(ws, "web")}
+    cam1 = checks1["camoufox-reverse"]
+    assert cam1.status == "FAIL" and cam1.tier == "HARD"
+    assert cam1.fix == ("ships with the kunglao-agent plugin "
+                        "(.claude-plugin/plugin.json mcpServers) — enable "
+                        "the plugin; install dep: pip install "
+                        "camoufox-reverse-mcp")
+    assert "claude mcp add" not in cam1.fix  # user-scope surface deleted
+    # workspace .mcp.json alone also satisfies (project-scope path)
     (ws / ".mcp.json").write_text(json.dumps(
         {"mcpServers": {"camoufox-reverse": {"command": "python",
          "args": ["-m", "camoufox_reverse_mcp"]}}}), encoding="utf-8")
-    checks2 = {c.name: c for c in
-               mcp_probe.check_mcp(ws, "web",
-                                   claude_json=tmp_path / "no.json")}
+    checks2 = {c.name: c for c in mcp_probe.check_mcp(ws, "web")}
     assert checks2["camoufox-reverse"].status == "PASS"
 
 
 def test_init_refuses_web_without_camoufox(tmp_path, capsys, monkeypatch):
-    """Web-lane init WITHOUT camoufox-reverse refuses (rc 4) naming the
-    exact `claude mcp add` command; once registered (ws .mcp.json) the
-    gate passes. Unit face over refuse_missing_required_mcp (the full-run
-    face needs the whole intake completed first — that is the 51job
-    live-run shape), plus a source pin that run() wires the gate into the
-    supply preflight."""
+    """Web-lane init refuses (rc 4) when camoufox-reverse supply is absent
+    on BOTH #408 surfaces (workspace .mcp.json AND plugin carriage — with
+    the repo's own plugin.json carrying mcpServers the in-repo supply is
+    satisfied by construction, so the refusal face needs the carriage
+    removed). The remediation names the plugin carriage + pip dep, never
+    a user-level `claude mcp add`. Unit face over refuse_missing_required_mcp
+    (the full-run face needs the whole intake completed first — that is
+    the 51job live-run shape), plus a source pin that run() wires the gate
+    into the supply preflight."""
     ws = _decision_ws(tmp_path, CUR, tag="webws")
     (ws / "analysis_state.txt").write_text("project_type=web\n",
                                            encoding="utf-8")
@@ -746,14 +760,15 @@ def test_init_refuses_web_without_camoufox(tmp_path, capsys, monkeypatch):
         "kunglao_init_sweep", SCRIPTS / "kunglao-init.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    empty_claude = tmp_path / "no.json"
-    monkeypatch.setattr(mod.mcp_probe, "claude_json_path",
-                        lambda: empty_claude)
+    # remove BOTH supply surfaces (deploy without plugin carriage)
+    monkeypatch.setattr(mod.mcp_probe, "plugin_declared_servers",
+                        lambda root=None: {})
     rc = mod.refuse_missing_required_mcp(ws, "web")
     err = capsys.readouterr().err
     assert rc == 4, err
-    assert "claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp" \
-        in err, err[-600:]
+    assert "ships with the kunglao-agent plugin" in err, err[-600:]
+    assert "pip install camoufox-reverse-mcp" in err, err[-600:]
+    assert "claude mcp add" not in err  # user-scope surface deleted (#408)
     assert "AGENT-DO" in err
     # registered in the workspace .mcp.json -> satisfied
     (ws / ".mcp.json").write_text(json.dumps(

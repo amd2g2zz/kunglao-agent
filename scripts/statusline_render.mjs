@@ -183,17 +183,24 @@ function isUptrend(vHist) {
   return vals[vals.length - 1] > vals[0];
 }
 
-// Health dots x3: oracle registered / retro lag < 8 / no DORMANT.
-// ok -> green solid; suspect (retro lag, DORMANT) -> amber; broken (oracle
-// unregistered) -> red; down -> all red empty (broken face).
-function healthDots(health, down) {
+// Health dots: the snapshot's health_specs (computed Python-side — kunglao
+// logic stays out of Node; #412 adds hooks/mcp/scheduler to the trio).
+// ok -> green solid; suspect (dormant/unknown — #412 dormant is yellow at
+// best) -> amber; broken (incl. STALE component source) -> red; down ->
+// all red empty (broken face). Legacy snapshots (no health_specs) fall
+// back to the #883 trio.
+function healthDots(health, specs, down) {
   if (!health || typeof health !== 'object') return '';
-  const specs = [
-    { ok: health.oracle, suspect: false },
-    { ok: health.retro, suspect: true },
-    { ok: health.dormant, suspect: true },
+  const h = health;
+  const legacy = [
+    { ok: h.oracle, suspect: false },
+    { ok: h.retro, suspect: true },
+    { ok: h.dormant, suspect: true },
   ];
-  return specs
+  const rows = (Array.isArray(specs) && specs.length)
+    ? specs.map((s) => ({ ok: !!s.ok, suspect: !!s.suspect }))
+    : legacy;
+  return rows
     .map(({ ok, suspect }) => {
       if (down) return PALETTE.red('○');
       if (ok) return PALETTE.green('●');
@@ -387,7 +394,7 @@ function renderKunglao(snapPath, nowMs) {
   const badge = entropyBadge(snap);
   const rankSeg = rankBadge(snap);
   const calSeg = calibrationBadge(snap);
-  const dots = healthDots(snap.health, down);
+  const dots = healthDots(snap.health, snap.health_specs, down);
   const chip = taskChip(snap.now);
   const diff = difficultyBadge(snap);
   const perfSegs = perfSegments(snap.perf);

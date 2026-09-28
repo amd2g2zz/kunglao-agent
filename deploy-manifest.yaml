@@ -347,7 +347,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: 2c29bf8a6e23066275db4503eb1200f0eec40ceffbd76f4c89827e6ab648f6c8
+    sha256: 439290165c47b21433ed1d2079b771e6e7d49aee4f8a00a0b982675e7eb35379
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -519,7 +519,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: 4361ff6160c1d5c7dcf2e0113883599524403c74c2cd71456c66e4ad2b3b9e4d
+    sha256: 140d9161f11d8e5c235cc3269c2a0cb841d068c7c0987775fee3b25f9371a128
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
@@ -583,7 +583,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: e547417d55e12794f31c1da293d851572b16537f7ab9789fb6bd272d8af718d7
+    sha256: 891eb2b10f2f9f46b14233d740f8054cfeb9bfc8573e86fa8f05f9add6ea7080
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -655,7 +655,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 4382c129f6882b1881cf89f7bda6c698fec3f002f36a17217fa215b3da45f519
+    sha256: 6417d12e2197e6ce56afe48ba224625ff043db18c36173f904183f6ae0f4963b
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -675,7 +675,7 @@ files:
   - src: scripts/mcp_probe.py
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
-    sha256: 559b845de26d177f0c0e24fcffc9539b65f6480d6a24f8125475b0f1339c9f9c
+    sha256: cc0c23132397f76a132c9d0ca6b1356f9ec1d3068ae9101a9d56ed189d78fc20
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
@@ -943,7 +943,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 590837b12924ff37c8394c0ec4c6de53e30af008af80f413155a73dc771c651e
+    sha256: 1380dc6256f6ee077fac06c4adf73f2f400b07f2b138746ef3a24bce2704883c
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -1075,7 +1075,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 7945705c65b3c0ebfeac182e258be9a581228cce4d0a50d0a325f3cc1a64ea46
+    sha256: 2d2541cb224ce6ba3ee2ee6bc06bcd3e04b86bd7108d72fae8b91103e607ae05
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
@@ -1643,7 +1643,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 654df16a1989cf2a9e5b9e8e69e12fed2dc384d30ac1fbfe5841b73435a95963
+    sha256: 1ccb0980893d6a3b04d72dd1178a51123f62f66b74429365e598ef4cab7e169d
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

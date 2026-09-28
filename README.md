@@ -388,7 +388,7 @@ Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a works
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | HARD | web | browser JS reversing (hooks / trace / network capture) — REQUIRED on web | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
+| `camoufox-reverse` | HARD | web | browser JS reversing (hooks / trace / network capture) — REQUIRED on web (51job ruling 2026-09-27) | ships with the kunglao-agent plugin (`.claude-plugin/plugin.json mcpServers`; #408) — enable the plugin; install dep: pip install camoufox-reverse-mcp |
 
 </details>
 

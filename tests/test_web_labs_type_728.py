@@ -116,7 +116,11 @@ def test_camoufox_manifest_entry():
     item = mcp_probe._BY_NAME["camoufox-reverse"]
     assert item.tier == "HARD"
     assert item.types == ("web",)
-    assert "python -m camoufox_reverse_mcp" in item.register
+    # #408: camoufox ships with the plugin — the remediation names the
+    # carriage (never a user-level `claude mcp add` command); the runtime
+    # invocation stays `python -m camoufox_reverse_mcp` (plugin.json args).
+    assert "plugin" in item.register
+    assert "claude mcp add" not in item.register
     assert mcp_probe.MANIFEST_GROUPS["web_labs"] == ["camoufox-reverse"]
 
 

@@ -1689,8 +1689,10 @@ APK -> aapt/apktool unpack -> jadx DEX->Java
     "web": """## Hard constraints (web)
 
 - **Channel: docker** — `KUNGLAO_CHANNEL=docker` is the web default; set explicitly to override.
-- **camoufox-reverse MCP** — browser JS reverse engineering supply; register manually:
-  `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp`
+- **camoufox-reverse MCP** — browser JS reverse engineering supply; ships with
+  the kunglao-agent plugin (`.claude-plugin/plugin.json` mcpServers, #408) —
+  enable the plugin (workspace settings `enableAllProjectMcpServers: true`);
+  install dep: `pip install camoufox-reverse-mcp`
   (verify: `python -m camoufox_reverse_mcp --help`; optional flags: `--proxy`, `--geoip`, `--humanize`).
 - **No VM channel** — web dynamic analysis is the browser; VM channels (vmr-shell) do not apply.
 - **static-only analysis**: `KUNGLAO_CHANNEL` unset + no docker = local mode — no dynamic tooling, no dynamic RE. Read the CLAUDE.md quick-reference sections first.
@@ -1710,8 +1712,8 @@ Choose the delivery shape by evidence characteristics:
 ## camoufox operations card (core)
 
 ```bash
-# Register
-claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp
+# Supply (#408: plugin-carried, zero registration — never a user-level claude mcp add)
+# install dep: pip install camoufox-reverse-mcp  (plugin entry: python -m camoufox_reverse_mcp)
 
 # Launch + navigate
 camoufox.launch_browser()            # anti-detection Firefox
@@ -1805,8 +1807,9 @@ MCP_ROW_TEXT: dict[str, str] = {
     "camoufox-reverse":
         "| `camoufox-reverse` | HARD | web | browser JS reverse engineering "
         "(anti-detection Firefox) — REQUIRED on web "
-        "| `claude mcp add camoufox-reverse -- python -m "
-        "camoufox_reverse_mcp` |\n",
+        "| ships with the kunglao-agent plugin (.claude-plugin/plugin.json "
+        "mcpServers) — enable the plugin; install dep: pip install "
+        "camoufox-reverse-mcp |\n",
 }
 
 # Presentation order (pre-#919 template row order — golden-anchored).
@@ -2085,7 +2088,7 @@ def _setup_web_env(ws: Path) -> None:
         write_state_line(ws, "KUNGLAO_CHANNEL", "docker")
     print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
     print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
-    print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
+    print("  MCP: camoufox-reverse ships with the plugin (#408 mcpServers) — enable the plugin; install dep: pip install camoufox-reverse-mcp", file=sys.stderr)
     print("  docs: references/re-library/web/labs/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
@@ -3703,9 +3706,10 @@ REQUIRED_MCP_BY_TYPE = {"camoufox-reverse": {"web"}}
 def refuse_missing_required_mcp(ws: Path, project_type: str) -> int | None:
     """0.1.6 sweep (owner ruling, 51job live run): REQUIRED MCP supply for
     the lane — a missing camoufox-reverse on web refuses init with the
-    EXACT registration command as the remediation. Remediation tier
-    AGENT-DO: the agent / init-worker can run `claude mcp add ...` itself;
-    a genuine failure escalates to a blocker with the error attached.
+    carriage remediation as the fix (enable the plugin / install the
+    camoufox-reverse-mcp dep). Remediation tier AGENT-DO: the agent /
+    init-worker can run the pip install itself; a genuine failure
+    escalates to a blocker with the error attached.
     Returns RC_TOOLCHAIN_REFUSE on refusal, None when the supply is
     satisfied. Writes nothing."""
     mcp_hard_missing = [
