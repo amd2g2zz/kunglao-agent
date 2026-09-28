@@ -1,0 +1,20 @@
+[package]
+name = "crackme"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "crackme"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "crackme_host"
+path = "src/bin/host.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
