@@ -134,12 +134,18 @@ def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
     canonical = (fake_home / ".claude" / "skills" / "kunglao-agent" / "hooks").as_posix()
     skill_root = (fake_home / ".claude" / "skills" / "kunglao-agent").as_posix()
     ws_posix = ws.as_posix()
+    import hook_activation
+    framework = hook_activation._framework_project_root()
     for cmd in _collect_commands(settings):
-        # #389: commands are `uv run --project <skill_root> <script path>` —
-        # uv replaces bare python (2.x risk); the script path stays absolute
-        # inside the canonical skill hooks dir (#269).
-        assert cmd.startswith(f"PYTHONUTF8=1 uv run --project {skill_root} "), \
-            f"hook command must invoke uv with the canonical skill root: {cmd}"
+        # #389 + 0.1.6 sweep (#6): commands are
+        # `uv run --project <framework-root> python <script path>` — uv
+        # replaces bare python (2.x risk), the ENV project is the framework
+        # install (the workspace ships no pyproject — the ephemeral-env
+        # trap), and the script path stays absolute inside the canonical
+        # skill hooks dir (#269).
+        assert cmd.startswith(
+            f"PYTHONUTF8=1 uv run --project {framework.as_posix()} python "), \
+            f"hook command must run uv --project the framework root: {cmd}"
         script_path = cmd.replace("\\", "/").split()[-1]
         assert script_path.startswith(canonical), \
             f"hook command must point into the canonical skill hooks dir: {cmd}"

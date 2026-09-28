@@ -102,11 +102,14 @@ SCHEDULER_STALE_TICKS = 2
 # the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;
 # older ticks stay on disk (append-only, nothing deleted) but stop voting.
 # Sized to the real cadence above (5m): 12 ticks ~= 1 hour of normal
-# operation, so ordinary jitter never trips it, while any historical stall
-# stops counting within ~a day (24h age bound) instead of re-rejecting the
-# workspace forever after one mid-life gap.
+# operation, so ordinary jitter never trips it. 0.1.6 sweep (#415, owner
+# ruling): the age bound drops 24h -> 2h — a historical stall stops
+# counting within 2 hours instead of re-rejecting the workspace for ~a
+# day after one mid-life gap (deploy-day quiet gaps must not poison the
+# verdict until tomorrow; the #415.3 gated baseline reset is the other
+# half of the recovery).
 CONTINUITY_WINDOW_TICKS = 12
-CONTINUITY_WINDOW_HOURS = 24
+CONTINUITY_WINDOW_HOURS = 2
 
 # ---------------------------------------------------------------------------
 # Partial-fact verification staleness (#342: the VERIFY_STALE threshold, 12)

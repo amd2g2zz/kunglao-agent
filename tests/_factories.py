@@ -25,6 +25,22 @@ FAR_FUTURE = "2099-12-31T23:59:59Z"
 DEFAULT_SAMPLE = b"MZ\x90\x00" + b"\x00" * 64
 
 
+def stamp_current(ws: Path) -> Path:
+    """Write the primary stamp carrier (CLAUDE.md) at the executing skill
+    version (0.1.6 version gate: synthetic workspaces must carry a stamp
+    matching the agent or the analysis entry refuses with rc 67)."""
+    import sys
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import template_version
+    carrier = ws / "CLAUDE.md"
+    carrier.write_text(
+        template_version.stamp_line(template_version.read_skill_version())
+        + "\n", encoding="utf-8")
+    return carrier
+
+
 def _in_minutes(minutes: float) -> str:
     """Timestamp now+minutes, second precision, Z suffix."""
     return (datetime.now(tz=timezone.utc) + timedelta(minutes=minutes)

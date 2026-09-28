@@ -37,8 +37,8 @@ The capability dataset lives in [`eval/`](eval/README.md): constructed targets w
 **Smoke tier — shipped today.** Three constructed families (`go-arx-v1`, `js-sign-v1`, `py-derive-v1`), minutes-scale:
 
 ```bash
-python scripts/eval_smoke_runner.py --tier smoke               # self-check: the tier's reference candidates must green their oracles
-python scripts/eval_smoke_runner.py --tier smoke --baselines   # append the 1/k-guessing floor rows
+uv run python scripts/eval_smoke_runner.py --tier smoke               # self-check: the tier's reference candidates must green their oracles
+uv run python scripts/eval_smoke_runner.py --tier smoke --baselines   # append the 1/k-guessing floor rows
 ```
 
 Results land under `runs/eval-smoke/`. `--tasks <id,id>` scopes a run; `--candidate-for <task_id>=<path>` plugs an external arm's artifacts into the same checker.
@@ -48,7 +48,7 @@ Results land under `runs/eval-smoke/`. `--tasks <id,id>` scopes a run; `--candid
 **The control arm A/B** ([#236](https://github.com/amd2g2zz/kunglao-agent/issues/236)) — bare LLM vs. the framework, one command:
 
 ```bash
-python scripts/eval_control_arm.py --ab --manifest bare-candidates.jsonl --framework-manifest framework-candidates.jsonl
+uv run python scripts/eval_control_arm.py --ab --manifest bare-candidates.jsonl --framework-manifest framework-candidates.jsonl
 ```
 
 Both arms read candidates from a `kunglao-eval-candidates/1` manifest (`--live` drives prompt-only `claude -p` runs instead). Five metrics decide it, per arm: `answer_rate`, `proven_with_evidence_rate`, `premature_closure_rate`, `false_proven_rate`, and `budget` (wall seconds, per-task TTC, tokens where the face provides them).
@@ -56,7 +56,7 @@ Both arms read candidates from a `kunglao-eval-candidates/1` manifest (`--live` 
 **The replay ruler** ([#294](https://github.com/amd2g2zz/kunglao-agent/issues/294)) — offline ordering-quality measurement. Point it at a completed workspace and it re-plays the historical ledger under alternative ranker configurations, reporting deterministic time-to-converge per configuration:
 
 ```bash
-python scripts/replay_ruler.py ~/cases/finished-engagement
+uv run python scripts/replay_ruler.py ~/cases/finished-engagement
 ```
 
 The source workspace opens read-only; writes land in a sandbox. `--configs-json` supplies the configuration set; `--with-events` adds the λ epistemology check over historical rank events.
@@ -245,7 +245,7 @@ claim_id: C-401
 provenance:
   - {role: sample, path: bins/<sha>}
   - {role: capture_log, path: runs/c329-inner-pe.bin}   # via evidence/_index.json
-reproduce: python -c "import struct; ..."               # runs against the cited artifact
+reproduce: uv run python -c "import struct; ..."               # runs against the cited artifact
 verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
 ```
 
@@ -260,7 +260,7 @@ The `--type` you pick at init locks which HARD-tier tools must be installed. Gui
 
 | Tier | Tool | Install |
 |---|---|---|
-| HARD | `pefile` (Python) | `pip install pefile` |
+| HARD | `pefile` (Python) | `uv pip install pefile` |
 | HARD | `die` (Detect It Easy) | `KUNGLAO_DIE` env or on PATH — [ntinfo.com](https://ntinfo.com) |
 | HARD | `floss` (FLARE FLOSS) | per [flare-floss docs](https://github.com/mandiant/flare-floss) |
 | HARD | Ghidra or IDA | one of them; see [Internals](#internals) |
@@ -299,7 +299,7 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 | HARD | `adb` + **a rooted device** with `ro.debuggable=1` | platform-tools + custom frida on device |
 | HARD | `frida-server` (renamed, custom port 1337) | device-side binary |
 | HARD | `android_server` (IDA remote debugging) | device-side binary, port 23946 |
-| WARN | `apkid` | `pip install apkid` |
+| WARN | `apkid` | `uv pip install apkid` |
 | WARN | `baksmali` | from [smali releases](https://github.com/baksmali/smali/releases) |
 
 </details>
@@ -309,7 +309,7 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 
 | Tier | Tool | Install |
 |---|---|---|
-| WARN | `camoufox-reverse` MCP (web) | anti-detect Firefox for hook / trace / network capture |
+| HARD | `camoufox-reverse` MCP (web) | anti-detect Firefox for hook / trace / network capture (REQUIRED on web) |
 | WARN | `docker` (web channel default) | Docker Desktop, or set `KUNGLAO_CHANNEL=ssh` explicitly |
 | WARN | `lipo`, `otool`, `nm`, `codesign`, `xattr` (macOS) | Xcode Command Line Tools |
 | WARN | `ghidra` MCP (macOS) | recommended — see the manifest under [Internals](#internals) |
@@ -318,7 +318,7 @@ Init probes only the essentials for these types; heavier capabilities engage whe
 
 </details>
 
-Single manifest source for everything above — probe it any time: `python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` (exit 1 = HARD missing).
+Single manifest source for everything above — probe it any time: `uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` (exit 1 = HARD missing).
 
 ## Bring your own environment
 
@@ -367,7 +367,7 @@ uv run python -m pytest -q
 gh pr create --base dev
 ```
 
-The authoritative full-suite entry is `python -m pytest -q` (see .github/workflows/release-check.yml).
+The authoritative full-suite entry is `uv run python -m pytest -q` (see .github/workflows/release-check.yml).
 
 Design documentation lives in `docs/` and `specs/`. See [License](#license).
 
@@ -376,7 +376,7 @@ Design documentation lives in `docs/` and `specs/`. See [License](#license).
 <details>
 <summary><strong>MCP supply (the full manifest)</strong></summary>
 
-Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` — exit 1 = HARD missing, 2 = WARN missing only.
+Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` — exit 1 = HARD missing, 2 = WARN missing only.
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -388,7 +388,7 @@ Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a works
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web | browser JS reversing (hooks / trace / network capture) | ships with the kunglao-agent plugin (`.claude-plugin/plugin.json mcpServers`; #408) — enable the plugin; install dep: pip install camoufox-reverse-mcp |
+| `camoufox-reverse` | HARD | web | browser JS reversing (hooks / trace / network capture) — REQUIRED on web (51job ruling 2026-09-27) | ships with the kunglao-agent plugin (`.claude-plugin/plugin.json mcpServers`; #408) — enable the plugin; install dep: pip install camoufox-reverse-mcp |
 
 </details>
 

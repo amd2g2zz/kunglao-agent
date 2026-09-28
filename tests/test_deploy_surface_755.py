@@ -602,11 +602,20 @@ class TestT6Registry:
             "0.1.3-stamped workspace re-plans instead of short-circuiting")
         assert versions.index("0.1.3") < versions.index("0.1.4"), \
             "registry stays linear"
-        last_fn = up.MIGRATIONS[-1][1]
-        items = last_fn(_fixture_ws(tmp_path), True)
-        assert any(i.startswith("template_stamp_refresh") for i in items), \
-            "the stamp refresh must ride the LAST migration"
-        assert any("uv_sync" in i for i in items)
+        # Owner ruling 2026-09-11: the stamp carry is NOT a per-entry
+        # tail anymore — the planner appends the universal _carry_tail
+        # (G3 merge + G4-gated quiet stamp) behind ANY behind-workspace
+        # plan, so the stamp face rides every release without a
+        # hand-written carry. (The 0.1.6 sweep entry is the registry's
+        # last version-specific repair set.)
+        def _fixture(tag: str) -> Path:
+            return _fixture_ws(tmp_path / f"fx-{tag}")
+
+        carry = up._carry_tail(_fixture("carry"), True)
+        assert any(i.startswith("template_stamp_refresh") for i in carry), \
+            "the universal carry tail must own the stamp refresh"
+        assert any("uv_sync" in i
+                   for i in up.MIGRATIONS[-1][1](_fixture("last"), True))
 
     @pytest.fixture(autouse=True)
     def _offline_uv(self, monkeypatch):

@@ -5,13 +5,17 @@
 User ruling (2026-08-27): "升级前要先检测 git 检测未提交，然后 commit 之后再执行
 upgrade，不然坏掉了都无法回滚". Pins:
 
-  B1  git-first anchor — dirty owned-repo refused RC=6 with guidance; legacy
-      no-git workspaces get a pre-upgrade anchor commit BEFORE migration and a
-      post-state commit after, so `git revert HEAD` restores the anchor.
+  B1  git-first snapshot — the migration path commits the workspace state
+      (dirty included) AS the pre-migration snapshot; repo-less workspaces
+      get git init + snapshot first; the migrated state lands as the
+      second commit so `git revert HEAD` restores the snapshot. (0.1.6
+      sweep: the RC 6 dirty refusal survives only on the already-current
+      early-exit refresh.)
   B2  structured stderr events `[event] name=<n> status=<s> detail=<d>` at
       every critical node (landed with the emitter wiring).
   B3  /reload-plugins hint on the success path (upgrade + init tail).
-  B4  tail atomicity — a lost summary event yields RC_INCOMPLETE=7.
+  B4  tail atomicity — a lost summary event yields RC_INCOMPLETE=7 AND the
+      0.1.6 transactional rollback (byte-identical pre-upgrade tree).
 """
 from __future__ import annotations
 
@@ -155,9 +159,11 @@ def up():
 
 # ------------------------------------------------------------------ B1 tests
 
-def test_dirty_owned_repo_refused_rc6_with_guidance(up, tmp_path, capsys):
-    """An uncommitted owned repo is refused BEFORE any migration write:
-    rc=6 + stderr tells the operator to commit or stash first."""
+def test_dirty_owned_repo_snapshot_committed(up, tmp_path, capsys):
+    """Transactional migration (0.1.6 sweep): an uncommitted owned repo is
+    no longer refused — its state is committed AS the pre-migration git
+    snapshot (the rollback point), then the migration runs. The old RC 6
+    refusal survives only on the already-current early-exit refresh."""
     ws = synth_v012_ws(tmp_path)
     for args in (("init",), ("add", "-A"), ("commit", "--no-gpg-sign",
                                              "-m", "pre-existing")):
@@ -166,29 +172,34 @@ def test_dirty_owned_repo_refused_rc6_with_guidance(up, tmp_path, capsys):
     (ws / "CLAUDE.md").write_text(
         _stamp_line("0.1.2") + "\nuncommitted local edit\n", encoding="utf-8")
     rc = up.main([str(ws)])
-    assert rc == 6, "dirty owned-repo must be refused with RC_DIRTY_WORKSPACE"
-    err = capsys.readouterr().err
-    assert "commit" in err.lower(), "guidance must offer the commit escape"
-    assert "stash" in err.lower(), "guidance must offer the stash escape"
-    assert "uncommitted" in err.lower()
-    assert (ws / ".agent").exists() is False, \
-        "refusal must precede every scaffold write"
+    assert rc == 0, "dirty state must be snapshot-committed, never refused"
+    subs = _subjects(ws)
+    # newest-first: success commit, snapshot commit, the operator's baseline
+    assert "kunglao upgrade: 0.1.2 ->" in subs[0], subs
+    assert "kunglao upgrade snapshot: pre" in subs[1], subs
+    assert subs[-1] == "pre-existing", subs
+    sha = _git(ws, "log", "--format=%H", "--grep",
+               "kunglao upgrade snapshot: pre", "--fixed-strings",
+               "-1").stdout.strip()
+    show = _git(ws, "show", "--name-only", "--format=", sha)
+    assert "CLAUDE.md" in show.stdout, \
+        "the uncommitted edit must ride INSIDE the snapshot commit"
 
 
 def test_no_git_workspace_anchored_before_migration(up, tmp_path):
     """Legacy no-git workspace: upgrade leaves .git whose FIRST commit is the
-    pre-upgrade anchor; a post-state commit rides on top; reverting it
-    restores the exact pre-upgrade framework scaffold."""
+    pre-upgrade snapshot; the migrated state rides on top as the second
+    commit; reverting it restores the exact pre-upgrade scaffold."""
     ws = synth_v012_ws(tmp_path)
     assert not (ws / ".git").exists()
     assert up.main([str(ws)]) == 0
     assert (ws / ".git").exists()
     subs = _subjects(ws)
     assert len(subs) == 2, subs
-    # `git log` is newest-first: the post-state commit sits on top, the
-    # chronologically-FIRST commit (the anchor) is last in the listing
-    assert "post-upgrade state" in subs[0], subs
-    assert "pre-upgrade anchor" in subs[-1], subs
+    # `git log` is newest-first: the migrated state sits on top, the
+    # chronologically-FIRST commit (the snapshot) is last in the listing
+    assert "kunglao upgrade: 0.1.2 ->" in subs[0], subs
+    assert "kunglao upgrade snapshot: pre" in subs[-1], subs
     rev = _git(ws, "revert", "--no-edit", "HEAD")
     assert rev.returncode == 0, rev.stderr
     claudemd = (ws / "CLAUDE.md").read_text(encoding="utf-8")
@@ -201,14 +212,21 @@ def test_no_git_workspace_anchored_before_migration(up, tmp_path):
 
 
 def test_re_run_after_anchor_stays_clean(up, tmp_path):
-    """The anchor + post-state pair closes the loop: a follow-up upgrade hits
-    the already-current fast path without tripping RC_DIRTY_WORKSPACE, and
-    proxies zero extra commits into the snapshot layer."""
+    """A follow-up upgrade never trips RC_DIRTY_WORKSPACE and never stacks
+    another SNAPSHOT commit: the second run starts from a clean tree, so
+    HEAD (the first run's success commit) is its snapshot and only the
+    renewed framework state (TTL timestamps etc.) lands as a fresh success
+    commit — honest history, no refusal, no snapshot spam."""
     ws = synth_v012_ws(tmp_path)
     assert up.main([str(ws)]) == 0
     subs = _subjects(ws)
     assert up.main([str(ws)]) == 0
-    assert _subjects(ws) == subs, "second run must not touch the snapshot"
+    subs2 = _subjects(ws)
+    assert subs2[:2] == [subs[0], subs[0]], \
+        "run 2 may land a success commit but must reuse run 1's history"
+    # exactly ONE snapshot commit across both runs (run 2 started clean)
+    assert sum(1 for s in subs2
+               if "kunglao upgrade snapshot: pre" in s) == 1, subs2
 
 
 def test_dry_run_still_never_touches_git(up, tmp_path):
@@ -253,24 +271,33 @@ def test_success_stderr_has_structured_event_trail(up, tmp_path, capsys):
     assert "[event]" not in captured.out, "events belong on stderr only"
 
 
-def test_interrupted_item_keeps_anchor_and_last_event(up, tmp_path, capsys):
+def test_interrupted_item_rolls_back_and_keeps_last_event(up, tmp_path,
+                                                          capsys):
     """Kill simulation A: a migration item explodes mid-flight. The git
-    anchor must already exist, and the stderr trail ends at the exact last
-    completed node (migration-start) — no fake completion events after it."""
+    snapshot must already exist, the tree is ROLLED BACK to it (0.1.6
+    transactional requirement), and the stderr trail ends at the exact
+    last completed node — no fake completion events after the crash."""
     ws = synth_v012_ws(tmp_path)
+    pre_claudemd = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    pre_settings = (ws / ".claude" / "settings.json").read_bytes()
 
     def exploding(ws: Path, dry: bool):
         raise RuntimeError("simulated kill mid-migration")
 
     up.MIGRATIONS = [("9.9.9", exploding)]
-    with pytest.raises(RuntimeError, match="simulated kill"):
-        up.main([str(ws)])
-    assert (ws / ".git").exists(), "anchor must exist before items ever run"
-    assert "pre-upgrade anchor" in _subjects(ws)[-1]
+    rc = up.main([str(ws)])
+    assert rc == 7, "a raised item maps to RC_INCOMPLETE with rollback"
+    assert (ws / ".git").exists(), "snapshot must exist before items ever run"
+    subs = _subjects(ws)
+    assert len(subs) == 1, "no success commit after a rolled-back run"
+    assert "kunglao upgrade snapshot: pre" in subs[-1], subs
+    # rollback restored the pre-migration framework scaffold
+    assert (ws / "CLAUDE.md").read_text(encoding="utf-8") == pre_claudemd
+    assert (ws / ".claude" / "settings.json").read_bytes() == pre_settings
     evs = _events(capsys.readouterr().err)
     names = [e["name"] for e in evs]
     assert "migration-start" in names, f"start marker missing: {names}"
-    assert "item" not in names, "no item can have completed past the crash"
+    assert "rollback" in names, "the rollback must leave its own event"
     assert "stamp" not in names and "summary" not in names
 
 
@@ -325,9 +352,11 @@ def test_lost_summary_event_yields_rc_incomplete_7(up, tmp_path, capsys,
                                                    monkeypatch):
     """Kill simulation B: the telemetry seam dies exactly where #753's
     incident died — between stamp and the `upgrade` summary event. main must
-    surface RC_INCOMPLETE=7 (never a silent RC_OK) and the stderr trail shows
-    stamp=ok immediately before summary=fail."""
+    surface RC_INCOMPLETE=7 (never a silent RC_OK) and — the 0.1.6
+    transactional requirement — ROLL BACK to the snapshot: the workspace
+    ends byte-identical to pre-upgrade, re-run starts clean."""
     ws = synth_v012_ws(tmp_path)
+    pre_settings = (ws / ".claude" / "settings.json").read_bytes()
 
     def seam_kill(_ws, action, _detail):
         if action == "upgrade":
@@ -343,26 +372,18 @@ def test_lost_summary_event_yields_rc_incomplete_7(up, tmp_path, capsys,
     idx_summary = len(names) - 1 - names[::-1].index("summary")
     assert idx_stamp < idx_summary, f"trail order broken: {evs}"
     assert evs[idx_summary]["status"] == "fail"
-    # migrations themselves DID land — the incomplete code is about the finish.
-    # (stamp progress is #758 G4-gated on frame currency, so pin an
-    # independent item effect instead: hooks_rewire rewired the settings.)
+    # transactional: the migrations did NOT survive the finish abort — the
+    # rollback restored the pre-upgrade scaffold (hooks rewire reverted).
     settings = json.loads((ws / ".claude" / "settings.json")
                           .read_text(encoding="utf-8"))
-    assert "violation_capture.py" in json.dumps(settings)
+    assert "violation_capture.py" not in json.dumps(settings)
+    assert (ws / ".claude" / "settings.json").read_bytes() == pre_settings
 
 
 def test_json_envelope_labels_for_new_rcs(up, tmp_path, capsys, monkeypatch):
-    """rc6 -> refused-dirty, rc7 -> incomplete in the --json envelope."""
-    ws_dirty = synth_v012_ws(tmp_path / "d")
-    for args in (("init",), ("add", "-A"), ("commit", "--no-gpg-sign",
-                                            "-m", "base")):
-        _git(ws_dirty, *args)
-    (ws_dirty / "notes" / "N-new.md").write_text("wip", encoding="utf-8")
-    assert up.main([str(ws_dirty), "--json"]) == 6
-    env = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert env["status"] == "refused-dirty"
-    assert env["rc"] == 6
-
+    """rc7 -> incomplete in the --json envelope (the rc6 refused-dirty
+    mapping persists for the already-current early-exit refresh face; the
+    migration path itself no longer produces rc6 — see the B1 tests)."""
     ws_int = synth_v012_ws(tmp_path / "i")
 
     def dead(_ws, action, _detail):
@@ -376,12 +397,13 @@ def test_json_envelope_labels_for_new_rcs(up, tmp_path, capsys, monkeypatch):
     assert env["rc"] == 7
 
 
-def test_incomplete_does_not_proxy_commit_post_state(up, tmp_path,
+def test_incomplete_rolls_back_not_just_skips_commit(up, tmp_path,
                                                      monkeypatch):
-    """When the finish sequence dies, the post-state commit must NOT be
-    attempted half-way: the snapshot layer holds the anchor alone, keeping
-    the recovery story one-dimensional."""
+    """When the finish sequence dies, the transaction ROLLS BACK: the
+    snapshot layer holds the snapshot alone and the tree is back to the
+    pre-upgrade scaffold."""
     ws = synth_v012_ws(tmp_path)
+    pre_settings = (ws / ".claude" / "settings.json").read_bytes()
 
     def dead(_ws, action, _detail):
         if action == "upgrade":
@@ -391,4 +413,5 @@ def test_incomplete_does_not_proxy_commit_post_state(up, tmp_path,
     assert up.main([str(ws)]) == 7
     subs = _subjects(ws)
     assert len(subs) == 1, subs
-    assert "pre-upgrade anchor" in subs[-1]
+    assert "kunglao upgrade snapshot: pre" in subs[-1]
+    assert (ws / ".claude" / "settings.json").read_bytes() == pre_settings

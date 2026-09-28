@@ -309,6 +309,7 @@ EMIT_ACTIONS = [
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face
     "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
     "upgrade_item",       # #726 per-item migration telemetry
+    "upgrade_rollback",   # 0.1.6 sweep: failed-migration git rollback face
     "user_signal",           # #868 UserPromptSubmit capture face
     "user_signal_processed", # #868 four-route processing result
     "uv_sync",            # #755 A7 install-venv sync face (WARN-only)

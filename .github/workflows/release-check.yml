@@ -86,6 +86,13 @@ jobs:
       # over scripts/** and tests/** (constitution rule on formal content)
       run: uv run python scripts/comment_hygiene_lint.py
 
+    - name: Invocation hygiene lint (uv-run canonical form, 0.1.6 sweep)
+      # fail-loud gate: bare python/python3/pip invocations in skills/**,
+      # README.md and runtime .py spawn lines — the ONE legal form is
+      # `uv run --project <plugin-root> python <script> ...`; baseline is
+      # zero (ratchet by absence)
+      run: uv run python scripts/invocation_hygiene_lint.py
+
     - name: Silent-except ratchet gate (issue #275)
       # fail-loud gate: no-op-body except handlers over scripts/** and
       # hooks/** — shrink-only per-file ledger (issue #275 batch 1: the

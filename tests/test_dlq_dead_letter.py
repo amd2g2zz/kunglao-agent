@@ -24,6 +24,7 @@ import yaml
 
 from status_defs import PARTIAL_STATUSES, IN_PROGRESS_STATUSES
 from convergence_check import _open_claims
+from _factories import stamp_current
 
 
 # --- REQ-001: DEAD membership in TERMINAL ---
@@ -62,6 +63,7 @@ def test_worker_pulse_shows_quarantined_flag(tmp_path):
 
     ws = tmp_path / "ws-dead"
     ws.mkdir()
+    stamp_current(ws)  # 0.1.6 gate: the pulse shells out to convergence_check
     _write_reg(ws, [{"id": "C-036", "status": "DEAD", "promotion_attempts": 5}])
 
     pulse, decision = wp._build_pulse(ws)

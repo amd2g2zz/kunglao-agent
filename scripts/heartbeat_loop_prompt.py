@@ -68,7 +68,10 @@ def build_prompt(ws: str, interval: str = "5m") -> str:
 python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
 
 [Per-tick monitoring (5-minute interval)]
-0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
+0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
+                                 # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
+                                 # until then the ticks above (or hook_activation --heartbeat-on) are the tick source; a quiet gap right
+                                 # after registration is deploy-day shape, not a dead cron (heartbeat_tick.py --reset-continuity re-arms).
                                  # (all mechanical steps folded into 1 command; manual handling only when exit=1)
                                  # oracle_registered=false in the report → run the Phase 0 task-oracle.yaml backfill now
                                  # mechanisms face: the tick schedules every registered mechanism (mechanisms.yaml, #878);
@@ -163,6 +166,20 @@ def main() -> int:
         print(f"Usage: {Path(sys.argv[0]).name} <workspace> [--interval 5m] [--verify]", file=sys.stderr)
         return 2
     ws = sys.argv[1]
+    # 0.1.6 version-consistency gate: LOOP BIRTH on a workspace whose
+    # format stamp != the executing skill version refuses (rc 9) with
+    # upgrade guidance — the transactional upgrade is the only path
+    # forward for a mismatched workspace. `--verify` is exempt: it is the
+    # read-only diagnostics face and must keep reporting on any workspace.
+    if "--verify" not in sys.argv[2:] and Path(ws).is_dir():
+        import template_version
+        mismatch = template_version.version_mismatch(Path(ws))
+        if mismatch is not None:
+            print(f"REFUSE: {mismatch}. Run: python scripts/kunglao_upgrade.py "
+                  f"{ws} — the transactional upgrade is the only path "
+                  f"forward, then re-run the loop birth.",
+                  file=sys.stderr)
+            return 9
     if "--verify" in sys.argv[2:]:
         return verify_loop(ws)
     interval = "5m"
