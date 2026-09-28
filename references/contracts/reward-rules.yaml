@@ -1,5 +1,5 @@
 schema: reward-rules/1
-version: 2
+version: 3
 description: >
   Deterministic settlement rules for the unified rollout ledger (#366).
   THE reward currency contract: reward_settlement.py reads ONLY this table
@@ -18,6 +18,14 @@ description: >
   earned from the exp1-7 measured cost distribution (cited in
   cost_reference below). The /1 rows above remain foldable unchanged;
   settled() interface unchanged; adapters unchanged.
+
+  version 3 (issue 433): round-credit VALUE LADDER (anti fact-farming
+  value alignment) — verified demotes from sufficient condition to
+  ADMISSION TICKET; cited / used-toward-stage is the value condition;
+  verified-but-never-cited and replay-evidence refutations settle the
+  TRACE canonical, once per demotion class per dispatch row. V/dV and
+  the root layers are unchanged; process quality (D4/D5/cost) stays in
+  the MEASUREMENT dimensions, never in the VALUE dimension.
 bands:
   SETTLED_GREEN: {reward: 1.0, polarity: positive}
   SETTLED_RED:   {reward: 0.0, polarity: negative}
@@ -143,12 +151,41 @@ cost_reference:
     BRONZE scalar 0.4 and named tier/bronze-expensive — the documented
     per-rollout efficiency discount.
 
-# --- v2: round credit settlement (#379 spec) ------------------------------
+# --- v3: round credit settlement (#379 spec + issue 433 value ladder) -----
 round_credit:
   formula: >
-    r_i = sum(artifacts created in dispatch i that are oracle-verified OR
-    cited-by-deliverable OR oracle-backed refutations) - attributed waste
+    r_i = (full-credit artifacts created in dispatch i) + (one trace
+    total per demotion class present in dispatch i) - attributed waste
     (decoy-follow walls traced to dispatch i).
+  value_ladder:
+    full: 1.0
+    trace: 0.01          # the validator rails' TRACE canonical, reused
+    legs:
+      cited_or_used_toward_stage_verified: full
+      stage_milestone: full   # + the existing V-jump attribution face
+      refuted_with_replay_evidence: trace
+      uncited_verified: trace
+      action_success_tool_ran: 0.0
+    note: >
+      Issue 433 (anti fact-farming): verified is the ADMISSION TICKET,
+      cited / used-toward-stage is the VALUE CONDITION — a verified fact
+      nobody cites is an exploration option, worthless until cited. The
+      citation relation is mechanical: named by the deliverable
+      (cited_by_deliverable) OR linked via claim provenance to a
+      question-bearing claim (fact claim_id -> claim-register
+      answers_question non-null — the surface the verdict scorer walks).
+      The uncited demotion is a CLASS demotion: one trace total per
+      dispatch row per demotion class, never a per-unit price — N farmed
+      facts earn the same single exploration-option value as one. A late
+      citation back-promotes the fact to full through the amendment path
+      (append-only ledger rows, promoted ids named in the settlement):
+      no punishment for foresight, no farming of uncited facts.
+      Stage-milestone artifacts (layer falls, key recovered) keep full
+      credit plus the existing V-jump attribution; V/dV and the root
+      layers are unchanged. Owner ruling 2026-09-28: within-cell
+      homogeneity is a STATE-SIGNATURE property, not a reward property —
+      NO reward-side normalization (no z-score, no rescaling); the cell
+      structure already conditions the comparison.
   attribution: >
     provenance-exact via the fact frontmatter creator field (the dispatch
     trace id the worker echo'd at creation). NO positional discount: the

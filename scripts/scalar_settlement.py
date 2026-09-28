@@ -11,12 +11,19 @@ polarity bands — it never raises a SETTLED_RED row and never lowers a
 SETTLED_GREEN row's ledger reward (task/oracle-green is never_demoted).
 
 Level 2 — ROUND credit settlement: per-dispatch rows
-``r_i = sum(credited artifacts created in dispatch i) - attributed waste``,
-provenance-exact via the fact frontmatter ``creator`` field (the dispatch
-trace id the worker echo'd at creation). NO positional weighting — the
-time-preference ruling removed the per-step weighting symbol from this
-design twice: the round index orders rows, it never weights them;
-``untraced`` artifacts are listed and counted toward no dispatch.
+``r_i = full-credit artifacts created in dispatch i + one trace total per
+demotion class present - attributed waste``, provenance-exact via the fact
+frontmatter ``creator`` field (the dispatch trace id the worker echo'd at
+creation). NO positional weighting — the time-preference ruling removed
+the per-step weighting symbol from this design twice: the round index
+orders rows, it never weights them; ``untraced`` artifacts are listed and
+counted toward no dispatch. Issue 433 (value alignment, anti
+fact-farming): credit is a VALUE LADDER, not a verified-count —
+``verified`` is the admission ticket, ``cited / used-toward-stage`` is
+the value condition; uncited verified artifacts settle one trace total
+per dispatch row (the exploration option, worthless until cited), and a
+late citation back-promotes through the amendment path. See the ladder
+block at ROUND_CREDIT_FULL.
 
 Settlement output — the experience 3-tuple ``(s, a, r)`` is extracted AT
 settlement as a first-class settlement-document field
@@ -53,6 +60,33 @@ RULE_ROUND_CREDIT = "round/provenance-credit"
 RULE_NEUTRAL = "tier/neutral"
 RULE_RED = "tier/red"
 
+# --- round-credit VALUE LADDER (issue 433: anti fact-farming) --------------
+#
+# Declared in reward-rules.yaml round_credit.value_ladder; FIRST-MATCH:
+#   cited / used-toward-stage verified artifact -> FULL 1.0
+#   stage-milestone artifact (layer falls, key recovered) -> FULL plus
+#     the existing V-jump attribution face — unchanged by issue 433; a
+#     milestone artifact is by construction used toward its stage, so it
+#     enters through the citation leg and keeps full credit
+#   refuted-with-replay-evidence -> TRACE (information option)
+#   verified but never cited -> TRACE (exploration option, worthless
+#     until cited; demotion reason uncited_verified)
+#   action success / tool ran -> 0
+# ``verified`` is the ADMISSION TICKET, ``cited`` the value condition —
+# the issue-433 inversion. The uncited demotion is a CLASS demotion: one
+# trace total per dispatch row per demotion class, never a per-unit
+# price — N farmed facts earn the same single exploration-option value
+# as one, so the farming gradient dies at any N; back-promotion is
+# per-fact via late citation (the amendment path).
+#
+# Owner ruling 2026-09-28: within-cell homogeneity is a STATE-SIGNATURE
+# property, not a reward property — NO reward-side normalization here;
+# the cell structure already conditions the comparison (the full ruling
+# wording lives in reward-rules.yaml round_credit.value_ladder.note).
+ROUND_CREDIT_FULL = 1.0
+DEMOTION_UNCITED_VERIFIED = "uncited_verified"
+DEMOTION_REFUTED_INFORMATION = "refuted_with_replay_evidence"
+
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
 TIER_BRONZE = "BRONZE"
@@ -67,7 +101,7 @@ NG_MU0 = 0.5     # scalar support midpoint (tiers live in [0, 1])
 NG_KAPPA0 = 1.0  # one pseudo-observation of prior strength (weak)
 NG_A0 = 1.0
 NG_B0 = 1.0
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn  # canonical warn: one impl, dedupe + ledger face
 
 
 def _now() -> str:
@@ -320,35 +354,63 @@ _CREDIT_TERMINALS = frozenset({"PROVEN", "VERIFIED"})
 _REFUTATION_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 
 
-def _artifact_credited(artifact: dict) -> bool:
-    """oracle-verified OR cited-by-deliverable OR oracle-backed
-    refutation (the spec's three credited classes)."""
-    if artifact.get("cited_by_deliverable"):
-        return True
+def _artifact_cited(artifact: dict) -> bool:
+    """The citation relation — the issue-433 single chokepoint.
+
+    An artifact is CITED iff it is named by a deliverable
+    (``cited_by_deliverable`` — the deliverable citation face) OR linked
+    via claim provenance to a question-bearing claim
+    (``answers_question`` — the fact frontmatter claim_id resolving in
+    claim-register.yaml to a claim with a non-null answers_question; the
+    same surface the verdict scorer walks pq -> claim -> linked fact).
+    Pure: same artifact face -> same verdict; the workspace-side
+    determination of both legs lives in fact_artifacts."""
+    return bool(artifact.get("cited_by_deliverable")
+                or artifact.get("answers_question"))
+
+
+def _artifact_credit(artifact: dict) -> tuple[float, str | None]:
+    """One artifact's round-credit value under the issue-433 ladder:
+    ``(value, demotion reason or None)``. FIRST-MATCH:
+      terminal-verified + cited             -> (FULL, None)
+      terminal-verified, never cited        -> (TRACE, uncited_verified)
+      oracle-backed refutation w/ replay    -> (TRACE,
+                                                refuted_with_replay_evidence)
+      anything else (action/tool success)   -> (0.0, None)
+    An unverified artifact earns nothing even when cited — verified is
+    the admission ticket, not an alternative value path."""
     status = str(artifact.get("status") or "").strip().upper()
     if status in _CREDIT_TERMINALS:
-        return True
-    if status in _REFUTATION_STATUSES \
-            and artifact.get("oracle_backed_refutation") \
-            and str(artifact.get("verify_status") or "").lower() == "passes":
-        return True
-    return False
+        if _artifact_cited(artifact):
+            return ROUND_CREDIT_FULL, None
+        return TRACE_CANONICAL, DEMOTION_UNCITED_VERIFIED
+    if (status in _REFUTATION_STATUSES
+            and artifact.get("oracle_backed_refutation")
+            and str(artifact.get("verify_status") or "").lower()
+            == "passes"):
+        return TRACE_CANONICAL, DEMOTION_REFUTED_INFORMATION
+    return 0.0, None
 
 
 def round_credit(dispatches: list[dict], artifacts: list[dict],
                  waste: list[dict] | None = None) -> dict:
     """Pure round-credit core: per-dispatch
-    ``r_i = sum(credited artifacts created in i) - attributed_waste(i)``.
+    ``r_i = full-credit artifacts created in i + one trace total per
+    demotion class present - attributed_waste(i)`` under the issue-433
+    value ladder (see the ladder block at ROUND_CREDIT_FULL).
 
     Provenance-exact attribution on the artifact ``creator`` field (the
     dispatch id); the round index carries ordering information only and
     never weights the sum. Artifacts with no creator (or a creator
     outside the dispatch set) are ``untraced``: listed, counted toward
-    no dispatch."""
+    no dispatch. Demoted artifacts are listed per artifact with their
+    reason (``demoted``) so the gradient is auditable — the worker sees
+    WHY the credit is low."""
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or []) if d.get("dispatch_id")]
     known = set(dispatch_ids)
     credited_by: dict[str, list[str]] = {d: [] for d in dispatch_ids}
+    demoted_by: dict[str, list[dict]] = {d: [] for d in dispatch_ids}
     untraced: list[str] = []
     for a in (artifacts or []):
         aid = str(a.get("id") or "")
@@ -358,8 +420,11 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
             if aid:
                 untraced.append(aid)
             continue
-        if _artifact_credited(a):
+        value, reason = _artifact_credit(a)
+        if value >= ROUND_CREDIT_FULL:
             credited_by[creator].append(aid)
+        elif reason:
+            demoted_by[creator].append({"id": aid, "reason": reason})
     waste_by: dict[str, float] = {d: 0.0 for d in dispatch_ids}
     unattributed_waste = 0.0
     for w in (waste or []):
@@ -374,11 +439,17 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
         if not did:
             continue
         credited = credited_by[did]
+        demoted = demoted_by[did]
+        # ONE trace total per demotion CLASS present (a class demotion,
+        # never a per-unit price — the farming gradient dies at any N)
+        trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
         rows.append({"dispatch_id": did,
                      "round": d.get("round"),  # ordering info ONLY
                      "credited": credited,
+                     "demoted": demoted,
                      "waste": waste_by[did],
-                     "r": float(len(credited)) - waste_by[did]})
+                     "r": float(len(credited)) + trace_total
+                     - waste_by[did]})
     return {"rows": rows, "untraced": untraced,
             "unattributed_waste": unattributed_waste}
 
@@ -409,6 +480,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         signals = [{"type": "round_credit_signal",
                     "source": "scalar_settlement",
                     "value": {"credited": len(row["credited"]),
+                              "demoted": len(row["demoted"]),
                               "waste": row["waste"]},
                     "ts": ts_row}]
         rec = rl.record(ws, kind=KIND_ROUND_CREDIT,
@@ -417,16 +489,33 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         if not rec.get("appended") and rec.get("reason") not in (
                 "duplicate: unchanged",):
             warn("settle_round_credit", f"{rid}: {rec.get('reason')}")
+        # issue 433 late-cite provenance: the ids THIS settlement raises
+        # out of a prior trace demotion into full credit (a late citation
+        # is foresight rewarded through the amendment path, never
+        # punished; a first settlement has no prior demotions)
+        prior_st = (existing.get("settlement") or {}) if existing else {}
+        prior_demoted = {str(e.get("id"))
+                         for e in (prior_st.get("demoted") or [])
+                         if isinstance(e, dict)}
         settlement = {"reward": row["r"], "band": BAND_ROUND_CREDIT,
                       "rule_id": RULE_ROUND_CREDIT,
                       "evidence_refs": [
                           f"creator:{row['dispatch_id']}"] + [
-                          f"credited:{aid}" for aid in row["credited"]],
+                          f"credited:{aid}" for aid in row["credited"]] + [
+                          f"demoted:{e['id']}:{e['reason']}"
+                          for e in row["demoted"]],
                       "credited": row["credited"],
+                      "demoted": row["demoted"],
                       "waste": row["waste"],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
+        prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
+        late_cited = prior_late + [
+            aid for aid in row["credited"]
+            if aid in prior_demoted and aid not in prior_late]
+        if late_cited:
+            settlement["late_cited"] = late_cited
         res = rl.settle(ws, rid, settlement)
         if res.get("appended"):
             settled_n += 1
@@ -549,6 +638,30 @@ def merge_normal_gamma_posts(posts: list[dict],
 
 # --- fact provenance read face (the creator field) --------------------------
 
+def question_claims(ws) -> set[str]:
+    """<ws>/claim-register.yaml -> ids of the question-bearing claims
+    (answers_question non-null) — the claim-provenance half of the
+    issue-433 citation relation (the same surface the verdict scorer
+    walks: pq -> claim -> linked fact; a fact on such a claim is used
+    toward the deliverable/stage). Tolerant: a missing or unparseable
+    register degrades to an empty set — no claim face means no
+    claim-provenance citations; the deliverable face is unaffected."""
+    import yaml
+    try:
+        data = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(
+                encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return set()
+    out: set[str] = set()
+    if isinstance(data, dict):
+        for c in data.get("claims") or []:
+            if isinstance(c, dict) and c.get("id") \
+                    and c.get("answers_question"):
+                out.add(str(c["id"]))
+    return out
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -558,11 +671,15 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     channels, trace_id is mission-stable so it attributes to the mission,
     not the dispatch). Status/verify_status are the oracle faces;
     ``cited_by_deliverable`` comes from the deliverable citation face
-    (cited_ids — the ids the deliverable document names). Tolerant read:
+    (cited_ids — the ids the deliverable document names) and
+    ``answers_question`` from the claim-provenance face (claim_id
+    resolving to a question-bearing claim — the used-toward-stage leg of
+    the issue-433 citation relation; see question_claims). Tolerant read:
     unparseable or extension-layer-incomplete files are skipped (they are
     not credit artifacts; lint_facts owns their loudness)."""
     import yaml
     cited = {str(c) for c in (cited_ids or [])}
+    question_bearing = question_claims(ws)
     out: list[dict] = []
     facts_dir = Path(ws) / "facts"
     if not facts_dir.is_dir():
@@ -580,10 +697,14 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
             continue
         fid = str(meta.get("id") or path.stem)
         creator = str(meta.get("creator") or meta.get("trace_id") or "")
+        claim_id = str(meta.get("claim_id") or "").strip()
         out.append({"id": fid,
                     "creator": creator or None,
                     "status": str(meta.get("status") or ""),
                     "verify_status": str(meta.get("verify_status") or ""),
+                    "claim_id": claim_id or None,
+                    "answers_question": bool(claim_id)
+                    and claim_id in question_bearing,
                     "cited_by_deliverable": fid in cited,
                     "oracle_backed_refutation": str(
                         meta.get("status") or "").strip().upper()

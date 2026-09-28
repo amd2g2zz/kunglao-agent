@@ -911,7 +911,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: ecd81cfa092ad1366a9e6437c82547add250a92ab131022608e070ecf0953e6d
+    sha256: 3e1e738e805baefc79d12b64e1ac419eb3263ac7b1b2d2d0fac6730abac46e1d
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1171,7 +1171,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: da7a71311ae350fcc98fc3613f61542c9dcc2b4e3e6095477612b0fd3936dd6d
+    sha256: 6f25a91b70d1c6dd48e4fa63ca7e20173bbec9fc9e7f8e09c1ea12f6e40e0dee
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset
