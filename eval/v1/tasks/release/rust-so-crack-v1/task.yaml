@@ -1,0 +1,65 @@
+schema: kunglao-eval-task/1
+task_id: rust-so-crack-v1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: rust-so-crack
+seed: 33731
+rung: l1
+anchors:
+  goal_verbatim: Analyze the arm64 android shared object target/libcrackme.so
+    (Rust cdylib), recover the three mutated parameters — the ChaCha20 KDF
+    sigma word, the AES-shaped S-box seed (affine a/b + shifted rcon), and
+    the 16-byte license magic — and re-implement crackme_verify and
+    crackme_probe reproducing the captured outputs byte-exact.
+  success_criterion: A re-implementation carrying the recovered parameters
+    that reproduces every published and checker-minted probe (verify return
+    code plus the 16-hex probe output, byte-exact), including the decoy
+    legacy lane behind the 0x44 0x45 prefix and the anti-analysis poison
+    staying silent in a clean environment.
+  verification_method: reproduction
+workspace_scaffold:
+  language: rust/arm64-android
+  files:
+  - target/libcrackme.so
+  - reference.py
+  entry: target/libcrackme.so
+  candidate_contract: 'A Python module exposing verify(data: bytes) -> int (0/1/2)
+    and probe(data: bytes) -> str (16 lowercase hex chars = first 8 bytes of the
+    P2 keystream block 0, little-endian).'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - constant-hit
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 3
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 192
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps:
+  - ptrace-traceme
+  - tracerpid-inline-syscall
+  - clock-timing
+  - brk-text-scan
+  - frida-maps-scan
+  - decoy-fake-success
+  clean_env_guarantee: >-
+    silent in a clean runtime (no tracer, no frida, no breakpoints): traps
+    never fire and verify/probe outputs are deterministic; on a trip the
+    derived keystream is silently corrupted (wrong-key observable, never
+    an exception or log line)
+  self_defending: poison-semantics

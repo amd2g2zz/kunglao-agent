@@ -42,6 +42,13 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
     # ---- release tier, native ladder (eval_native_targets registry) ----
     "arm-native-kdf": {"suffix": ".py", "response_language": "Python",
                        "target_surface": "binary"},
+    # rust-so-crack (2026-09-29): the rust arm64 android .so E2E target —
+    # a native binary artifact graded through a PURE-PYTHON candidate
+    # (verify/probe); fresh probes mint from the same-crate host oracle
+    # (target/crackme_host, held_out), so the family lives outside the
+    # seed-model registries but keeps the contract row.
+    "rust-so-crack": {"suffix": ".py", "response_language": "Python",
+                      "target_surface": "binary"},
     # win-pe-kdf commits the Go SOURCE (the PE is built at mint when the
     # toolchain exists), so its committed entry face is text
     "win-pe-kdf": {"suffix": ".py", "response_language": "Python",

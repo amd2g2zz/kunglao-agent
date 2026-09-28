@@ -210,8 +210,9 @@ class TestLandedCorpus:
         dirs = ds.iter_task_dirs(tier="release")
         # the merged #332 inventory: 12 native (this lane) + 15 web/net
         # (#332b: web-pack-sign x5, mod-crypto-js x4, req-sign x3,
-        # net-verify-license x3) = one 27-unit release ladder
-        assert len(dirs) == 27
+        # net-verify-license x3) = one 27-unit release ladder; +1 for
+        # rust-so-crack-v1 (the rust .so E2E target, 2026-09-29) = 28
+        assert len(dirs) == 28
         landed_ids = {d.name for d in dirs}
         assert {u["task_id"] for u in ntg.UNITS} <= landed_ids
         for tdir in dirs:

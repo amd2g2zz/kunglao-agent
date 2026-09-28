@@ -1,0 +1,4 @@
+# rust-so-crack-v1 build config: the android arm64 artifact is linked by
+# the NDK clang wrapper (rustup toolchain 1.98.x, target aarch64-linux-android).
+[target.aarch64-linux-android]
+linker = "/Users/mikenike/Library/Android/sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android21-clang"
