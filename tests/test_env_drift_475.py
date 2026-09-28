@@ -133,8 +133,10 @@ class TestCheckEnvFresh:
 
     def _payload(self, desc: str = 'w-t bootstrap dispatch') -> dict:
         # #862 通道归一：形状走 prompt（canonical），description 纯描述
+        # #432: v0 形状以 prose 标记行声明 method-family（同一合同、两个声明面）
         return {'tool_input': {'name': 'w-t', 'description': desc,
-                               'prompt': '[T2 tools=vmr-shell] claim C-001 detonate'}}
+                               'prompt': '[T2 tools=vmr-shell] claim C-001 detonate'
+                                         '\nmethod-family: dynamic-trace'}}
 
     def test_missing_file_fail_open(self, tmp_path, capsys):
         """Missing env-state.json → allow (FAIL_OPEN) + one-time stderr hint."""

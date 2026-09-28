@@ -211,7 +211,15 @@ def read_csv(ws) -> list[dict]:
 def q_report(ws) -> dict:
     """READ-ONLY Q report: per-(s_hash, a_arm) empirical mean + count over
     the triple bank (the issue-386 estimator arithmetic, zero behavior —
-    banking visibility). Cold start = no cells. Never writes."""
+    banking visibility). Cold start = no cells. Never writes.
+
+    #432: carries the method-family vocabulary health block
+    (never-fills / dominates-all / other>20%-persistent, computed from
+    (family, cell) usage by scripts/method_families.py — the action-half
+    companion of the s_hash cells). Additive key: the Q arithmetic and
+    the q-report/1 cells stay byte-identical. A registry the health face
+    cannot read degrades to an explicit "unavailable" marker — visible,
+    never silent."""
     cells: dict[tuple[str, str], list[float]] = {}
     total = 0
     for row in read_csv(ws):
@@ -226,7 +234,19 @@ def q_report(ws) -> dict:
             "n": len(rs),
             "mean_r": round(sum(rs) / len(rs), 6)}
            for k, rs in sorted(cells.items())]
-    return {"schema": Q_REPORT_SCHEMA, "cells": out, "rows": total}
+    return {"schema": Q_REPORT_SCHEMA, "cells": out, "rows": total,
+            "method_family_health": _family_health_face(ws)}
+
+
+def _family_health_face(ws) -> dict:
+    """#432: method-family health at the Q report face — pure read; any
+    degradation is explicit, never a silent empty block."""
+    import method_families as mf  # local: keeps module import order flat
+
+    try:
+        return mf.family_health(ws)
+    except mf.RegistryError as exc:
+        return {"unavailable": f"registry unreadable: {exc}"}
 
 
 if __name__ == "__main__":  # pragma: no cover — library module

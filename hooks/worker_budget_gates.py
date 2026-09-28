@@ -1483,6 +1483,16 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     text_lower = f'{desc}\n{prompt}'.lower()
+    # #432: the method-family declaration (v1 envelope field or v0 prose
+    # marker) is protocol metadata, not dispatch prose — a token like
+    # `static-decompile` carries the category word `static` and would
+    # misfire the keyword scan (advisory noise for every declaring
+    # dispatch). Strip BOTH declaration faces before evaluation;
+    # `tool-catalog:` markers below are unaffected (they never ride the
+    # method-family declaration).
+    text_lower = re.sub(
+        r'"method_family"\s*:\s*"[^"]*"|method-family:[^\n]*', '',
+        text_lower)
     cited = None
     if 'tool-catalog:' in text_lower:
         m = re.search(r'tool-catalog:\s*(.+)', text_lower)

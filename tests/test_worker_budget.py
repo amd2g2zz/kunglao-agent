@@ -526,7 +526,7 @@ def test_pre_check_accepts_first_dispatch_without_plan(tmp_path, capsys):
     plan file, no plan path in the prompt — passes the plan gate (dispatch
     carries intent, not a plan; the worker plans as its first act)."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
 
@@ -535,7 +535,7 @@ def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
     """Issue 239 v2 e2e: first dispatch approved (anchor stamped) -> a re-dispatch
     with no worker-authored plan in between is REJECTED by the plan gate."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts')
     paths = _min_paths(ws)
     assert pre_check(payload, paths) == 0, capsys.readouterr().err
     _seed_live_heartbeat(ws)
@@ -716,7 +716,7 @@ def test_pre_check_advisory_dispatch_matching_tool_without_marker(tmp_path, caps
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}\n'
+        '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\n'
         'facts-snapshot: 1 facts\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
@@ -738,7 +738,7 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}\n'
+        '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\n'
         'facts-snapshot: 1 facts\ntool-catalog: crypto-tool\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
@@ -773,6 +773,7 @@ REJECT_NAMES = [
     'plan',
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
     'granularity',  # issue 241: claim granularity discipline
+    'methodfamily',  # #432: method-family vocabulary gate
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -797,6 +798,7 @@ REJECT_FIX_KEYWORDS = {
     'devreason': 'agent-reasoning',
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
     'granularity': 'claim_granularity.py',  # issue 241: the mint entrypoint
+    'methodfamily': 'method_families.yaml',  # #432: the registry path
 }
 
 
@@ -870,7 +872,7 @@ def _paths_for(ws: Path) -> dict:
 
 def _budget_payload(prompt=None, desc=''):
     env = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-           '"tools": ["grep"], "agent": "w-test"}}')
+           '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}')
     if prompt is None:
         prompt = env + '\nfacts-snapshot: 1 facts'
     return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
@@ -1010,7 +1012,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
         {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 1},
     ])
-    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'
+    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts'
     scenarios.append(('devreason', 'agent-reasoning',
                       lambda ws=ws: wb.pre_check(_budget_payload(prompt=env_c002), _paths_for(ws))))
 
@@ -1074,7 +1076,7 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
         'cwd': str(ws),
         'tool_input': {'name': 'w-test',
                        'description': '',
-                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'},
+                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts'},
     }
     r = subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / 'hooks'
