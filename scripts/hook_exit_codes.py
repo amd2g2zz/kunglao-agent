@@ -50,4 +50,20 @@ HOOK_EXIT_SEMANTICS = {
     "recall_inject": {
         ExitCode.OK: "recall processed — knowledge injected or silent (inject-only, never rejects)",
     },
+    "workguard_gate": {
+        ExitCode.OK: "turn exit allowed — actionable set empty (legal sleep) or pass-through face",
+        ExitCode.GENERAL_ERROR: "turn exit BLOCKED — actionable set non-empty; reason carries the next-decision guidance (issue 434 WORKGUARD)",
+    },
+    "round_closure": {
+        ExitCode.OK: "closure event row appended (or pass-through; recorder, never blocks)",
+    },
+    "session_start": {
+        ExitCode.OK: "armed + renewed + constitution injected (or non-workspace notice; never blocks a session)",
+    },
+    "compact_continuity": {
+        ExitCode.OK: "continuity note injected (inject-only, never blocks compaction)",
+    },
+    "user_signal_capture": {
+        ExitCode.OK: "operator observation recorded + signal routed (fail-open, never blocks user input)",
+    },
 }

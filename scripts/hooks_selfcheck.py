@@ -73,6 +73,11 @@ _KONG_SKIP_FILES = frozenset({
     "orchestrator_tool_guard.py",  # Bash maker-checker WARN — env_check scans it (#608)
     "violation_capture.py", # Bash violation recorder — env_check scans it (#718)
     "bash_fact_guard.py",   # Bash facts-write lint recorder — env_check scans it (#809)
+    "workguard_gate.py",    # Stop WORKGUARD — env_check scans it (issue 434)
+    "round_closure.py",     # SubagentStop closure feed — env_check scans it (issue 434)
+    "session_start.py",     # SessionStart arm + constitution — env_check scans it (issue 434)
+    "compact_continuity.py",  # PreCompact continuity — env_check scans it (issue 434)
+    "user_signal_capture.py",  # UserPromptSubmit observation — env_check scans it (issue 434)
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —

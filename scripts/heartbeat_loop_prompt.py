@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""heartbeat_loop_prompt.py — v1.9.26: generate the FULL /loop heartbeat prompt.
+"""heartbeat_loop_prompt.py — the /loop heartbeat prompt (event-wakeup
+topology restructure, issue 434).
 
-Why: the heartbeat must be BORN registered. The orchestrator used to create
-the /loop cron, THEN remember to run --heartbeat-on — a two-step dance that
-failed (orchestrator claimed monitoring started without registering it,
-v1.9.25 lesson). This script emits ONE self-contained /loop prompt that
-CARRIES the registration + monitoring + verification contract, so a single
-`/loop 5m <prompt>` starts everything at once.
+The pre-434 body was a cron-injected OPERATING MANUAL: the same decision
+table, ping ritual and note ritual re-injected every 5 minutes. The
+restructured prompt splits along the topology:
+
+  (a) CONSTITUTION — constitution() below: the static decision semantics
+      (DISPATCH/BLOCKED/DEFERRED/PARK/SATURATED/CONVERGED imperatives +
+      the action_taken contract), injected ONCE per session by the
+      SessionStart hook — never by the cron;
+  (b) STRATEGY SECTIONS — per decision, through the versioned seam
+      (scripts/strategy_sections.py reads runs/round-strategy.json; the
+      producer lands later, the seam renders nothing until it does);
+  (c) GUARD GUIDANCE — dynamic, on Stop-hook fires (the WORKGUARD).
+
+The cron body itself (build_prompt) is the WATCHDOG face: the heartbeat
+demotes to a true watchdog and fires guidance ONLY when an expected event
+did not arrive (report.watchdog.fired — scripts/loop_watchdog.py). A
+quiet watchdog decision makes the wake a NO-OP: the LLM ends the turn
+without re-reading any manual. The born-registered contract (#461) and
+the scheduler's entry markers survive verbatim.
 
 Usage:
     python scripts/heartbeat_loop_prompt.py <workspace> [--interval 5m]
     python scripts/heartbeat_loop_prompt.py <workspace> --verify
-
-Output: the prompt to pass to `/loop <interval> <prompt>` (or CronCreate).
-The prompt's FIRST action is `hook_activation.py <ws> --heartbeat-on
---loop-registered` (registration is born with the loop AND marked — the
-prompt body executing is the proof CronCreate accepted it, #461), then
-per-tick monitoring (reconcile / status poll / smart ping / convergence /
-renew). Since v1.9.29 (issue #237) the convergence decision is a COMMAND,
-not a suggestion: DISPATCH must dispatch priority_ratio.py #1, BLOCKED must
-self-recover/reactivate, DEFERRED must check reactivation — no action in
-a tick = idle fault. CONVERGED only after §6.3 checklist + handoff-check
-PASS, then `--heartbeat-off` stops the loop (guarded: unconverged teardown
-is rejected).
 
 --verify (#461, HARD): the caller-side cron-registration acceptance check.
 Reads the loop marker in <ws>/runs/.heartbeat.json (loop_registered);
@@ -41,7 +43,7 @@ from pathlib import Path
 
 
 def _difficulty_guidance(ws: str) -> str:
-    """#16: the difficulty-aware red-team rigor line ("" below hard).
+    """the difficulty-aware red-team rigor line ("" below hard).
 
     Guidance-only surface: the difficulty_thresholds policy decides whether
     the tier carries associated_task_consistency; a below-hard tier (and any
@@ -56,48 +58,64 @@ def _difficulty_guidance(ws: str) -> str:
     return f"\n   → {line}" if line else ""
 
 
+def constitution(ws: str) -> str:
+    """(a) The once-per-session CONSTITUTION — the static decision
+    semantics carried out of the cron body. Injected by the SessionStart
+    hook; deterministic for a given workspace so sessions are comparable.
+    """
+    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
+    cc = str(skill_dir / "scripts" / "convergence_check.py")
+    diff_line = _difficulty_guidance(ws)
+    return f"""[kunglao-agent CONSTITUTION — injected once per session; the cron heartbeat no longer repeats it]
+Decision semantics (run `python {cc} {ws} --json`, read `decision`, then act — every decision MUST produce a convergence-advancing action; no action = idle fault):
+   DISPATCH   -> dispatch priority_ratio.py top action, no idling
+   DISPATCH_VERIFIER -> dispatch the verifier the decision names
+   BLOCKED    -> self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
+                 worker death: any runs/.worker-death-*.json surfaced by the decision/stuck report ->
+                 dispatch a RESUME claim per record: read its artifacts list FIRST, verify + absorb
+                 the existing products, continue from where the worker died — do NOT redo from zero
+   DEFERRED   -> check whether reactivation is possible (e.g. VM reachable again -> restore the claim)
+   PARK       -> legal idle on external gates: record the wake_condition, then stop the heartbeat
+                 (revive via mission_stall.py when the wake condition is met); a tick rc=2 with
+                 idle_circuit_breaker is a MANDATORY stop — do not re-tick through it
+   SATURATED  -> poll all active workers (no idle waiting)
+   CONVERGED  -> run the closing checklist (blind_gate sign-off spot-check + kunglao-verify.py L1
+                 re-run) + handoff-check PASS first, then stop the heartbeat (no cleanup before
+                 convergence — deletion breaks dispatch)
+Per-tick output contract: fill runs/.heartbeat-tick.json action_taken every tick with what the
+tick advanced (dispatched/verified/solved/reactivated); an empty field = idle fault.
+Worker pings use SendMessage "[ping HH:MM] step? stuck? eta?" and append replies to
+runs/.ping-log.jsonl (isolation boundary: no agent teams; the orchestrator->worker ping is the
+sanctioned channel).{diff_line}"""
+
+
 def build_prompt(ws: str, interval: str = "5m") -> str:
-    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
+    """The WATCHDOG cron body (issue 434): registration + one-command tick
+    + the missed-event decision. The operating manual is NOT here — it is
+    constitution(), injected once at SessionStart."""
+    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
     h = str(skill_dir / "scripts" / "hook_activation.py")
     tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
     cc = str(skill_dir / "scripts" / "convergence_check.py")
-    diff_line = _difficulty_guidance(ws)
-    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + monitoring + verification in one):
+    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
 
 [Startup action — run once on the loop's first trigger]
 python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
 
-[Per-tick monitoring (5-minute interval)]
-0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
+[Watchdog tick — the heartbeat fires ONLY on missed events]
+0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
                                  # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
-                                 # until then the ticks above (or hook_activation --heartbeat-on) are the tick source; a quiet gap right
-                                 # after registration is deploy-day shape, not a dead cron (heartbeat_tick.py --reset-continuity re-arms).
-                                 # (all mechanical steps folded into 1 command; manual handling only when exit=1)
-                                 # oracle_registered=false in the report → run the Phase 0 task-oracle.yaml backfill now
-                                 # mechanisms face: the tick schedules every registered mechanism (mechanisms.yaml, #878);
-                                 # `python scripts/mechanism_scheduler.py {ws} --plan` answers "what runs when"
-1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
-2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
-   → append structured replies to runs/.ping-log.jsonl
-   (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
-    workers never message each other)
-3. python {cc} {ws} --json → read the decision field, imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
-   DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
-   BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
-                → worker death (#11): any runs/.worker-death-*.json surfaced by the decision/stuck report →
-                  dispatch a RESUME claim for each: read the record's artifacts list (已完成产物清单) FIRST,
-                  verify + absorb the existing products, continue from where the worker died — do NOT redo from zero
-   DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
-   PARK       → legal idle on external gates (#634): record the wake_condition, then python {h} {ws} --heartbeat-off
-                (revive via mission_stall.py when the wake condition is met); tick rc=2 with idle_circuit_breaker
-                is a MANDATORY stop — do not re-tick through it
-   SATURATED  → MUST poll all active workers (no idle waiting)
-   CONVERGED  → run the §6.3 checklist (5 items) + independent verification (blind_gate sign-off spot-check
-              + kunglao-verify.py L1 re-run) + handoff-check PASS first
-              → then python {h} {ws} --heartbeat-off stops the heartbeat (no cleanup before convergence — deletion breaks dispatch)
-4. Finished worker → verify facts → merge to master → update claim-register + _INDEX
-5. Record notes with malware-veri-notes per §6.2; at the end of every tick you MUST be able to state "what this round advanced" (fill it into
-   runs/.heartbeat-tick.json's action_taken; an empty field = idle fault){diff_line}"""
+                                 # a quiet gap right after registration is deploy-day shape, not a dead cron (--reset-continuity re-arms).
+   - report.watchdog.fired == false -> this wake is a NO-OP: end the turn NOW. Events already wake the session
+     (dispatch returns in-turn, worker completions between-turns, the Stop WORKGUARD judges turn-exit);
+     re-reading manuals or dispatching from a quiet wake is the noise this watchdog replaced.
+   - report.watchdog.fired == true  -> act ONLY on report.watchdog.reasons (missed events):
+       heartbeat-gap   -> the cadence died: re-verify with python {h} {ws} --heartbeat-check, re-arm the chain if stale
+       stuck-worker    -> smart-ping each named worker (SendMessage "[ping HH:MM] step? stuck? eta?", replies to runs/.ping-log.jsonl)
+       step-failure    -> repair the failed mechanical step (the report's per-step stderr tails carry the text)
+     then run python {cc} {ws} --json and follow the session constitution's decision semantics.
+   - oracle_registered=false in the report -> run the Phase 0 task-oracle.yaml backfill now
+   - tick exit=2 with idle_circuit_breaker -> MANDATORY stop — do not re-tick through it"""
 
 
 def verify_loop(ws: str) -> int:

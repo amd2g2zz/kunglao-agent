@@ -117,6 +117,7 @@ ALL_HOOKS = {
     "state_anchor",
     "completion_gate",
     "user_signal_capture",   # #868 UserPromptSubmit: user-signal capture face
+    "workguard_gate",        # issue 434 Stop WORKGUARD: turn-exit actionable-set gate
 }
 
 TIER_DEFAULTS = {
@@ -982,6 +983,11 @@ _DEPLOYED_WIRING = (
     ("PostToolUse", "Edit|Write|MultiEdit|Agent",
      "cost_input_capture.py"),  # #873 cost 输入捕获
     ("Stop", "", "completion_gate.py"),
+    ("Stop", "", "workguard_gate.py"),        # issue 434 WORKGUARD
+    ("SubagentStop", "", "round_closure.py"),      # issue 434 closure feed
+    ("SessionStart", "", "session_start.py"),      # issue 434 constitution
+    ("PreCompact", "", "compact_continuity.py"),   # issue 434 continuity
+    ("UserPromptSubmit", "", "user_signal_capture.py"),  # issue 434 observation
 )
 
 
@@ -1136,9 +1142,11 @@ def register_hooks(workspace: Path | None = None,
         return other + new, True
 
     def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
-        """Stop hooks carry no matcher (they fire on every Stop event). Dedupe
-        by command basename across all Stop entries so re-wiring replaces, not
-        stacks. Appends one entry with the single hook."""
+        """Matcher-less hook entries (Stop / SessionStart / PreCompact /
+        SubagentStop / UserPromptSubmit — every event that is not a
+        tool-use match). Dedupe by command basename across the bucket's
+        entries so re-wiring replaces, not stacks. Appends one entry with
+        the single hook."""
         kept = []
         for e in entries:
             hs = e.get("hooks", [])
@@ -1226,6 +1234,21 @@ def register_hooks(workspace: Path | None = None,
     stop = hooks.get("Stop") or []
     stop, added = _ensure_stop(stop, "completion_gate.py")
     count += added
+
+    # issue 434 (event-wakeup topology): the WORKGUARD Stop entry + the four
+    # matcher-less event wirings. All no-matcher buckets (these events are
+    # not tool-use matches); dedupe by command basename like the Stop face.
+    stop, added = _ensure_stop(stop, "workguard_gate.py")
+    count += added
+    for event, hook_file in (
+            ("SubagentStop", "round_closure.py"),
+            ("SessionStart", "session_start.py"),
+            ("PreCompact", "compact_continuity.py"),
+            ("UserPromptSubmit", "user_signal_capture.py")):
+        bucket = hooks.get(event) or []
+        bucket, added = _ensure_stop(bucket, hook_file)
+        hooks[event] = bucket
+        count += added
 
     hooks["PreToolUse"] = pre
     hooks["PostToolUse"] = post

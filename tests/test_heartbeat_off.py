@@ -169,16 +169,25 @@ def test_tick_report_has_action_taken(tmp_path, monkeypatch, capsys):
 
 def test_prompt_is_imperative(tmp_path):
     """Cron prompt turned from 'suggestion' to 'command': every decision must
-    bind a convergence-advancing action; no action = idle fault."""
-    from scripts.heartbeat_loop_prompt import build_prompt
-    p = build_prompt(str(tmp_path / "ws"))
-    assert "MUST dispatch priority_ratio.py #1" in p, "DISPATCH must dispatch"
+    bind a convergence-advancing action; no action = idle fault.
+
+    Event-wakeup restructure (issue 434): the imperative decision semantics
+    moved from the per-tick cron body to the session constitution
+    (heartbeat_loop_prompt.constitution, injected once at SessionStart) —
+    the intent of this pin (semantics exist and bind actions) is unchanged,
+    the HOME moved."""
+    from scripts.heartbeat_loop_prompt import build_prompt, constitution
+    p = constitution(str(tmp_path / "ws"))
+    assert "dispatch priority_ratio.py" in p, "DISPATCH must dispatch"
+    assert "no idling" in p, "DISPATCH binds an action, no idling"
     assert "idle fault" in p, "no action = idle fault"
     assert "self-recover" in p, "BLOCKED must self-recover"
     assert "reactivat" in p, "DEFERRED must check reactivation"
-    assert "--heartbeat-off" in p, "after convergence, --heartbeat-off must stop the heartbeat first"
     assert "handoff-check" in p, "CONVERGED must handoff-check PASS before off"
-    assert "§6.3" in p
+    # the cron body stays the watchdog face: it must NOT re-inject the
+    # manual (the restructure's acceptance)
+    body = build_prompt(str(tmp_path / "ws"))
+    assert "idle fault" not in body and "self-recover" not in body
 
 
 def test_prompt_keeps_sendmessage_ping(tmp_path):

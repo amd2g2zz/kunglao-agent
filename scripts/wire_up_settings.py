@@ -70,6 +70,11 @@ WIRE_UP_HOOK_FILES = frozenset({
     "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
     "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
     "bash_fact_guard.py",      # PostToolUse/Bash — facts-write lint recorder (#809)
+    "workguard_gate.py",       # Stop — WORKGUARD: turn-exit actionable-set gate (issue 434)
+    "round_closure.py",        # SubagentStop — round-closure lifecycle feed (issue 434)
+    "session_start.py",        # SessionStart — arm + constitution injection (issue 434)
+    "compact_continuity.py",   # PreCompact — strategy continuity note (issue 434)
+    "user_signal_capture.py",  # UserPromptSubmit — operator observation + signal capture (issue 434)
 })
 
 # #675: hooks registered on MORE THAN ONE event slot by

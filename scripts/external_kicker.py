@@ -142,6 +142,11 @@ _KICKER_SKIP_FILES = frozenset({
     "orchestrator_tool_guard.py",  # Bash maker-checker WARN (#608) — full --wire-up restores it
     "violation_capture.py", # Bash violation recorder (#718) — full --wire-up restores it
     "bash_fact_guard.py",   # Bash facts-write lint recorder (#809) — full --wire-up restores it
+    "workguard_gate.py",    # Stop WORKGUARD (issue 434) — wire-up restores
+    "round_closure.py",     # SubagentStop closure feed (issue 434) — ditto
+    "session_start.py",     # SessionStart arm + constitution (issue 434)
+    "compact_continuity.py",  # PreCompact continuity (issue 434) — ditto
+    "user_signal_capture.py",  # UserPromptSubmit observation (issue 434)
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 

@@ -506,7 +506,12 @@ def check_hooks(ws: Path) -> tuple[str, str]:
             f"{sp}: {line}" for line in
             wire_up_settings.registration_shape_issues(s))
         cmds = []
-        for event in ("PreToolUse", "PostToolUse", "Stop"):
+        # issue 434: scan EVERY canonical event bucket (the registry now
+        # wires SubagentStop / SessionStart / PreCompact / UserPromptSubmit
+        # alongside the tool-use events) — a checker that reads only
+        # Pre/Post/Stop is blind to four of the registry's faces (the
+        # three-checkers-three-answers bug class).
+        for event in wire_up_settings.HOOK_EVENTS:
             for entry in s.get("hooks", {}).get(event, []) or []:
                 for h in entry.get("hooks", []) or []:
                     cmds.append(str(h.get("command", "")))

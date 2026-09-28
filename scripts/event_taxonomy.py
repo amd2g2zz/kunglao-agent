@@ -190,6 +190,8 @@ EMIT_ACTIONS = [
     "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
+    "compact_continuity",  # issue 434 PreCompact strategy-continuity injection face
+    "constitution_injected",  # issue 434 SessionStart constitution injection (once per session)
     "context_manifest",  # issue 293 dispatch-assembly context inventory (cards/plan/siblings/providers)
     "converge",
     "death_verdict_rejected",
@@ -258,6 +260,7 @@ EMIT_ACTIONS = [
     "must_ask",
     "must_stop",
     "observation",        # #157 oracle_runner per-case result row (id/status + #146 forensics summary class) — the reward signal's event face
+    "operator_observation",  # issue 434 UserPromptSubmit operator-intent observation row (pure recording)
     "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
