@@ -259,6 +259,7 @@ EMIT_ACTIONS = [
     "must_stop",
     "observation",        # #157 oracle_runner per-case result row (id/status + #146 forensics summary class) — the reward signal's event face
     "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
+    "oracle_probe_t1",    # issue 429 §1 T1 ladder rung: mid-round oracle probe batch fired on a long round (verification_ladder)
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
@@ -294,6 +295,7 @@ EMIT_ACTIONS = [
     "stale_plan_on_new_evidence",
     "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
+    "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "task_terminal_settlement",
     "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)

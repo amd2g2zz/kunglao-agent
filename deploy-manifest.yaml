@@ -407,7 +407,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 3033de9e54de21c869f0d5c1e03b4897554fb2d6c3fbc5c6a6704ccf86bbe7b3
+    sha256: 9feb560202d98b832a020018843ae690fc355c1f3ac6fb65b667d1eb99d84031
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: a3e0df17e635292dbe511fbf62edfff50da1346fb9f78d27e451e296215c79f7
+    sha256: 0c47be920cc3ceaef1af5ee1f45e219b5f12c79953d821740ae8cdce5442cf6c
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
@@ -619,7 +619,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 7c2393b14e69fc0fff740af85e4c760ad204c33f199dae08f8265dc7da8805db
+    sha256: f65f38d5f72fd29017872147a42134280748a5774db918dc04961bd877b9dfff
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -683,7 +683,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: f9b0969500e5c7f516aa92c1b02be2d5d9e9d0a2b33857c8c6c3c204efc16def
+    sha256: aca00d7f0fc11a6e45f0c4d39a4e630220cfa7ec227ac1623ecae56df5147343
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -1032,6 +1032,10 @@ files:
     dest: .claude/scripts/value_replay.py
     kind: scaffold
     sha256: f7026ddcd99023b5d7df11d437bf96bc9a7805a11612d449ba0dc9faa0fb2fb0
+  - src: scripts/verification_ladder.py
+    dest: .claude/scripts/verification_ladder.py
+    kind: scaffold
+    sha256: 01c73f8c88694a3e5e0d47b6729d4e8f8111d77479265bdc4d3c67f74424b831
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1647,7 +1651,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: fae5b7cbaf41d0d3d4d3ab7d651d5a2f748b95343d2259d6ec368d1cf1bc403b
+    sha256: 73f8a05cdad87334eb5ef15ead57f39f87b67575d753cea65e160577ff9c7684
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
