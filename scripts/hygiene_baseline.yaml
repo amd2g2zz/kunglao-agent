@@ -787,6 +787,8 @@ files:
     r1: 4
   tests/test_gate_power_473.py:
     r1: 3
+  tests/test_gate_residuals_427.py:
+    r1: 8
   tests/test_gc_harness_720.py:
     r1: 1
   tests/test_ghidra_async.py:
@@ -1387,7 +1389,8 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 45
+    r1: 46
+    r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7
   tests/test_worker_liveness_protocol.py:
