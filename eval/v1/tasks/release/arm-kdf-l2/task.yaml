@@ -17,7 +17,6 @@ workspace_scaffold:
   language: c/arm64
   files:
   - target/libkdf.so
-  - reference.py
   entry: target/libkdf.so
   candidate_contract: 'A Python module exposing kdf_derive(data: bytes) -> str (lowercase
     hex, 64 bytes out = counter-mode mod-SHA over the recovered constants).'

@@ -419,7 +419,7 @@ files:
   - src: scripts/eval_native_targets.py
     dest: .claude/scripts/eval_native_targets.py
     kind: scaffold
-    sha256: 26cb9f4d2b6324dbe7048b354c12bba42786dc35606117e56ee33abd148caeb7
+    sha256: cecab230a49b08cbe49623112efce258c3dfaad3fa343c2e9aa0484dc6b8ef44
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold

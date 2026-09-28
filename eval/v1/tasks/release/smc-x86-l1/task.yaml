@@ -16,7 +16,6 @@ workspace_scaffold:
   language: c/x86_64-freestanding
   files:
   - target/smc_payload.elf
-  - reference.py
   entry: target/smc_payload.elf
   candidate_contract: 'A Python module exposing payload_derive(data: bytes) -> str
     (lowercase hex, 16 bytes out = the decrypted payload''s mod-crypto transform).'

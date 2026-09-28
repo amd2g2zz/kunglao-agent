@@ -245,6 +245,36 @@ class TestLandedCorpus:
             assert task["tier"] == "release"
             assert task["source"] == "constructed"
 
+    def test_scaffold_files_never_ship_answer_sources(self):
+        """reference.py is the checker's answer source (its
+        self-check candidate) — checker-side only, invoked harness-side
+        from the unit dir. It (and any answer-equivalent name) must never
+        ride workspace_scaffold.files into the E2E workspace."""
+        for tdir in ds.iter_task_dirs(tier="release"):
+            task = ds.load_task(tdir)
+            answer = str(((task.get("checker") or {})
+                          .get("self_check_candidate")) or "")
+            for f in task["workspace_scaffold"]["files"]:
+                assert f != answer, \
+                    f"{tdir.name}: scaffold ships the answer source {f}"
+                assert Path(f).name not in ("reference.py",
+                                            "reference_candidate.py"), \
+                    f"{tdir.name}: scaffold ships answer-equivalent {f}"
+
+    def test_mint_emits_no_answer_source_in_scaffold(self):
+        """Re-mint safety: build_task_unit declares the analysis
+        material (the target artifact) only — a re-mint can never
+        reintroduce the contamination. The checker-side self-check
+        candidate stays reference.py."""
+        for unit in ntg.UNITS:
+            doc = ntg.build_task_unit(unit["family"], unit["rung"],
+                                      unit["task_id"])
+            scaffold = doc["task"]["workspace_scaffold"]
+            assert scaffold["files"] == [scaffold["entry"]], \
+                f"{unit['task_id']}: mint emits answer source in scaffold"
+            assert doc["task"]["checker"]["self_check_candidate"] == \
+                "reference.py"
+
     def test_native_artifact_magic_and_budget(self):
         """Deterministic artifacts commit as real bytes with the right
         magic; win-pe commits source + build record (PE > budget, see
@@ -274,11 +304,22 @@ class TestLandedCorpus:
                     assert "sha256" in record and "size" in record
 
     def test_committed_binaries_carry_graded_constants(self):
-        """The static-face ground truth: deterministic committed artifacts
-        carry their graded constants as raw bytes (L2p/SMC units verify via
-        records instead — UPX compresses, SMC encrypts)."""
+        """The static-face ground truth where the artifact records its
+        graded constants AT A BYTE SURFACE: smc-x86 keeps its mutation
+        tables raw in .rodata, so every graded constant must be present
+        in the committed .elf's bytes (LE or BE word form).
+
+        The scanned blob is the staged material ONLY —
+        reference.py (the checker's answer source) is not a valid
+        constant carrier and its hex text can never stand in for the
+        artifact. The stripped arm/mod .so embed constants as compiler
+        immediates (no byte-addressable form); their constants-carrying
+        face is behavioral, pinned by TestArtifactEqualsModel."""
+        checked = 0
         for tdir in ds.iter_task_dirs(tier="release"):
             task = ds.load_task(tdir)
+            if task["family"] != "smc-x86":
+                continue
             gt = json.loads(
                 (tdir / task["ground_truth"]["file"]).read_text(encoding="utf-8"))
             if gt.get("constants_record_mode") != "raw-bytes":
@@ -294,6 +335,8 @@ class TestLandedCorpus:
                     forms.append(bytes([value]))
                 assert any(form in blob for form in forms), \
                     f"{tdir.name}: graded constant {name} absent from bytes"
+            checked += 1
+        assert checked, "the smc-x86 byte-surface units must be present"
 
     def test_anti_debug_signatures_in_artifacts(self):
         """Addition B is ground truth: every family's artifact (for the

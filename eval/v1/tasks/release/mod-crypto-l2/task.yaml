@@ -15,7 +15,6 @@ workspace_scaffold:
   language: c/arm64
   files:
   - target/libmodcrypto.so
-  - reference.py
   entry: target/libmodcrypto.so
   candidate_contract: 'A Python module exposing mod_kdf(data: bytes) -> str (lowercase
     hex, 16 bytes out = the mod-crypto AES-of-digest transform).'
