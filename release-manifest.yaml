@@ -31,7 +31,10 @@ assets:
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
     - hooks/env_check_gate.py
+    - hooks/compact_continuity.py   # #434 PreCompact strategy continuity
     - hooks/heartbeat_touch.py
+    - hooks/round_closure.py   # #434 SubagentStop round-closure feed
+    - hooks/workguard_gate.py   # #434 Stop WORKGUARD
     - hooks/user_signal_capture.py  # #868 UserPromptSubmit user-signal capture
     - hooks/lib_kunglao.py
     - hooks/recall_inject.py   # #268 wired by wire_up_settings.py:152

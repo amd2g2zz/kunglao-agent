@@ -91,10 +91,21 @@ def _write_settings(target_root: Path) -> Path:
     pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
         {"type": "command", "command": "python hooks/write_guard.py"}]})
     stop = [{"hooks": [
-        {"type": "command", "command": "python hooks/completion_gate.py"}]}]
-    settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,
-                                              "PostToolUse": post,
-                                              "Stop": stop}}),
+        {"type": "command", "command": "python hooks/completion_gate.py"},
+        {"type": "command",
+         "command": "python hooks/workguard_gate.py"}]}]
+    # issue 434 (event-wakeup topology): the matcher-less event buckets.
+    plain_events = {
+        "SubagentStop": "python hooks/round_closure.py",
+        "SessionStart": "python hooks/session_start.py",
+        "PreCompact": "python hooks/compact_continuity.py",
+        "UserPromptSubmit": "python hooks/user_signal_capture.py",
+    }
+    doc = {"PreToolUse": pre, "PostToolUse": post, "Stop": stop}
+    for event, command in plain_events.items():
+        doc[event] = [{"hooks": [
+            {"type": "command", "command": command}]}]
+    settings.write_text(json.dumps({"hooks": doc}),
                         encoding="utf-8")
     # #675: the per-matcher grouping above mirrors register_hooks — the
     # grouping lives only in its imperative _ensure sequence, so this
@@ -106,6 +117,9 @@ def _write_settings(target_root: Path) -> Path:
         for group in (pre, post, stop)
         for entry in group
         for h in entry["hooks"]
+    } | {
+        command[len("python hooks/"):]
+        for command in plain_events.values()
     }
     registry = set(wire_up_settings.WIRE_UP_HOOK_FILES)
     if covered != registry:
