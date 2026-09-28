@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] worker_budget_gates WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # tests + sinks consume these via module attributes (gates.MAX_WORKERS etc.)
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
@@ -299,7 +293,8 @@ def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
         return True, ''
     try:
         n, _stuck = load_hooks_lib().scan_active_workers(Path(ws))
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN, verdict unchanged
+        warn('gate_error:active_workers_scan', f'{type(exc).__name__}: {exc}')
         return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:
         return (False, f'active_workers={n} >= {MAX_WORKERS}')
@@ -434,7 +429,8 @@ def reset_retry_counter(workspace: str | Path, worker_id: str, claim_id: str) ->
     del counters[key]
     try:
         _write_retry_counter(Path(workspace), counters)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — recorded failure, return shape kept
+        warn('retry_counter_write', f'{type(exc).__name__}: {exc}')
         return False
     return True
 
@@ -1530,7 +1526,8 @@ def set_claim_operation(ws, claim_id: str, keywords: list[str],
         new_text = text[:start] + block + label + text[end:]
         _atomic_write(reg, new_text)
         return True
-    except Exception:  # noqa: BLE001 — label is observability, fail-open
+    except Exception as exc:  # noqa: BLE001 — label is observability, fail-open
+        warn('claim_operation_label_write', f'{type(exc).__name__}: {exc}')
         return False
 
 
@@ -2024,5 +2021,6 @@ def check_rotation_experiment(paths: dict, cid, prompt: str) -> tuple:
             'trigger-isolation matrix (per-process / per-session / '
             'per-request / timer), rotation-input source trace.'
         ))
-    except Exception:  # noqa: BLE001 — gate error must not crash the checks loop
+    except Exception as exc:  # noqa: BLE001 — gate error must not crash the checks loop
+        warn('gate_error:rotation_check', f'{type(exc).__name__}: {exc}')
         return (True, '')

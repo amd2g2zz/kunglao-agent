@@ -57,25 +57,19 @@ dispatches via the Agent tool):
     "command": "uv run --project <skill_root> <skill_root>/hooks/dispatch_gate.py"}]}
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] dispatch_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import re
 import sys
@@ -475,9 +469,9 @@ def _resolve_dispatch_trace(ws: Path, prompt_text: str) -> tuple[str | None, boo
             return declared, False
         tid, created = allocate_trace_id(ws)
         if declared is not None:
-            print(f"dispatch_gate: WARN trace_id {declared!r} invalid "
-                  f"(want tr-<mission>-<seq>, #879); allocated {tid}",
-                  file=sys.stderr, flush=True)
+            warn("trace_id_invalid",
+                 f"trace_id {declared!r} invalid "
+                 f"(want tr-<mission>-<seq>, #879); allocated {tid}")
         return tid, created
     except Exception:  # noqa: BLE001 — trace must never block dispatch
         return (declared if isinstance(declared, str) else None), False
@@ -646,13 +640,13 @@ def _emit_capability_dormant(ws: Path, claim_id: str) -> None:
         return
     if (ws / DORMANT_SENTINEL).exists():
         return
-    print(
-        f"dispatch_gate: WARN capability-dormant (#600) — no claim in "
+    warn(
+        "capability_dormant",
+        f"capability-dormant (#600) — no claim in "
         f"claim-register.yaml carries `obstacle_for`, so the #496 "
         f"capability-switch tooth (②(a)) is a silent no-op. Capability "
         f"cards arm from the obstacle_for parent edge; promote obstacle "
         f"claims (#495 failure-analysis promotion) to arm the gate.",
-        file=sys.stderr, flush=True,
     )
     print(json.dumps({
         "hookSpecificOutput": {
@@ -850,9 +844,9 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
         return 2
     if rc == 3:
         # drift-warning -> SATURATED. Visible but not REJECT.
-        print(f"dispatch_gate: plan-drift auto SATURATED ({claim_id}): "
-              "WARN-only, observe-first",
-              file=sys.stderr, flush=True)
+        warn("plan_drift_saturated",
+             f"plan-drift auto SATURATED ({claim_id}): "
+             "WARN-only, observe-first")
         return 3
     if rc == 0:
         # no drift -> fall through
@@ -1553,14 +1547,13 @@ def _redo_leak_check(ws: Path, prompt_text: str,
     if not overlaps:
         return
     sample = ", ".join(overlaps[:5])
-    print(
-        f"dispatch_gate: WARN redo-leak (#772) — redo-marked dispatch "
+    warn(
+        "redo_leak",
+        f"redo-leak (#772) — redo-marked dispatch "
         f"prompt overlaps the latest red-team DIFF on {len(overlaps)} "
         f"value string(s): [{sample}]. Redo prompts must be GAP-ONLY "
         f"(WHERE it diverged, never the verifier's derived answer). "
-        f"Re-check build_redo_context output before sending.",
-        file=sys.stderr, flush=True,
-    )
+        f"Re-check build_redo_context output before sending.")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

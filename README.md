@@ -214,6 +214,17 @@ From there the loop runs itself — the route adapts to what the sample turns ou
 
 Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` to pick the thread back up any time) → read the report at convergence → `upgrade` old workspaces after plugin updates.
 
+## CLI console scripts
+
+`uv sync` in the repo root registers the router as the `kunglao` console
+script (issue #416): `kunglao --help` lists all nine subcommands — `decide`,
+`tick`, `verify`, `record`, `health`, `resume`, `check-stale`, `upgrade`,
+`analysis` — so every `kunglao <sub> <workspace>` invocation taught by the
+skills works on PATH. Dedicated entries: `kunglao-init`, `kunglao-verify`,
+`kunglao-upgrade`, `heartbeat-tick`, `convergence-check` (see
+`[project.scripts]` in pyproject.toml; wrappers in `kunglao_agent_cli/` are
+registration-only — targets stay `scripts/<file>.py`).
+
 ## Reading the deliverable
 
 A claim register and fact base where trust is mechanical, not conventional:

@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 # settled-REFUTED is the ONLY terminal that re-arms: the claim's answer was
@@ -50,17 +49,7 @@ REDO_TERMINAL_STATUSES = frozenset({"REFUTED"})
 
 # the agent marker the #461 linkage row writes into detail
 _AGENT_RE = re.compile(r"\bagent=(\S+)")
-
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] wait_dispose WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _utc_now_z() -> str:

@@ -262,7 +262,7 @@ wheels = [
 [[package]]
 name = "kunglao-agent"
 version = "0.1.6"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "capstone" },
     { name = "jinja2" },

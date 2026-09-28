@@ -41,19 +41,142 @@ from __future__ import annotations
 # issue 275 batch-3: fail-open handlers keep their liveness posture (never
 # raise, never change the return shape) but must leave ONE trace - a stderr
 # WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
+# reason changes (the _zof_warn pattern of issue 276).
+#
+# THIS is now the single implementation. The ~85 per-module
+# copies (each with its own `_WARN_LAST` dict) were migrated to
+# `from kunglao_log import warn`. Two deliberate consequences:
+#
+#   * PROCESS-WIDE DEDUPE (intended semantics change): the rate limit used
+#     to live in one dict per module, so two modules warning the same
+#     (op, reason) in one process each printed. One process, one dict —
+#     the same (op, reason) now collapses to the first print, process-wide.
+#   * LEDGER FACE: a dedupe-window pass also lands one structured row
+#     (action=warn, actor=telemetry) via emit() when a workspace is
+#     resolvable (explicit set_warn_workspace() registration, else a cwd
+#     walk-up for a workspace marker) — headless runs finally see the
+#     fail-open traces. The stderr print STAYS; only the visibility face
+#     is added, and the ledger row is written once per dedupe window,
+#     never per call.
+#
+# The module tag in the message is derived from the CALLER's file (the
+# stem of the frame's __file__), so `warn("x", "y")` inside rollup.py
+# still prints `[kunglao-agent] rollup WARN (fail-open): x: y` — the
+# diagnosability token the old private copies hard-coded, now automatic.
 import sys
 _WARN_LAST: dict[str, str] = {}
 
+# re-entrancy guard: the ledger face calls emit(); an emit write failure
+# itself warns — without the guard, warn -> emit -> fail -> warn would
+# recurse. While a warn row is being emitted, nested warn calls stay
+# stderr-only.
+_WARN_LEDGER_ACTIVE = False
 
-def warn(op: str, reason: str) -> None:
+# single-slot explicit workspace registration for the ledger face
+# (set_warn_workspace); a list is used as an immutable-by-convention box.
+_WARN_WS_OVERRIDE: list = []
+
+#: the emit action word for warn ledger rows (registered in
+#: event_taxonomy.EMIT_ACTIONS — the controlled emit-action vocabulary).
+WARN_LEDGER_ACTION = "warn"
+
+
+def set_warn_workspace(ws) -> None:
+    """Explicitly register the process workspace the warn() ledger face
+    writes to. Hooks and entry points that KNOW their workspace can pin
+    it here; without a registration the face falls back to a cwd walk-up
+    (a directory holding `task_spec.yaml` or a `runs/` dir), and with
+    neither, warn() stays stderr-only (the pre-batch behavior)."""
+    _WARN_WS_OVERRIDE.clear()
+    if ws is not None:
+        _WARN_WS_OVERRIDE.append(Path(ws))
+
+
+def _discover_warn_workspace() -> Path | None:
+    """Best-effort workspace resolution for the ledger face: the nearest
+    directory at-or-above cwd that carries a workspace marker. None when
+    nothing matches (honest "no workspace known" — stderr-only warn)."""
+    try:
+        cwd = Path.cwd()
+    except OSError:
+        return None
+    for cand in (cwd, *cwd.parents):
+        try:
+            if (cand / "task_spec.yaml").exists() or (cand / "runs").is_dir():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def _warn_workspace():
+    if _WARN_WS_OVERRIDE:
+        return _WARN_WS_OVERRIDE[0]
+    return _discover_warn_workspace()
+
+
+def _caller_tag() -> str | None:
+    """The caller's module token: the stem of the calling frame's
+    __file__ (real for CLI runs, pytest imports, and by-path loads), or
+    the frame module name as a fallback. Never raises, and deliberately
+    exception-FREE (a try/except here would recurse through warn when
+    tagging itself fails under exotic interpreters)."""
+    getter = getattr(sys, "_getframe", None)
+    frame = getter(2) if callable(getter) else None  # <- warn <- caller
+    if frame is None:
+        return None
+    g = getattr(frame, "f_globals", None) or {}
+    f = g.get("__file__")
+    if f:
+        return Path(f).stem
+    return g.get("__name__") or None
+
+
+def _warn_to_ledger(op: str, reason: str, tag: str | None) -> None:
+    """The ledger face: one action=warn row per dedupe window, into
+    the resolvable workspace (if any). Never raises; re-entrancy guarded
+    so the emit-failure warn cannot recurse through this face."""
+    global _WARN_LEDGER_ACTIVE
+    if _WARN_LEDGER_ACTIVE:
+        return
+    ws = _warn_workspace()
+    if ws is None:
+        return
+    _WARN_LEDGER_ACTIVE = True
+    try:
+        emit(ws, "telemetry", WARN_LEDGER_ACTION,
+             detail=(f"{tag}: {op}: {reason}" if tag
+                     else f"{op}: {reason}"))
+    except Exception as exc:  # noqa: BLE001 — never break warn; leave the trace
+        warn("warn_ledger", f"ledger row failed: {type(exc).__name__}: {exc}")
+    finally:
+        _WARN_LEDGER_ACTIVE = False
+
+
+def warn(op: str, reason: str, *, tag: str | None = None) -> None:
+    """The ONE rate-limited fail-open tracer (issue 275 batch-3 policy,
+    the single implementation).
+
+    Rate limit: per op until the reason changes, process-wide (used to be
+    per-module dicts — the collapse to one process-wide dict is the documented semantics
+    change). Faces, in order: the stderr print (console face, module tag
+    auto-derived from the caller's file unless `tag` is explicit), then —
+    when a workspace is resolvable — ONE action=warn ledger row (persistence
+    face, headless visibility). Never raises on any face."""
     if _WARN_LAST.get(op) == reason:
         return
     _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] kunglao_log WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+    if tag is None:
+        tag = _caller_tag()
+    if tag:
+        print(f"[kunglao-agent] {tag} WARN (fail-open): "
+              f"{op}: {reason}",
+              file=sys.stderr)
+    else:
+        print(f"[kunglao-agent] WARN (fail-open): "
+              f"{op}: {reason}",
+              file=sys.stderr)
+    _warn_to_ledger(op, reason, tag)
 import argparse
 import json
 import os
@@ -448,9 +571,71 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         finally:
             os.close(fd)
     except OSError as exc:
-        print(f"[kunglao_log] warning: cannot write {p}: {exc}", file=sys.stderr)
+        # self-dogfood: the emit-failure face IS this module's warn
+        # (dedupe + ledger posture like every other fail-open face); the
+        # re-entrancy guard in _warn_to_ledger stops warn -> emit -> warn
+        # from recursing.
+        warn("emit", f"cannot write {p}: {exc}")
         return False
+    _maybe_prune(ws)
     return True
+
+
+# ------------------- day-file retention --------------------------------
+# Keep the newest N `kunglao-<date>.jsonl` day files per workspace. N=30 is
+# derived, not vibes: two full milestone windows at the roadmap's ~2-week
+# release-train cadence (v0.1.x) plus slack for a long mission's forensic
+# replay — day files are small append-only JSONL (KB-scale/day at the rot
+# audit's 382-row ledger), so the cap bounds directory growth without
+# pruning history an active investigation still needs. Deletes happen at
+# write time, gated to once per UTC day per process, and are FAIL-OPEN:
+# any unlink error warns and stops the sweep — retention must never break
+# emit, and only files matching `kunglao-<YYYY-MM-DD>.jsonl` are ever
+# touched (a sibling `kunglao_init-*.log` or foreign file is never a
+# candidate).
+LOG_DAY_RETENTION = 30
+_DAY_FILE_RE = re.compile(r"^kunglao-\d{4}-\d{2}-\d{2}\.jsonl$")
+
+# last UTC day the retention sweep ran (single slot; per-process memo —
+# hooks and short CLIs emit once anyway, long runners re-sweep on day-roll)
+_PRUNED_DAY: list[str] = []
+
+
+def prune_day_logs(ws, keep: int = LOG_DAY_RETENTION) -> int:
+    """Delete the oldest day files beyond `keep` (newest kept). Returns
+    the number removed; stops at the first unlink error (warn + fail-open).
+    Only `kunglao-<date>.jsonl` names are candidates."""
+    logs = Path(ws) / "runs" / "logs"
+    try:
+        files = sorted(p for p in logs.glob("kunglao-*.jsonl")
+                       if _DAY_FILE_RE.match(p.name))
+    except OSError:
+        return 0
+    excess = len(files) - max(1, int(keep))
+    removed = 0
+    for p in files[:max(0, excess)]:
+        try:
+            p.unlink()
+            removed += 1
+        except OSError as exc:
+            warn("prune_day_logs", f"{type(exc).__name__}: {exc}")
+            break
+    return removed
+
+
+def _maybe_prune(ws) -> None:
+    """Write-time retention gate: at most one sweep per UTC day per
+    process. Never raises (retention must never break emit)."""
+    today = _utc_now()[:10]
+    if _PRUNED_DAY and _PRUNED_DAY[0] == today:
+        return
+    _PRUNED_DAY.clear()
+    _PRUNED_DAY.append(today)
+    try:
+        prune_day_logs(ws)
+    except Exception as exc:  # noqa: BLE001 — best-effort, but never silent
+        warn("prune_day_logs",
+             f"retention sweep failed: {type(exc).__name__}: {exc}")
 
 
 # ------------------- #58 S2: subagent lifecycle events ----------------------
@@ -487,8 +672,10 @@ def emit_lifecycle(ws, actor: str, phase: str, *, claim: str | None = None,
     break analysis, and garbage phases must not pollute the ledger)."""
     action = LIFECYCLE_ACTIONS.get(str(phase))
     if action is None:
-        print(f"[kunglao_log] warning: unknown lifecycle phase {phase!r} "
-              f"(vocabulary: {', '.join(LIFECYCLE_PHASES)})", file=sys.stderr)
+        # self-dogfood: same face as the emit-failure warn above.
+        warn("emit_lifecycle",
+             f"unknown lifecycle phase {phase!r} "
+             f"(vocabulary: {', '.join(LIFECYCLE_PHASES)})")
         return
     if digest is not None:
         detail = json.dumps(digest, sort_keys=True, ensure_ascii=False)
@@ -559,7 +746,7 @@ def emit_result_digest(ws, actor: str, *, claim: str | None = None,
          trace_id=trace_id)
 
 
-def iter_jsonl(lines):
+def iter_jsonl(lines, source: str | None = None):
     """Tolerant JSONL line reader (#863 Family K single source).
 
     Yields parsed values from `lines`, skipping blank lines and lines that
@@ -569,7 +756,12 @@ def iter_jsonl(lines):
     to specific shapes stays with the consumer, byte-equivalent with the
     pre-consolidation loops. Accepts any iterable of str (lists, generators,
     ``reversed(...)``).
-    """
+
+    `source` (optional) names the origin for the record-only tier:
+    when given, dropped-row count is rate-limited-WARNed once at stream
+    end (`jsonl_drop:<source>`); without it the reader stays fully silent
+    (byte-compatible with every pre-existing caller)."""
+    dropped = 0
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -577,15 +769,19 @@ def iter_jsonl(lines):
         try:
             row = json.loads(stripped)
         except ValueError:
+            dropped += 1
             continue
         yield row
+    if source is not None and dropped:
+        warn(f"jsonl_drop:{source}", f"{dropped} unparseable row(s) skipped")
 
 
 def _all_rows(ws: Path) -> list[dict]:
     """Every parseable row across ALL day files, chronological order.
 
     Shared by tail / unattributed_rate / actor_violations — one read path,
-    one tolerance rule (unparseable lines are skipped)."""
+    one tolerance rule (unparseable lines are skipped; record-only:
+    per-file drops and unreadable files leave a rate-limited WARN)."""
     logs = Path(ws) / "runs" / "logs"
     rows: list[dict] = []
     if not logs.is_dir():
@@ -593,9 +789,10 @@ def _all_rows(ws: Path) -> list[dict]:
     for p in sorted(logs.glob("kunglao-*.jsonl")):
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        except OSError as exc:
+            warn(f"day_file_read:{p.name}", f"{type(exc).__name__}: {exc}")
             continue
-        rows.extend(iter_jsonl(text.splitlines()))
+        rows.extend(iter_jsonl(text.splitlines(), source=p.name))
     return rows
 
 
@@ -791,7 +988,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError) as exc:
-            warn("main", f"{type(exc).__name__}: {exc}")
+            warn("cli.check_actors", f"{type(exc).__name__}: {exc}")
         viols = actor_violations(ws)
         for v in viols:
             print(f"ACTOR-VIOLATION {v['ts']} actor={v['actor']!r} "
@@ -808,7 +1005,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError) as exc:
-        warn("main_2", f"{type(exc).__name__}: {exc}")
+        warn("cli.tail", f"{type(exc).__name__}: {exc}")
     for row in tail(ws, args.n):
         # canonical form = the emit serialization (sort_keys, compact,
         # ensure_ascii=False) so tail output round-trips with the file bytes

@@ -28,25 +28,8 @@ Usage:
   python dead_letter.py <workspace> --dirty          # detect dirty status literals
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] dead_letter WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import sys
 from pathlib import Path
@@ -226,9 +209,10 @@ def _escalate_must_ask(workspace: Path, claim_id: str, attempts: int) -> dict:
             encoding="utf-8",
         )
     except OSError as exc:
-        print(f"[kunglao-agent] #234 must-ask escalation WARN: artifact "
-              f"write failed ({type(exc).__name__}: {exc}) — strike "
-              f"counted, escalation surface not written", file=sys.stderr)
+        warn("escalation_artifact",
+             f"#234 must-ask escalation WARN: artifact write failed "
+             f"({type(exc).__name__}: {exc}) — strike counted, escalation "
+             f"surface not written")
         return {"escalated": False, "claim_id": claim_id,
                 "reason": f"artifact write failed "
                           f"({type(exc).__name__}: {exc})"}

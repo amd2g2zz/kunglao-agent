@@ -24,16 +24,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] digest_build WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -335,15 +326,13 @@ def build_digest(ws: Path) -> str:
                 print(f"digest_build: bridge_lint_findings emit also "
                       f"unavailable ({type(emit_exc).__name__}: {emit_exc})",
                       file=sys.stderr, flush=True)
-            print(f"digest_build: WARN hypothesis-bridge lint: "
-                  f"{'; '.join(findings[:5])}"
-                  f"{' …' if len(findings) > 5 else ''}",
-                  file=sys.stderr, flush=True)
+            warn("bridge_lint_findings",
+                 f"hypothesis-bridge lint: {'; '.join(findings[:5])}"
+                 f"{' …' if len(findings) > 5 else ''}")
     except Exception as exc:  # noqa: BLE001 — the sweep never blocks cold start
-        print(f"digest_build: WARN hypothesis-bridge sweep skipped "
-              f"({type(exc).__name__}: {exc}) — candidate strings stay "
-              f"parked until the next cold start",
-              file=sys.stderr, flush=True)
+        warn("bridge_sweep_skipped",
+             f"hypothesis-bridge sweep skipped ({type(exc).__name__}: {exc})"
+             f" — candidate strings stay parked until the next cold start")
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising

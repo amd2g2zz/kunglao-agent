@@ -78,8 +78,9 @@ required on every kunglao fact, validated for key presence by
 
 - `agents/kunglao-worker.md` (#310 domain): point the fact-writing section at
   `templates/fact-frontmatter.md` and the slugged id convention.
-- `scripts/convergence_check.py` / `scripts/priority.py` (#331 domain): consume
-  this mapping when reconciling register statuses with fact statuses.
+- `scripts/convergence_check.py` / `scripts/priority_ratio.py` (#331 domain;
+  `priority.py` renamed by #499): consume this mapping when reconciling
+  register statuses with fact statuses.
 - `handoff-check.py` (malware-veri-notes, live dir): integration hook is a
   one-liner — run `lint_facts.py <workspace>` before the notes gate; lint
   failure = non-conforming (wrapper is independent until then).

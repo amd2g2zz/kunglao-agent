@@ -12,25 +12,8 @@ Standalone CLI entry: scripts/kunglao-record.py (thin wrapper; this module holds
 Output contract: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53-72).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] kunglao_record WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import os
 import hashlib
@@ -583,11 +566,11 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             print(f"kunglao-record: family_sync_failed emit also unavailable "
                   f"({type(emit_exc).__name__}: {emit_exc})",
                   file=sys.stderr, flush=True)
-        print(f"kunglao-record: WARN family-ledger sync failed after "
-              f"{claim_id} -> {effective_status} "
-              f"({type(exc).__name__}: {exc}); the ledger may be stale — "
-              f"run `python scripts/hypothesis_bridge.py {ws} --sync`",
-              file=sys.stderr, flush=True)
+        warn("family_ledger_sync",
+             f"family-ledger sync failed after "
+             f"{claim_id} -> {effective_status} "
+             f"({type(exc).__name__}: {exc}); the ledger may be stale — "
+             f"run `python scripts/hypothesis_bridge.py {ws} --sync`")
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)

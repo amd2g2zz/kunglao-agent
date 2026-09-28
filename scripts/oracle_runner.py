@@ -154,25 +154,8 @@ retiring emits the coverage-drop WARN event
 armed-case count shrank.
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] oracle_runner WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import hashlib
 import json
@@ -207,9 +190,11 @@ MUTATION_KINDS = ("swap", "omit", "change")
 # _settled_rows guard). ``liveness_marker`` is a RESERVED client-output key.
 LIVENESS_MARKER = "liveness_marker"
 LIVENESS_ALIVE = "alive"
-LIVENESS_CONTRACT_NAME = "LIVENESS_CONTRACT"  # trust residual (issue 237 class, named): an unconditional liveness_marker self-attests —
-# the marker proves the probe RAN, not that its evidence is honest; a forged-liveness client is
-# the same trust class as forged verification and is handled by blind red-team, not this gate.
+# Trust residual (issue 237 class, named): an unconditional liveness_marker
+# self-attests — the marker proves the probe RAN, not that its evidence is
+# honest; a forged-liveness client is the same trust class as forged
+# verification and is handled by blind red-team, not this gate.
+LIVENESS_CONTRACT_NAME = "LIVENESS_CONTRACT"
 LIVENESS_CONTRACT_V2 = 2
 
 # #146 case-abandonment protocol: the closed attribution taxonomy a

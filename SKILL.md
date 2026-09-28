@@ -78,6 +78,13 @@ kunglao-agent subcommands:
                            print this usage list
                            example: /kunglao-agent:help
 
+  CLI face (console scripts — `uv sync` in the repo root installs them;
+  the router answers `kunglao --help`):
+    kunglao <sub>    decide | tick | verify | record | health | resume |
+                     check-stale | upgrade | analysis
+    standalone       kunglao-init / kunglao-verify / kunglao-upgrade
+                     heartbeat-tick / convergence-check
+
 Next steps:
   uninitialized workspace → /kunglao-agent:init
   initialized workspace   → /kunglao-agent:analysis

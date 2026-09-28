@@ -17,9 +17,10 @@ detail) — mirrors agents_refresh posture.
 from __future__ import annotations
 
 import shutil
-import sys
 import time
 from pathlib import Path
+
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 def _norm(b: bytes) -> bytes:
@@ -117,8 +118,7 @@ def refresh(ws: Path, *, dry: bool = False,
         carrier = dm.write_carrier(ws, list(entries.values()))
         carrier_digest = carrier["deployed_digest"]
     except Exception as exc:  # noqa: BLE001 — WARN-only posture
-        print(f"deployed_refresh: WARN — carrier write failed ({exc!r})",
-              file=sys.stderr)
+        warn("carrier_write", f"carrier write failed ({exc!r})")
 
     parts = [f"manifest={len(entries)}"]
     if modified:
