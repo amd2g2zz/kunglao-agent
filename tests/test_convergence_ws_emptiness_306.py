@@ -38,6 +38,8 @@ from pathlib import Path
 
 import pytest
 
+from _factories import stamp_current
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
@@ -64,6 +66,7 @@ def _rotted_ws(tmp_path: Path) -> Path:
     (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
     (ws / "task_spec.yaml").write_text("primary_questions: []\n",
                                        encoding="utf-8")
+    stamp_current(ws)  # healthy-format fixture: gate must pass
     return ws
 
 
@@ -173,6 +176,7 @@ def test_template_scaffold_is_not_misjudged_as_rotted(tmp_path, capsys):
         TEMPLATE_REGISTER.read_text(encoding="utf-8"), encoding="utf-8")
     (ws / "task_spec.yaml").write_text(
         TEMPLATE_TASK_SPEC.read_text(encoding="utf-8"), encoding="utf-8")
+    stamp_current(ws)  # current-format scaffold: gate must pass
     rc = cc.main([str(ws), "--json"])
     captured = capsys.readouterr()
     assert rc != cc.EXIT_EMPTY_WORKSPACE, (

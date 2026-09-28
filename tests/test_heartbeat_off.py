@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _factories import write_claims_register
+from _factories import stamp_current, write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_ACTIVATION = ROOT / "scripts" / "hook_activation.py"
@@ -39,6 +39,7 @@ def _make_ws(ws: Path, claims: list[dict] | None = None,
     write_claims_register(ws, claims)
     # #240: the convergence gate now hard-errors without the task_spec marker
     (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+    stamp_current(ws)  # 0.1.6 gate: off's converged probe runs the decide face
     if heartbeat:
         (ws / "runs" / ".heartbeat.json").write_text(
             json.dumps({"started_ts": "2026-08-13T00:00:00Z", "interval_min": 5}),

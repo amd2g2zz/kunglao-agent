@@ -38,6 +38,15 @@ def _make_ws(tmp_path: Path, claims: list[dict] | None = None) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "runs").mkdir()
+    # 0.1.6 version gate: the decide face refuses a workspace whose stamp
+    # != the executing skill version — synthetic workspaces carry the
+    # current stamp on the primary carrier.
+    if str(ROOT / "scripts") not in sys.path:
+        sys.path.insert(0, str(ROOT / "scripts"))
+    import template_version
+    (ws / "CLAUDE.md").write_text(
+        template_version.stamp_line(template_version.read_skill_version())
+        + "\n", encoding="utf-8")
     reg = [{"id": "C-1", "status": "OPEN"}] if claims is None else claims
     # #240: the convergence CLI now hard-errors without the task_spec marker
     (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")

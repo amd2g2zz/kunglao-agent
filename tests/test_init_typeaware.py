@@ -27,6 +27,14 @@ from _factories import seed_oracle_anchors
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 
+def _cur_version() -> str:
+    """The executing skill version (same source the init subprocess reads)."""
+    if str(SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS))
+    import template_version
+    return template_version.read_skill_version()
+
+
 @pytest.fixture
 def init_ws(tmp_path: Path) -> Path:
     """Minimal workspace: bins/ + runs/."""
@@ -263,73 +271,28 @@ def _load_init_module():
     return mod
 
 
-# ---------- F1 (#304 review): marker without project_type — upgrade path ----------
-
-def test_marker_without_type_upgrade_writes_type(init_ws: Path):
-    """F1: [initialized] marker present but NO project_type (pre-#304
-    workspace) -> `init --type windows` must WRITE project_type and exit 0
-    (breaks the env_check_gate reject loop), preserving marker + seeds."""
-    _make_pe(init_ws)
-    (init_ws / "claim-register.yaml").write_text(
-        "# [initialized] state_hash=abc seeds=3\n"
-        "claims:\n- id: C-001\n  status: OPEN\n",
-        encoding="utf-8",
-    )
-    (init_ws / "analysis_state.txt").write_text(
-        "agent_teams_flag=0\n", encoding="utf-8",
-    )
-    r = _run_init(init_ws, ["--type", "windows"])
-    assert r.returncode == 0, f"upgrade run failed: {r.stdout}{r.stderr}"
-    state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
-    assert "project_type=windows" in state, f"type not written on upgrade: {state}"
-    reg = (init_ws / "claim-register.yaml").read_text(encoding="utf-8")
-    assert "[initialized]" in reg, "upgrade must preserve the [initialized] marker"
-    assert "C-001" in reg, "upgrade must preserve seed claims"
-
-
-def test_marker_without_type_upgrade_restores_gate_pass(init_ws: Path):
-    """F1: after the upgrade run is_init_complete() is True — the gate reject
-    loop is mechanically closed (no human edit required)."""
-    _make_pe(init_ws)
-    (init_ws / "claim-register.yaml").write_text(
-        "# [initialized] state_hash=abc seeds=3\n"
-        "claims:\n- id: C-001\n  status: OPEN\n",
-        encoding="utf-8",
-    )
-    (init_ws / "analysis_state.txt").write_text(
-        "agent_teams_flag=0\n", encoding="utf-8",
-    )
-    mod = _load_init_module()
-    assert not mod.is_init_complete(init_ws), "precondition: workspace incomplete"
-    r = _run_init(init_ws, ["--type", "windows"])
-    assert r.returncode == 0, f"upgrade run failed: {r.stdout}{r.stderr}"
-    assert mod.is_init_complete(init_ws), "gate must pass after the upgrade run"
-
-
-def test_marker_without_type_upgrade_via_resolve(init_ws: Path):
-    """F1 (#455): upgrade without --type resolves the type via the
-    --resolve answer (the old stdin-confirm path is gone)."""
-    _make_pe(init_ws)
-    (init_ws / "claim-register.yaml").write_text(
-        "# [initialized] state_hash=abc seeds=3\n"
-        "claims:\n- id: C-001\n  status: OPEN\n",
-        encoding="utf-8",
-    )
-    (init_ws / "analysis_state.txt").write_text(
-        "agent_teams_flag=0\n", encoding="utf-8",
-    )
-    r = _run_init(init_ws, ["--resolve", _write_answers(init_ws, {"type": "windows"})])
-    assert r.returncode == 0, f"upgrade via resolve failed: {r.stdout}{r.stderr}"
-    state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
-    assert "project_type=windows" in state
-
+# ---------- F1 (#304 review): marker without project_type — type repair ----------
+# 0.1.6 sweep (no-backcompat ruling 2026-09-01): the pre-#304 stamp-less
+# type-UPGRADE faces are deleted — an existing workspace whose stamp is
+# absent or != the executing skill version refuses at the version gate
+# (refuse_version_mismatch, rc 9), pointing at kunglao_upgrade. What
+# remains here is the INVALID-type rot repair for a CURRENT-stamped
+# workspace (reachable state: a hand-edit can carry a bad type).
 
 def test_marker_with_invalid_type_upgrade_fixes_type(init_ws: Path):
-    """F1: an invalid project_type (typo) is corrected by an explicit --type."""
+    """F1 rot repair: an invalid project_type (typo) on a CURRENT-stamped
+    workspace is corrected by an explicit --type."""
     _make_pe(init_ws)
     (init_ws / "claim-register.yaml").write_text(
-        "# [initialized] state_hash=abc seeds=3\n"
+        "# kunglao_template_version: "
+        + _cur_version()
+        + "\n# [initialized] state_hash=abc seeds=3\n"
         "claims:\n- id: C-001\n  status: OPEN\n",
+        encoding="utf-8",
+    )
+    # the stamp's primary carrier is CLAUDE.md — the gate reads it first
+    (init_ws / "CLAUDE.md").write_text(
+        "# kunglao_template_version: " + _cur_version() + "\n# ws\n",
         encoding="utf-8",
     )
     (init_ws / "analysis_state.txt").write_text(
@@ -340,6 +303,26 @@ def test_marker_with_invalid_type_upgrade_fixes_type(init_ws: Path):
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=linux" in state
     assert "project_type=banana" not in state
+
+
+def test_marker_without_type_on_legacy_stamp_refuses_at_gate(init_ws: Path):
+    """0.1.6 version gate: the pre-#304 stamp-less type-upgrade face is
+    gone — a marker-carrying workspace with no stamp refuses (rc 9) with
+    upgrade guidance instead of silently repairing forward."""
+    _make_pe(init_ws)
+    (init_ws / "claim-register.yaml").write_text(
+        "# [initialized] state_hash=abc seeds=3\n"
+        "claims:\n- id: C-001\n  status: OPEN\n",
+        encoding="utf-8",
+    )
+    (init_ws / "analysis_state.txt").write_text(
+        "agent_teams_flag=0\n", encoding="utf-8",
+    )
+    r = _run_init(init_ws, ["--type", "windows"])
+    assert r.returncode == 9, f"expected rc 9: {r.stdout}{r.stderr}"
+    assert "kunglao_upgrade" in (r.stdout + r.stderr)
+    assert "project_type=windows" not in \
+        (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
 
 
 # ---------- init-completeness: marker + type ----------

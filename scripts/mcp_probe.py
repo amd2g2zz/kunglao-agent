@@ -158,17 +158,20 @@ MANIFEST: tuple[MCPItem, ...] = (
         source="@burtthecoder/mcp-virustotal (needs VT_API_KEY)",
         register="claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal",
     ),
-    # #728 web (labs): browser JS reverse engineering supply. #408: the
-    # server now SHIPS WITH THE PLUGIN (mcpServers in
-    # .claude-plugin/plugin.json) — zero registration in any workspace, so
-    # the remediation text names the plugin carriage, never a `claude mcp
-    # add` user-level command (the root-owned ~/.claude.json sudo trap is
-    # unreachable by construction). Install dependency (documented upstream,
-    # NOT in this repo's locked env): camoufox-reverse-mcp via
-    # `git clone + pip install -e .` — the plugin entry launches
+    # #728 web (labs): browser JS reverse engineering supply. Owner
+    # ruling (2026-09-27, 51job live run): camoufox-reverse is REQUIRED on
+    # the web lane — without a fingerprint-spoofing browser, captcha/
+    # anti-bot web analysis cannot run at all ("web项目必须要装啊，不然
+    # 怎么分析啊"), so the tier is HARD. #408/#423 carriage: the server
+    # SHIPS WITH THE PLUGIN (mcpServers in .claude-plugin/plugin.json) —
+    # zero registration in any workspace, so the remediation text names
+    # the plugin carriage, never a `claude mcp add` user-level command
+    # (the root-owned ~/.claude.json sudo trap is unreachable by
+    # construction). Install dependency (documented upstream, NOT in this
+    # repo's locked env): camoufox-reverse-mcp; the plugin entry launches
     # `python -m camoufox_reverse_mcp`.
     MCPItem(
-        name="camoufox-reverse", tier="WARN", types=("web",),
+        name="camoufox-reverse", tier="HARD", types=("web",),
         purpose="browser JS reverse engineering (anti-detection Firefox: "
                 "hooks/trace/network capture; optional --proxy/--geoip/"
                 "--humanize flags)",

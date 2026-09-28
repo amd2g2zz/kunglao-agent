@@ -52,6 +52,14 @@ EXIT_CRASHED = 65
 # happened or the contract files rotted after intake — hard error, never
 # a verdict (the #240 family). 66 is the next free byte after CRASHED.
 EXIT_EMPTY_WORKSPACE = 66
+# 0.1.6 sweep version-consistency gate (owner HARD requirement): the
+# workspace format stamp is present but != the executing skill version
+# (older AND newer — only exact match proceeds), or the stamp is absent
+# on an otherwise-markered workspace. Analysis/decide entry refuses with
+# guidance pointing at kunglao_upgrade — the transactional upgrade is the
+# ONLY path forward for a mismatched workspace (no silent best-effort
+# analysis of old-format workspaces). 67 is the next free byte.
+EXIT_VERSION_MISMATCH = 67
 
 # --- plan_drift_detector --auto face (#602 integration remap) -------------
 # The ONLY bytes --auto may exit with: 0 no-drift (proceed) / 2 drift-severe

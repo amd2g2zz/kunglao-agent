@@ -409,8 +409,12 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
         dm.build_entries()), "init must stamp the deployment carrier"
     cmds = _commands(ws)
     assert cmds, "settings.json must carry the hook registry"
+    # 0.1.6 sweep (#6): env project = framework root; script path = ws copy
+    import hook_activation as _ha
     for c in cmds:
-        assert f"uv run --project {ws.as_posix()}" in c, c
+        assert f"uv run --project {_ha._framework_project_root()}" in c and \
+            " python " in c, c
+        assert f"{ws.as_posix()}/.claude/hooks/" in c, c
         assert "/.claude/hooks/" in c.replace("\\", "/"), c
 
     # 2. hand-tamper one deployed copy -> gate flips to deploy-drift

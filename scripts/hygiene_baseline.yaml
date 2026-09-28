@@ -140,6 +140,8 @@ files:
   scripts/event_taxonomy.py:
     r1: 115
     r2: 1
+  scripts/exogenous.py:
+    r1: 2
   scripts/external_kicker.py:
     r1: 32
   scripts/fact_contradiction_gate.py:
@@ -155,15 +157,15 @@ files:
   scripts/harness_common.py:
     r1: 1
   scripts/heartbeat.py:
-    r1: 27
+    r1: 29
   scripts/heartbeat_loop_prompt.py:
     r1: 4
   scripts/heartbeat_tick.py:
-    r1: 39
+    r1: 43
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 76
+    r1: 79
   scripts/hooks_selfcheck.py:
     r1: 38
   scripts/hypothesis_seeder.py:
@@ -189,19 +191,19 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 196
+    r1: 198
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
     r1: 1
   scripts/kunglao.py:
-    r1: 19
+    r1: 20
   scripts/kunglao_eval.py:
     r1: 13
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 28
+    r1: 29
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -209,7 +211,7 @@ files:
   scripts/kunglao_status.py:
     r1: 7
   scripts/kunglao_upgrade.py:
-    r1: 85
+    r1: 89
   scripts/kunglao_verify.py:
     r1: 29
   scripts/kunglao_wait.py:
@@ -219,7 +221,7 @@ files:
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 20
+    r1: 22
   scripts/log_setup.py:
     r1: 1
   scripts/loop_scheduler.py:
@@ -227,7 +229,7 @@ files:
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
-    r1: 29
+    r1: 30
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/migrate_facts.py:
@@ -305,6 +307,8 @@ files:
     r1: 1
   scripts/retract_claim.py:
     r1: 8
+  scripts/reward_settlement.py:
+    r1: 2
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
@@ -593,11 +597,11 @@ files:
   tests/test_deploy_closure_810.py:
     r1: 4
   tests/test_deploy_inversion_783.py:
-    r1: 2
+    r1: 4
   tests/test_deploy_lifecycle_783.py:
-    r1: 10
+    r1: 11
   tests/test_deploy_local_783.py:
-    r1: 1
+    r1: 2
   tests/test_deploy_manifest_783.py:
     r1: 2
   tests/test_deploy_shim.py:
@@ -719,6 +723,8 @@ files:
     r2: 1
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
+  tests/test_exogenous_421.py:
+    r1: 2
   tests/test_expected_hashlock_828.py:
     r1: 1
   tests/test_ext_index.py:
@@ -726,7 +732,7 @@ files:
   tests/test_ext_index_tiers_162.py:
     r1: 1
   tests/test_external_kicker.py:
-    r1: 12
+    r1: 13
   tests/test_fact_contradiction_gate.py:
     r1: 6
   tests/test_fact_expected_binding.py:
@@ -801,7 +807,7 @@ files:
   tests/test_heartbeat_bootstrap.py:
     r1: 14
   tests/test_heartbeat_durable_830.py:
-    r1: 1
+    r1: 2
   tests/test_heartbeat_gate.py:
     r1: 3
   tests/test_heartbeat_off.py:
@@ -888,7 +894,7 @@ files:
   tests/test_kunglao_decide.py:
     r1: 8
   tests/test_kunglao_init.py:
-    r1: 27
+    r1: 28
   tests/test_kunglao_log.py:
     r1: 5
   tests/test_kunglao_log_channel_699.py:
@@ -1118,6 +1124,8 @@ files:
     r1: 1
   tests/test_review_hook_install.py:
     r1: 10
+  tests/test_reward_settlement_366.py:
+    r1: 1
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:
@@ -1169,6 +1177,8 @@ files:
   tests/test_settlement_pq_257.py:
     r1: 1
   tests/test_shell_defaults.py:
+    r1: 1
+  tests/test_silent_except_traces_275.py:
     r1: 1
   tests/test_silent_except_traces_275_batch3.py:
     r1: 1
@@ -1295,8 +1305,10 @@ files:
     r1: 2
   tests/test_unidbg_harness_template.py:
     r1: 1
+  tests/test_upgrade_016_sweep.py:
+    r1: 10
   tests/test_upgrade_safety_753.py:
-    r1: 8
+    r1: 7
   tests/test_upgrade_slash_command_746.py:
     r1: 4
     r2: 1

@@ -18,7 +18,7 @@ Before any output or action in a round, run the convergence check first
 (re-read ground truth from disk, never from memory):
 
 ```bash
-python scripts/convergence_check.py <workspace>
+uv run --project <SKILL_DIR> python scripts/convergence_check.py <workspace>
 ```
 
 This rule still applies after `/compact`, and in sessions that never invoked

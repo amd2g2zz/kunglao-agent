@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+import hook_activation
 from hook_activation import canonical_install_root
 from _factories import seed_bins, seed_oracle_anchors
 
@@ -124,6 +125,10 @@ def _seed_hooks_json(init_ws: Path, pre_command: str, post_command: str) -> Path
     return target
 
 
+def _framework_project_root():
+    return hook_activation._framework_project_root()
+
+
 def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_home) -> None:
     """#389 F2: init hook deployment REPLACES a legacy bare-python
     worker_budget entry with the uv form — the same-name skip must not leave
@@ -136,8 +141,13 @@ def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_hom
     root = canonical_install_root().resolve()
     hook_file = root / "hooks" / "worker_budget.py"
     # #811 起新 canonical 形态带可选 PYTHONUTF8=1 env 前缀（PEP 540 注入）
+    # 0.1.6 sweep (#6): the canonical form gains the explicit `python`
+    # token and runs against the FRAMEWORK project root (the env owns the
+    # dependency set); the SCRIPT path stays the canonical install copy.
+    env_root = _framework_project_root() or root
     uv_form = (f"PYTHONUTF8=1 "
-               f"uv run --project {root.as_posix()} {hook_file.as_posix()}")
+               f"uv run --project {env_root.as_posix()} "
+               f"python {hook_file.as_posix()}")
     legacy = f"python {hook_file.as_posix()}"
     hooks_json = _seed_hooks_json(init_ws, legacy, legacy)
     r = _run_init(init_ws, ["--hooks-json", str(hooks_json)])
