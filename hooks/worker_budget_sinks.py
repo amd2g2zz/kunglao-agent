@@ -550,6 +550,35 @@ def _declared_trace_id(prompt: str) -> str | None:
     return None
 
 
+
+def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
+                           agent_name: str) -> None:
+    """#429 §4: record the (signature_hash, method_family) observation
+    at the dispatch ALLOW tail — the Q-cell data spine for the TS
+    envelope sampler (scripts/rlvr/q_cells.py).
+
+    Fail-open telemetry ONLY: a failure here never turns an ALLOW into
+    anything else, and the #432 vocabulary gate stays the sole
+    ENFORCEMENT face. This hook imports rlvr.q_cells (never
+    state_signature directly — the #396 freeze pins the decision faces
+    import-clean); the signature is computed inside the module. An
+    undeclared family records nothing: the honest gap, never a
+    fabricated bucket, until the #432 gate makes declaration
+    mandatory."""
+    try:
+        from rlvr import q_cells as _qc429
+        meta = None
+        try:
+            meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
+        except Exception:  # noqa: BLE001 — envelope parse best-effort
+            meta = None
+        _qc429.record_dispatch_observation(
+            paths.get('workspace'), prompt, envelope_meta=meta,
+            claim=cid, agent=agent_name)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('qcell_record', f'{type(exc).__name__}: {exc}')
+
+
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
                         prompt: str = '') -> None:
@@ -580,6 +609,10 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
         print(f'[kunglao-agent] dispatch linkage WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
+    # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
+    # method_family declared on the envelope) — the sampler's data spine.
+    # Fail-open inside; rejected dispatches above never reach this line.
+    _qcell_record_dispatch(paths, prompt, cid, agent_name)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:

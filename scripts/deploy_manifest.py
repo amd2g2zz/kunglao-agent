@@ -132,6 +132,13 @@ def build_entries() -> list[dict]:
         ents.append({"src": f"agents/{p.name}", "kind": "agent"})
     for p in sorted(SKILL_SCRIPTS.glob("*.py")):
         ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
+    # #420 (package README, Phase-2 execution notes): the rlvr package
+    # modules join the deployed tree — the flat glob above predates the
+    # package; without these rows the deployed scaffold lacks
+    # rlvr/q_cells.py and the #429 dispatch-gate recorder's lazy import
+    # can never resolve outside the repo (#429 §4).
+    for p in sorted(SKILL_SCRIPTS.glob("rlvr/*.py")):
+        ents.append({"src": f"scripts/rlvr/{p.name}", "kind": "scaffold"})
     # #142: the statusline renderer rides the deployed scaffold like the
     # scripts it reads — statusLine commands point at the workspace-local
     # copy (<ws>/.claude/scripts/), so the workspace stays self-contained.

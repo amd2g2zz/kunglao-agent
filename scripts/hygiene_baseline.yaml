@@ -72,7 +72,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 13
+    r1: 16
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -323,6 +323,10 @@ files:
     r1: 7
   scripts/rho_verifier.py:
     r1: 7
+  scripts/rlvr/__init__.py:
+    r1: 2
+  scripts/rlvr/q_cells.py:
+    r1: 14
   scripts/roi_settlement.py:
     r1: 4
   scripts/rollup.py:
@@ -1080,6 +1084,9 @@ files:
     r1: 3
   tests/test_python_floor.py:
     r1: 1
+  tests/test_q_cells_429.py:
+    r1: 2
+    r2: 1
   tests/test_qtable_p3.py:
     r1: 5
   tests/test_recall_inject.py:
