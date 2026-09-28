@@ -70,8 +70,13 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
     monkeypatch.setattr(
         tc, "_tcp_connect",
         lambda host, port: (False, "connection refused"))
+    # #408: the registration rides the workspace .mcp.json — the user-global
+    # claude.json surface is deleted and its seed stays invisible (poison).
     claude_json = tmp_path / "claude.json"
     claude_json.write_text(json.dumps(
+        {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
+        encoding="utf-8")
+    (tmp_path / ".mcp.json").write_text(json.dumps(
         {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
         encoding="utf-8")
     item = tc._mcp_reachability_face(
