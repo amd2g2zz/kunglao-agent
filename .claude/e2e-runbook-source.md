@@ -132,7 +132,7 @@ C6-pre-4 (mechanical):
   uv run ... env_check.py $WS                    → OVERALL=PASS
   uv run ... convergence_check.py $WS            → decision DISPATCH (rc per table)
   uv run ... priority_ratio.py $WS --json        → rank #1 claim id
-Dispatch (orchestrator act, fire-and-continue): Task tool, subagent_type
+Dispatch (orchestrator act, fire-and-continue): Agent tool dispatch, subagent_type
 kunglao-worker, background; prompt opens with the v1 canonical envelope
   {"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":1,"tools":["grep","python3"],"agent":"kunglao-worker"}}
 + task text + facts-snapshot: line. T1 tier (pure static, cheap).

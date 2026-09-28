@@ -94,7 +94,7 @@ files:
   scripts/e2e/llm_faces.py:
     r1: 1
   scripts/e2e/model.py:
-    r1: 5
+    r1: 6
   scripts/e2e/runtime.py:
     r1: 4
   scripts/emit_gate.py:
