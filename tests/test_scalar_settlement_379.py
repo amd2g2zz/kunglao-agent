@@ -62,11 +62,16 @@ def _seed(ws: Path, kind: str, anchor: str, signals: list[dict]) -> str:
 
 class TestRulesFileV2:
     def test_rules_version_bumped_v1_rows_foldable(self):
-        """reward-rules/2 = version 2 of the versioned rules file; the four
-        /1 rows remain foldable in the same table (issue 379 versioning)."""
+        """reward-rules/3 = version 3 of the versioned rules file; the four
+        /1 rows remain foldable in the same table (issue 379 versioning).
+
+        RE-MINT (issue 433 declared section): version 2 -> 3 — the
+        round-credit value-ladder semantic change (verified-but-uncited
+        demoted to a trace total) is a rules-table semantic change and
+        bumps the versioned file per the issue-379 precedent."""
         doc = rs.load_rules(RULES_PATH)
         assert doc["schema"] == "reward-rules/1"  # fold contract unchanged
-        assert doc["version"] == 2
+        assert doc["version"] == 3
         rule_ids = {r["rule_id"] for r in doc["rules"]}
         assert {"task/oracle-green", "task/oracle-red",
                 "self_distill/adverse", "self_distill/helped"} <= rule_ids
@@ -319,11 +324,31 @@ class TestDensePartial:
 
 
 # ---------- round credit settlement ----------
+#
+# ================== DECLARED RE-MINT SECTION (issue 433) ==================
+# Semantic change (anti fact-farming value alignment): round credit is a
+# VALUE LADDER, not a verified-or-cited count. verified is the ADMISSION
+# TICKET; cited / used-toward-stage is the value condition. Re-minted
+# expectations below, each with its reason (never a silent weakening):
+#   - verified-but-uncited artifact: FULL -> ONE trace total per dispatch
+#     row (0.01, the TRACE canonical), reason uncited_verified;
+#   - oracle-backed refutation: FULL -> the trace information option
+#     (0.01), reason refuted_with_replay_evidence;
+#   - cited verified artifact: FULL, unchanged in value;
+#   - action-success / OPEN: 0, unchanged.
+# New-ladder pins (farming gradient, claim-provenance citation leg,
+# late-cite amendment) live in tests/test_round_credit_alignment_433.py.
+# Pins NOT touched by the ladder (tier engine, dense partial, 3-tuple,
+# scalar priors, gamma absence, no-prior feed) are unchanged.
+# ==========================================================================
 
 def _artifact(aid, creator, status="PROVEN", verify="passes",
-              cited=False, refutation=False):
+              cited=False, refutation=False, answers=False):
+    # answers_question: the claim-provenance citation leg (issue 433) —
+    # the fact feeds a question-bearing claim (used toward the stage)
     return {"id": aid, "creator": creator, "status": status,
             "verify_status": verify, "cited_by_deliverable": cited,
+            "answers_question": answers,
             "oracle_backed_refutation": refutation}
 
 
@@ -333,45 +358,66 @@ DISPATCHES = [{"dispatch_id": "tr-m1-d1", "round": 1},
 
 class TestRoundCredit:
     def test_provenance_attributed_artifacts_counted(self):
+        """RE-MINT (issue 433): F001-a is verified-but-uncited — demoted
+        to the trace total with the reason named; only the cited F002-b
+        earns FULL. 1.0 + one 0.01 class total = 1.01 (was 2.0 when
+        verified alone bought full credit)."""
         artifacts = [_artifact("F001-a", "tr-m1-d1"),
                      _artifact("F002-b", "tr-m1-d1", cited=True),
                      _artifact("F003-c", "tr-m1-d1", status="OPEN")]
         out = ss.round_credit(DISPATCHES, artifacts, waste=[])
         row = next(r for r in out["rows"] if r["dispatch_id"] == "tr-m1-d1")
-        assert row["credited"] == ["F001-a", "F002-b"]
-        assert row["r"] == 2.0
+        assert row["credited"] == ["F002-b"]
+        assert row["r"] == 1.01
+        assert row["demoted"] == \
+            [{"id": "F001-a", "reason": "uncited_verified"}]
 
     def test_oracle_backed_refutation_counts(self):
+        """RE-MINT (issue 433): the oracle-backed refutation keeps
+        SETTLING (it is real information) but at the TRACE information
+        option — 0.01 with the reason named, not full credit (was 1.0)."""
         artifacts = [_artifact("F010-n", "tr-m1-d1", status="NEGATIVE",
                                refutation=True),
                      _artifact("F011-n", "tr-m1-d1", status="NEGATIVE",
                                refutation=False)]
         out = ss.round_credit(DISPATCHES, artifacts, waste=[])
         row = out["rows"][0]
-        assert row["credited"] == ["F010-n"]
-        assert row["r"] == 1.0
+        assert row["credited"] == []
+        assert row["r"] == 0.01
+        assert row["demoted"] == \
+            [{"id": "F010-n", "reason": "refuted_with_replay_evidence"}]
 
     def test_attributed_waste_subtracted(self):
+        """RE-MINT (issue 433): the uncited verified artifact settles the
+        0.01 trace total, waste still subtracts one-for-one:
+        0.01 - 1.0 = -0.99 (was 0.0 = 1.0 full - 1 waste)."""
         artifacts = [_artifact("F020-a", "tr-m1-d2")]
         waste = [{"kind": "decoy_follow", "dispatch_id": "tr-m1-d2",
                   "ref": "C-9"}]
         out = ss.round_credit(DISPATCHES, artifacts, waste)
         row = next(r for r in out["rows"] if r["dispatch_id"] == "tr-m1-d2")
         assert row["waste"] == 1.0
-        assert row["r"] == 0.0  # 1 credited - 1 waste
+        assert row["r"] == -0.99  # one trace total - 1 waste
 
     def test_untraced_marked_not_counted(self):
+        """RE-MINT (issue 433): F031-y is verified-but-uncited -> the
+        0.01 trace total (was 1.0). Untraced face unchanged: listed,
+        counted toward no dispatch, never demoted (no attribution, no
+        credit decision)."""
         artifacts = [_artifact("F030-x", creator=None),
                      _artifact("F031-y", "tr-m1-d1")]
         out = ss.round_credit(DISPATCHES, artifacts, waste=[])
         assert out["untraced"] == ["F030-x"]
         row = out["rows"][0]
         assert "F030-x" not in row["credited"]
-        assert row["r"] == 1.0
+        assert row["r"] == 0.01
 
     def test_no_positional_discount_order_invariant(self):
         """gamma ruled out: round ORDER changes nothing — per-dispatch r is
         a provenance sum, never position-weighted."""
+        # RE-MINT (issue 433): both artifacts are verified-but-uncited —
+        # d1 settles the 0.01 trace total (was 1.0), d2 the trace total
+        # minus its waste (was 1.0 - 1.0 = 0.0).
         artifacts = [_artifact("F040-a", "tr-m1-d1"),
                      _artifact("F041-b", "tr-m1-d2")]
         waste = [{"kind": "decoy_follow", "dispatch_id": "tr-m1-d2",
@@ -381,9 +427,13 @@ class TestRoundCredit:
         by_dispatch = lambda out: {r["dispatch_id"]: r["r"]
                                    for r in out["rows"]}
         assert by_dispatch(fwd) == by_dispatch(rev) \
-            == {"tr-m1-d1": 1.0, "tr-m1-d2": 0.0}
+            == {"tr-m1-d1": 0.01, "tr-m1-d2": -0.99}
 
     def test_round_credit_rows_land_in_the_ledger(self, tmp_path):
+        """RE-MINT (issue 433): the uncited verified F050-a settles the
+        0.01 trace total minus its waste = -0.99 (was 0.0 = 1.0 full -
+        1 waste); the demotion is named in the settlement row with its
+        reason. Ledger/idempotence faces unchanged."""
         ws = tmp_path / "ws"
         ws.mkdir()
         artifacts = [_artifact("F050-a", "tr-m1-d1")]
@@ -394,8 +444,10 @@ class TestRoundCredit:
         assert res["settled"] == 2
         row = rl.fold(ws, "round_credit/tr-m1-d1")
         assert row["settlement"]["band"] == "ROUND_CREDIT"
-        assert row["settlement"]["reward"] == 0.0
-        assert row["settlement"]["credited"] == ["F050-a"]
+        assert row["settlement"]["reward"] == -0.99
+        assert row["settlement"]["credited"] == []
+        assert row["settlement"]["demoted"] == \
+            [{"id": "F050-a", "reason": "uncited_verified"}]
         assert row["settlement"]["waste"] == 1.0
         # idempotent at a LATER wall-clock time: the signal ts freezes at
         # the row identity, so record/settle dedupe (no ledger churn)
@@ -642,12 +694,17 @@ class TestFactProvenanceFace:
             "\n".join(lines) + "\n", encoding="utf-8")
 
     def test_creator_field_attribution(self, tmp_path):
+        """RE-MINT (issue 433): the artifact face grew the claim-
+        provenance citation fields claim_id / answers_question (the
+        used-toward-stage leg); this fact carries no claim_id, so both
+        are the empty face values."""
         ws = tmp_path / "ws"
         ws.mkdir()
         self._fact(ws, "F001-a", "tr-m1-d1")
         rows = ss.fact_artifacts(ws)
         assert rows == [{"id": "F001-a", "creator": "tr-m1-d1",
                          "status": "PROVEN", "verify_status": "passes",
+                         "claim_id": None, "answers_question": False,
                          "cited_by_deliverable": False,
                          "oracle_backed_refutation": False}]
 
