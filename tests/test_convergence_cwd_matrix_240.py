@@ -45,7 +45,19 @@ def _real_ws(root: Path) -> Path:
         encoding="utf-8")
     (ws / "task_spec.yaml").write_text(
         "primary_questions: []\n", encoding="utf-8")
+    # 0.1.6 version gate: carry the current stamp on the primary carrier
+    _stamp_current(ws)
     return ws
+
+
+def _stamp_current(ws: Path) -> None:
+    """Write the primary stamp carrier at the executing skill version."""
+    if str(ROOT / "scripts") not in sys.path:
+        sys.path.insert(0, str(ROOT / "scripts"))
+    import template_version
+    (ws / "CLAUDE.md").write_text(
+        template_version.stamp_line(template_version.read_skill_version())
+        + "\n", encoding="utf-8")
 
 
 def _register_only_ws(root: Path) -> Path:

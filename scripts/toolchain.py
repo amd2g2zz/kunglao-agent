@@ -39,6 +39,7 @@ import sys
 _IMPORT_DEGRADED: list[str] = []
 import argparse
 import dataclasses
+import glob
 import json
 import os
 import re
@@ -1345,12 +1346,21 @@ def _probe_ida_via_brew() -> Path | None:
 def _probe_ida_via_known_dirs(
         patterns: tuple[str, ...] | None = None) -> Path | None:
     """Ladder rung d: the known-dir sweep — classic shapes AND the
-    .app/Contents/MacOS bundle layout, plus Windows/Linux equivalents."""
+    .app/Contents/MacOS bundle layout, plus Windows/Linux equivalents.
+
+    0.1.6 sweep (static-audit finding): the glob import was MISSING here,
+    so this rung raised NameError on every call and the broad except
+    swallowed it — a silent no-op that always returned None. The import is
+    in place; a failing pattern is now RECORDED to stderr instead of being
+    silently eaten (silent-suppression audit posture)."""
     for pattern in (patterns or _IDA_KNOWN_DIR_PATTERNS):
         expanded = os.path.expanduser(pattern)
         try:
             hits = sorted(glob.glob(expanded))
-        except Exception:  # noqa: BLE001 — a bad pattern never kills the gate
+        except Exception as exc:  # noqa: BLE001 — a bad pattern never kills the gate
+            print(f"toolchain: WARN ida known-dir pattern skipped: "
+                  f"{pattern!r} ({type(exc).__name__}: {exc})",
+                  file=sys.stderr)
             continue
         for hit in hits:
             cand = Path(hit)

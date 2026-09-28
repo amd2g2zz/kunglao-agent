@@ -86,12 +86,11 @@ def _note(op: str, reason: str) -> None:
         _DEGRADED[op] = reason
 
 
-# #534: observability lifeline — module-level emit on load.
-try:
-    kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
-                             detail="module wired")
-except NameError as exc:
-    _note("module_emit", f"{type(exc).__name__}: {exc}")
+# #534 observability lifeline — HISTORY: this used to be a module-level
+# emit on load, but `ws` only exists inside main(), so the NameError was
+# swallowed into degraded.module_emit and EVERY tick report shipped the
+# bogus degradation (#413). The "module wired" emit now lives in main(),
+# after ws resolution — an import of this module emits nothing.
 from pathlib import Path
 
 import hook_activation as ha
@@ -397,6 +396,13 @@ def main(argv: list[str] | None = None) -> int:
         "workspace", nargs="?", default=None,
         help="initialized workspace directory (default: probe cwd, then "
              "cwd/<workspace_dir>; never created — init owns that)")
+    parser.add_argument(
+        "--reset-continuity", action="store_true",
+        help="#415: gated continuity-baseline reset for VERIFIED FRESH "
+             "DEPLOYS — rotates runs/.heartbeat.log and rebuilds "
+             "tick_history from now. Refused (fail-closed) when any real "
+             "tick row exists or the heartbeat state is older than 24h: "
+             "those are real stalls, and the re-arm chain is the remedy.")
     parsed = parser.parse_args(args)
     ws_arg = parsed.workspace or None
     # A path-shaped positional must EXIST: the tick writes telemetry into the
@@ -409,6 +415,30 @@ def main(argv: list[str] | None = None) -> int:
               "creates one (run kunglao init first)", file=sys.stderr)
         return 2
     ws = _resolve_ws(ws_arg)
+    # #415.3: the gated fresh-deploy reset face — early exit, it is not a
+    # tick (nothing else in this run may execute off a reset).
+    if parsed.reset_continuity:
+        from heartbeat import reset_continuity_baseline
+        result = reset_continuity_baseline(ws)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result.get("status") == "reset" else 1
+    # #415.1: THIS is a real main-flow tick — land the durable tick row
+    # (actor="tick") so continuity counts real cadence, never hook pulses
+    # (the sidecar had only hook/register rows before: hook activity then
+    # masqueraded as ticks and deploy-day quiet gaps looked like dead crons).
+    try:
+        from heartbeat import append_tick_log
+        append_tick_log(ws, actor="tick")
+    except Exception as exc:  # noqa: BLE001 — telemetry must never kill the tick
+        _note("tick_row", f"{type(exc).__name__}: {exc}")
+    # #534 observability lifeline, #413 fix: the "module wired" row lands
+    # HERE (resolved ws), not at import time — the import-time form could
+    # never succeed and poisoned every report with degraded.module_emit.
+    try:
+        kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
+                         detail="module wired")
+    except Exception as exc:  # noqa: BLE001 — telemetry must never kill the tick
+        _note("module_emit", f"{type(exc).__name__}: {exc}")
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.

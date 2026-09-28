@@ -137,11 +137,55 @@ def build(report, task_spec, ws) -> dict:
         "prescan": _prescan(report),
         "obfuscation_prior": _obfuscation_prior(ws),
         "java_reachability": _java_reachability(report, task_spec),
-        "prescan_obligation": {
+        "prescan_obligation": _prescan_obligation(task_spec, ws),
+    }
+
+
+# Lanes whose analysis subject is a native binary: the T1 pre-scan
+# artifacts (die.json / apkid.json) exist only there. Owner ruling from
+# the 51job live run (web lane): a web target NEVER produces die.json /
+# apkid.json, so gating deep-analysis claims on them locks the workspace
+# forever — the obligation must be lane-aware AND explicit either way
+# (即使 web 车道用不上，也需显式落盘说明).
+NATIVE_OBLIGATION_LANES = frozenset({"malware"})
+
+
+def _obligation_lane(task_spec, ws: Path) -> str:
+    """The workspace's declared lane; undeclared keeps the malware default
+    (the pre-lane contract — lane_spec.DEFAULT_LEGACY)."""
+    lane = (task_spec or {}).get("lane")
+    if isinstance(lane, str) and lane.strip():
+        return lane.strip()
+    try:
+        import lane_spec
+        declared = lane_spec.declared(ws)
+        if isinstance(declared, str) and declared.strip():
+            return declared.strip()
+    except Exception as exc:  # noqa: BLE001 — fail-open to the legacy default
+        print(f"intake-promise: WARN (fail-open) lane probe failed "
+              f"({type(exc).__name__}: {exc}) — defaulting to the malware "
+              f"lane obligation", file=sys.stderr)
+    return "malware"
+
+
+def _prescan_obligation(task_spec, ws: Path) -> dict:
+    lane = _obligation_lane(task_spec, ws)
+    if lane in NATIVE_OBLIGATION_LANES:
+        return {
+            "lane": lane,
             "required": list(OBLIGATION),
             "note": "first claim must be the T1 pre-scan (#669) - "
                     "these artifacts gate deep-analysis claims",
-        },
+        }
+    return {
+        "lane": lane,
+        "required": [],
+        "note": f"lane={lane}: native binary-identification artifacts "
+                f"({', '.join(OBLIGATION)}) are NOT producible on this "
+                f"lane and do NOT gate deep-analysis claims here - the "
+                f"T1 pre-scan obligation is satisfied by lane-appropriate "
+                f"evidence instead (explicit no-op per the 0.1.6 sweep; "
+                f"#669)",
     }
 
 

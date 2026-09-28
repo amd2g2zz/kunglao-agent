@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
-from _factories import seed_bins, write_hook_state, seed_oracle_anchors
+from _factories import stamp_current, seed_bins, write_hook_state, seed_oracle_anchors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -132,6 +132,7 @@ def _trajectory1_ws(root: Path) -> Path:
         "assumption_validity": "justified-adequate",
         "next_method": "method was adequate",
         "analyzed_at": "2026-08-19T00:00:00+00:00"})
+    stamp_current(ws)  # 0.1.6 gate: the decide face refuses unstamped ws
     return ws
 
 

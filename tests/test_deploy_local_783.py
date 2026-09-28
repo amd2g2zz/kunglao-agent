@@ -9,6 +9,7 @@ run is idempotent at the file level.
 from __future__ import annotations
 
 import json
+import hook_activation as ha
 import subprocess
 import sys
 from pathlib import Path
@@ -40,9 +41,12 @@ def test_deploy_local_e2e(tmp_path: Path) -> None:
     cmds = [h["command"] for face in settings["hooks"].values()
             for e in face for h in e.get("hooks", [])]
     assert cmds, "registry registered"
+    # 0.1.6 sweep (#6): env project = framework root; script path = ws copy
     for c in cmds:
-        assert f"uv run --project {ws.as_posix()}" in c, (
-            f"project root must be the workspace: {c}")
+        assert f"uv run --project {ha._framework_project_root()}" in c and             " python " in c, (
+            f"#6: env project must be the framework root: {c}")
+        assert f"{ws.as_posix()}/.claude/hooks/" in c, (
+            f"#783: script path stays the workspace copy: {c}")
         assert "/.claude/hooks/" in c.replace("\\", "/"), (
             f"script path must be the workspace-local copy: {c}")
 

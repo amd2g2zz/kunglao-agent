@@ -97,7 +97,9 @@ def test_orphan_double_confirm_prunes_foreign_keeps_known(
     detail = dr.refresh(ws)
 
     assert not foreign.exists(), "unknown scaffolding must be pruned"
-    backup = ws / "runs" / "deploy-backup-orphan" / "intruder.py"
+    # subpath-preserving backup (0.1.6: same-basename orphans in different
+    # trees never overwrite each other's backup)
+    backup = ws / "runs" / "deploy-backup-orphan" / "hooks" / "intruder.py"
     assert backup.is_file(), "prune must back the orphan up first"
     assert "pruned_orphans=1" in detail
 

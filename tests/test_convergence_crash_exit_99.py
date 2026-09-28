@@ -30,6 +30,8 @@ from pathlib import Path
 
 import yaml
 
+from _factories import stamp_current
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
@@ -45,6 +47,7 @@ def _mk_ws(tmp_path: Path, name: str, register_text: str) -> Path:
     (ws / "runs").mkdir(parents=True)
     (ws / "claim-register.yaml").write_text(register_text, encoding="utf-8")
     (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+    stamp_current(ws)
     return ws
 
 

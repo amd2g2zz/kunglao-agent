@@ -29,10 +29,22 @@ Exit codes (consumed by the slash-command SKILL.md UX layer):
 
     0  migrated / already at target / dry-run plan printed
     3  no version stamp on the workspace — direct to /kunglao-agent:init
-    4  iron-rule violation — user data drifted, snapshot on disk
-    6  dirty owned-repo — commit/stash first, then re-run (#753 B1)
-    7  incomplete — migration applied but the finish sequence aborted
-       (#753 B4); re-run upgrade to complete stamping/cleanup
+    4  iron-rule violation — user data drifted; the tree is ROLLED BACK to
+       the pre-migration snapshot and the forensic snapshot json kept
+    6  dirty owned-repo on the ALREADY-CURRENT early-exit refresh only —
+       the migration path itself no longer refuses dirty state: it
+       commits it AS the pre-migration git snapshot
+    7  incomplete — a migration item raised or the finish sequence
+       aborted; the tree is ROLLED BACK to the pre-migration snapshot;
+       re-run upgrade
+
+Transactional migration (0.1.6 sweep, owner HARD requirement): before any
+mutation the workspace state is committed via git (repo-less -> git init +
+snapshot commit; dirty repo -> the current state committed AS the
+snapshot). Success lands the migrated state as a second commit
+("kunglao upgrade: <origin> -> <target>"); any failure rolls the tree
+back byte-identical to the snapshot (reset --hard + scoped clean of the
+migration's own untracked outputs — never a blanket clean of user data).
 
 JSON envelope (when `--json` is set):
 
@@ -799,6 +811,39 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     ]
 
 
+def migrate_to_0_1_6(ws: Path, dry: bool) -> list[str]:
+    """v0.1.4/0.1.5 -> 0.1.6 deploy-surface refresh (release sweep).
+
+    A 0.1.4- or 0.1.5-origin workspace carries 0.1.5-era deployed copies
+    and version telemetry; the 0.1.6 file set moved under them (blocker
+    schema v2 template, lane-universal redteam agent, new reference
+    cards). Every item here is idempotent and overwrite-semantics:
+
+      - agents re-copy  (the #355 lane-universal kunglao-redteam.md)
+      - deployed-copy refresh + ORPHAN PRUNE — the "every superseded file
+        REMOVED" face: manifest-unknown scaffolding in the deployed trees
+        is backed up under runs/deploy-backup-orphan/ then deleted
+      - env-ledger + init-report version stamps advanced to 0.1.6
+      - install-venv sync + install-staleness report
+
+    The frame/stamp carry rides the planner's universal tail (no
+    hand-written carry here — owner ruling 2026-09-11). No user-data dir
+    is touched; the seven iron-rule dirs are invariant by construction.
+    Evaluated and found EMPTY for 0.1.6: no workspace config key or state
+    file was superseded (the 0.1.6 additions — rollout ledger, rotation
+    induction, premise expiry — create their surfaces at runtime,
+    fail-open), so there is nothing to delete outside the deployed trees.
+    """
+    return [
+        _item_agents_refresh(ws, dry),          # #355 lane-universal agent
+        _item_deployed_refresh(ws, dry),        # 0.1.6 copies + orphan prune
+        _item_env_manifest_refresh(ws, dry),    # ledger kunglao_version
+        _item_toolchain_manifest(ws, dry),      # report skill_version
+        _item_uv_sync(ws, dry),                 # install venv
+        _item_skill_staleness_check(ws, dry),   # detect+report
+    ]
+
+
 # Linear registry: version-SPECIFIC repairs only. The frame/stamp carry
 # (G3 merge + G4-gated quiet stamp) used to be a per-release boilerplate
 # entry; it is now the planner's universal terminal step (see
@@ -810,6 +855,7 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
     ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
+    ("0.1.6", migrate_to_0_1_6),   # 0.1.6 release sweep (deploy refresh)
 ]
 
 
@@ -1200,6 +1246,197 @@ def ensure_git_snapshot(ws: Path) -> dict:
     sha = rev.stdout.strip() if rev.returncode == 0 else None
     _print_git_banner(ws)
     return {"status": "created", "commit": sha}
+
+
+# --------------------------------------------------------------------------
+# transactional migration (owner HARD requirement, 0.1.6 sweep) ------------
+# --------------------------------------------------------------------------
+
+def _snapshot_msg(origin: str, target: str) -> str:
+    return (f"kunglao upgrade snapshot: pre {target} "
+            f"(from {origin})")
+
+
+def _snapshot_pre_migration(ws: Path, origin: str, target: str) -> dict:
+    """BEFORE any mutation, commit the workspace state via git.
+
+    - repo-less workspace -> git init + the snapshot commit (bootstrap
+      also writes the hygiene .gitignore, #739 posture);
+    - existing repo, clean tree -> HEAD itself is the snapshot (no empty
+      commit noise);
+    - existing repo, dirty tree -> the current state (uncommitted work
+      included) is committed AS the snapshot — the old RC 6 refusal on
+      the migration path is gone: the snapshot commit IS the rollback
+      point the #753 ruling demanded, and committing beats refusing.
+
+    Returns {"status": ..., "sha": <snapshot commit or None>}; a skipped
+    snapshot (git broken) degrades to best-effort HEAD-based rollback.
+    """
+    msg = _snapshot_msg(origin, target)
+    try:
+        return _snapshot_pre_migration_inner(ws, origin, target, msg)
+    except (FileNotFoundError, OSError) as exc:
+        # git binary missing / unwritable: the #739 posture — WARN and
+        # continue without a snapshot (rollback degrades to best-effort)
+        _warn_git_skip("pre-migration snapshot", str(exc))
+        _emit(ws, "git_snapshot_skipped", f"snapshot: {exc}")
+        _emit_event("snapshot", "warn", str(exc))
+        return {"status": "skipped", "sha": None}
+
+
+def _snapshot_pre_migration_inner(ws: Path, origin: str, target: str,
+                                  msg: str) -> dict:
+    if (ws / ".git").exists():
+        state, _n = _probe_dirty(ws)
+        if state == "clean":
+            rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+            sha = rev.stdout.strip() if rev.returncode == 0 else None
+            if not sha:
+                # zero-commit repo ("clean" with no HEAD): no snapshot is
+                # possible — the refusal gate must fire, never migrate
+                # unanchored (reviewer r2 finding A)
+                _warn_git_skip("pre-migration snapshot",
+                               "repo has no commits — no HEAD to anchor")
+                _emit_event("snapshot", "warn", "zero-commit repo")
+                return {"status": "skipped", "sha": None}
+            _emit_event("snapshot", "ok",
+                        f"clean-head {sha} — HEAD is the snapshot")
+            return {"status": "clean-head", "sha": sha}
+        if state == "skipped":
+            _warn_git_skip("pre-migration snapshot probe",
+                           "git status unreadable — rollback degrades to "
+                           "best-effort HEAD reset")
+            _emit_event("snapshot", "warn", "probe unreadable")
+            return {"status": "skipped", "sha": None}
+        add = _run_git(ws, "add", "-A")
+        if add.returncode == 0:
+            commit = _run_git(ws, *_GIT_IDENTITY, "-m", msg)
+        else:
+            commit = add
+        if commit.returncode != 0:
+            tail = (commit.stderr or commit.stdout or "").strip().splitlines()
+            why = tail[-1] if tail else f"exit {commit.returncode}"
+            _warn_git_skip("pre-migration snapshot (dirty commit)", why)
+            _emit(ws, "git_snapshot_skipped", f"snapshot commit: {why}")
+            _emit_event("snapshot", "warn", f"dirty commit: {why}")
+            return {"status": "skipped", "sha": None}
+        rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+        sha = rev.stdout.strip() if rev.returncode == 0 else None
+        _emit_event("snapshot", "ok",
+                    f"dirty state committed @{sha or '?'}")
+        return {"status": "committed", "sha": sha or None}
+    ok, _reason = _git_bootstrap_commit(
+        ws, msg, "pre-migration snapshot",
+        "git_snapshot_skipped", "snapshot")
+    if not ok:
+        _emit_event("snapshot", "warn", "bootstrap skipped")
+        return {"status": "skipped", "sha": None}
+    rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+    sha = rev.stdout.strip() if rev.returncode == 0 else None
+    _emit_event("snapshot", "ok", f"repo bootstrapped @{sha or '?'}")
+    _print_git_banner(ws)
+    return {"status": "created", "sha": sha}
+
+
+def _refuse_no_snapshot(ws: Path) -> int:
+    """Refusal face when the pre-migration snapshot cannot be taken: the
+    transaction has no rollback point, so the migration must not run
+    (#753 ruling). Refused BEFORE any mutation — the tree is untouched."""
+    _emit_event("snapshot", "fail", "no rollback anchor — migration refused")
+    _emit(ws, "git_snapshot_skipped", "no rollback anchor — refused")
+    print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — the "
+          f"pre-migration git snapshot could not be created for {ws}; "
+          f"migrating without a rollback anchor is unrecoverable.",
+          file=sys.stderr)
+    print("kunglao-upgrade: repair git in this workspace (verify `git "
+          "status` works and any pre-commit hook passes), then re-run.",
+          file=sys.stderr)
+    return RC_DIRTY_WORKSPACE
+
+
+def _rollback_failed(ws: Path, snap_sha: str | None, why: str) -> None:
+    """Roll the tree back to the pre-migration snapshot after ANY failure
+    (mid-item raise / iron-rule violation / finish-sequence abort): the
+    workspace ends byte-identical to the snapshot.
+
+    reset --hard restores every tracked file; `git clean -fd` (NO -x)
+    then removes exactly the migration's own untracked non-ignored
+    outputs — ignored telemetry (runs/ upgrade snapshots + event logs)
+    survives, tracked user data is restored, never blanket-cleaned.
+    A failed rollback is a loud WARN, never a crash or a silent pass.
+    """
+    try:
+        if not snap_sha:
+            # No rollback anchor exists: a destructive reset would wipe
+            # uncommitted user work to HEAD, which is NOT the pre-migration
+            # state. Never reset; WARN and leave the tree as-is (the caller
+            # refuses the whole run before items when the snapshot skips).
+            _emit_event("rollback", "fail",
+                        f"no snapshot sha — destructive reset refused ({why})")
+            _emit(ws, "git_snapshot_skipped",
+                  f"rollback refused (no anchor): {why}")
+            _warn_line(f"kunglao-upgrade: WARN — no pre-migration snapshot "
+                       f"exists; destructive rollback REFUSED ({why}). The "
+                       f"tree is left as-is — inspect it before proceeding.")
+            return
+        reset = _run_git(ws, "reset", "--hard", snap_sha)
+        ok = reset.returncode == 0
+        detail = ""
+        if ok:
+            # -e keeps the upgrade's own forensics/recovery artifacts from
+            # being swept when the repo has no .gitignore covering runs/.
+            clean = _run_git(ws, "clean", "-fd",
+                             "-e", "runs/upgrade-snapshot.*",
+                             "-e", "runs/claudemd-pending-merge.*")
+            ok = clean.returncode == 0
+            detail = ((clean.stderr or clean.stdout or "")
+                      .strip().splitlines() or [""])[-1]
+        else:
+            detail = ((reset.stderr or reset.stdout or "")
+                      .strip().splitlines() or [""])[-1]
+    except (FileNotFoundError, OSError) as exc:
+        ok = False
+        detail = f"{type(exc).__name__}: {exc}"
+    if ok:
+        _emit_event("rollback", "ok",
+                    f"restored to {snap_sha or 'HEAD'} ({why})")
+        _emit(ws, "upgrade_rollback", f"ok: {why}")
+        _warn_line(f"kunglao-upgrade: rollback complete — workspace "
+                   f"restored to the pre-migration snapshot ({why})")
+    else:
+        _emit_event("rollback", "fail", f"{detail} ({why})")
+        _emit(ws, "git_snapshot_skipped", f"rollback failed: {detail}")
+        _warn_line(f"kunglao-upgrade: WARN — ROLLBACK FAILED ({detail}); "
+                   f"the workspace may differ from the pre-migration "
+                   f"state ({why})")
+
+
+def _success_commit(ws: Path, origin: str, target: str) -> bool:
+    """Land the migrated state as the transaction's second commit. A
+    failed commit is WARN-only: the migration itself succeeded. A missing
+    git binary degrades to the #739 WARN posture — never flips the rc."""
+    try:
+        add = _run_git(ws, "add", "-A")
+        if add.returncode == 0:
+            add = _run_git(ws, *_GIT_IDENTITY,
+                           "-m", f"kunglao upgrade: {origin} -> {target}")
+        if add.returncode != 0:
+            tail = (add.stderr or add.stdout or "").strip().splitlines()
+            why = tail[-1] if tail else f"exit {add.returncode}"
+            _warn_git_skip("post-migration state commit", why)
+            _emit(ws, "git_snapshot_skipped", f"success commit: {why}")
+            _emit_event("git-snapshot", "warn",
+                        f"success commit skipped: {why}")
+            return False
+    except (FileNotFoundError, OSError) as exc:
+        _warn_git_skip("post-migration state commit", str(exc))
+        _emit(ws, "git_snapshot_skipped", f"success commit: {exc}")
+        _emit_event("git-snapshot", "warn", f"success commit skipped: {exc}")
+        return False
+    rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+    head = rev.stdout.strip() if rev.returncode == 0 else "?"
+    _emit_event("git-snapshot", "ok", f"migrated state committed @{head}")
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -1675,7 +1912,7 @@ def upgrade(ws: Path, dry_run: bool = False,
     # Issue 212: the statusline re-verify is the FIRST line of every upgrade run
     # (owner ruling) — before the stamp refusal, before "already at
     # version", before the plan. Read-only here; the heal runs at the gated
-    # write points below.
+    # write point (main path: after the items, inside the anchored window).
     sl = _statusline_report(ws, dry_run)
     if origin is None:
         print("kunglao-upgrade: no version stamp on this workspace — "
@@ -1774,43 +2011,35 @@ def upgrade(ws: Path, dry_run: bool = False,
         print(f"  [{target}] install_reference_scan({stale_n} stale)")
         return RC_OK
 
-    # ---- #753 B1: git-first rollback anchor -------------------------------
-    # User ruling 2026-08-27: 未提交不升、无 git 先锚——坏掉必须能回滚。
-    gate_state, dirty_n = _probe_dirty(ws)
-    if gate_state == "dirty":
-        return _refuse_dirty(ws, dirty_n)
-    anchor: dict = {"status": "clean"}
-    if gate_state == "absent":
-        _emit_event("gate-dirty", "ok", "no git — anchoring first")
-        anchor = ensure_pre_upgrade_anchor(ws)
-    elif gate_state == "clean":
-        _emit_event("gate-dirty", "ok", "clean owned repo")
-    else:
-        _emit_event("gate-dirty", "warn", "probe unreadable")
-        _warn_git_skip("git status probe unreadable",
-                       "cannot verify workspace cleanliness")
+    # ---- pre-migration git snapshot (transactional migration) -------------
+    # BEFORE any mutation the workspace state is committed (owner HARD
+    # requirement): repo-less -> git init + snapshot commit; existing repo
+    # -> the current state (dirty included) is committed AS the snapshot.
+    # Every failure below rolls the tree back to this point; success lands
+    # the migrated state as the second commit (_success_commit).
+    # Reviewer r1-016sweep blocking finding: when the snapshot CANNOT be
+    # taken (git broken / commit refused), the migration previously ran
+    # unsnapshotted and a later failure's rollback destroyed uncommitted
+    # work — strictly worse than refusing. The #753 ruling is absolute
+    # (未提交不升、无 git 先锚): no snapshot -> NO migration, refuse here.
+    snapshot = _snapshot_pre_migration(ws, origin, target)
+    snap_sha = snapshot.get("sha")
+    if snapshot.get("status") == "skipped":
+        return _refuse_no_snapshot(ws)
 
     # The required intake answers are verified BEFORE any migration work:
     # the structured interview is the FIRST face of every success path, so
     # a pending exit 8 stops the run with no migration item applied and no
     # stamp refresh — the framework never moves while the workspace's input
-    # contract is unanswered. The position is AFTER the git gate on
-    # purpose: a backfill apply must not feed the dirty gate an
-    # unsanctioned write, and the post-state commit at the tail still lands
-    # the applied answers.
+    # contract is unanswered. Position: AFTER the snapshot (the backfill's
+    # own task_spec write is a mutation and must ride the transaction), and
+    # the post-state commit at the tail still lands the applied answers.
     anchor_rc, anchor_pending = _anchor_backfill(
         ws, dry_run=False, resolve=resolve, items_out=items_out)
     if anchor_rc != RC_OK:
         if anchor_pending is not None:
             print(json.dumps(anchor_pending, ensure_ascii=False))
         return anchor_rc
-
-    # Issue 212: the main-path statusline heal rides the SAME position as the
-    # migration items — after the git gate + rollback anchor, inside the
-    # anchored window, so the post-state commit captures it. Never before
-    # the gate: the heal's own write must not trip _probe_dirty.
-    if not sl["ok"]:
-        _statusline_heal(ws, items_out)
 
     pre = user_data_digest(ws)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -1822,15 +2051,34 @@ def upgrade(ws: Path, dry_run: bool = False,
 
     applied = 0
     _emit_event("migration-start", "ok", f"{origin}->{target} migrations={len(plan)}")
-    for v, fn in plan:
-        for item in fn(ws, dry=False):
-            applied += 1
-            print(f"  [{v}] {item} ok")
-            _emit(ws, "upgrade_item", item)
-            _emit_event("item", "ok", item)
-            if items_out is not None:
-                items_out.append({"name": item, "action": "applied",
-                                   "detail": f"version={v}"})
+    try:
+        for v, fn in plan:
+            for item in fn(ws, dry=False):
+                applied += 1
+                print(f"  [{v}] {item} ok")
+                _emit(ws, "upgrade_item", item)
+                _emit_event("item", "ok", item)
+                if items_out is not None:
+                    items_out.append({"name": item, "action": "applied",
+                                       "detail": f"version={v}"})
+    except Exception as exc:  # noqa: BLE001 — transactional: roll back, never crash
+        _rollback_failed(ws, snap_sha,
+                         f"migration item raised: {type(exc).__name__}: {exc}")
+        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — a migration "
+              f"item raised ({type(exc).__name__}: {exc}); the workspace "
+              f"was rolled back to the pre-migration snapshot.",
+              file=sys.stderr)
+        return RC_INCOMPLETE
+
+    # Issue 212: the main-path statusline heal rides INSIDE the anchored
+    # window (after the pre-migration snapshot, before the success commit)
+    # but AFTER the migration items — the items deploy the workspace-local
+    # statusline copy, so the heal registers the WORKSPACE face on the
+    # first run and stays stable across re-runs (a heal ordering that
+    # flips its target between runs would churn settings.json into a
+    # noise commit on every repeat upgrade).
+    if not sl["ok"]:
+        _statusline_heal(ws, items_out)
 
     post = user_data_digest(ws)
     if pre != post:
@@ -1838,19 +2086,22 @@ def upgrade(ws: Path, dry_run: bool = False,
                          if pre.get(k) != post.get(k))
         _emit_event("iron-rule", "fail",
                     f"{len(changed)} file(s): {changed[:5]}...")
+        _rollback_failed(ws, snap_sha,
+                         f"iron rule: {len(changed)} user-data file(s) moved")
         print(f"kunglao-upgrade: IRON RULE VIOLATION — user data changed "
-              f"({len(changed)} file(s): {changed[:5]}...). Snapshot kept: "
-              f"{snap_path}", file=sys.stderr)
+              f"({len(changed)} file(s): {changed[:5]}...); the workspace "
+              f"was rolled back to the pre-migration snapshot. Framework "
+              f"snapshot kept: {snap_path}", file=sys.stderr)
         return RC_IRON_RULE
     _emit_event("iron-rule", "ok", f"{len(pre)} user-data file(s) invariant")
 
-    # ---- #753 B4: atomic finish sequence -----------------------------------
-    # The incident behind this issue died AFTER stamp but BEFORE the summary
-    # event, silently, with rc 0. From here on every step is guarded: any
-    # exception surfaces as RC_INCOMPLETE=7 plus a summary=fail event —
-    # never a silent RC_OK. (A hard external kill cannot be caught in-process;
-    # B1's anchor makes that revertable and the flushed [event] trail above
-    # records the exact last completed node.)
+    # ---- #753 B4: atomic finish sequence (transactional) -------------------
+    # From here on every step is guarded: any exception rolls the tree back
+    # to the pre-migration snapshot and surfaces as RC_INCOMPLETE=7 — never
+    # a silent RC_OK, never a half-migrated workspace. (A hard external
+    # kill cannot be caught in-process; the snapshot commit makes that
+    # revertable and the flushed [event] trail above records the exact last
+    # completed node.)
     tail_error = ""
     try:
         # stamp to target even when no migration entry exists for the gap
@@ -1864,39 +2115,10 @@ def upgrade(ws: Path, dry_run: bool = False,
         print(f"kunglao-upgrade: {origin} -> {target} "
               f"({applied} item(s), snapshot {snap_path.name})")
         _emit_event("summary", "ok", f"{origin}->{target} items={applied}")
-        # snapshot layer. When THIS run created the anchor we land the
-        # post-state commit ourselves (one `git revert` back to the anchor;
-        # the tree ends clean so later runs stay legal). Otherwise fall
-        # through to the #739 recovery attempt (skipped-anchor workspaces).
-        if anchor.get("status") == "created":
-            post = _run_git(ws, "add", "-A")
-            if post.returncode == 0:
-                post = _run_git(ws, *_GIT_IDENTITY, "-m", _POST_STATE_MSG)
-            if post.returncode != 0:
-                tail = (post.stderr or post.stdout or "").strip().splitlines()
-                why = tail[-1] if tail else f"exit {post.returncode}"
-                _warn_git_skip("post-upgrade state commit", why)
-                _emit(ws, "git_snapshot_skipped",
-                      f"post-state commit: {why}")
-                _emit_event("git-snapshot", "warn",
-                            f"anchor@{anchor.get('commit')} kept; "
-                            f"post-state skipped: {why}")
-            else:
-                rev = _run_git(ws, "rev-parse", "--short", "HEAD")
-                head = rev.stdout.strip() if rev.returncode == 0 else "?"
-                _emit_event("git-snapshot", "ok",
-                            f"anchor@{anchor.get('commit')} "
-                            f"post-state@{head}")
-        else:
-            # #739 — snapshot layer for workspaces that predate git; WARN-only,
-            # never changes the exit code
-            snap = ensure_git_snapshot(ws)
-            if snap.get("status") == "skipped":
-                _emit_event("git-snapshot", "warn",
-                            str(snap.get("reason") or "skipped"))
-            else:
-                _emit_event("git-snapshot", "ok", snap.get("status", ""))
-                # #752 D6 — residual-scavenger end step; WARN-only, exit code
+        # transaction tail: the migrated state lands as the second commit
+        # (snapshot -> migrated); WARN-only on failure.
+        _success_commit(ws, origin, target)
+        # #752 D6 — residual-scavenger end step; WARN-only, exit code
         # untouched. Guarded separately from #753's atomic finish: a sweep
         # bug must neither flip this upgrade to RC_INCOMPLETE nor pass
         # silently — it surfaces as one stderr WARN + a scan event.
@@ -1914,17 +2136,19 @@ def upgrade(ws: Path, dry_run: bool = False,
                   f"error:{type(sweep_exc).__name__}")
             _warn_line(f"kunglao-upgrade: WARN - install-reference sweep "
                        f"skipped ({type(sweep_exc).__name__}: {sweep_exc})")
-# #753 B3 — the skill package just moved; Claude Code picks the new
+        # #753 B3 — the skill package just moved; Claude Code picks the new
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")
-    except Exception as exc:  # noqa: BLE001 — incomplete, not silent success
+    except Exception as exc:  # noqa: BLE001 — incomplete: roll back + RC 7
         tail_error = f"{type(exc).__name__}: {exc}"
         _emit_event("summary", "fail", tail_error)
+        _rollback_failed(ws, snap_sha, f"finish sequence aborted: {tail_error}")
     if tail_error:
-        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — migration "
-              f"applied but the finish sequence aborted ({tail_error}); "
-              f"re-run upgrade to complete stamping/cleanup.", file=sys.stderr)
+        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — the finish "
+              f"sequence aborted ({tail_error}); the workspace was rolled "
+              f"back to the pre-migration snapshot — re-run upgrade.",
+              file=sys.stderr)
         return RC_INCOMPLETE
     return RC_OK
 

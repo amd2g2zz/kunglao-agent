@@ -267,6 +267,9 @@ RC_HOOK_WIRING = 7   # #445: hook deployment self-check FAILED (written layer/co
 RC_PENDING_DECISIONS = 8  # #455: undecided intake item (workspace/target/
                           # target_object/type) — pending list on stdout,
                           # agent re-enters with --resolve; zero scaffold
+RC_VERSION_MISMATCH = 9  # 0.1.6 sweep: existing-workspace stamp != skill
+                         # version — the transactional upgrade is the only
+                         # path forward (older AND newer refuse)
 
 # #534: structured init report — same envelope shape as runs/.env-check.json
 # (ts / phases[] / overall / exit). Phases are the six face labels from the
@@ -918,6 +921,41 @@ def _assert_workspace_boundary(ws: Path) -> None:
             f"internal error: workspace root resolved to a file {ws} — "
             "refusing to scaffold outside a workspace directory"
         )
+
+
+def refuse_version_mismatch(ws: Path, *, force: bool) -> int | None:
+    """0.1.6 sweep version-consistency gate (init intake face).
+
+    An existing initialized workspace whose format stamp != the executing
+    skill version — OLDER AND NEWER — refuses init re-entry (resume /
+    anchor repair / type repair): the transactional kunglao_upgrade is
+    the ONLY path forward for a mismatched workspace. A marker-carrying
+    register with NO stamp refuses the same way (same refusal family).
+    `--force` bypasses (explicit rebuild is the operator's own act).
+    Returns RC_VERSION_MISMATCH on refusal, None when init may proceed.
+    Nothing is written on the refusal path."""
+    reg = ws / "claim-register.yaml"
+    if force:
+        return None  # explicit rebuild is the operator's own act
+    if not reg.is_file():
+        return None  # fresh/creatable — scaffold owns stamping
+    text = reg.read_text(encoding="utf-8", errors="replace")
+    if MARKER not in text:
+        return None  # not initialized — fresh scaffold owns stamping
+    mismatch = template_version.version_mismatch(ws)
+    if mismatch is None:
+        return None
+    print(
+        f"kunglao-init: REFUSE — {mismatch}. An initialized workspace must "
+        "match the executing skill version; no best-effort analysis of "
+        "old-format workspaces. Run: python scripts/kunglao_upgrade.py "
+        f"{ws} — the transactional upgrade is the only path forward, then "
+        "re-run init if a repair re-entry is still needed.",
+        file=sys.stderr,
+    )
+    print("kunglao-init: NOT re-entered (no scaffold, no state write)",
+          file=sys.stderr)
+    return RC_VERSION_MISMATCH
 
 
 def refuse_path_shape(ws: Path, shape: str) -> int:
@@ -1651,8 +1689,10 @@ APK -> aapt/apktool unpack -> jadx DEX->Java
     "web": """## Hard constraints (web)
 
 - **Channel: docker** — `KUNGLAO_CHANNEL=docker` is the web default; set explicitly to override.
-- **camoufox-reverse MCP** — browser JS reverse engineering supply; register manually:
-  `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp`
+- **camoufox-reverse MCP** — browser JS reverse engineering supply; ships with
+  the kunglao-agent plugin (`.claude-plugin/plugin.json` mcpServers, #408) —
+  enable the plugin (workspace settings `enableAllProjectMcpServers: true`);
+  install dep: `pip install camoufox-reverse-mcp`
   (verify: `python -m camoufox_reverse_mcp --help`; optional flags: `--proxy`, `--geoip`, `--humanize`).
 - **No VM channel** — web dynamic analysis is the browser; VM channels (vmr-shell) do not apply.
 - **static-only analysis**: `KUNGLAO_CHANNEL` unset + no docker = local mode — no dynamic tooling, no dynamic RE. Read the CLAUDE.md quick-reference sections first.
@@ -1672,8 +1712,8 @@ Choose the delivery shape by evidence characteristics:
 ## camoufox operations card (core)
 
 ```bash
-# Register
-claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp
+# Supply (#408: plugin-carried, zero registration — never a user-level claude mcp add)
+# install dep: pip install camoufox-reverse-mcp  (plugin entry: python -m camoufox_reverse_mcp)
 
 # Launch + navigate
 camoufox.launch_browser()            # anti-detection Firefox
@@ -1765,10 +1805,11 @@ MCP_ROW_TEXT: dict[str, str] = {
         "(KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) "
         "| `claude mcp add ssh-mcp -- ssh-mcp` |\n",
     "camoufox-reverse":
-        "| `camoufox-reverse` | WARN | web (labs) | browser JS reverse "
-        "engineering (anti-detection Firefox) "
-        "| `claude mcp add camoufox-reverse -- python -m "
-        "camoufox_reverse_mcp` |\n",
+        "| `camoufox-reverse` | HARD | web | browser JS reverse engineering "
+        "(anti-detection Firefox) — REQUIRED on web "
+        "| ships with the kunglao-agent plugin (.claude-plugin/plugin.json "
+        "mcpServers) — enable the plugin; install dep: pip install "
+        "camoufox-reverse-mcp |\n",
 }
 
 # Presentation order (pre-#919 template row order — golden-anchored).
@@ -2047,7 +2088,7 @@ def _setup_web_env(ws: Path) -> None:
         write_state_line(ws, "KUNGLAO_CHANNEL", "docker")
     print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
     print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
-    print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
+    print("  MCP: camoufox-reverse ships with the plugin (#408 mcpServers) — enable the plugin; install dep: pip install camoufox-reverse-mcp", file=sys.stderr)
     print("  docs: references/re-library/web/labs/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
@@ -2826,7 +2867,7 @@ def emit_activation_handoff(ws) -> int:
     print(f"                   python heartbeat_loop_prompt.py {ws} --verify")
     print(f"  2. arm hooks   : python {ha} {ws} --tier advisory "
           "(or --set-active dispatch_gate,worker_pulse) — hooks stay "
-          "dormant until this Phase-0 arm (v1.9.7 default-inactive)")
+          "dormant until this Phase-0 arm (default-inactive)")
     print(f"  3. re-register : python {ls} {ws} (idempotent; also run at "
           "any analysis entry — or just re-run init) when the 7-day "
           "Claude Code durable-schedule cap expires")
@@ -2834,6 +2875,12 @@ def emit_activation_handoff(ws) -> int:
           "durable /loop schedule registered (.claude/scheduled_tasks.json) "
           "— loop_registered flips true on the schedule's FIRST real "
           "execution, then accept with two ticks + --verify")
+    print("kunglao-init: NOTE (#415) the durable cron takes effect from the "
+          "NEXT Claude Code session start — until then the session re-arm "
+          "chain (hook_activation --heartbeat-on / heartbeat_tick) is the "
+          "tick source; a quiet gap right after registration is deploy-day "
+          "shape, not a dead cron (heartbeat_tick.py --reset-continuity "
+          "re-arms a verified fresh deploy)")
     return RC_OK
 
 
@@ -3134,6 +3181,14 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # rather than polluting a sibling directory.
     _assert_workspace_boundary(ws)
 
+    # 0.1.6 version-consistency gate — BEFORE any write (statusline, hooks,
+    # scaffold): an initialized workspace stamped != the executing skill
+    # version refuses re-entry (resume / anchor repair / type repair);
+    # --force is the operator's explicit rebuild bypass.
+    gate_rc = refuse_version_mismatch(ws, force=force)
+    if gate_rc is not None:
+        return gate_rc
+
     # STATUSLINE DEPLOYMENT IS THE FIRST STEP of init (issue 212 owner priority
     # update). Before the toolchain probe, before the anchor interview, so
     # the operator's success/failure signal exists before anything else.
@@ -3380,6 +3435,10 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
 
+        mcp_rc = refuse_missing_required_mcp(ws, project_type)
+        if mcp_rc is not None:
+            return mcp_rc
+
         # apkid recommendation summary (issue 209): the gate probed
         # presence only; the first-claim run decision stays with the agent.
         for _rec in apkid_summary_lines(report):
@@ -3419,6 +3478,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         try:
             _promise = intake_promise.build(report, task_spec, ws)
             _promise_path = intake_promise.apply(ws, _promise)
+            print(f"kunglao-init: intake-promise written: {_promise_path}")
         except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
             print(f"kunglao-init: ERROR intake-promise failed: {exc}",
                   file=sys.stderr)
@@ -3427,8 +3487,41 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                                  detail=f"intake-promise: {exc}")
             except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
                 warn("run", f"{type(exc).__name__}: {exc}")
-        else:
-            print(f"kunglao-init: intake-promise written: {_promise_path}")
+
+    # #407 (0.1.6 sweep): scaffold goal-operationalization.yaml — the first
+    # dispatch refuses an unaudited translation, and before this scaffold
+    # the operator had to hand-write the whole file. Init pre-fills the
+    # goal verbatim + the required structure in DRAFT form (generalization
+    # stays `required`, no --stamp-dispatch): the validator gate still
+    # refuses until the operator fills + verifies + stamps it. Written ONLY
+    # when absent (never clobbers an audited translation).
+    goal_op_path = ws / "goal-operationalization.yaml"
+    if not goal_op_path.exists():
+        try:
+            _spec = (yaml.safe_load((ws / "task_spec.yaml")
+                                    .read_text(encoding="utf-8"))
+                     if (ws / "task_spec.yaml").is_file() else {}) or {}
+            _goal = str((_spec or {}).get("goal_verbatim")
+                        or "(fill: the user's goal, verbatim)")
+            from harness_common import utc_now_z
+            goal_op_path.write_text(yaml.safe_dump({
+                "schema": "goal-operationalization/1",
+                "draft": True,
+                "goal_verbatim": _goal,
+                "deliverables": [],
+                "acceptance": [],
+                "not_done": [],
+                "diff_vs_verbatim": "",
+                "generalization": "required",
+                "declared_ts": utc_now_z(),
+            }, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            print(f"kunglao-init: goal-operationalization scaffold written "
+                  f"(DRAFT — fill deliverables/acceptance/not_done, then "
+                  f"goal_operationalization.py --stamp-dispatch before the "
+                  f"first dispatch): {goal_op_path}")
+        except OSError as exc:
+            print(f"kunglao-init: WARNING goal-operationalization scaffold "
+                  f"skipped: {exc}", file=sys.stderr)
 
     # #15: sample difficulty calibration — 证据面(扫描器输出) -> easy/medium/
     # hard/max 内在难度，落 evidence/difficulty.json + task_spec `difficulty:`
@@ -3600,6 +3693,47 @@ def apkid_summary_lines(report: "toolchain.ToolchainReport") -> list[str]:
                 "recommended for apk fingerprinting (packer / obfuscator "
                 "/ anti-*); agent to run on first claim")
     return lines
+
+
+# 0.1.6 sweep (owner ruling, 51job live run): MCP supply items that REFUSE
+# init when missing for their lane — camoufox-reverse on web ("web项目必须
+# 要装"). The pre-existing desktop HARD items (ghidra/x64dbg/...) KEEP
+# their historical record-not-refuse posture (#474) — this gate covers
+# only the lane-required web supply.
+REQUIRED_MCP_BY_TYPE = {"camoufox-reverse": {"web"}}
+
+
+def refuse_missing_required_mcp(ws: Path, project_type: str) -> int | None:
+    """0.1.6 sweep (owner ruling, 51job live run): REQUIRED MCP supply for
+    the lane — a missing camoufox-reverse on web refuses init with the
+    carriage remediation as the fix (enable the plugin / install the
+    camoufox-reverse-mcp dep). Remediation tier AGENT-DO: the agent /
+    init-worker can run the pip install itself; a genuine failure
+    escalates to a blocker with the error attached.
+    Returns RC_TOOLCHAIN_REFUSE on refusal, None when the supply is
+    satisfied. Writes nothing."""
+    mcp_hard_missing = [
+        c for c in mcp_probe.check_mcp(ws, project_type)
+        if c.name in REQUIRED_MCP_BY_TYPE
+        and project_type in REQUIRED_MCP_BY_TYPE[c.name]
+        and c.status == "FAIL" and c.fix
+    ]
+    if not mcp_hard_missing:
+        return None
+    print(
+        "kunglao-init: REFUSE — required MCP supply missing "
+        "(remediation tier AGENT-DO: the agent can run the "
+        "command itself; a genuine failure escalates to a "
+        "blocker):",
+        file=sys.stderr,
+    )
+    for c in mcp_hard_missing:
+        print(f"kunglao-init:   [FAIL] {c.name} — {c.detail}",
+              file=sys.stderr)
+        print(f"command: {c.fix}", file=sys.stderr)
+    print("kunglao-init: NOT initialized (no scaffold written, "
+          "no .claude/ created)", file=sys.stderr)
+    return RC_TOOLCHAIN_REFUSE
 
 
 def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
