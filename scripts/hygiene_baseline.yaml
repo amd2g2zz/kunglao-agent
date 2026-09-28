@@ -1185,6 +1185,8 @@ files:
     r1: 6
   tests/test_state_anchor_hyp_pointers_528.py:
     r1: 3
+  tests/test_state_layer_diagnosis_213.py:
+    r1: 1
   tests/test_static_tools_1b.py:
     r1: 2
   tests/test_static_tools_1c.py:
@@ -1253,7 +1255,7 @@ files:
   tests/test_tool_value_881.py:
     r1: 2
   tests/test_toolchain.py:
-    r1: 19
+    r1: 21
   tests/test_toolchain_bug_756.py:
     r1: 5
     r2: 1
