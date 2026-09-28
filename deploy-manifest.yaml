@@ -560,6 +560,10 @@ files:
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
     sha256: ec3c9cc325a674588bf1a0b124400678293d006680c96351728d48fbeaf32140
+  - src: scripts/jadx_exec.py
+    dest: .claude/scripts/jadx_exec.py
+    kind: scaffold
+    sha256: b93fe96091624f40e96a7f631e19bf4847d8cae69eab9d9bdb63758f3bc52792
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
@@ -1635,7 +1639,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 5cdfe2c7fa57c06142b28e20e0c94aa11bf9695985c5c1f672ccb93fee2ce7f1
+    sha256: 38392807cebb25517efdb92894532e18500087d6d985b44ac30f0ed255bba924
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

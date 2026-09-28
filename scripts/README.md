@@ -242,6 +242,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `jadx_exec.py` | jadx execution contract (#426): memory-bounded wrapper keyed off apk_mem_gate verdicts — whole-APK `--no-res` (bounded heap/threads); per-dex ladder on `targeted-jadx` (zip-entry dex extraction + relevance-marker scan, isolated runs); OOM fallback with recorded transitions + discarded rung-1 partials; `smali-only`/`refuse` = zero jadx; unified `-d OUT` layout + `jadx_exec_summary.json` record face. Migration targets (tool_tiers android-dex-static rows, route_capability jadx lanes, agent playbooks) deliberately NOT migrated in this PR | tests |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
 | `contracts.py` | cross-process contract registry (#102) — exit-code registry (convergence 0-5 + 64/65, plan_drift --auto trio `PLAN_DRIFT_AUTO_RCS`), event field schema (`EVENT_FIELD="action"`), gate-subprocess legal rc sets; single definition imported by every producer/consumer face (drift of this class can no longer pass CI) | hooks, lib(2: convergence_check, event_taxonomy), tests |
