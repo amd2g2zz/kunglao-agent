@@ -28,6 +28,7 @@ from worker_budget_core import (  # noqa: F401 — broad re-export surface:
 from worker_budget_core import check_claim_status_change  # noqa: E402,F401
 from worker_budget_gates import (
     check_workers_lt_3, check_promotion_attempts, check_tools_allowed,
+    check_max_retries,  # #427: the #604 breaker wired into live enforcement
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
@@ -726,6 +727,19 @@ def pre_check(payload: dict, paths: dict) -> int:
         paths.get('workspace'), cid, payload, prompt)
     checks = [
         ('workers', check_workers_lt_3(paths)),
+        # issue #427: the #604 silent-failure circuit breaker graduates
+        # from latent (built, never called by any enforcement path) to
+        # live battery enforcement — a dispatch whose (worker_id, claim_id)
+        # retry counter has hit MAX_RETRIES=3 is REJECTED with the
+        # escalation message (failure-analysis artifact REQUIRED). Worker-
+        # health slot, right after workers-lt-3. Worker identity = payload
+        # tool_input.name (agent_name) — the SAME identity the approval
+        # point registers via register_worker; an absent name stays the
+        # gate's own documented FAIL_OPEN skip (no fabricated id). The
+        # check's internal FAIL_OPEN-on-scan semantics (missing counter
+        # file / unreadable workspace) are unchanged by this wiring.
+        ('max_retries', check_max_retries(paths.get('workspace'),
+                                          agent_name, cid)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),

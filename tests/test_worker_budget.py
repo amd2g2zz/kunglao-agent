@@ -448,17 +448,20 @@ def test_check_worker_plan_bom_template_rejects(tmp_path):
     assert 'empty-shell' in msg.lower()
 
 
-def test_check_worker_plan_unreadable_fails_open(tmp_path):
-    """Issue 294 (updated for the issue 239 v2 contract): on a RE-dispatch, an unreadable plan (a
-    directory shadowing the plan name) is a system error — fail OPEN with an
-    honest note instead of a misleading empty-shell reject blaming the
-    worker."""
+def test_check_worker_plan_unreadable_fails_closed(tmp_path):
+    """Issue 294 (updated for the issue 239 v2 contract), then re-pinned by
+    #427 (declared semantic change per the #406 ruling — gate error =
+    reject with recorded reason; this is the old fail-open pin UPDATED, not
+    silently weakened): on a RE-dispatch, an unreadable plan (a directory
+    shadowing the plan name) is a gate ERROR — REJECT with the OSError
+    cause, because the worker cannot demonstrate its execution basis."""
     ws = tmp_path / 'ws'
     _seed_prior_dispatch(ws)
     (ws / 'runs' / 'plan-C001.md').mkdir()  # directory, not a file
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
-    assert ok, msg
+    assert not ok, msg
     assert 'unreadable' in msg
+    assert 'IsADirectoryError' in msg  # the OSError cause is surfaced
 
 
 def test_check_worker_plan_exact_name_accepts(tmp_path):

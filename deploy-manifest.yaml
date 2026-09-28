@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 2ec7e60fb04acc273d6b9e1f5b69e631dccc1eb6836131fde8da54ca0b1a13f1
+    sha256: 366d864fe83f11aa5b2156420120164ea48e89ab4c3ee7fe3bf5d27c1884021a
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 0e3bcea61c7b39bff33cf6ee8b4c72417eaee7c72740272e6071edf57194182e
+    sha256: e9dfbb61fee2d366e9f246d30ee054ebdd0931bceb7d62520a841112d0d22395
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1087,7 +1087,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 9adb2861d083b14655c075545311b9fecc69d526b7f5f1d8d431674507cf723f
+    sha256: c6fd928334aaabe1c89412c565f2b364f7fc1b5b416bdc94881522917292bf73
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
