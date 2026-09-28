@@ -2039,6 +2039,18 @@ QUICK_START_SCAFFOLDS: dict[str, str] = {
 }
 
 
+# #432: the dispatch-envelope doc face — every scaffold (lane and type
+# alike) teaches the v1 envelope WITH the method_family field. One shared
+# line, never per-type drift; the registry (scripts/method_families.yaml)
+# is the closed vocabulary the field draws from.
+DISPATCH_ENVELOPE_LINE = (
+    "\nDispatch shape (protocol v1): {\"kunglao_dispatch\": "
+    "{\"version\": 1, \"claim\": \"C-NNN\", \"tier\": 1, \"tools\": [...], "
+    "\"agent\": \"...\", \"method_family\": \"<token>\"}} — method_family "
+    "names the APPROACH (registry: scripts/method_families.yaml; "
+    "other(<one-line>) when nothing fits).")
+
+
 def quick_start_scaffold(project_type: str | None,
                          target_name: str | None = None,
                          lane: str | None = None) -> str:
@@ -2052,7 +2064,11 @@ def quick_start_scaffold(project_type: str | None,
     Issue 208: a non-malware lane has no `bins/<sha>` target — its scaffold
     is the lane's material workflow (the per-type scaffolds above all open
     on a binary sample). The stub lanes get the same shape, with their
-    material line naming what they consume."""
+    material line naming what they consume.
+
+    #432: both faces append the dispatch-envelope line (the envelope
+    template doc face — method_family is a required, gate-validated
+    field)."""
     if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
         return (
             f"**Material**: {lane_spec.material(lane)}.\n"
@@ -2068,9 +2084,11 @@ def quick_start_scaffold(project_type: str | None,
             "claim-register.yaml; one worker per claim.\n"
             f"4. Close: verify each answer by the declared method "
             "(reproduction / replay-evidence against recorded pairs); "
-            "red-team before PROVEN.")
+            "red-team before PROVEN."
+            + DISPATCH_ENVELOPE_LINE)
     key = project_type if project_type in QUICK_START_SCAFFOLDS else "windows"
-    return QUICK_START_SCAFFOLDS[key].format(target=target_name or "sample")
+    return (QUICK_START_SCAFFOLDS[key].format(
+        target=target_name or "sample") + DISPATCH_ENVELOPE_LINE)
 
 
 def _setup_web_env(ws: Path) -> None:

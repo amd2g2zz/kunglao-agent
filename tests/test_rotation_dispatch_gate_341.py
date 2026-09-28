@@ -161,7 +161,8 @@ def test_none_claim_id_is_never_flagged(tmp_path):
 # =====================================================================
 
 _ENVELOPE = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-             '"tier": 1, "tools": ["grep"], "agent": "w-test"}}')
+             '"tier": 1, "tools": ["grep"], "agent": "w-test", '
+             '"method_family": "static-decompile"}}')
 
 
 def _payload(prompt: str) -> dict:

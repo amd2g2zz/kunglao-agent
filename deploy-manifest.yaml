@@ -75,11 +75,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: a46ac378872b5fb3d2118ec151ddc1729d87070f1910e5950b2d468bb3e59587
+    sha256: 366d864fe83f11aa5b2156420120164ea48e89ab4c3ee7fe3bf5d27c1884021a
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 6146bdbc1ae54f49b6e7de8a592a2fef919025beeac70e17a8324a4fd558b31d
+    sha256: e9dfbb61fee2d366e9f246d30ee054ebdd0931bceb7d62520a841112d0d22395
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -311,7 +311,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: 3b7b0ec7411450f45a67e426acf4a3dd7e8a069b511e6114fab9198866e18e44
+    sha256: a1afaafeb545b9ed8d37651b1c181f259f47402fdb55f36744d3d4e2118ed1ff
   - src: scripts/deploy_shim.py
     dest: .claude/scripts/deploy_shim.py
     kind: scaffold
@@ -463,7 +463,7 @@ files:
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
-    sha256: 880aea6d9eb899cc33c582ee36c1d2f3133c19b0f7d3a27b5d6c673ed43b3da7
+    sha256: e3f58cb62d38743cc371553b8794449c20b706e759839c7bf1b9c728017e1452
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -599,7 +599,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 891eb2b10f2f9f46b14233d740f8054cfeb9bfc8573e86fa8f05f9add6ea7080
+    sha256: 214ec99eef6e39e1ea167309a7f02d9e160a10c35ae5307d8b6287b7b6e261da
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -700,6 +700,10 @@ files:
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
     sha256: f9b0969500e5c7f516aa92c1b02be2d5d9e9d0a2b33857c8c6c3c204efc16def
+  - src: scripts/method_families.py
+    dest: .claude/scripts/method_families.py
+    kind: scaffold
+    sha256: c184404d67cb45407e98cb79444fac20fd47fc8d138a68edef4ab95f2cc08cd2
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -1104,6 +1108,26 @@ files:
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
     sha256: 2d2541cb224ce6ba3ee2ee6bc06bcd3e04b86bd7108d72fae8b91103e607ae05
+  - src: scripts/hygiene_baseline.yaml
+    dest: .claude/scripts/hygiene_baseline.yaml
+    kind: scaffold
+    sha256: 27a4328fbf24ce9b431633ed72275c44d14fd84be96245c9acfec6a1360721dd
+  - src: scripts/mechanisms.yaml
+    dest: .claude/scripts/mechanisms.yaml
+    kind: scaffold
+    sha256: c65c39b1c9ff249b6af73f255350e95163cb57f2609e4df4c94c4bfeb21dcf3c
+  - src: scripts/method_families.yaml
+    dest: .claude/scripts/method_families.yaml
+    kind: scaffold
+    sha256: bd8429635411c864a5fd7ce15669fe3bd8da64a8c5c3aca16166c231af09597b
+  - src: scripts/silent_except_baseline.yaml
+    dest: .claude/scripts/silent_except_baseline.yaml
+    kind: scaffold
+    sha256: c07a50bb6c42e13458c31426aef2ffe41a061f206a80d620ea881aceee882877
+  - src: scripts/tool_tiers.yaml
+    dest: .claude/scripts/tool_tiers.yaml
+    kind: scaffold
+    sha256: e7e9a3d76b918c7e6602afa23324231d43b7ff0138b533dba7a3b7ec0948e86e
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
@@ -1671,7 +1695,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 0821e8cec44ed6d630f324fb4f28a7b3e301dba9ffc4a1451383543ee393fab5
+    sha256: 16fe0e67c4056eb1450070322f4cd63f613fa5c1077a5f8bf3314cfd06ebb9ce
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

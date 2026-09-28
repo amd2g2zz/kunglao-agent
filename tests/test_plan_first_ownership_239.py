@@ -57,7 +57,8 @@ def _payload(prompt: str) -> dict:
 
 def _dispatch_prompt() -> str:
     return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-            '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
+            '"tier": 1, "tools": ["grep"], "agent": "w-test", '
+            '"method_family": "static-decompile"}}\n'
             'facts-snapshot: 1 facts')
 
 

@@ -74,7 +74,8 @@ def _run_pre_check(ws: Path, claim: str, marked: bool) -> int:
     import worker_budget as wb
     prompt = (json.dumps({"kunglao_dispatch": {
         "version": 1, "claim": claim, "tier": 1,
-        "tools": ["grep"], "agent": "w-test"}})
+        "tools": ["grep"], "agent": "w-test",
+        "method_family": "static-decompile"}})
         + "\nfacts-snapshot: 1 facts"
         + "\nagent-reasoning: executing the STALLED verdict's prescribed "
           "decomposition remedy (issue-249); minted sub-claim dispatch"

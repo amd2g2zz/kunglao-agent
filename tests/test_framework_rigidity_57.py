@@ -412,7 +412,8 @@ def test_g3_approval_point_stamps_the_anchor(tmp_path, capsys):
             "name": "w-test",
             "description": "",
             "prompt": '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-                      '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
+                      '"tier": 1, "tools": ["grep"], "agent": "w-test", '
+                      '"method_family": "static-decompile"}}\n'
                       "facts-snapshot: 1 facts",
         },
     }

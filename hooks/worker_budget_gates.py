@@ -721,6 +721,12 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     present but bare) does NOT satisfy the re-dispatch leg — it is existence
     without content.
 
+    #427 (following the #406 ruling): a plan file that EXISTS but cannot be
+    READ (locked / permission / directory shadowing the name) fail-closes
+    on the re-dispatch leg — gate error = REJECT with the recorded cause
+    (a gate_error:plan_read warn). The pre-#427 fail-open 'content not
+    verified' pass is gone.
+
     First-dispatch vs re-dispatch is decided ONLY from the approval-point
     anchor log (what stamp_dispatch_anchor wrote for PRIOR dispatches): the
     current dispatch's own KUNGLAO_DISPATCH_CONTEXT / context-file nonce is
@@ -751,12 +757,21 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
             # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
             # template cannot smuggle '﻿goal:' past the empty-shell check.
             plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
-        except OSError:
-            # unreadable (locked / directory shadowing the name) — fail
-            # OPEN with an honest note; a misleading empty-shell reject
-            # would blame the worker for a system error.
-            return (True, f'plan file exists (unreadable, content not '
-                          f'verified): {plan_path.name}')
+        except OSError as exc:
+            # #427 (following the #406 ruling / #424 precedent): a gate
+            # ERROR is a REJECT with the recorded reason — on a
+            # RE-dispatch an unreadable plan (locked / permission /
+            # directory shadowing the name) means the worker cannot
+            # demonstrate its execution basis. Was: a fail-open
+            # 'content not verified' pass.
+            warn('gate_error:plan_read', f'{type(exc).__name__}: {exc}')
+            return (False, (
+                f'PLAN GATE: plan file {plan_path.name} is unreadable '
+                f'({type(exc).__name__}: {exc}) — the worker cannot '
+                f'demonstrate its execution basis for this re-dispatch; '
+                f'repair or re-author runs/{plan_path.name}, then '
+                f're-dispatch.'
+            ))
         if _plan_is_empty_shell(plan_text):
             return (False, (
                 f'{plan_path.name} is an empty-shell template (goal/preflight/'
@@ -1468,6 +1483,16 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     text_lower = f'{desc}\n{prompt}'.lower()
+    # #432: the method-family declaration (v1 envelope field or v0 prose
+    # marker) is protocol metadata, not dispatch prose — a token like
+    # `static-decompile` carries the category word `static` and would
+    # misfire the keyword scan (advisory noise for every declaring
+    # dispatch). Strip BOTH declaration faces before evaluation;
+    # `tool-catalog:` markers below are unaffected (they never ride the
+    # method-family declaration).
+    text_lower = re.sub(
+        r'"method_family"\s*:\s*"[^"]*"|method-family:[^\n]*', '',
+        text_lower)
     cited = None
     if 'tool-catalog:' in text_lower:
         m = re.search(r'tool-catalog:\s*(.+)', text_lower)
