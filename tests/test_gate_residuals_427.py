@@ -72,7 +72,8 @@ def _dispatch_prompt() -> str:
     shape test_worker_budget.py::test_pre_check_accepts_first_dispatch
     _without_plan uses)."""
     return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-            '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
+            '"tier": 1, "tools": ["grep"], "agent": "w-test", '
+            '"method_family": "static-decompile"}}\n'
             'facts-snapshot: 1 facts')
 
 

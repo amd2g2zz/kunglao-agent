@@ -107,6 +107,7 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
 2. Mount the material under the workspace (`corpora/`, `references/`, `dataset/`, or the lane's own dir) and record its provenance (path + sha256) before deriving anything.
 3. Each unresolved observation becomes ONE claim in claim-register.yaml; one worker per claim.
 4. Close: verify each answer by the declared method (reproduction / replay-evidence against recorded pairs); red-team before PROVEN.
+Dispatch shape (protocol v1): {"kunglao_dispatch": {"version": 1, "claim": "C-NNN", "tier": 1, "tools": [...], "agent": "...", "method_family": "<token>"}} — method_family names the APPROACH (registry: scripts/method_families.yaml; other(<one-line>) when nothing fits).
 
 ## Analysis material (lane: algorithm)
 

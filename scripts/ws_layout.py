@@ -61,6 +61,22 @@ def resolve_quiet(arg: str | None, *, sentinel: str | None = None) -> Path:
     return sub if (sub / marker).exists() else cwd
 
 
+def resolve_payload_ws(payload: dict) -> Path | None:
+    """Payload-event face (#863 Family C home): the workspace is the
+    manifest workspace_dir sibling (or the payload cwd itself) holding a
+    workspace marker (claim register or hook state). None when no marker —
+    payload events never trust a bare path. Hooks delegate here instead
+    of carrying layout literals (#434 wiring faces)."""
+    import env_manifest  # same scripts/ dir (lazy, like resolve_quiet)
+    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
+    layout = env_manifest.layout_conventions(cwd)
+    for base in (cwd / layout.workspace_dir, cwd):
+        if (base / layout.claim_register).exists() \
+                or (base / ".hook_state.json").exists():
+            return base
+    return None
+
+
 def resolve_strict(arg: str | None) -> Path:
     """#228 family: arg wins (resolved); else probe cwd then the manifest
     workspace_dir sibling for the claim register or the state file; nothing
