@@ -89,6 +89,14 @@ files:
     r1: 17
   scripts/dual_gate.py:
     r1: 3
+  scripts/e2e/checkpoints.py:
+    r1: 4
+  scripts/e2e/llm_faces.py:
+    r1: 1
+  scripts/e2e/model.py:
+    r1: 6
+  scripts/e2e/runtime.py:
+    r1: 4
   scripts/emit_gate.py:
     r1: 5
   scripts/encoding_lint.py:
@@ -666,6 +674,9 @@ files:
     r1: 1
   tests/test_dynamic_channel_698.py:
     r1: 1
+  tests/test_e2e_runner.py:
+    r1: 5
+    r2: 4
   tests/test_emit_gate_880.py:
     r1: 4
   tests/test_encoding_declarations.py:
