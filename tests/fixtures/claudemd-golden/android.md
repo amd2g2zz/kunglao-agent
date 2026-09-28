@@ -110,6 +110,7 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
    (custom port) or android_server.
 4. Stuck fallback: frida hook + unidbg hybrid (AND gate: frida
    data sufficient + decompile done + still stuck).
+Dispatch shape (protocol v1): {"kunglao_dispatch": {"version": 1, "claim": "C-NNN", "tier": 1, "tools": [...], "agent": "...", "method_family": "<token>"}} — method_family names the APPROACH (registry: scripts/method_families.yaml; other(<one-line>) when nothing fits).
 
 ## Sample under analysis
 

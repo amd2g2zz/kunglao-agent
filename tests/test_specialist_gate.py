@@ -60,8 +60,10 @@ def _desc(task: str = 'do the task') -> str:
 
 def _prompt(task: str = 'do the task') -> str:
     # canonical prompt = 形状行 + facts-snapshot 标记行（S1c 门要求两者）
+    # #432: v0 形状以 prose 标记行声明 method-family
     return (f'[T1 tools=grep] claim C-001 {task}' + chr(10)
-            + 'facts-snapshot: 1 facts')
+            + 'facts-snapshot: 1 facts' + chr(10)
+            + 'method-family: static-decompile')
 
 
 PROMPT = 'facts-snapshot: 1 facts'
