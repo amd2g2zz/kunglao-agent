@@ -50,9 +50,17 @@ EXPECTED_VERSION = "0.1.6"
 # "0.1.5". (Issue 258; scan-regression fix for PR 268.)
 PLUGIN_VERSION = "0.1.6"
 # The #366 field set: identity metadata only (issue body scope item 1).
-REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
+REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage",
+                   "license", "mcpServers"}
 # Component-path fields that would change runtime behavior (#364, not #366).
-FORBIDDEN_FIELDS = {"skills", "commands", "agents", "hooks", "mcpServers",
+# #408 (owner verdict 2026-09-27) amends the #366 metadata-only scope:
+# `mcpServers` is now a DECLARED field (plugin-carried MCP — camoufox-
+# reverse ships with the plugin; zero registration in any workspace, the
+# root-owned ~/.claude.json sudo trap is unreachable by construction).
+# It is NOT component-path wiring (no skills/commands/agents identity
+# surface — the 7f5f179 breakage class) and the identity fields of the
+# original pin stay exactly as they were.
+FORBIDDEN_FIELDS = {"skills", "commands", "agents", "hooks",
                     "lspServers", "outputStyles", "workflows"}
 
 
@@ -75,15 +83,23 @@ def test_manifest_exists_and_minimal():
 
 
 def test_manifest_declares_only_the_366_field_set():
-    """Schema pin: exactly the #366 fields, no component wiring.
+    """Schema pin: exactly the #366 identity fields + the #408 mcpServers
+    carriage, no component-path wiring.
 
-    Required fields absent → manifest invalid; component fields present →
-    scope creep into #364 (behavioral surface must soak before v1.0).
+    Required fields absent → manifest invalid; component-path fields
+    present → scope creep into #364 (behavioral surface must soak before
+    v1.0). mcpServers is the #408 amendment (plugin-carried MCP), not a
+    #364 component path.
     """
     m = _manifest()
     assert set(m) == REQUIRED_FIELDS, (
-        f"manifest keys {sorted(set(m))} != #366 field set {sorted(REQUIRED_FIELDS)}"
+        f"manifest keys {sorted(set(m))} != #366+#408 field set "
+        f"{sorted(REQUIRED_FIELDS)}"
     )
+    # #408: the carriage must be real — camoufox-reverse ships with the
+    # plugin (workspace-init never needs a user-level registration).
+    servers = m["mcpServers"]
+    assert isinstance(servers, dict) and "camoufox-reverse" in servers
 
 
 def test_manifest_forbids_component_paths():

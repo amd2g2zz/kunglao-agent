@@ -466,17 +466,27 @@ def test_init_unparseable_task_spec_stays_hard(tmp_path, monkeypatch, capsys):
 
 # ---------- issue evidence 2 fixed as the negative example ----------
 
+def _seed_ws_mcp(ws: Path, servers: list[str]) -> None:
+    """#408: seed the workspace .mcp.json (the sanctioned surface). The
+    isolated fake ~/.claude.json registry stays as a POISON path — the
+    probe must never read it."""
+    (ws / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {n: {} for n in servers}}),
+        encoding="utf-8")
+
+
 def _complete_static_env(tmp_path, monkeypatch) -> Path:
     """An otherwise-COMPLETE windows toolchain with ONLY the VM missing:
     die/floss stubs on PATH (pefile is importable in the project venv),
-    ghidra + sequential-thinking + x64dbg registered in the isolated MCP
-    registry (decompiler supply via MCP → WARN, mcp items PASS), no
-    KUNGLAO_VM_HOST. The VM channel is the sole HARD gap."""
+    ghidra + sequential-thinking + x64dbg registered in the workspace
+    .mcp.json (#408 surface; decompiler supply via MCP → WARN, mcp items
+    PASS), no KUNGLAO_VM_HOST. The VM channel is the sole HARD gap."""
     ws = _ws_with_sample(tmp_path)
     fb = _stub_bin(tmp_path)
     registry = _fake_registry(
         tmp_path, ["ghidra", "sequential-thinking", "x64dbg"])
     _hermetic_env(monkeypatch, fake_bin=fb, claude_json=registry)
+    _seed_ws_mcp(ws, ["ghidra", "sequential-thinking", "x64dbg"])
     return ws
 
 
@@ -527,6 +537,7 @@ def test_init_assume_yes_reprobe_keeps_task_spec(tmp_path, monkeypatch,
     registry = _fake_registry(
         tmp_path, ["ghidra", "sequential-thinking", "x64dbg"])
     _hermetic_env(monkeypatch, fake_bin=fb, claude_json=registry)
+    _seed_ws_mcp(ws, ["ghidra", "sequential-thinking", "x64dbg"])
     _write_task_spec(ws, STATIC_ONLY_SPEC)
     mod = _load_init_module()
 

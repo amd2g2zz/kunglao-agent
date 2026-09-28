@@ -212,9 +212,10 @@ def test_l3_unregistered_hard_recorded_manual_not_silent(tmp_path):
 
 
 def test_l3_registered_pass(tmp_path):
-    """ghidra registered user-global -> manifest records pass."""
+    """ghidra registered in the workspace .mcp.json (#408 surface) ->
+    manifest records pass."""
     ws = _mk_ws(tmp_path)
-    (ws.parent / "fake-claude.json").write_text(
+    (ws / ".mcp.json").write_text(
         json.dumps({"mcpServers": {"ghidra": {"command": "x"}}}), encoding="utf-8")
     r = _run_init(ws)
     assert r.returncode == RC_OK, r.stderr

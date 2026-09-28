@@ -88,6 +88,15 @@ HEARTBEAT_STALE_MINUTES = 35
 # this value is NEW in #754, not a surveyed pre-existing constant.
 TICK_INTERVAL_DEFAULT_MIN = 5
 
+# scripts/hooks_selfcheck.py + scripts/statusline_snapshot.py (#412): the
+# component-truth staleness allowance, in TICKS. The self-check rewrites
+# runs/.hooks-selfcheck.json at tick step 0, and the statusline component
+# dots read that file — a source older than N ticks means the CHECKER itself
+# stopped, and its component verdicts must render STALE (red), never green.
+# Value 2 mirrors the continuity-gate adjudication above (one missed tick is
+# jitter; two is a dead cron) and the DEAD_WORKER_MINUTES = 2x pattern.
+SCHEDULER_STALE_TICKS = 2
+
 # scripts/heartbeat.py (#4): the continuity verdict reads a SLIDING WINDOW,
 # not the whole durable tick sidecar - a tick participates when it is among
 # the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;

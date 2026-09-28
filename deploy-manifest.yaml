@@ -347,7 +347,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: 2c29bf8a6e23066275db4503eb1200f0eec40ceffbd76f4c89827e6ab648f6c8
+    sha256: 439290165c47b21433ed1d2079b771e6e7d49aee4f8a00a0b982675e7eb35379
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -515,7 +515,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: 4361ff6160c1d5c7dcf2e0113883599524403c74c2cd71456c66e4ad2b3b9e4d
+    sha256: 140d9161f11d8e5c235cc3269c2a0cb841d068c7c0987775fee3b25f9371a128
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
@@ -647,7 +647,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: b977966a157e5fcab4fdaa17a3cb4ab067d32223d2086f8fca65f54610532632
+    sha256: 5c636064a661ab6e5daf87ecad4ced094e47bad40c8ba5c317e416f73d218015
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -667,7 +667,7 @@ files:
   - src: scripts/mcp_probe.py
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
-    sha256: 2fbd62567b7757e192185f991be630cbd39f719db162be9b04ef0f53ef3e013a
+    sha256: 5ab13efbc8739a31868fc478cb7430a26d3e79704ec0802517401e1daf29e20b
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
@@ -935,7 +935,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 590837b12924ff37c8394c0ec4c6de53e30af008af80f413155a73dc771c651e
+    sha256: 1380dc6256f6ee077fac06c4adf73f2f400b07f2b138746ef3a24bce2704883c
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -1067,7 +1067,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 7945705c65b3c0ebfeac182e258be9a581228cce4d0a50d0a325f3cc1a64ea46
+    sha256: 2d2541cb224ce6ba3ee2ee6bc06bcd3e04b86bd7108d72fae8b91103e607ae05
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
@@ -1635,7 +1635,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ad8bb75770809378fde86395ff16a08aa45a3767dd614fe171bc99e78be5c4bf
+    sha256: 5cdfe2c7fa57c06142b28e20e0c94aa11bf9695985c5c1f672ccb93fee2ce7f1
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

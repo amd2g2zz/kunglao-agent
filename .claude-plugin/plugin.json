@@ -6,5 +6,11 @@
     "name": "amd2g2zz"
   },
   "homepage": "https://github.com/amd2g2zz/kunglao-agent",
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "mcpServers": {
+    "camoufox-reverse": {
+      "command": "python",
+      "args": ["-m", "camoufox_reverse_mcp"]
+    }
+  }
 }
