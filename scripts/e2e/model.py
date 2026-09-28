@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
+
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source
 
 # ---------------------------------------------------------------------------
 # exit codes (spec: 0/2/3/4). NOTE: 2 is dual-used — argparse's own usage-
@@ -386,10 +387,6 @@ class DispatchRequest:
             "tier": self.tier, "tools": list(self.tools),
             "agent": self.agent, "emitted_ts": emitted_ts,
         }
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 @dataclass
