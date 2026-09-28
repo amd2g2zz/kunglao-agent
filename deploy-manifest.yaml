@@ -568,6 +568,10 @@ files:
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
     sha256: 5c23561cd4277b439c343ff3e9f5a1f28fc8e8d5503065e5652688b727efb7ac
+  - src: scripts/jadx_exec.py
+    dest: .claude/scripts/jadx_exec.py
+    kind: scaffold
+    sha256: b93fe96091624f40e96a7f631e19bf4847d8cae69eab9d9bdb63758f3bc52792
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
@@ -1643,7 +1647,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 1ccb0980893d6a3b04d72dd1178a51123f62f66b74429365e598ef4cab7e169d
+    sha256: fae5b7cbaf41d0d3d4d3ab7d651d5a2f748b95343d2259d6ec368d1cf1bc403b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
