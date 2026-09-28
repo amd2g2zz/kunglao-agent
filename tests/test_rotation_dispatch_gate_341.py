@@ -17,6 +17,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
@@ -86,11 +88,16 @@ def test_load_flags_skips_unfired_rows(tmp_path):
     assert flags == {"C-001": ["config-decrypt-key"]}
 
 
-def test_load_flags_corrupt_state_degrades_to_empty(tmp_path):
+def test_load_flags_corrupt_state_raises_fail_closed(tmp_path):
+    """FLIPPED (owner ruling 2026-09-28): a corrupt flag store is a gate
+    error — the loader RAISES so check_rotation_experiment fail-closes
+    (was: degrade-to-empty, which let a flagged dispatch slip past a
+    broken store). An ABSENT store stays the designed no-op {}."""
     ws = _mk_ws(tmp_path)
     (ws / "runs" / ".rotation-induction.json").write_text(
         "{not json", encoding="utf-8")
-    assert load_rotation_flags(ws) == {}
+    with pytest.raises(ValueError):
+        load_rotation_flags(ws)
 
 
 # =====================================================================

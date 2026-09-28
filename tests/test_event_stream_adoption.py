@@ -144,7 +144,10 @@ class TestEmitActionVocabulary:
             "stale_plan_on_new_evidence",
             "analysis_recorded", "analysis_blocked",
             # #569 FAIL_OPEN audit faces
-            "top1_fail_open", "decide_fail_open",
+            "decide_fail_open",
+            # owner ruling 2026-09-28 fail-closed faces (top1_fail_open
+            # retired: its only emitter now emits top1_gate_error)
+            "top1_gate_error", "capability_gate_error",
         }
         missing = expected - set(et.EMIT_ACTIONS)
         assert not missing, f"EMIT_ACTIONS missing words: {sorted(missing)}"
