@@ -72,8 +72,9 @@ def session_start(workspace: Path) -> int:
         print(f"[session_start] renewed TTL")
 
         return 0
-    except Exception as exc:
-        print(f"[session_start] ERROR: {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN, recorded
+        from kunglao_log import warn
+        warn("session_start_error", f"{type(exc).__name__}: {exc}")
         return 0  # non-fatal: don't block session
 
 
@@ -111,8 +112,9 @@ def main_with_payload(payload: dict) -> int:
                       "strategy seam):")
                 print(sections)
         except Exception as exc:  # noqa: BLE001 — seam renders nothing on failure
-            print(f"[session_start] WARN: strategy seam unavailable "
-                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
+            from kunglao_log import warn
+            warn("session_start_strategy_seam",
+                 f"{type(exc).__name__}: {exc}")
 
         try:
             import kunglao_log
@@ -120,8 +122,9 @@ def main_with_payload(payload: dict) -> int:
                              action="constitution_injected",
                              detail=str(payload.get("source") or "startup"))
         except Exception as exc:  # noqa: BLE001 — recording never blocks
-            print(f"[session_start] WARN: injection record failed "
-                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
+            from kunglao_log import warn
+            warn("session_start_record",
+                 f"{type(exc).__name__}: {exc}")
         return 0
     except Exception as exc:  # noqa: BLE001 — FAIL_OPEN body level
         print(f"[session_start] ERROR: {exc}", file=sys.stderr)

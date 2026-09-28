@@ -19,7 +19,7 @@ restructured prompt splits along the topology:
 The cron body itself (build_prompt) is the WATCHDOG face: the heartbeat
 demotes to a true watchdog and fires guidance ONLY when an expected event
 did not arrive (report.watchdog.fired — scripts/loop_watchdog.py). A
-quiet watchdog verdict makes the wake a NO-OP: the LLM ends the turn
+quiet watchdog decision makes the wake a NO-OP: the LLM ends the turn
 without re-reading any manual. The born-registered contract (#461) and
 the scheduler's entry markers survive verbatim.
 
@@ -91,7 +91,7 @@ sanctioned channel).{diff_line}"""
 
 def build_prompt(ws: str, interval: str = "5m") -> str:
     """The WATCHDOG cron body (issue 434): registration + one-command tick
-    + the missed-event verdict. The operating manual is NOT here — it is
+    + the missed-event decision. The operating manual is NOT here — it is
     constitution(), injected once at SessionStart."""
     skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
     h = str(skill_dir / "scripts" / "hook_activation.py")
@@ -103,7 +103,7 @@ def build_prompt(ws: str, interval: str = "5m") -> str:
 python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
 
 [Watchdog tick — the heartbeat fires ONLY on missed events]
-0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog verdict
+0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
                                  # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
                                  # a quiet gap right after registration is deploy-day shape, not a dead cron (--reset-continuity re-arms).
    - report.watchdog.fired == false -> this wake is a NO-OP: end the turn NOW. Events already wake the session

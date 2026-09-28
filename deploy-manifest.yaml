@@ -51,7 +51,7 @@ files:
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
-    sha256: 9a25a0e2bde89018fb9351b4e94fe8c02af8b7c2522da8f32ba72387bdca47a0
+    sha256: bc577dd5def82b48076e1c762527b8d5b2dfdf71947e23735a267d4e84548677
   - src: hooks/state_anchor.py
     dest: .claude/hooks/state_anchor.py
     kind: hook
@@ -511,7 +511,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: a5211827471bda5dac19ffebcd7cc0785f218ebbeb41b4c5b3c102382b1cda56
+    sha256: d5a23b5120f3bba9267f186c05a7d0da05713c5bd065ea73f38dee969a7217ec
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
