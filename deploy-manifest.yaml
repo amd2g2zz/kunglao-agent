@@ -11,7 +11,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 022cefd7c97a98114cbbb2b5029ebdee023a4eec63ae842c88eea9dbe5993780
+    sha256: 266dbb82ccefdf6836f1746fba8d4d44a7feab85ea483d5f2175ea468bda96f6
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 41297b3886af469da91a2b44a0e10998153cec53b7f8be947d58b771a1a2c097
+    sha256: 976fabb3b79022d2f5a1258ff930c3330d34223690a5fccf11b5495629ad52cd
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 568fcd8c02988bf6550fd9194d39c0f507baeba1ca6f233ea29c3e89fd29dc7e
+    sha256: a46ac378872b5fb3d2118ec151ddc1729d87070f1910e5950b2d468bb3e59587
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 8c65024d115894826e111494b6c5cc7afb892b41e23cd4cfaed974b89af3a836
+    sha256: 6146bdbc1ae54f49b6e7de8a592a2fef919025beeac70e17a8324a4fd558b31d
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 49b394425b1a6072057d9372999162439f9d52eb920c7f9ae503d9eb14de705d
+    sha256: 366d38f89088fb14f8e6f0b19b00dcb534c45c438a3cb711ca853e30fb4a53d1
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -443,7 +443,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 32b4742a946d5357951510ab560a917405b536cbbd771bfecfddd1fb3141cd6e
+    sha256: 034027ae43352f6f9ec4de8d79845abc39252859495c78d4ef2e5b750104c81d
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
@@ -903,7 +903,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: d50c7cb0a4c26a932099a67f563d981bc71e15265daa7e06d9459b6f8fe732e6
+    sha256: ecd81cfa092ad1366a9e6437c82547add250a92ab131022608e070ecf0953e6d
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1039,7 +1039,7 @@ files:
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
-    sha256: 85767db13b8a3a26ba7cdebaa56bde15ad49981fccb0353f31bb3010818548a4
+    sha256: 8c185ecc523a1ba791bc384f275de9d111768f8de3e9be9cd2c0b8b3d2307825
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
