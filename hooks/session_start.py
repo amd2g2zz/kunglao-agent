@@ -78,15 +78,9 @@ def session_start(workspace: Path) -> int:
 
 
 def _resolve_ws(payload: dict) -> Path | None:
-    """Workspace markers (claim-register.yaml / .hook_state.json) under
-    payload cwd or cwd/malware-analysis-workspace — the deployed hook
-    convention (payload-driven events never trust a bare argv path)."""
-    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / "claim-register.yaml").exists() \
-                or (base / ".hook_state.json").exists():
-            return base
-    return None
+    """Pure delegation to scripts/ws_layout.py (#863 Family C)."""
+    from ws_layout import resolve_payload_ws
+    return resolve_payload_ws(payload)
 
 
 def main_with_payload(payload: dict) -> int:

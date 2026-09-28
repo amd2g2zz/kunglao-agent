@@ -23,12 +23,14 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if ((base / "claim-register.yaml").exists()
-                or (base / ".hook_state.json").exists()):
-            return base
-    return None
+    """Pure delegation to scripts/ws_layout.py (#863 Family C). The import
+    rides the scripts_on_path() authority — in the DEPLOYED shape
+    (uv run python <deployed>/hooks/user_signal_capture.py) sys.path has
+    the hooks dir only, so a bare import would ModuleNotFoundError and the
+    main() cage would swallow it into a silent no-op (reviewer round 2)."""
+    with scripts_on_path():
+        from ws_layout import resolve_payload_ws
+        return resolve_payload_ws(payload)
 
 
 def process_event(payload: dict) -> int:

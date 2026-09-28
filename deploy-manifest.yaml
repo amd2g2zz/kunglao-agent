@@ -51,7 +51,7 @@ files:
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
-    sha256: 1d8fcc3f3dae3623cbfe10dc84bf617a4993779a250ba071f71049cb5d93c485
+    sha256: 9a25a0e2bde89018fb9351b4e94fe8c02af8b7c2522da8f32ba72387bdca47a0
   - src: hooks/state_anchor.py
     dest: .claude/hooks/state_anchor.py
     kind: hook
@@ -59,7 +59,7 @@ files:
   - src: hooks/user_signal_capture.py
     dest: .claude/hooks/user_signal_capture.py
     kind: hook
-    sha256: 7a25ff26b2eeeadf194ca0d4063c771807fe6604d20704c74a1b0a5bd2fa7b71
+    sha256: 286d5f4c4fda3f16896dc6d3ee409a8acdd36408a657719dd2c6358c2125f20d
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
@@ -1091,7 +1091,7 @@ files:
   - src: scripts/ws_layout.py
     dest: .claude/scripts/ws_layout.py
     kind: scaffold
-    sha256: 7c4e59aae5238acaa0066e48156d4192e6ede4ad87a4c627a47a81057f4da9c5
+    sha256: ac0e31417467dda128b0fcd2550ebf7f878c869783d0b8f8af561fa58cf4dbcf
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
@@ -1667,7 +1667,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 1ccb0980893d6a3b04d72dd1178a51123f62f66b74429365e598ef4cab7e169d
+    sha256: dd9a23d0015897b9b62219980baf5f252562e9e71ad2299a85484a6e96604d60
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

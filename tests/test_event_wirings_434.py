@@ -183,3 +183,36 @@ class TestUserPromptObservation:
             {"cwd": str(tmp_path), "prompt": "hi"})
         out = capsys.readouterr().out
         assert rc == 0 and out == ""
+
+
+def test_user_signal_capture_deployed_shape_lands_rows(tmp_path):
+    """Deployed-shape regression (reviewer round 2, #434 CI round): the
+    hook run via its REGISTERED command form — uv run --project <repo>
+    python <repo>/hooks/user_signal_capture.py — must land the
+    operator_observation row. sys.path[0] is the hooks dir only in this
+    shape; a bare ws_layout import silently no-ops through the main()
+    cage (both the #434 observation face AND the #868 ingest face lost).
+    """
+    import os
+    import subprocess
+
+    repo = ROOT
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    payload = {"cwd": str(ws), "prompt": "deployed-shape probe"}
+    env = dict(os.environ, PYTHONUTF8="1", CLAUDE_PROJECT_DIR=str(ws))
+    proc = subprocess.run(
+        ["uv", "run", "--project", str(repo), "python",
+         str(repo / "hooks" / "user_signal_capture.py")],
+        input=json.dumps(payload), capture_output=True, text=True,
+        timeout=120, env=env)
+    assert proc.returncode == 0, proc.stderr[-600:]
+    rows = []
+    for p in sorted((ws / "runs" / "logs").glob("kunglao-*.jsonl")):
+        rows.extend(json.loads(line) for line in
+                    p.read_text(encoding="utf-8").splitlines() if line.strip())
+    acts = {r.get("action") for r in rows}
+    assert "operator_observation" in acts, (
+        f"deployed shape lost the observation face: actions={acts}; "
+        f"stderr tail: {proc.stderr[-300:]}")

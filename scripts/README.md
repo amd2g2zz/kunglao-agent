@@ -243,6 +243,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `workguard.py` | WORKGUARD actionable-set predicate (#434): dispatchable + returned-worker faces, PARK/wall semantics, fail-open with one canonical warn — the turn-exit decision core | hooks (workguard_gate), tests |
+| `strategy_sections.py` | versioned round-strategy/1 seam (#434 consumer face; #431 produces) — pointer + render, absent renders nothing | hooks (SessionStart/WORKGUARD), tests |
+| `loop_watchdog.py` | missed-event predicate (#434): heartbeat cron fires ONLY when an expected event did not arrive | heartbeat_tick, tests |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
 | `contracts.py` | cross-process contract registry (#102) — exit-code registry (convergence 0-5 + 64/65, plan_drift --auto trio `PLAN_DRIFT_AUTO_RCS`), event field schema (`EVENT_FIELD="action"`), gate-subprocess legal rc sets; single definition imported by every producer/consumer face (drift of this class can no longer pass CI) | hooks, lib(2: convergence_check, event_taxonomy), tests |
