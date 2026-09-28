@@ -72,7 +72,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 16
+    r1: 18
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -150,6 +150,8 @@ files:
     r2: 1
   scripts/exogenous.py:
     r1: 2
+  scripts/experience_triples.py:
+    r1: 2
   scripts/external_kicker.py:
     r1: 32
   scripts/fact_contradiction_gate.py:
@@ -201,7 +203,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 198
+    r1: 200
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
@@ -242,6 +244,8 @@ files:
     r1: 30
   scripts/mechanism_scheduler.py:
     r1: 16
+  scripts/method_families.py:
+    r1: 5
   scripts/migrate_facts.py:
     r1: 7
   scripts/mission_ledger.py:
@@ -698,7 +702,7 @@ files:
   tests/test_env_dotenv.py:
     r1: 1
   tests/test_env_drift_475.py:
-    r1: 4
+    r1: 5
   tests/test_env_manifest.py:
     r1: 24
   tests/test_env_negative_rule.py:
@@ -971,6 +975,8 @@ files:
     r1: 4
   tests/test_mechanisms_retirement.py:
     r1: 4
+  tests/test_method_families_432.py:
+    r1: 6
   tests/test_migrate_facts_809.py:
     r1: 1
   tests/test_mission_ledger_823.py:
@@ -1216,7 +1222,7 @@ files:
   tests/test_specialist_contract_expansion.py:
     r1: 8
   tests/test_specialist_gate.py:
-    r1: 4
+    r1: 5
   tests/test_stale_workspace_gate_748.py:
     r1: 1
   tests/test_state_anchor.py:
@@ -1396,7 +1402,7 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 46
+    r1: 48
     r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7

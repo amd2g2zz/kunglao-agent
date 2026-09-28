@@ -1,0 +1,138 @@
+schema: method-families/1
+issue: "432"
+# ---------------------------------------------------------------------------
+# method_families.yaml — the CLOSED method-family vocabulary (#432).
+#
+# THE Q-KEY POLICY (issue 432 header ruling):
+#   A method family names the APPROACH (how the work attacks the claim),
+#   not the tools used to execute it. Method family is the Q key —
+#   Q(state signature, method family); the tool chain is a RIDER that
+#   rides dispatch telemetry and may NEVER enter the key. "grep the
+#   constants" and "ghidra xref the constants" are ONE family
+#   (static-decompile / crypto-core-identification), two riders.
+#
+# REGISTRATION DISCIPLINE (the scripts/event_taxonomy.py EMIT_ACTIONS
+# precedent): one token per approach FACE, lowercase kebab-case, grammar
+# ^[a-z][a-z0-9-]{2,39}$; the gate validates every dispatch against this
+# file — unregistered or missing tokens REJECT fail-closed. The escape
+# hatch is other(<one-line>) — quarantined, triaged, and promoted ONLY by
+# a reviewed registry diff (never auto-promoted).
+#
+# The vocabulary is MINED, not invented. Per-family counts, sources and
+# examples: scripts/method_families.derivation.md (mined from the
+# eval-campaign-v016 corpus, tools/_INDEX.yaml capability tags and the
+# references/ quickref taxonomy). Extend the registry ONLY with a new
+# mining row in the derivation doc.
+# ---------------------------------------------------------------------------
+families:
+  - token: structural-anchoring
+    description: >-
+      Fix the material identity first — sha256 anchors, byte-offset
+      structural maps, DIE/apkid prescan triage — before any behavioral
+      claim (the F001/prescan face every workspace opens with).
+    mined:
+      - "eval-campaign-v016: 3 prescan facts (loop-k3 a1/a2/a3-arm-kdf, T1 prescan of libkdf.so / die.json+apkid.json)"
+      - "eval-campaign-v016: F001-sample-identity (byte-offset structural map + mirrored-hash identity)"
+      - "facts evidence_class=triage x4"
+
+  - token: static-decompile
+    description: >-
+      Read recovered source — decompiled, deobfuscated-normalized or
+      plainly visible — and derive the claim from the code text itself.
+    mined:
+      - "eval-campaign-v016: facts source=static-decompile x8 (loop-k3 a3-net-verify-license F001-F006+F009, a2-arm-kdf F001)"
+      - "facts evidence_class=decompile x5"
+      - "tools/_INDEX.yaml capability tags static:* x17 (disasm, pe-parse, stack-strings, ...)"
+
+  - token: dynamic-trace
+    description: >-
+      Observe the live target — instrumented runs, recorded traffic,
+      debugger/Frida channels — and derive the claim from observed
+      behavior rather than code text.
+    mined:
+      - "eval-campaign-v016: facts source=dynamic-trace x2 (F007 original-artifact-replay, F008 replay-equivalence)"
+      - "facts evidence_class=dynamic x2"
+      - "tools/_INDEX.yaml capability tag dynamic:* family; references/_index-dynamic.md"
+
+  - token: obfuscation-peeling
+    description: >-
+      Strip layered obfuscation — unpack, deobfuscate, index the
+      recovered tree — so later faces read clean structure (the web-re
+      quickref sections 2-3 loop).
+    mined:
+      - "references/re-library/web/labs/web-re-quickref.md sections 'Obfuscation recognition and layered peeling' + 'Index the tree you just recovered'"
+      - "tools/_INDEX.yaml capability tags js:deobfuscate / js:unbundle / js:obfuscation-detect"
+      - "eval-campaign-v016: task family web-pack-sign x25 rows (webpack/pack layers)"
+
+  - token: crypto-core-identification
+    description: >-
+      Identify the (often mutated) crypto primitive at the heart of the
+      target — constant-set diffs against standard algorithms, cipher
+      shape classification — before any protocol claim.
+    mined:
+      - "eval-campaign-v016: F003-mutated-core (standard SHA-256 with fully mutated constant set)"
+      - "tools/_INDEX.yaml cipher_identify (crypto:identify), crypto-tool (crypto:decode)"
+      - "references web-re-quickref 'Crypto-algorithm signatures'; task families mod-crypto-js x20 + mod-crypto-native x11"
+
+  - token: kdf-chain-reconstruction
+    description: >-
+      Reconstruct the key-derivation chain end to end — seed input,
+      iterated hash/counter structure, output width — as an executable
+      recipe rather than prose.
+    mined:
+      - "eval-campaign-v016: F004-kdf-chain (sk = H(H(H(secret||challenge))) over the mutated core)"
+      - "task families arm-native-kdf x17 + win-pe-kdf x12 rows"
+
+  - token: protocol-flow-reconstruction
+    description: >-
+      Map the wire protocol — round-trips, exact JSON/payload shapes,
+      signed-parameter locations — into a replayable contract.
+    mined:
+      - "eval-campaign-v016: F002-protocol-flow (two POST round-trips and their exact JSON shapes)"
+      - "task families net-verify-license x22 + req-sign x21 rows"
+      - "references web-re-quickref 'Signed-parameter location workflow'"
+
+  - token: anti-analysis-discrimination
+    description: >-
+      Separate real paths from anti-analysis decoys — tripped canaries,
+      timing checks, poison outputs — and prove which branch is live.
+    mined:
+      - "eval-campaign-v016: F006-antidebug-decoy-path (tripped canary sends length-derived decoy)"
+      - "references/_index-anti-analysis.md"
+      - "task family smc-x86 x13 rows (SMC stub + XOR-corrupt anti-debug decoy)"
+
+  - token: replay-harness-verification
+    description: >-
+      Verify by replay — rebuild the algorithm offline and prove
+      byte-equivalence against recorded pairs (re-implementation as the
+      oracle, never re-scoring by eye).
+    mined:
+      - "eval-campaign-v016: checker_kind=replay-roundtrip x88 result rows"
+      - "eval-campaign-v016: F007/F008 replay-equivalence facts"
+      - "references web-re-quickref 'verify-by-replay loop'"
+
+  - token: pair-match-verification
+    description: >-
+      Verify by deterministic pair matching — captured input/output
+      pairs reground through the candidate implementation and compared
+      field-by-field.
+    mined:
+      - "eval-campaign-v016: checker_kind=pair-match x53 result rows"
+
+  - token: red-team-verification
+    description: >-
+      Adversarial re-derivation — an independent checker attacks the
+      claim from raw evidence before promotion to PROVEN (maker-claim is
+      STAMP until refutation fails).
+    mined:
+      - "eval-campaign-v016: dispatch rows agent=kunglao-redteam x42 + verdict-scorer x16 (adversarial verify face)"
+      - "eval-campaign-v016: drift_verifier_passthrough events x35"
+
+  - token: hypothesis-falsification
+    description: >-
+      Drive the hypothesis layer by falsifiers — every candidate enters
+      with a named kill experiment; pick the one experiment that
+      discriminates the competing explanations.
+    mined:
+      - "references/re-library/method/process/falsifier-library.md (19 hypothesis families with kill experiments)"
+      - "hypothesis_store / hypothesis_bridge dispatch faces (eval-campaign loop arms)"

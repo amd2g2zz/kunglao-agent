@@ -245,6 +245,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `method_families.py` | method-family action vocabulary (#432): closed registry loader (fail-closed), envelope field validation helper, other() quarantine + triage face, dispatch-history reindex, family health signals — the RL kernel's Q-cell action symbols | hooks (worker_budget_sinks battery), CLI (`--validate/--triage/--reindex/--health`), q_report, tests |
 | `jadx_exec.py` | jadx execution contract (#426): memory-bounded wrapper keyed off apk_mem_gate verdicts — whole-APK `--no-res` (bounded heap/threads); per-dex ladder on `targeted-jadx` (zip-entry dex extraction + relevance-marker scan, isolated runs); OOM fallback with recorded transitions + discarded rung-1 partials; `smali-only`/`refuse` = zero jadx; unified `-d OUT` layout + `jadx_exec_summary.json` record face. Migration targets (tool_tiers android-dex-static rows, route_capability jadx lanes, agent playbooks) deliberately NOT migrated in this PR | tests |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |

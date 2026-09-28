@@ -37,7 +37,8 @@ _paths_for = _tb._paths_for
 _write_register = _tb._write_register
 
 ENV = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-       '"tools": ["grep"], "agent": "w-test"}}')
+       '"tools": ["grep"], "agent": "w-test", '
+       '"method_family": "static-decompile"}}')
 
 
 def _env(tier=1, tools="grep"):

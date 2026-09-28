@@ -111,6 +111,7 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
    dispatch carries the static gap list.
 5. Close: verdict-scorer answers primary_questions; red-team
    before PROVEN.
+Dispatch shape (protocol v1): {"kunglao_dispatch": {"version": 1, "claim": "C-NNN", "tier": 1, "tools": [...], "agent": "...", "method_family": "<token>"}} — method_family names the APPROACH (registry: scripts/method_families.yaml; other(<one-line>) when nothing fits).
 
 ## Sample under analysis
 

@@ -204,7 +204,8 @@ class TestPremiseReconciliation:
         payload = {"tool_input": {
             "name": "w-t", "description": "dynamic detonation",
             "prompt": "[T2 tools=vmr-shell] claim C-001 detonate "
-                      "facts-snapshot: 0 facts at 2026-09-22T00:00Z"}}
+                      "facts-snapshot: 0 facts at 2026-09-22T00:00Z"
+                      "\nmethod-family: dynamic-trace"}}
         rc = pre_check(payload, _paths(ws))
         captured = capsys.readouterr()
         assert "envpremise" not in captured.err

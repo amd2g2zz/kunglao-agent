@@ -241,7 +241,8 @@ class TestCorroborationLoop:
     def _pre_check_payload() -> dict:
         prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
                   '"tier": 1, "tools": ["Read"], '
-                  '"agent": "kunglao-redteam"}}\n'
+                  '"agent": "kunglao-redteam", '
+                  '"method_family": "red-team-verification"}}\n'
                   'facts-snapshot: 1 facts')
         # H1 shape: subagent_type only, NO `name` key in tool_input
         return {"tool_input": {"prompt": prompt,
@@ -307,7 +308,8 @@ class TestCorroborationLoop:
         ws = self._loop_ws(tmp_path)
         prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
                   '"tier": 1, "tools": ["Read"], '
-                  '"agent": "kunglao-worker"}}\n'
+                  '"agent": "kunglao-worker", '
+                  '"method_family": "static-decompile"}}\n'
                   'facts-snapshot: 1 facts')
         payload = {"tool_input": {"name": "kunglao-worker", "prompt": prompt}}
         rc = pre_check(payload, {

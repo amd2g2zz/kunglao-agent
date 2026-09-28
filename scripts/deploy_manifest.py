@@ -144,6 +144,15 @@ def build_entries() -> list[dict]:
     # copy (<ws>/.claude/scripts/), so the workspace stays self-contained.
     for p in sorted(SKILL_SCRIPTS.glob("*.mjs")):
         ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
+    # #432: scripts/*.yaml are RUNTIME DATA the deployed scripts read —
+    # method_families.yaml is the fail-closed vocabulary registry the
+    # dispatch gate validates against (unmirrored => every deployed
+    # dispatch REJECTs); mechanisms.yaml / tool_tiers.yaml are the same
+    # class (read by deployed mechanism_scheduler / tool_tiers). The
+    # #810 full-mirror rationale extends verbatim: data assets belong to
+    # the mirror, trimming is forbidden.
+    for p in sorted(SKILL_SCRIPTS.glob("*.yaml")):
+        ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
     for d, p in _iter_asset_files():
         ents.append({"src": f"{d}/{p.relative_to(ROOT / d).as_posix()}",
                      "kind": "asset"})
