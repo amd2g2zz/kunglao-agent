@@ -410,7 +410,9 @@ class TestNoRewardSideNormalization:
             assert needle not in text, needle
 
     def test_ruling_comment_lives_next_to_the_ladder(self):
-        low = (SCRIPTS / "scalar_settlement.py").read_text(
+        # issue 420 Phase 2: the ladder body lives at scripts/rlvr/scalar.py
+        # (scripts/scalar_settlement.py is the re-export shim)
+        low = (SCRIPTS / "rlvr" / "scalar.py").read_text(
             encoding="utf-8").lower()
         assert "state-signature" in low
         assert "2026-09-28" in low

@@ -197,12 +197,18 @@ K_ZERO_FILES = (
 # kunglao_log counts include the iter_jsonl util body itself (json.loads in
 # the generator + one docstring mention), its own trace-state read, and the
 # #58 current_trace() inheritance read (same state file, same non-loop face).
+# Phase 2 of the rlvr consolidation (issue 420): heartbeat's Family-K
+# loop sites moved to scripts/rlvr/liveness.py (the continuity core) —
+# the delegation import + its residuals are pinned under "rlvr/liveness";
+# heartbeat keeps a pin for its remaining direct state-file parses
+# (register/mark/check, one loads each).
 K_RESIDUAL_PINS = {
     "rho_verifier": (1, 1),
     "kunglao_log": (4, 1),
     "kunglao_record": (1, 1),
     "kunglao_resume": (2, 0),
-    "heartbeat": (4, 3),
+    "heartbeat": (3, 2),
+    "rlvr/liveness": (1, 1),
     "infeasible_signal": (2, 2),
     "mechanism_scheduler": (3, 0),
     "external_kicker": (2, 0),
@@ -210,11 +216,18 @@ K_RESIDUAL_PINS = {
 
 
 @pytest.mark.parametrize(
-    "name", tuple(sorted(set(K_RESIDUAL_PINS) - {"kunglao_log"})))
+    "name",
+    tuple(sorted(set(K_RESIDUAL_PINS) - {"kunglao_log", "heartbeat"})))
 def test_family_k_files_delegate_to_iter_jsonl(name: str):
     src = (SCRIPTS / f"{name}.py").read_text(encoding="utf-8")
     assert "from kunglao_log import iter_jsonl" in src, (
         f"{name}: iter_jsonl delegation import missing")
+    # heartbeat delegates through its split core (scripts/rlvr/liveness.py,
+    # pinned above) — the adapter itself no longer parses JSONL at all.
+    if name == "rlvr/liveness":
+        hb = (SCRIPTS / "heartbeat.py").read_text(encoding="utf-8")
+        assert "from rlvr.liveness import" in hb, (
+            "heartbeat adapter must consume the delegated core")
 
 
 @pytest.mark.parametrize("name", K_ZERO_FILES)

@@ -22,18 +22,21 @@ from pathlib import Path
 
 from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
 
-# The continuity core (issue #420 Phase 2). STALE_MINUTES and the
-# CONTINUITY_WINDOW_* / TICK_INTERVAL_* constants re-export through
-# rlvr.liveness; scripts/liveness_policy.py stays THE constant source
-# (#597 adjudication — re-exported, never redefined).
-from rlvr.liveness import (  # noqa: F401
-    CONTINUITY_WINDOW_HOURS,
-    CONTINUITY_WINDOW_TICKS,
+# A 5-min cron tick should refresh .heartbeat.json continuously; >35 min
+# stale (5-min interval + jitter margin) means monitoring is NOT running.
+# Value single-sourced in liveness_policy (issue 597, THE liveness-minutes
+# source) — imported here directly (the adjudication names this file a
+# consumer), and re-exported through rlvr.liveness (never redefined).
+from liveness_policy import (CONTINUITY_WINDOW_HOURS,  # noqa: E402,F401 (#4 window)
+                             CONTINUITY_WINDOW_TICKS,
+                             STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN)
+# The continuity core (issue #420 Phase 2): the shared verdict + the
+# durable-sidecar faces live in rlvr.liveness; this adapter keeps the CLI
+# faces and re-exports the core so every existing importer keeps working.
+from rlvr.liveness import (  # noqa: E402,F401
     HEARTBEAT_LOG_NAME,
-    STALE_MINUTES,
     TICK_HISTORY_CAP,
     TICK_HISTORY_KEY,
-    TICK_INTERVAL_DEFAULT_MIN,
     append_tick,
     append_tick_log,
     evaluate_tick_continuity,
@@ -42,7 +45,7 @@ from rlvr.liveness import (  # noqa: F401
     newest_sidecar_ts,
     reset_continuity_baseline,
 )
-from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
+from harness_common import utc_now_z as utc_now  # noqa: E402,F401 — #863 Family F: single source (was a local def)
 
 # #461: the cron-registration marker. --heartbeat-on alone proves only that
 # the FILE was written (init / manual chain both can do that); the marker

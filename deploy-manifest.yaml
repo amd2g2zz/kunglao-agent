@@ -347,7 +347,7 @@ files:
   - src: scripts/emit_gate.py
     dest: .claude/scripts/emit_gate.py
     kind: scaffold
-    sha256: 908cbca93e87b6e793355d2d3be255138e10436e6ad2f64b34fa0847a2c6d1ce
+    sha256: e589dad7c9b4446fbc542eaa4613f79cf3ce08cbdbacda275c376772ca0d7a92
   - src: scripts/encoding_lint.py
     dest: .claude/scripts/encoding_lint.py
     kind: scaffold
@@ -511,7 +511,7 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: 85cd0ad3145cfe418fa9aeb57f6a6b41555a24fb33bf24abc95746929423c164
+    sha256: ee9ce0d684c2547cac044d3f1325d83a8300008d5f027c4f84bb779d650f3ec3
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
@@ -1751,7 +1751,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 112d0ec71b2a3804f36055b461b70ba6f17bd7d647ad9f60fe454fb88296e30e
+    sha256: 5c13622059aa0c8912f7c2dd0095ed5a91d4b82f10b78b1b15ba7b2c76b37d6b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
