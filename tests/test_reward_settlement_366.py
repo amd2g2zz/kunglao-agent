@@ -279,7 +279,8 @@ class TestNoModelCallPath:
         # #421: exogenous classification — a mechanical file-reader over
         # runs/env-state.json (component-state face); no model-call path.
         "exogenous", "env_state_probe",
-        # #420 Phase 2: the engine body lives at scripts/rlvr/reward.py;
+        # Phase 2 of the rlvr consolidation (issue 420): the engine body
+        # lives at scripts/rlvr/reward.py;
         # the wall follows the body. ``rlvr`` is the engine's own package
         # (the rlvr.ledger face — the same U1 ledger the bare import was);
         # ``numpy`` is the prior-feed exact integer counting
@@ -293,13 +294,15 @@ class TestNoModelCallPath:
         "eval_targets", "verdict_layer",
     )
     # escape-hatch needles assembled from parts so this file does not
-    # itself carry the raw strings it forbids (the #379 convention)
+    # itself carry the raw strings it forbids (the settlement-379
+    # test file's convention)
     _ESC_NEEDLES = ("subprocess", "os." + "system", "popen",
                     "eval" + "(", "ex" + "ec" + "(", "__import__",
                     "importlib")
 
     def _imports(self) -> list[str]:
-        # #420 Phase 2: parse the ENGINE BODY (scripts/rlvr/reward.py);
+        # Phase 2 of the rlvr consolidation (issue 420): parse the ENGINE
+        # BODY (scripts/rlvr/reward.py);
         # scripts/reward_settlement.py is the pure re-export shim.
         tree = ast.parse(
             (SCRIPTS / "rlvr" / "reward.py").read_text(encoding="utf-8"))
@@ -324,7 +327,8 @@ class TestNoModelCallPath:
         assert not bad, f"model-call surface inside settlement engine: {bad}"
 
     def test_engine_source_has_no_exec_escape_hatches(self):
-        # #420 Phase 2: the body carries the wall; the shim re-exports it.
+        # Phase 2 of the rlvr consolidation (issue 420): the body carries
+        # the wall; the shim re-exports it.
         for path in (SCRIPTS / "rlvr" / "reward.py",
                      SCRIPTS / "reward_settlement.py"):
             text = path.read_text(encoding="utf-8")

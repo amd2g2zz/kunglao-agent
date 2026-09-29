@@ -9,14 +9,20 @@ liveness — has no unified module design. Exports are scattered
 statistical math is hand-rolled. This document declares the unified
 package surface; execution is **phase-gated**:
 
-- **Phase 1 (this PR)** — numpy dependency via uv lock, this design,
+- **Phase 1 (PR #420 wave 1)** — numpy dependency via uv lock, this design,
   the bit-exact pin framework (`tests/test_rlvr_bitexact.py`), and the
   numpy pattern-setter adoption in two self-contained spots
   (Normal-Gamma pooling internals; winrate curve aggregation).
-- **Phase 2 (after the correctness wave merges)** — consolidation into
-  this package, thin adapters left at the old import paths, hand-rolled
-  math moved onto the numpy pattern, duplicate faces deleted, all
-  importers updated.
+- **Phase 2 (LANDED, #420 follow-up)** — consolidation into this
+  package: the eight face modules (ledger / reward / scalar / priors /
+  triples / winrate / state / liveness) carry the implementation
+  bodies, thin adapters stay at the old import paths, the remaining
+  hand-rolled math (Beta aggregation loops, prior-feed counts, the
+  v_anchor weighted mean, the Q-report per-cell means, the q_cells
+  family-mass and sampling-weight reductions) moved onto the numpy
+  pattern bit-exactly, and the export map in `rlvr/__init__.py` gained
+  the `q_cells` and `compose` faces. All pins in
+  `tests/test_rlvr_bitexact.py` held without re-minting.
 
 ## The package
 

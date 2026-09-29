@@ -304,8 +304,7 @@ class TestTolerantShapeGaps:
         ws = _mk_ws(tmp_path)
         _seed_stream(ws, _fixture_rows())
         calls = []
-        # #420 P2: the aggregation body lives at rlvr.winrate; the seam
-        # follows the body (wc.face is rlvr.winrate.face).
+        # seam follows the aggregation body (wc.face is rlvr.winrate.face)
         import rlvr.winrate as _rw  # noqa: PLC0415
         real = _rw.read_settlements
 

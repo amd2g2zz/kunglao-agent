@@ -50,8 +50,8 @@ from typing import Protocol, Sequence
 
 import yaml
 
-import rollout_ledger as rl
-import state_signature
+from rlvr import ledger as rl  # the package faces (issue 420 Phase 2)
+from rlvr import state as state_signature
 
 SCHEMA = "round-strategy/1"
 CARD_SCHEMA = "card/1"
