@@ -193,7 +193,13 @@ def parse_decision(outcome: model.CmdOutcome) -> tuple[str | None, dict | None]:
 
 
 def top_claim(outcome: model.CmdOutcome) -> str | None:
-    """Rank #1 claim id from a priority_ratio --json stdout."""
+    """Rank #1 claim id from a priority_ratio --json stdout.
+
+    #454: the #610/#107/#97 ranker emits a BARE top-level array
+    ([{claim_id: ...}, ...]), not an object envelope. parse_last_json
+    only scans {} objects, so the bare array face needs its own parse:
+    try the object-envelope keys first (backward face), then a direct
+    json.loads on the stripped stdout for the array face."""
     doc = model.parse_last_json(outcome.stdout) or {}
     actions = doc.get("actions") or doc.get("ranking") or []
     for entry in actions:
@@ -202,7 +208,29 @@ def top_claim(outcome: model.CmdOutcome) -> str | None:
         if isinstance(entry, dict) and entry.get("claim"):
             return str(entry["claim"])
     ranked = doc.get("ranked_order") or []
-    return str(ranked[0]) if ranked else None
+    if ranked:
+        return str(ranked[0])
+    # #454/#454-r2: bare top-level array face (the current ranker emits
+    # json.dumps(..., indent=2) — pretty-printed multi-line). Try the
+    # WHOLE stdout first, then individual lines as fallback.
+    import json as _json
+    text = (outcome.stdout or "").strip()
+    candidates = [text]
+    candidates.extend(
+        chunk.strip() for chunk in reversed(text.splitlines())
+        if chunk.strip().startswith("["))
+    for chunk in candidates:
+        try:
+            arr = _json.loads(chunk)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(arr, list):
+            for entry in arr:
+                if isinstance(entry, dict) and entry.get("claim_id"):
+                    return str(entry["claim_id"])
+                if isinstance(entry, dict) and entry.get("claim"):
+                    return str(entry["claim"])
+    return None
 
 
 def budget_ok(ctx: RunContext) -> bool:

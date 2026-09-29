@@ -227,12 +227,33 @@ def checkpoint_c3(ctx: RunContext) -> model.CheckpointResult:
     degraded = [e for e in ("module_emit", "NameError")
                 if e in out_tick.stderr]
     hb_file = ctx.ws / "runs" / ".heartbeat.json"
-    ok = (model.adjudicate("C3-heartbeat", out_tick.rc) == model.PASS
+    # #450: a FIRST tick legitimately returns rc=1 with the
+    # waiting-for-second-tick continuity reason (#415 semantics: entry
+    # needs >=2 ticks; continuity is adjudicated at C5 after the second
+    # tick). The reason lives in the TICK REPORT ARTIFACT
+    # (ws/runs/.heartbeat-tick.json -> heartbeat.stderr), NOT the tick
+    # process's own stderr (the child's stderr is captured into the
+    # report, never forwarded — reviewer-450-1's decisive finding).
+    waiting_second = False
+    tick_report = ctx.ws / "runs" / ".heartbeat-tick.json"
+    if out_tick.rc == 1 and tick_report.is_file():
+        try:
+            import json as _json
+            _hb = _json.loads(
+                tick_report.read_text(encoding="utf-8")).get("heartbeat", {})
+            waiting_second = (
+                _hb.get("rc") == 1
+                and "wait for the SECOND tick" in (_hb.get("stderr") or ""))
+        except (OSError, ValueError):
+            waiting_second = False
+    ok = ((model.adjudicate("C3-heartbeat", out_tick.rc) == model.PASS
+           or waiting_second)
           and not degraded and hb_file.is_file())
     return _record(ctx, "C3", "heartbeat",
                    model.PASS if ok else model.FAIL, out_tick.rc, out_tick,
                    total_ms,
                    {"degraded_markers": degraded,
+                    "waiting_second_tick": waiting_second,
                     "heartbeat_state": str(hb_file),
                     "heartbeat_state_exists": hb_file.is_file(),
                     "steps": [a for a, _ in outs]})
