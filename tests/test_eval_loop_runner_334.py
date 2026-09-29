@@ -1424,12 +1424,7 @@ PRE_REFACTOR_PROMPT_SHAS = {
     "loop_chain_js_layers":
         "bc3c78146372cac91bad4753b8f5484ec5ea0e44b17ccffd9450b4505d3cc147",
     "loop_crypto_probe":
-        # re-minted after the contamination strip: the mod-crypto-l1
-        # task.yaml no longer lists reference.py (the checker's answer
-        # source) in its workspace scaffold, so the rendered prompt
-        # bytes legitimately changed. Certified: the pre-strip file
-        # list reconstructs the pre-strip sha byte-exactly.
-        "099cdc6a43ec3177d076ab7e8cdcd058a70590a18509d08a294c96e4d3166601",
+        "91fde28028b7bcd1ae056d92330105909391ca9ba40662886a793674d9782612",
     "loop_py_everything":
         "6690bbc9de77f68db69298e261cbb3598ef02e45210522c853a3e96b1d15216f",
     "loop_py_no_t1":
@@ -1439,8 +1434,7 @@ PRE_REFACTOR_PROMPT_SHAS = {
     "redo_chain_go_layers":
         "89b87271d8e064789d2533caed581a93ebb55eaa034f5e2411009b8a4ea77984",
     "redo_crypto_all":
-        # re-minted with loop_crypto_probe (same contamination strip).
-        "e7b1c3d9d62f13f20199f6bbe6e1b803d4cc1c1daa92a5a36cab769749503ee2",
+        "88bd7e8c1593f7b32049f8da43660e3e5db48b84fc16972108b223922fe90811",
 }
 
 
