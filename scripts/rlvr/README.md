@@ -31,7 +31,8 @@ scripts/rlvr/
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
-├── posteriors.py        # γ Discounted-TS posterior store (issue 428) —
+├── posteriors.py        # DTS posterior store, Discounted Thompson
+#                        #   Sampling (issue 428) —
 │                        #   append-only runs/posterior-store.jsonl + fold/read
 │                        #   γ decay + pseudo-count priors + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
@@ -44,7 +45,7 @@ a single `__all__` plus explicit submodule re-exports — so the public
 surface is enumerable in one file and drift against it is a test
 failure, not folklore.
 
-### posteriors — γ Discounted-TS store (landed W2-T1, issue 428)
+### posteriors — DTS store (Discounted Thompson Sampling; landed W2-T1, issue 428)
 
 | face | home |
 |---|---|
@@ -186,7 +187,7 @@ repr-stable, and interpreter-independent.
 numpy enters the RLVR surface under four rules (no scipy: every
 distribution value on this surface is closed-form — Beta means are
 `alpha/(alpha+beta)`, the Normal-Gamma posterior is the conjugate
-update; Thompson Beta sampling stays stdlib `betavariate`):
+update; DTS Beta sampling stays stdlib `betavariate`):
 
 1. **Ordered float reductions go through `_seq_sum`** —
    `np.add.accumulate` over a float64 array with an explicit `0.0`

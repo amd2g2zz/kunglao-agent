@@ -80,18 +80,23 @@ class TestStoreFaces:
         assert row["outcome"] == 1
         assert row["alpha_add"] == 1.0 and row["beta_add"] == 0.0
 
-    def test_record_default_gamma_is_unit(self, tmp_path):
-        """No γ decided → the row records γ = 1.0 (plain Bayesian
-        counting; the engine's schedule decides otherwise explicitly)."""
+    def test_record_default_gamma_is_the_shipped_dts_schedule(self, tmp_path):
+        """Owner ruling 2026-09-29 (DTS REPLACES TS): no plain-TS default
+        anywhere — gamma=None records the SHIPPED default schedule's γ
+        (default_schedule().gamma(), the adaptive day-one value from the
+        neutral seed), never the γ = 1 no-forgetting constant."""
         rp.record(tmp_path, "s", "a", 0, ts=TS)
-        assert rp.read(tmp_path)[0]["gamma"] == 1.0
-        assert rp.read(tmp_path)[0]["beta_add"] == 1.0
+        row = rp.read(tmp_path)[0]
+        assert row["gamma"] == rp.default_schedule().gamma()
+        assert row["gamma"] != 1.0
+        assert row["beta_add"] == 1.0
 
     def test_gamma_domain_enforced_at_append(self, tmp_path):
         """γ ∈ (0, 1]: zero/negative/over-one/non-numeric refused loudly
         (result dict, no raise), nothing appended. gamma=None is NOT in
         the domain check — it is the documented 'undecided' sentinel that
-        records γ = 1.0 (see test_record_default_gamma_is_unit)."""
+        records the shipped DTS default schedule's γ
+        (see test_record_default_gamma_is_the_shipped_dts_schedule)."""
         for bad in (0, -0.5, 1.5, "0.9", float("inf")):
             res = rp.record(tmp_path, "s", "a", 1, gamma=bad, ts=TS)
             assert res["appended"] is False and res["reason"], (bad, res)
@@ -342,7 +347,7 @@ class TestNumpyView:
         assert view.cell("other", "a") is None
 
     def test_sample_returns_python_floats_via_stdlib_beta(self, tmp_path):
-        """Thompson sampling stays stdlib betavariate (numpy policy 4):
+        """DTS sampling stays stdlib betavariate (numpy policy 4):
         the view samples the DECAYED posterior per cell."""
         _seed_cell(tmp_path, "s", "a", [1, 1, 1, 0], gamma=0.9)
         view = rp.fold(tmp_path)
@@ -537,3 +542,21 @@ class TestDefaults:
         source = Path(rp.__file__).read_text(encoding="utf-8")
         assert "EX-2" in source
         assert "ex2-gamma-calibration" in source
+
+    def test_shipped_write_default_folds_decayed(self, tmp_path):
+        """DTS everywhere, day one (owner ruling 2026-09-29): rows written
+        at the default γ (no schedule decision threaded) fold to a DECAYED
+        posterior under the default read — the γ = 1 no-forgetting write
+        is no longer a default anywhere. Control: the same stream recorded
+        at explicit γ = 1 folds exact (the calibration face)."""
+        outcomes = [1, 0, 1, 1, 0] * 4
+        for out in outcomes:
+            assert rp.record(tmp_path, "s", "a", out, ts=TS)["appended"]
+        decayed = rp.fold(tmp_path).cell("s", "a")
+        assert decayed["n_effective"] < len(outcomes)
+        unit_ws = tmp_path / "unit-control"
+        for out in outcomes:
+            rp.record(unit_ws, "s", "a", out, gamma=1.0, ts=TS)
+        exact = rp.fold(unit_ws).cell("s", "a")
+        assert exact["n_effective"] == float(len(outcomes))
+        assert decayed["width"] > exact["width"]
