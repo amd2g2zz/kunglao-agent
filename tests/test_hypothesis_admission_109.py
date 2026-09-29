@@ -117,10 +117,18 @@ def _intent_rows(ws: Path) -> list[dict]:
             p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
-_PROMPT = "[T1 tools=Read,Write] claim C-1 probe the header mac path"
+_PROMPT = '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Write"]}}\nprobe the header mac path'
 
 
 # ---------- AC 1: first dispatch into an empty PQ neighborhood REJECTs ----
+
+def _v1_envelope(claim: str, tools: list[str]) -> str:
+    """v1 dispatch envelope (the post-retirement standard form)."""
+    import json
+    return json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": claim, "tier": 1,
+        "tools": tools, "agent": "kunglao-worker"}})
+
 
 class TestFirstDispatchAdmission:
     def test_empty_candidates_first_dispatch_rejects(self, tmp_path) -> None:
@@ -271,8 +279,7 @@ class TestAdmissionSatisfied:
         ranked = pr.priority_ratio(claims, deps,
                                    pr.EvidenceView.from_workspace(ws))
         top = ranked[0].claim_id
-        gate = _run_gate(root, ws, f"[T1 tools=Read,Write] claim {top} "
-                                   f"probe the header mac path")
+        gate = _run_gate(root, ws, _v1_envelope(top, ["Read", "Write"]))
         assert gate.returncode == 0, (
             f"a minted-arm workspace must pass first dispatch; "
             f"stderr={gate.stderr!r}")

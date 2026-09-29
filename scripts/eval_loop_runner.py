@@ -1478,7 +1478,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     }
     doc = {
         "schema": ds.RESULTS_SCHEMA,
-        "eval_version": ds.EVAL_TIER_VERSION.get(tier, ds.EVAL_VERSION),
+        "eval_version": ds.TIER_EVAL_VERSION.get(tier, ds.EVAL_VERSION),
         "tier": tier,
         "arm": arm,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

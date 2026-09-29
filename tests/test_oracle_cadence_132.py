@@ -382,8 +382,9 @@ def test_undeclared_intent_dispatch_is_counted(tmp_path: Path) -> None:
     root = tmp_path
     ws = _mk105(root)
     proc = _run_gate(root, ws,
-                     "[T1 tools=Read,Write] claim C-1 sweep with no "
-                     "declaration")
+                     '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+                     '"tier": 1, "tools": ["Read", "Write"]}}\n'
+                     "sweep with no declaration")
     assert proc.returncode == 0
     face = cad.missing_intent_face(ws)
     assert face["intent_unparsed_events"] >= 1

@@ -129,7 +129,7 @@ def test_check_no_self_cap_integration():
 
     # Case A: clean dispatch, no task_spec
     task_spec_empty = _make_tmp_yaml("")
-    ok, msg = wb.check_no_self_cap("[T1 tools=grep,xxd] claim C-001 grep for marker", task_spec_empty)
+    ok, msg = wb.check_no_self_cap('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep", "xxd"]}}\ngrep for marker', task_spec_empty)
     print(f"  [{'OK ' if ok else 'FAIL'}] clean + empty task_spec: ok={ok}, msg={msg!r}")
     if not ok:
         fails.append("case_a")

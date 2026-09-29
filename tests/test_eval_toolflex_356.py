@@ -5,8 +5,8 @@ eval family: chain-necessity units + blocked-path variants (#356).
 The issue is the contract. Faces pinned here:
 
   (a) TIER WIRING — the toolflex tier is registered additively: TIERS,
-      EVAL_VERSIONS (eval-v1.3), the TIER_EVAL_VERSION map AND its
-      EVAL_TIER_VERSION alias (both tier-version consumers pinned), and
+      EVAL_VERSIONS (eval-v1.3), the TIER_EVAL_VERSION map (the single
+      tier-version spelling), and
       the schemas/eval-task-v1.json enums;
   (b) UNITS — >= 3 landed TF units covering K=2/3/4; every landed unit
       validates through ds.validate_task; every unit carries a
@@ -79,12 +79,13 @@ class TestTierWiring:
         assert "eval-v1.3" in ds.EVAL_VERSIONS
         assert ds.TIER_EVAL_VERSION["toolflex"] == "eval-v1.3"
 
-    def test_both_tier_version_consumers_pinned(self):
-        """TIER_EVAL_VERSION is the #334 loop runner's consumer surface;
-        EVAL_TIER_VERSION is the release-tier alias kept for the native
-        lane — both must carry the toolflex tier (one map, two names)."""
-        assert ds.EVAL_TIER_VERSION is ds.TIER_EVAL_VERSION
-        assert ds.EVAL_TIER_VERSION.get("toolflex") == "eval-v1.3"
+    def test_single_tier_version_spelling_pinned(self):
+        """TIER_EVAL_VERSION is the only tier-version spelling (the
+        EVAL_TIER_VERSION release-tier alias is deleted, compat-rot sweep
+        2026-09-29) — it must carry the toolflex tier, and the alias must
+        stay gone (anti-resurrection)."""
+        assert ds.TIER_EVAL_VERSION.get("toolflex") == "eval-v1.3"
+        assert not hasattr(ds, "EVAL_TIER_VERSION")
 
     def test_schema_enums_extended(self):
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))

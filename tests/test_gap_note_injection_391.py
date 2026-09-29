@@ -29,10 +29,14 @@ from recall_inject import evaluate  # noqa: E402  (pytest.ini pythonpath)
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
 
-CLAIM = "[T2 tools=ghidra] claim C-391 retry: recover the config builder " \
-        "from the packed sample"
-OTHER_CLAIM = "[T2 tools=ghidra] claim C-777 disassemble the unpacked " \
-              "sample and decode the import table"
+CLAIM = ('{"kunglao_dispatch": {"version": 1, "claim": "C-391", '
+         '"tier": 2, "tools": ["ghidra"]}}\n'
+         'retry: recover the config builder '
+         "from the packed sample")
+OTHER_CLAIM = ('{"kunglao_dispatch": {"version": 1, "claim": "C-777", '
+               '"tier": 2, "tools": ["ghidra"]}}\n'
+               'disassemble the unpacked '
+               "sample and decode the import table")
 
 
 def _sig(type_: str, source: str, value, ts="2026-09-26T00:00:00Z"):

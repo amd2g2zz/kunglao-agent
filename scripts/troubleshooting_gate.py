@@ -106,7 +106,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # F-10 selective activation: skip if hook is paused
-    if not ha.is_active(Path(args.workspace), "troubleshooting_gate"):
+    if not ha.is_active_strict(Path(args.workspace), "troubleshooting_gate"):
         print("SKIP: troubleshooting_gate is paused (check .hook_state.json)")
         return 0
 

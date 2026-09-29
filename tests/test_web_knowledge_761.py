@@ -188,7 +188,9 @@ class TestJ1IndexedAndRecalled:
 
 
 WEB_CLAIM = (
-    "[T2 tools=camoufox] claim C-901 recover the sign parameter for the "
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-901", '
+    '"tier": 2, "tools": ["camoufox"]}}\n'
+    "recover the sign parameter for the "
     "--type web target; the request is blocked by 反爬 challenge, 风控 "
     "returns a slider captcha page"
 )
@@ -207,7 +209,9 @@ class TestJ1RecallInjectDictionary:
     def test_non_web_claim_gets_no_web_query(self) -> None:
         from recall_inject import queries_for_features
 
-        plain = "[T2 tools=ghidra] claim C-102 disassemble and decode the sample"
+        plain = ('{"kunglao_dispatch": {"version": 1, "claim": "C-102", '
+                 '"tier": 2, "tools": ["ghidra"]}}\n'
+                 "disassemble and decode the sample")
         assert "risk control" not in queries_for_features(plain, tier=2)
 
     def test_web_risk_claim_injects_new_doc(self, tmp_path) -> None:

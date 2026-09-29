@@ -11,7 +11,9 @@ gap at the ONE point every claim enters the loop: the Agent dispatch.
 Design (mirrors dispatch_gate / env_check_gate, inject-only):
   - PreToolUse hook on Agent. Reads the dispatch description from the tool
     input (prompt / description / task / input — the same shapes dispatch_gate
-    accepts). Matches the dispatch format `[T<N> tools=...] claim C-NN`.
+    accepts). Matches the v1 canonical dispatch envelope
+    `{"kunglao_dispatch": {"version": 1, "claim": "C-NN", ...}}` (the v0
+    text prefix is retired).
   - Claim features -> tier via scripts/tier_rules.tier_for_claim (single
     source for T3 VM/dynamic vs T2 static-depth signals), then -> recall
     queries: go signals -> "go" (languages-go.md); tier 3 -> "vm" + "dynamic"

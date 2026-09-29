@@ -123,7 +123,6 @@ def golden_master():
         manifest = yaml.safe_load((ROOT / "tests" / "fixtures" / "golden" / "manifest.yaml").read_text(encoding="utf-8"))
         case = next(c for c in manifest["cases"] if c["id"] == case_id)
         env = dict(os.environ)
-        env.pop("PRIORITY_WEIGHTS", None)
         r = subprocess.run(
             case["cmd"]["argv"], cwd=case["cmd"].get("cwd", str(ROOT)),
             env=env, capture_output=True, text=True,

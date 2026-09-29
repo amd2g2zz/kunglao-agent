@@ -245,11 +245,12 @@ def test_selfcheck_fails_stale_canonical_commands(fake_home, monkeypatch):
                for m in result["mismatches"]), result["mismatches"]
 
 
-def test_selfcheck_ignores_a_lying_caller_hook_dir(fake_home, monkeypatch):
-    """The self-certifying loop of #752, killed outright: the caller hands
-    in the SAME wrong dir the bad file matches — the verdict must still be
-    FAIL because the expectation is recomputed from the executing install,
-    never taken from the parameter."""
+def test_selfcheck_has_no_hook_dir_parameter(fake_home, monkeypatch):
+    """The self-certifying loop of #752, killed STRUCTURALLY: the lying
+    hook_dir parameter is deleted (compat-rot sweep 2026-09-29, audit A1)
+    — the lie is no longer "accepted but ignored", it is untellable. The
+    shape expectation is recomputed from the executing install; there is
+    no caller variable left to certify itself."""
     skills = fake_home / ".claude" / "skills"
     prod = _install_at(skills, "kunglao-agent")
     dev = _install_at(skills, "kunglao-agent-dev")
@@ -257,13 +258,11 @@ def test_selfcheck_ignores_a_lying_caller_hook_dir(fake_home, monkeypatch):
     ws = fake_home.parent / "ws-liar"
     ws.mkdir(parents=True)
     target = _write_at(prod / "hooks", ws)
-    result = hook_activation.selfcheck_registration(
-        target, expected_files={"env_check_gate.py"},
-        hook_dir=prod / "hooks",  # the lie: matches the file, not reality
-        workspace=ws, layer="project")
-    assert result["ok"] is False, (
-        "a caller-supplied hook_dir must never certify itself: "
-        f"{result}")
+    with pytest.raises(TypeError, match="hook_dir"):
+        hook_activation.selfcheck_registration(
+            target, expected_files={"env_check_gate.py"},
+            hook_dir=prod / "hooks",  # the lie: no longer even accepted
+            workspace=ws, layer="project")
 
 
 def test_register_hooks_does_not_forward_hook_dir(fake_home, monkeypatch,

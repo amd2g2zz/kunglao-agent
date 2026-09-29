@@ -94,11 +94,12 @@ class TestChainTierWiring:
         assert "eval-v1.4" in ds.EVAL_VERSIONS
         assert ds.TIER_EVAL_VERSION["chain"] == "eval-v1.4"
 
-    def test_both_tier_version_consumers_pinned(self):
-        """TIER_EVAL_VERSION is the #334 loop runner's consumer surface;
-        EVAL_TIER_VERSION is the release-lane alias — both carry chain."""
-        assert ds.EVAL_TIER_VERSION is ds.TIER_EVAL_VERSION
-        assert ds.EVAL_TIER_VERSION.get("chain") == "eval-v1.4"
+    def test_single_tier_version_spelling_pinned(self):
+        """TIER_EVAL_VERSION is the only tier-version spelling (the
+        EVAL_TIER_VERSION release-lane alias is deleted, compat-rot sweep
+        2026-09-29) — it must carry chain, and the alias must stay gone."""
+        assert ds.TIER_EVAL_VERSION.get("chain") == "eval-v1.4"
+        assert not hasattr(ds, "EVAL_TIER_VERSION")
 
     def test_schema_enums_extended(self):
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))

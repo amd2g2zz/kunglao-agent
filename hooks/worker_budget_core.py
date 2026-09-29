@@ -59,7 +59,10 @@ ensure_scripts_path()
 from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402,F401 — re-exported to gates
 # #861 单源化保留：无 claim 的 v0 裸前缀（非 claim 派发）是 budget 本地边缘
 # 合同——claim 派发的识别已单源到 lib_kunglao.parse_dispatch。
-_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
+# v0 retirement (compat-rot sweep 2026-09-29): the lookahead excludes the
+# claim FORM — "[T1 tools=x] claim C-NN" is a retired v0 claim envelope and
+# must parse to absent, not leak through the bare-prefix edge.
+_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\](?!\s*claim\b)')
 
 
 VM_TOOLS = {'vmr-shell', 'rev-frida'}
@@ -317,7 +320,7 @@ def check_backtrack_gate(paths):
     return True, ''  # unknown rc -> fail open
 
 
-def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None):
+def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
     ranks by the authoritative scorer (priority_ratio.py — specs/phase-4/
     contract.md §1). #107 rebuilt that scorer as ONE Thompson ranker (sampled
@@ -333,9 +336,10 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
     "pretend-priority" dispatches that skip the recorded-deviation discipline).
 
-    task_spec_path is kept for signature stability only — the ranking is
-    Thompson-seeded from the posterior state; the old priority_weights/
-    PRIORITY_WEIGHTS override does not apply to the authority scorer.
+    The ranking is Thompson-seeded from the posterior state — there is no
+    weights/override face (the old priority_weights/PRIORITY_WEIGHTS override
+    does not apply to the authority scorer; the inert task_spec_path
+    signature-stability parameter is deleted, compat-rot sweep 2026-09-29).
 
     Caller-side filtering is the caller's job (contract §1 — the pure function
     takes no ws): failure-blocked claims (failed attempt, no current
@@ -392,10 +396,11 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
 def parse_dispatch(description: str) -> tuple[int, list[str], str | None]:
     """Parse the dispatch shape -> (tier, tools, claim_id). #861 单源化。
 
-    Delegates to hooks/lib_kunglao.py:parse_dispatch — v1 canonical JSON
-    envelope takes precedence, v0 claim prefix retained as legacy-replay
-    fallback. Previously parsed the v0 prefix only, silently disarming the
-    budget cid gates on v1 dispatches (issue #861, B1).
+    Delegates to hooks/lib_kunglao.py:parse_dispatch — the v1 canonical
+    JSON envelope is the only recognized claim dispatch (the v0 claim
+    prefix is RETIRED, compat-rot sweep 2026-09-29; previously the face
+    parsed the v0 prefix only, silently disarming the budget cid gates on
+    v1 dispatches — issue #861, B1).
 
     边缘合同保留：无 claim 的 v0 裸前缀（非 claim 派发，如 init-worker 类）
     是 budget 本地合同——lib 单源只建模 claim 派发，故此回退留在本地。"""

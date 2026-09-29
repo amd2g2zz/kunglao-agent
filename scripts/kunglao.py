@@ -5,7 +5,10 @@
 Replaces the 31 scattered CLIs with subcommands, each composing existing
 script pure functions. Output contract (JSON + exit codes) is FROZEN to
 match the legacy scripts — worker_pulse.py parses convergence_check --json
-and priority --json via subprocess, so byte-identical output is mandatory.
+via subprocess (worker_pulse.py:258), so byte-identical output is mandatory
+for that face. The priority leg now reads priority_ratio.py --json
+(worker_pulse.py:296) — the #107 Thompson ranker — and carries no
+byte-identity constraint on kunglao.py (which has no priority subcommand).
 
 E3.1 criteria: kunglao.py decide <ws> --json == convergence_check.py <ws> --json
 (byte-identical diff on same fixture).
@@ -195,8 +198,9 @@ def cmd_check_stale(args) -> int:
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
     try:
-        ws_key = template_version._semver_tuple(ws_v)
-        skill_key = template_version._semver_tuple(skill_v)
+        # parse-validation only — the call raises on an unparseable stamp
+        template_version._semver_tuple(ws_v)
+        template_version._semver_tuple(skill_v)
     except Exception:
         envelope = {
             "status": "stale",
@@ -338,8 +342,9 @@ def _gate_stale_workspace(ws: Path) -> int:
         )
         return RC_STALE_WORKSPACE
     try:
-        ws_key = template_version._semver_tuple(ws_v)
-        skill_key = template_version._semver_tuple(skill_v)
+        # parse-validation only — the call raises on an unparseable stamp
+        template_version._semver_tuple(ws_v)
+        template_version._semver_tuple(skill_v)
     except Exception:
         print(
             f"kunglao: workspace stamp {ws_v!r} is not parseable — "

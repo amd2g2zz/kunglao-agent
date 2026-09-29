@@ -127,7 +127,7 @@ def test_registered_names_reads_workspace_and_plugin_only(
     monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(poison))
     (ws / ".mcp.json").write_text(json.dumps(
         {"mcpServers": {"ghidra": {"command": "bridge"}}}), encoding="utf-8")
-    found = mcp_probe.registered_names(None, ws)
+    found = mcp_probe.registered_names(ws)
     assert found["ghidra"] == ["workspace"]
     assert found["camoufox-reverse"] == ["plugin-carried"]
     assert "x64dbg" not in found, "the poison user-global file must be ignored"
@@ -136,16 +136,20 @@ def test_registered_names_reads_workspace_and_plugin_only(
 
 def test_registered_server_urls_reads_workspace_and_plugin_only(
         tmp_path, monkeypatch, no_user_global_read):
-    """Reachability face (#202/#408): urls come from the #408 surfaces only;
-    a non-None claude_json argument (toolchain merge-sync shim) is never
-    opened — pinned with the poisoned loader."""
+    """Reachability face (#202/#408): urls come from the #408 surfaces only.
+    The merge-sync `claude_json` parameter is DELETED (compat-rot sweep
+    2026-09-29) — there is no caller path left to hand the probe a poison
+    file; the poisoned-loader pin below proves the reads stay on the
+    sanctioned surfaces."""
     ws = _make_ws(tmp_path)
     poison = _poison_claude_json(tmp_path)
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(poison))
     (ws / ".mcp.json").write_text(json.dumps(
         {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:13337"}}}),
         encoding="utf-8")
-    urls = mcp_probe.registered_server_urls(poison, ws)
+    urls = mcp_probe.registered_server_urls(ws)
     assert urls == {"ida-pro-vm": "http://127.0.0.1:13337"}
+    assert no_user_global_read, "the loader spy must have observed the reads"
 
 
 def test_check_mcp_web_passes_via_plugin_with_no_files(tmp_path, no_user_global_read):
@@ -159,13 +163,16 @@ def test_check_mcp_web_passes_via_plugin_with_no_files(tmp_path, no_user_global_
     assert "plugin-carried" in cam[0].detail
 
 
-def test_check_mcp_ignores_claude_json_argument(tmp_path, no_user_global_read):
-    """Merge-sync shim: the legacy `claude_json` parameter stays ACCEPTED
-    (toolchain.py sweeps in another owner's stream) but is INERT — the
-    deleted surface is never opened."""
+def test_check_mcp_has_no_claude_json_parameter(tmp_path, no_user_global_read):
+    """Merge-sync shim retired (compat-rot sweep 2026-09-29): the legacy
+    `claude_json` parameter is DELETED — the deleted surface cannot even be
+    named at a call site, let alone opened (the former "accepted but inert"
+    pin becomes a structural anti-resurrection pin)."""
     ws = _make_ws(tmp_path)
     poison = _poison_claude_json(tmp_path)
-    checks = mcp_probe.check_mcp(ws, "web", claude_json=poison)
+    with pytest.raises(TypeError, match="claude_json"):
+        mcp_probe.check_mcp(ws, "web", claude_json=poison)
+    checks = mcp_probe.check_mcp(ws, "web")
     assert all(c.name != "x64dbg" for c in checks)
 
 

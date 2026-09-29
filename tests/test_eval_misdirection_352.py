@@ -565,7 +565,6 @@ class TestSelfCheckParity:
 class TestVersioningAndRestraint:
     def test_tier_version_pair_pinned_on_both_consumers(self):
         assert ds.TIER_EVAL_VERSION["misdirection"] == "eval-v1.2"
-        assert ds.EVAL_TIER_VERSION is ds.TIER_EVAL_VERSION
         assert "misdirection" in ds.TIERS
         assert "eval-v1.2" in ds.EVAL_VERSIONS
 

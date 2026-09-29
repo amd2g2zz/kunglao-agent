@@ -170,7 +170,7 @@ class TestTop1Enforcement:
         advisory-only audit (#310-era) never had on this hook face."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, (
             f"rank-3 dispatch without reasoning must REJECT; got rc="
             f"{r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}")
@@ -186,9 +186,7 @@ class TestTop1Enforcement:
         a trace (unified event log action=priority_deviation, claim=C-2)."""
         root = tmp_path / "r2"
         ws = _top1_ws(root)
-        prompt = ("[T1 tools=grep] claim C-2 background work\n"
-                  "agent-reasoning: C-1 needs the VM lease which is not up "
-                  "yet; C-2 is pure-static and unblocked")
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 1, "tools": ["grep"]}}\nbackground work\nagent-reasoning: C-1 needs the VM lease which is not up yet; C-2 is pure-static and unblocked')
         r = _run_gate(root, ws, prompt)
         assert r.returncode == 0, (
             f"agent-reasoning deviation must pass; stderr={r.stderr!r}")
@@ -205,7 +203,7 @@ class TestTop1Enforcement:
         no deviation trace (guard: the tooth is narrow, rank-#1 only)."""
         root = tmp_path / "r3"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T1 tools=grep] claim C-1 background work")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground work')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
         assert "REJECT top1" not in r.stderr
         assert not [e for e in _event_rows(ws)
@@ -236,7 +234,7 @@ class TestTop1Enforcement:
         led.cases["case-c-4"] = po.CasePosterior("case-c-4", alpha=1.0,
                                                  beta=2.0)
         led.save(ws)
-        r = _run_gate(root, ws, "[T1 tools=grep] claim C-4 retry the failed")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-4", "tier": 1, "tools": ["grep"]}}\nretry the failed')
         assert r.returncode == 0, (
             f"failure-blocked slice belongs to the #495 injection, not the "
             f"top-1 REJECT; stderr={r.stderr!r}")
@@ -358,7 +356,7 @@ class TestCapabilityGate:
         root = tmp_path / "c1"
         ws = _capability_ws(root)
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-xposed] claim C-1 hook the check via xposed")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-xposed"]}}\nhook the check via xposed')
         assert r.returncode == 2, (
             f"validated frida + dispatch xposed must REJECT; rc="
             f"{r.returncode}, stderr={r.stderr!r}")
@@ -371,9 +369,7 @@ class TestCapabilityGate:
         leaves the capability_switch trace in the unified log."""
         root = tmp_path / "c2"
         ws = _capability_ws(root)
-        prompt = ("[T2 tools=rev-xposed] claim C-1 hook the check via xposed\n"
-                  "capability-disproof: frida (spawn path timed out twice — "
-                  "see analyses/failure-C-1.yaml)")
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-xposed"]}}\nhook the check via xposed\ncapability-disproof: frida (spawn path timed out twice — see analyses/failure-C-1.yaml)')
         r = _run_gate(root, ws, prompt)
         assert r.returncode == 0, f"stderr={r.stderr!r}"
         assert "CAPABILITY (disproof recorded)" in r.stderr, (
@@ -390,7 +386,7 @@ class TestCapabilityGate:
         root = tmp_path / "c3"
         ws = _capability_ws(root, with_obstacle_claim=True)
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-xposed] claim C-2 try xposed instead")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 2, "tools": ["rev-xposed"]}}\ntry xposed instead')
         assert r.returncode == 2, (
             f"obstacle claim must inherit the parent capability card; rc="
             f"{r.returncode}, stderr={r.stderr!r}")
@@ -423,7 +419,7 @@ class TestCapabilityGate:
             "identified_obstacle": "none",
         })
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-xposed] claim C-2 try xposed instead")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 2, "tools": ["rev-xposed"]}}\ntry xposed instead')
         assert r.returncode == 2, (
             f"leak direction: the parent's frida card must survive the "
             f"child's familyless card; rc={r.returncode}, "
@@ -433,7 +429,7 @@ class TestCapabilityGate:
             f"the rejection must name the still-constraining family; "
             f"stderr={r.stderr!r}")
         r2 = _run_gate(root, ws,
-                       "[T2 tools=rev-frida] claim C-2 back to frida")
+                       '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 2, "tools": ["rev-frida"]}}\nback to frida')
         assert r2.returncode == 0, (
             f"false-block direction: returning to the parent-validated "
             f"frida is capability in hand, not a switch; rc="
@@ -595,7 +591,7 @@ class TestStrategyDataFace:
         root = tmp_path / "s3"
         ws = _top1_ws(root)
         r = _run_gate(root, ws,
-                      "[T1 tools=grep] claim C-1 background sweep [strategy first-pass]")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground sweep [strategy first-pass]')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
         log = ws / "runs" / "strategy-log.jsonl"
         assert log.exists(), "the strategy dispatch row must be logged"
@@ -630,7 +626,7 @@ class TestCapabilityDormantObservability:
         validated family passes (rc=0) in both dispatches."""
         root = tmp_path / "d1"
         ws = _capability_ws(root)
-        prompt = "[T2 tools=rev-frida] claim C-1 stay on the validated family"
+        prompt = '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-frida"]}}\nstay on the validated family'
         r = _run_gate(root, ws, prompt)
         assert r.returncode == 0, (
             f"dormant WARN must not change the pass rc; stderr={r.stderr!r}")
@@ -646,7 +642,7 @@ class TestCapabilityDormantObservability:
             f"condition); stdout={r.stdout!r}")
         # sentinel is in place -> the second dispatch does not repeat
         assert (ws / "runs" / ".capability-dormant-warned").exists()
-        r2 = _run_gate(root, ws, "[T2 tools=rev-frida] claim C-1 second dispatch")
+        r2 = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-frida"]}}\nsecond dispatch')
         assert r2.returncode == 0, f"stderr={r2.stderr!r}"
         rows2 = [e for e in _event_rows(ws)
                  if e.get("action") == "capability_dormant"]
@@ -661,7 +657,7 @@ class TestCapabilityDormantObservability:
         root = tmp_path / "d2"
         ws = _capability_ws(root, with_obstacle_claim=True)
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-frida] claim C-1 background work")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-frida"]}}\nbackground work')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "capability_dormant"]

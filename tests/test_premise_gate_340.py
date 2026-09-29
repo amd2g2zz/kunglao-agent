@@ -203,7 +203,10 @@ class TestPremiseReconciliation:
                                                "detail": "ok"}})
         payload = {"tool_input": {
             "name": "w-t", "description": "dynamic detonation",
-            "prompt": "[T2 tools=vmr-shell] claim C-001 detonate "
+            "prompt": '{"kunglao_dispatch": {"version": 1, '
+                      '"claim": "C-001", "tier": 2, '
+                      '"tools": ["vmr-shell"]}}\n'
+                      "detonate "
                       "facts-snapshot: 0 facts at 2026-09-22T00:00Z"
                       "\nmethod-family: dynamic-trace"}}
         rc = pre_check(payload, _paths(ws))
