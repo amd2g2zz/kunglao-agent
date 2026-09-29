@@ -23,6 +23,7 @@ evidence; the first failure stops the pipeline (recorded, never retried).
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -31,9 +32,29 @@ from e2e import audit, evidence, llm_faces, model
 from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     IMPORT_ERRORS, RunContext, budget_ok as _guard_budget,
     family_of, new_run_id, parse_decision as _decide,
-    promote_claims, record_result as _record, resolve_task_dir,
+    promote_claims, ranked_claims as _ranked_claims,
+    record_result as _record, resolve_task_dir,
     resume_plan, tail as _tail, top_claim as _top_claim,
 )
+
+#: #459: max dispatch acts launched CONCURRENTLY per tick wave. The acts
+#: are independent `claude -p` processes in one workspace; the loop is
+#: sequential Python, so the `dispatched` set is mutated only in the main
+#: thread (launch + landing) — pool threads never touch it.
+MAX_PARALLEL_DISPATCH = 3
+
+
+def _max_parallel_dispatch() -> int:
+    """The wave bound, overridable via KUNGLAO_E2E_MAX_PARALLEL (read at
+    call time so tests/CI can pin it per run). Floor 1 — a 0/garbage value
+    never yields an empty wave by accident; unparseable falls back to the
+    module default."""
+    raw = os.environ.get("KUNGLAO_E2E_MAX_PARALLEL", "")
+    try:
+        n = int(raw)
+    except ValueError:
+        return MAX_PARALLEL_DISPATCH
+    return max(1, n)
 
 # ---------------------------------------------------------------------------
 # C6 pre-registration payload (runbook C6-pre-1..3, verbatim templates)
@@ -418,21 +439,26 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
                    [goal_op, register, spec_path])
 
 
-def _rank_top_claim(ctx: RunContext) -> tuple[str | None,
-                                              model.CmdOutcome | None, int]:
-    """Priority-rank the top claim. Returns (claim, failed_outcome, ms)."""
+def _rank_dispatchable(ctx: RunContext) -> tuple[list[str],
+                                                  model.CmdOutcome | None, int]:
+    """#459: ALL dispatchable claims in rank order (the tick dispatches up
+    to max-parallel of them). Returns (claims, failed_outcome, ms);
+    failed_outcome is set when ranking failed or produced nothing."""
     out, ms = ctx.py("priority_ratio.py", str(ctx.ws), "--json")
     ok = model.adjudicate("C6-loop", out.rc) == model.PASS
-    claim = _top_claim(out) if ok else None
-    return claim, (None if ok and claim else out), ms
+    claims = _ranked_claims(out) if ok else []
+    return claims, (None if ok and claims else out), ms
 
 
-def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
-                      detail: dict) -> model.CheckpointResult | None:
-    """Mint the dispatch request + run the LLM face for one claim.
-    Returns a terminal CheckpointResult on failure, None on success."""
+def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
+                     ) -> tuple[model.DispatchRequest | None, object]:
+    """Launch phase (#459) — MAIN THREAD ONLY: mark the claim, mint the
+    prompt + envelope, emit method_family, and emit the ATTEMPT row (via
+    the face, so every wave's attempts land in launch order before any
+    act executes). Returns (request, face_handle); request None = the
+    claim is already in flight from an earlier tick."""
     if claim in dispatched:
-        return None  # already emitted; wait for the act to land
+        return None, None
     dispatched.add(claim)
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -453,15 +479,58 @@ def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         method_family=method_family or None)
-    act = ctx.face.dispatch_act(request)
+    return request, ctx.face.launch_dispatch(request)
+
+
+def _land_dispatch(ctx: RunContext, claim: str, act: object,
+                   dispatched: set[str], detail: dict) -> None:
+    """Landing phase (#459) — MAIN THREAD ONLY: record the act + per-act
+    rollback. #456 bug-2: a BLOCKED/TIMEOUT/ERROR act frees THAT claim
+    only — without the discard the loop skips re-dispatch forever and
+    only the idle circuit-breaker can end the run (round-3/round-4 fate).
+    A timeout on one act never touches the other claims of the wave."""
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
-    # #456 bug-2: a BLOCKED/TIMEOUT/ERROR act frees the claim — without
-    # this discard the loop skips re-dispatch forever and only the idle
-    # circuit-breaker can end the run (round-3/round-4 fate).
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
         dispatched.discard(claim)
+
+
+def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
+                      detail: dict) -> model.CheckpointResult | None:
+    """Synchronous single-act path (the pre-#459 seam the rollback tests
+    pin): launch → execute → land in the caller's thread. Returns a
+    terminal CheckpointResult on failure, None on success."""
+    request, handle = _launch_dispatch(ctx, claim, dispatched)
+    if request is None:
+        return None  # already emitted; wait for the act to land
+    act = ctx.face.run_dispatch(request, handle)
+    _land_dispatch(ctx, claim, act, dispatched, detail)
     return None
+
+
+def _dispatch_wave(ctx: RunContext, claims: list[str],
+                   dispatched: set[str], detail: dict) -> None:
+    """#459: launch up to max-parallel not-yet-dispatched acts (rank
+    order), then WAIT for the whole wave to land and record each outcome.
+
+    Budget guard is GLOBAL (#459 acceptance): it is consulted before
+    EVERY launch — exhausted stops launching new acts but never abandons
+    the already-launched in-flight ones (they still land + record). The
+    `dispatched` set is mutated only here, in the main thread."""
+    launched: list[tuple[model.DispatchRequest, object]] = []
+    for claim in claims:
+        if len(launched) >= _max_parallel_dispatch():
+            break
+        if not _guard_budget(ctx):
+            break
+        request, handle = _launch_dispatch(ctx, claim, dispatched)
+        if request is not None:
+            launched.append((request, handle))
+    if not launched:
+        return
+    acts = llm_faces.run_dispatch_parallel(ctx.face, launched)
+    for act in acts:  # landing order; ActRecord.claim correlates 1:1
+        _land_dispatch(ctx, act.claim, act, dispatched, detail)
 
 
 _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
@@ -533,17 +602,18 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                                 {**detail, "stop_class": stop_class}),
                 total_ms)
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
-        claim, failed, ms = _rank_top_claim(ctx)
+        claims, failed, ms = _rank_dispatchable(ctx)
         total_ms += ms
-        if failed is not None or not claim:
+        if failed is not None or not claims:
             return ("stop", _record(
                 ctx, "C6", "loop", model.FAIL,
                 failed.rc if failed else None, failed, total_ms,
                 {**detail, "failed_step": "priority_ratio"}), total_ms)
         if decision == "DISPATCH":
-            terminal = _run_dispatch_act(ctx, claim, dispatched, detail)
-            if terminal is not None:
-                return "stop", terminal, total_ms
+            # #459: dispatch up to max-parallel acts concurrently (launch
+            # all, wait for all); rollback + budget guard stay per-act /
+            # global inside the wave.
+            _dispatch_wave(ctx, claims, dispatched, detail)
     elif decision is None:
         return ("stop", _record(ctx, "C6", "loop", model.FAIL, out_d.rc,
                                 out_d, total_ms,

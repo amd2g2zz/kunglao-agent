@@ -22,7 +22,9 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -92,23 +94,36 @@ class OrchestratorFace:
     def __init__(self, evidence_dir: Path):
         self.evidence_dir = Path(evidence_dir)
 
-    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
+    def launch_dispatch(self, req: model.DispatchRequest) -> str:
+        """Launch phase (#459): write the request file + emit the ATTEMPT
+        row. Called sequentially from the main thread so a wave's attempts
+        land in launch order BEFORE any act executes. Returns the launch
+        handle (the request-file path) run_dispatch consumes."""
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         path = self.evidence_dir / f"dispatch-{req.claim}-{req.emitted_ts or model.utc_now()}.json"
         path.write_text(
             json.dumps(req.to_dict(), indent=2, sort_keys=True,
                        ensure_ascii=False) + "\n", encoding="utf-8")
-        # unified audit trail (owner ruling 2026-09-29 §2): attempt +
-        # result for EVERY dispatch act, stream AND ActRecord. The
-        # orchestrator face runs no subprocess — the result's exit is a
-        # documented null ("orchestrator_face_no_subprocess"), never a
-        # fabricated 0.
+        # unified audit trail (owner ruling 2026-09-29 §2): attempt row for
+        # EVERY dispatch act, stream AND ActRecord.
         audit.emit_dispatch_attempt(req.workspace, req.claim, mode=self.mode,
                                     artifact=str(path))
+        return str(path)
+
+    def run_dispatch(self, req: model.DispatchRequest,
+                     handle=None) -> ActRecord:
+        """Execution phase (#459): emit the RESULT row + mint the record.
+        The orchestrator face runs no subprocess — the result's exit is a
+        documented null ("orchestrator_face_no_subprocess"), never a
+        fabricated 0."""
+        artifact = str(handle) if handle else ""
         audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
-                                   rc=None, artifacts=[str(path)])
+                                   rc=None, artifacts=[artifact])
         return ActRecord(req.claim, self.mode, "EMITTED",
-                         {"dispatch_request": str(path)})
+                         {"dispatch_request": artifact})
+
+    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
+        return self.run_dispatch(req, self.launch_dispatch(req))
 
     def wait_verdict(self, ws: Path, poll_seconds: float,
                      deadline: float, sleep_fn=time.sleep) -> bool:
@@ -130,7 +145,26 @@ class AutoLlmFace:
         self.runner = runner
         self.evidence_dir = Path(evidence_dir)
 
-    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
+    def launch_dispatch(self, req: model.DispatchRequest) -> None:
+        """Launch phase (#459): the ATTEMPT row, emitted from the main
+        thread so every attempt precedes every result in a wave. The
+        command rides with the prompt elided to its file pointer — the
+        prompt body lives in the dispatch-prompt evidence file, and the
+        stream stays one-line-per-event readable."""
+        ws = Path(req.workspace)
+        audit.emit_dispatch_attempt(
+            req.workspace, req.claim, mode=self.mode,
+            command=["claude", "-p", f"<prompt-file:{req.prompt_file}>",
+                     "--output-format", "json",
+                     "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"],
+            cwd=str(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
+        return None
+
+    def run_dispatch(self, req: model.DispatchRequest,
+                     handle=None) -> ActRecord:
+        """Execution phase (#459): the headless claude act — safe to run
+        in a pool thread (its subprocess + parse + result row share no
+        mutable state with the other acts of the wave)."""
         prompt = Path(req.prompt_file).read_text(encoding="utf-8")
         # #456 fix: run IN the workspace (the agent must read/write the
         # claim register, facts, target material) — NOT in the repo.
@@ -138,16 +172,6 @@ class AutoLlmFace:
         ws = Path(req.workspace)
         cmd = ["claude", "-p", prompt, "--output-format", "json",
                "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"]
-        # unified audit trail (owner ruling 2026-09-29 §2): ATTEMPT before
-        # execution. The command rides with the prompt elided to its file
-        # pointer — the prompt body lives in the dispatch-prompt evidence
-        # file, and the stream stays one-line-per-event readable.
-        audit.emit_dispatch_attempt(
-            req.workspace, req.claim, mode=self.mode,
-            command=["claude", "-p", f"<prompt-file:{req.prompt_file}>",
-                     "--output-format", "json",
-                     "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"],
-            cwd=str(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
         started = time.monotonic()
         outcome = self.runner.run(cmd, cwd=str(ws),
                                   timeout=CLAUDE_ACT_TIMEOUT_S)
@@ -189,6 +213,10 @@ class AutoLlmFace:
              "stdout_tail": outcome.stdout[-model.TAIL_CHARS:],
              "stderr_tail": outcome.stderr[-model.TAIL_CHARS:]})
 
+    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
+        self.launch_dispatch(req)
+        return self.run_dispatch(req)
+
     def verdict_act(self, ws: Path, prompt: str) -> ActRecord:
         outcome = self.runner.run(
             ["claude", "-p", prompt, "--output-format", "json"],
@@ -216,54 +244,68 @@ class DryLlmFace:
     def __init__(self, evidence_dir: Path, claim_counter: dict | None = None):
         self.evidence_dir = Path(evidence_dir)
         self.claim_counter = claim_counter if claim_counter is not None else {}
+        # #459: waves run acts in pool threads — the dry face serializes
+        # its counter + fixture writes so parallel dry acts stay
+        # deterministic (dry is a scripted responder; concurrency would
+        # only race the fixture file names, never real analysis).
+        self._lock = threading.Lock()
 
-    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
-        ws = Path(req.workspace)
-        # unified audit trail (owner ruling 2026-09-29 §2): the dry face
-        # dispatches too — attempt before, result after, both in-stream.
+    def launch_dispatch(self, req: model.DispatchRequest) -> None:
+        """Launch phase (#459): the dry face dispatches too — the ATTEMPT
+        row from the main thread, in launch order."""
         audit.emit_dispatch_attempt(req.workspace, req.claim, mode=self.mode,
-                                    cwd=str(ws), timeout=None)
+                                    cwd=str(Path(req.workspace)), timeout=None)
+        return None
+
+    def run_dispatch(self, req: model.DispatchRequest,
+                     handle=None) -> ActRecord:
+        ws = Path(req.workspace)
         started = time.monotonic()
-        n = self.claim_counter.get(req.claim, 0) + 1
-        self.claim_counter[req.claim] = n
         artifacts: list[str] = []
-        # 1. worker-status FIRST (worker-side rule, W-15)
-        status = ws / "runs" / f"worker-status-dry-{req.claim}-{n}.md"
-        status.parent.mkdir(parents=True, exist_ok=True)
-        status.write_text(
-            f"# worker status (dry)\nclaim: {req.claim}\nstatus: DONE\n",
-            encoding="utf-8")
-        artifacts.append(str(status))
-        # 2. fact file with recovered-constants evidence
-        fact = ws / "facts" / f"F{len(self.claim_counter):03d}.md"
-        fact.parent.mkdir(parents=True, exist_ok=True)
-        fact.write_text(
-            f"---\nclaim: {req.claim}\nstatus: PROVEN\n"
-            "evidence: static read of target/derive.py (dry fixture)\n"
-            "---\nconstants recovered: 0 / 13 / 7 (dry placeholder)\n",
-            encoding="utf-8")
-        artifacts.append(str(fact))
-        # 3. verify-note (outcome_capture convention for the gate)
-        note = ws / "runs" / f"{req.claim}-verify-note.md"
-        note.parent.mkdir(parents=True, exist_ok=True)
-        note.write_text(
-            f"# verify — {req.claim}\noutcome: passes\n"
-            "redteam: CONFIRMED (dry)\n", encoding="utf-8")
-        artifacts.append(str(note))
-        # 4. reimpl artifact (deliverable stand-in)
-        reimpl = ws / "artifacts" / "derive_reimpl.py"
-        reimpl.parent.mkdir(parents=True, exist_ok=True)
-        reimpl.write_text(
-            "def derive(data: bytes) -> int:\n"
-            "    # dry-llm stub re-implementation (pipeline test only)\n"
-            "    return 42\n", encoding="utf-8")
-        artifacts.append(str(reimpl))
+        with self._lock:
+            n = self.claim_counter.get(req.claim, 0) + 1
+            self.claim_counter[req.claim] = n
+            # 1. worker-status FIRST (worker-side rule, W-15)
+            status = ws / "runs" / f"worker-status-dry-{req.claim}-{n}.md"
+            status.parent.mkdir(parents=True, exist_ok=True)
+            status.write_text(
+                f"# worker status (dry)\nclaim: {req.claim}\n"
+                "status: DONE\n", encoding="utf-8")
+            artifacts.append(str(status))
+            # 2. fact file with recovered-constants evidence
+            fact = ws / "facts" / f"F{len(self.claim_counter):03d}.md"
+            fact.parent.mkdir(parents=True, exist_ok=True)
+            fact.write_text(
+                f"---\nclaim: {req.claim}\nstatus: PROVEN\n"
+                "evidence: static read of target/derive.py (dry fixture)\n"
+                "---\nconstants recovered: 0 / 13 / 7 (dry placeholder)\n",
+                encoding="utf-8")
+            artifacts.append(str(fact))
+            # 3. verify-note (outcome_capture convention for the gate)
+            note = ws / "runs" / f"{req.claim}-verify-note.md"
+            note.parent.mkdir(parents=True, exist_ok=True)
+            note.write_text(
+                f"# verify — {req.claim}\noutcome: passes\n"
+                "redteam: CONFIRMED (dry)\n", encoding="utf-8")
+            artifacts.append(str(note))
+            # 4. reimpl artifact (deliverable stand-in)
+            reimpl = ws / "artifacts" / "derive_reimpl.py"
+            reimpl.parent.mkdir(parents=True, exist_ok=True)
+            reimpl.write_text(
+                "def derive(data: bytes) -> int:\n"
+                "    # dry-llm stub re-implementation (pipeline test only)\n"
+                "    return 42\n", encoding="utf-8")
+            artifacts.append(str(reimpl))
         duration_ms = int((time.monotonic() - started) * 1000)
         audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
                                    rc=0, duration_ms=duration_ms,
                                    artifacts=artifacts)
         return ActRecord(req.claim, self.mode, "DISPATCHED",
                          {"artifacts": artifacts})
+
+    def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
+        self.launch_dispatch(req)
+        return self.run_dispatch(req)
 
     def verdict_act(self, ws: Path, prompt: str = "") -> ActRecord:
         verdict_dir = Path(ws) / "evidence"
@@ -290,6 +332,27 @@ def face_for(mode: str, runner: CommandRunner,
     if mode == "dry":
         return DryLlmFace(evidence_dir)
     raise ValueError(f"unknown llm mode {mode!r}")
+
+
+def run_dispatch_parallel(
+        face, launched: list[tuple[model.DispatchRequest, object]]
+        ) -> list[ActRecord]:
+    """#459 bounded-concurrency execution wave.
+
+    Precondition: every request's ATTEMPT row was already emitted by
+    launch_dispatch in the CALLER's thread (launch order, before any act
+    executes). This runs the acts — independent `claude -p` processes in
+    the same workspace — in one thread-pool wave and WAITS for all of
+    them to land: a timeout on one act never cancels the others (each
+    subprocess carries its own timeout). Returns ActRecords in LANDING
+    order (as_completed); a wave of one runs inline (no pool spin-up —
+    the common single-claim tick keeps its exact sequential behavior)."""
+    if len(launched) <= 1:
+        return [face.run_dispatch(req, handle) for req, handle in launched]
+    with ThreadPoolExecutor(max_workers=len(launched)) as pool:
+        futures = [pool.submit(face.run_dispatch, req, handle)
+                   for req, handle in launched]
+        return [future.result() for future in as_completed(futures)]
 
 
 class AutonomousFace:
