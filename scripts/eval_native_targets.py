@@ -894,7 +894,11 @@ def build_task_unit(family: str, rung: str, task_id: str | None = None):
         "anchors": dict(_ANCHORS[family]),
         "workspace_scaffold": {
             "language": meta["language"],
-            "files": [meta["target"], "reference.py"],
+            # The analysis material ONLY. reference.py is the
+            # checker's answer source (self_check_candidate below) —
+            # checker-side, invoked harness-side from the unit dir; it
+            # must never ship as workspace scaffold.
+            "files": [meta["target"]],
             "entry": meta["target"],
             "candidate_contract": _CANDIDATE_CONTRACT[family],
         },
