@@ -551,3 +551,23 @@ def test_posterior_store_decayed_weight_fades_old_rows(tmp_path):
     assert 0.0 < w_old < 1.0  # γ-decayed under the shipped DTS schedule
     # foreign ids keep the unit weight (no invented decay for unknown rows)
     assert store.decayed_weight("task/not-in-ledger") == 1.0
+
+
+def test_prior_channel_counts_proposals_never_outcomes(tmp_path):
+    """Review follow-up (W3 MEDIUM): the P_LLM proposal prior counts the
+    two PROPOSAL faces only — dispatch rows and settled method_family
+    signals. Settlement-source q-cell rows are OUTCOME data; counting
+    them would skew the prior toward dispatch-heavy families."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    # one declared proposal: static-decompile
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch", claim="tr-m1-d1")
+    # five settlement rows for another family: OUTCOME data, no proposal
+    for _ in range(5):
+        q_cells.observe(ws, fp, "dynamic-trace", 0.0)
+    store = compose.load_store(ws)
+    prior = store._proposal_prior()
+    assert prior == {"static-decompile": 1.0}
+    assert store.method_lead(fp) == "static-decompile"

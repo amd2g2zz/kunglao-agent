@@ -39,9 +39,13 @@ points the seam at the faces that actually landed (#428 posterior store,
     the seam returns None — compose's documented fallback to the settled
     ledger total (the pre-spine evidence base, IdentityStore semantics).
 
-Failure posture: compose is the decision single-point — fail-closed.
-Every learned value is a pure read over workspace state; a broken
-deployment raises into compose's loud path, it never fakes a policy.
+Failure posture: compose is the decision single-point — the seam
+FAILS LOUDLY on a broken construction (never a silent fake policy).
+Store READS ride the documented q_cells store protocol: a corrupt
+posterior bank degrades to the tolerant JSONL face with one rate-
+limited warn (the store's own fail-open read contract), and the
+learned values derived from it are pure deterministic reads of
+whatever rows survive.
 """
 from __future__ import annotations
 
@@ -79,6 +83,10 @@ class PosteriorStrategyStore:
     def decayed_weight(self, row_id: str) -> float:
         """γ-decayed weight of one settled backing row (unit weight for
         rows outside the settled stream)."""
+        # lifecycle pin: the weight ladder is cached per INSTANCE and a
+        # fresh store is built per decision event (compose.compose does
+        # exactly that) — a long-lived instance would serve stale weights
+        # after settlements land.
         if self._weights is None:
             self._weights = self._decayed_weights()
         return float(self._weights.get(str(row_id), 1.0))
@@ -98,12 +106,16 @@ class PosteriorStrategyStore:
 
     def _proposal_prior(self) -> dict[str, float]:
         """P_LLM as a measured face: each family's share of the
-        declarations this workspace has seen (q-cell dispatch rows +
-        settled ``method_family`` signals). Deterministic in workspace
-        state; empty when nothing was ever declared."""
+        declarations this workspace has seen — the two PROPOSAL faces
+        only (q-cell DISPATCH rows + settled ``method_family`` signals).
+        Settlement-source q-cell rows are outcome data, never proposals;
+        counting them would skew the prior toward dispatch-heavy
+        families. Deterministic in workspace state; empty when nothing
+        was ever declared."""
         counts: dict[str, int] = {}
         for row in self._qstore.observations():
-            if not isinstance(row, dict):
+            if not isinstance(row, dict) \
+                    or str(row.get("source") or "") != "dispatch":
                 continue
             fam = str(row.get("method_family") or "").strip()
             if fam:
@@ -150,8 +162,10 @@ def _row_outcome(row: dict) -> float:
 
 
 def load_store(ws) -> "PosteriorStrategyStore":
-    """Constructor face for callers that want the adapter without
-    importing compose (compose.load_store delegates here)."""
+    """Standalone constructor face for callers that want the adapter
+    without importing compose (compose.load_store constructs
+    PosteriorStrategyStore directly; this wrapper adds the loud
+    warn-and-reraise on a failed construction)."""
     try:
         return PosteriorStrategyStore(ws)
     except Exception as exc:  # noqa: BLE001 — re-raise LOUDLY (fail-closed)

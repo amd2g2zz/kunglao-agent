@@ -1155,7 +1155,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 89280dfd697f9299f82b74bd80f70ee679ff6b99ef1e4bdbb06fc7b36f7739b0
+    sha256: 9f7df81e87c0ab64b76b06a03fd1b4ea54b865f1014f680740918b1e3f7460f5
   - src: scripts/rlvr/triples.py
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold
