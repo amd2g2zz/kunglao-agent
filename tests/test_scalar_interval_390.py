@@ -87,9 +87,13 @@ class TestOutputRails:
 
     def test_rails_are_clamp_bounds_not_tuned_weights(self):
         """Declared reference bands — the constant carries the derivation
-        note (no tuned weights) on its face."""
+        note (no tuned weights) on its face. #420 Phase 2: the body lives
+        at scripts/rlvr/scalar.py; the note is pinned on the ENGINE source
+        (followed through the shim's re-exported function home)."""
         import inspect
-        src = inspect.getsource(ss)
+        import sys
+        src = inspect.getsource(
+            sys.modules[ss.clamp_credit.__module__])
         assert "NOT tuned weights" in src
         assert "0.01" in str(ss.OUTPUT_RAILS["TRACE"]["canonical"])
 

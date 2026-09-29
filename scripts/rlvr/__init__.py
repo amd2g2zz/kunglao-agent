@@ -25,6 +25,8 @@ from __future__ import annotations
 from . import ledger
 from . import posteriors
 from . import q_cells
+from . import reward
+from . import scalar
 from .ledger import (
     KIND_HYBRID_DISTILL,
     KIND_SELF_DISTILL,
@@ -42,6 +44,30 @@ from .ledger import (
     row_schema_lint as ledger_row_schema_lint,
     settle as settle_rollout,
     settled as settled_rollouts,
+)
+from .reward import (
+    BANDS as REWARD_BANDS,
+    POLARITY_ALPHA_BANDS,
+    POLARITY_BETA_BANDS,
+    RULES_SCHEMA,
+    classify as classify_signals,
+    load_rules,
+    polarity_of,
+    prior_observations,
+    settle_workspace as settle_workspace_rewards,
+)
+from .scalar import (
+    MEASURED_TIERS,
+    OUTPUT_RAILS,
+    classify_tier,
+    extract_tuple,
+    normal_gamma_update,
+    merge_normal_gamma_posts,
+    round_credit,
+    scalar_observations,
+    settle_round_credit,
+    settle_workspace_scalars,
+    tuples as experience_tuples,
 )
 from .posteriors import (
     ADAPTIVE_EMA_LAMBDA_DEFAULT,
@@ -64,6 +90,8 @@ __all__ = [
     "ledger",
     "posteriors",
     "q_cells",
+    "reward",
+    "scalar",
     # ledger faces (issue 420 Phase 2)
     "KIND_TASK",
     "KIND_SELF_DISTILL",
@@ -81,6 +109,28 @@ __all__ = [
     "pending_settlement",
     "record_rollout",
     "settle_rollout",
+    # reward faces (issue 420 Phase 2)
+    "REWARD_BANDS",
+    "POLARITY_ALPHA_BANDS",
+    "POLARITY_BETA_BANDS",
+    "RULES_SCHEMA",
+    "classify_signals",
+    "load_rules",
+    "polarity_of",
+    "prior_observations",
+    "settle_workspace_rewards",
+    # scalar faces (issue 420 Phase 2)
+    "MEASURED_TIERS",
+    "OUTPUT_RAILS",
+    "classify_tier",
+    "extract_tuple",
+    "normal_gamma_update",
+    "merge_normal_gamma_posts",
+    "round_credit",
+    "scalar_observations",
+    "settle_round_credit",
+    "settle_workspace_scalars",
+    "experience_tuples",
     # posteriors faces (issue 428)
     "ADAPTIVE_EMA_LAMBDA_DEFAULT",
     "GAMMA_FLOOR_DEFAULT",
