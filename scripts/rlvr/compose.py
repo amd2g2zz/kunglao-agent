@@ -34,9 +34,9 @@ Segment discipline: card text rides the dynamic strategy segments only.
 The constitution segment is permanently card-free — pinned by
 assert_cards_allowed plus the validator's exact-section-set rule.
 
-Store seam: ALL learned arithmetic (Thompson-sampled method lead, gamma
-decay weights, cell population) belongs to the posterior store (issue
-428, parallel work stream). compose sees it only through the
+Store seam: ALL learned arithmetic (DTS-sampled method lead, γ decay
+weights, cell population) belongs to the posterior store (issue 428,
+parallel work stream). compose sees it only through the
 StrategyStore protocol; the module degrades to IdentityStore (no lead,
 unit weights, ledger-total cell count) until that store lands.
 """
@@ -105,7 +105,7 @@ class SegmentError(ValueError):
 
 class StrategyStore(Protocol):
     """The learned-state seam. compose owns templates + scheduling; the
-    store owns ALL learned arithmetic (Thompson sampling, gamma decay,
+    store owns ALL learned arithmetic (DTS sampling, γ decay,
     cell population). Implementations come from the posterior store
     (issue 428)."""
 

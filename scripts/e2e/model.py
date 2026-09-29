@@ -42,7 +42,13 @@ TICK_WAIT_SECONDS_DEFAULT = 300
 #: stdout/stderr evidence tails (bytes) kept per checkpoint.
 TAIL_CHARS = 4_000
 
-CONTAMINATION_NAMES = ("ground_truth.json", "checker.py")
+CONTAMINATION_NAMES = ("ground_truth.json", "checker.py",
+                       "reference.py", "reference_candidate.py")
+
+#: Answer-equivalent file NAMES (the checker's self-check / ground-truth
+#: sources). Checker-side only — never staged into the E2E
+#: workspace; the checker invokes them harness-side from the REPO tree.
+ANSWER_FILE_NAMES = frozenset({"reference.py", "reference_candidate.py"})
 
 #: The REAL #880 settlement action. register_proven_gate.emit_settlements
 #: emits kunglao_log rows with action="claim_settled" (actor
@@ -193,25 +199,58 @@ def synthesize_answers(pending_ids: list[str], anchors: dict[str, str],
 # ---------------------------------------------------------------------------
 
 
+def scaffold_material(task_dir: Path) -> list[str]:
+    """The unit's task.yaml-declared analysis material:
+    workspace_scaffold.files minus the checker's answer sources (the
+    declared self_check_candidate plus any answer-equivalent name).
+
+    A unit with no declared files, or whose every declared file is an
+    answer source, has NO analysis material — AnchorError, never an
+    empty mount."""
+    import yaml  # local import: yaml is a repo dependency, keep module lean
+
+    task_yaml = Path(task_dir) / "task.yaml"
+    doc = yaml.safe_load(task_yaml.read_text(encoding="utf-8")) or {}
+    files = (doc.get("workspace_scaffold") or {}).get("files") or []
+    self_check = str(((doc.get("checker") or {})
+                      .get("self_check_candidate")) or "")
+    material = [f for f in files
+                if f != self_check and Path(f).name not in ANSWER_FILE_NAMES]
+    if not material:
+        raise AnchorError(
+            f"{task_yaml}: workspace_scaffold.files declares no analysis "
+            "material (empty, or answer sources only)")
+    return material
+
+
 def stage_workspace(task_dir: Path, ws: Path) -> Path:
-    """Material mount: copy ONLY target/derive.py into WS/target/.
+    """Material mount: copy ONLY the unit's task.yaml-declared analysis
+    material (workspace_scaffold.files) into WS, preserving relative
+    paths. Answer sources (reference.py = the checker's self-check
+    candidate) never stage — the checker invokes them harness-side
+    from the REPO tree; its default --candidate is its own unit dir.
 
     WS lives OUTSIDE the repo (never inside it). ground_truth.json and
     checker.py stay out of the workspace — the checker is resolved from
-    the REPO tree at C7 (rehearsal finding #3)."""
+    the REPO tree at C7 (rehearsal finding #3). A declared file missing
+    from the task unit is a loud FileNotFoundError — never a partial
+    silent stage."""
     task_dir = Path(task_dir)
     ws = Path(ws)
-    target_dst = ws / "target"
-    target_dst.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(task_dir / "target/derive.py", target_dst / "derive.py")
+    for rel in scaffold_material(task_dir):
+        dst = ws / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(task_dir / rel, dst)
     return ws
 
 
 def check_contamination(ws: Path) -> list[str]:
     """Return every contamination violation under WS (path strings).
 
-    ground_truth.json / checker.py must never exist anywhere inside the
-    workspace — as file OR directory — in any nesting."""
+    ground_truth.json / checker.py / reference.py /
+    reference_candidate.py must never exist anywhere inside the
+    workspace — as file OR directory — in any nesting (the answer sources
+    are checker-side, invoked from the REPO tree)."""
     ws = Path(ws)
     violations: list[str] = []
     if not ws.is_dir():
