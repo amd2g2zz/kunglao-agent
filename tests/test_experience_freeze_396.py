@@ -47,6 +47,8 @@ import tc_journal  # noqa: E402
 RECORDING_MODULES = ("state_signature", "tc_journal", "experience_triples")
 
 # the decision faces that must never pull recording in
+# (#420 Phase 2: the settlement engine bodies live at rlvr/{reward,scalar}.py;
+#  the top-level scripts are re-export shims — the wall follows the bodies)
 DECISION_SOURCES = [
     HOOKS / "dispatch_gate.py",
     HOOKS / "worker_budget.py",
@@ -57,6 +59,8 @@ DECISION_SOURCES = [
     HOOKS / "completion_gate.py",
     SCRIPTS / "reward_settlement.py",
     SCRIPTS / "scalar_settlement.py",
+    SCRIPTS / "rlvr" / "reward.py",
+    SCRIPTS / "rlvr" / "scalar.py",
     SCRIPTS / "convergence_check.py",
     SCRIPTS / "priority_ratio.py",
     SCRIPTS / "rollout_ledger.py",
@@ -93,10 +97,30 @@ class TestImportDirection:
 
     def test_recording_never_imports_settlement_rules(self):
         """Recording reads the ledger read-face only — it must not import
-        the frozen rules module (reward_settlement) at all."""
+        the frozen rules module (reward_settlement) at all.
+
+        #420 Phase 2: the recording bodies live at rlvr/{state,triples}.py;
+        the same wall runs there, checked on the FULL import module string
+        (a `from rlvr import reward` inside the package is the same
+        violation the bare import was)."""
         for mod in RECORDING_MODULES:
             imports = _module_imports(SCRIPTS / f"{mod}.py")
             assert "reward_settlement" not in imports
+        for body in ("state", "triples"):
+            path = SCRIPTS / "rlvr" / f"{body}.py"
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            mods = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    mods.update(a.name for a in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    mods.add(node.module)
+                    if node.level:  # relative import (from . import X)
+                        mods.update(
+                            f"rlvr.{a.name}" for a in node.names)
+            bad = {m for m in mods
+                   if m in ("reward_settlement", "rlvr.reward")}
+            assert not bad, f"rlvr/{body}.py imports settlement rules: {bad}"
 
 
 # ---------- 2. settlement byte identity ----------

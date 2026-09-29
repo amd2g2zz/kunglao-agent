@@ -150,7 +150,11 @@ class TestRollupEmitsUnifiedRows:
         transition (make the adapters crash and the rollup still fires)."""
         ws, lib = _proven_workspace(tmp_path)
         import unittest.mock as mock
-        with mock.patch.object(rs, "settle_workspace",
+        # seam follows the body (issue 420 Phase 2: rollup_face calls
+        # settle_workspace from rlvr.reward's globals — the shim attribute
+        # is no longer the calling frame)
+        import rlvr.reward as _rreward  # noqa: PLC0415
+        with mock.patch.object(_rreward, "settle_workspace",
                                side_effect=RuntimeError("boom")):
             res = rag.run_rollup(ws, "C-101", terminal_status="PROVEN",
                                  lessons_library=lib,

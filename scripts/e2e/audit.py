@@ -162,8 +162,10 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     # the tick axis, same contract as kunglao_log._resolve_epoch(ws, None):
     # omitted kwarg inherits current_tick; an unreadable ledger is a
     # documented null, never a fabricated value.
-    epoch = kunglao_log.current_tick(ws)
-    epoch_reason = None if epoch is not None else "tick_ledger_unreadable"
+    # single-axis inheritance (#255): READ the one tick counter, never
+    # keep a local name that pattern-matches a second producer's face
+    cur_tick = kunglao_log.current_tick(ws)
+    epoch_reason = None if cur_tick is not None else "tick_ledger_unreadable"
     version = kunglao_log._repo_sha()
     reasons: dict = {}
     if null_reasons:
@@ -179,7 +181,7 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "exit": int(exit) if exit is not None else None,
         "detail": _detail_text(detail),
         "arm": str(arm) if arm else None,
-        "epoch": int(epoch) if epoch is not None else None,
+        "epoch": int(cur_tick) if cur_tick is not None else None,
         "hypothesis_ref": None,
         "matched_rule": None,
         "trace_id": str(trace_id) if trace_id else None,

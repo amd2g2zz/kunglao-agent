@@ -148,6 +148,10 @@ max-complexity = 12
 "scripts/feedback.py" = ["E501"]
 "scripts/gate_telemetry.py" = ["E501"]
 "scripts/heartbeat.py" = ["C901", "E501"]
+# #420 Phase 2: evaluate_tick_continuity moved VERBATIM from
+# scripts/heartbeat.py (pinned detail strings + complexity) to
+# scripts/rlvr/liveness.py — the grandfather rides with the body.
+"scripts/rlvr/liveness.py" = ["C901", "E501"]
 "scripts/heartbeat_loop_prompt.py" = ["E501"]
 "scripts/heartbeat_tick.py" = ["C901", "E501"]
 "scripts/hook_activation.py" = ["C901", "E501"]
