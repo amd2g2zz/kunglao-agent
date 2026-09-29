@@ -340,7 +340,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 2
   scripts/rlvr/q_cells.py:
-    r1: 14
+    r1: 15
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
@@ -1127,7 +1127,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_q_cells_429.py:
-    r1: 3
+    r1: 4
     r2: 2
   tests/test_qtable_p3.py:
     r1: 5

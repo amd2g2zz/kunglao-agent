@@ -563,10 +563,35 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         res = rl.settle(ws, rid, settlement)
         if res.get("appended"):
             settled_n += 1
+            # issue 462 W5 — the settlement feed: the FIRST SUCCESSFUL
+            # settlement of a dispatch banks its ladder value into the
+            # matching Q cell (the eager learning clock). The guard tests
+            # settlement PRESENCE in the fold, not mere row existence: a
+            # first run that recorded the identity row but failed/died
+            # before settling must bank on the retry, while replays and
+            # the late-cite amendment path (both carrying a settlement in
+            # the fold) refine the LEDGER only — the append-only
+            # observation log has no retraction face, so re-banking would
+            # double-count the round.
+            if not (existing and existing.get("settlement") is not None):
+                _bank_q_cell_credit(ws, row)
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
     return {"settled": settled_n, "untraced": doc["untraced"],
             "unattributed_waste": doc["unattributed_waste"]}
+
+
+def _bank_q_cell_credit(ws, row: dict) -> None:
+    """Issue 462 W5: bank one settled round credit into the matching Q
+    cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
+    Telemetry posture: fail-open, a banked-credit failure is one
+    rate-limited WARN and never breaks settlement (the determinism wall
+    covers the ledger receipt; the Q bank is the learning feed)."""
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        _qc.observe_settlement(ws, str(row["dispatch_id"]), row["r"])
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
 
 
 # --- scalar prior feed (exponential family, consumed by compute_priors) --
