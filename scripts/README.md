@@ -243,6 +243,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `verification_ladder.py` | the RL kernel's verification ladder (#429 section 1): T1 write-debounced long-round oracle probe trigger + T2 round-close stalled-first priority queue (runs/t2-queue.json) — declaratively hosted via the #878 mechanism registry | eval_loop_runner, mechanism_scheduler, tests |
 | `workguard.py` | WORKGUARD actionable-set predicate (#434): dispatchable + returned-worker faces, PARK/wall semantics, fail-open with one canonical warn — the turn-exit decision core | hooks (workguard_gate), tests |
 | `strategy_sections.py` | versioned round-strategy/1 seam (#434 consumer face; #431 produces) — pointer + render, absent renders nothing | hooks (SessionStart/WORKGUARD), tests |
 | `loop_watchdog.py` | missed-event predicate (#434): heartbeat cron fires ONLY when an expected event did not arrive | heartbeat_tick, tests |
