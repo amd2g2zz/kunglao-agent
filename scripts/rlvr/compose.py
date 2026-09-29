@@ -37,8 +37,12 @@ assert_cards_allowed plus the validator's exact-section-set rule.
 Store seam: ALL learned arithmetic (DTS-sampled method lead, γ decay
 weights, cell population) belongs to the posterior store (issue 428,
 parallel work stream). compose sees it only through the
-StrategyStore protocol; the module degrades to IdentityStore (no lead,
-unit weights, ledger-total cell count) until that store lands.
+StrategyStore protocol; since issue 462 W3 the seam is REAL —
+``load_store`` returns ``rlvr.strategy_store.PosteriorStrategyStore``
+over the landed q_cells/posteriors faces, and a store failure
+propagates loudly (compose is the decision single-point: fail-closed,
+never a silent fake policy — the former silent IdentityStore degrade is
+closed; IdentityStore survives as an explicit test/experiment stub only).
 """
 from __future__ import annotations
 
@@ -131,15 +135,13 @@ class IdentityStore:
 
 
 def load_store(ws) -> StrategyStore:
-    """Lazy-import the posterior store; ImportError degrades to
-    IdentityStore so the compose face is live before that store lands.
-    Any other store failure propagates loudly (compose is the decision
+    """THE real store seam (issue 462 W3): the PosteriorStrategyStore
+    over the landed learned-state faces (rlvr.q_cells + rlvr.posteriors
+    + the settled ledger). The former silent IdentityStore degrade is
+    CLOSED — any failure propagates loudly (compose is the decision
     single-point: fail-closed, never a silent fake policy)."""
-    try:
-        from rlvr.posteriors import PosteriorsStore  # type: ignore
-    except ImportError:
-        return IdentityStore()
-    return PosteriorsStore.open(Path(ws))  # type: ignore[attr-defined]
+    from rlvr.strategy_store import PosteriorStrategyStore  # noqa: PLC0415
+    return PosteriorStrategyStore(Path(ws))
 
 
 # ------------------------------------------------------------- canonical

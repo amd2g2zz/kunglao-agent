@@ -477,11 +477,77 @@ def test_round_strategy_yaml_seam(tmp_path):
     assert latest is not None and latest["content_hash"] == obj["content_hash"]
 
 
-# ------------------------------------------------- store seam fallback pin
+# ------------------------------------------------- store seam: the real face
 
-def test_store_seam_degrades_to_identity(tmp_path):
+def test_load_store_returns_the_posterior_store(tmp_path):
+    """W3 (#462): the store seam is REAL — load_store returns the
+    PosteriorStrategyStore over the landed posterior/q-cell faces, never
+    a silent fake-policy fallback."""
+    from rlvr.strategy_store import PosteriorStrategyStore
     store = compose.load_store(tmp_path)
-    assert isinstance(store, compose.IdentityStore)
-    assert store.method_lead("any") is None
+    assert isinstance(store, PosteriorStrategyStore)
+    # cold workspace, no q-cell log: the seam's documented fallback face
+    # (None cell count -> compose falls back to the settled-ledger total)
+    assert store.method_lead("abcdabcdabcd") is None
     assert store.decayed_weight("task/whatever") == 1.0
-    assert store.cell_count("any") is None
+    assert store.cell_count("abcdabcdabcd") is None
+
+
+def test_load_store_silent_identity_degrade_stays_closed():
+    """The stale-import tripwire (issue 462 W3 acceptance): if the store
+    import ever goes stale again, load_store must FAIL LOUDLY — the
+    silent IdentityStore degrade (method_lead=None, unit weights) was the
+    defect this wiring closes. AST-based: docstring prose may explain the
+    closed defect; the CODE may never reference the fallback again."""
+    import ast as _ast
+    tree = _ast.parse(
+        (SCRIPTS / "rlvr" / "compose.py").read_text(encoding="utf-8"))
+    body = None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef) \
+                and node.name == "load_store":
+            body = node
+            break
+    assert body is not None, "load_store vanished from compose.py"
+    names = {n.id for n in _ast.walk(body) if isinstance(n, _ast.Name)}
+    names |= {n.attr for n in _ast.walk(body)
+              if isinstance(n, _ast.Attribute)}
+    assert "IdentityStore" not in names, \
+        "load_store silently degrades to IdentityStore again"
+    assert "PosteriorsStore" not in names, \
+        "load_store points at a nonexistent store face again"
+
+
+def test_posterior_store_method_lead_and_cells_follow_evidence(tmp_path):
+    """The real store's learned faces on a seeded workspace: settled rows
+    declaring one family + banked q-cell rows make the lead and the cell
+    population real (no stub in sight)."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/lead-1", "static-decompile")
+    _ok_row(ws, "task/lead-2", "static-decompile")
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch", claim="tr-m1-d1")
+    q_cells.observe(ws, fp, "static-decompile", 1.0)
+    store = compose.load_store(ws)
+    assert store.cell_count(fp) == 2
+    # the only proposal channel face: the sample degenerates to it
+    assert store.method_lead(fp) == "static-decompile"
+    # another state carries no cell mass of its own (state-conditioned)
+    assert store.cell_count("ffffffffffff") == 0
+
+
+def test_posterior_store_decayed_weight_fades_old_rows(tmp_path):
+    ws = _ws(tmp_path)
+    # settled() orders by (ts, rollout_id): zzz sorts LAST, so it is the
+    # stream's freshest end (weight 1.0); aaa sits one settlement back
+    _ok_row(ws, "task/aaa-old", "method-a")
+    _ok_row(ws, "task/zzz-new", "method-a")
+    store = compose.load_store(ws)
+    w_new = store.decayed_weight("task/zzz-new")
+    w_old = store.decayed_weight("task/aaa-old")
+    assert w_new == 1.0
+    assert 0.0 < w_old < 1.0  # γ-decayed under the shipped DTS schedule
+    # foreign ids keep the unit weight (no invented decay for unknown rows)
+    assert store.decayed_weight("task/not-in-ledger") == 1.0
