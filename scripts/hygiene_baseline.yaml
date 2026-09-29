@@ -72,7 +72,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 15
+    r1: 18
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -162,9 +162,9 @@ files:
     r1: 2
   scripts/fixture_excerpt_lint.py:
     r1: 1
-  scripts/guardian_kpi.py:
-    r1: 1
   scripts/goal_operationalization.py:
+    r1: 1
+  scripts/guardian_kpi.py:
     r1: 1
   scripts/harness_common.py:
     r1: 1
@@ -329,6 +329,8 @@ files:
     r1: 7
   scripts/rho_verifier.py:
     r1: 7
+  scripts/rlvr/q_cells.py:
+    r1: 14
   scripts/roi_settlement.py:
     r1: 4
   scripts/rollup.py:
@@ -740,10 +742,10 @@ files:
   tests/test_event_stream_adoption.py:
     r1: 24
     r2: 1
-  tests/test_ex3_bucket_calibration_429.py:
-    r1: 2
   tests/test_event_wirings_434.py:
     r1: 1
+  tests/test_ex3_bucket_calibration_429.py:
+    r1: 2
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
   tests/test_exogenous_421.py:
@@ -821,10 +823,10 @@ files:
   tests/test_governance_docs_784.py:
     r1: 2
     r2: 1
-  tests/test_hardcode_purge.py:
-    r1: 2
   tests/test_guardian_kpi_429.py:
     r1: 3
+  tests/test_hardcode_purge.py:
+    r1: 2
   tests/test_harness_common_863g.py:
     r1: 2
   tests/test_heartbeat_autonomy_754.py:
@@ -1094,6 +1096,9 @@ files:
     r1: 3
   tests/test_python_floor.py:
     r1: 1
+  tests/test_q_cells_429.py:
+    r1: 2
+    r2: 1
   tests/test_qtable_p3.py:
     r1: 5
   tests/test_recall_inject.py:

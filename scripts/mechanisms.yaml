@@ -296,3 +296,27 @@ mechanisms:
       refires with the fuller series (superseding note). The D wiring
       feeds one operator_action row to the convergence ledger so
       convergence_health renders the rotation face.
+
+  - name: oracle_probe_t1
+    entry: scripts/verification_ladder.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: long_round
+    cost_class: expensive
+    depth: workspace
+    argv: ["--t1"]
+    cockpit_signal: "ledger action=oracle_probe_t1 + runs/oracle-status.json verdict faces"
+    owner: scripts/verification_ladder.py
+    description: >
+      Verification ladder T1 rung (issue #429 §1): mid-round oracle probe
+      batches for LONG rounds. The verified-write evidence stream
+      (runs/signals.jsonl) debounces into one batch — due when the
+      coalesced write count crosses the round-turn threshold
+      (KUNGLAO_T1_MIN_WRITES) and the interval floor
+      (KUNGLAO_T1_MIN_INTERVAL_MIN) has elapsed since the previous batch.
+      The long_round gate reads the debounce state (fail-open). Firing
+      consumes the existing oracle cadence face (wired, not rebuilt) and
+      emits the registered `oracle_probe_t1` word. Settlement accepts T0/T1
+      immediately; the T2 rung upgrades settled rows via the ledger
+      amendment path.
