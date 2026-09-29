@@ -19,7 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from e2e import evidence, llm_faces, model
+from e2e import audit, evidence, llm_faces, model
 
 IMPORT_ERRORS = ("ModuleNotFoundError", "ImportError", "NameError")
 
@@ -167,8 +167,12 @@ def record_result(ctx: RunContext, checkpoint: str, name: str, status: str,
                   duration_ms: int, detail: dict,
                   evidence_paths: list[str] | None = None
                   ) -> model.CheckpointResult:
-    """Adjudicate → write evidence → record in run-state. Every checkpoint
-    result lands on disk the moment it exists (resume anchor)."""
+    """Adjudicate → write evidence → record in run-state → ONE audit
+    event. Every checkpoint result lands on disk the moment it exists
+    (resume anchor) and leaves exactly one row in the unified stream
+    (owner ruling 2026-09-29 §1/§3): checkpoint_<status> for C1-C7,
+    oracle_verdict for the ORACLE step (no twin row — the exactly-one
+    guarantee)."""
     result = model.CheckpointResult(
         checkpoint=checkpoint, name=name, status=status, rc=rc,
         stdout_tail=tail(out.stdout) if out else "",
@@ -180,6 +184,15 @@ def record_result(ctx: RunContext, checkpoint: str, name: str, status: str,
     result.evidence_paths.append(str(path))
     evidence.write_checkpoint(Path(ctx.state.evidence_dir), result)
     ctx.state.steps[result.step] = status
+    if checkpoint == "ORACLE":
+        audit.emit_oracle_verdict(
+            str(ctx.ws), step=result.step, status=status, rc=rc,
+            duration_ms=duration_ms, verdict=detail.get("verdict"),
+            min_pair_ratio=detail.get("min_pair_ratio"))
+    else:
+        audit.emit_checkpoint(
+            str(ctx.ws), step=result.step, status=status, rc=rc,
+            duration_ms=duration_ms, failed_step=detail.get("failed_step"))
     return result
 
 

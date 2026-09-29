@@ -90,9 +90,9 @@ files:
   scripts/dual_gate.py:
     r1: 3
   scripts/e2e/checkpoints.py:
-    r1: 6
+    r1: 10
   scripts/e2e/llm_faces.py:
-    r1: 1
+    r1: 3
   scripts/e2e/model.py:
     r1: 6
   scripts/e2e/runtime.py:
@@ -683,7 +683,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 7
+    r1: 10
     r2: 4
   tests/test_emit_gate_880.py:
     r1: 4

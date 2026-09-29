@@ -20,12 +20,13 @@ No face ever degrades silently: every act lands in structured evidence.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from e2e import model
+from e2e import audit, model
 
 #: per-command timeouts (seconds) — every subprocess call is bounded.
 SCRIPT_TIMEOUT_S = 600
@@ -97,6 +98,15 @@ class OrchestratorFace:
         path.write_text(
             json.dumps(req.to_dict(), indent=2, sort_keys=True,
                        ensure_ascii=False) + "\n", encoding="utf-8")
+        # unified audit trail (owner ruling 2026-09-29 §2): attempt +
+        # result for EVERY dispatch act, stream AND ActRecord. The
+        # orchestrator face runs no subprocess — the result's exit is a
+        # documented null ("orchestrator_face_no_subprocess"), never a
+        # fabricated 0.
+        audit.emit_dispatch_attempt(req.workspace, req.claim, mode=self.mode,
+                                    artifact=str(path))
+        audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
+                                   rc=None, artifacts=[str(path)])
         return ActRecord(req.claim, self.mode, "EMITTED",
                          {"dispatch_request": str(path)})
 
@@ -122,14 +132,60 @@ class AutoLlmFace:
 
     def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
         prompt = Path(req.prompt_file).read_text(encoding="utf-8")
-        cmd = ["claude", "-p", prompt, "--output-format", "json"]
-        outcome = self.runner.run(cmd, cwd=self.runner.repo,
+        # #456 fix: run IN the workspace (the agent must read/write the
+        # claim register, facts, target material) — NOT in the repo.
+        # The prompt carries the repo path for script access.
+        ws = Path(req.workspace)
+        cmd = ["claude", "-p", prompt, "--output-format", "json",
+               "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"]
+        # unified audit trail (owner ruling 2026-09-29 §2): ATTEMPT before
+        # execution. The command rides with the prompt elided to its file
+        # pointer — the prompt body lives in the dispatch-prompt evidence
+        # file, and the stream stays one-line-per-event readable.
+        audit.emit_dispatch_attempt(
+            req.workspace, req.claim, mode=self.mode,
+            command=["claude", "-p", f"<prompt-file:{req.prompt_file}>",
+                     "--output-format", "json",
+                     "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"],
+            cwd=str(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
+        started = time.monotonic()
+        outcome = self.runner.run(cmd, cwd=str(ws),
                                   timeout=CLAUDE_ACT_TIMEOUT_S)
+        duration_ms = int((time.monotonic() - started) * 1000)
+        # Parse the claude -p JSON for the agent's actual result
+        # (rc=0 does NOT mean the analysis succeeded — #456 bug 2)
+        result_status = "DISPATCHED"
+        try:
+            _doc = json.loads(outcome.stdout) if outcome.stdout else {}
+            _agent_result = (_doc.get("result") or "").strip()
+            # word-boundary + case-insensitive: "Blocked:" parses,
+            # "unblocked" does not (substring scan misfired both ways)
+            if re.search(r"\bblocked\b", _agent_result, re.IGNORECASE):
+                result_status = "BLOCKED"
+            elif outcome.timed_out:
+                result_status = "TIMEOUT"
+        except (ValueError, TypeError):
+            if outcome.timed_out:
+                result_status = "TIMEOUT"
+        if result_status == "DISPATCHED" and outcome.rc != 0:
+            result_status = "TIMEOUT" if outcome.timed_out else "ERROR"
+        # RESULT after execution; failure carries the FULL stderr (§2
+        # diagnosis face — tails stay thrifted, the exact moment you need
+        # the text is the failure, not the pass).
+        audit.emit_dispatch_result(
+            req.workspace, req.claim, mode=self.mode, rc=outcome.rc,
+            timed_out=outcome.timed_out, duration_ms=duration_ms,
+            stdout_tail=outcome.stdout[-model.TAIL_CHARS:],
+            stderr_tail=outcome.stderr[-model.TAIL_CHARS:],
+            stderr_full=(outcome.stderr if (outcome.rc != 0 or
+                                            outcome.timed_out) else None))
         return ActRecord(
-            req.claim, self.mode,
-            "DISPATCHED" if outcome.rc == 0 else
-            ("TIMEOUT" if outcome.timed_out else "ERROR"),
-            {"cmd": cmd[:1], "rc": outcome.rc,
+            req.claim, self.mode, result_status,
+            {"cmd": ["claude", "-p"], "rc": outcome.rc,
+             "cwd": str(ws),
+             "timeout": CLAUDE_ACT_TIMEOUT_S,
+             "timed_out": outcome.timed_out,
+             "duration_ms": duration_ms,
              "stdout_tail": outcome.stdout[-model.TAIL_CHARS:],
              "stderr_tail": outcome.stderr[-model.TAIL_CHARS:]})
 
@@ -163,6 +219,11 @@ class DryLlmFace:
 
     def dispatch_act(self, req: model.DispatchRequest) -> ActRecord:
         ws = Path(req.workspace)
+        # unified audit trail (owner ruling 2026-09-29 §2): the dry face
+        # dispatches too — attempt before, result after, both in-stream.
+        audit.emit_dispatch_attempt(req.workspace, req.claim, mode=self.mode,
+                                    cwd=str(ws), timeout=None)
+        started = time.monotonic()
         n = self.claim_counter.get(req.claim, 0) + 1
         self.claim_counter[req.claim] = n
         artifacts: list[str] = []
@@ -197,6 +258,10 @@ class DryLlmFace:
             "    # dry-llm stub re-implementation (pipeline test only)\n"
             "    return 42\n", encoding="utf-8")
         artifacts.append(str(reimpl))
+        duration_ms = int((time.monotonic() - started) * 1000)
+        audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
+                                   rc=0, duration_ms=duration_ms,
+                                   artifacts=artifacts)
         return ActRecord(req.claim, self.mode, "DISPATCHED",
                          {"artifacts": artifacts})
 
