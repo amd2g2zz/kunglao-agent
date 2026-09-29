@@ -1011,3 +1011,24 @@ class TestDryLlmIntegration:
         # pipeline stopped before the oracle — no verdict fabricated
         by_step = {c["step"] for c in report["checkpoints"]}
         assert "ORACLE" not in by_step
+
+
+def test_c3_first_tick_waiting_second_is_pass():
+    """#450: a FIRST tick's rc=1 with the waiting-for-second-tick
+    continuity reason is CORRECT #415 behavior — C3 passes (continuity
+    itself is C5's job). The acceptance is wired in checkpoint_c3's
+    waiting_second predicate; this pin holds the wiring in place."""
+    code = (SCRIPTS / "e2e" / "checkpoints.py").read_text(
+        encoding="utf-8")
+    assert "wait for the SECOND tick" in code, (
+        "the #450 waiting-reason acceptance must stay wired")
+    assert "waiting_second_tick" in code
+    assert ".heartbeat-tick.json" in code, (
+        "#450 r2: the predicate must read the TICK REPORT artifact "
+        "(heartbeat.stderr lives there, not the process stderr — "
+        "reviewer-450-1's finding)")
+    assert 'out_tick.rc == 1' in code, (
+        "the rc==1 gate: only the waiting reason passes, never rc>=2")
+    assert '_hb.get("rc") == 1' in code, (
+        "the report-level rc gate: the heartbeat STEP inside the report "
+        "must also be rc==1, not just the process rc")

@@ -225,3 +225,41 @@ def face_for(mode: str, runner: CommandRunner,
     if mode == "dry":
         return DryLlmFace(evidence_dir)
     raise ValueError(f"unknown llm mode {mode!r}")
+
+
+class AutonomousFace:
+    """--autonomous (owner ruling 2026-09-29: zero intervention — command,
+    wait, key). ONE headless claude session launched IN THE WORKSPACE with
+    the plugin armed; the loop prompt + hooks + WORKGUARD drive everything.
+    The runner does NOT dispatch, does NOT tick, does NOT intervene — it
+    launches the session and polls for the verdict within the budget."""
+
+    mode = "autonomous"
+
+    def __init__(self, runner: CommandRunner, evidence_dir: Path,
+                 budget_seconds: int = 14_400):
+        self.runner = runner
+        self.evidence_dir = Path(evidence_dir)
+        self.budget_seconds = budget_seconds
+
+    def launch(self, ws: Path) -> ActRecord:
+        """Launch the autonomous session. Returns once the session exits
+        (converged, budget-broken, or errored). The session itself is the
+        WHOLE analysis — init already wrote CLAUDE.md, task_spec.yaml,
+        armed hooks; the SessionStart hook injects the constitution."""
+        prompt = (
+            "Run the full analysis for this workspace per the CLAUDE.md "
+            "instructions and task_spec.yaml. Complete every primary "
+            "question, verify per the declared verification method, and "
+            "write the verdict. The heartbeat loop and hooks are armed — "
+            "follow the loop prompt's contract.")
+        cmd = ["claude", "-p", prompt, "--output-format", "json"]
+        outcome = self.runner.run(
+            cmd, cwd=str(ws), timeout=self.budget_seconds)
+        return ActRecord(
+            "autonomous-session", self.mode,
+            "COMPLETED" if outcome.rc == 0 else
+            ("TIMEOUT" if outcome.timed_out else "ERROR"),
+            {"rc": outcome.rc,
+             "stdout_tail": outcome.stdout[-model.TAIL_CHARS:],
+             "stderr_tail": outcome.stderr[-model.TAIL_CHARS:]})
