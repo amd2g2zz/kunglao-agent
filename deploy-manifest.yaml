@@ -939,7 +939,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: 3e1e738e805baefc79d12b64e1ac419eb3263ac7b1b2d2d0fac6730abac46e1d
+    sha256: 77b3d6ab0bff2247f20bf7ab4e3e206a2bbb6d21815436f7d27bf589475f937d
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1135,7 +1135,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: e1467df4391ddd5a87bba277220fe5e10431b6e036537c51d20eba2c3e313e69
+    sha256: ff6fcedccd2b95bedcb8e2c85fe000379895724d10240b15036d0394933a9cc1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
