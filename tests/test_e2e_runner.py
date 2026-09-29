@@ -1559,3 +1559,179 @@ class TestReviewFixes456R2:
                 .splitlines() if line.strip()]
         assert rows, "no row landed for unserializable detail"
         assert "<unserializable" in rows[-1]["detail"]
+
+
+class TestParallelDispatch459:
+    """#459: when the ranker returns multiple dispatchable claims, ONE tick
+    dispatches up to max-parallel acts concurrently — launch all (attempt
+    rows in launch order), wait for all to land, per-act rollback, global
+    budget guard between launches (never abandons in-flight acts)."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_parallel_env(self, monkeypatch):
+        # the default bound (3) must hold unless a test sets the env knob
+        monkeypatch.delenv("KUNGLAO_E2E_MAX_PARALLEL", raising=False)
+
+    def _ctx(self, stub_repo, tmp_path, mode="auto", runner=None):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="p1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=14400,
+            llm_mode=mode, started_ts="t", started_monotonic=1000.0,
+            anchors=dict(ANCHORS))
+        runner = runner or ScriptedRunner()
+        face = llm_faces.face_for(mode, runner, ev_dir)
+        return checkpoints.RunContext(
+            state=state, runner=runner, face=face, clock=FakeClock(),
+            sleep_fn=lambda _s: None)
+
+    def _script_tick(self, runner, claims):
+        """One tick worth of subprocesses: heartbeat, DISPATCH decision,
+        multi-claim ranker (the #454 bare-array face), one claude act per
+        claim (the act's prompt carries `claim: <id>` — the needle)."""
+        runner.on("heartbeat_tick.py", rc=0)
+        runner.on("convergence_check.py", "--json", rc=1,
+                  stdout=json.dumps({"decision": "DISPATCH"}))
+        runner.on("priority_ratio.py", "--json", rc=0,
+                  stdout=json.dumps([{"claim_id": c, "action": "static_re"}
+                                     for c in claims]))
+        for c in claims:
+            runner.on("claude", "-p", f"claim: {c}", rc=0,
+                      stdout=json.dumps({"result": f"done {c}"}))
+
+    def _dispatch_rows(self, ws):
+        from e2e import audit
+        rows = [json.loads(line) for line
+                in audit.audit_path(ws).read_text(encoding="utf-8")
+                .splitlines() if line.strip()]
+        return [r for r in rows if str(r["action"]).startswith("dispatch_")]
+
+    def test_two_claims_dispatch_concurrently_loop_waits_for_both(
+            self, stub_repo, tmp_path):
+        # the acceptance case: 2 dispatchable actions, both acts launched
+        # in ONE tick, both recorded, both attempts before any result
+        ctx = self._ctx(stub_repo, tmp_path)
+        self._script_tick(ctx.runner, ["C-004", "C-005"])
+        detail: dict = {"acts": [], "ticks": 1, "decision": None}
+        dispatched: set = set()
+        flow, terminal, _ms = checkpoints._loop_one_tick(
+            ctx, dispatched, detail, tick_wait_seconds=0, total_ms=0)
+        assert flow == "continue" and terminal is None
+        # BOTH acts recorded — the tick waited for the whole wave
+        assert {a["claim"] for a in detail["acts"]} == {"C-004", "C-005"}
+        assert dispatched == {"C-004", "C-005"}  # clean landings stay claimed
+        # audit stream: attempts in launch order, THEN results as they land
+        rows = self._dispatch_rows(ctx.ws)
+        assert [r["action"] for r in rows] == [
+            "dispatch_attempt", "dispatch_attempt",
+            "dispatch_result", "dispatch_result"]
+        assert [r["claim"] for r in rows[:2]] == ["C-004", "C-005"]
+        assert {r["claim"] for r in rows[2:]} == {"C-004", "C-005"}
+
+    def test_max_parallel_bounds_the_wave(self, stub_repo, tmp_path,
+                                          monkeypatch):
+        monkeypatch.setenv("KUNGLAO_E2E_MAX_PARALLEL", "2")
+        claims = ["C-004", "C-005", "C-006", "C-007", "C-008"]
+        ctx = self._ctx(stub_repo, tmp_path)
+        self._script_tick(ctx.runner, claims)
+        detail: dict = {"acts": [], "ticks": 1, "decision": None}
+        flow, terminal, _ms = checkpoints._loop_one_tick(
+            ctx, set(), detail, tick_wait_seconds=0, total_ms=0)
+        assert flow == "continue" and terminal is None
+        # exactly 2 acts per tick wave — the top-2 ranked claims
+        assert len(detail["acts"]) == 2
+        assert {a["claim"] for a in detail["acts"]} == {"C-004", "C-005"}
+        assert len([c for c in ctx.runner.calls
+                    if c.startswith("claude -p")]) == 2
+
+    def test_per_act_rollback_under_concurrency(self, stub_repo, tmp_path):
+        # one act TIMEOUT, the other lands — ONLY the timed-out claim is
+        # freed; a timeout on one act never kills the other
+        class _TimeoutOneRunner(ScriptedRunner):
+            def run(self, cmd, cwd=None, timeout=None):
+                argv = " ".join(str(c) for c in cmd)
+                if "claim: C-005" in argv:
+                    self.calls.append(argv)
+                    return model.CmdOutcome(rc=-1, stdout="",
+                                            stderr="TIMEOUT after 1800s",
+                                            timed_out=True)
+                return super().run(cmd, cwd=cwd, timeout=timeout)
+
+        ctx = self._ctx(stub_repo, tmp_path, runner=_TimeoutOneRunner())
+        self._script_tick(ctx.runner, ["C-004", "C-005"])
+        detail: dict = {"acts": [], "ticks": 1, "decision": None}
+        dispatched: set = set()
+        flow, terminal, _ms = checkpoints._loop_one_tick(
+            ctx, dispatched, detail, tick_wait_seconds=0, total_ms=0)
+        assert flow == "continue" and terminal is None
+        outcomes = {a["claim"]: a["outcome"] for a in detail["acts"]}
+        assert outcomes == {"C-004": "DISPATCHED", "C-005": "TIMEOUT"}
+        assert dispatched == {"C-004"}  # only the timed-out claim freed
+
+    def test_budget_exhaustion_mid_wave_stops_launches_not_inflight(
+            self, stub_repo, tmp_path, monkeypatch):
+        # the guard is GLOBAL: exhausted between launches stops NEW acts
+        # but the already-launched in-flight act still lands + records
+        ctx = self._ctx(stub_repo, tmp_path)
+        self._script_tick(ctx.runner, ["C-004", "C-005"])
+        guard_calls: list[int] = []
+
+        def counting_guard(_ctx):
+            guard_calls.append(1)
+            return len(guard_calls) < 3  # tick-top + launch1 pass; stop @2nd
+
+        monkeypatch.setattr(checkpoints, "_guard_budget", counting_guard)
+        detail: dict = {"acts": [], "ticks": 1, "decision": None}
+        dispatched: set = set()
+        flow, terminal, _ms = checkpoints._loop_one_tick(
+            ctx, dispatched, detail, tick_wait_seconds=0, total_ms=0)
+        # the tick completes: the in-flight act landed, no budget stop here
+        assert flow == "continue" and terminal is None
+        assert len(guard_calls) == 3  # guard consulted per launch
+        assert [a["claim"] for a in detail["acts"]] == ["C-004"]
+        assert dispatched == {"C-004"}
+        assert len([c for c in ctx.runner.calls
+                    if c.startswith("claude -p")]) == 1
+
+    def test_max_parallel_constant_and_env_override(self, monkeypatch):
+        assert checkpoints.MAX_PARALLEL_DISPATCH == 3
+        monkeypatch.setenv("KUNGLAO_E2E_MAX_PARALLEL", "5")
+        assert checkpoints._max_parallel_dispatch() == 5
+        monkeypatch.setenv("KUNGLAO_E2E_MAX_PARALLEL", "0")
+        assert checkpoints._max_parallel_dispatch() == 1  # floor: never 0
+        monkeypatch.setenv("KUNGLAO_E2E_MAX_PARALLEL", "garbage")
+        assert checkpoints._max_parallel_dispatch() == 3  # unparseable: default
+        monkeypatch.delenv("KUNGLAO_E2E_MAX_PARALLEL")
+        assert checkpoints._max_parallel_dispatch() == 3
+
+    def test_ranked_claims_returns_all_dispatchable_in_rank_order(self):
+        from e2e.runtime import ranked_claims
+
+        def out(stdout: str):
+            return model.CmdOutcome(rc=0, stdout=stdout, stderr="",
+                                    timed_out=False)
+
+        # the real ranker face: pretty-printed bare array, rank order kept
+        real = ("[\n  {\"claim_id\": \"C-005\", \"action\": "
+                "\"evidence_collection\", \"score\": 0.976},\n  "
+                "{\"claim_id\": \"C-004\", \"action\": "
+                "\"protocol_reconstruction\", \"score\": 0.911}\n]")
+        assert ranked_claims(out(real)) == ["C-005", "C-004"]
+        # object envelope (backward face)
+        env = '{"actions": [{"claim_id": "C-001"}, {"claim_id": "C-002"}]}'
+        assert ranked_claims(out(env)) == ["C-001", "C-002"]
+        # ranked_order face
+        assert ranked_claims(out('{"ranked_order": ["C-009", "C-007"]}')
+                             ) == ["C-009", "C-007"]
+        # a repeated id (envelope face, both key spellings) never
+        # double-dispatches in one wave — dedup keeps first-rank order
+        dup = ('{"actions": [{"claim_id": "C-004"}, {"claim_id": "C-005"}, '
+               '{"claim": "C-004"}]}')
+        assert ranked_claims(out(dup)) == ["C-004", "C-005"]
+        # empty / garbage: no claims, never a guessed id
+        assert ranked_claims(out("")) == []
+        assert ranked_claims(out("not json")) == []

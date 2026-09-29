@@ -205,45 +205,58 @@ def parse_decision(outcome: model.CmdOutcome) -> tuple[str | None, dict | None]:
     return (str(decision).upper() if decision else None), doc
 
 
-def top_claim(outcome: model.CmdOutcome) -> str | None:
-    """Rank #1 claim id from a priority_ratio --json stdout.
+def ranked_claims(outcome: model.CmdOutcome) -> list[str]:
+    """ALL dispatchable claim ids from a priority_ratio --json stdout, in
+    RANK order (#459 — the loop dispatches up to max-parallel per tick).
 
-    #454: the #610/#107/#97 ranker emits a BARE top-level array
-    ([{claim_id: ...}, ...]), not an object envelope. parse_last_json
-    only scans {} objects, so the bare array face needs its own parse:
-    try the object-envelope keys first (backward face), then a direct
-    json.loads on the stripped stdout for the array face."""
+    Parses the same faces as top_claim (see below); top_claim is
+    ranked_claims()[0] — one parser, two views, no drift. A repeated id is
+    de-duplicated (never double-dispatched in one wave)."""
+    ids: list[str] = []
+
+    def _cid(entry) -> str | None:
+        if isinstance(entry, dict):
+            raw = entry.get("claim_id") or entry.get("claim")
+            return str(raw) if raw else None
+        return None
+
     doc = model.parse_last_json(outcome.stdout) or {}
-    actions = doc.get("actions") or doc.get("ranking") or []
-    for entry in actions:
-        if isinstance(entry, dict) and entry.get("claim_id"):
-            return str(entry["claim_id"])
-        if isinstance(entry, dict) and entry.get("claim"):
-            return str(entry["claim"])
-    ranked = doc.get("ranked_order") or []
-    if ranked:
-        return str(ranked[0])
-    # #454/#454-r2: bare top-level array face (the current ranker emits
-    # json.dumps(..., indent=2) — pretty-printed multi-line). Try the
-    # WHOLE stdout first, then individual lines as fallback.
-    import json as _json
-    text = (outcome.stdout or "").strip()
-    candidates = [text]
-    candidates.extend(
-        chunk.strip() for chunk in reversed(text.splitlines())
-        if chunk.strip().startswith("["))
-    for chunk in candidates:
-        try:
-            arr = _json.loads(chunk)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(arr, list):
-            for entry in arr:
-                if isinstance(entry, dict) and entry.get("claim_id"):
-                    return str(entry["claim_id"])
-                if isinstance(entry, dict) and entry.get("claim"):
-                    return str(entry["claim"])
-    return None
+    for entry in doc.get("actions") or doc.get("ranking") or []:
+        cid = _cid(entry)
+        if cid:
+            ids.append(cid)
+    if not ids:
+        ids = [str(c) for c in doc.get("ranked_order") or []]
+    if not ids:
+        # #454/#454-r2: bare top-level array face (the current ranker emits
+        # json.dumps(..., indent=2) — pretty-printed multi-line). Try the
+        # WHOLE stdout first, then individual lines as fallback.
+        import json as _json
+        text = (outcome.stdout or "").strip()
+        candidates = [text]
+        candidates.extend(
+            chunk.strip() for chunk in reversed(text.splitlines())
+            if chunk.strip().startswith("["))
+        for chunk in candidates:
+            try:
+                arr = _json.loads(chunk)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(arr, list):
+                ids = [c for c in map(_cid, arr) if c]
+                break
+    unique: list[str] = []
+    for cid in ids:
+        if cid not in unique:
+            unique.append(cid)
+    return unique
+
+
+def top_claim(outcome: model.CmdOutcome) -> str | None:
+    """Rank #1 claim id from a priority_ratio --json stdout (ranked_claims
+    restricted to its first element — the pre-#459 single-claim view)."""
+    ids = ranked_claims(outcome)
+    return ids[0] if ids else None
 
 
 def budget_ok(ctx: RunContext) -> bool:
