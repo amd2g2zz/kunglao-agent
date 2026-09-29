@@ -135,7 +135,10 @@ class TestCheckEnvFresh:
         # #862 通道归一：形状走 prompt（canonical），description 纯描述
         # #432: v0 形状以 prose 标记行声明 method-family（同一合同、两个声明面）
         return {'tool_input': {'name': 'w-t', 'description': desc,
-                               'prompt': '[T2 tools=vmr-shell] claim C-001 detonate'
+                               'prompt': '{"kunglao_dispatch": {"version": 1, '
+                                         '"claim": "C-001", "tier": 2, '
+                                         '"tools": ["vmr-shell"]}}\n'
+                                         'detonate'
                                          '\nmethod-family: dynamic-trace'}}
 
     def test_missing_file_fail_open(self, tmp_path, capsys):
@@ -257,7 +260,7 @@ class TestToolErrorPolicyWired:
             'task_spec': ws / 'task_spec.yaml',
         }
         post_check({'tool_input': {'name': 'w-t', 'description':
-                                   '[T1 tools=grep] claim C-001 strings'},
+                                   '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings'},
                     'tool_result': tool_result}, paths)
 
     def _streak(self, ws: Path, tool: str) -> int:

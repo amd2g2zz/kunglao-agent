@@ -139,16 +139,19 @@ def _authority_rank(ws: Path, *, rng_posterior: bool):
 
 
 def _pulse_payload(ws: Path) -> dict:
-    """Real PostToolUse(Agent) payload shape carrying the dispatch prefix.
-
-    The prefix must satisfy DISPATCH_RE (claim ids there are C-NNN); the
-    cited id is inert — the pulse recomputes next-up from the register.
+    """Real PostToolUse(Agent) payload shape carrying the v1 dispatch
+    envelope (v0 text prefix is retired — the pulse only fires on the
+    canonical envelope); the cited id is inert — the pulse recomputes
+    next-up from the register.
     """
     return {
         "hookEventName": "PostToolUse",
         "tool_name": "Agent",
         "cwd": str(ws),
-        "tool_input": {"prompt": "[T1 tools=basic] claim C-02: gather background evidence"},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, '
+                                 '"claim": "C-02", "tier": 1, '
+                                 '"tools": ["basic"]}}\n'
+                                 'gather background evidence'},
     }
 
 
@@ -219,14 +222,14 @@ def test_check_priority_audits_against_thompson_ranker(tmp_path) -> None:
     top = actions[0]
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), top.claim_id, ws=ws)
+        top.claim_id, ws=ws)
     assert (ok, msg, deviated) == (True, '', False), (
         f"dispatching the ranker #1 ({top.claim_id}) must be a silent "
         f"rank-#1 dispatch. Got: ok={ok} deviated={deviated} msg={msg!r}")
     other = next(a for a in actions if a.claim_id != top.claim_id)
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), other.claim_id, ws=ws)
+        other.claim_id, ws=ws)
     assert deviated is True, (
         f"dispatching a non-#1 ({other.claim_id}) must register as a deviation")
     assert top.claim_id in msg and "thompson" in msg.lower(), (
@@ -240,7 +243,7 @@ def test_check_priority_audits_against_thompson_ranker(tmp_path) -> None:
     fail_top = _authority_rank(ws, rng_posterior=True)[0]
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), "C-F", ws=ws)
+        "C-F", ws=ws)
     assert (ok, deviated) == (True, False), (
         "dispatching a failure-blocked claim is an ADVISORY, never a REJECT. "
         f"Got: ok={ok} deviated={deviated} msg={msg!r}")
@@ -251,7 +254,7 @@ def test_check_priority_audits_against_thompson_ranker(tmp_path) -> None:
         f"Got: {msg!r}")
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), fail_top.claim_id, ws=ws)
+        fail_top.claim_id, ws=ws)
     assert (ok, msg, deviated) == (True, '', False), (
         f"the filtered rank's #1 ({fail_top.claim_id}) stays a silent "
         f"dispatch on the failure fixture. Got: {msg!r}")
@@ -266,7 +269,7 @@ def test_rank_none_dispatch_gets_advisory_not_silent_pass(tmp_path) -> None:
     ws = _authority_ws(tmp_path / "ws-retract")
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), "C-R", ws=ws)
+        "C-R", ws=ws)
     assert (ok, deviated) == (True, False), (
         f"a rank-None dispatch is an advisory, never a REJECT; got "
         f"{ok=} {deviated=} {msg=!r}")

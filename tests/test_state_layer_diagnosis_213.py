@@ -61,7 +61,7 @@ def _registered_mcp_item():
     import toolchain as tc
     return tc.CheckResult(
         name="mcp:ida-pro-vm", status=tc.Status.PASS, tier=tc.Tier.HARD,
-        detail="registered (user-global)")
+        detail="registered (workspace)")
 
 
 def test_registered_but_unreachable_names_connection_layer(monkeypatch,
@@ -72,6 +72,8 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
         lambda host, port: (False, "connection refused"))
     # #408: the registration rides the workspace .mcp.json — the user-global
     # claude.json surface is deleted and its seed stays invisible (poison).
+    # The merge-sync claude_json parameter is DELETED (compat-rot sweep
+    # 2026-09-29): the face no longer accepts the poison path at all.
     claude_json = tmp_path / "claude.json"
     claude_json.write_text(json.dumps(
         {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
@@ -80,9 +82,10 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
         {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
         encoding="utf-8")
     item = tc._mcp_reachability_face(
-        _registered_mcp_item(), "ida-pro-vm", claude_json, tmp_path)
+        _registered_mcp_item(), "ida-pro-vm", tmp_path)
     assert item.status is tc.Status.WARN
     assert item.detail.startswith("connection layer"), item.detail
+    assert "user-global" not in item.detail, "poison seed must stay invisible"
     assert item.fix and item.fix.startswith("connection layer"), item.fix
     assert "agent-do" in item.fix, "repair must be agent-do"
     assert "uv sync" in item.fix, "broken venv repair = uv sync in the venv"
@@ -95,11 +98,10 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
 
 def test_unregistered_task_spec_item_names_register_layer(tmp_path):
     import toolchain as tc
-    claude_json = tmp_path / "claude.json"  # registry absent
     checks = tc._task_spec_mcp_checks(
         (tc.McpServerSpec(name="ida-pro-vm", transport="http",
                           url="http://127.0.0.1:1"),),
-        claude_json, tmp_path)
+        tmp_path)
     assert len(checks) == 1 and checks[0].status == "FAIL"
     assert checks[0].detail.startswith("register layer"), checks[0].detail
     # execution seam: the fix is fed to _concrete_register_argv verbatim —

@@ -400,7 +400,9 @@ def test_record_dispatch_observation_v1_envelope(tmp_path):
 def test_record_dispatch_observation_prose_marker_fallback(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    prompt = "[T1 tools=Bash] claim C-13 — extract the KDF\n" \
+    prompt = '{"kunglao_dispatch": {"version": 1, "claim": "C-13", ' \
+             '"tier": 1, "tools": ["Bash"]}}\n' \
+             "— extract the KDF\n" \
              "method-family: dynamic-instrumentation\n"
     out = q_cells.record_dispatch_observation(ws, prompt, claim="C-13")
     assert out["appended"] is True
@@ -411,7 +413,8 @@ def test_record_dispatch_observation_undeclared_is_honest_gap(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     out = q_cells.record_dispatch_observation(
-        ws, "[T1 tools=Bash] claim C-14 — no declaration",
+        ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-14", '
+        '"tier": 1, "tools": ["Bash"]}}\n— no declaration',
         envelope_meta=None)
     assert out["appended"] is False
     assert out["reason"] == "undeclared"

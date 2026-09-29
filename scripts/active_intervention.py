@@ -182,7 +182,7 @@ def main() -> int:
 
     # F-10 selective activation: skip if hook is paused
     # v1.9.9 fix: is_active() needs a Path, not a str (Path / str raises TypeError)
-    if not ha.is_active(Path(args.workspace), "active_intervention"):
+    if not ha.is_active_strict(Path(args.workspace), "active_intervention"):
         print("SKIP: active_intervention is paused (check .hook_state.json)")
         return 0
     return check(Path(args.workspace), max_age_min=args.max_age_min)

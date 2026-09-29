@@ -51,7 +51,9 @@ def _ws(tmp_path: Path, worker_status: str) -> Path:
 def _post_check(ws: Path, tool_result: str = "") -> int:
     payload = {
         "tool_input": {"name": "w-alpha",
-                       "description": "[T1 tools=grep] claim C-001 strings"},
+                       "description": '{"kunglao_dispatch": {"version": 1, '
+                       '"claim": "C-001", "tier": 1, '
+                       '"tools": ["grep"]}}\nstrings'},
         "tool_result": tool_result,
     }
     paths = {
@@ -189,7 +191,9 @@ def test_post_check_rejects_obstacle_proven_register_edit(tmp_path, capsys):
         ]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     payload = {
         "tool_input": {"name": "w-alpha",
-                       "description": "[T1 tools=grep] claim C-001 strings"},
+                       "description": '{"kunglao_dispatch": {"version": 1, '
+                       '"claim": "C-001", "tier": 1, '
+                       '"tools": ["grep"]}}\nstrings'},
         "tool_result": "",
         "register_before": {"C-001": "OPEN"},
     }

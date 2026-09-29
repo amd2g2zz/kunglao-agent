@@ -312,7 +312,8 @@ class TestDispatchGateRejectEmit:
         REJECT side was stderr-only."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
+       '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws) if e.get("action") == "top1_reject"]
         assert any(e.get("claim") == "C-3" for e in rows), (
@@ -325,7 +326,9 @@ class TestDispatchGateRejectEmit:
         root = tmp_path / "r2"
         ws = _capability_ws(root)
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-xposed] claim C-1 hook the check via xposed")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+                      '"tier": 2, "tools": ["rev-xposed"]}}\n'
+                      "hook the check via xposed")
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "capability_reject"]
@@ -591,7 +594,8 @@ class TestFailOpenEmit:
         # cannot be created (the #107 re-pinned fixture keeps runs/posteriors
         # readable — the rank state must not change with the log sabotage)
         (ws / "runs" / "logs").write_text("", encoding="utf-8")
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
+       '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, (
             f"REJECT must not depend on the log write; rc={r.returncode}, "
             f"stderr={r.stderr!r}")

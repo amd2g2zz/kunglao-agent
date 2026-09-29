@@ -251,8 +251,9 @@ class TestScenario1DispatchCapabilityCrossCheck:
             "ghidra headless decompile reaches the config-parsing routine")
         r = _run_dispatch_gate(
             tmp_path, ws,
-            "[T1 tools=ghidra-decompile-functions] claim C-1 "
-            "decompile the string routine")
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+            '"tier": 1, "tools": ["ghidra-decompile-functions"]}}\n'
+            'decompile the string routine')
         assert r.returncode == 0, (
             f"validated ghidra card + ghidra dispatch is family-in-hand; "
             f"rc={r.returncode}, stderr={r.stderr!r}, stdout={r.stdout!r}")
@@ -263,8 +264,9 @@ class TestScenario1DispatchCapabilityCrossCheck:
             "x64dbg conditional trace reaches the anti-debug check")
         r = _run_dispatch_gate(
             tmp_path, ws,
-            "[T1 tools=ghidra-decompile-functions] claim C-1 "
-            "decompile the string routine")
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+            '"tier": 1, "tools": ["ghidra-decompile-functions"]}}\n'
+            'decompile the string routine')
         assert r.returncode == 2, (
             f"validated x64dbg card + ghidra dispatch is an undisproved "
             f"family switch; rc={r.returncode}, stderr={r.stderr!r}")
@@ -278,7 +280,8 @@ class TestScenario1DispatchCapabilityCrossCheck:
             tmp_path,
             "x64dbg conditional trace reaches the anti-debug check")
         prompt = (
-            "[T1 tools=ghidra-decompile-functions] claim C-1 "
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+            '"tier": 1, "tools": ["ghidra-decompile-functions"]}}\n'
             "decompile the string routine\n"
             "capability-disproof: x64dbg (trace diverged at the unpacking "
             "stub — see analyses/failure-C-1.yaml)")

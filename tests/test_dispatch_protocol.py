@@ -4,8 +4,8 @@
 
 Covers:
 - v1 (JSON) parsing — happy path + malformed
-- v0 (regex) parsing — happy path + legacy forms
-- v1 takes precedence over v0 (JSON wins when both present)
+- v0 retirement COMPLETED (compat-rot sweep 2026-09-29): v0 (regex)
+  parsing is deleted — legacy prefix forms parse to absent
 - Unparseable dispatch → visible signal (no silent return 0; #452 AC)
 - Roundtrip via lib_kunglao.parse_dispatch (the single source).
 """
@@ -36,7 +36,6 @@ def _load_hooks_lib_kunglao():
 _lk = _load_hooks_lib_kunglao()
 DISPATCH_JSON_RE = _lk.DISPATCH_JSON_START_RE  # alias for back-compat name
 DISPATCH_PROTOCOL_VERSION = _lk.DISPATCH_PROTOCOL_VERSION
-DISPATCH_RE = _lk.DISPATCH_RE
 parse_dispatch = _lk.parse_dispatch
 parse_dispatch_json = _lk.parse_dispatch_json
 
@@ -63,14 +62,15 @@ class TestV1Protocol:
         assert tools == ["floss"]
         assert meta == {"agent": "floss-filter", "task": "decode packed strings"}
 
-    def test_v1_takes_precedence_over_v0(self) -> None:
-        """When both v0 and v1 markers are present, v1 wins (JSON is canonical)."""
+    def test_v0_text_is_inert_prose_around_v1(self) -> None:
+        """v0 retirement completed: legacy prefix text is inert prose —
+        the v1 envelope in the same prompt is the recognized dispatch."""
         text = (
             '[T1 tools=grep] claim C-001 fallback-prompt\n'
             '{"kunglao_dispatch": {"version": 1, "claim": "C-999", "tier": 1, "tools": []}}'
         )
         tier, _, claim_id = parse_dispatch(text)
-        assert claim_id == "C-999", "v1 must win over v0"
+        assert claim_id == "C-999", "v1 must be the recognized dispatch"
 
     def test_wrong_version_returns_empty(self) -> None:
         text = ('{"kunglao_dispatch": {"version": 99, "claim": "C-1", "tier": 1}}')
@@ -101,21 +101,19 @@ class TestV1Protocol:
         assert tools == ["a", "2", "b"]
 
 
-# ----- v0 (regex) protocol --------------------------------------------
+# ----- v0 (regex) protocol — RETIRED (compat-rot sweep 2026-09-29) ----
 
-class TestV0Protocol:
-    def test_happy_path(self) -> None:
-        tier, tools, claim_id = parse_dispatch("[T1 tools=grep,strings-classify] claim C-001")
-        assert tier == 1
-        assert tools == ["grep", "strings-classify"]
-        assert claim_id == "C-001"
+class TestV0Retired:
+    """The v0 claim prefix is no longer a dispatch: every legacy form
+    parses to absent (the former happy-path pins, re-minted)."""
 
-    def test_with_prose_after(self) -> None:
+    def test_happy_path_form_rejected(self) -> None:
+        assert parse_dispatch(
+            "[T1 tools=grep,strings-classify] claim C-001") == (0, [], None)
+
+    def test_with_prose_after_rejected(self) -> None:
         text = "[T2 tools=pe_analyze] claim C-007 investigate overlay section"
-        tier, tools, claim_id = parse_dispatch(text)
-        assert tier == 2
-        assert tools == ["pe_analyze"]
-        assert claim_id == "C-007"
+        assert parse_dispatch(text) == (0, [], None)
 
     def test_no_match_returns_zeros(self) -> None:
         assert parse_dispatch("no dispatch here") == (0, [], None)
@@ -237,7 +235,8 @@ class TestDispatchMustStop:
         """A dispatch prompt containing an irreversible action MUST exit 2
         (hard pause) + emit stderr signal."""
         self._setup_ws(tmp_path)
-        prompt = ('[T2 tools=vmrun] claim C-409 '
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-409", '
+                  '"tier": 2, "tools": ["vmr-shell"]}}\n'
                   'task: cleanup environment, vmrun delete VM-1')
         r = self._run_hook(tmp_path, prompt)
         assert r.returncode == 2, \
@@ -250,7 +249,9 @@ class TestDispatchMustStop:
         """A normal dispatch prompt (no irreversible action) exits 0 (silent),
         not 2 — must-stop is narrow."""
         self._setup_ws(tmp_path)
-        prompt = "[T1 tools=grep] claim C-401 static string extraction"
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-401", '
+                  '"tier": 1, "tools": ["grep"]}}\n'
+                  'static string extraction')
         r = self._run_hook(tmp_path, prompt)
         assert r.returncode == 0, \
             f"normal dispatch must stay silent; stderr={r.stderr!r}"

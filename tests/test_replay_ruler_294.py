@@ -852,7 +852,7 @@ class TestNoRuntimeSelfTuning:
             {"depends_on": {}, "competitor_groups": {}}, sort_keys=False),
             encoding="utf-8")
         ok, _msg, _dev = wbc.check_priority(
-            reg, deps, tmp_path / "task_spec.yaml", "C-1")
+            reg, deps, "C-1")
         assert ok is True
         # the audit actually ranked (two dispatchable claims -> actions
         # were built inside the hook path) — and mutated nothing.

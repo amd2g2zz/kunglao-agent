@@ -267,7 +267,9 @@ def test_pre_check_accepts_v0_prose_marker(tmp_path, capsys):
     """v0 dispatches declare the same field as a prose marker — one
     contract, two declaration faces (the #105 intent precedent)."""
     ws = tmp_path / 'ws'
-    prompt = ('[T1 tools=grep] claim C-001 strings\n'
+    prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+              '"tier": 1, "tools": ["grep"]}}\n'
+              'strings\n'
               'facts-snapshot: 1 facts\n'
               'method-family: static-decompile')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))

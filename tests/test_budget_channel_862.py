@@ -87,7 +87,7 @@ def test_description_only_shape_rejected(tmp_path):
     红：当前 description 解析有效 → 门照常空转通过。"""
     ws = _healthy_ws(tmp_path)
     rc, err, _ = _run(_payload(prompt="facts-snapshot: 1 facts\n",
-                               description="[T1 tools=grep] claim C-001 strings"),
+                               description='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings'),
                       _paths_for(ws))
     assert rc == 2, err
     assert "devchannel" in err, err

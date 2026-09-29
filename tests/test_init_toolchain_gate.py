@@ -478,16 +478,10 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("GHIDRA_HOME", str(ghidra_home))
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
 
-    # #454: isolate the MCP registry — _check_decompiler is MCP-first and a
-    # machine with a user-global mcp:ghidra registration would short-circuit
-    # to `decompiler via MCP (ghidra)`, hiding the analyzeHeadless CLI
-    # supply this test pins. Inject an EMPTY user registry
-    # (KUNGLAO_CLAUDE_JSON is mcp_probe.claude_json_path's documented test
-    # override); the workspace surface is already isolated (fresh tmp ws, no
-    # .mcp.json).
-    isolated_registry = tmp_path / "isolated-claude.json"
-    isolated_registry.write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(isolated_registry))
+    # #454: isolate the MCP registry — _check_decompiler is MCP-first. The
+    # user-global ~/.claude.json surface is DELETED (no-backcompat), so the
+    # registry is workspace+plugin only: the fresh tmp ws carries no
+    # .mcp.json, which is already the isolation this test needs.
 
     # PATH with the host tools so binutils/pefile-style probes are satisfiable
     empty = tmp_path / "empty-bin"

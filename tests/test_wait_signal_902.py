@@ -71,7 +71,7 @@ def _waiting_ledger(ws: Path, agent: str = "kunglao-worker",
     return p
 
 
-_GATE_PROMPT = "[T1 tools=Read,Write] claim C-1 background sweep"
+_GATE_PROMPT = '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Write"]}}\nbackground sweep'
 
 
 def _run_gate(root: Path, ws: Path, agent: str = "kunglao-worker") -> subprocess.CompletedProcess:
@@ -159,7 +159,7 @@ def _run_pulse(ws: Path) -> str:
         "hookEventName": "PostToolUse",
         "tool_name": "Agent",
         "cwd": str(ws),
-        "tool_input": {"prompt": "[T1 tools=basic] claim C-203: grep chemistry strings"},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, "claim": "C-203", "tier": 1, "tools": ["basic"]}}\n: grep chemistry strings'},
     })
     r = subprocess.run(
         [sys.executable, str(ROOT / "hooks" / "worker_pulse.py")],

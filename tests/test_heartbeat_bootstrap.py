@@ -171,7 +171,7 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str = ("[T1 tools=grep] claim C-001 strings" + chr(10) +
+def _dispatch_payload(prompt: str = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings' + chr(10) +
                       "facts-snapshot: 1 facts" + chr(10) +
                       "method-family: static-decompile"),
                       desc: str = "w-test bootstrap dispatch") -> dict:

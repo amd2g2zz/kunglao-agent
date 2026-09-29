@@ -200,7 +200,7 @@ def _heartbeat_health(ws: Path, now: datetime) -> dict:
 
 def _activation_health(ws: Path, now: datetime) -> dict:
     """Activation TTL from .hook_state.json (hook_activation.read_state —
-    the activation owner; expiry parse mirrors is_active)."""
+    the activation owner; expiry parse mirrors is_active_strict)."""
     state = hook_activation.read_state(ws)
     if not state:
         return {"status": "MISSING", "expires_at": None, "active_hooks": []}

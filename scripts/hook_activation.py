@@ -39,7 +39,7 @@ Usage:
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
-dispatches to them. The public API below (read_state, write_state, is_active,
+dispatches to them. The public API below (read_state, write_state,
 is_active_strict, update_state, renew) is unchanged — 7 gate scripts + hooks
 import this module as `ha`.
 
@@ -151,49 +151,15 @@ def write_state(workspace: Path, state: dict) -> None:
     path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def is_active(workspace: Path, hook_name: str) -> bool:
-    """Check whether a hook should fire. Returns True if active, False if paused.
-
-    Expiry: if the state carries an expires_at in the past, the activation is
-    STALE and the hook is treated as inactive. A stale activation from a
-    5-day-old session must not keep firing hooks in a fresh session —
-    kunglao-agent renews at Phase 0 (`--renew`)."""
-    state = read_state(workspace)
-    if not state:
-        return True
-    expires = state.get("expires_at")
-    if expires:
-        try:
-            exp = datetime.fromisoformat(expires.replace("Z", "+00:00"))
-            if datetime.now(tz=timezone.utc) > exp:
-                return False  # expired — treated as paused
-        except (ValueError, TypeError) as exc:
-            warn("is_active", f"{type(exc).__name__}: {exc}")
-    override = state.get("user_override", {}).get(hook_name)
-    if override == "on":
-        return True
-    if override == "off":
-        return False
-    active = state.get("active_hooks", [])
-    paused = state.get("paused_hooks", [])
-    if hook_name in paused:
-        return False
-    if hook_name in active:
-        return True
-    return True
-
-
 def is_active_strict(workspace: Path, hook_name: str) -> bool:
-    """Hooks use THIS, not is_active().
+    """THE activation check — the single path (D1 cleanup, compat-rot sweep
+    2026-09-29: the legacy is_active() default-TRUE face is deleted; every
+    gate — enforcement family included — sleeps until explicitly activated).
 
-    is_active() defaults to True when no state file exists (legacy: an
-    unconfigured workspace must not silently disable enforcement). That is the
-    WRONG default for the new narrow hooks (dispatch_gate, worker_pulse):
-    semantics = default-INACTIVE — no activation → hooks sleep. A
+    Semantics = default-INACTIVE — no activation → hooks sleep. A
     non-kunglao-agent session must get zero noise from these hooks.
 
     Strict = explicit activation required AND not expired AND not paused.
-    is_active() keeps its legacy behavior for the old gate family.
 
     #613: expiry is no longer silent — the first refusal per expired window
     writes a one-shot runs/.hook-slept.json + one stderr WARNING (fail-open;
@@ -622,7 +588,6 @@ _SELFCHECK_LAYERS = ("project", "user-opt-in", "operator-declared")
 
 
 def selfcheck_registration(target: Path, *, expected_files: Collection[str],
-                           hook_dir: Path | None = None,
                            workspace: Path | None = None,
                            layer: str = "project",
                            deployed_project: Path | None = None) -> dict:
@@ -644,10 +609,10 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                  "settings rewrite dropped the hooks segment" class.
       shape    — every expected command is uv-form pointing into the
                  EXECUTING install's hooks dir, derived independently here
-                 via _canonical_hooks_dir (#752 D4+: the legacy hook_dir
-                 parameter is accepted but ignored for the verdict) — the
-                 #269 worktree-bound-command silent-death class plus the
-                 #752 self-certifying-variable class.
+                 via _canonical_hooks_dir (the legacy hook_dir parameter is
+                 DELETED — the caller variable the #752 self-certifying
+                 class needed no longer exists) — the #269 worktree-bound-
+                 command silent-death class plus the #752 class.
                  Path existence is deliberately NOT asserted (a canonical
                  install under a test HOME is a legitimate shape).
 
@@ -714,12 +679,12 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
 
     # #752 D4+: the shape expectation is recomputed HERE from the executing
     # install (_canonical_hooks_dir) — never taken from a caller variable.
-    # The legacy hook_dir parameter stays ACCEPTED for API compatibility
-    # (#445 callers may still pass it) but feeds nothing: a checker handed
-    # the same wrong dir the writer wrote ("write whatever, verify
-    # whatever") must fail, not certify itself. Path existence is
-    # deliberately NOT asserted (a canonical install under a test HOME is a
-    # legitimate shape).
+    # The legacy hook_dir parameter is DELETED (compat-rot sweep): a checker
+    # handed the same wrong dir the writer wrote ("write whatever, verify
+    # whatever") must fail, not certify itself — with the parameter gone the
+    # lie is untellable, not merely ignored. Path existence is deliberately
+    # NOT asserted (a canonical install under a test HOME is a legitimate
+    # shape).
     # #783: in deploy mode the executing authority is the WORKSPACE copy —
     # the declared mode comes from the registration contract (deployed_project),
     # so a checker handed the same wrong mode still fails; bare-skill fallback
@@ -1418,7 +1383,7 @@ def main() -> int:
         return 0
 
     if args.is_active:
-        active = is_active(workspace, args.is_active)
+        active = is_active_strict(workspace, args.is_active)
         print(f"{args.is_active}: {'ACTIVE' if active else 'PAUSED'}")
         return 0 if active else 1
 

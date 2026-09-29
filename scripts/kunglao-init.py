@@ -2599,7 +2599,6 @@ def _record_mcp(ws: Path, project_type: str) -> list[dict]:
     the workspace-level .mcp.json lookup depend on process cwd (workspace
     registrations were missed whenever init ran from another directory).
     """
-    mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)  # registry read warms the single-source probe
     comps: list[dict] = []
     for check in mcp_probe.check_mcp(ws, project_type):
         if check.status == "PASS":
