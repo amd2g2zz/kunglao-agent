@@ -219,7 +219,12 @@ def q_report(ws) -> dict:
     companion of the s_hash cells). Additive key: the Q arithmetic and
     the q-report/1 cells stay byte-identical. A registry the health face
     cannot read degrades to an explicit "unavailable" marker — visible,
-    never silent."""
+    never silent.
+
+    W3-T3.1 guardian KPI (issue 429): three guardian-KPI blocks rendered
+    beside the method-family health block (guardian_kpi / verifier_drift
+    / reject_rate — pure read faces of scripts/guardian_kpi.py, additive
+    keys, zero behavior)."""
     cells: dict[tuple[str, str], list[float]] = {}
     total = 0
     for row in read_csv(ws):
@@ -234,8 +239,10 @@ def q_report(ws) -> dict:
             "n": len(rs),
             "mean_r": round(sum(rs) / len(rs), 6)}
            for k, rs in sorted(cells.items())]
-    return {"schema": Q_REPORT_SCHEMA, "cells": out, "rows": total,
-            "method_family_health": _family_health_face(ws)}
+    doc = {"schema": Q_REPORT_SCHEMA, "cells": out, "rows": total,
+           "method_family_health": _family_health_face(ws)}
+    doc.update(_kpi_faces(ws))
+    return doc
 
 
 def _family_health_face(ws) -> dict:
@@ -247,6 +254,16 @@ def _family_health_face(ws) -> dict:
         return mf.family_health(ws)
     except mf.RegistryError as exc:
         return {"unavailable": f"registry unreadable: {exc}"}
+
+
+def _kpi_faces(ws) -> dict:
+    """W3-T3.1 guardian KPI (issue 429): the guardian-KPI blocks
+    (guardian triggers / verifier drift / gate reject rate) at the Q
+    report face — same lazy-import + explicit-degradation posture as the
+    health block."""
+    import guardian_kpi as gk  # local: keeps module import order flat
+
+    return gk.faces(ws)
 
 
 if __name__ == "__main__":  # pragma: no cover — library module

@@ -463,7 +463,7 @@ files:
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
-    sha256: e3f58cb62d38743cc371553b8794449c20b706e759839c7bf1b9c728017e1452
+    sha256: 9ff7a7dda986b5f45b077abc06730b6a0458b514243d38db11f22ec519a9faf1
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -500,6 +500,10 @@ files:
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
     sha256: c86cfa266c7d526479e73317f9d73c4e54231125a7e7378578c708a288ed81d5
+  - src: scripts/guardian_kpi.py
+    dest: .claude/scripts/guardian_kpi.py
+    kind: scaffold
+    sha256: 94bbf06730d74b17faca907df827301248d8686a90ce30e5ae3062058613d666
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
@@ -1112,6 +1116,10 @@ files:
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
     sha256: bb967f544d961c2dad11f0e8cd61832bc9523196f1015efa652f2dcaf21db153
+  - src: scripts/rlvr/compose.py
+    dest: .claude/scripts/rlvr/compose.py
+    kind: scaffold
+    sha256: afa9d8c657ffb62cfd052fb6271e0af49115a1eb22e526a404a02eb5eb9bb0c6
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
@@ -1127,7 +1135,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: fa13c40daec47ee3718753e02c8db243ad3ddb6e9f8cde4bb11178ab3f61777b
+    sha256: b4946049c7d5237a2bebc35eb41a1f608900305af086ccb90de829edc4a162e8
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1711,7 +1719,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 541d5ab78e7fc10d8b2243cfebf44488d7f2bb01c6ae94517a66a3bf0352c092
+    sha256: 112d0ec71b2a3804f36055b461b70ba6f17bd7d647ad9f60fe454fb88296e30e
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
