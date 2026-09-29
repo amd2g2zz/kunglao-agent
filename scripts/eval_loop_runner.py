@@ -691,15 +691,26 @@ def _record_experience(ws: Path, trigger: str) -> None:
     worker-return / terminal lifecycle points, journal the session's
     tool-call rows (tc_journal), append one mainline situation snapshot
     (state_signature), and at the terminal regenerate the derived
-    (s, a, r) triple view (experience_triples). Runs AFTER measurement
-    and settlement faces — pure telemetry, fail-open: any recording
-    failure is a WARN, never a broken harvest or a changed verdict."""
+    (s, a, r) triple view (experience_triples). The verification ladder
+    rides the same lifecycle points (issue 429 §1/§8): the worker return
+    IS the round-closure event, so the T2 unblocking-value priority queue
+    is rebuilt there; the mainline (s_M, A_M, delta-V) decision rows are
+    replayed off the situation stream at both points. Runs AFTER
+    measurement and settlement faces — pure telemetry, fail-open: any
+    recording failure is a WARN, never a broken harvest or a changed
+    verdict."""
     try:
         import experience_triples
         import state_signature
         import tc_journal
+        import verification_ladder
         tc_journal.harvest_from_log(ws)
         state_signature.append_snapshot(ws, trigger=trigger)
+        if trigger == "worker_return":
+            # Stop(worker) = round closure event: refresh the T2 queue
+            verification_ladder.round_close(ws)
+        # mainline decision rows: situation-stream replay, idempotent
+        verification_ladder.settle_mainline_decisions(ws)
         if trigger == "terminal":
             experience_triples.extract(ws)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict

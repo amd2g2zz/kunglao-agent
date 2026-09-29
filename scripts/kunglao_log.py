@@ -252,6 +252,7 @@ LEGACY_ACTORS = frozenset({
     "target_ladder",  # issue 293 tagged decision emission (sibling fan-out + settlement gate)
     "telemetry", "think_seat", "toolchain_install", "tuition_curve",
     "update_index", "upgrade", "user", "user_signal", "verdict_scorer",
+    "verification_ladder",  # issue 429 §1 ladder host (oracle_probe_t1 / t2_queue_built faces)
     "verify_status_watch", "verifier", "violation_capture",
     "wire_up_settings", "worker", "worker_budget",
     "zero_output_fingerprint",

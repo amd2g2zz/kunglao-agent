@@ -72,7 +72,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 15
+    r1: 18
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -169,7 +169,7 @@ files:
   scripts/heartbeat.py:
     r1: 29
   scripts/heartbeat_loop_prompt.py:
-    r1: 4
+    r1: 3
   scripts/heartbeat_tick.py:
     r1: 43
   scripts/heartbeat_touch.py:
@@ -327,6 +327,8 @@ files:
     r1: 7
   scripts/rho_verifier.py:
     r1: 7
+  scripts/rlvr/q_cells.py:
+    r1: 14
   scripts/roi_settlement.py:
     r1: 4
   scripts/rollup.py:
@@ -401,7 +403,7 @@ files:
   scripts/write_guard_unlock.py:
     r1: 1
   scripts/ws_layout.py:
-    r1: 3
+    r1: 4
   scripts/zero_output_fingerprint.py:
     r1: 1
   tests/_factories.py:
@@ -738,6 +740,8 @@ files:
   tests/test_event_stream_adoption.py:
     r1: 24
     r2: 1
+  tests/test_event_wirings_434.py:
+    r1: 1
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
   tests/test_exogenous_421.py:
@@ -1086,6 +1090,9 @@ files:
     r1: 3
   tests/test_python_floor.py:
     r1: 1
+  tests/test_q_cells_429.py:
+    r1: 2
+    r2: 1
   tests/test_qtable_p3.py:
     r1: 5
   tests/test_recall_inject.py:
