@@ -390,9 +390,23 @@ def _gate_policy_due(ws: Path, events: set) -> bool:
         return False
 
 
+def _gate_long_round(ws: Path, events: set) -> bool:
+    """The verification ladder's T1 trigger (issue 429 §1): the round is
+    LONG when the coalesced verified-write count crosses the round-turn
+    threshold and the debounce interval floor has elapsed. Reads the
+    debounce state (fail-open: any read problem is just "not due" — the
+    mechanism fires on the next pass)."""
+    try:
+        import verification_ladder as vlad
+        return bool(vlad.t1_due(Path(ws)).get("due"))
+    except Exception:  # noqa: BLE001 — a gate must never raise (fail-open)
+        return False
+
+
 GATES = {
     "always": _gate_always,
     "events_seen": _gate_events_seen,
+    "long_round": _gate_long_round,
     "loop_unregistered": _gate_loop_unregistered,
     "session_dead": _gate_session_dead,
     "policy_due": _gate_policy_due,
