@@ -6,8 +6,10 @@ Unit pins (RED-first) for scripts/e2e/ (the runbook productization):
     stop rcs (5/6/7) classify BLOCKED, everything else out-of-set is FAIL;
   - resolve-answer synthesis: task.yaml anchors used VERBATIM, lane/type
     re-supplied (rehearsal finding #1), unknown decision ids surfaced;
-  - contamination guard: only target/derive.py enters the workspace;
-    ground_truth.json / checker.py never do (rehearsal finding #3 kin);
+  - contamination guard: ONLY the task.yaml-declared analysis material
+    (workspace_scaffold.files) enters the workspace — answer sources
+    (reference.py) never do; ground_truth.json / checker.py never
+    do (rehearsal finding kin);
   - evidence schema + resume: per-checkpoint JSON evidence anchors resume;
     PASS steps are skipped, non-PASS steps re-run;
   - budget accounting: exhausted budget -> exit 4 PARTIAL, never silent;
@@ -61,6 +63,54 @@ workspace_scaffold:
 DERIVE_PY = "def derive(data: bytes) -> int:\n    return 42\n"
 
 GROUND_TRUTH = '{"offset": 0, "mul": 13, "fold": 7}\n'
+
+# --- a synthetic NATIVE-family unit (the rust-so-crack-v1 shape,
+# family-agnostic): the task declares a binary analysis material plus the
+# checker's answer source. The .so must stage; reference.py must not.
+NATIVE_TASK_YAML = """schema: kunglao-eval-task/1
+task_id: arm-kdf-l0
+tier: release
+family: arm-native-kdf
+anchors:
+  goal_verbatim: Recover the mutated constants and re-implement kdf_derive.
+  success_criterion: Byte-exact reproduction on every probe.
+  verification_method: reproduction
+workspace_scaffold:
+  files:
+  - target/libkdf.so
+  - reference.py
+checker:
+  entrypoint: checker.py
+  self_check_candidate: reference.py
+"""
+ELF_SO = b"\x7fELF\x02\x01\x01native-kdf-material-bytes"
+REFERENCE_PY = "def kdf_derive(data: bytes) -> str:\n    return 'answer'\n"
+
+
+@pytest.fixture()
+def native_stub_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    task = repo / "eval/v1/tasks/release/arm-kdf-l0"
+    (task / "target").mkdir(parents=True)
+    (task / "target/libkdf.so").write_bytes(ELF_SO)
+    (task / "reference.py").write_text(REFERENCE_PY, encoding="utf-8")
+    (task / "task.yaml").write_text(NATIVE_TASK_YAML, encoding="utf-8")
+    return repo
+
+
+@pytest.fixture()
+def nested_stub_repo(tmp_path: Path) -> Path:
+    """Declared material with a nested relative path (no answer files)."""
+    repo = tmp_path / "repo"
+    task = repo / "eval/v1/tasks/release/synth-nested"
+    (task / "target/deep").mkdir(parents=True)
+    (task / "target/deep/nested.so").write_bytes(ELF_SO, )
+    (task / "task.yaml").write_text(
+        NATIVE_TASK_YAML.replace("arm-kdf-l0", "synth-nested").replace(
+            "  - target/libkdf.so\n  - reference.py\n",
+            "  - target/deep/nested.so\n"),
+        encoding="utf-8")
+    return repo
 
 
 @pytest.fixture()
@@ -275,6 +325,89 @@ class TestContaminationGuard:
         checker = model.resolve_checker(stub_repo, "smoke", "py-derive-v1")
         assert checker == (stub_repo / "eval/v1/tasks/smoke/py-derive-v1/checker.py")
         assert ws not in checker.parents  # never resolved from the workspace
+
+    # ------------------------------------------------ contamination pins
+
+    def test_staging_native_unit_stages_declared_material_never_reference(
+            self, native_stub_repo, tmp_path):
+        """A native unit's declared analysis material (the .so)
+        stages; the checker's answer source (reference.py) never does —
+        the checker invokes it harness-side from the REPO tree."""
+        ws = tmp_path / "ws"
+        model.stage_workspace(
+            native_stub_repo / "eval/v1/tasks/release/arm-kdf-l0", ws)
+        assert (ws / "target/libkdf.so").read_bytes() == ELF_SO
+        staged = sorted(p.relative_to(ws).as_posix()
+                        for p in ws.rglob("*") if p.is_file())
+        assert staged == ["target/libkdf.so"], \
+            f"answer source staged into the workspace: {staged}"
+
+    def test_staging_preserves_nested_declared_paths(
+            self, nested_stub_repo, tmp_path):
+        """Declared relative paths land at the SAME relative path under
+        WS (deep target trees, not flattened into WS/target)."""
+        ws = tmp_path / "ws"
+        model.stage_workspace(
+            nested_stub_repo / "eval/v1/tasks/release/synth-nested", ws)
+        assert (ws / "target/deep/nested.so").read_bytes() == ELF_SO
+        assert list(ws.rglob("reference.py")) == []
+
+    def test_staging_excludes_answer_names_even_without_self_check(
+            self, tmp_path):
+        """Belt and suspenders: a misconfigured unit that lists
+        reference.py WITHOUT declaring it self_check_candidate still
+        never stages it (name-denylist backstop)."""
+        repo = tmp_path / "repo"
+        task = repo / "eval/v1/tasks/release/synth-misconf"
+        (task / "target").mkdir(parents=True)
+        (task / "target/libkdf.so").write_bytes(ELF_SO)
+        (task / "reference.py").write_text(REFERENCE_PY, encoding="utf-8")
+        (task / "task.yaml").write_text(
+            NATIVE_TASK_YAML.replace("arm-kdf-l0", "synth-misconf")
+            .replace("checker:\n  entrypoint: checker.py\n"
+                     "  self_check_candidate: reference.py\n", "checker:\n"),
+            encoding="utf-8")
+        ws = tmp_path / "ws"
+        model.stage_workspace(task, ws)
+        assert list(ws.rglob("reference.py")) == []
+        assert (ws / "target/libkdf.so").read_bytes() == ELF_SO
+
+    def test_staging_missing_declared_file_fails_loudly(
+            self, native_stub_repo, tmp_path):
+        """A declared file absent from the task unit is a loud failure
+        naming the missing path — never a silent partial stage."""
+        (native_stub_repo / "eval/v1/tasks/release/arm-kdf-l0/target/libkdf.so") \
+            .unlink()
+        with pytest.raises(FileNotFoundError, match="libkdf.so"):
+            model.stage_workspace(
+                native_stub_repo / "eval/v1/tasks/release/arm-kdf-l0",
+                tmp_path / "ws")
+
+    def test_staging_without_declared_files_fails_loudly(self, tmp_path):
+        """A unit with no workspace_scaffold.files has no analysis
+        material — refuse loudly (AnchorError kin), never an empty mount."""
+        repo = tmp_path / "repo"
+        task = repo / "eval/v1/tasks/release/synth-empty"
+        task.mkdir(parents=True)
+        (task / "task.yaml").write_text(
+            NATIVE_TASK_YAML.replace("arm-kdf-l0", "synth-empty").replace(
+                "workspace_scaffold:\n  files:\n"
+                "  - target/libkdf.so\n  - reference.py\n",
+                "workspace_scaffold:\n  files: []\n"),
+            encoding="utf-8")
+        with pytest.raises(model.AnchorError, match="workspace_scaffold.files"):
+            model.stage_workspace(task, tmp_path / "ws")
+
+    def test_guard_flags_planted_reference_py(self, tmp_path):
+        """Defense-in-depth: reference.py is an answer source —
+        its presence ANYWHERE in the workspace is a contamination
+        violation (the checker's own copy lives in the REPO tree)."""
+        ws = tmp_path / "ws"
+        nested = ws / "a/reference.py"
+        nested.parent.mkdir(parents=True)
+        nested.write_text(REFERENCE_PY, encoding="utf-8")
+        violations = model.check_contamination(ws)
+        assert any("reference.py" in v for v in violations)
 
 
 # ---------------------------------------------------------------------------
