@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""posteriors.py — the γ Discounted-TS posterior store (issue 428 + 420 P2).
+"""posteriors.py — the DTS posterior store (Discounted Thompson Sampling,
+issue 428 + 420 P2).
 
 v0.1.6 W2-T1 learned-state core. Replaces the τ temperature-annealing
 design (issue 386, retired by issue 428: τ flattening breaks the TS invariant and
-the p_min patch was a patch to a broken mechanism) with Discounted TS —
+the p_min patch was a patch to a broken mechanism) with DTS —
 the documented non-stationarity standard (discounted/sliding-window TS
-literature). ONE Thompson engine: samples always come from a GENUINE
-posterior, only the data behind it is discounted.
+literature). ONE engine: DTS everywhere, day one (owner ruling
+2026-09-29: DTS REPLACES TS — there is no plain-TS default and no
+activation-pending shim anywhere on this surface). Samples always come
+from a GENUINE posterior, only the data behind it is discounted.
 
 Store — ``<ws>/runs/posterior-store.jsonl``, append-only JSONL,
 ledger-isomorphic with rollout_ledger.py. One row = one Bernoulli
-observation of one Thompson cell ``(state, arm)``:
+observation of one DTS cell ``(state, arm)``:
 
     {"schema": "posterior-store/1",
      "state": "<state-signature hash>",   # the Q-table key half
@@ -55,7 +58,7 @@ one IEEE multiply + add per element — bit-exact replay is pinned in
 tests/test_rlvr_posteriors_428.py. numpy appears only as the in-memory
 view's elementwise statistics (np.sum/pairwise reductions NEVER touch
 this surface — numpy policy 1, issue 420); no numpy float crosses a
-boundary (policy 3) and Thompson sampling stays stdlib ``betavariate``
+boundary (policy 3) and DTS sampling stays stdlib ``betavariate``
 (policy 4). Reads fail open (missing/dirty store → empty, rate-limited
 WARN); writes are loud-result dicts, never raises into the producer.
 """
@@ -73,8 +76,6 @@ from kunglao_log import iter_jsonl, warn
 SCHEMA = "posterior-store/1"
 STORE_REL = "runs/posterior-store.jsonl"
 LOCK_REL = "runs/.posterior-store.lock"
-
-GAMMA_UNIT = 1.0  # no forgetting: plain Bayesian counting
 
 # Pseudo-count priors = the learning-rate knob (prior strength = how many
 # observations a newborn cell carries). Beta(1, 1) uniform: every arm is
@@ -168,8 +169,14 @@ class OutcomeAdaptiveGamma:
         return self.gamma_floor + (1.0 - self.gamma_floor) * self._m
 
     def observe(self, outcome) -> None:
-        self._m = self.ema_lambda * self._m + (1.0 - self.ema_lambda) * (
-            1.0 if outcome else 0.0)
+        """Fold one outcome into the EMA: ``m ← λ·m + (1−λ)·outcome``.
+        Domain: Bernoulli 0/1 (the store's outcome vocabulary) AND
+        fractional outcomes in [0, 1] (the credit streams — e.g. q_cells'
+        rail-clamped round credit — so ONE schedule drives every DTS
+        read face). Bernoulli inputs are bit-identical to the 0/1
+        truthiness fold; out-of-band values clamp into [0, 1]."""
+        o = max(0.0, min(1.0, float(outcome)))
+        self._m = self.ema_lambda * self._m + (1.0 - self.ema_lambda) * o
 
     def next_gamma(self, outcome) -> float:
         """Convenience: γ now, then fold the outcome in (engine loop)."""
@@ -184,7 +191,9 @@ def gamma_constant(gamma: float) -> _ConstantGamma:
 
 
 def default_schedule() -> OutcomeAdaptiveGamma:
-    """The EX-2-calibrated default schedule (the constants above)."""
+    """THE shipped default schedule (the EX-2 constants above) — the one
+    γ face of the DTS engine. Every module-wide default imports THIS; no
+    duplicated constants anywhere (owner ruling 2026-09-29)."""
     return OutcomeAdaptiveGamma(gamma_floor=GAMMA_FLOOR_DEFAULT,
                                 ema_lambda=ADAPTIVE_EMA_LAMBDA_DEFAULT)
 
@@ -331,8 +340,12 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
     - ``outcome``: Bernoulli 0/1 (int/float/bool) — scalar semantics live
       in scalar_settlement; this store accepts observations as data.
     - ``gamma``: the γ in force at event time, recorded on the row. None
-      = no schedule decision yet → GAMMA_UNIT (plain counting). The decay
-      itself is applied at the fold/read face, never in the file.
+      = no schedule decision threaded by the caller → the SHIPPED default
+      schedule's γ (``default_schedule().gamma()`` — the adaptive day-one
+      value from the neutral seed; owner ruling 2026-09-29: no plain-TS
+      write default anywhere). The adaptive engine loop threads its own
+      per-event γ (``next_gamma(outcome)``). The decay itself is applied
+      at the fold/read face, never in the file.
     Loud result dict, no raise."""
     ws = Path(ws)
     state = str(state or "").strip()
@@ -344,7 +357,8 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
         return {"appended": False,
                 "reason": f"outcome: Bernoulli 0/1 required, got {outcome!r}"}
     try:
-        g = _require_gamma("gamma", GAMMA_UNIT if gamma is None else gamma)
+        g = _require_gamma(
+            "gamma", default_schedule().gamma() if gamma is None else gamma)
     except ValueError as exc:
         return {"appended": False, "reason": str(exc)}
     ok = _locked_append(ws, _row_bytes(state, arm, ts or _utc_now(), g,
@@ -401,7 +415,7 @@ class PosteriorView:
         return [float(v) for v in np.sqrt(var)]
 
     def sample(self, rng) -> list[float]:
-        """One Thompson draw per cell from the DECAYED posterior."""
+        """One DTS draw per cell from the DECAYED posterior."""
         return [rng.betavariate(float(a), float(b))
                 for a, b in zip(self.alpha, self.beta)]
 
