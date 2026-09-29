@@ -427,6 +427,57 @@ def _rank_top_claim(ctx: RunContext) -> tuple[str | None,
     return claim, (None if ok and claim else out), ms
 
 
+def _sample_envelope_family(ws) -> tuple[str, dict | None]:
+    """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
+
+    The P_LLM x Q draw (``rlvr.q_cells.sample_method_family``) picks the
+    envelope's method_family when the run declares none: candidates are
+    the workspace's measured proposal channel (families actually declared
+    — the q-cell observation log, INTERSECTED with the #432 registry: a
+    retired token must never ride the prior again, or the fail-closed
+    vocabulary gate would lockstep-reject every dispatch in the
+    workspace) with a share prior; a workspace with no declaration
+    history proposes uniformly over the registered vocabulary (the mined
+    proposal set). rng = ``q_cells_seed_state`` — the sample moves when
+    evidence moves or the round advances (#251; a re-dispatched claim
+    therefore re-samples — recorded decision, the #251 contract), never
+    on a wall clock. Day one the posteriors are the wide Beta(1,1) and
+    the draw degenerates to the pure proposal prior; banked credits (the
+    W5 settlement feed) make Q the learned adjustment. Fail-open: any
+    sampler failure leaves the envelope undeclared (the byte-compatible
+    v1 shape) and returns no receipt — a broken kernel must never break
+    the dispatch loop."""
+    try:
+        import method_families
+        from rlvr import q_cells
+        from rlvr import state as rlvr_state
+        store = q_cells.default_store(ws)
+        registered = sorted(method_families.registered_tokens())
+        counts: dict[str, int] = {}
+        for row in store.observations():
+            if not isinstance(row, dict):
+                continue
+            fam = str(row.get("method_family") or "").strip()
+            if fam and fam in registered:
+                counts[fam] = counts.get(fam, 0) + 1
+        if counts:
+            prior = {fam: float(n) for fam, n in sorted(counts.items())}
+        else:
+            if not registered:
+                return "", None
+            prior = {fam: 1.0 for fam in registered}
+        rng, _round = q_cells.q_cells_seed_state(ws)
+        receipt = q_cells.sample_method_family(
+            rlvr_state.snapshot(ws), prior, store, rng=rng)
+        return str(receipt["family"]), receipt
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the loop
+        from kunglao_log import warn  # canonical warn: rate-limited
+        warn("e2e.envelope_sampler",
+             f"{type(exc).__name__}: {exc} (fail-open: envelope left "
+             f"undeclared)")
+        return "", None
+
+
 def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
                       detail: dict) -> model.CheckpointResult | None:
     """Mint the dispatch request + run the LLM face for one claim.
@@ -434,21 +485,29 @@ def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
     if claim in dispatched:
         return None  # already emitted; wait for the act to land
     dispatched.add(claim)
+    # kernel-facing hook (audit §4): the envelope's method_family is the
+    # declared proposal when the run carries one, else the DTS-sampled
+    # draw (W4, issue 462) — the sampled family rides the envelope AND
+    # the stream records it with its sampler receipt.
+    method_family = getattr(ctx.state, "method_family", "") or ""
+    receipt: dict | None = None
+    if not method_family:
+        method_family, receipt = _sample_envelope_family(ctx.ws)
+    dispatch_meta: dict = {
+        "version": 1, "claim": claim, "tier": 1,
+        "tools": ["grep", "python3"],
+        "agent": "kunglao-worker"}
+    if method_family:
+        dispatch_meta["method_family"] = method_family
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(
-        json.dumps({"kunglao_dispatch": {
-            "version": 1, "claim": claim, "tier": 1,
-            "tools": ["grep", "python3"],
-            "agent": "kunglao-worker"}})
+        json.dumps({"kunglao_dispatch": dispatch_meta})
         + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n",
         encoding="utf-8")
-    # kernel-facing hook (audit §4): when the run declares a method
-    # family, the envelope carries it AND the stream records it — ready
-    # for kernel activation, inert (and envelope byte-compatible) today.
-    method_family = getattr(ctx.state, "method_family", "") or ""
     if method_family:
-        audit.emit_method_family(str(ctx.ws), claim, method_family)
+        audit.emit_method_family(str(ctx.ws), claim, method_family,
+                                 envelope=receipt)
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
