@@ -277,7 +277,7 @@ def _pulse_payload(ws: Path) -> dict:
         "hookEventName": "PostToolUse",
         "tool_name": "Agent",
         "cwd": str(ws),
-        "tool_input": {"prompt": "[T1 tools=basic] claim C-203: grep chemistry strings in main.main"},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, "claim": "C-203", "tier": 1, "tools": ["basic"]}}\n: grep chemistry strings in main.main'},
     }
 
 

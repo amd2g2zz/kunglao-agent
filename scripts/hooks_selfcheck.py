@@ -395,7 +395,7 @@ def check_component_mcp(ws: Path, project_type: str | None = None) -> dict:
 
     ptype = project_type or _read_project_type_local(ws) or "windows"
     import mcp_probe
-    found = mcp_probe.registered_names(None, ws)
+    found = mcp_probe.registered_names(ws)
     hard_missing = []
     for item in mcp_probe.MANIFEST:
         if ptype not in item.types or item.tier != "HARD":

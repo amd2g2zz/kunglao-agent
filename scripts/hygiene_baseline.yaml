@@ -130,7 +130,7 @@ files:
   scripts/eval_crypto.py:
     r1: 1
   scripts/eval_dataset.py:
-    r1: 3
+    r1: 2
   scripts/eval_loop_runner.py:
     r1: 4
   scripts/eval_native_sources.py:
@@ -177,7 +177,7 @@ files:
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 79
+    r1: 78
   scripts/hooks_selfcheck.py:
     r1: 38
   scripts/hypothesis_seeder.py:
@@ -243,7 +243,7 @@ files:
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
-    r1: 30
+    r1: 25
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/method_families.py:
@@ -716,7 +716,7 @@ files:
   tests/test_error_response.py:
     r1: 3
   tests/test_eval_chain_370.py:
-    r1: 4
+    r1: 3
   tests/test_eval_contract_352.py:
     r1: 1
   tests/test_eval_control_arm_236.py:
@@ -734,7 +734,7 @@ files:
   tests/test_eval_tf_shadow_356.py:
     r1: 2
   tests/test_eval_toolflex_356.py:
-    r1: 3
+    r1: 2
   tests/test_evals_fixture_530.py:
     r1: 1
   tests/test_evals_schema.py:
@@ -1228,7 +1228,7 @@ files:
   tests/test_specialist_contract_expansion.py:
     r1: 8
   tests/test_specialist_gate.py:
-    r1: 5
+    r1: 4
   tests/test_stale_workspace_gate_748.py:
     r1: 1
   tests/test_state_anchor.py:

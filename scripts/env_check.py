@@ -341,7 +341,7 @@ def _mcp_decompiler_supply(ws: Path) -> bool:
     config read errors."""
     try:
         import mcp_probe
-        registered = mcp_probe.registered_names(None, ws)
+        registered = mcp_probe.registered_names(ws)
         return "ghidra" in registered or "ida-pro-vm" in registered
     except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
         return False
@@ -371,7 +371,7 @@ def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
     ptype = project_type if project_type in init_state.VALID_TYPES else "windows"
     try:
         import mcp_probe
-        found = mcp_probe.registered_names(None, ws)
+        found = mcp_probe.registered_names(ws)
     except Exception as exc:  # noqa: BLE001 — registry unreadable ≠ crash
         return ("FAIL", f"MCP registry probe failed ({exc}) — supply unverified")
     # #408 CRITICAL: approval state rides EVERY verdict. Workspace-scope

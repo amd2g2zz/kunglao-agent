@@ -97,7 +97,7 @@ class TestTop1FailOpenEmit:
         # fresh import in case the module already cached worker_budget
         importlib.reload(dg)
         try:
-            rc = dg._top1_enforcement(ws, "C-2", "[T1 tools=grep] claim C-2")
+            rc = dg._top1_enforcement(ws, "C-2", '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 1, "tools": ["grep"]}}\n')
         finally:
             # restore real worker_budget for subsequent tests in this process
             monkeypatch.delitem(sys.modules, "worker_budget", raising=False)
@@ -135,7 +135,7 @@ class TestTop1FailOpenEmit:
         import dispatch_gate as dg
         # ensure worker_budget is the live reference inside dg
         importlib.reload(dg)
-        rc = dg._top1_enforcement(ws, "C-3", "[T1 tools=grep] claim C-3")
+        rc = dg._top1_enforcement(ws, "C-3", '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 1, "tools": ["grep"]}}\n')
 
         assert rc == 2, (
             f"audit-crash face must REJECT with rc 2; got {rc!r}")

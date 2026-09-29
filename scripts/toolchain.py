@@ -999,13 +999,12 @@ def _concrete_register_argv(register_template: str,
 
 
 def _task_spec_mcp_checks(specs: "tuple[McpServerSpec, ...]",
-                          claude_json: Path | None,
                           ws: Path) -> list["mcp_probe.MCPCheck"]:
     """MCP face over the task_spec-declared server set (issue 202).
 
     When the task declares `tools.mcp_servers`, the face checks THESE exact
     servers instead of the type manifest (env = f(task_spec))."""
-    found = mcp_probe.registered_names(claude_json, ws)
+    found = mcp_probe.registered_names(ws)
     checks: list[mcp_probe.MCPCheck] = []
     for spec in specs:
         if spec.name in found:
@@ -1031,16 +1030,15 @@ def _task_spec_mcp_checks(specs: "tuple[McpServerSpec, ...]",
     return checks
 
 
-def _mcp_server_url(name: str, claude_json: Path | None,
-                    ws: Path) -> str | None:
+def _mcp_server_url(name: str, ws: Path) -> str | None:
     """Registered endpoint url for a server (first http url across the
     registration surfaces), or None."""
-    urls = mcp_probe.registered_server_urls(claude_json, ws)
+    urls = mcp_probe.registered_server_urls(ws)
     return urls.get(name.lower())
 
 
 def _mcp_reachability_face(item: CheckResult, name: str,
-                           claude_json: Path | None, ws: Path) -> CheckResult:
+                           ws: Path) -> CheckResult:
     """Honest reachability evidence for a REGISTERED http-transport server.
 
     Registered + endpoint reachable -> probe upgrades to LIVENESS; endpoint
@@ -1048,7 +1046,7 @@ def _mcp_reachability_face(item: CheckResult, name: str,
     connection layer (registration alone is not a live server), with the
     agent-do repair the layer owns. stdio servers keep presence evidence
     (honesty rule)."""
-    url = _mcp_server_url(name, claude_json, ws)
+    url = _mcp_server_url(name, ws)
     if not url:
         return item
     parts = urllib.parse.urlsplit(url)
@@ -1072,9 +1070,8 @@ def _mcp_reachability_face(item: CheckResult, name: str,
 
 
 def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
-               reqs: Requirements = DEFAULT_REQUIREMENTS,
-               claude_json: Path | None = None) -> None:
-    """Append MCP supply checks (probe ~/.claude.json + workspace .mcp.json).
+               reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Append MCP supply checks (workspace .mcp.json + plugin-carried).
 
     Manifest + probe live in mcp_probe.py — single source of truth shared
     with the kunglao-init .mcp.json scaffold and the doc tables.
@@ -1082,13 +1079,10 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
     `claude mcp add` itself (opt-in via KUNGLAO_AGENT_DO=1) and re-verifies
     registration; only a genuine failure escalates, with the error attached.
     """
-    if claude_json is None:
-        claude_json = mcp_probe.claude_json_path()
     if reqs.required_mcp or reqs.required_mcp_declared:
-        checks = _task_spec_mcp_checks(reqs.required_mcp, claude_json, ws)
+        checks = _task_spec_mcp_checks(reqs.required_mcp, ws)
     else:
-        checks = mcp_probe.check_mcp(ws, project_type,
-                                     claude_json=claude_json)
+        checks = mcp_probe.check_mcp(ws, project_type)
     spec_urls = {s.name: s.url for s in reqs.required_mcp if s.url}
     for mc in checks:
         item = CheckResult(
@@ -1101,7 +1095,7 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
             probe=ProbeTier.PRESENCE,
         )
         if item.status is Status.PASS:
-            item = _mcp_reachability_face(item, mc.name, claude_json, ws)
+            item = _mcp_reachability_face(item, mc.name, ws)
         elif item.status is Status.FAIL and mc.fix:
             argv = _concrete_register_argv(mc.fix, spec_urls.get(mc.name))
             if argv is not None:
@@ -1110,7 +1104,7 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
                     ok, err = _attempt_mcp_register(argv)
                     item.attempts = (" ".join(argv),)
                     if ok:
-                        found = mcp_probe.registered_names(claude_json, ws)
+                        found = mcp_probe.registered_names(ws)
                         if mc.name in found:
                             item = CheckResult(
                                 name=item.name, status=Status.PASS,
@@ -1143,9 +1137,9 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
 # reachability (never a local IDA install/license); local lane -> the
 # ordered probe ladder; neither -> the exit-8 PendingDecision CHOICE.
 
-# Registry keys checked by mcp_probe.registered_names (user ~/.claude.json +
-# workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal
-# for the UNDECLARED lane; CLI supply is the probe-ladder surface.
+# Registry keys checked by mcp_probe.registered_names: workspace .mcp.json +
+# plugin-carried manifest — the user ~/.claude.json surface is DELETED. A
+# registered MCP decompiler is PRIMARY for the UNDECLARED lane; CLI is ladder.
 _DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
 
 # Issue 210 — ONE decompiler family (`decompiler`), XOR semantics: exactly
@@ -1522,7 +1516,6 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
     registers it itself (AGENT-DO, task_spec url) and re-verifies."""
     spec = next((s for s in reqs.required_mcp if s.name == "ida-pro-vm"),
                 McpServerSpec(name="ida-pro-vm", transport="http"))
-    claude_json = mcp_probe.claude_json_path()
     if "ida-pro-vm" not in registered:
         register = (f"claude mcp add --transport http ida-pro-vm {spec.url}"
                     if spec.url else
@@ -1539,7 +1532,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                 if allowed:
                     ok, err = _attempt_mcp_register(argv)
                     attempts = (" ".join(argv),)
-                    registered = mcp_probe.registered_names(claude_json, ws)
+                    registered = mcp_probe.registered_names(ws)
                     if "ida-pro-vm" in registered:
                         report.items.append(_decompiler_item(
                             status=Status.PASS,
@@ -1565,7 +1558,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
             detail=detail, fix=register,
         ))
         return
-    url = spec.url or _mcp_server_url("ida-pro-vm", claude_json, ws)
+    url = spec.url or _mcp_server_url("ida-pro-vm", ws)
     if url:
         parts = urllib.parse.urlsplit(url)
         port = parts.port or (443 if parts.scheme == "https" else 80)
@@ -1628,7 +1621,7 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
     `has_native_so` keeps the android nuance: pure-DEX (False) keeps the
     WARN (no HARD blocker, no choice needed — the lane is freely skipped).
     """
-    registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+    registered = mcp_probe.registered_names(ws)
 
     if reqs.decompiler_lane == "mcp":
         _check_decompiler_mcp_lane(report, ws, registered, reqs)

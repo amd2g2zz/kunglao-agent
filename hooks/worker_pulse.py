@@ -12,7 +12,8 @@ completes (PostToolUse on Agent), the orchestrator receives a compact
 
 SMART = narrow + alive-only (same philosophy as dispatch_gate):
   - fires ONLY when a worker/agent call completed AND the payload carries a
-    claim dispatch prefix `[T<N> tools=...] claim <C-NN>` — i.e. a kunglao-agent
+    v1 canonical dispatch envelope `{"kunglao_dispatch": {"version": 1,
+    "claim": "C-NN", ...}}` — i.e. a kunglao-agent
     worker just finished. Everything else → silent.
   - fires ONLY while kunglao-agent is ACTIVATED (30-min TTL, renewed by the
     orchestrator at Phase 0 / heartbeat). No activation / expired = hooks

@@ -114,7 +114,6 @@ def test_golden_replay(case: dict) -> None:
     assert expected.exists(), f"golden fixture missing: {expected}"
     cmd = case["cmd"]
     env = dict(os.environ)
-    env.pop("PRIORITY_WEIGHTS", None)
     digest_before = _tree_digest(case_dir / "ws")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_ws = Path(tmp) / "ws"

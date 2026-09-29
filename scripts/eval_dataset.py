@@ -81,17 +81,16 @@ TIERS: tuple[str, ...] = ("smoke", "release", "misdirection", "toolflex",
                           "chain")
 # per-tier corpus version (#332 bump): the smoke corpus stays eval-v1; the
 # release tier lands at eval-v1.1 (same v1 directory, changelog-appended —
-# never mutated in place per the eval version rules). Both spellings are
-# load-bearing: TIER_EVAL_VERSION is the #334 loop runner's consumer
-# surface; EVAL_TIER_VERSION is the release-tier alias kept for the
-# native-lane tests/runner. Misdirection (issue 352) lands at eval-v1.2;
+# never mutated in place per the eval version rules). TIER_EVAL_VERSION is
+# the single spelling — every tier-version consumer (loop runner, smoke
+# runner, pin tests) reads it (the EVAL_TIER_VERSION alias is deleted,
+# compat-rot sweep 2026-09-29). Misdirection (issue 352) lands at eval-v1.2;
 # toolflex (issue 356) at eval-v1.3.
 TIER_EVAL_VERSION: dict[str, str] = {"smoke": "eval-v1",
                                      "release": "eval-v1.1",
                                      "misdirection": "eval-v1.2",
                                      "toolflex": "eval-v1.3",
                                      "chain": "eval-v1.4"}
-EVAL_TIER_VERSION = TIER_EVAL_VERSION
 SOURCES: tuple[str, ...] = ("constructed", "historical-replay", "public-corpus")
 CHECKER_KINDS: tuple[str, ...] = ("constant-hit", "pair-match",
                                   "replay-roundtrip", "misdirection-verdict",
