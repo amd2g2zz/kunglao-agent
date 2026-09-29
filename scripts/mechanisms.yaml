@@ -64,6 +64,25 @@ mechanisms:
       traversal. The only in-session time host (#878).
 
   # ---- declaration-only channels (execution stays on their own rails) ----
+  - name: strategy_compose
+    entry: hooks/round_closure.py
+    channel: hooks
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/round-strategy/tick-*.yaml + runs/round-strategy.json (the loop-prompt seam face)"
+    owner: scripts/rlvr/compose.py
+    description: >
+      The compose single-point's production host (issue #462 W1): ONE
+      round-strategy object per decision event, composed + versioned at
+      the round-closure event (hooks/round_closure.py SubagentStop) and
+      broadcast through the four issue-429 outlets (dispatch envelope /
+      loop prompt / hook injection / schema amendments). Hooks channel is
+      host lifecycle — NOT migrated to the scheduler (issue #878 explicit
+      exclusion); declared here so the cockpit answer stays complete.
+
   - name: heartbeat_register
     entry: scripts/heartbeat.py
     channel: cli

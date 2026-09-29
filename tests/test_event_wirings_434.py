@@ -147,6 +147,82 @@ class TestRoundClosure:
         assert rc == 0 and out == ""
 
 
+class TestKernelRoundClosure462:
+    """issues #462 W1+W6: the production round-closure kernel faces.
+    Stop(worker) IS the round-closure event (#429 §6) — so the hook now
+    hosts what until now fired only from eval_loop_runner: the T2
+    unblocking-value queue (build + drain) and the compose single-point
+    (one round-strategy object per decision event, versioned)."""
+
+    def _payload(self, ws: Path) -> dict:
+        return {"cwd": str(ws), "session_id": "sess-9",
+                "transcript_path": str(ws / "transcript.jsonl")}
+
+    def test_round_closure_builds_and_drains_the_t2_queue(
+            self, tmp_path, capsys):
+        import round_closure
+        ws = _mk_ws(tmp_path)  # carries an OPEN claim (C-1)
+        write_hook_state(ws, active_hooks=["completion_gate"])
+        rc = round_closure.main_with_payload(self._payload(ws))
+        capsys.readouterr()
+        assert rc == 0
+        queue_path = ws / "runs" / "t2-queue.json"
+        assert queue_path.is_file(), \
+            "production closure must persist the T2 queue (not eval-only)"
+        queue = json.loads(queue_path.read_text(encoding="utf-8"))
+        assert queue["schema"] == "t2-queue/1"
+        assert queue["dispatched"], "the closure drains the queue head"
+        assert queue["dispatched"][0]["claim_id"] == "C-1"
+
+    def test_round_closure_composes_and_versions_the_strategy(
+            self, tmp_path, capsys):
+        import round_closure
+        import rollout_ledger as rl
+        import yaml
+        ws = _mk_ws(tmp_path)
+        for rid in ("task/k1", "task/k2"):
+            rl.record(ws, kind="task", anchor=rid, signals=[
+                {"type": "method_family", "source": "envelope",
+                 "value": "static-decompile", "ts": "t"}], rollout_id=rid)
+            rl.settle(ws, rid, {"reward": 1.0, "band": "SETTLED_GREEN",
+                                "rule_id": "unit-test",
+                                "evidence_refs": [rid]})
+        write_hook_state(ws, active_hooks=["completion_gate"])
+        rc = round_closure.main_with_payload(self._payload(ws))
+        capsys.readouterr()
+        assert rc == 0
+        ticks = sorted((ws / "runs" / "round-strategy").glob("tick-*.yaml"))
+        assert ticks, "the compose host must version the strategy object"
+        obj = yaml.safe_load(ticks[-1].read_text(encoding="utf-8"))
+        assert obj["schema"] == "round-strategy/1"
+        assert obj["dispatch"]["method_lead"] == "static-decompile"
+
+    def test_kernel_faces_stay_fail_open(self, tmp_path, capsys):
+        """A COMPOSE-face failure must never disturb the closure: the
+        strategy dir blocked by a file makes write_strategy fail — the
+        closure row still lands, the T2 queue still builds+drains, and
+        rc stays 0 (each kernel face is caged separately)."""
+        import round_closure
+        ws = _mk_ws(tmp_path)  # OPEN claim C-1 for the T2 face
+        write_hook_state(ws, active_hooks=["completion_gate"])
+        # block the compose write face: runs/round-strategy is a FILE
+        (ws / "runs" / "round-strategy").write_text("not a dir",
+                                                    encoding="utf-8")
+        rc = round_closure.main_with_payload(self._payload(ws))
+        capsys.readouterr()
+        assert rc == 0
+        # the closure row still landed (the cage isolates the faces)
+        logs = sorted((ws / "runs" / "logs").glob("kunglao-*.jsonl"))
+        assert logs, "closure event must still land"
+        rows = [json.loads(ln) for ln
+                in logs[-1].read_text(encoding="utf-8").splitlines() if ln]
+        assert any(r.get("action") == "lifecycle_completed" for r in rows)
+        # the T2 face still built + drained (independent cage)
+        queue = json.loads(
+            (ws / "runs" / "t2-queue.json").read_text(encoding="utf-8"))
+        assert queue["dispatched"][0]["claim_id"] == "C-1"
+
+
 class TestUserPromptObservation:
     def test_observation_row_lands(self, tmp_path, capsys):
         """UserPromptSubmit records the operator prompt as an observation

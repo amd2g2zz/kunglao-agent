@@ -414,6 +414,8 @@ files:
     r2: 1
   scripts/value_replay.py:
     r1: 3
+  scripts/verification_ladder.py:
+    r1: 1
   scripts/verifier_identity.py:
     r1: 1
   scripts/verify_backlog_face.py:
@@ -771,7 +773,7 @@ files:
     r1: 24
     r2: 1
   tests/test_event_wirings_434.py:
-    r1: 1
+    r1: 2
   tests/test_ex3_bucket_calibration_429.py:
     r1: 2
   tests/test_exit4_no_repair_e2e.py:

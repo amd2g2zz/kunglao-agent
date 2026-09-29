@@ -47,7 +47,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 620c24c0909f4fd256308f4df9d772219e8a584df1abcd2decc5bcdf5b9000e6
+    sha256: 561937faefa4f4b1465a3e5fa71b1096d1cff0c31c85994dba7acec5248776e4
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -1063,7 +1063,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: 01c73f8c88694a3e5e0d47b6729d4e8f8111d77479265bdc4d3c67f74424b831
+    sha256: 7f7f23bbc0114d4e98568ca33a66f92d777104525274af6417027b1661f4cc95
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1171,11 +1171,11 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 07abde5e12de1f6b146cc4a97f1eb309649d53691917f3983b1cfc2ae413c075
+    sha256: 7f07356f103c1b8533ce4465625f97f7195bd388a0551d8ebcfb3795ae0d5937
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 0e7b727e1448eb02472b1a5526be9b96f2d5378ad3f4b2903a75ba29ba3c79fe
+    sha256: a4a49c36b44b2bf063125f81fb98bec928aea70625fe49689513212cf624763d
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold

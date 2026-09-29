@@ -67,6 +67,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -418,15 +419,33 @@ def build_t2_queue(ws, *, now: datetime | None = None,
 
 
 def _persist_queue(ws: Path, doc: dict) -> bool:
+    """Atomic persist (writer-unique tmp + os.replace): since #462 W6 the
+    queue is written from the production SubagentStop face, where two
+    workers stopping together spawn concurrent hook processes on one
+    workspace. A FIXED tmp name would let the two writers truncate each
+    other's buffer mid-write and tear the final file (the two-writer
+    race, demonstrated in review); the unique name makes each rename
+    atomic AND writer-isolated."""
     p = ws / T2_QUEUE_REL
+    tmp: Path | None = None
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(doc, ensure_ascii=False, indent=2),
-                     encoding="utf-8")
+        fd, name = tempfile.mkstemp(dir=p.parent, prefix=".t2-queue.",
+                                    suffix=".tmp")
+        tmp = Path(name)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(doc, ensure_ascii=False, indent=2))
+        os.replace(tmp, p)
         return True
     except OSError as exc:
         warn("t2_persist", f"{type(exc).__name__}: {exc}")
         return False
+    finally:
+        if tmp is not None and tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:  # noqa: BLE001 — cleanup best-effort
+                pass
 
 
 def drain_t2_queue(ws, *, budget: int | None = None,
