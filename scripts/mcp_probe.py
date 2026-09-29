@@ -13,9 +13,9 @@ Registration surfaces — #408 scope redesign (owner verdict 2026-09-27):
      in any workspace)
 The user-level ~/.claude.json surface is DELETED (no-backcompat policy):
 the historical root-owned ~/.claude.json made registration impossible
-(sudo trap) and verification lies. The legacy `claude_json` parameters on
-the probe functions are INERT merge-sync shims — accepted, never opened —
-until the toolchain sweep (init/upgrade stream) retires them.
+(sudo trap) and verification lies. The legacy `claude_json` merge-sync
+parameters and claude_json_path() are deleted too (compat-rot sweep
+2026-09-29) — no probe face accepts or computes a user-global path.
 
 Name matching is case-insensitive (Claude Code normalizes server names).
 
@@ -55,7 +55,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -221,21 +220,6 @@ PLUGIN_MANIFEST_REL = Path(".claude-plugin") / "plugin.json"
 APPROVAL_KEY = "enableAllProjectMcpServers"
 
 
-def claude_json_path() -> Path:
-    """DELETED SURFACE (merge-sync shim) — do not call from new code.
-
-    #408 deleted the ~/.claude.json probe path per the no-backcompat policy.
-    This function survives ONLY because scripts/toolchain.py (another
-    owner's stream) still passes its result into the inert `claude_json`
-    parameters below; the sweep that retires those call sites deletes this
-    function with them. It computes a path and performs NO I/O — the
-    KUNGLAO_CLAUDE_JSON override is equally inert."""
-    override = os.environ.get("KUNGLAO_CLAUDE_JSON")
-    if override:
-        return Path(override)
-    return Path(os.path.expanduser("~")) / ".claude.json"
-
-
 def plugin_root() -> Path:
     """The plugin root (the skill/repo root carries .claude-plugin/)."""
     return Path(__file__).resolve().parent.parent
@@ -279,16 +263,16 @@ def plugin_declared_servers(root: Path | None = None) -> dict:
             if not k.startswith("_") and isinstance(v, dict)}
 
 
-def registered_names(claude_json: Path | None, ws: Path) -> dict[str, list[str]]:
+def registered_names(ws: Path) -> dict[str, list[str]]:
     """Registered MCP server names (lowercased) → source labels.
 
     #408 surfaces ONLY: workspace <ws>/.mcp.json `mcpServers` +
     plugin-carried servers (.claude-plugin/plugin.json). The user-global
-    ~/.claude.json surface is DELETED: `claude_json` is an INERT merge-sync
-    parameter — accepted for the toolchain sweep, NEVER opened.
+    ~/.claude.json surface is DELETED (no-backcompat policy), and the
+    inert merge-sync `claude_json` parameter is deleted with it
+    (compat-rot sweep 2026-09-29).
     Case-insensitive.
     """
-    del claude_json  # inert merge-sync shim (#408 — deleted surface)
     found: dict[str, list[str]] = {}
     ws_mcp = _load_json(ws / ".mcp.json")
     for name in (ws_mcp.get("mcpServers") or {}):
@@ -335,8 +319,7 @@ def ensure_project_mcp_approval(ws: Path) -> dict:
     return {"changed": True, "path": str(path), "key": APPROVAL_KEY}
 
 
-def registered_server_urls(claude_json: Path | None,
-                           ws: Path) -> dict[str, str]:
+def registered_server_urls(ws: Path) -> dict[str, str]:
     """Registered endpoint urls per server name (issue 202 reachability face).
 
     First http url per canonical (lowercased) name across the #408 surfaces
@@ -344,7 +327,6 @@ def registered_server_urls(claude_json: Path | None,
     spawns, never connects. Secret hygiene: callers MUST render host:port
     only — a url may carry a token in its path/query, so the full value
     never goes into report details."""
-    del claude_json  # inert merge-sync shim (#408 — deleted surface)
     urls: dict[str, str] = {}
     ws_mcp = _load_json(ws / ".mcp.json")
     for name, cfg in (ws_mcp.get("mcpServers") or {}).items():
@@ -378,8 +360,7 @@ def read_project_type(ws: Path) -> str | None:
     return None
 
 
-def check_mcp(ws: Path, project_type: str,
-              claude_json: Path | None = None) -> list[MCPCheck]:
+def check_mcp(ws: Path, project_type: str) -> list[MCPCheck]:
     """Probe the manifest items applicable to project_type.
 
     #407: decompiler supply is MCP-first — a registered `ida-pro-vm` satisfies
@@ -392,8 +373,7 @@ def check_mcp(ws: Path, project_type: str,
             f"Must be one of: {', '.join(VALID_TYPES)}. "
             f"Set --type or add project_type=<type> to analysis_state.txt."
         )
-    del claude_json  # inert merge-sync shim (#408 — deleted surface)
-    found = registered_names(None, ws)
+    found = registered_names(ws)
     ghidra_registered = "ghidra" in found
     ida_pro_vm_registered = "ida-pro-vm" in found
     checks: list[MCPCheck] = []
@@ -436,7 +416,7 @@ def check_mcp(ws: Path, project_type: str,
 INVENTORY_SCHEMA = "mcp-inventory/1"
 
 
-def mcp_inventory(ws: Path, claude_json: Path | None = None) -> dict:
+def mcp_inventory(ws: Path) -> dict:
     """Enumerate REGISTERED servers across the #408 surfaces (workspace
     .mcp.json + plugin-carried).
 
@@ -449,10 +429,8 @@ def mcp_inventory(ws: Path, claude_json: Path | None = None) -> dict:
 
     Secret hygiene: only names/surfaces/tiers are emitted — never the
     command/args/env/url VALUES from the config (they may carry API keys).
-    `claude_json` is an inert merge-sync parameter (#408 deleted surface).
     """
-    del claude_json  # inert merge-sync shim (#408 — deleted surface)
-    found = registered_names(None, ws)
+    found = registered_names(ws)
     servers = []
     for canonical in sorted(found):
         item = _BY_NAME.get(canonical)

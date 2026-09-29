@@ -103,7 +103,7 @@ def test_post_check_wires_the_gate_and_blocks_on_promotion(tmp_path, capsys):
     before = {"C-001": "OPEN"}    # register BEFORE the unverified flip
     payload = {
         "tool_input": {"name": "w-alpha",
-                       "description": "[T1 tools=grep] claim C-001 strings"},
+                       "description": '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings'},
         "tool_result": "",
         "register_before": before,
     }
@@ -126,7 +126,7 @@ def test_post_check_emits_write_blocked_event(tmp_path):
     reg = ws / "claim-register.yaml"
     payload = {
         "tool_input": {"name": "w-alpha",
-                       "description": "[T1 tools=grep] claim C-001 strings"},
+                       "description": '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings'},
         "tool_result": "",
         "register_before": {"C-001": "OPEN"},
     }
@@ -151,7 +151,7 @@ def test_post_check_clean_completion_stays_silent(tmp_path):
     ws = _ws(tmp_path, "OPEN")
     payload = {
         "tool_input": {"name": "w-alpha",
-                       "description": "[T1 tools=grep] claim C-001 strings"},
+                       "description": '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings'},
         "tool_result": "",
     }
     paths = {

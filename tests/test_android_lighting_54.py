@@ -233,7 +233,8 @@ def test_redline_android_dispatch_without_marker_still_passes():
     tool-catalog marker still PASSES silently (no_match), exactly as today.
     No new REJECT path may exist for android dispatches."""
     ok, reason = wbg.check_tool_first(
-        {}, f"[T1 tools=grep] claim C-001 {REPRO_ZH}", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"]}}\n' + REPRO_ZH, "")
     assert ok is True, f"ZERO new REJECT paths (#54): {reason}"
     ev = wbg._toolfirst_evaluate(REPRO_ZH.lower(), None)
     assert ev["mode"] == "no_match", ev
@@ -241,7 +242,8 @@ def test_redline_android_dispatch_without_marker_still_passes():
 
 def test_redline_english_variant_without_marker_still_passes():
     ok, reason = wbg.check_tool_first(
-        {}, f"[T1 tools=grep] claim C-001 {REPRO_EN}", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"]}}\n' + REPRO_EN, "")
     assert ok is True, f"ZERO new REJECT paths (#54): {reason}"
     ev = wbg._toolfirst_evaluate(REPRO_EN.lower(), None)
     assert ev["mode"] == "no_match", ev
@@ -258,7 +260,7 @@ def test_redline_existing_reject_semantics_unchanged():
     assert "crypto-tool" in reason
     assert "tool-catalog" in reason
     ok2, _msg = wbg.check_tool_first(
-        {}, "[T1 tools=grep] claim C-001 static overview of imports", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstatic overview of imports', "")
     assert ok2, "stopword discipline must be unchanged"
 
 

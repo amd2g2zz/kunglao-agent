@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_q_cells_429.py — #429 §4 Q cells + TS call site 2 (W2-T2.2).
+"""tests/test_q_cells_429.py — #429 §4 Q cells + DTS call site 2 (W2-T2.2).
 
 RED-first pins for the RL kernel's action-value layer:
 
@@ -10,6 +10,8 @@ RED-first pins for the RL kernel's action-value layer:
      until enough LOCAL evidence diverges; cold families stay wide);
   3. sampling distribution ~= discounted posterior probabilities
      (P_LLM ⊗ Q, seeded, chi-square tolerance) + the γ read-face decay;
+     the SHIPPED default itself is the discounted adaptive schedule
+     (owner ruling 2026-09-29: DTS replaces TS — no plain-TS default);
   4. determinism given seed (and the Random(0) anchor default);
   5. the Store protocol seam (stub store, no filesystem);
   6. the recording faces: dispatch observation (dual-face family
@@ -93,7 +95,12 @@ def test_reindex_forms_cells_from_replayed_history(tmp_path):
                   "(#461 linkage: renew + arm + phase=DISPATCH)"}) + "\n",
         encoding="utf-8")
 
-    report = q_cells.reindex(root)
+    # gamma=1.0 explicit: this pin is the CELL-FORMATION face (exact
+    # counts, pending joins, ordering). The shipped default itself is the
+    # discounted adaptive schedule (owner ruling 2026-09-29, DTS replaces
+    # TS) and is pinned by test_shipped_default_fold_is_the_discounted_
+    # adaptive_schedule — not re-pinned here.
+    report = q_cells.reindex(root, gamma=1.0)
 
     assert report["schema"] == q_cells.REINDEX_SCHEMA
     assert report["rows_scanned"] == 6
@@ -146,7 +153,7 @@ def _shrink_fixture():
 
 
 def test_cell_with_one_sample_follows_the_global_anchor():
-    fold = q_cells.fold(_shrink_fixture())
+    fold = _shrink_fold(_shrink_fixture())
     # anchor-family totals (10x1.0 @aaaa + 1 good @bbbb + 1 bad @cccc):
     # bbbb's leave-one-out anchor = 10s + 1f -> m = 11/13, w = min(8,11) = 8
     a, b = q_cells.cell_posterior(fold, "bbbbbbbbbbbb", "anchor-family")
@@ -164,7 +171,7 @@ def test_cell_with_one_sample_follows_the_global_anchor():
 
 
 def test_local_evidence_diverges_from_the_anchor():
-    fold = q_cells.fold(_shrink_fixture())
+    fold = _shrink_fold(_shrink_fixture())
     a, b = q_cells.cell_posterior(fold, "dddddddddddd", "diverge-family")
     mean = a / (a + b)
     # 20 local failures outweigh the capped anchor (w <= 8):
@@ -174,7 +181,7 @@ def test_local_evidence_diverges_from_the_anchor():
 
 
 def test_cold_family_and_single_cell_family():
-    fold = q_cells.fold(_shrink_fixture())
+    fold = _shrink_fold(_shrink_fixture())
     # family never observed anywhere: the wide Beta(1,1); one local bad
     # sample gives (1, 2) — no anchor exists to borrow from
     a, b = q_cells.cell_posterior(fold, "eeeeeeeeeeee", "brand-new")
@@ -186,7 +193,7 @@ def test_cold_family_and_single_cell_family():
 
 
 def test_cold_cell_of_warm_family_uses_the_anchor():
-    fold = q_cells.fold(_shrink_fixture())
+    fold = _shrink_fold(_shrink_fixture())
     # a never-visited cell borrows the FULL family aggregate (12 rows:
     # 11s + 1f -> m = 6/7, w = 8): its posterior mean IS the anchor mean
     a, b = q_cells.cell_posterior(fold, "000000000000", "anchor-family")
@@ -197,13 +204,23 @@ def test_cold_cell_of_warm_family_uses_the_anchor():
 
 # --------------------------------------------- 3. sampling distribution + gamma
 
+def _shrink_fold(store):
+    """Shrinkage pins need EXACT masses: fold at the explicit constant
+    γ = 1 (the calibration face). Owner ruling 2026-09-29 (DTS replaces
+    TS): the SHIPPED default fold is the adaptive schedule and is pinned
+    by test_shipped_default_fold_is_the_discounted_adaptive_schedule —
+    these tests pin the shrinkage ARITHMETIC, not the shipped default,
+    so they select the constant explicitly."""
+    return q_cells.fold(store, gamma=1.0)
+
+
 def _dist_store():
     return _store(
         [_row("5e5e5e5e5e5e", "fam-a", 1.0) for _ in range(12)]
         + [_row("5e5e5e5e5e5e", "fam-b", 0.0) for _ in range(12)])
 
 
-def _target_probs(prior, store, sig="5e5e5e5e5e5e", gamma=q_cells.GAMMA):
+def _target_probs(prior, store, sig="5e5e5e5e5e5e", gamma=None):
     fold = q_cells.fold(store, gamma=gamma)
     raw = {}
     for fam, p in prior.items():
@@ -273,6 +290,70 @@ def test_gamma_discount_shifts_empirical_distribution():
     for f, t in targets.items():
         assert abs(freq[f] - t) <= 0.02, (f, freq[f], t)
     assert freq["fam-i"] > freq["fam-h"]
+
+
+def test_shipped_default_fold_is_the_discounted_adaptive_schedule():
+    """Owner ruling 2026-09-29: DTS REPLACES TS as the one engine — the
+    SHIPPED default fold is the #428 EX-2-calibrated adaptive schedule
+    (imported from rlvr.posteriors, one source of truth), not the γ = 1
+    no-forgetting fold. The plain-TS default is dead."""
+    from rlvr import posteriors as rp  # noqa: PLC0415
+    rows = ([_row("0b0b0b0b0b0b", "fam-dts", 1.0)] * 2
+            + [_row("0b0b0b0b0b0b", "fam-dts", 0.0)] * 2)
+    store = _store(rows)
+    # decay is ACTIVE by default: default masses < γ = 1 masses
+    d = q_cells.fold(store).cells[("0b0b0b0b0b0b", "fam-dts")]
+    u = q_cells.fold(store, gamma=1.0).cells[("0b0b0b0b0b0b", "fam-dts")]
+    assert d.evidence < u.evidence
+    # the default IS the posteriors default schedule — bit-identical
+    # masses (single source of truth: no duplicated constants here)
+    s = q_cells.fold(store, gamma=rp.default_schedule()).cells[
+        ("0b0b0b0b0b0b", "fam-dts")]
+    assert d.success == s.success
+    assert d.failure == s.failure
+    # and NOT any constant: a constant-γ replay cannot reproduce the
+    # adaptive γ stream's masses (floor 0.8, λ 0.9 — EX-2)
+    for const in (0.8, 0.9, 0.95, 1.0):
+        c = q_cells.fold(store, gamma=const).cells[
+            ("0b0b0b0b0b0b", "fam-dts")]
+        assert (c.success, c.failure) != (d.success, d.failure), const
+
+
+def test_default_sampling_distribution_is_decay_active():
+    """The shipped default itself (no override) discounts recency into
+    the sampling distribution: default targets move toward recent
+    evidence versus the γ = 1 targets, and the sampler's default
+    empirical distribution matches the DEFAULT targets. The receipt
+    reports the schedule's post-replay γ — the adaptive band, never
+    pinned at 1.0."""
+    rows = ([_row("0c0c0c0c0c0c", "fam-old", 1.0)] * 4
+            + [_row("0c0c0c0c0c0c", "fam-new", 0.0)] * 4)
+    store = _store(rows)
+    prior = {"fam-old": 0.5, "fam-new": 0.5}
+    t_default = _target_probs(prior, store, sig="0c0c0c0c0c0c")
+    t_unit = _target_probs(prior, store, sig="0c0c0c0c0c0c", gamma=1.0)
+    # the default moved the distribution versus no-forgetting (recent
+    # failures discounted lighter -> fam-new's share rises)
+    assert t_default["fam-new"] > t_unit["fam-new"]
+    assert t_default["fam-old"] < t_unit["fam-old"]
+    rng = random.Random(31337)
+    counts = {"fam-old": 0, "fam-new": 0}
+    for _ in range(N_DRAWS):
+        r = q_cells.sample_method_family(
+            "0c0c0c0c0c0c", prior, store, rng=rng)
+        counts[r["family"]] += 1
+    freq = {f: c / N_DRAWS for f, c in counts.items()}
+    for f, t in t_default.items():
+        assert abs(freq[f] - t) <= 0.02, (f, freq[f], t)
+    # the decay shifts weight, it does not invert the ranking: fam-old
+    # (successes) still dominates fam-new (failures) — the pin is that
+    # the DEFAULT distribution matches the DECAYED targets (above), not
+    # the γ = 1 targets (t_default["fam-new"] > t_unit["fam-new"])
+    assert freq["fam-old"] > freq["fam-new"]
+    # receipt γ: the default schedule's post-replay γ (adaptive band)
+    r2 = q_cells.sample_method_family(
+        "0c0c0c0c0c0c", prior, store, rng=random.Random(1))
+    assert 0.8 <= r2["gamma"] < 1.0
 
 
 # --------------------------------------------------------- 4. determinism
@@ -400,7 +481,9 @@ def test_record_dispatch_observation_v1_envelope(tmp_path):
 def test_record_dispatch_observation_prose_marker_fallback(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    prompt = "[T1 tools=Bash] claim C-13 — extract the KDF\n" \
+    prompt = '{"kunglao_dispatch": {"version": 1, "claim": "C-13", ' \
+             '"tier": 1, "tools": ["Bash"]}}\n' \
+             "— extract the KDF\n" \
              "method-family: dynamic-instrumentation\n"
     out = q_cells.record_dispatch_observation(ws, prompt, claim="C-13")
     assert out["appended"] is True
@@ -411,7 +494,8 @@ def test_record_dispatch_observation_undeclared_is_honest_gap(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     out = q_cells.record_dispatch_observation(
-        ws, "[T1 tools=Bash] claim C-14 — no declaration",
+        ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-14", '
+        '"tier": 1, "tools": ["Bash"]}}\n— no declaration',
         envelope_meta=None)
     assert out["appended"] is False
     assert out["reason"] == "undeclared"
@@ -427,7 +511,9 @@ def test_observe_clamps_credit_into_the_unit_interval(tmp_path):
     rows = q_cells.JSONLQStore(ws).observations()
     assert [r["credit"] for r in rows] == [1.0, 0.0, 0.5]
     assert all(r["source"] == "settlement" for r in rows)
-    fold = q_cells.fold(q_cells.JSONLQStore(ws))
+    # gamma=1.0 explicit: this pin is the CLAMPING face (exact masses);
+    # the shipped default is the DTS adaptive schedule (ruling 2026-09-29)
+    fold = q_cells.fold(q_cells.JSONLQStore(ws), gamma=1.0)
     cell = fold.cells[("abcdabcdabcd", "static-symbolic")]
     assert cell.success == pytest.approx(1.5)
     assert cell.failure == pytest.approx(1.5)

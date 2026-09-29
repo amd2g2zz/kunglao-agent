@@ -882,7 +882,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
     # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
     # dispatching a different claim without recording why).
-    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid, paths.get('workspace'))
+    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
         if 'agent-reasoning:' not in prompt:

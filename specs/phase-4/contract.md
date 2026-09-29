@@ -27,7 +27,7 @@
 Source documents (frozen sources, excerpts with line numbers):
 - `docs/design/archive/module-design.md` — all of §M1 (L112-207); M1.1 division L114-125; M1.2 signatures L126-159; M1.3 schema L160-172; M1.4 state machine L173-192; M1.5 error handling L193-199; M1.6 test points L200-205
 - same directory `docs/design/archive/design-spec.md` — §3.2 ratio-key algorithm (L129, with the 2026-08-06 VoI-proxy final decision)
-- ready for reuse, unchanged: `scripts/convergence_check.py::decide` (5-branch matrix, golden F-01..F-16), `scripts/priority.py::rank_claims` (legacy additive weights), `scripts/ask_for_direction_gate.py` (selfcheck ask-back part already implemented)
+- ready for reuse, unchanged: `scripts/convergence_check.py::decide` (5-branch matrix, golden F-01..F-16), `scripts/ask_for_direction_gate.py` (selfcheck ask-back part already implemented). (`scripts/priority.py::rank_claims` was removed by #499/#446 — the ranking face is now `scripts/priority_ratio.py`, the #107 Thompson ranker.)
 
 > 2026-08-14 (#319 dedup): the source documents moved with the docs-tree
 > unification into `docs/design/` (old tree deleted, see git history); line

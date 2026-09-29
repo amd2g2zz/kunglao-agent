@@ -143,7 +143,7 @@ def test_inject_success_metrics(tmp_path):
     rc, err, ctx = recall_inject.evaluate(
         {"cwd": str(tmp_path),
          "tool_input": {"prompt":
-                        "[T2 tools=...] claim C-9 android dex static"}},
+                        '{"kunglao_dispatch": {"version": 1, "claim": "C-9", "tier": 2, "tools": ["..."]}}\nandroid dex static'}},
         recall_runner=runner)
     assert rc == 0
     rows = _rows(tmp_path)

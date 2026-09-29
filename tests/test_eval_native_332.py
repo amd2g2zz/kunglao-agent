@@ -380,8 +380,8 @@ class TestVersioning:
         assert "release" in text
 
     def test_tier_version_map(self):
-        assert ds.EVAL_TIER_VERSION["smoke"] == "eval-v1"
-        assert ds.EVAL_TIER_VERSION["release"] == "eval-v1.1"
+        assert ds.TIER_EVAL_VERSION["smoke"] == "eval-v1"
+        assert ds.TIER_EVAL_VERSION["release"] == "eval-v1.1"
 
     def test_guess_baseline_arithmetic(self):
         for tdir in ds.iter_task_dirs(tier="release"):

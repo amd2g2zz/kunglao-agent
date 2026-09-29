@@ -53,20 +53,16 @@ def _payload(ws: Path, prompt: str) -> dict:
 # -> re-library/anti-analysis/catalog/anti-analysis.md top.
 
 VM_CLAIM = (
-    "[T3 tools=mcp__x64dbg__*,mcp__frida__*] claim C-101 observe the sample's "
-    "dynamic behavior in the VM with x64dbg breakpoints and frida injection, "
-    "then dump the runtime state"
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-101", "tier": 3, "tools": ["mcp__x64dbg__*", "mcp__frida__*"]}}\nobserve the sample\'s dynamic behavior in the VM with x64dbg breakpoints and frida injection, then dump the runtime state'
 )
 GO_CLAIM = (
-    "[T2 tools=ghidra] claim C-102 reverse the go binary to recover its "
-    "symbol table and go runtime structures"
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-102", "tier": 2, "tools": ["ghidra"]}}\nreverse the go binary to recover its symbol table and go runtime structures'
 )
 DISASM_CLAIM = (
-    "[T2 tools=ghidra] claim C-103 disassemble the unpacked sample and decode "
-    "the import table to map its api calls"
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-103", "tier": 2, "tools": ["ghidra"]}}\ndisassemble the unpacked sample and decode the import table to map its api calls'
 )
 DEFAULT_CLAIM = (
-    "[T1 tools=grep] claim C-104 strings and metadata scan of the sample"
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-104", "tier": 1, "tools": ["grep"]}}\nstrings and metadata scan of the sample'
 )
 
 

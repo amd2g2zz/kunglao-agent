@@ -383,7 +383,9 @@ class TestRedoLeakWarn:
         _ws_with_diff(tmp_path)
         r = _run_gate(
             tmp_path,
-            "[T1 tools=Read,Write,Grep] claim C-005 redo — you got this "
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-005", '
+            '"tier": 1, "tools": ["Read", "Write", "Grep"]}}\n'
+            "redo — you got this "
             "wrong, correct sec_user_id to actual anchor 3446 and rerun")
         assert r.returncode == 0, (
             f"WARN must not REJECT; rc={r.returncode} stderr={r.stderr!r}")
@@ -395,7 +397,9 @@ class TestRedoLeakWarn:
         _ws_with_diff(tmp_path)
         r = _run_gate(
             tmp_path,
-            "[T1 tools=Read,Write,Grep] claim C-005 redo — prior attempt "
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-005", '
+            '"tier": 1, "tools": ["Read", "Write", "Grep"]}}\n'
+            "redo — prior attempt "
             "diverged: anchor mismatch at sec_user_id, StringBuilder scope "
             "assumption questioned. Re-derive independently.")
         assert r.returncode == 0, f"stderr={r.stderr!r}"
@@ -409,7 +413,9 @@ class TestRedoLeakWarn:
         _ws_with_diff(tmp_path)
         r = _run_gate(
             tmp_path,
-            "[T1 tools=Read,Write,Grep] claim C-005 fresh sweep — recover "
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-005", '
+            '"tier": 1, "tools": ["Read", "Write", "Grep"]}}\n'
+            "fresh sweep — recover "
             "sec_user_id anchor 3446 from raw bytes")
         assert r.returncode == 0
         assert "redo_leak" not in (r.stdout + r.stderr)
@@ -417,12 +423,16 @@ class TestRedoLeakWarn:
     def test_failopen_without_diff_files(self, tmp_path: Path) -> None:
         """No workspace / no DIFF files → silent open, never an exception."""
         _run_gate(tmp_path,
-                  "[T1 tools=Read,Write] claim C-005 redo — retry")
+                  '{"kunglao_dispatch": {"version": 1, "claim": "C-005", '
+                  '"tier": 1, "tools": ["Read", "Write"]}}\n'
+                  "redo — retry")
         ws = _ws_with_diff(tmp_path)
         (ws / "runs" / "verify-redteam-C-005.md").unlink()
         r = _run_gate(
             ws.parent,
-            "[T1 tools=Read,Write,Grep] claim C-005 redo — anything at all "
+            '{"kunglao_dispatch": {"version": 1, "claim": "C-005", '
+            '"tier": 1, "tools": ["Read", "Write", "Grep"]}}\n'
+            "redo — anything at all "
             "with number 3446 inside")
         assert r.returncode == 0
         assert "redo_leak" not in (r.stdout + r.stderr)

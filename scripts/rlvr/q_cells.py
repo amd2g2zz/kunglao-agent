@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""q_cells.py — the #429 §4 action-value layer: Q cells + TS call site 2.
+"""q_cells.py — the #429 §4 action-value layer: Q cells + DTS call site 2.
 
 The RL kernel's round-layer Q table. Cells are keyed by the plan
 contract's binary tuple **(signature_hash, method_family)** — the two
@@ -39,14 +39,14 @@ own signal outweighs the family aggregate. Changing it follows the
 ADR-001 governance pattern (replay evidence + pins; never runtime
 self-tuning).
 
-## TS call site 2 — envelope method-family sampling (day-one ruling)
+## DTS call site 2 — envelope method-family sampling (day-one ruling)
 
 Call site 1 is priority_ratio's claim ordering (untouched here). THIS
 module is call site 2: envelope SYNTHESIS time, per #429 §8's online
 day-one ruling — the LLM is the PRIOR, sampling ∝
 P_LLM(proposal) ⊗ Q:
 
-    theta_f    ~ Beta(cell posterior)          (Thompson sample)
+    theta_f    ~ Beta(cell posterior)          (DTS draw)
     weight_f   =  P_LLM(f) · theta_f
     selection  ~ weight / Σ weight             (proportional draw)
 
@@ -54,14 +54,22 @@ Day one (no credits banked) every posterior is the wide Beta(1,1) and
 the selection degenerates to the pure LLM prior — Q is the learned
 ADJUSTMENT, it never overrides the proposal channel.
 
-## γ discount — read face only
+## γ discount — the DTS read face (owner ruling 2026-09-29)
 
 γ applies to the whole posterior tree uniformly (#429 §4) at the FOLD
 read face; raw observation rows are append-only and NEVER rewritten
 (the posterior-store design, #428). Age = append-order distance from
 the end of the credit stream (machine-independent; no wall clock — the
-#251 lesson). GAMMA ships at 1.0 (plain TS): activating decay requires
-the #428 measured schedule (free-parameter discipline).
+#251 lesson). DTS REPLACES TS as the system's one engine: the SHIPPED
+default is the #428 store's EX-2-calibrated adaptive schedule
+(``posteriors.default_schedule()`` — floor 0.8 / EMA λ 0.9, imported,
+never duplicated here). There is no plain-TS default and no
+activation-pending shim: a bare fold discounts. An explicit number
+selects a constant-γ schedule (the EX-2 calibration grid face); an
+explicit schedule object selects that schedule. Each observation row is
+decayed once per LATER row, at THAT row's event-time γ (the no-peeking
+recurrence: γ is emitted before the row's own credit is folded in) —
+for a constant γ this is exactly the γ^age weight.
 
 ## Recording face (the sampler's data spine)
 
@@ -152,10 +160,34 @@ BASE_BETA = 1.0
 # ADR-001 governance procedure (replay evidence + pins).
 SHRINK_CAP = 8.0
 
-# γ read-face discount, default 1.0 = plain TS (#429 §4). Activation of
-# any γ<1 schedule requires the #428 measured calibration; shipping a
-# decay would be an unmeasured free parameter.
-GAMMA = 1.0
+class GammaSchedule(Protocol):
+    """Any γ schedule with the posteriors schedule face: ``gamma()``
+    emits the γ in force for the NEXT observation; ``observe(outcome)``
+    folds that outcome in (no peeking)."""
+
+    def gamma(self) -> float: ...
+
+    def observe(self, outcome) -> None: ...
+
+
+def _resolve_schedule(gamma) -> GammaSchedule:
+    """The γ face resolution. None → the SHIPPED default (the #428
+    adaptive schedule, imported — single source of truth); a number → a
+    constant schedule (the EX-2 calibration grid face, domain-validated
+    (0, 1] by the store); a schedule-like object → itself. Anything else
+    is a caller bug — fail fast at the boundary."""
+    if gamma is None or isinstance(gamma, (int, float)) \
+            and not isinstance(gamma, bool):
+        from rlvr import posteriors as _posteriors  # noqa: PLC0415
+        if gamma is None:
+            return _posteriors.default_schedule()
+        return _posteriors.gamma_constant(float(gamma))
+    if hasattr(gamma, "gamma") and hasattr(gamma, "observe"):
+        return gamma
+    raise ValueError(
+        f"gamma must be None (the shipped DTS default schedule), a "
+        f"constant in (0, 1], or a gamma()/observe() schedule; got "
+        f"{gamma!r:.80}")
 
 # the #432 v0 prose declaration face (dual-face contract: v1 envelope
 # field FIRST, prose marker second — same order as method_families)
@@ -271,18 +303,40 @@ def _credit_of(row: dict):
     return float(c)
 
 
-def fold(store: QCellStore, gamma: float = GAMMA) -> Fold:
-    """γ-discounted fold over the credit stream. Age = append-order
-    distance from the END of the global credit stream (uniform tree
-    decay; no wall clock — machine-independent replay). Pending rows
-    (credit=None) count toward n_pending only, never posterior mass."""
+def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
+         ) -> Fold:
+    """DTS-discounted fold over the credit stream. The SHIPPED default
+    (``gamma=None``) is the #428 adaptive schedule imported from the
+    posterior store — a bare fold DISCOUNTS (owner ruling 2026-09-29:
+    DTS replaces TS; a constant γ is only the explicit calibration
+    face). Each row is decayed once per LATER observation, at THAT
+    observation's event-time γ (no peeking: the schedule emits γ before
+    the row's own credit is folded in) — for a constant γ this is
+    exactly the γ^age weight:
+
+        weight_i = Π_{k>i} γ_k        (γ_k emitted at row k's event time)
+
+    Age = append-order distance from the END of the global credit stream
+    (uniform tree decay; no wall clock — machine-independent replay).
+    Pending rows (credit=None) count toward n_pending only, never
+    posterior mass."""
+    schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
             if isinstance(r, dict) and _credit_of(r) is not None]
     n = len(rows)
+    gammas = [0.0] * n
+    for i, row in enumerate(rows):
+        gammas[i] = schedule.gamma()
+        schedule.observe(_credit_of(row))
+    weights = [1.0] * n
+    w = 1.0
+    for i in range(n - 2, -1, -1):
+        w *= gammas[i + 1]
+        weights[i] = w
     cells: dict[tuple[str, str], CellCounts] = {}
     for i, row in enumerate(rows):
         credit = max(0.0, min(1.0, _credit_of(row)))
-        weight = float(gamma) ** (n - 1 - i)
+        weight = weights[i]
         key = (str(row.get("signature_hash") or ""),
                str(row.get("method_family") or ""))
         cell = cells.get(key)
@@ -336,7 +390,7 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
 
 
 # ---------------------------------------------------------------------------
-# TS call site 2: envelope method-family sampling
+# DTS call site 2: envelope method-family sampling
 # ---------------------------------------------------------------------------
 
 def _coerce_signature(state_signature) -> str:
@@ -378,20 +432,25 @@ def _normalize_prior(candidates_with_llm_prior) -> dict[str, float]:
 
 def sample_method_family(state_signature, candidates_with_llm_prior,
                          store: QCellStore, rng: random.Random | None = None,
-                         gamma: float = GAMMA) -> dict:
-    """TS call site 2 — sample ONE method family for envelope synthesis.
+                         gamma: float | GammaSchedule | None = None) -> dict:
+    """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
-    Thompson draw theta_f from the shrunk cell posterior, weight =
-    P_LLM · theta, one proportional selection. Pure: (fold, candidates,
-    rng) -> receipt; every receipt number traces to store rows (逐句可
-    归因). rng=None -> random.Random(0) (anchor-deterministic default);
-    live callers thread q_cells_seed_state(ws) so the sample moves when
-    evidence moves or the round advances (the #251 contract).
+    DTS draw theta_f from the shrunk cell posterior, weight =
+    P_LLM · theta, one proportional selection. The fold runs under the
+    shipped default schedule (gamma=None — the #428 adaptive DTS
+    schedule, imported from the posterior store); the receipt's
+    ``gamma`` reports the schedule's post-replay γ (the adaptive band —
+    never pinned at 1.0). Pure: (fold, candidates, rng) -> receipt;
+    every receipt number traces to store rows (逐句可归因). rng=None ->
+    random.Random(0) (anchor-deterministic default); live callers thread
+    q_cells_seed_state(ws) so the sample moves when evidence moves or
+    the round advances (the #251 contract).
     """
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
-    fold_view = fold(store, gamma=gamma)
+    schedule = _resolve_schedule(gamma)
+    fold_view = fold(store, gamma=schedule)
     if rng is None:
         rng = random.Random(0)  # anchor-deterministic default
     base = rng.getrandbits(64)
@@ -426,7 +485,7 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
         "schema": SAMPLE_SCHEMA,
         "signature_hash": sig,
         "family": chosen,
-        "gamma": float(gamma),
+        "gamma": float(schedule.gamma()),
         "candidates": cand_doc,
     }
 
@@ -442,13 +501,17 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
     from priority_ratio import round_index  # noqa: PLC0415
     rnd = round_index(ws)
     store = default_store(ws)
-    fold_view = fold(store)
+    schedule = _resolve_schedule(None)   # the shipped DTS default
+    fold_view = fold(store, gamma=schedule)
     payload = {
         "cells": sorted(
             [sig, fam, round(c.success, 9), round(c.failure, 9),
              c.n_pending]
             for (sig, fam), c in fold_view.cells.items()),
-        "gamma": GAMMA,
+        "gamma_schedule": {
+            "floor": schedule.gamma_floor,
+            "ema_lambda": schedule.ema_lambda,
+        },
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True,
@@ -641,8 +704,12 @@ def _scan_unified_face(root: Path, skip: set[Path],
     return scanned, unattributed, approximated
 
 
-def reindex(root, gamma: float = GAMMA) -> dict:
+def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     """The deterministic offline index over dispatch history.
+
+    The fold runs under the shipped DTS default (``gamma=None`` — the
+    #428 adaptive schedule imported from the posterior store; an
+    explicit constant γ selects the exact-count calibration face).
 
     Face 1 — runs/q-cell-log.jsonl (authoritative; exact signatures +
     credits). Face 2 — the #432 usage log (family + claim, NO
@@ -655,6 +722,7 @@ def reindex(root, gamma: float = GAMMA) -> dict:
     precedence). Rows without a family are unattributed: counted once
     as the honest gap, never fabricated."""
     root = Path(root)
+    schedule = _resolve_schedule(gamma)
     rows_scanned = unattributed = approximated = 0
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
@@ -664,7 +732,10 @@ def reindex(root, gamma: float = GAMMA) -> dict:
         rows = _read_jsonl(p)
         rows_scanned += len(rows)
         face1_rows.extend(rows)
-    fold_view = fold(InMemoryStore(face1_rows))
+    fold_view = fold(InMemoryStore(face1_rows), gamma=schedule)
+    # representative γ for the approximate-count face: the schedule's
+    # post-replay γ (what the engine believes after the whole stream)
+    rep_gamma = float(schedule.gamma())
     usage_roots, scanned, unattributed, approximated = _scan_usage_face(
         root, pendings)
     rows_scanned += scanned
@@ -680,7 +751,7 @@ def reindex(root, gamma: float = GAMMA) -> dict:
         cells.append({
             "signature_hash": sig, "method_family": fam,
             "credit_observations": int(round(
-                _weighted_count(cell.success, cell.failure, gamma))),
+                _weighted_count(cell.success, cell.failure, rep_gamma))),
             "success": round(cell.success, 9),
             "failure": round(cell.failure, 9),
             "pending": cell.n_pending + pendings.get((sig, fam), 0),
@@ -721,9 +792,11 @@ def _weighted_count(success: float, failure: float,
 # CLI (offline faces only — the sampler is a library call)
 # ---------------------------------------------------------------------------
 
-def cell_table(ws, gamma: float = GAMMA) -> dict:
-    """The cell-table report over one workspace's observation log."""
-    fold_view = fold(default_store(ws), gamma=gamma)
+def cell_table(ws, gamma: float | GammaSchedule | None = None) -> dict:
+    """The cell-table report over one workspace's observation log (the
+    shipped DTS default fold when gamma is None)."""
+    schedule = _resolve_schedule(gamma)
+    fold_view = fold(default_store(ws), gamma=schedule)
     cells = [{
         "signature_hash": c.signature_hash,
         "method_family": c.family,
@@ -733,7 +806,7 @@ def cell_table(ws, gamma: float = GAMMA) -> dict:
     } for c in sorted(fold_view.cells.values(),
                       key=lambda c: (c.signature_hash, c.family))]
     return {"schema": CELLS_SCHEMA, "workspace": str(ws),
-            "gamma": float(gamma), "cells": cells}
+            "gamma": float(schedule.gamma()), "cells": cells}
 
 
 def _parse_prior(text: str) -> dict[str, float]:

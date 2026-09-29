@@ -373,8 +373,11 @@ def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str
             f"no verifier dispatch evidence for {claim_id} (verifier-dispatch "
             f"gate, #57 gate 5: a claim cannot reach PROVEN-candidate without "
             f"a dispatched verifier). Fix: dispatch the verifier FIRST — e.g. "
-            f"`[T1 tools=Read,Grep,Write] claim {claim_id}` to agent "
-            f"kunglao-redteam (kunglao-redteam --target claim {claim_id}); "
+            f'prompt agent kunglao-redteam with the v1 dispatch envelope '
+            f'`{{"kunglao_dispatch": {{"version": 1, "claim": "{claim_id}", '
+            f'"tier": 1, "tools": ["Read", "Grep", "Write"], '
+            f'"agent": "kunglao-redteam"}}}}` '
+            f"(kunglao-redteam --target claim {claim_id}); "
             f"its DIFF lands at runs/verify-redteam-{claim_id}.md and the "
             f"dispatch row lands in runs/logs/ — then re-run the promotion.")
 

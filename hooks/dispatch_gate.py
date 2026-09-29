@@ -564,7 +564,7 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
     try:
         _ok, msg, deviated = check_priority(
             ws / "claim-register.yaml", ws / "claim_deps.yaml",
-            ws / "task_spec.yaml", claim_id, ws)
+            claim_id, ws)
     except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
         # was #569 AUDIT fail-open-with-trace; flipped fail-closed.
         return _gate_error_reject(

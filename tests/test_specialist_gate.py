@@ -60,8 +60,10 @@ def _desc(task: str = 'do the task') -> str:
 
 def _prompt(task: str = 'do the task') -> str:
     # canonical prompt = 形状行 + facts-snapshot 标记行（S1c 门要求两者）
-    # #432: v0 形状以 prose 标记行声明 method-family
-    return (f'[T1 tools=grep] claim C-001 {task}' + chr(10)
+    # v1 canonical envelope (the v0 text prefix is retired, compat-rot
+    # sweep 2026-09-29); method-family stays a prose declaration line
+    return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"]}}\n' + task + chr(10)
             + 'facts-snapshot: 1 facts' + chr(10)
             + 'method-family: static-decompile')
 
@@ -139,7 +141,7 @@ def test_missing_register_fails_open(tmp_path):
 def test_unknown_claim_fails_open(tmp_path):
     ws = tmp_path
     _register(ws, 'decompile the main function')
-    desc = '[T1 tools=grep] claim C-999 do the task'
+    desc = '{"kunglao_dispatch": {"version": 1, "claim": "C-999", "tier": 1, "tools": ["grep"]}}\ndo the task'
     ok, msg = check_agent_type(_paths(ws), desc, PROMPT, 'kunglao-worker')
     assert ok
 
