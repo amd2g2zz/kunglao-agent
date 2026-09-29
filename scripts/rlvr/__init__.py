@@ -22,8 +22,27 @@ adapters until their Phase-2 consolidation wave):
 """
 from __future__ import annotations
 
+from . import ledger
 from . import posteriors
 from . import q_cells
+from .ledger import (
+    KIND_HYBRID_DISTILL,
+    KIND_SELF_DISTILL,
+    KIND_TASK,
+    LEDGER_REL,
+    LOCK_REL,
+    ROLLOUT_KINDS,
+    SCHEMA as LEDGER_SCHEMA,
+    fold as fold_rollout,
+    kinds as rollout_kinds,
+    pending_settlement,
+    read as read_rollouts,
+    record as record_rollout,
+    register_kind as register_rollout_kind,
+    row_schema_lint as ledger_row_schema_lint,
+    settle as settle_rollout,
+    settled as settled_rollouts,
+)
 from .posteriors import (
     ADAPTIVE_EMA_LAMBDA_DEFAULT,
     GAMMA_FLOOR_DEFAULT,
@@ -42,8 +61,26 @@ from .posteriors import (
 )
 
 __all__ = [
+    "ledger",
     "posteriors",
     "q_cells",
+    # ledger faces (issue 420 Phase 2)
+    "KIND_TASK",
+    "KIND_SELF_DISTILL",
+    "KIND_HYBRID_DISTILL",
+    "LEDGER_SCHEMA",
+    "LEDGER_REL",
+    "LOCK_REL",
+    "ROLLOUT_KINDS",
+    "register_rollout_kind",
+    "rollout_kinds",
+    "ledger_row_schema_lint",
+    "read_rollouts",
+    "fold_rollout",
+    "settled_rollouts",
+    "pending_settlement",
+    "record_rollout",
+    "settle_rollout",
     # posteriors faces (issue 428)
     "ADAPTIVE_EMA_LAMBDA_DEFAULT",
     "GAMMA_FLOOR_DEFAULT",
