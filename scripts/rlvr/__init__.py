@@ -15,14 +15,14 @@ adapters until their Phase-2 consolidation wave):
   face applying the γ decay, pseudo-count priors, outcome-adaptive
   schedule with EX-2-calibrated defaults.
 
-SEAM (W2-T2, parallel maker): ``rlvr.q_cells`` — the Q cell
-registry keyed ``(signature_hash, method_family)`` with hierarchy
-shrinkage toward the global anchor — joins this export map when its
-branch lands; do not import it before it exists.
+- ``rlvr.q_cells`` — the Q cell registry keyed ``(signature_hash,
+  method_family)`` with hierarchy shrinkage toward the global anchor
+  (issue 429 section 4, W2-T2).
 """
 from __future__ import annotations
 
 from . import posteriors
+from . import q_cells
 from .posteriors import (
     ADAPTIVE_EMA_LAMBDA_DEFAULT,
     GAMMA_FLOOR_DEFAULT,
@@ -43,6 +43,7 @@ from .posteriors import (
 
 __all__ = [
     "posteriors",
+    "q_cells",
     # posteriors faces (issue 428)
     "ADAPTIVE_EMA_LAMBDA_DEFAULT",
     "GAMMA_FLOOR_DEFAULT",

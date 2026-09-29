@@ -79,7 +79,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: e9dfbb61fee2d366e9f246d30ee054ebdd0931bceb7d62520a841112d0d22395
+    sha256: d12d63b38d4f23048dbd425590e66a62b9e0ba15d4b2cf3aadf987b723c6f178
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -311,7 +311,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: a1afaafeb545b9ed8d37651b1c181f259f47402fdb55f36744d3d4e2118ed1ff
+    sha256: f69c7ef40d50d8f43360f0157f87203cf8b78ae3c2139322ebbf516d238d6a14
   - src: scripts/deploy_shim.py
     dest: .claude/scripts/deploy_shim.py
     kind: scaffold
@@ -1104,6 +1104,18 @@ files:
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
     sha256: 264f0b35dcf4f2037fbf2a81e98114197524ec21b456b0aae3b13a57f942e189
+  - src: scripts/rlvr/__init__.py
+    dest: .claude/scripts/rlvr/__init__.py
+    kind: scaffold
+    sha256: bb967f544d961c2dad11f0e8cd61832bc9523196f1015efa652f2dcaf21db153
+  - src: scripts/rlvr/posteriors.py
+    dest: .claude/scripts/rlvr/posteriors.py
+    kind: scaffold
+    sha256: d69e0fe689a4902b685ff54d54c7fff3c68a58837264353b877111ac82e4c205
+  - src: scripts/rlvr/q_cells.py
+    dest: .claude/scripts/rlvr/q_cells.py
+    kind: scaffold
+    sha256: 29769399daf2177a13b57273d97f986b38bd7c017cf1bbcf1303fc731dfec230
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
@@ -1111,7 +1123,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 27a4328fbf24ce9b431633ed72275c44d14fd84be96245c9acfec6a1360721dd
+    sha256: fa13c40daec47ee3718753e02c8db243ad3ddb6e9f8cde4bb11178ab3f61777b
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
