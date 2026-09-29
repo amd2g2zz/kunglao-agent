@@ -379,7 +379,10 @@ class TestSituationStream:
         (root CI bypasses permission bits)."""
         def boom(_ws):
             raise RuntimeError("snapshot exploded")
-        monkeypatch.setattr(ssig, "snapshot", boom)
+        # #420 P2: the body lives at rlvr.state; the monkeypatch seam
+        # follows the body (the shim re-export is not the calling frame).
+        import rlvr.state as _rstate  # noqa: PLC0415
+        monkeypatch.setattr(_rstate, "snapshot", boom)
         res = ssig.append_snapshot(tmp_path, trigger="terminal")
         assert res["appended"] is False
         assert res["row"] == {}

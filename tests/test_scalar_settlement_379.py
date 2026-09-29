@@ -126,7 +126,13 @@ class TestRulesFileV2:
 
     def test_scalar_module_import_surface_has_no_model_call_path(self):
         """U3 extended: the scalar engine is pure if-then over machine
-        signals — the import surface has no model-call path."""
+        signals — the import surface has no model-call path.
+
+        #420 Phase 2: the engine body lives at scripts/rlvr/scalar.py
+        (scripts/scalar_settlement.py is the re-export shim); the wall
+        follows the body. ``rlvr`` joins the allowlist for the intra-
+        package ledger face (rlvr.ledger — the same U1 ledger the shim
+        used to import bare); it is not a model-call path."""
         ALLOW = {"__future__", "json", "sys", "os", "re", "time",
                  "datetime", "pathlib", "typing", "yaml",
                  "rollout_ledger", "harness_common", "kunglao_log",
@@ -135,9 +141,12 @@ class TestRulesFileV2:
                  # Normal-Gamma pooling (_seq_sum — np.add.accumulate,
                  # input order, bit-pinned by test_rlvr_bitexact.py). Not a
                  # model-call path; the U3 wall is unchanged.
-                 "numpy"}
+                 "numpy",
+                 # issue 420 Phase 2: the engine's own package (the
+                 # rlvr.ledger face + intra-package imports). Same wall.
+                 "rlvr"}
         tree = ast.parse(
-            (SCRIPTS / "scalar_settlement.py").read_text(encoding="utf-8"))
+            (SCRIPTS / "rlvr" / "scalar.py").read_text(encoding="utf-8"))
         imported: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -147,11 +156,25 @@ class TestRulesFileV2:
         outside = [m for m in imported if m.split(".")[0] not in ALLOW]
         assert not outside, \
             f"scalar engine imports outside allowlist: {outside}"
-        text = (SCRIPTS / "scalar_settlement.py").read_text(
+        text = (SCRIPTS / "rlvr" / "scalar.py").read_text(
             encoding="utf-8")
         for needle in _NEEDLES:
             assert needle not in text, needle
         assert not _ESC_CALL.search(text), "escape hatch in scalar engine"
+        # the shim must stay a pure re-export: its ONLY import is the
+        # package face (no escape hatch re-enters through the compat path)
+        shim = (SCRIPTS / "scalar_settlement.py").read_text(encoding="utf-8")
+        shim_tree = ast.parse(shim)
+        shim_imports = [
+            a.name for node in ast.walk(shim_tree)
+            if isinstance(node, ast.Import) for a in node.names] + [
+            node.module for node in ast.walk(shim_tree)
+            if isinstance(node, ast.ImportFrom) and node.module]
+        assert set(shim_imports) <= {"rlvr.scalar", "__future__"}, \
+            shim_imports
+        for needle in _NEEDLES:
+            assert needle not in shim, needle
+        assert not _ESC_CALL.search(shim), "escape hatch in shim"
 
 
 # ---------- tier construction from synthetic dimensions ----------

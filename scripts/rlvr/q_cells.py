@@ -130,6 +130,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping, Protocol
 
+import numpy as np  # issue 420 P2: ordered-float reductions (see _seq_sum)
+
 if __package__ in (None, ""):
     # direct-path execution (python scripts/rlvr/q_cells.py): the
     # package parent (scripts/) is NOT on sys.path (path[0] is
@@ -139,7 +141,7 @@ if __package__ in (None, ""):
 
 from kunglao_log import iter_jsonl, warn
 
-import state_signature as ssig
+from rlvr import state as ssig  # the package face (issue 420 Phase 2)
 
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
@@ -159,6 +161,30 @@ BASE_BETA = 1.0
 # outweighs the family aggregate. Changing this value follows the
 # ADR-001 governance procedure (replay evidence + pins).
 SHRINK_CAP = 8.0
+
+
+def _seq_sum(values) -> float:
+    """Input-order float64 reduction — the settlement determinism axiom
+    ("float sums in input order") as a numpy primitive (issue 420).
+
+    np.add.accumulate is strictly left-to-right IEEE-754 double addition;
+    the prepended 0.0 seed makes it bit-identical to a Python in-order
+    sum for every finite input, and — unlike builtin sum(), which
+    switched floats to Neumaier compensation in 3.12 — identical on
+    every interpreter. np.sum / np.add.reduce are FORBIDDEN on this
+    path: pairwise summation reorders the bits, and the pins in
+    tests/test_rlvr_bitexact.py are the wall.
+
+    Canonical implementation: rlvr.scalar._seq_sum (the pattern-setter);
+    redeclared here to keep this module's deliberate import isolation
+    (zero-decision posture — no settlement-family import) — the
+    TERMINAL_FACT_STATUSES redeclaration precedent in rlvr.state.
+    """
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 0:
+        return 0.0
+    return float(np.add.accumulate(np.concatenate(([0.0], arr)))[-1])
+
 
 class GammaSchedule(Protocol):
     """Any γ schedule with the posteriors schedule face: ``gamma()``
@@ -287,13 +313,17 @@ class Fold:
 
     def family_mass(self, family: str) -> tuple[float, float]:
         """(success, failure) mass over ALL signatures — the family
-        global aggregate the anchor is built from."""
-        s = f = 0.0
-        for (sig, fam), cell in self.cells.items():
-            if fam == family:
-                s += cell.success
-                f += cell.failure
-        return s, f
+        global aggregate the anchor is built from.
+
+        numpy adoption (issue 420 Phase 2, README rule 1): the mass
+        accumulation runs through _seq_sum — cell insertion order,
+        bit-identical to the former += loop and interpreter-stable
+        (builtin sum() went Neumaier in 3.12)."""
+        cells = [(cell.success, cell.failure)
+                 for (_sig, fam), cell in self.cells.items()
+                 if fam == family]
+        return (_seq_sum([s for s, _ in cells]),
+                _seq_sum([f for _, f in cells]))
 
 
 def _credit_of(row: dict):
@@ -470,7 +500,11 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             "theta": round(theta, 6),
             "weight": round(weights[family], 6),
         }
-    total = sum(weights.values())
+    # numpy adoption (issue 420 Phase 2, README rule 1): the sampling
+    # weight total runs through _seq_sum — candidate insertion order
+    # (the sorted fork order), bit-identical to the former builtin
+    # sum() and interpreter-stable.
+    total = _seq_sum(list(weights.values()))
     if total <= 0.0:  # pragma: no cover — theta > 0 a.s.
         raise ValueError("degenerate sampling weights (all zero)")
     u = random.Random(f"qcell-select/{base}").random() * total
