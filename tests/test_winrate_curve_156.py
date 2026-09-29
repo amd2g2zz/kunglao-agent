@@ -304,13 +304,16 @@ class TestTolerantShapeGaps:
         ws = _mk_ws(tmp_path)
         _seed_stream(ws, _fixture_rows())
         calls = []
-        real = wc.read_settlements
+        # #420 P2: the aggregation body lives at rlvr.winrate; the seam
+        # follows the body (wc.face is rlvr.winrate.face).
+        import rlvr.winrate as _rw  # noqa: PLC0415
+        real = _rw.read_settlements
 
         def counting(ws_arg):
             calls.append(1)
             return real(ws_arg)
 
-        monkeypatch.setattr(wc, "read_settlements", counting)
+        monkeypatch.setattr(_rw, "read_settlements", counting)
         wc.face(ws, window=WINDOW)
         assert len(calls) == 1
 
