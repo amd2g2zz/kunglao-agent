@@ -463,7 +463,7 @@ files:
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
-    sha256: e3f58cb62d38743cc371553b8794449c20b706e759839c7bf1b9c728017e1452
+    sha256: 9ff7a7dda986b5f45b077abc06730b6a0458b514243d38db11f22ec519a9faf1
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -500,6 +500,10 @@ files:
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
     sha256: c86cfa266c7d526479e73317f9d73c4e54231125a7e7378578c708a288ed81d5
+  - src: scripts/guardian_kpi.py
+    dest: .claude/scripts/guardian_kpi.py
+    kind: scaffold
+    sha256: 94bbf06730d74b17faca907df827301248d8686a90ce30e5ae3062058613d666
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
@@ -1111,7 +1115,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 27a4328fbf24ce9b431633ed72275c44d14fd84be96245c9acfec6a1360721dd
+    sha256: d6059405c7d9c0b1a730db4ad8589312ecc3de646af3f079050680f247c4bdd1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1695,7 +1699,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 16fe0e67c4056eb1450070322f4cd63f613fa5c1077a5f8bf3314cfd06ebb9ce
+    sha256: 5787d134b7d7c7830550d4d67898ab050de28f51f205f1357ff94a1dc0b7f0c5
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

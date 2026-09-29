@@ -162,6 +162,8 @@ files:
     r1: 2
   scripts/fixture_excerpt_lint.py:
     r1: 1
+  scripts/guardian_kpi.py:
+    r1: 1
   scripts/goal_operationalization.py:
     r1: 1
   scripts/harness_common.py:
@@ -738,6 +740,8 @@ files:
   tests/test_event_stream_adoption.py:
     r1: 24
     r2: 1
+  tests/test_ex3_bucket_calibration_429.py:
+    r1: 2
   tests/test_event_wirings_434.py:
     r1: 1
   tests/test_exit4_no_repair_e2e.py:
@@ -819,6 +823,8 @@ files:
     r2: 1
   tests/test_hardcode_purge.py:
     r1: 2
+  tests/test_guardian_kpi_429.py:
+    r1: 3
   tests/test_harness_common_863g.py:
     r1: 2
   tests/test_heartbeat_autonomy_754.py:
