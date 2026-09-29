@@ -1032,3 +1032,38 @@ def test_c3_first_tick_waiting_second_is_pass():
     assert '_hb.get("rc") == 1' in code, (
         "the report-level rc gate: the heartbeat STEP inside the report "
         "must also be rc==1, not just the process rc")
+
+
+def test_top_claim_bare_pretty_printed_array():
+    """#454: priority_ratio --json emits json.dumps(..., indent=2) — a
+    pretty-printed MULTI-LINE array. top_claim must parse the whole
+    stdout, not just single lines starting with '['."""
+    import sys as _sys
+    _sys.path.insert(0, str(SCRIPTS / "e2e"))
+    from runtime import top_claim
+    from model import CmdOutcome
+    # the real ranker face: indent=2, multi-line
+    real = '''[
+  {
+    "claim_id": "C-005",
+    "action": "evidence_collection",
+    "score": 0.976
+  },
+  {
+    "claim_id": "C-004",
+    "action": "protocol_reconstruction",
+    "score": 0.911
+  }
+]'''
+    assert top_claim(CmdOutcome(rc=0, stdout=real, stderr="",
+                                timed_out=False)) == "C-005"
+    # object envelope (backward face)
+    env = '{"actions": [{"claim_id": "C-001", "score": 0.9}]}'
+    assert top_claim(CmdOutcome(rc=0, stdout=env, stderr="",
+                                timed_out=False)) == "C-001"
+    # garbage
+    assert top_claim(CmdOutcome(rc=0, stdout="not json", stderr="",
+                                timed_out=False)) is None
+    # empty
+    assert top_claim(CmdOutcome(rc=0, stdout="", stderr="",
+                                timed_out=False)) is None
