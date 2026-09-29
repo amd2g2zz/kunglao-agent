@@ -1727,6 +1727,11 @@ class TestParallelDispatch459:
         # ranked_order face
         assert ranked_claims(out('{"ranked_order": ["C-009", "C-007"]}')
                              ) == ["C-009", "C-007"]
+        # a repeated id (envelope face, both key spellings) never
+        # double-dispatches in one wave — dedup keeps first-rank order
+        dup = ('{"actions": [{"claim_id": "C-004"}, {"claim_id": "C-005"}, '
+               '{"claim": "C-004"}]}')
+        assert ranked_claims(out(dup)) == ["C-004", "C-005"]
         # empty / garbage: no claims, never a guessed id
         assert ranked_claims(out("")) == []
         assert ranked_claims(out("not json")) == []
