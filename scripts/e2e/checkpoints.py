@@ -27,7 +27,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from e2e import evidence, llm_faces, model
+from e2e import audit, evidence, llm_faces, model
 from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     IMPORT_ERRORS, RunContext, budget_ok as _guard_budget,
     family_of, new_run_id, parse_decision as _decide,
@@ -39,7 +39,8 @@ from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
 # C6 pre-registration payload (runbook C6-pre-1..3, verbatim templates)
 # ---------------------------------------------------------------------------
 
-PRIMARY_QUESTIONS = (
+# #456 bug-3: claims generated from the unit's task.yaml anchors.
+_DEFAULT_PQ = (
     {"id": "pq-1",
      "question": "What are the three derivation parameters of "
                  "target/derive.py?"},
@@ -47,8 +48,7 @@ PRIMARY_QUESTIONS = (
      "question": "Does a re-implemented derive() reproduce every "
                  "published and checker-minted probe output exactly?"},
 )
-
-CLAIM_APPENDS: tuple[dict, ...] = (
+_DEFAULT_CLAIMS = (
     {"id": "C-004",
      "statement": "target/derive.py implements a 64-bit derivation whose "
                   "three parameters (initial offset, multiply prime, fold "
@@ -64,6 +64,62 @@ CLAIM_APPENDS: tuple[dict, ...] = (
      "answers_question": "pq-2", "boundary_type": "confirmed",
      "status": "OPEN", "source": "synthesis"},
 )
+
+PRIMARY_QUESTIONS: tuple[dict, ...] = _DEFAULT_PQ
+CLAIM_APPENDS: tuple[dict, ...] = _DEFAULT_CLAIMS
+
+
+def _resolve_claims(task_spec: Path) -> None:
+    """#456 bug-3: resolve PQ/CLAIMS from the unit's task.yaml anchors.
+    Falls back to the py-derive-v1 shape when anchors are absent."""
+    global PRIMARY_QUESTIONS, CLAIM_APPENDS
+    try:
+        import yaml as _yaml
+        spec = _yaml.safe_load(task_spec.read_text(encoding="utf-8"))
+        if not isinstance(spec, dict):
+            # empty/null/list-shaped spec: restore defaults — a reused
+            # process must not leak the previous unit's resolved claims
+            PRIMARY_QUESTIONS = _DEFAULT_PQ
+            CLAIM_APPENDS = _DEFAULT_CLAIMS
+            return
+        anchors = spec.get("anchors") or {}
+        # #456 bug-3 (round-4 lesson): kunglao-init writes the oracle
+        # anchors at the TOP LEVEL of task_spec.yaml; the nested anchors{}
+        # shape is the C1 answers file. Read both — top level wins, so a
+        # beacon workspace never falls back to the py-derive defaults.
+        goal = (str(spec.get("goal_verbatim", "")).strip()
+                or str(anchors.get("goal_verbatim", "")).strip())
+        criterion = (str(spec.get("success_criterion", "")).strip()
+                     or str(anchors.get("success_criterion", "")).strip())
+        if not goal:
+            PRIMARY_QUESTIONS = _DEFAULT_PQ
+            CLAIM_APPENDS = _DEFAULT_CLAIMS
+            return
+        task_id = str(spec.get("task_id", "unknown"))
+        PRIMARY_QUESTIONS = (
+            {"id": "pq-1",
+             "question": f"What approach resolves: {goal[:180]}?"},
+            {"id": "pq-2",
+             "question": f"Does the result satisfy: {criterion[:180]}?"},
+        )
+        CLAIM_APPENDS = (
+            {"id": "C-004",
+             "statement": f"The target for {task_id} is characterizable; "
+                          f"its key parameters are recoverable from the "
+                          f"workspace material.",
+             "answers_question": "pq-1", "boundary_type": "analysis",
+             "promotion_gate": "parameters derived from evidence and "
+                               "confirmed by the checker",
+             "status": "OPEN", "source": "static_re"},
+            {"id": "C-005",
+             "statement": f"A re-implementation for {task_id} satisfies "
+                          f"the success criterion.",
+             "answers_question": "pq-2", "boundary_type": "confirmed",
+             "status": "OPEN", "source": "synthesis"},
+        )
+    except Exception:  # never-raise resolver: ANY failure restores defaults
+        PRIMARY_QUESTIONS = _DEFAULT_PQ
+        CLAIM_APPENDS = _DEFAULT_CLAIMS
 
 
 def build_goal_op_doc(anchors: dict[str, str]) -> dict:
@@ -311,6 +367,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
             if spec_path.is_file() else None) or {}
     existing = {q.get("id") for q in (spec.get("primary_questions") or [])}
     spec.setdefault("primary_questions", [])
+    _resolve_claims(ctx.ws / "task_spec.yaml")
     for question in PRIMARY_QUESTIONS:
         if question["id"] not in existing:
             spec["primary_questions"].append(dict(question))
@@ -344,6 +401,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
     status_d = model.adjudicate("C6-dispatch", out_d.rc)
     decision, _doc = _decide(out_d)
     detail.update({"decide_status": status_d, "decision": decision})
+    audit.emit_convergence_decision(str(ctx.ws), decision, rc=out_d.rc)
     if status_d != model.PASS or decision not in ("DISPATCH",
                                                   "DISPATCH_VERIFIER"):
         return _record(ctx, "C6", "pre",
@@ -385,12 +443,24 @@ def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
             "agent": "kunglao-worker"}})
         + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n",
         encoding="utf-8")
+    # kernel-facing hook (audit §4): when the run declares a method
+    # family, the envelope carries it AND the stream records it — ready
+    # for kernel activation, inert (and envelope byte-compatible) today.
+    method_family = getattr(ctx.state, "method_family", "") or ""
+    if method_family:
+        audit.emit_method_family(str(ctx.ws), claim, method_family)
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
-        prompt_file=str(prompt_file), run_id=ctx.state.run_id)
+        prompt_file=str(prompt_file), run_id=ctx.state.run_id,
+        method_family=method_family or None)
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
+    # #456 bug-2: a BLOCKED/TIMEOUT/ERROR act frees the claim — without
+    # this discard the loop skips re-dispatch forever and only the idle
+    # circuit-breaker can end the run (round-3/round-4 fate).
+    if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+        dispatched.discard(claim)
     return None
 
 
@@ -452,6 +522,8 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     total_ms += ms
     decision, _doc = _decide(out_d)
     detail["decision"] = decision
+    audit.emit_convergence_decision(str(ctx.ws), decision,
+                                    tick=detail.get("ticks"), rc=out_d.rc)
     if decision == "CONVERGED":
         return "break", None, total_ms
     stop_class = _STOP_DECISIONS.get(decision or "")
@@ -528,6 +600,7 @@ def checkpoint_c7(ctx: RunContext) -> model.CheckpointResult:
     total_ms += ms
     status_d = model.adjudicate("C7-convergence", out_d.rc)
     decision, _doc = _decide(out_d)
+    audit.emit_convergence_decision(str(ctx.ws), decision, rc=out_d.rc)
     if status_d != model.PASS or decision != "CONVERGED":
         return _record(ctx, "C7", "completion",
                        model.BLOCKED if decision else model.FAIL,

@@ -412,10 +412,14 @@ class DispatchRequest:
     tools: tuple[str, ...] = ("grep", "python3")
     agent: str = "kunglao-worker"
     emitted_ts: str = ""
+    # kernel-facing hook (audit §4): set only when the run declares a
+    # method family; the envelope gains the key ONLY when set, so the v1
+    # canonical envelope stays byte-compatible for current runs.
+    method_family: str | None = None
 
     def to_dict(self) -> dict:
         emitted_ts = self.emitted_ts or utc_now()
-        return {
+        out = {
             "schema_version": self.schema_version,
             "kunglao_dispatch": {
                 "version": 1, "claim": self.claim, "tier": self.tier,
@@ -426,6 +430,9 @@ class DispatchRequest:
             "tier": self.tier, "tools": list(self.tools),
             "agent": self.agent, "emitted_ts": emitted_ts,
         }
+        if self.method_family:
+            out["method_family"] = self.method_family
+        return out
 
 
 @dataclass
@@ -447,6 +454,7 @@ class RunState:
     ws_root: str = ""
     lane: str = "algorithm"
     type_: str = "linux"
+    method_family: str = ""
     tick_wait_seconds: int = TICK_WAIT_SECONDS_DEFAULT
     max_ticks: int = 60
     budget_consumed_seconds: float = 0.0
@@ -468,6 +476,7 @@ class RunState:
             "budget_consumed_seconds": self.budget_consumed_seconds,
             "llm_mode": self.llm_mode, "started_ts": self.started_ts,
             "lane": self.lane, "type": self.type_,
+            "method_family": self.method_family,
             "tick_wait_seconds": self.tick_wait_seconds,
             "max_ticks": self.max_ticks,
             "anchors": dict(self.anchors), "steps": dict(self.steps),
@@ -484,6 +493,7 @@ class RunState:
             started_monotonic=0.0, anchors=dict(doc.get("anchors", {})),
             ws_root=doc.get("ws_root", ""), lane=doc.get("lane", "algorithm"),
             type_=doc.get("type", "linux"),
+            method_family=str(doc.get("method_family", "")),
             tick_wait_seconds=int(doc.get("tick_wait_seconds",
                                           TICK_WAIT_SECONDS_DEFAULT)),
             max_ticks=int(doc.get("max_ticks", 60)),
