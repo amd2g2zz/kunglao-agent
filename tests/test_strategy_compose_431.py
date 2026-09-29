@@ -21,9 +21,11 @@ the strategy-object spec in issue 429):
   - the YAML seam: both artifact families load as plain YAML with their
     declared schema strings
 
-All fixtures are SYNTHETIC (privacy rule). The posterior store is a parallel
-work stream (issue 428): every learned-state touchpoint here is an explicit
-stub of the compose.StrategyStore protocol seam.
+All fixtures are SYNTHETIC (privacy rule). The store seam is REAL since
+issue 462 W3 (rlvr.strategy_store.PosteriorStrategyStore over the landed
+q_cells/posteriors faces) — most learned-state touchpoints exercise the
+real chain; the explicit _Store stub survives for targeted
+scheduling/ranking pins.
 """
 from __future__ import annotations
 
@@ -571,3 +573,145 @@ def test_prior_channel_counts_proposals_never_outcomes(tmp_path):
     prior = store._proposal_prior()
     assert prior == {"static-decompile": 1.0}
     assert store.method_lead(fp) == "static-decompile"
+
+
+# --------------------------------------------- the consumer seam (462 W2)
+
+def test_write_strategy_emits_the_sections_seam(tmp_path):
+    """W2 (#462): the producer/consumer seam is ALIGNED — write_strategy
+    emits ``runs/round-strategy.json`` shaped
+    ``{schema, round, sections:[{title, body}]}`` (the shape the live
+    loop-prompt seam reads), derived deterministically from the versioned
+    strategy object. The tick files stay the reconstructable ledger."""
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "method-a")
+    _ok_row(ws, "task/s2", "method-a")
+    # budget telemetry present: the budget line rides the lead section
+    # (advisory context for the lead decision — the warm branch)
+    (ws / "cost_events.jsonl").write_text(
+        json.dumps({"cost_usd": 0.5}) + "\n", encoding="utf-8")
+    obj = compose.compose(ws, tick=1)  # the REAL store (W3) — no stub
+    compose.write_strategy(ws, obj)
+    seam_path = ws / "runs" / "round-strategy.json"
+    seam = json.loads(seam_path.read_text(encoding="utf-8"))
+    assert seam["schema"] == "round-strategy/1"
+    assert seam["round"] == 1
+    assert seam["sections"], "non-empty sections"
+    for sec in seam["sections"]:
+        assert set(sec) == {"title", "body"}
+        assert sec["body"].strip()
+    titles = {s["title"] for s in seam["sections"]}
+    assert "dispatch-lead" in titles
+    # the live loop-prompt seam renders REAL strategy content now
+    import strategy_sections
+    rendered = strategy_sections.render(ws)
+    assert rendered != ""
+    assert "round-strategy" in rendered
+    assert "method lead" in rendered
+    assert "budget:" in rendered
+    assert strategy_sections.pointer(ws) == "runs/round-strategy.json"
+
+
+def test_seam_is_deterministic_and_self_healing(tmp_path):
+    """Same strategy object -> byte-identical seam file (the round field
+    is part of the seam's identity: it names the round the strategy is
+    in force for); a DELETED or CORRUPT (including non-UTF-8 — the W2
+    review MEDIUM-1 case) seam is re-emitted byte-exact by the next
+    write_strategy call, which must never raise on the seam face."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "method-a")
+    _ok_row(ws, "task/s2", "method-a")
+    obj1 = compose.compose(ws, tick=1)
+    compose.write_strategy(ws, obj1)
+    seam_path = ws / "runs" / "round-strategy.json"
+    first = seam_path.read_bytes()
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    # deleted -> re-emitted
+    seam_path.unlink()
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    # corrupt (non-UTF-8 bytes) -> repaired, never raised (the tick write
+    # dedups unchanged, but the seam face still heals itself)
+    seam_path.write_bytes(b"\xff\xfe broken \xff")
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    assert strategy_sections.render(ws) != ""
+
+
+def test_workguard_guidance_renders_the_composed_strategy(tmp_path):
+    """The W2 acceptance integration pin: the WORKGUARD turn-exit
+    guidance (the live loop-prompt dynamic face) renders non-empty
+    strategy sections produced by the REAL compose chain."""
+    import workguard
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "method-a")
+    _ok_row(ws, "task/s2", "method-a")
+    compose.write_strategy(ws, compose.compose(ws, tick=1))
+    result = {"claims": [{"id": "C-1", "why": workguard.WHY_DISPATCHABLE}],
+              "walls": [], "active_workers": []}
+    guidance = workguard.turn_exit_guidance(Path(ws), result)
+    assert "WORKGUARD" in guidance
+    assert "<round-strategy" in guidance
+    assert "method lead" in guidance
+
+
+def test_cold_seam_renders_nothing_cleanly(tmp_path):
+    """A silent (below-threshold) strategy still emits the seam FILE, but
+    with empty bodies — and the consumers render NOTHING (no headers, no
+    placeholder noise; the pre-existing seam contract). UNCONDITIONAL:
+    budget telemetry present does not break the cold-start silence (the
+    W2 review MEDIUM-2 case — budget_hint is advisory context for a
+    lead; a lead-less strategy renders nothing)."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    compose.write_strategy(ws, compose.compose(ws, tick=1))
+    seam = json.loads(
+        (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8"))
+    assert seam["sections"] == []
+    assert strategy_sections.render(ws) == ""
+    assert strategy_sections.pointer(ws) == "runs/round-strategy.json"
+    # the same cold silence holds with budget telemetry on the workspace
+    # (the REAL telemetry face: state.COST_EVENTS_REL, ws root)
+    (ws / "cost_events.jsonl").write_text(
+        json.dumps({"cost_usd": 0.1}) + "\n", encoding="utf-8")
+    compose.write_strategy(ws, compose.compose(ws, tick=2))
+    seam2 = json.loads(
+        (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8"))
+    assert seam2["sections"] == [], \
+        "budget telemetry must not break the cold-start silence"
+    assert strategy_sections.render(ws) == ""
+
+
+def test_injection_changes_with_evidence_across_two_runs(tmp_path):
+    """The #429 §9 central clause, mechanically demonstrated through the
+    REAL chain end to end (settled evidence -> card library -> store ->
+    compose -> seam): two decision events with different evidence produce
+    VISIBLY different injected content, every changed line citing its
+    backing ledger row."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    # run 1: two green rounds of method-a — the injection prefers it
+    _ok_row(ws, "task/r1-a", "method-a")
+    _ok_row(ws, "task/r1-b", "method-a")
+    obj1 = compose.compose(ws, tick=1)
+    compose.write_strategy(ws, obj1)
+    seam1 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")
+    rendered1 = strategy_sections.render(ws)
+    assert "method-a" in rendered1
+    assert "dead path" not in rendered1
+
+    # run 2: the environment contradicted the favored family — method-a
+    # just FAILED on a new unit (a settled red row citing the new unit)
+    _dead_row(ws, "task/r2-dead", "method-a")
+    obj2 = compose.compose(ws, tick=2)
+    compose.write_strategy(ws, obj2)
+    seam2 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")
+    rendered2 = strategy_sections.render(ws)
+    # the injected content CHANGED, and the change is attributable
+    assert seam2 != seam1
+    assert "dead path" in rendered2
+    assert "task/r2-dead" in rendered2
+    assert "task/r2-dead" in obj2["composed_from"]
+    assert obj2["hooks"]["cards"] != obj1["hooks"]["cards"]

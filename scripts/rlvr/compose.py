@@ -16,7 +16,10 @@ Determinism wall: no model call, no invented sentences. Every sentence is
 a template slot filled from named ledger rows; card text cites its
 backing_refs inline at render time. Same (ledger, cards, store view) ->
 byte-identical rendered sections -> identical ``content_hash`` (sha256
-over the canonical rendered sections — the consumers' dedup key).
+over the canonical rendered sections — the consumers' dedup key). The
+consumer seam projection (``runs/round-strategy.json``, issue 462 W2)
+is derived deterministically from the same object, so both write faces
+are reproducible from workspace state alone.
 
 Card library (schema ``card/1``): cards accumulate from settlement
 events. Sources in v1: dead_path from settled task FAIL rows (the
@@ -61,6 +64,12 @@ SCHEMA = "round-strategy/1"
 CARD_SCHEMA = "card/1"
 STRATEGY_DIR_REL = PurePosixPath("runs") / "round-strategy"
 CARDS_DIR_REL = PurePosixPath("runs") / "strategy-cards"
+# the consumer seam (issue 462 W2): the derived projection of the
+# strategy IN FORCE, in the exact shape scripts/strategy_sections.py
+# reads ({schema, round, sections:[{title, body}]}). The tick files
+# stay the versioned ledger (reconstructability); this file is the
+# broadcast face the loop prompt renders.
+SEAM_REL = PurePosixPath("runs") / "round-strategy.json"
 
 CARD_KINDS = ("success_recipe", "dead_path", "exogenous_pitfall")
 ANTI_HINT_KINDS = ("dead_path", "exogenous_pitfall")
@@ -275,6 +284,37 @@ def _cards_dir(ws: Path) -> Path:
     return ws / CARDS_DIR_REL
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomic text write (writer-unique tmp + os.replace): since #462 W1
+    the compose write faces run from the production SubagentStop hook,
+    where two workers stopping together spawn concurrent hook processes
+    on one workspace — a fixed tmp name would let the two writers
+    truncate each other's buffer mid-write and tear the file (the
+    two-writer race, demonstrated in review); the unique name makes each
+    rename atomic AND writer-isolated. Card/strategy/seam files are
+    whole-document replaces, never appends (the ledger keeps its own
+    locked append face)."""
+    import os  # noqa: PLC0415 — stdlib local, keeps the module import face
+    import tempfile  # noqa: PLC0415
+    fd, name = tempfile.mkstemp(dir=path.parent,
+                                prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(name)
+    try:
+        # 0o644 parity with the pre-atomic write_text face (mkstemp
+        # creates 0600; same-user consumers are unaffected but a
+        # cross-user read face over these artifacts must not regress)
+        os.chmod(fd, 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:  # noqa: BLE001 — cleanup best-effort
+                pass
+
+
 def save_card(ws, card: dict) -> dict:
     """Write (or refresh) one card file. Idempotent: same semantic content
     refreshes the lifecycle fields (the re-derive face — the evidence
@@ -297,13 +337,12 @@ def save_card(ws, card: dict) -> dict:
             refreshed["minted_tick"] = int(card["minted_tick"])
             if card.get("superseded_by"):
                 refreshed["superseded_by"] = card["superseded_by"]
-            path.write_text(
-                yaml.safe_dump(refreshed, allow_unicode=True,
-                               sort_keys=True), encoding="utf-8")
+            _atomic_write_text(
+                path, yaml.safe_dump(refreshed, allow_unicode=True,
+                                     sort_keys=True))
             return {"written": False, "refreshed": True, "path": path}
-    path.write_text(
-        yaml.safe_dump(card, allow_unicode=True, sort_keys=True),
-        encoding="utf-8")
+    _atomic_write_text(
+        path, yaml.safe_dump(card, allow_unicode=True, sort_keys=True))
     return {"written": True, "refreshed": False, "path": path}
 
 
@@ -319,8 +358,8 @@ def supersede_card(ws, old_id: str, new_id: str) -> bool:
     if not isinstance(card, dict) or card.get("id") != old_id:
         return False
     card["superseded_by"] = str(new_id)
-    path.write_text(yaml.safe_dump(card, allow_unicode=True, sort_keys=True),
-                    encoding="utf-8")
+    _atomic_write_text(path, yaml.safe_dump(card, allow_unicode=True,
+                                            sort_keys=True))
     return True
 
 
@@ -704,7 +743,9 @@ def write_strategy(ws, obj: dict) -> dict:
     already exists on file (same tick or any earlier tick) is NOT written
     again — consumers skip on unchanged hash. A recomposition of an
     existing tick with new content overwrites that tick. Returns
-    {"written", "changed", "path", "reason"}."""
+    {"written", "changed", "path", "reason"}. Also re-emits the consumer
+    seam projection (``write_seam``) so the strategy in force is always
+    rendered where the loop prompt reads it (issue 462 W2)."""
     directory = _strategy_dir(Path(ws))
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"tick-{int(obj['tick']):04d}.yaml"
@@ -712,17 +753,95 @@ def write_strategy(ws, obj: dict) -> dict:
         existing = _load_yaml(path)
         if isinstance(existing, dict) \
                 and existing.get("content_hash") == obj["content_hash"]:
+            write_seam(ws, obj)
             return {"written": False, "changed": False, "path": path,
                     "reason": "unchanged"}
     for other_path in sorted(directory.glob("tick-*.yaml")):
         other = _load_yaml(other_path)
         if isinstance(other, dict) \
                 and other.get("content_hash") == obj["content_hash"]:
+            write_seam(ws, obj)
             return {"written": False, "changed": False, "path": other_path,
                     "reason": "unchanged"}
-    path.write_text(yaml.safe_dump(obj, allow_unicode=True, sort_keys=True),
-                    encoding="utf-8")
+    _atomic_write_text(path, yaml.safe_dump(obj, allow_unicode=True,
+                                             sort_keys=True))
+    write_seam(ws, obj)
     return {"written": True, "changed": True, "path": path, "reason": None}
+
+
+# ------------------------------------------------------ consumer seam (W2)
+
+def _seam_sections(ws: Path, obj: dict) -> list[dict]:
+    """The deterministic projection of one strategy object into the
+    consumer seam's ``sections:[{title, body}]`` — every sentence
+    attributable to the strategy's own fields (template faces only, no
+    invention). The seam broadcasts what CHANGES: learned/attributable
+    content only (lead + its budget context, anti-hints, monitor focus,
+    cards). The loop policy constants (ping policy / stall rules) stay
+    in the versioned tick objects — they are compose plumbing, identical
+    in every strategy, and rendering them would break the cold-start
+    silence the seam consumers contract for. The dispatch-lead section
+    renders only when a LEAD exists: budget_hint is advisory context
+    for the lead decision, and a lead-less strategy (below the evidence
+    threshold) renders NOTHING whatever the workspace's budget
+    telemetry says (the pre-existing consumer contract, now
+    unconditional — 462 review MEDIUM-2). Empty-bodied sections are
+    dropped."""
+    cards = {str(c["id"]): c for c in load_cards(ws)}
+    sections: list[dict] = []
+    dispatch = obj.get("dispatch") or {}
+    lead = str(dispatch.get("method_lead") or "").strip()
+    if lead:
+        lines = [f"method lead: prefer family {lead} for matching "
+                 f"states at this decision point"]
+        hint = str(dispatch.get("budget_hint") or "").strip()
+        if hint:
+            lines.append(f"budget: {hint}")
+        sections.append({"title": "dispatch-lead", "body": "\n".join(lines)})
+    anti = [str(a) for a in (dispatch.get("anti_hints") or [])
+            if str(a).strip()]
+    if anti:
+        sections.append({"title": "anti-hints", "body": "\n".join(anti)})
+    focus = [str(f) for f in ((obj.get("loop") or {}).get("monitor_focus")
+                              or []) if str(f).strip()]
+    if focus:
+        sections.append({"title": "loop-watch",
+                         "body": "monitor focus: " + ", ".join(focus)})
+    card_blocks = [render_card_block(cards[str(cid)],
+                                     segment=SEGMENT_STRATEGY)
+                   for cid in (obj.get("hooks") or {}).get("cards") or []
+                   if str(cid) in cards]
+    if card_blocks:
+        sections.append({"title": "cards", "body": "\n".join(card_blocks)})
+    return sections
+
+
+def write_seam(ws, obj: dict) -> dict:
+    """Emit the consumer seam projection for one strategy object (issue
+    462 W2): ``runs/round-strategy.json`` shaped ``{schema, round,
+    sections}`` — ``round`` carries the strategy's tick (the round axis
+    the object was composed at). Byte-idempotent and self-healing: the
+    write face re-emits on every compose, so a deleted or corrupt seam
+    is repaired by the next decision event. Fail-open with the module's
+    own broad cage (the W2 review MEDIUM-1: a corrupt non-UTF-8 seam or
+    a malformed on-disk card must WARN + skip, never raise out of the
+    write face — the versioned tick write must always land)."""
+    ws = Path(ws)
+    path = ws / SEAM_REL
+    try:
+        doc = {"schema": SCHEMA, "round": int(obj["tick"]),
+               "sections": _seam_sections(ws, obj)}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(doc, ensure_ascii=False, sort_keys=True,
+                          indent=2) + "\n"
+        if path.is_file() and path.read_text(encoding="utf-8",
+                                             errors="replace") == text:
+            return {"written": False, "path": path}
+        _atomic_write_text(path, text)
+        return {"written": True, "path": path}
+    except Exception as exc:  # noqa: BLE001 — the seam never breaks the write
+        warn("write_seam", f"{type(exc).__name__}: {exc}")
+        return {"written": False, "path": path}
 
 
 def read_strategy(ws, tick: int | None = None) -> dict | None:

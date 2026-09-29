@@ -975,7 +975,7 @@ files:
   - src: scripts/strategy_sections.py
     dest: .claude/scripts/strategy_sections.py
     kind: scaffold
-    sha256: 4505c4e4713ed2544ebfe9674927ab06246394e9a4b25bac5bbce7b442c25a65
+    sha256: 55e81aec2bba52549f23cb79e0521639d71f530260c450bb87b0c329f6a8254a
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -1119,7 +1119,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: aff6092218b0f35e2cfad7f13c43869cd77b3e9a227653859b66db8c92edc772
+    sha256: a08a1c310a19d988cd2522d67732d39e669bfb52569dae1a0524f78da0d12022
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1171,7 +1171,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 7f07356f103c1b8533ce4465625f97f7195bd388a0551d8ebcfb3795ae0d5937
+    sha256: 5b004fdf10ce647df6649a734fcb65e6b5aaeb4d22c4848730dc2b358e8883dd
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
