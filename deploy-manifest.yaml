@@ -939,7 +939,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: ef8c06e37384db69ff1fdfe1e54bc69369f6a2776f3e70c550fca1051b0e11b7
+    sha256: d6ed12c3573255af5121d4c12c7ee0be55f0915a6a490c94e7b4ae3350bbbe1c
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1147,7 +1147,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 8e3caa0bcf9f1a12dc4b6a2b1af5ad51ffd6c13531a59f5bae73c6f5d86fe6c7
+    sha256: a989267e0c2e54f4de5373b36d6ad04efeafe08112325c7c3d8a31261184f944
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
@@ -1167,7 +1167,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 3875510ccfdbe1ad050daf2c095f55f936112821dd142cb9fed9abbd0b489bc1
+    sha256: 96ab0e4858831b652bdb1e7b970919d9084b914318fa7ade7fa76a7f1ca30467
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

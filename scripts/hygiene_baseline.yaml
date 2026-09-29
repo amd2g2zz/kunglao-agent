@@ -89,10 +89,12 @@ files:
     r1: 17
   scripts/dual_gate.py:
     r1: 3
-  scripts/e2e/checkpoints.py:
-    r1: 6
-  scripts/e2e/llm_faces.py:
+  scripts/e2e/audit.py:
     r1: 1
+  scripts/e2e/checkpoints.py:
+    r1: 10
+  scripts/e2e/llm_faces.py:
+    r1: 3
   scripts/e2e/model.py:
     r1: 6
   scripts/e2e/runtime.py:
@@ -707,7 +709,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 7
+    r1: 10
     r2: 4
   tests/test_emit_gate_880.py:
     r1: 4
@@ -1198,6 +1200,8 @@ files:
   tests/test_rotation_dispatch_gate_341.py:
     r1: 1
   tests/test_rotation_induction_341.py:
+    r1: 1
+  tests/test_round_credit_cited_cap_438.py:
     r1: 1
   tests/test_route_capability.py:
     r1: 5

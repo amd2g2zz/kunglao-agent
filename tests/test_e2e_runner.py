@@ -1067,3 +1067,495 @@ def test_top_claim_bare_pretty_printed_array():
     # empty
     assert top_claim(CmdOutcome(rc=0, stdout="", stderr="",
                                 timed_out=False)) is None
+
+
+# ---------------------------------------------------------------------------
+# Owner ruling 2026-09-29 (「需要完整补全。另外日志太分散、格式尽量统一」):
+# ONE unified audit stream per workspace — <ws>/runs/logs/e2e-audit.jsonl —
+# in the exact kunglao_log.emit 17-field schema. Every checkpoint result,
+# dispatch attempt/result, convergence decision, and oracle verdict leaves
+# EXACTLY ONE event; the kernel-facing hooks (method_family / strategy /
+# posterior / mainline) exist ready for activation.
+# ---------------------------------------------------------------------------
+
+
+class TestUnifiedAuditTrail:
+    AUDIT_RELPATH = Path("runs") / "logs" / "e2e-audit.jsonl"
+
+    def _rows(self, ws: Path) -> list[dict]:
+        from e2e import audit
+        path = audit.audit_path(ws)
+        assert path.is_file(), f"missing unified audit stream: {path}"
+        return [json.loads(line) for line
+                in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()]
+
+    def _ctx(self, stub_repo, tmp_path, mode="dry", runner=None,
+             ws: Path | None = None):
+        ws = ws or (tmp_path / "ws")
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode=mode, started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        runner = runner or ScriptedRunner()
+        face = llm_faces.face_for(mode, runner, ev_dir)
+        return checkpoints.RunContext(
+            state=state, runner=runner, face=face, clock=FakeClock(),
+            sleep_fn=lambda _s: None)
+
+    # -- schema: the stream IS kunglao_log's 17-field schema ----------------
+
+    def test_stream_uses_kunglao_log_17_field_schema(self, tmp_path):
+        """Spot-check field names: an audit row carries EXACTLY the field
+        set of a real kunglao_log.emit row (schema drift = red here)."""
+        import kunglao_log
+        from e2e import audit
+        ws_a, ws_b = tmp_path / "a", tmp_path / "b"
+        ws_a.mkdir()
+        ws_b.mkdir()
+        assert kunglao_log.emit(ws_a, "orchestrator", "warn",
+                                detail="schema reference row")
+        assert audit.emit(ws_b, "orchestrator", "convergence_decision",
+                          claim="C-004", exit=0, detail={"decision": "DISPATCH"})
+        ref = json.loads(
+            (kunglao_log.log_path(ws_a)).read_text(encoding="utf-8"))
+        row = self._rows(ws_b)[0]
+        assert len(ref) == 17
+        assert sorted(row) == sorted(ref), (
+            f"schema drift: audit={sorted(row)} vs kunglao_log={sorted(ref)}")
+        for name in ("ts", "actor", "action", "claim", "tool", "artifact",
+                     "duration_ms", "exit", "detail", "arm", "epoch",
+                     "hypothesis_ref", "matched_rule", "trace_id", "version",
+                     "channel", "null_reasons"):
+            assert name in row
+
+    # -- checkpoint results land exactly once ------------------------------
+
+    def test_checkpoint_pass_lands_exactly_one_event(self, stub_repo, tmp_path):
+        from e2e.runtime import record_result
+        ctx = self._ctx(stub_repo, tmp_path)
+        record_result(ctx, "C1", "init", "PASS", 0, None, 5, {})
+        rows = self._rows(ctx.ws)
+        assert len(rows) == 1, "exactly-one-event guarantee violated"
+        row = rows[0]
+        assert row["action"] == "checkpoint_pass"
+        assert row["actor"] == "orchestrator"
+        detail = json.loads(row["detail"])
+        assert set(detail) == {"step", "status", "rc", "duration_ms",
+                               "failed_step"}
+        assert detail["step"] == "C1-init"
+        assert detail["status"] == "PASS"
+        assert detail["rc"] == 0
+        assert detail["duration_ms"] == 5
+
+    def test_checkpoint_fail_carries_failed_step(self, stub_repo, tmp_path):
+        from e2e.runtime import record_result
+        ctx = self._ctx(stub_repo, tmp_path)
+        record_result(ctx, "C6", "loop", "FAIL", 2, None, 7,
+                      {"failed_step": "tick"})
+        (row,) = self._rows(ctx.ws)
+        assert row["action"] == "checkpoint_fail"
+        detail = json.loads(row["detail"])
+        assert detail["failed_step"] == "tick"
+        assert detail["step"] == "C6-loop"
+
+    def test_blocked_and_skip_statuses_have_vocabulary(self, stub_repo,
+                                                       tmp_path):
+        from e2e.runtime import record_result
+        ctx = self._ctx(stub_repo, tmp_path)
+        record_result(ctx, "C5", "analysis", "BLOCKED", 5, None, 1,
+                      {"stop_class": "stale-workspace"})
+        record_result(ctx, "C6", "loop", "SKIP", None, None, 0, {})
+        actions = [r["action"] for r in self._rows(ctx.ws)]
+        assert actions == ["checkpoint_blocked", "checkpoint_skip"]
+
+    # -- the oracle verdict is ONE row, never a checkpoint twin ------------
+
+    def test_oracle_result_emits_single_oracle_verdict(self, stub_repo,
+                                                       tmp_path):
+        from e2e.runtime import record_result
+        ctx = self._ctx(stub_repo, tmp_path)
+        record_result(ctx, "ORACLE", "oracle", "PASS", 0, None, 5,
+                      {"verdict": "PASS", "min_pair_ratio": 1.0})
+        rows = self._rows(ctx.ws)
+        assert len(rows) == 1, "oracle verdict must not get a checkpoint_* twin"
+        row = rows[0]
+        assert row["action"] == "oracle_verdict"
+        detail = json.loads(row["detail"])
+        assert detail["verdict"] == "PASS"
+        assert detail["min_pair_ratio"] == 1.0
+        assert detail["step"] == "ORACLE"
+
+    # -- dispatch acts: attempt BEFORE result, both in the stream ----------
+
+    def test_dry_dispatch_act_writes_attempt_then_result(self, stub_repo,
+                                                         tmp_path):
+        ctx = self._ctx(stub_repo, tmp_path)
+        request = model.DispatchRequest(
+            claim="C-004", workspace=str(ctx.ws),
+            prompt_file=str(tmp_path / "ev" / "p.md"), run_id="a1")
+        act = ctx.face.dispatch_act(request)
+        assert act.outcome == "DISPATCHED"
+        rows = self._rows(ctx.ws)
+        assert [r["action"] for r in rows] == ["dispatch_attempt",
+                                               "dispatch_result"]
+        attempt = json.loads(rows[0]["detail"])
+        assert attempt["claim"] == "C-004"
+        assert attempt["mode"] == "dry"
+        result = json.loads(rows[1]["detail"])
+        assert rows[1]["exit"] == 0
+        assert result["claim"] == "C-004"
+
+    def _prompt_file(self, tmp_path: Path) -> str:
+        path = tmp_path / "ev" / "p.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("dispatch prompt body\n", encoding="utf-8")
+        return str(path)
+
+    def test_auto_dispatch_failure_logs_full_stderr(self, stub_repo, tmp_path):
+        class _FailRunner(ScriptedRunner):
+            def run(self, cmd, cwd=None, timeout=None):
+                self.calls.append(" ".join(str(c) for c in cmd))
+                return model.CmdOutcome(rc=1, stdout="",
+                                        stderr="FULL-STDERR-BODY",
+                                        timed_out=False)
+
+        runner = _FailRunner()
+        ctx = self._ctx(stub_repo, tmp_path, mode="auto", runner=runner)
+        request = model.DispatchRequest(
+            claim="C-005", workspace=str(ctx.ws),
+            prompt_file=self._prompt_file(tmp_path), run_id="a1")
+        act = ctx.face.dispatch_act(request)
+        assert act.outcome == "ERROR"
+        rows = self._rows(ctx.ws)
+        assert [r["action"] for r in rows] == ["dispatch_attempt",
+                                               "dispatch_result"]
+        result = json.loads(rows[1]["detail"])
+        assert rows[1]["exit"] == 1
+        # the diagnosis face: FULL stderr, not just the tail
+        assert result["stderr"] == "FULL-STDERR-BODY"
+        assert result["stderr_tail"] == "FULL-STDERR-BODY"
+        assert result["timed_out"] is False
+        # ActRecord carries the same slice (BOTH faces, per the ruling)
+        assert act.detail["rc"] == 1
+        assert "duration_ms" in act.detail and "timeout" in act.detail
+
+    def test_auto_dispatch_attempt_detail_has_command_cwd_timeout(
+            self, stub_repo, tmp_path):
+        class _OkRunner(ScriptedRunner):
+            def run(self, cmd, cwd=None, timeout=None):
+                return model.CmdOutcome(rc=0, stdout="ok", stderr="")
+
+        runner = _OkRunner()
+        ctx = self._ctx(stub_repo, tmp_path, mode="auto", runner=runner)
+        request = model.DispatchRequest(
+            claim="C-004", workspace=str(ctx.ws),
+            prompt_file=self._prompt_file(tmp_path), run_id="a1")
+        ctx.face.dispatch_act(request)
+        rows = self._rows(ctx.ws)
+        attempt = json.loads(rows[0]["detail"])
+        # the auto face runs IN the workspace (in-workspace dispatch), not
+        # the repo
+        assert attempt["cwd"] == str(ctx.ws)
+        assert attempt["timeout"] == llm_faces.CLAUDE_ACT_TIMEOUT_S
+        assert "claude" in attempt["command"]
+
+    # -- convergence decisions + report integration ------------------------
+
+    def test_convergence_decision_lands_in_stream(self, stub_repo, tmp_path):
+        from e2e import audit
+        ctx = self._ctx(stub_repo, tmp_path)
+        audit.emit_convergence_decision(str(ctx.ws), "DISPATCH", tick=3,
+                                        claim="C-004")
+        (row,) = self._rows(ctx.ws)
+        assert row["action"] == "convergence_decision"
+        assert row["claim"] == "C-004"
+        detail = json.loads(row["detail"])
+        assert detail["decision"] == "DISPATCH"
+        assert detail["tick"] == 3
+
+    def test_report_audit_trail_populated(self, stub_repo, tmp_path):
+        from e2e import audit
+        ws = tmp_path / "ws"
+        ctx = self._ctx(stub_repo, tmp_path, ws=ws)
+        audit.emit(str(ctx.ws), "orchestrator", "checkpoint_pass")
+        audit.emit(str(ctx.ws), "orchestrator", "dispatch_attempt",
+                   claim="C-004")
+        report = evidence.build_report(
+            ctx.state, [], final_status="ALL-PASS", exit_code=0,
+            final_verdict=None)
+        trail = report["audit_trail"]
+        assert trail["path"] == str(ws / self.AUDIT_RELPATH)
+        assert trail["line_count"] == 2
+        assert trail["first_ts"] and trail["last_ts"]
+        cats = trail["categories"]
+        assert cats["checkpoint"] == 1 and cats["dispatch"] == 1
+        assert cats["decision"] == 0 and cats["oracle"] == 0
+
+    def test_report_audit_trail_missing_stream_is_zeroed(self, stub_repo,
+                                                         tmp_path):
+        ctx = self._ctx(stub_repo, tmp_path)
+        report = evidence.build_report(
+            ctx.state, [], final_status="ALL-PASS", exit_code=0,
+            final_verdict=None)
+        trail = report["audit_trail"]
+        assert trail["line_count"] == 0
+        assert trail["first_ts"] is None and trail["last_ts"] is None
+        assert trail["path"] == str(ctx.ws / self.AUDIT_RELPATH)
+
+    # -- kernel-facing hooks: exist, ready, land in the stream -------------
+
+    def test_kernel_hooks_ready_and_categorized(self, stub_repo, tmp_path):
+        from e2e import audit
+        ctx = self._ctx(stub_repo, tmp_path)
+        audit.emit_method_family(str(ctx.ws), "C-004", "mod-crypto-js")
+        audit.emit_strategy_composed(str(ctx.ws), "strategy-001",
+                                     {"arms": ["static_re", "dynamic"]})
+        audit.emit_posterior_update(str(ctx.ws), "static_re:beta",
+                                    {"alpha": 2, "beta": 1})
+        audit.emit_mainline_decision(str(ctx.ws), "C-004", dv=0.25)
+        rows = self._rows(ctx.ws)
+        assert [r["action"] for r in rows] == [
+            "method_family_recorded", "strategy_composed",
+            "posterior_updated", "mainline_decision"]
+        mainline = json.loads(rows[3]["detail"])
+        assert mainline["dv"] == 0.25
+        stats = audit.read_stats(ctx.ws)
+        assert stats["categories"]["kernel"] == 4
+
+    def test_dispatch_envelope_method_family_optional_and_hooked(
+            self, stub_repo, tmp_path):
+        from e2e.checkpoints import _run_dispatch_act
+        # default envelope: NO method_family key (byte-compatible)
+        request = model.DispatchRequest(
+            claim="C-004", workspace="/tmp/x", prompt_file="/tmp/p.md",
+            run_id="a1")
+        assert "method_family" not in request.to_dict()
+        # a run configured with a method family: envelope carries it and
+        # the dispatch act leaves a method_family_recorded event
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.state.method_family = "mod-crypto-js"
+        detail: dict = {"acts": []}
+        terminal = _run_dispatch_act(ctx, "C-004", set(), detail)
+        assert terminal is None
+        actions = [r["action"] for r in self._rows(ctx.ws)]
+        assert actions == ["method_family_recorded", "dispatch_attempt",
+                           "dispatch_result"]
+
+    # -- the stats reader is tolerant --------------------------------------
+
+    def test_stats_tolerate_corrupt_and_blank_lines(self, stub_repo, tmp_path):
+        from e2e import audit
+        ctx = self._ctx(stub_repo, tmp_path)
+        audit.emit(str(ctx.ws), "orchestrator", "oracle_verdict")
+        path = audit.audit_path(ctx.ws)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write("NOT JSON AT ALL\n")
+            fh.write("\n")
+        stats = audit.read_stats(ctx.ws)
+        assert stats["line_count"] == 1
+        assert stats["categories"]["oracle"] == 1
+
+    def test_audit_emit_never_raises_on_unwritable_ws(self):
+        from e2e import audit
+        # a path THROUGH a file cannot be mkdir'd: emit must degrade, not raise
+        blocked = Path("/dev/null") / "nope" / "runs" / "logs"
+        assert audit.emit(str(blocked), "orchestrator",
+                          "checkpoint_pass") is False
+
+
+class TestClaimRollbackAndDynamicClaims:
+    """#456 bug-2 (claim freed on BLOCKED/TIMEOUT/ERROR acts) and bug-3
+    (PQ/claims resolved from the unit's task_spec — never the hardcoded
+    py-derive templates)."""
+
+    def _ctx(self, stub_repo, tmp_path, mode="auto"):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode=mode, started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        runner = ScriptedRunner()
+        face = llm_faces.face_for(mode, runner, ev_dir)
+        return checkpoints.RunContext(
+            state=state, runner=runner, face=face, clock=FakeClock(),
+            sleep_fn=lambda _s: None)
+
+    def test_blocked_act_frees_claim(self, stub_repo, tmp_path):
+        # claude -p exits rc=0 with the agent reporting BLOCKED — the
+        # signature #456 bug-2 case. The claim must leave the dispatched
+        # set so the next tick can re-dispatch it.
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=0,
+                      stdout='{"result": "BLOCKED: sandbox cannot reach '
+                             'the workspace"}')
+        dispatched: set = set()
+        detail: dict = {"acts": []}
+        assert _run_dispatch_act(ctx, "C-005", dispatched, detail) is None
+        assert "C-005" not in dispatched
+        assert detail["acts"][-1]["outcome"] == "BLOCKED"
+
+    def test_error_act_frees_claim(self, stub_repo, tmp_path):
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=124, stdout="")
+        dispatched: set = set()
+        detail: dict = {"acts": []}
+        assert _run_dispatch_act(ctx, "C-005", dispatched, detail) is None
+        assert "C-005" not in dispatched
+        assert detail["acts"][-1]["outcome"] == "ERROR"
+
+    def test_clean_act_keeps_claim_dispatched(self, stub_repo, tmp_path):
+        # rc=0, no BLOCKED text: the act is presumed landed — the claim
+        # stays dispatched (healthy path, not a dead loop).
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=0, stdout='{"result": "done"}')
+        dispatched: set = set()
+        detail: dict = {"acts": []}
+        assert _run_dispatch_act(ctx, "C-005", dispatched, detail) is None
+        assert "C-005" in dispatched
+        assert detail["acts"][-1]["outcome"] == "DISPATCHED"
+
+    def test_resolve_claims_reads_top_level_task_spec(self, tmp_path):
+        # kunglao-init's task_spec.yaml carries goal_verbatim at the TOP
+        # LEVEL — round-4 read only anchors{} and silently fell back to
+        # the py-derive defaults.
+        from e2e import checkpoints
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text(
+            "lane: algorithm\n"
+            "task_id: rust-apk-beacon-v1\n"
+            "goal_verbatim: Unpack target/beacon.apk and recover the "
+            "ChaCha20 sigma word.\n"
+            "success_criterion: Re-implementation reproduces probe "
+            "outputs byte-exact.\n",
+            encoding="utf-8")
+        keep = (checkpoints.PRIMARY_QUESTIONS,
+                checkpoints.CLAIM_APPENDS)
+        try:
+            checkpoints._resolve_claims(spec)
+            statements = " ".join(c["statement"]
+                                  for c in checkpoints.CLAIM_APPENDS)
+            assert "derive.py" not in statements
+            assert "rust-apk-beacon-v1" in statements
+            assert "beacon.apk" in (
+                checkpoints.PRIMARY_QUESTIONS[0]["question"])
+        finally:
+            checkpoints.PRIMARY_QUESTIONS, checkpoints.CLAIM_APPENDS = keep
+
+    def test_resolve_claims_still_supports_nested_anchors(self, tmp_path):
+        from e2e import checkpoints
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text(
+            "task_id: legacy-unit\n"
+            "anchors:\n"
+            "  goal_verbatim: Recover the mutated constants.\n"
+            "  success_criterion: Probes reproduce byte-exact.\n",
+            encoding="utf-8")
+        keep = (checkpoints.PRIMARY_QUESTIONS,
+                checkpoints.CLAIM_APPENDS)
+        try:
+            checkpoints._resolve_claims(spec)
+            assert "legacy-unit" in (
+                checkpoints.CLAIM_APPENDS[0]["statement"])
+        finally:
+            checkpoints.PRIMARY_QUESTIONS, checkpoints.CLAIM_APPENDS = keep
+
+
+class TestReviewFixes456R2:
+    """Round-2 fixes from the independent #456/#457 review: word-boundary
+    BLOCKED parse, never-raise _resolve_claims (incl. stale-global leak),
+    fail-open audit serialization."""
+
+    def _ctx(self, stub_repo, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode="auto", started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        runner = ScriptedRunner()
+        face = llm_faces.face_for("auto", runner, ev_dir)
+        return checkpoints.RunContext(
+            state=state, runner=runner, face=face, clock=FakeClock(),
+            sleep_fn=lambda _s: None)
+
+    def test_blocked_parse_word_boundary_and_case(self, stub_repo, tmp_path):
+        # "Blocked:" (mixed case) must parse — the old case-sensitive
+        # scan resurrected the stuck-claim death loop
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=0,
+                      stdout='{"result": "Blocked: cannot reach /tmp"}')
+        d: dict = {"acts": []}
+        _run_dispatch_act(ctx, "C-005", set(), d)
+        assert d["acts"][-1]["outcome"] == "BLOCKED"
+
+    def test_unblocked_word_does_not_parse_blocked(self, stub_repo,
+                                                   tmp_path):
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=0,
+                      stdout='{"result": "register unblocked and '
+                             'written"}')
+        dispatched: set = set()
+        d: dict = {"acts": []}
+        _run_dispatch_act(ctx, "C-005", dispatched, d)
+        assert d["acts"][-1]["outcome"] == "DISPATCHED"
+        assert "C-005" in dispatched  # landed act stays claimed
+
+    def test_resolve_claims_never_raises_and_restores_defaults(
+            self, tmp_path):
+        from e2e import checkpoints as cp
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text("task_id: beacon-x\ngoal_verbatim: Unpack the "
+                        "APK.\nsuccess_criterion: Probes match.\n",
+                        encoding="utf-8")
+        cp._resolve_claims(spec)  # resolve beacon-shaped claims first
+        assert "beacon-x" in cp.CLAIM_APPENDS[0]["statement"]
+        # every degenerate shape: no raise, defaults restored (no leak)
+        for text in ("", "# comments only\n", "- a\n- b\n", "goal_verbatim: "
+                     "[unclosed"):
+            spec.write_text(text, encoding="utf-8")
+            cp._resolve_claims(spec)
+            assert "derive.py" in cp.CLAIM_APPENDS[0]["statement"], (
+                f"stale claims leaked for spec={text!r}")
+        # a fresh valid spec still resolves after the degenerates
+        spec.write_text("task_id: unit-z\ngoal_verbatim: G\n"
+                        "success_criterion: S\n", encoding="utf-8")
+        cp._resolve_claims(spec)
+        assert "unit-z" in cp.CLAIM_APPENDS[0]["statement"]
+        cp.PRIMARY_QUESTIONS, cp.CLAIM_APPENDS = (
+            cp._DEFAULT_PQ, cp._DEFAULT_CLAIMS)
+
+    def test_audit_emit_degrades_on_unserializable_detail(self, tmp_path):
+        from e2e import audit
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        class Opaque:
+            def __repr__(self):
+                return "<opaque>"
+        # must not raise; must land a row with the degradation marker
+        assert audit.emit_strategy_composed(
+            str(ws), "s-1", strategy={"obj": Opaque()}) is True
+        rows = [json.loads(line) for line
+                in audit.audit_path(ws).read_text(encoding="utf-8")
+                .splitlines() if line.strip()]
+        assert rows, "no row landed for unserializable detail"
+        assert "<unserializable" in rows[-1]["detail"]

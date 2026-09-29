@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from e2e import model
+from e2e import audit, model
 
 RUN_STATE_FILE = "run-state.json"
 REPORT_FILE = "report.json"
@@ -73,7 +73,9 @@ def build_report(state: model.RunState,
                  results: list[model.CheckpointResult],
                  final_status: str, exit_code: int,
                  final_verdict: dict | None = None) -> dict:
-    """The final run report: per-checkpoint table, budget, oracle verdict."""
+    """The final run report: per-checkpoint table, budget, oracle verdict,
+    and the audit_trail summary (owner ruling 2026-09-29 §5 — the unified
+    stream's path, line count, time range, and per-category counts)."""
     checkpoints = [r.to_dict() for r in results]
     statuses = [r.status for r in results]
     if final_status == "ALL-PASS" and model.BLOCKED in statuses:
@@ -96,6 +98,7 @@ def build_report(state: model.RunState,
         },
         "checkpoints": checkpoints,
         "oracle": dict(final_verdict or {}),
+        "audit_trail": audit.read_stats(Path(state.ws)),
         "total_duration_ms": state.total_duration_ms,
     }
 

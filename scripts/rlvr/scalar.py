@@ -25,8 +25,14 @@ fact-farming): credit is a VALUE LADDER, not a verified-count —
 ``verified`` is the admission ticket, ``cited / used-toward-stage`` is
 the value condition; uncited verified artifacts settle one trace total
 per dispatch row (the exploration option, worthless until cited), and a
-late citation back-promotes through the amendment path. See the ladder
-block at ROUND_CREDIT_FULL.
+late citation back-promotes through the amendment path. Issue 438
+closes the ACTIVE vector: the citation surfaces are worker-writable
+(one question-bearing claim stamp on N facts), so at most
+CITED_CAP_DEFAULT cited artifacts per dispatch row settle FULL —
+deterministic id-sort selection, no preference channel; the excess
+joins the class demotion face as ``cited_over_cap``, and a capped
+artifact that lands within a later settlement's cap amends up through
+the same late-cite path. See the ladder block at ROUND_CREDIT_FULL.
 
 Settlement output — the experience 3-tuple ``(s, a, r)`` is extracted AT
 settlement as a first-class settlement-document field
@@ -82,6 +88,20 @@ RULE_RED = "tier/red"
 # as one, so the farming gradient dies at any N; back-promotion is
 # per-fact via late citation (the amendment path).
 #
+# Issue 438 (the ACTIVE farming vector): the citation surfaces are
+# worker-writable (fact frontmatter ``claim_id``; lint registers
+# EXISTENCE only), so ONE question-bearing claim stamp on N verified
+# facts would settle N x full. The per-dispatch cited cap closes it: at
+# most CITED_CAP_DEFAULT cited artifacts per dispatch row earn FULL; the
+# excess settles at the TRACE CLASS level (one trace total for the
+# capped class, mirroring the uncited demotion's class semantics) under
+# the named reason ``cited_over_cap`` — auditable, the worker sees WHY.
+# Selection is DETERMINISTIC — the row's cited artifacts sort by
+# artifact id, the first K stay full (no preference channel). Genuine
+# deep citations still reward: a capped artifact that lands within a
+# LATER settlement's cap amends up through the existing late-cite path
+# (no extra code).
+#
 # Owner ruling 2026-09-28: within-cell homogeneity is a STATE-SIGNATURE
 # property, not a reward property — NO reward-side normalization here;
 # the cell structure already conditions the comparison (the full ruling
@@ -89,6 +109,13 @@ RULE_RED = "tier/red"
 ROUND_CREDIT_FULL = 1.0
 DEMOTION_UNCITED_VERIFIED = "uncited_verified"
 DEMOTION_REFUTED_INFORMATION = "refuted_with_replay_evidence"
+# issue 438 per-dispatch cited cap: at most this many cited artifacts
+# per dispatch row settle FULL; the excess demotes to the TRACE class
+# (reason below). A named module constant ON PURPOSE (minimum diff) —
+# the reward-rules.yaml promotion is a declared follow-up, not this
+# change.
+CITED_CAP_DEFAULT = 2
+DEMOTION_CITED_OVER_CAP = "cited_over_cap"
 
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
@@ -400,7 +427,8 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
     """Pure round-credit core: per-dispatch
     ``r_i = full-credit artifacts created in i + one trace total per
     demotion class present - attributed_waste(i)`` under the issue-433
-    value ladder (see the ladder block at ROUND_CREDIT_FULL).
+    value ladder with the issue-438 per-dispatch cited cap (see the
+    ladder block at ROUND_CREDIT_FULL).
 
     Provenance-exact attribution on the artifact ``creator`` field (the
     dispatch id); the round index carries ordering information only and
@@ -408,7 +436,10 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
     outside the dispatch set) are ``untraced``: listed, counted toward
     no dispatch. Demoted artifacts are listed per artifact with their
     reason (``demoted``) so the gradient is auditable — the worker sees
-    WHY the credit is low."""
+    WHY the credit is low. The cap (issue 438) bounds the cited FULL
+    face per row at CITED_CAP_DEFAULT (deterministic id-sort selection);
+    the excess demotes under ``cited_over_cap`` and stays rescue-eligible
+    through the late-cite amendment path."""
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or []) if d.get("dispatch_id")]
     known = set(dispatch_ids)
@@ -441,8 +472,18 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
         did = str(d.get("dispatch_id") or "")
         if not did:
             continue
-        credited = credited_by[did]
-        demoted = demoted_by[did]
+        # issue 438 per-dispatch cited cap: deterministic id-sort
+        # selection — the first CITED_CAP_DEFAULT cited artifacts keep
+        # FULL, the excess joins the demotion face under the named
+        # reason (class semantics, same audit shape as the uncited
+        # demotion). New lists throughout — credited_by/demoted_by are
+        # never mutated here.
+        full_sorted = sorted(credited_by[did])
+        credited = full_sorted[:CITED_CAP_DEFAULT]
+        over_cap = full_sorted[CITED_CAP_DEFAULT:]
+        demoted = demoted_by[did] + [
+            {"id": aid, "reason": DEMOTION_CITED_OVER_CAP}
+            for aid in over_cap]
         # ONE trace total per demotion CLASS present (a class demotion,
         # never a per-unit price — the farming gradient dies at any N)
         trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
