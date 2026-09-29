@@ -10,7 +10,8 @@ failure, not folklore. Design: ``scripts/rlvr/README.md``.
 Modules (phase-gated per the README; the top-level scripts stay thin
 adapters until their Phase-2 consolidation wave):
 
-- ``rlvr.posteriors`` — the γ Discounted-TS posterior store (issue 428,
+- ``rlvr.posteriors`` — the DTS posterior store (Discounted Thompson
+  Sampling, issue 428,
   v0.1.6 W2-T1): append-only ``runs/posterior-store.jsonl``, fold/read
   face applying the γ decay, pseudo-count priors, outcome-adaptive
   schedule with EX-2-calibrated defaults.
@@ -26,7 +27,6 @@ from . import q_cells
 from .posteriors import (
     ADAPTIVE_EMA_LAMBDA_DEFAULT,
     GAMMA_FLOOR_DEFAULT,
-    GAMMA_UNIT,
     PRIOR_ALPHA_DEFAULT,
     PRIOR_BETA_DEFAULT,
     SCHEMA as POSTERIOR_SCHEMA,
@@ -47,7 +47,6 @@ __all__ = [
     # posteriors faces (issue 428)
     "ADAPTIVE_EMA_LAMBDA_DEFAULT",
     "GAMMA_FLOOR_DEFAULT",
-    "GAMMA_UNIT",
     "PRIOR_ALPHA_DEFAULT",
     "PRIOR_BETA_DEFAULT",
     "POSTERIOR_SCHEMA",
