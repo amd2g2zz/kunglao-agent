@@ -51,6 +51,16 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+# the canonical warn — ONE implementation (process-wide dedupe + the
+# ledger face); import-guarded so a scripts/-less host context still
+# imports the engine (the warn face degrades to stderr).
+try:
+    from kunglao_log import warn as _warn
+except ImportError:  # partial-deploy lifeline, never blocks the engine
+    def _warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
+
 # --- policy constants (the CEILING — a stored budget above these clamps
 # down; nothing may raise them; smaller stored values are honored) ------
 DISTILL_ACTS_PER_RUN = 2      # hard per-run cap on distillation acts
@@ -144,11 +154,15 @@ def scan_triggers(ws, mtime_floor: float | None = None) -> list[Trigger]:
             try:
                 if path.stat().st_mtime < mtime_floor:
                     continue
-            except OSError:
+            except OSError as exc:
+                _warn("online_distill_scan", f"stat {rel}: "
+                      f"{type(exc).__name__}: {exc} (file skipped)")
                 continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        except OSError as exc:
+            _warn("online_distill_scan", f"read {rel}: "
+                  f"{type(exc).__name__}: {exc} (file skipped)")
             continue
         for m in _MARKER_RE.finditer(text):
             triggers.append(Trigger(
@@ -169,9 +183,18 @@ def scan_triggers(ws, mtime_floor: float | None = None) -> list[Trigger]:
 
 
 def _read_json(path: Path):
+    """Tolerant read. A MISSING file is the documented no-signal (probe
+    evidence absent, cold-workspace ledger) — explicit existence guard,
+    None, no exception face at all. Anything else (corrupt content,
+    unreadable) is a degradation: None plus the canonical rate-limited
+    warn, never a crash and never silent."""
+    path = Path(path)
+    if not path.is_file():
+        return None
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        _warn("online_distill_read", f"{path}: {type(exc).__name__}: {exc}")
         return None
 
 
@@ -202,15 +225,15 @@ def _epoch_of(ts: str) -> float | None:
 
 def _clamp(doc: dict) -> dict:
     """Never loosen: stored budgets above the defaults clamp down;
-    smaller stored budgets are honored (tightening is always legal)."""
+    smaller stored budgets are honored (tightening is always legal).
+    Callers run this AFTER the ledger guard validated the counter
+    types — a type-garbage document here is an internal-contract
+    violation and raises loudly."""
     doc = dict(doc)
-    try:
-        if int(doc.get("per_run_budget", 0)) > DISTILL_ACTS_PER_RUN:
-            doc["per_run_budget"] = DISTILL_ACTS_PER_RUN
-        if int(doc.get("hops_budget", 0)) > DISTILL_HOPS_BUDGET:
-            doc["hops_budget"] = DISTILL_HOPS_BUDGET
-    except (TypeError, ValueError):
-        pass
+    if int(doc.get("per_run_budget", 0)) > DISTILL_ACTS_PER_RUN:
+        doc["per_run_budget"] = DISTILL_ACTS_PER_RUN
+    if int(doc.get("hops_budget", 0)) > DISTILL_HOPS_BUDGET:
+        doc["hops_budget"] = DISTILL_HOPS_BUDGET
     return doc
 
 
@@ -317,8 +340,12 @@ def _atomic_write_json(path: Path, doc: dict) -> None:
     except BaseException:
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            # the silent-handler house rule: even tmp cleanup leaves the
+            # one trace — a silent pass here would hide disk trouble
+            _warn("online_distill_write",
+                  f"tmp cleanup {tmp}: {type(cleanup_exc).__name__}: "
+                  f"{cleanup_exc}")
         raise
 
 
