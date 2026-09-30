@@ -21,7 +21,7 @@ fewer-but-precise.
 
 ## What changes
 
-One new capability, `online-distillation`, built as five precise organs:
+One new capability, `online-distillation`, built as six precise organs (five mechanisms + the cross-cutting audit-stream face):
 
 - **Trigger face** — mechanical detection of two (and only two) honest
   miss signals: the structured `shelf-miss:` marker line a worker writes

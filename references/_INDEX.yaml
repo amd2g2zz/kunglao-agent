@@ -3,14 +3,14 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 24dff8e06dc74851f165ba536a018c52fa88c540fb9b3ae93f4b31a4a546ae2f
+  references/_INDEX.md: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
   references/_index-malware.md: cc69c42ba836f1a4d6f2c0ca09880ba2c20d43eeda216ef4ff2f4017093c0ef8
   references/_index-method.md: 8b1562980160c237677325d341f02a015eae1861d6e498dd46964c239f5548be
-  references/_index-patterns.md: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
+  references/_index-patterns.md: 325109c4972975d882309580ca35fa7178a617a2261df670f26f698f4786470d
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   references/_index-research.md: 2a9f7aca1353aded49c13b4fedb9bb61ad83d5fc62940218fc058181e05271d5
   references/_index-tools.md: 5f1d7d7c8a9d7a9a26e471278cbb561fbc083dd0e0cc8628506995fb92b740f9
@@ -83,6 +83,7 @@ files:
   references/re-library/method/process/verification-safety.md: fa458a95f78514ff9b76a3ef62b15002a0d23623d357ff812c87a59d231f5728
   references/re-library/patterns/catalog/patterns.md: 21eb4b7e61db599d4a92dc39b5a6b31a85f48889ff13aaa085b7aae4cd5a4b21
   references/re-library/patterns/debugging/patterns-debugging.md: 451be392f3c0cb4445ccfb477a17588f65ed77ea5f525a45db2d04e21d67d3fa
+  references/re-library/patterns/decode/byte-transform-id.md: d411e600f25faffe7bec856c5b9f13746d03acbb858891c742725f07291101f2
   references/re-library/patterns/decode/patterns-decode.md: 0a3b2fca6a4f157665008f0974f3d8fe76016dca50fcf7df818b1c5f72f49a2c
   references/re-library/patterns/simulation/patterns-simulation.md: 35cdbeb743c8b18baa4f3e343c86e1909687eb5128e3fee47056a29572394c78
   references/re-library/patterns/vm/vm-deobfuscation-routing.md: 61003437c1e58ff870c90e5cc30112f66b06340e3b1d52c9374821afe98c2ecf
