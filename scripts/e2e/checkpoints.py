@@ -37,6 +37,7 @@ from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     resume_plan, tail as _tail, top_claim as _top_claim,
     _load_repo_module,
 )
+import kunglao_log  # #472: the canonical warn (spec-unreadable trace)
 
 #: #459: max dispatch acts launched CONCURRENTLY per tick wave. The acts
 #: are independent `claude -p` processes in one workspace; the loop is
@@ -93,14 +94,30 @@ CLAIM_APPENDS: tuple[dict, ...] = _DEFAULT_CLAIMS
 
 def _resolve_claims(task_spec: Path) -> None:
     """#456 bug-3: resolve PQ/CLAIMS from the unit's task.yaml anchors.
-    Falls back to the py-derive-v1 shape when anchors are absent."""
+    Falls back to the py-derive-v1 shape when anchors are absent.
+
+    #472: the fallback faces are distinguished — spec-ABSENT and
+    anchors-ABSENT are the silent legitimate faces (no anchors to
+    read); spec-UNREADABLE (exists but corrupt, or not a mapping)
+    leaves ONE rate-limited warn so a corrupt spec is never
+    indistinguishable from an absent anchor."""
     global PRIMARY_QUESTIONS, CLAIM_APPENDS
+    if not task_spec.is_file():
+        # absent spec: the documented anchors-absent-adjacent fallback
+        # face — silent (nothing to read is not corruption)
+        PRIMARY_QUESTIONS = _DEFAULT_PQ
+        CLAIM_APPENDS = _DEFAULT_CLAIMS
+        return
     try:
         import yaml as _yaml
         spec = _yaml.safe_load(task_spec.read_text(encoding="utf-8"))
         if not isinstance(spec, dict):
             # empty/null/list-shaped spec: restore defaults — a reused
             # process must not leak the previous unit's resolved claims
+            kunglao_log.warn(
+                "e2e.resolve_claims",
+                f"spec not a mapping ({type(spec).__name__}), "
+                f"defaults restored: {task_spec}")
             PRIMARY_QUESTIONS = _DEFAULT_PQ
             CLAIM_APPENDS = _DEFAULT_CLAIMS
             return
@@ -139,7 +156,14 @@ def _resolve_claims(task_spec: Path) -> None:
              "answers_question": "pq-2", "boundary_type": "confirmed",
              "status": "OPEN", "source": "synthesis"},
         )
-    except Exception:  # never-raise resolver: ANY failure restores defaults
+    except Exception as exc:  # never-raise resolver: ANY failure restores defaults
+        # #472: the restore is silent NO LONGER — a corrupt spec left
+        # one rate-limited trace (anchors-absent above stays silent:
+        # that fallback is the documented #456 behavior, not a defect)
+        kunglao_log.warn(
+            "e2e.resolve_claims",
+            f"spec unreadable, defaults restored: "
+            f"{type(exc).__name__}: {exc}")
         PRIMARY_QUESTIONS = _DEFAULT_PQ
         CLAIM_APPENDS = _DEFAULT_CLAIMS
 
@@ -493,8 +517,22 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
                 return "", None
             prior = {fam: 1.0 for fam in registered}
         rng, _round = q_cells.q_cells_seed_state(ws)
+        # #460 Part B wiring (predict-before-try): thread the live
+        # instance features + the mined feature table into call site 2
+        # when KUNGLAO_PREDICT_BEFORE_TRY is on — fail-open to the
+        # flag-off sampler shape (a broken prior never breaks the loop)
+        kwargs: dict = {}
+        try:
+            from rlvr import feature_prior as _fp
+            if _fp.enabled():
+                features = _fp.features_from_workspace(ws)
+                if features:
+                    kwargs = {"features": features,
+                              "feature_table": _fp.default_table_path(ws)}
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            kwargs = {}
         receipt = q_cells.sample_method_family(
-            rlvr_state.snapshot(ws), prior, store, rng=rng)
+            rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
         return str(receipt["family"]), receipt
     except Exception as exc:  # noqa: BLE001 — telemetry, never the loop
         from kunglao_log import warn  # canonical warn: rate-limited
@@ -532,7 +570,18 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(
         json.dumps({"kunglao_dispatch": dispatch_meta})
-        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n",
+        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
+        "worker contract (from #473 live evidence rounds 5-7A):\n"
+        "1. Pin facts INCREMENTALLY — the moment a finding is established "
+        "(mapped structure, a constant with partial verification, decoded "
+        "case semantics) write facts/F<NNN>.md with boundary_type: "
+        "positive_observation. Do NOT batch facts at the end; final numeric "
+        "claims UPGRADE earlier facts rather than waiting for full "
+        "verification. An act that times out with zero facts is a failed "
+        "act.\n"
+        "2. End your final message with a line 'STATUS: DONE' (or 'STATUS: "
+        "BLOCKED' with the reason) so the orchestrator parses your outcome "
+        "precisely.\n",
         encoding="utf-8")
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
@@ -1066,7 +1115,23 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
             final_status = "PARTIAL"
             break
         print(f"[{sid}] RUN")
-        result = fn()
+        try:
+            result = fn()
+        except Exception as exc:  # noqa: BLE001 — #472 step cage: a
+            # raising step is converted to a FAIL CheckpointResult via
+            # the canonical _record seam (evidence file + exactly one
+            # audit row), then the loop's FAIL handling applies and
+            # finalize() still writes the report — the harness's
+            # product IS the report; a crash must not lose it. The
+            # error text rides the per-step evidence detail (the
+            # emit_checkpoint detail contract is exactly-those-keys —
+            # pinned by TestUnifiedAuditTrail — so it does NOT join the
+            # audit row; rc=None matches the BLOCKED precedent).
+            # BaseException (operator interrupts) still propagates.
+            result = _record(ctx, checkpoint, name, model.FAIL, None,
+                             None, 0,
+                             {"failed_step": name,
+                              "error": f"{type(exc).__name__}: {exc}"})
         results.append(result)
         state.steps[sid] = result.status
         if result.status == model.FAIL:

@@ -68,14 +68,28 @@ from _path_hygiene import load_module_by_path, scripts_on_path  # #671 sys.path 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
-# #762 K1b: owed durable-result-note refusal code (shim-face only — judge()
-# stays workspace-pure; the scripts-side judge keeps its {0..4} table).
-EXIT_NOTES_DUE = 5
-# #834: notes structural-discrimination refusal (same shim-face-only rule).
-EXIT_NOTES_FAKE = 6
-# #826: summary structural-contract refusal (uncertainty must not evaporate
-# in the user-facing transcription).
-EXIT_SUMMARY_FAKE = 7
+# #472: the shim's refusal codes DERIVE from the registry (scripts/
+# hook_exit_codes.py — the single source of truth) in a SEPARATE
+# fail-open block placed after the _path_hygiene one: a registry import
+# failure must not drop the canonical kunglao_log.warn into its stderr
+# fallback arm. The per-constant literal fallbacks preserve the
+# partial-deploy lifeline AND the source-substring drift pin
+# (test_notes_closure_762); the registry-vs-shim VALUE pin lives in
+# tests/test_hook_exit_codes.py.
+# Semantics (shim-face only — judge() stays workspace-pure; the
+# scripts-side judge keeps its {0..4} table):
+#   5 = #762 K1b owed durable-result notes; 6 = #834 notes structural
+#   discrimination; 7 = #826 summary structural contract (uncertainty
+#   must not evaporate in the user-facing transcription).
+try:
+    from hook_exit_codes import ExitCode as _ExitCode
+    EXIT_NOTES_DUE = int(_ExitCode.NOTES_DUE)
+    EXIT_NOTES_FAKE = int(_ExitCode.NOTES_FAKE)
+    EXIT_SUMMARY_FAKE = int(_ExitCode.SUMMARY_FAKE)
+except Exception:  # noqa: BLE001 — fail-open literal fallback (partial deploy)
+    EXIT_NOTES_DUE = 5
+    EXIT_NOTES_FAKE = 6
+    EXIT_SUMMARY_FAKE = 7
 # #831: ledger-anchored second-stop sanction event type (ledger CONTRACT line
 # format identical to rollup._append_ledger: json.dumps ensure_ascii=False).
 SECOND_STOP_EVENT = "second_stop_pass"

@@ -346,9 +346,12 @@ def _retry_key(worker_id: str, claim_id: str) -> str:
 def read_retry_counter(workspace: str | Path) -> dict[str, int]:
     """Read the {key: count} map from runs/.retry-counter.yaml.
 
-    Returns {} when the file is absent, unreadable, or malformed. Missing
-    `runs/` directory also returns {} (the counter file is created lazily
-    by `record_retry`).
+    Returns {} when the file is absent, unreadable, or malformed (fail-
+    open). #472: an EXISTING-but-unreadable/malformed file additionally
+    leaves one rate-limited warn (a silent reset of the pass@k cap was
+    the audit finding); absence stays silent (the counter is created
+    lazily by `record_retry`). Missing `runs/` directory also returns
+    {} (the counter file is created lazily by `record_retry`).
     """
     if not workspace:
         return {}
@@ -358,7 +361,11 @@ def read_retry_counter(workspace: str | Path) -> dict[str, int]:
     try:
         import yaml as _y
         data = _y.safe_load(p.read_text(encoding='utf-8')) or {}
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — fail-open, but #472: the
+        # reset leaves ONE rate-limited trace — a corrupt counter
+        # silently re-opening the pass@k cap was the audit finding;
+        # warn is the issue-275 batch-3 idiom (dedupe per (op, reason))
+        warn('retry_counter_read', f'{type(exc).__name__}: {exc}')
         return {}
     raw = data.get('counters') or {}
     if not isinstance(raw, dict):

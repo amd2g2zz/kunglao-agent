@@ -1830,3 +1830,233 @@ class TestParallelDispatch459:
         # empty / garbage: no claims, never a guessed id
         assert ranked_claims(out("")) == []
         assert ranked_claims(out("not json")) == []
+
+
+# ===========================================================================
+# #472 — pre-release exception/logging audit fixes (RED-first batch)
+# ===========================================================================
+
+class TestWaveActCage472:
+    """HIGH #1: a raising act never loses the wave — every dispatched
+    act lands in structured evidence (cage = record + move on)."""
+
+    def _req(self, ws, claim):
+        return model.DispatchRequest(claim=claim, workspace=str(ws),
+                                     prompt_file="", run_id="r1")
+
+    def _rows(self, ws):
+        from e2e import audit
+        return [json.loads(line) for line
+                in audit.audit_path(ws).read_text(encoding="utf-8")
+                .splitlines() if line.strip()]
+
+    def test_raising_act_mid_wave_is_caged_and_siblings_land(
+            self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+
+        class _FlakyFace:
+            mode = "stub"
+
+            def run_dispatch(self, req, handle=None):
+                if req.claim == "C-005":
+                    raise OSError("simulated act crash")
+                return llm_faces.ActRecord(req.claim, self.mode,
+                                           "DISPATCHED", {})
+
+        launched = [(self._req(ws, c), None)
+                    for c in ("C-004", "C-005", "C-006")]
+        acts = llm_faces.run_dispatch_parallel(_FlakyFace(), launched)
+        outcomes = {a.claim: a.outcome for a in acts}
+        assert outcomes == {"C-004": "DISPATCHED", "C-005": "ERROR",
+                            "C-006": "DISPATCHED"}
+        err = next(a for a in acts if a.outcome == "ERROR")
+        assert err.mode == "stub"  # the record preserves the face
+        assert "OSError" in err.detail["error"]
+        # the caged act's ATTEMPT/RESULT pair completes with an
+        # EXPLAINED rc-null — not the orchestrator no-subprocess reason
+        results = {r["claim"]: r for r in self._rows(ws)
+                   if r["action"] == "dispatch_result"}
+        assert results["C-005"]["exit"] is None
+        assert results["C-005"]["null_reasons"]["exit"] == (
+            "wave_act_exception")
+        assert "OSError" in results["C-005"]["detail"]
+
+    def test_wave_of_one_raising_act_is_caged(self, tmp_path):
+        # the inline wave-of-one path carries the same cage — the common
+        # single-claim tick must not die with the wave's records lost
+        ws = tmp_path / "ws"
+        ws.mkdir()
+
+        class _BoomFace:
+            mode = "stub"
+
+            def run_dispatch(self, req, handle=None):
+                raise RuntimeError("single-act wave crash")
+
+        acts = llm_faces.run_dispatch_parallel(
+            _BoomFace(), [(self._req(ws, "C-004"), None)])
+        assert len(acts) == 1
+        assert acts[0].outcome == "ERROR" and acts[0].claim == "C-004"
+
+    def test_auto_face_missing_prompt_file_yields_error_record(
+            self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        face = llm_faces.AutoLlmFace(ScriptedRunner(), tmp_path / "ev")
+        req = model.DispatchRequest(
+            claim="C-004", workspace=str(ws),
+            prompt_file=str(tmp_path / "gone.md"), run_id="r1")
+        act = face.run_dispatch(req)  # must NOT raise
+        assert act.outcome == "ERROR" and act.claim == "C-004"
+        row = [r for r in self._rows(ws)
+               if r["action"] == "dispatch_result"][0]
+        assert row["exit"] is None
+        assert row["null_reasons"]["exit"] == "prompt_file_unreadable"
+
+
+class TestResolveClaimsWarn472:
+    """HIGH #2: spec-UNREADABLE warns; anchors-absent and file-absent
+    stay silent-legitimate (the #456 documented fallback faces)."""
+
+    def _clear_dedupe(self):
+        import kunglao_log
+        kunglao_log._WARN_LAST.pop("e2e.resolve_claims", None)
+
+    def test_corrupt_spec_warns_and_restores_defaults(self, tmp_path,
+                                                      capsys):
+        from e2e import checkpoints as cp
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text("goal_verbatim: [unclosed\n", encoding="utf-8")
+        self._clear_dedupe()
+        capsys.readouterr()
+        cp._resolve_claims(spec)
+        assert "derive.py" in cp.CLAIM_APPENDS[0]["statement"]
+        err = capsys.readouterr().err
+        assert "e2e.resolve_claims" in err
+        assert "defaults restored" in err
+
+    def test_non_mapping_spec_warns(self, tmp_path, capsys):
+        from e2e import checkpoints as cp
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text("- a\n- b\n", encoding="utf-8")
+        self._clear_dedupe()
+        capsys.readouterr()
+        cp._resolve_claims(spec)
+        err = capsys.readouterr().err
+        assert "e2e.resolve_claims" in err
+        assert "not a mapping" in err
+
+    def test_anchors_absent_spec_stays_silent(self, tmp_path, capsys):
+        from e2e import checkpoints as cp
+        spec = tmp_path / "task_spec.yaml"
+        spec.write_text("task_id: u\nother: x\n", encoding="utf-8")
+        self._clear_dedupe()
+        capsys.readouterr()
+        cp._resolve_claims(spec)
+        assert "derive.py" in cp.CLAIM_APPENDS[0]["statement"]
+        assert "e2e.resolve_claims" not in capsys.readouterr().err
+
+    def test_missing_spec_file_stays_silent(self, tmp_path, capsys):
+        from e2e import checkpoints as cp
+        spec = tmp_path / "never-written.yaml"
+        self._clear_dedupe()
+        capsys.readouterr()
+        cp._resolve_claims(spec)
+        assert "derive.py" in cp.CLAIM_APPENDS[0]["statement"]
+        assert "e2e.resolve_claims" not in capsys.readouterr().err
+
+
+class TestAuditEmitSafeNumerics472:
+    """MEDIUM #4 (twin site): e2e.audit's event dict coerces garbage
+    numerics to documented nulls — the twin of kunglao_log's cage."""
+
+    def test_dispatch_result_garbage_numerics_coerce(self, tmp_path):
+        from e2e import audit
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        assert audit.emit_dispatch_result(
+            str(ws), "C-004", mode="dry", rc="not-an-int",
+            duration_ms="garbage") is True
+        rows = [json.loads(line) for line
+                in audit.audit_path(ws).read_text(encoding="utf-8")
+                .splitlines() if line.strip()]
+        row = rows[-1]
+        assert row["exit"] is None and row["duration_ms"] is None
+        assert row["null_reasons"]["exit"] == "value_unparseable"
+        assert row["null_reasons"]["duration_ms"] == "value_unparseable"
+
+
+class TestPipelineStepCage472:
+    """MEDIUM #6: a raising checkpoint step lands a FAIL result and the
+    report is still written (finalize runs) — the harness's product IS
+    the report; a crash must not lose it."""
+
+    def test_raising_step_lands_fail_report(self, stub_repo, tmp_path,
+                                            monkeypatch):
+        def _boom(_ctx):
+            raise RuntimeError("checkpoint exploded")
+
+        monkeypatch.setattr(checkpoints, "checkpoint_c1", _boom)
+        sink: list = []
+        rc = checkpoints.run_pipeline(
+            model.PipelineArgs(unit="py-derive-v1", repo=stub_repo,
+                               ws_root=tmp_path / "wsroot",
+                               budget_seconds=100, llm_mode="dry",
+                               tick_wait_seconds=0, run_id="cage1"),
+            cmd_runner=ScriptedRunner(), clock=FakeClock(),
+            sleep_fn=FakeClock().sleep, report_sink=sink)
+        assert rc == model.EXIT_CHECKPOINT_FAIL
+        report = sink[0]
+        assert report["final_status"] == "FAIL"
+        sid = model.step_id("C1", "init")
+        by_step = {c["step"]: c for c in report["checkpoints"]}
+        assert by_step[sid]["status"] == "FAIL"
+        assert "RuntimeError: checkpoint exploded" in (
+            by_step[sid]["detail"]["error"])
+
+
+class TestFactLanding473:
+    """#473: envelope carries the incremental-facts + STATUS contract;
+    act timeout is env-overridable with a safe default."""
+
+    def _ctx(self, stub_repo, tmp_path, mode="dry"):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode=mode, started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        return checkpoints.RunContext(
+            state=state, runner=ScriptedRunner(),
+            face=llm_faces.face_for(mode, ScriptedRunner(), ev_dir),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+
+    def test_envelope_carries_fact_landing_contract(self, stub_repo,
+                                                    tmp_path):
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        detail: dict = {"acts": []}
+        _run_dispatch_act(ctx, "C-005", set(), detail)
+        prompt = (Path(ctx.state.evidence_dir)
+                  / "dispatch-prompt-C-005.md").read_text(encoding="utf-8")
+        assert "INCREMENTALLY" in prompt
+        assert "positive_observation" in prompt
+        assert "STATUS: DONE" in prompt and "STATUS: BLOCKED" in prompt
+        assert "zero facts is a failed act" in prompt
+
+    def test_act_timeout_env_override_and_garbage_fallback(self, monkeypatch):
+        import importlib
+        from e2e import llm_faces as lf
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "3600")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 3600
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "garbage")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "-5")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
+        monkeypatch.delenv("KUNGLAO_E2E_ACT_TIMEOUT_S", raising=False)
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800

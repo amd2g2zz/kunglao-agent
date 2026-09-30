@@ -395,20 +395,34 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
 # ---------------------------------------------------------------------------
 
 def cell_posterior(fold_view: Fold, signature_hash: str,
-                   family: str) -> tuple[float, float]:
+                   family: str, *,
+                   feature_pool=None) -> tuple[float, float]:
     """The SHRUNK Beta posterior used for sampling — (alpha, beta).
 
     Anchor = the family's global aggregate LEAVE-ONE-OUT (this cell's
     own counts excluded — a family observed only here has an empty
     anchor and stands on its local evidence alone, no self-echo). A
     nowhere-observed family yields the wide Beta(1,1) prior.
-    """
+
+    ``feature_pool`` (#460 Part B, predict-before-try) is an optional
+    duck-typed FeaturePool (``.success``/``.failure``/``.rows`` —
+    scripts/rlvr/feature_prior.py): its similarity-discounted masses
+    are added to the anchor masses BEFORE the single SHRINK_CAP, so
+    the family/global pool stays the base borrow and total borrowed
+    pseudo-observations never exceed the cap. None (default) or a
+    zero-mass pool is bit-identical to the pre-change kernel — the
+    determinism wall. The live face pools every table row; the replay
+    passes exclude_run by explicit run id (leave-instance-out is the
+    replay's split, not a live-face filter)."""
     cell = fold_view.cells.get(
         (signature_hash, family),
         CellCounts(signature_hash, family))
     fam_s, fam_f = fold_view.family_mass(family)
     s_anchor = max(fam_s - cell.success, 0.0)
     f_anchor = max(fam_f - cell.failure, 0.0)
+    if feature_pool is not None:
+        s_anchor += float(feature_pool.success)
+        f_anchor += float(feature_pool.failure)
     n_anchor = s_anchor + f_anchor
     if n_anchor <= 0.0:
         return (BASE_ALPHA + cell.success, BASE_BETA + cell.failure)
@@ -460,9 +474,32 @@ def _normalize_prior(candidates_with_llm_prior) -> dict[str, float]:
     return prior
 
 
+def _feature_pools(features, feature_table,
+                   prior: Mapping[str, float]) -> Mapping:
+    """#460 Part B — the flag-gated pool resolution at call site 2.
+
+    Returns {} (the inert no-op) unless the
+    KUNGLAO_PREDICT_BEFORE_TRY flag is on AND both the features vector
+    and a loadable table were supplied; otherwise one FeaturePool per
+    candidate family. Any feature_prior failure degrades to {} (the
+    seam is fail-open: a broken prior never breaks the sampler)."""
+    if features is None or feature_table is None:
+        return {}
+    try:
+        from rlvr import feature_prior as _fp  # noqa: PLC0415 — lazy
+        if not _fp.enabled():
+            return {}
+        return _fp.pools_for_candidates(feature_table, features,
+                                        prior.keys())
+    except Exception:  # noqa: BLE001 — fail-open by design
+        return {}
+
+
 def sample_method_family(state_signature, candidates_with_llm_prior,
                          store: QCellStore, rng: random.Random | None = None,
-                         gamma: float | GammaSchedule | None = None) -> dict:
+                         gamma: float | GammaSchedule | None = None, *,
+                         features: Mapping | None = None,
+                         feature_table=None) -> dict:
     """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
@@ -476,11 +513,20 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     random.Random(0) (anchor-deterministic default); live callers thread
     q_cells_seed_state(ws) so the sample moves when evidence moves or
     the round advances (the #251 contract).
-    """
+
+    #460 Part B (predict-before-try): ``features`` + ``feature_table``
+    activate the feature-conditioned prior ONLY when
+    KUNGLAO_PREDICT_BEFORE_TRY is set AND both inputs are usable —
+    per-candidate similarity pools (feature_prior.pools_for_candidates)
+    ride the cell posterior as a second anchor source under the one
+    SHRINK_CAP, and candidates with contributing rows carry an additive
+    ``feature_prior`` receipt block. Any other state (flag off, no
+    inputs, empty table) is byte-identical to the pre-change kernel."""
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
     schedule = _resolve_schedule(gamma)
     fold_view = fold(store, gamma=schedule)
+    pools = _feature_pools(features, feature_table, prior)
     if rng is None:
         rng = random.Random(0)  # anchor-deterministic default
     base = rng.getrandbits(64)
@@ -489,17 +535,28 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     cand_doc: dict[str, dict] = {}
     weights: dict[str, float] = {}
     for family in order:
-        alpha, beta = cell_posterior(fold_view, sig, family)
+        alpha, beta = cell_posterior(
+            fold_view, sig, family,
+            feature_pool=pools.get(family) if pools else None)
         child = random.Random(f"qcell/{base}/{family}")
         theta = child.betavariate(alpha, beta)
         weights[family] = prior[family] * theta
-        cand_doc[family] = {
+        cand = {
             "p_llm": prior[family],
             "alpha": alpha,
             "beta": beta,
             "theta": round(theta, 6),
             "weight": round(weights[family], 6),
         }
+        pool = pools.get(family) if pools else None
+        if pool is not None and pool.rows > 0:
+            # additive block — a zero-row pool never rides the receipt
+            cand["feature_prior"] = {
+                "pool_success": round(pool.success, 9),
+                "pool_failure": round(pool.failure, 9),
+                "rows": pool.rows,
+            }
+        cand_doc[family] = cand
     # numpy adoption (issue 420 Phase 2, README rule 1): the sampling
     # weight total runs through _seq_sum — candidate insertion order
     # (the sorted fork order), bit-identical to the former builtin

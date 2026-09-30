@@ -182,3 +182,65 @@ class TestTailCli:
         self._emit_n(tmp, 2, "t4")
         r0 = self._tail(tmp, "0")
         assert r0.returncode == 64, f"N<1 must fail fast; rc={r0.returncode}"
+
+
+# ===========================================================================
+# #472 MEDIUM — emit's never-raise contract is UNCONDITIONAL
+# ===========================================================================
+
+class TestEmitNeverRaise472:
+    """Non-numeric duration_ms/exit/epoch coerce to null + a documented
+    value_unparseable reason (never a fabricated value, never a raise —
+    including the OverflowError face: int(float('inf')) raises)."""
+
+    def _last(self, tmp: Path) -> dict:
+        return _rows(log_path(tmp))[-1]
+
+    def test_garbage_numeric_fields_coerce_to_null_with_reason(
+            self, tmp: Path):
+        emit(tmp, actor="orchestrator", action="tool_call",
+             duration_ms="garbage", exit="x", epoch=[1])
+        row = self._last(tmp)
+        assert row["duration_ms"] is None
+        assert row["exit"] is None
+        assert row["epoch"] is None
+        for f in ("duration_ms", "exit", "epoch"):
+            assert row["null_reasons"][f] == "value_unparseable", f
+
+    def test_infinite_float_duration_coerces_null_overflow_caged(
+            self, tmp: Path):
+        # int(float('inf')) raises OverflowError — a ValueError-only
+        # cage leaves a live raise path in the never-raise contract.
+        emit(tmp, actor="orchestrator", action="tool_call",
+             duration_ms=float("inf"))
+        row = self._last(tmp)
+        assert row["duration_ms"] is None
+        assert row["null_reasons"]["duration_ms"] == "value_unparseable"
+
+    def test_nan_duration_coerces_null(self, tmp: Path):
+        emit(tmp, actor="orchestrator", action="tool_call",
+             duration_ms=float("nan"))
+        row = self._last(tmp)
+        assert row["duration_ms"] is None
+        assert row["null_reasons"]["duration_ms"] == "value_unparseable"
+
+    def test_garbage_epoch_is_not_reinherited(self, tmp: Path,
+                                              monkeypatch):
+        # ordering pin: coercion happens at the event-dict site (AFTER
+        # epoch-axis resolution) — a garbage epoch must land null +
+        # value_unparseable, NOT be coerced to None and silently
+        # re-inherited from the tick ledger (a fabricated axis).
+        import kunglao_log
+        monkeypatch.setattr(kunglao_log, "current_tick", lambda _ws: 7)
+        emit(tmp, actor="orchestrator", action="tool_call", epoch=[1])
+        row = self._last(tmp)
+        assert row["epoch"] is None
+        assert row["null_reasons"]["epoch"] == "value_unparseable"
+
+    def test_numeric_strings_still_coerce_as_before(self, tmp: Path):
+        emit(tmp, actor="orchestrator", action="tool_call",
+             duration_ms="42", exit="3", epoch="9")
+        row = self._last(tmp)
+        assert row["duration_ms"] == 42
+        assert row["exit"] == 3
+        assert row["epoch"] == 9

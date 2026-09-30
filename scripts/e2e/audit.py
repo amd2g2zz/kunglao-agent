@@ -33,7 +33,10 @@ tests/test_e2e_runner.py::TestUnifiedAuditTrail:
     arm             attribution arm (or null, auto-documented)
     epoch           the tick axis — inherited from the workspace's
                     convergence ledger via kunglao_log (0 = cold start;
-                    unreadable ledger = documented null, never fabricated)
+                    unreadable ledger = documented null, never
+                    fabricated; #472: a garbage numeric input at any
+                    emit site = documented "value_unparseable" null —
+                    the twin of kunglao_log._safe_int)
     hypothesis_ref  (or null, auto-documented)
     matched_rule    (or null, auto-documented)
     trace_id        mission chain id `tr-<mission>-<seq>` — inherited from
@@ -178,6 +181,16 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     reasons: dict = {}
     if null_reasons:
         reasons.update({str(k): str(v) for k, v in null_reasons.items()})
+    # #472: the twin numeric cage — same coercion site rule as
+    # kunglao_log.emit (at the event dict, after the axis reads), same
+    # documented "value_unparseable" null; numeric strings coerce
+    # exactly as before.
+    safe_duration = kunglao_log._safe_int(duration_ms)
+    safe_exit = kunglao_log._safe_int(exit)
+    if duration_ms is not None and safe_duration is None:
+        reasons["duration_ms"] = "value_unparseable"
+    if exit is not None and safe_exit is None:
+        reasons["exit"] = "value_unparseable"
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -185,8 +198,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "claim": str(claim) if claim is not None else None,
         "tool": str(tool) if tool is not None else None,
         "artifact": str(artifact) if artifact is not None else None,
-        "duration_ms": int(duration_ms) if duration_ms is not None else None,
-        "exit": int(exit) if exit is not None else None,
+        "duration_ms": safe_duration,
+        "exit": safe_exit,
         "detail": _detail_text(detail),
         "arm": str(arm) if arm else None,
         "epoch": int(cur_tick) if cur_tick is not None else None,
@@ -276,11 +289,19 @@ def emit_dispatch_result(ws, claim: str, *, mode: str, rc: int | None,
                          timed_out: bool = False, duration_ms: int | None = None,
                          stdout_tail: str = "", stderr_tail: str = "",
                          stderr_full: str | None = None,
-                         artifacts=None) -> bool:
+                         artifacts=None,
+                         exit_null_reason: str = "orchestrator_face_no_subprocess"
+                         ) -> bool:
     """RESULT row — logged after the act. On failure the FULL stderr
-    rides the detail (§2: diagnosis face; tails stay thrifted)."""
+    rides the detail (§2: diagnosis face; tails stay thrifted).
+
+    #472: a caged act (crashed before/without a subprocess) reports
+    rc=None with the CALLER's null reason — the explained-null honesty
+    rule, so "no subprocess exit to report" (orchestrator face),
+    "the act raised" (wave cage), and "the prompt file was unreadable"
+    (auto-face guard) are distinguishable in the stream."""
     if rc is None:
-        nulls = {"exit": "orchestrator_face_no_subprocess"}
+        nulls = {"exit": exit_null_reason}
     else:
         nulls = None
     return emit(ws, "orchestrator", "dispatch_result", claim=claim,
