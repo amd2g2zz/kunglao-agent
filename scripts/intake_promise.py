@@ -4,7 +4,10 @@
 
 init 在 toolchain 门通过后、scaffold 前，把预扫描状态显式落盘：
   - prescan.apkid / prescan.die：探测状态（missing = WARN 显式记录 + fix
-    提示——消灭"跳过且不记录"；#813 豆包现场病理）
+    提示——消灭"跳过且不记录"；#813 豆包现场病理）。#669 retirement
+    (#460 Part B)：per-project_type probe-set 会员门已删——两条探针在
+    每条 lane/type 上都记录 DIRECT capability fact（报告项 > host
+    presence > evidence presence > missing），无 per-type 规则。
   - obfuscation_prior：evidence/apkid.json 存在时提取 summary.obfuscator
     （与 route_capability #692 WP6 同源同键）
   - java_reachability：jadx/baksmali/apktool × constraints.dynamic_re →
@@ -60,26 +63,69 @@ def _item_state(status_name: str) -> str:
     return "missing"
 
 
-def _prescan(report) -> dict:
+def _which_tool(tool: str) -> str | None:
+    """Host tool presence (the direct-fact fallback — injectable for
+    host-independent tests)."""
+    import shutil
+    return shutil.which(tool)
+
+
+_EVIDENCE_FILES = {"die": "evidence/die.json", "apkid": "evidence/apkid.json"}
+
+
+def _probe_evidence_present(ws: Path, tool: str) -> bool:
+    """The tool's probe artifact exists and parses (a produced artifact
+    is a capability fact, independent of the current install)."""
+    p = ws / _EVIDENCE_FILES.get(tool, f"evidence/{tool}.json")
+    try:
+        json.loads(p.read_text(encoding="utf-8"))
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _prescan(report, ws: Path) -> dict:
+    """#669 retirement (#460 Part B): per-project_type probe-LIST
+    membership gating is DELETED — every probe tool gets a DIRECT
+    capability fact on every lane/type, one uniform fallback chain:
+    toolchain item when present (PASS→available / WARN→degraded /
+    FAIL→missing), else host tool presence, else probe-evidence
+    presence, else missing. Facts, not rules; tier stays WARN."""
     items = {i.name: i for i in (getattr(report, "items", None) or [])}
     prescan: dict = {}
     for tool in PRESCAN_TOOLS:
         item = items.get(tool)
-        if item is None:
+        if item is not None:
+            st = _status_name(item)
             prescan[tool] = {
-                "state": "not_probed",
+                "state": _item_state(st),
                 "tier": "WARN",
-                "note": "layer not in this project_type's probe set "
-                        "- must still run at first claim (#669)",
+                "note": _item_note(item) if st == "FAIL" else
+                        f"probe {st.lower()}",
             }
             continue
-        st = _status_name(item)
-        prescan[tool] = {
-            "state": _item_state(st),
-            "tier": "WARN",
-            "note": _item_note(item) if st == "FAIL" else
-                    f"probe {st.lower()}",
-        }
+        path = _which_tool(tool)
+        if path:
+            prescan[tool] = {
+                "state": "available",
+                "tier": "WARN",
+                "note": f"present at {path} (probed directly)",
+            }
+        elif _probe_evidence_present(Path(ws), tool):
+            prescan[tool] = {
+                "state": "available",
+                "tier": "WARN",
+                "note": f"{_EVIDENCE_FILES.get(tool, tool)} present "
+                        f"(probe artifact exists)",
+            }
+        else:
+            prescan[tool] = {
+                "state": "missing",
+                "tier": "WARN",
+                "note": "not found and no probe evidence — install the "
+                        "tool or dispatch the probe arm "
+                        "(predict-before-try, #460)",
+            }
     return prescan
 
 
@@ -134,7 +180,7 @@ def build(report, task_spec, ws) -> dict:
     ws = Path(ws)
     return {
         "generated_at": _now_z(),
-        "prescan": _prescan(report),
+        "prescan": _prescan(report, ws),
         "obfuscation_prior": _obfuscation_prior(ws),
         "java_reachability": _java_reachability(report, task_spec),
         "prescan_obligation": _prescan_obligation(task_spec, ws),
@@ -168,8 +214,35 @@ def _obligation_lane(task_spec, ws: Path) -> str:
     return "malware"
 
 
+def _predict_before_try_on() -> bool:
+    """The #460 Part B activation flag (default OFF — the inert-landing
+    discipline; the EX-5 replay A/B is the gate)."""
+    import os
+    return os.environ.get("KUNGLAO_PREDICT_BEFORE_TRY", "") == "1"
+
+
 def _prescan_obligation(task_spec, ws: Path) -> dict:
     lane = _obligation_lane(task_spec, ws)
+    if _predict_before_try_on():
+        # #669 retirement (#460 Part B): probes are cost_tier=probe
+        # ARMS ranked by the feature prior's expected-information-gain
+        # ordering — no fixed first-claim rule. Fail-open: a broken
+        # feature_prior import falls back to the legacy memo below.
+        try:
+            from rlvr import feature_prior as _fp
+            features = _fp.features_from_workspace(ws)
+            return {
+                "lane": lane,
+                "required": [],
+                "ranked": _fp.rank_arms(features, {}),
+                "note": "probes are cost_tier=probe arms ranked by the "
+                        "feature prior (predict-before-try, #460 / #669 "
+                        "retirement) - no fixed first-claim rule",
+            }
+        except Exception as exc:  # noqa: BLE001 — fail-open to legacy
+            print(f"intake-promise: WARN (fail-open) probe-arm ranking "
+                  f"unavailable ({type(exc).__name__}: {exc}) - legacy "
+                  f"obligation memo", file=sys.stderr)
     if lane in NATIVE_OBLIGATION_LANES:
         return {
             "lane": lane,

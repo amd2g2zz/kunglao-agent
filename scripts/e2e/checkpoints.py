@@ -516,8 +516,22 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
                 return "", None
             prior = {fam: 1.0 for fam in registered}
         rng, _round = q_cells.q_cells_seed_state(ws)
+        # #460 Part B wiring (predict-before-try): thread the live
+        # instance features + the mined feature table into call site 2
+        # when KUNGLAO_PREDICT_BEFORE_TRY is on — fail-open to the
+        # flag-off sampler shape (a broken prior never breaks the loop)
+        kwargs: dict = {}
+        try:
+            from rlvr import feature_prior as _fp
+            if _fp.enabled():
+                features = _fp.features_from_workspace(ws)
+                if features:
+                    kwargs = {"features": features,
+                              "feature_table": _fp.default_table_path(ws)}
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            kwargs = {}
         receipt = q_cells.sample_method_family(
-            rlvr_state.snapshot(ws), prior, store, rng=rng)
+            rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
         return str(receipt["family"]), receipt
     except Exception as exc:  # noqa: BLE001 — telemetry, never the loop
         from kunglao_log import warn  # canonical warn: rate-limited

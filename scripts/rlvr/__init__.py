@@ -51,6 +51,13 @@ map):
   method_family)`` with hierarchy shrinkage toward the global anchor
   (issue 429 section 4, W2-T2).
 
+- ``rlvr.feature_prior`` — #460 Part B predict-before-try: the
+  feature-conditioned prior over the mined feature table (flag-gated
+  default off) — Jaccard similarity over canonical feature tokens,
+  similarity-discounted pools riding the cell posterior as a second
+  anchor source under the one SHRINK_CAP, and the #669 probe-arm
+  information-gain ranking.
+
 - ``rlvr.compose`` — the strategy compose single-point (issue 431,
   W2-T3): the learned state as words the LLM sees, one round-strategy
   object per decision event + the fading card library.
@@ -64,6 +71,7 @@ map):
 from __future__ import annotations
 
 from . import compose
+from . import feature_prior
 from . import ledger
 from . import liveness
 from . import obstacles
@@ -199,6 +207,23 @@ from .q_cells import (
     reindex,
     sample_method_family,
 )
+from .feature_prior import (
+    FLAG_ENV as FEATURE_PRIOR_FLAG_ENV,
+    FEATURE_TABLE_REL,
+    FeaturePool,
+    PROBE_ARMS,
+    default_table_path as feature_table_path,
+    enabled as feature_prior_enabled,
+    feature_tokens,
+    features_from_workspace,
+    jaccard,
+    load_table as load_feature_table,
+    pool_for as feature_pool_for,
+    pools_for_candidates,
+    probe_gain,
+    rank_arms,
+    similarity,
+)
 from .compose import (
     CARD_SCHEMA,
     SEGMENT_CONSTITUTION,
@@ -226,6 +251,7 @@ from .obstacles import (
 __all__ = [
     # modules
     "compose",
+    "feature_prior",
     "ledger",
     "liveness",
     "obstacles",
@@ -351,6 +377,22 @@ __all__ = [
     "default_store",
     "cell_table",
     "reindex",
+    # feature_prior faces (issue 460 Part B)
+    "FEATURE_PRIOR_FLAG_ENV",
+    "FEATURE_TABLE_REL",
+    "FeaturePool",
+    "PROBE_ARMS",
+    "feature_prior_enabled",
+    "feature_table_path",
+    "load_feature_table",
+    "feature_tokens",
+    "features_from_workspace",
+    "jaccard",
+    "similarity",
+    "feature_pool_for",
+    "pools_for_candidates",
+    "probe_gain",
+    "rank_arms",
     # compose faces (issue 420 Phase 2 export-map completion; the compose
     # FUNCTION is compose_strategy — the bare name is the module's)
     "STRATEGY_SCHEMA",
