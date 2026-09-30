@@ -43,6 +43,11 @@ the Phase-2 posterior outvotes.
 
 ZERO DECISION POSTURE: pure reads + fail-open writes; no dispatch,
 gate, or settlement face imports this module (396 freeze wall).
+[Phase 2 note, issue 461 option-death: the ONE sanctioned consumer is
+the learned termination posterior (rlvr.termination), whose entire
+actuation is the DTS sampler floor — dead options sample at ARM_FLOOR,
+never removed; reject/block/gate on obstacle presence stays barred
+forever.]
 """
 from __future__ import annotations
 

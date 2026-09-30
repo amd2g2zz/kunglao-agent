@@ -506,6 +506,18 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
                               "feature_table": _fp.default_table_path(ws)}
         except Exception:  # noqa: BLE001 — fail-open at the seam
             kwargs = {}
+        # #461 Phase 2 wiring (option-death termination): thread the
+        # per-candidate death verdicts — dead options sample at the
+        # ARM_FLOOR, never removed (the PARK posture: revivable by new
+        # alive evidence). Fail-open to the termination-blind sampler
+        # shape; the zero-registry rule threads no kwarg at all.
+        try:
+            from rlvr import termination as _t461
+            _death = _t461.verdicts(ws, prior.keys())
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            _death = {}
+        if _death:
+            kwargs["death"] = _death
         receipt = q_cells.sample_method_family(
             rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
         return str(receipt["family"]), receipt

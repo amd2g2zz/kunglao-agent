@@ -110,7 +110,16 @@ evidence, not progress, and no obstacle term enters the weighted
 mean. Phase 1 is recording-only: no dispatch, gate, or settlement face
 SHALL import the obstacle module (the 396 freeze wall, extended with
 full-module-string checks), and no face SHALL reject, block, or
-re-rank anything on obstacle presence.
+re-rank anything on obstacle presence. [Phase-2 amendment, change
+issue-461-option-death, 2026-09-30: the recording-only clause was the
+Phase-1 boundary, not a permanent bar — Phase 2 adds exactly ONE
+consumption face, the learned option-death termination posterior
+(rlvr.termination), whose sole actuation is the DTS sampler floor
+(dead options sampled at floor weight, never removed). Re-ranking via
+that posterior is licensed; rejecting, blocking, gating, or any
+verdict-face enforcement on obstacle presence stays barred forever,
+and the dispatch/gate/settlement enforcement faces stay
+obstacle-import-clean (the freeze wall as pinned).]
 
 #### Scenario: obstacle-free signature re-pinned
 

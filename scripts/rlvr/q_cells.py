@@ -495,11 +495,48 @@ def _feature_pools(features, feature_table,
         return {}
 
 
+def _death_multiplier(death, family: str) -> tuple[float, dict | None]:
+    """#461 Phase 2 (option-death) — one candidate's effective sampler
+    multiplier + the additive receipt block.
+
+    ``death`` is the duck-typed verdict mapping the sampler hosts
+    thread (``{family → verdict}`` from rlvr.termination.verdicts);
+    this module NEVER imports that face — verdicts are data. Absent
+    verdict → (1.0, None): no multiplier, no receipt block, the draw
+    bit-identical to the pre-change kernel (x · 1.0 is IEEE-exact). A
+    non-mapping verdict degrades the same way (fail-open). A malformed
+    multiplier (non-numeric, ≤ 0 — would DELETE the option, or > 1 —
+    would AMPLIFY it) degrades to 1.0 with the receipt carrying the
+    EFFECTIVE multiplier actually applied — the audit trail never lies
+    about the arithmetic that ran."""
+    if death is None:
+        return 1.0, None
+    verdict = death.get(family)
+    if not isinstance(verdict, dict):
+        return 1.0, None
+    raw = verdict.get("weight_multiplier", 1.0)
+    try:
+        multiplier = float(raw)
+        if not (0.0 < multiplier <= 1.0) or multiplier != multiplier:
+            multiplier = 1.0
+    except (TypeError, ValueError):
+        multiplier = 1.0
+    p_dead = verdict.get("p_dead")
+    if isinstance(p_dead, bool) or not isinstance(p_dead, (int, float)):
+        p_dead = None
+    else:
+        p_dead = round(float(p_dead), 9)
+    return multiplier, {"dead": bool(verdict.get("dead")),
+                        "p_dead": p_dead,
+                        "weight_multiplier": multiplier}
+
+
 def sample_method_family(state_signature, candidates_with_llm_prior,
                          store: QCellStore, rng: random.Random | None = None,
                          gamma: float | GammaSchedule | None = None, *,
                          features: Mapping | None = None,
-                         feature_table=None) -> dict:
+                         feature_table=None,
+                         death: Mapping | None = None) -> dict:
     """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
@@ -521,7 +558,19 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     ride the cell posterior as a second anchor source under the one
     SHRINK_CAP, and candidates with contributing rows carry an additive
     ``feature_prior`` receipt block. Any other state (flag off, no
-    inputs, empty table) is byte-identical to the pre-change kernel."""
+    inputs, empty table) is byte-identical to the pre-change kernel.
+
+    #461 Phase 2 (option-death termination): ``death`` is the optional
+    duck-typed verdict mapping {family → verdict} the sampler hosts
+    thread from rlvr.termination.verdicts (this module never imports
+    that face — verdicts are data, not imports). A dead family's
+    weight is multiplied by its verdict's weight_multiplier (ARM_FLOOR
+    0.1 — floored, never zeroed: the PARK posture, still samplable,
+    revivable by new alive evidence); the per-candidate receipt gains
+    an additive ``death`` block (dead, p_dead, the EFFECTIVE
+    multiplier). Absent/empty/all-alive(×1.0) leaves the draw
+    byte-identical to the pre-change kernel; malformed multipliers
+    fail open to 1.0 (never delete, never amplify)."""
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
     schedule = _resolve_schedule(gamma)
@@ -540,7 +589,8 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             feature_pool=pools.get(family) if pools else None)
         child = random.Random(f"qcell/{base}/{family}")
         theta = child.betavariate(alpha, beta)
-        weights[family] = prior[family] * theta
+        multiplier, death_doc = _death_multiplier(death, family)
+        weights[family] = prior[family] * theta * multiplier
         cand = {
             "p_llm": prior[family],
             "alpha": alpha,
@@ -548,6 +598,9 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             "theta": round(theta, 6),
             "weight": round(weights[family], 6),
         }
+        if death_doc is not None:
+            # additive block — no verdict, no block (byte identity)
+            cand["death"] = death_doc
         pool = pools.get(family) if pools else None
         if pool is not None and pool.rows > 0:
             # additive block — a zero-row pool never rides the receipt
