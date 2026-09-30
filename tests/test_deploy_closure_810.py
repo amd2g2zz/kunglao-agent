@@ -115,11 +115,16 @@ def test_activation_writes_env_incident_on_incomplete(tmp_path):
     assert inc, "env_incident must be emitted with the missing list"
 
 
-def test_deployed_writer_emits_canonical_shape(tmp_path):
+def test_deployed_writer_emits_canonical_shape(tmp_path, monkeypatch):
     """#810 correction (audit B5 CONFIRMED)：deployed 注册以标准事件名为键、
     matcher 在 matcher 字段——并携带旧 writer 丢失的全部接线。"""
     import hook_activation as ha
     import wire_up_settings as wus
+    # hermetic env pin (issue 467 gate): the deployed writer runs the
+    # manifest-vs-imports gate against the resolved env root — pin it to
+    # the repo so the test stays machine-independent.
+    monkeypatch.setattr(ha, "_framework_project_root",
+                        lambda: Path(__file__).resolve().parents[1])
     ws = tmp_path / "ws"
     assert ha.register_hooks_deployed(ws) == 0
     settings = json.loads(

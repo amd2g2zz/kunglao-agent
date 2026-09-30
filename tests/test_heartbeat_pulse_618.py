@@ -83,10 +83,16 @@ def test_hook_pulse_dedup_60s(tmp_path, monkeypatch):
     assert "activity_ts" in cache
 
 
-def test_stop_face_registered(tmp_path):
+def test_stop_face_registered(tmp_path, monkeypatch):
     """C: register_hooks_deployed 产物里 heartbeat_touch 同时有 Bash 面
     （legacy 键 = PreToolUse/Bash）与 Stop 两条注册——会话每轮结束必跳。"""
     import hook_activation
+    # hermetic env pin (issue 467 gate): the deployed writer runs the
+    # manifest-vs-imports gate against the resolved env root — pin it to
+    # the repo so the test stays machine-independent (a machine may carry
+    # an older production install than the repo surface).
+    monkeypatch.setattr(hook_activation, "_framework_project_root",
+                        lambda: ROOT)
     ws = _mk_ws(tmp_path)
     hook_activation.register_hooks_deployed(ws)
     settings_path = ws / ".claude" / "settings.json"
