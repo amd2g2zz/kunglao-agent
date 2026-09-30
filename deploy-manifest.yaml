@@ -1147,7 +1147,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: a989267e0c2e54f4de5373b36d6ad04efeafe08112325c7c3d8a31261184f944
+    sha256: 37d963ee6fd7eb3bb7797c7d9c9da122e2de3704a0382fcf95f0e644d0e62c91
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
@@ -1279,7 +1279,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: 6f25a91b70d1c6dd48e4fa63ca7e20173bbec9fc9e7f8e09c1ea12f6e40e0dee
+    sha256: c605a5934460bdd7dac2a727b6201d7d0228fd500d5c21ab39cf169813b933e0
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset

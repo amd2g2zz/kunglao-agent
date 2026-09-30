@@ -162,7 +162,6 @@ round_credit:
     trace: 0.01          # the validator rails' TRACE canonical, reused
     legs:
       cited_or_used_toward_stage_verified: full
-      stage_milestone: full   # + the existing V-jump attribution face
       refuted_with_replay_evidence: trace
       uncited_verified: trace
       action_success_tool_ran: 0.0
@@ -180,9 +179,15 @@ round_credit:
       citation back-promotes the fact to full through the amendment path
       (append-only ledger rows, promoted ids named in the settlement):
       no punishment for foresight, no farming of uncited facts.
-      Stage-milestone artifacts (layer falls, key recovered) keep full
-      credit plus the existing V-jump attribution; V/dV and the root
-      layers are unchanged. Owner ruling 2026-09-28: within-cell
+      Stage-milestone artifacts (layer falls, key recovered) have NO
+      separate leg — the stage_milestone declaration was removed
+      (issue 438 minor tail: it had no settlement face): a milestone
+      is stage use by construction and earns full credit through the
+      cited/used-toward-stage leg when the citation relation names it;
+      an unlinked milestone settles as the exploration-option trace —
+      the disclosed under-credit-only assumption. The existing V-jump
+      attribution face, V/dV, and the root layers are unchanged. Owner
+      ruling 2026-09-28: within-cell
       homogeneity is a STATE-SIGNATURE property, not a reward property —
       NO reward-side normalization (no z-score, no rescaling); the cell
       structure already conditions the comparison.

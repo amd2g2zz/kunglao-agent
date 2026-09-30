@@ -234,6 +234,32 @@ class TestCapSettlementAndLateRescue:
                     if r["rollout_id"] == "round_credit/tr-m1-d1"]) == 2
 
 
+# ---------- the documented reward behavior (README round-credit row) ------
+
+class TestReadmeRowDocumentsTheCap:
+    def test_scripts_readme_row_names_the_ladder_and_the_cap(self):
+        """Issue 438 minor tail (docs): the scalar_settlement.py catalog
+        row in scripts/README.md must document the CURRENT reward
+        behavior — the value ladder (verified = admission ticket,
+        cited-toward-stage = the value condition) and THIS cap; the row
+        had drifted to the pre-433 v2 formula (oracle-verified alone
+        earning full credit, no cap)."""
+        lines = (ROOT / "scripts" / "README.md").read_text(
+            encoding="utf-8").splitlines()
+        rows = [ln for ln in lines
+                if ln.startswith("| `scalar_settlement.py` |")]
+        assert len(rows) == 1
+        low = rows[0].lower()
+        assert "admission ticket" in low
+        assert "value condition" in low
+        assert "cited cap" in low
+        assert "cited_over_cap" in low
+        # the VALUE rides with the name, derived from the module: if the
+        # constant changes (the declared yaml-promotion follow-up), the
+        # row must follow or this pin goes red — no silent drift.
+        assert f"CITED_CAP_DEFAULT = {ss.CITED_CAP_DEFAULT}" in rows[0]
+
+
 # ---------- the issue's exact attack, end to end ----------------------------
 
 class TestClaimStampAttackEndToEnd:
