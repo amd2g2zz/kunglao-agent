@@ -176,6 +176,7 @@ EMIT_ACTIONS = [
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
     "bridge_lint_findings",  # issue 252 hypothesis-bridge cold-start lint findings (digest face)
+    "candidate_landed",   # online distillation: a distilled candidate landed in the run-local tool shelf (tools-local, with provenance manifest)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_gate_error",  # owner ruling 2026-09-28: _capability_guard gate ERROR -> durable fail-closed REJECT
     "capability_reject",
@@ -200,6 +201,8 @@ EMIT_ACTIONS = [
     "detector_eval",      # #127 a detector ran (detail JSON carries `detector` name + counters)
     "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
+    "distill_attempt",    # online distillation: a distillation act dispatched (phase=dispatched) or the production closure's trigger signal (phase=triggered)
+    "distill_result",     # online distillation: per-attempt validation + sample-as-oracle outcome (rejections and phase=refused budget refusals included)
     "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face

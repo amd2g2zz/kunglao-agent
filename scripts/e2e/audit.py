@@ -107,14 +107,22 @@ KERNEL_ACTIONS = frozenset({
     "method_family_recorded", "strategy_composed",
     "posterior_updated", "mainline_decision",
 })
-AUDIT_ACTIONS = CHECKPOINT_ACTIONS | KERNEL_ACTIONS | frozenset({
-    "dispatch_attempt", "dispatch_result",
-    "convergence_decision", "oracle_verdict",
+#: online distillation rows (the capability's own words; one attempt
+#: row per dispatched act, one result row per attempt — rejections and
+#: budget refusals included — one landed row per landed candidate)
+DISTILL_ACTIONS = frozenset({
+    "distill_attempt", "distill_result", "candidate_landed",
 })
+AUDIT_ACTIONS = (CHECKPOINT_ACTIONS | KERNEL_ACTIONS | DISTILL_ACTIONS
+                 | frozenset({
+                     "dispatch_attempt", "dispatch_result",
+                     "convergence_decision", "oracle_verdict",
+                 }))
 
 #: report category buckets (§5) — anything outside them still counts in
 #: line_count, it just does not inflate a bucket (garbage stays visible).
-CATEGORIES = ("checkpoint", "dispatch", "decision", "oracle", "kernel")
+CATEGORIES = ("checkpoint", "dispatch", "decision", "oracle", "kernel",
+              "distill")
 
 
 def audit_path(ws) -> Path:
@@ -347,6 +355,55 @@ def emit_mainline_decision(ws, claim: str, dv) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# online-distillation rows (the capability's three words; details carry
+# the trigger/budget/oracle payloads; the capability token rides
+# detail — the attribution arm stays null for distill rows)
+# ---------------------------------------------------------------------------
+
+
+def emit_distill_attempt(ws, attempt: str, *, phase: str = "dispatched",
+                         trigger: dict | None = None,
+                         budget: dict | None = None) -> bool:
+    """One distill ATTEMPT row. phase="dispatched" rides one per
+    dispatched act; the production closure's signal face uses
+    phase="triggered" (the act there is the orchestrator's decision)."""
+    return emit(ws, "orchestrator", "distill_attempt",
+                detail={"attempt": attempt, "phase": phase,
+                        "trigger": trigger, "budget": budget})
+
+
+def emit_distill_result(ws, attempt: str, *, validated: bool,
+                        violations: list | None = None, hops: int = 0,
+                        oracle: dict | None = None,
+                        phase: str = "result",
+                        refusal_reason: str | None = None,
+                        trigger_token: str | None = None) -> bool:
+    """One distill RESULT row per dispatched attempt (validation +
+    oracle outcome; rejections included). Budget refusals ride the same
+    word with phase="refused", keyed to the trigger (nothing
+    dispatched)."""
+    detail: dict = {"attempt": attempt, "phase": phase,
+                    "validated": validated,
+                    "violations": list(violations or []),
+                    "hops": hops, "oracle": oracle}
+    if refusal_reason:
+        detail["refusal_reason"] = refusal_reason
+    if trigger_token:
+        detail["trigger_token"] = trigger_token
+    return emit(ws, "orchestrator", "distill_result", detail=detail)
+
+
+def emit_candidate_landed(ws, attempt: str, name: str, *,
+                          tool_path: str | None = None,
+                          capability: str | None = None) -> bool:
+    """One LANDED row per landed run-local candidate."""
+    return emit(ws, "orchestrator", "candidate_landed", tool=tool_path,
+                detail={"attempt": attempt, "name": name,
+                        "capability": capability,
+                        "tool_path": tool_path})
+
+
+# ---------------------------------------------------------------------------
 # read side: the §5 report summary
 # ---------------------------------------------------------------------------
 
@@ -355,6 +412,8 @@ def _category(action: str) -> str | None:
         return "checkpoint"
     if action.startswith("dispatch_"):
         return "dispatch"
+    if action.startswith("distill_") or action == "candidate_landed":
+        return "distill"
     if action == "convergence_decision":
         return "decision"
     if action == "oracle_verdict":

@@ -1,0 +1,7 @@
+{
+  "cipher_sha256": "4052e222c8a2c2e7bb45d965605002e132d49a5f04b64ba14c9532b6ac514a1c",
+  "length": 512,
+  "magic": "KLG1",
+  "plain_sha256": "220e8488b8294ef13cabf894aa538e83c2c8db8de6b26aff73c71a6bef7ef2cc",
+  "version": 3
+}
