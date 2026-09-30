@@ -1431,6 +1431,16 @@ class TestUnifiedAuditTrail:
             "retired tokens never ride the prior"
         assert receipt["schema"] == "q-cell-sample/1"
         assert "zz-retired-token" not in receipt["candidates"]
+        # outcome rows never enter any prior: five settlement rows for
+        # the registered family must not inflate its share (the shared
+        # proposal-channel definition — review MEDIUM)
+        for _ in range(5):
+            q_cells.observe(Path(ctx.ws), "abcdabcdabcd",
+                            "static-decompile", 1.0)
+        fam2, receipt2 = _sample_envelope_family(Path(ctx.ws))
+        assert receipt2["candidates"]["static-decompile"]["p_llm"] \
+            == pytest.approx(1.0), \
+            "settlement-source rows must not inflate the prior"
 
     # -- the stats reader is tolerant --------------------------------------
 

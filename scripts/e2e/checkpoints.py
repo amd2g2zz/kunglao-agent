@@ -455,11 +455,12 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
 
     The P_LLM x Q draw (``rlvr.q_cells.sample_method_family``) picks the
     envelope's method_family when the run declares none: candidates are
-    the workspace's measured proposal channel (families actually declared
-    — the q-cell observation log, INTERSECTED with the #432 registry: a
-    retired token must never ride the prior again, or the fail-closed
-    vocabulary gate would lockstep-reject every dispatch in the
-    workspace) with a share prior; a workspace with no declaration
+    the workspace's DECLARED families — q-cell DISPATCH rows only (the
+    shared proposal-channel definition: outcome data never enters any
+    prior; the e2e face reads no settled ledger), INTERSECTED with the
+    #432 registry: a retired token must never ride the prior again, or
+    the fail-closed vocabulary gate would lockstep-reject every dispatch
+    in the workspace — with a share prior; a workspace with no declaration
     history proposes uniformly over the registered vocabulary (the mined
     proposal set). rng = ``q_cells_seed_state`` — the sample moves when
     evidence moves or the round advances (#251; a re-dispatched claim
@@ -478,8 +479,9 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
         registered = sorted(method_families.registered_tokens())
         counts: dict[str, int] = {}
         for row in store.observations():
-            if not isinstance(row, dict):
-                continue
+            if not isinstance(row, dict) \
+                    or str(row.get("source") or "") != "dispatch":
+                continue  # outcome rows never enter any prior
             fam = str(row.get("method_family") or "").strip()
             if fam and fam in registered:
                 counts[fam] = counts.get(fam, 0) + 1

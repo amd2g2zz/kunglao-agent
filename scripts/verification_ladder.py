@@ -444,8 +444,10 @@ def _persist_queue(ws: Path, doc: dict) -> bool:
         if tmp is not None and tmp.exists():
             try:
                 tmp.unlink()
-            except OSError:  # noqa: BLE001 — cleanup best-effort
-                pass
+            except OSError as exc:  # non-silent: the #275 house rule
+                warn("atomic_cleanup",
+                     f"t2-queue.json: tmp {tmp.name} left behind: "
+                     f"{type(exc).__name__}: {exc}")
 
 
 def drain_t2_queue(ws, *, budget: int | None = None,

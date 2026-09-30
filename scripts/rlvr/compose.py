@@ -311,8 +311,10 @@ def _atomic_write_text(path: Path, text: str) -> None:
         if tmp.exists():
             try:
                 tmp.unlink()
-            except OSError:  # noqa: BLE001 — cleanup best-effort
-                pass
+            except OSError as exc:  # non-silent: the #275 house rule
+                warn("atomic_cleanup",
+                     f"{path.name}: tmp {tmp.name} left behind: "
+                     f"{type(exc).__name__}: {exc}")
 
 
 def save_card(ws, card: dict) -> dict:

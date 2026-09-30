@@ -107,11 +107,21 @@ class PosteriorStrategyStore:
     def _proposal_prior(self) -> dict[str, float]:
         """P_LLM as a measured face: each family's share of the
         declarations this workspace has seen — the two PROPOSAL faces
-        only (q-cell DISPATCH rows + settled ``method_family`` signals).
-        Settlement-source q-cell rows are outcome data, never proposals;
-        counting them would skew the prior toward dispatch-heavy
-        families. Deterministic in workspace state; empty when nothing
-        was ever declared."""
+        only (q-cell DISPATCH rows + settled ``method_family`` signals),
+        INTERSECTED with the #432 registered vocabulary (a retired
+        token must never ride the prior — the lead is advisory, but a
+        retired family steered into the loop prompt would push
+        declarations the fail-closed vocabulary gate rejects; the same
+        lockstep hazard the W4 sampler face filters). Settlement-source
+        q-cell rows are outcome data, never proposals; counting them
+        would skew the prior toward dispatch-heavy families. The two
+        proposal channels intentionally double-count a dispatched-then-
+        settled declaration (a weighting choice, 462 design review
+        LOW-3). An unreadable registry degrades to the unfiltered prior
+        with one warn — the #432 GATE stays the enforcement face (the
+        q_cells store's own division: enforcement is the gate's, never
+        the store's). Deterministic in workspace state; empty when
+        nothing was ever declared."""
         counts: dict[str, int] = {}
         for row in self._qstore.observations():
             if not isinstance(row, dict) \
@@ -124,6 +134,18 @@ class PosteriorStrategyStore:
             fam = method_family_of_row(row)
             if fam and fam != "any":
                 counts[fam] = counts.get(fam, 0) + 1
+        try:
+            import method_families  # noqa: PLC0415 — registry sibling
+            registered = method_families.registered_tokens()
+        except Exception as exc:  # noqa: BLE001 — registry best-effort
+            warn("strategy_store.prior",
+                 f"registry unreadable ({type(exc).__name__}: {exc}) — "
+                 f"prior unfiltered; the #432 gate remains the "
+                 f"enforcement face")
+            registered = None
+        if registered is not None:
+            counts = {fam: n for fam, n in counts.items()
+                      if fam in registered}
         total = sum(counts.values())
         if total <= 0:
             return {}

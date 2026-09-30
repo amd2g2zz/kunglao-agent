@@ -575,6 +575,27 @@ def test_prior_channel_counts_proposals_never_outcomes(tmp_path):
     assert store.method_lead(fp) == "static-decompile"
 
 
+def test_prior_channel_intersects_the_registered_vocabulary(tmp_path):
+    """462 design-review MEDIUM-3: the PRODUCTION prior gets the same
+    registry intersect the W4 sampler face has — a retired token must
+    never ride the prior into the loop prompt (the lead is advisory,
+    but steering declarations the fail-closed #432 gate rejects is the
+    lockstep hazard in advisory form)."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    # a retired token's declarations (recorded while registered)
+    q_cells.append_observation(ws, fp, "zz-retired-token", None,
+                               source="dispatch")
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch")
+    store = compose.load_store(ws)
+    prior = store._proposal_prior()
+    assert prior == {"static-decompile": 1.0}, \
+        "retired tokens never ride the production prior"
+    assert store.method_lead(fp) == "static-decompile"
+
+
 # --------------------------------------------- the consumer seam (462 W2)
 
 def test_write_strategy_emits_the_sections_seam(tmp_path):
@@ -584,8 +605,8 @@ def test_write_strategy_emits_the_sections_seam(tmp_path):
     loop-prompt seam reads), derived deterministically from the versioned
     strategy object. The tick files stay the reconstructable ledger."""
     ws = _ws(tmp_path)
-    _ok_row(ws, "task/s1", "method-a")
-    _ok_row(ws, "task/s2", "method-a")
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
     # budget telemetry present: the budget line rides the lead section
     # (advisory context for the lead decision — the warm branch)
     (ws / "cost_events.jsonl").write_text(
@@ -620,8 +641,8 @@ def test_seam_is_deterministic_and_self_healing(tmp_path):
     write_strategy call, which must never raise on the seam face."""
     import strategy_sections
     ws = _ws(tmp_path)
-    _ok_row(ws, "task/s1", "method-a")
-    _ok_row(ws, "task/s2", "method-a")
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
     obj1 = compose.compose(ws, tick=1)
     compose.write_strategy(ws, obj1)
     seam_path = ws / "runs" / "round-strategy.json"
@@ -646,8 +667,8 @@ def test_workguard_guidance_renders_the_composed_strategy(tmp_path):
     strategy sections produced by the REAL compose chain."""
     import workguard
     ws = _ws(tmp_path)
-    _ok_row(ws, "task/s1", "method-a")
-    _ok_row(ws, "task/s2", "method-a")
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
     compose.write_strategy(ws, compose.compose(ws, tick=1))
     result = {"claims": [{"id": "C-1", "why": workguard.WHY_DISPATCHABLE}],
               "walls": [], "active_workers": []}
@@ -693,18 +714,18 @@ def test_injection_changes_with_evidence_across_two_runs(tmp_path):
     import strategy_sections
     ws = _ws(tmp_path)
     # run 1: two green rounds of method-a — the injection prefers it
-    _ok_row(ws, "task/r1-a", "method-a")
-    _ok_row(ws, "task/r1-b", "method-a")
+    _ok_row(ws, "task/r1-a", "static-decompile")
+    _ok_row(ws, "task/r1-b", "static-decompile")
     obj1 = compose.compose(ws, tick=1)
     compose.write_strategy(ws, obj1)
     seam1 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")
     rendered1 = strategy_sections.render(ws)
-    assert "method-a" in rendered1
+    assert "static-decompile" in rendered1
     assert "dead path" not in rendered1
 
     # run 2: the environment contradicted the favored family — method-a
     # just FAILED on a new unit (a settled red row citing the new unit)
-    _dead_row(ws, "task/r2-dead", "method-a")
+    _dead_row(ws, "task/r2-dead", "static-decompile")
     obj2 = compose.compose(ws, tick=2)
     compose.write_strategy(ws, obj2)
     seam2 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")

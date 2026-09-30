@@ -570,7 +570,48 @@ def test_dispatch_lifecycle_recording_is_fail_open(tmp_path):
                             prompt=V1_PROMPT)  # no exception == pass
 
 
+# ------------------------- 10. the seed contract at call site 2 (462 gate)
+
+def test_seed_state_hashes_the_round_cold_start_unfreezes(tmp_path):
+    """462 design-review MEDIUM-1: the #251 contract f(store state,
+    round) — the round rides INSIDE the hashed payload, so distinct
+    rounds produce distinct seeds even on an evidence-free workspace
+    (the round used to be computed and returned but never hashed,
+    freezing the cold draw)."""
+    import json as _json
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    # a fake convergence ledger whose snapshot-row count IS the round:
+    # 0..4 -> five advancing rounds, no evidence anywhere
+    seeds = []
+    for rnd in range(5):
+        ledger = ws / ".convergence_ledger.jsonl"
+        rows = [{"open_count": 1} for _ in range(rnd)] \
+            + [{"type": "event"}]  # the event row is not a snapshot
+        ledger.write_text(
+            "\n".join(_json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8")
+        rng, rnd_out = q_cells.q_cells_seed_state(ws)
+        assert rnd_out == rnd
+        seeds.append(rng.random())
+    assert len(set(seeds)) == 5, \
+        "distinct rounds must produce distinct draws (cold start " \
+        "unfreezes)"
+
+
 # ------------------------------------------- 9. settlement feed (462 W5)
+
+def test_settlement_feed_class_is_a_module_member():
+    """Collection sentinel (review CRITICAL): an edit once glued this
+    class header onto the preceding comment line, dead-nesting all five
+    W5 pins inside the previous function (invisible to ruff, the
+    hygiene lints, and the manifest). A class glued to a comment never
+    becomes a module attribute — this pin fails loudly instead."""
+    import sys
+    assert hasattr(sys.modules[__name__], "TestSettlementFeed462"), \
+        "TestSettlementFeed462 lost its module scope — the W5 pins " \
+        "are not being collected"
+
 
 class TestSettlementFeed462:
     """issue 462 W5: the settlement feed — settled round credits reach

@@ -1063,7 +1063,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: 7f7f23bbc0114d4e98568ca33a66f92d777104525274af6417027b1661f4cc95
+    sha256: 111a5183c39d188bf147d6f9a05133ffc5fa8e1fcc4474f0d200d530ee157a89
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1119,7 +1119,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: a08a1c310a19d988cd2522d67732d39e669bfb52569dae1a0524f78da0d12022
+    sha256: 36c90be27ce6f14ade81759723187023c96cb5257bfec23bc92ec886bbdcb735
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1139,7 +1139,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 953d831e95a74e456b9b57b252c6d5e5c7582ed4344a560c4f690682c7a45742
+    sha256: c6454b99525647eb34308c0c3f13a063d07f8ce397d6e50310b19db8420f3375
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1155,7 +1155,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 9f7df81e87c0ab64b76b06a03fd1b4ea54b865f1014f680740918b1e3f7460f5
+    sha256: e348652571e450bdb879b848c397b6a5238fffc801a8174f3c9105b16315deb8
   - src: scripts/rlvr/triples.py
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold
@@ -1171,11 +1171,11 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: a040452aeb18e75ec43c17ee692641d243ea87bcadf2edf1a6f2057fe2a707c8
+    sha256: b7ba5e75a2e7fd19c9ddb3eb2f10f42e668e990742aee666906d9173bb712cc8
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: a4a49c36b44b2bf063125f81fb98bec928aea70625fe49689513212cf624763d
+    sha256: 0767b0b37b084fdb6c0f556670c1224801fb4328db5647892d1b21e067aec000
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold

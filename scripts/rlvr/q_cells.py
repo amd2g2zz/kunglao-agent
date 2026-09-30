@@ -527,11 +527,15 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
 def q_cells_seed_state(ws) -> tuple[random.Random, int]:
     """THE shared per-round seed source for call site 2 — the #251
     contract f(store state, round): sha256 over the canonical fold
-    payload plus the round axis (priority_ratio.round_index, the
-    convergence ledger's RAW snapshot-row count — single source, lazily
-    imported to keep this module's import cost off every recorder call).
-    The sample moves when evidence moves OR the round advances; no wall
-    clock anywhere."""
+    payload PLUS the round axis mixed INSIDE the hashed doc
+    (priority_ratio.round_index, the convergence ledger's RAW
+    snapshot-row count — single source, lazily imported to keep this
+    module's import cost off every recorder call). The sample moves
+    when evidence moves OR the round advances — including the
+    evidence-free cold workspace (distinct rounds produce distinct
+    seeds; the #251 per-round-cold-start property, 462 design-review
+    MEDIUM-1: the round used to be computed and returned but never
+    hashed, freezing the cold draw); no wall clock anywhere."""
     from priority_ratio import round_index  # noqa: PLC0415
     rnd = round_index(ws)
     store = default_store(ws)
@@ -546,6 +550,7 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
             "floor": schedule.gamma_floor,
             "ema_lambda": schedule.ema_lambda,
         },
+        "round": rnd,
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True,

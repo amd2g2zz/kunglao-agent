@@ -83,6 +83,25 @@ mechanisms:
       host lifecycle — NOT migrated to the scheduler (issue #878 explicit
       exclusion); declared here so the cockpit answer stays complete.
 
+  - name: t2_closure
+    entry: hooks/round_closure.py
+    channel: hooks
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/t2-queue.json (the drained unblocking-value queue, issue #462 W6)"
+    owner: scripts/verification_ladder.py
+    description: >
+      The verification ladder's T2 rung at the PRODUCTION round-closure
+      face (issue #462 W6): Stop(worker) IS the round-closure event
+      (#429 §6), so the unblocking-value priority queue builds AND
+      drains from hooks/round_closure.py SubagentStop — no longer
+      eval_loop_runner-only. Same hooks channel as strategy_compose
+      (host lifecycle, NOT scheduler-migrated per the #878 exclusion);
+      declared here so the cockpit answer stays complete.
+
   - name: heartbeat_register
     entry: scripts/heartbeat.py
     channel: cli

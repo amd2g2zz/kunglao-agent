@@ -334,7 +334,7 @@ files:
   scripts/rlvr/__init__.py:
     r1: 1
   scripts/rlvr/compose.py:
-    r1: 1
+    r1: 2
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -350,7 +350,7 @@ files:
   scripts/rlvr/state.py:
     r1: 2
   scripts/rlvr/strategy_store.py:
-    r1: 1
+    r1: 2
   scripts/rlvr/triples.py:
     r1: 3
   scripts/rlvr/winrate.py:
@@ -417,7 +417,7 @@ files:
   scripts/value_replay.py:
     r1: 3
   scripts/verification_ladder.py:
-    r1: 1
+    r1: 2
   scripts/verifier_identity.py:
     r1: 1
   scripts/verify_backlog_face.py:
@@ -1131,7 +1131,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_q_cells_429.py:
-    r1: 4
+    r1: 5
     r2: 2
   tests/test_qtable_p3.py:
     r1: 5
@@ -1294,7 +1294,7 @@ files:
   tests/test_statusline_v2_142.py:
     r1: 9
   tests/test_strategy_compose_431.py:
-    r1: 3
+    r1: 4
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
