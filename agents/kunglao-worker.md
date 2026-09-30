@@ -284,6 +284,40 @@ Never report failure as a verdict ("0 CryptUnprotectData calls" is a fact;
 that can't observe the behavior is a failed METHOD, not a negative result —
 say so under `assumption_validity`. `possible_next` must be different.
 
+## Attribution-at-failure protocol (obstacle objects)
+
+When an act fails, attribute BY INTERVENTION, not narration: run an
+isolation probe that discriminates the suspected cause, save the probe
+artifact, and record one structured obstacle row citing it. The artifact
+is an experiment result — the row is attribution evidence the analysis
+state reads (cause-bearing dead-ends stop looking identical); it is
+NEVER a verdict and NEVER an obstacle claim, and no gate rejects you
+for not producing one.
+
+1. **Isolate** — design the minimal differential probe: change ONE
+   variable (set the env entry, run under the other lane, point the
+   tool at the other layer) and observe whether the failure moves.
+2. **Artifact** — write `runs/probes/<slug>.txt` carrying the command,
+   the exit code (`rc=`), and verbatim output. Prose alone is not an
+   experiment result; the record face rejects artifacts without a
+   command/rc/output shape.
+3. **Record** — one row per failed act:
+   `python scripts/rlvr/obstacles.py record <workspace> --kind <kind> --cause "<one line, <= 200 chars>" --evidence-path runs/probes/<slug>.txt --method-family <the failed act's family>`
+   `--kind` is one of: `missing_env_entry` (an env/config entry absent —
+   name it), `detection_trigger` (anti-analysis detected the
+   instrumentation — name the trigger), `encryption_layer` (a layer is
+   encrypted — name the layer/artifact), `tool_limit` (the tool cannot
+   handle the construct — name the construct), `other` (escape hatch —
+   still one machine-checkable line).
+4. **Cite** — the `## failure` block's `what_I_tried` carries the
+   `OBS-<n>` id of the recorded row.
+
+One probe artifact may serve both this row's `evidence_path` and a
+blocker's `probe_evidence` when the same experiment backs an ESCALATE.
+Rows live at `runs/obstacles/OBS-<n>.json`; nothing about them is a
+terminal claim — death declarations stay licensed only by settled
+obstacle-claim evidence.
+
 ## Rebuttal protocol
 
 When the adversarial loop opens on your claim, answer each challenge with

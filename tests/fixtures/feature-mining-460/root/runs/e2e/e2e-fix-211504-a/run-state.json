@@ -1,0 +1,25 @@
+{
+  "budget_consumed_seconds": 373.11,
+  "budget_seconds": 7200,
+  "family": "release",
+  "lane": "algorithm",
+  "llm_mode": "auto",
+  "max_ticks": 60,
+  "repo": "fixture-root",
+  "run_id": "e2e-fix-211504-a",
+  "started_ts": "2026-09-29T05:25:44Z",
+  "steps": {
+    "C1-init": "PASS",
+    "C2-hooks": "PASS",
+    "C3-heartbeat": "PASS",
+    "C4-entry": "PASS",
+    "C5-analysis": "PASS",
+    "C6-pre": "PASS"
+  },
+  "task_dir": "eval/v1/tasks/release/rust-apk-beacon-v1",
+  "tick_wait_seconds": 300,
+  "type": "linux",
+  "unit": "rust-apk-beacon-v1",
+  "ws": "ws/e2e-ws-a",
+  "ws_root": "ws"
+}

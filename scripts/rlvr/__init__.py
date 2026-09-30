@@ -54,12 +54,19 @@ map):
 - ``rlvr.compose`` — the strategy compose single-point (issue 431,
   W2-T3): the learned state as words the LLM sees, one round-strategy
   object per decision event + the fading card library.
+
+- ``rlvr.obstacles`` — the obstacle/1 attribution registry (issue 461
+  Phase 1): intervention-born failure-cause objects as
+  ``runs/obstacles/OBS-<n>.json`` evidence files, read tolerantly into
+  the canonical state signature's ob= segment (attribution enters as
+  state — never a verdict, never a gate).
 """
 from __future__ import annotations
 
 from . import compose
 from . import ledger
 from . import liveness
+from . import obstacles
 from . import posteriors
 from . import priors
 from . import q_cells
@@ -125,6 +132,7 @@ from .state import (
     W_CHAIN,
     W_FACTS,
     append_snapshot,
+    obstacle_face,
     signature_hash,
     signature_str,
     snapshot as state_snapshot,
@@ -204,12 +212,23 @@ from .compose import (
     validate_strategy,
     write_strategy,
 )
+from .obstacles import (
+    CAUSE_MAX,
+    KINDS as OBSTACLE_KINDS,
+    OBSTACLES_REL,
+    SCHEMA as OBSTACLE_SCHEMA,
+    face as obstacle_digest,
+    read as read_obstacles,
+    record as record_obstacle,
+    validate_obstacle,
+)
 
 __all__ = [
     # modules
     "compose",
     "ledger",
     "liveness",
+    "obstacles",
     "posteriors",
     "priors",
     "q_cells",
@@ -273,6 +292,7 @@ __all__ = [
     "state_snapshot",
     "signature_str",
     "signature_hash",
+    "obstacle_face",
     "v_anchor",
     "v_from_workspace",
     "append_snapshot",
@@ -344,4 +364,13 @@ __all__ = [
     "render_card_block",
     "validate_strategy",
     "write_strategy",
+    # obstacles faces (issue 461 Phase 1)
+    "OBSTACLE_SCHEMA",
+    "OBSTACLE_KINDS",
+    "OBSTACLES_REL",
+    "CAUSE_MAX",
+    "validate_obstacle",
+    "record_obstacle",
+    "read_obstacles",
+    "obstacle_digest",
 ]
