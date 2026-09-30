@@ -1,0 +1,824 @@
+{
+  "experiment": "ex6-option-death",
+  "declared_synthetic": true,
+  "schema": "ex6-option-death/1",
+  "n_episodes": 40,
+  "episode_budget": 8,
+  "families": [
+    "dynamic-trace",
+    "replay-harness-verification",
+    "static-decompile",
+    "obfuscation-peeling",
+    "crypto-core-identification"
+  ],
+  "non_real_faces": [
+    "P_LLM: declared uniform over the five families (both production hosts measure the proposal channel)",
+    "act environment: the deterministic EX-4 truth table (no Bernoulli draws)"
+  ],
+  "disclosed_asymmetry": "arm B's ob= advances per failure, fragmenting its q-cell failure evidence across signatures (SHRINK_CAP 8 caps the family anchor) — B's ordinary DTS demotion is weaker than A's for the same failure count; B's advantage comes from the termination floor (2 attributed same-cause failures)",
+  "arms": {
+    "A": {
+      "label": "decay-only",
+      "episodes": [
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 7,
+          "wasted": 6
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 6,
+          "wasted": 5
+        },
+        {
+          "breakthrough": false,
+          "acts_used": 8,
+          "wasted": 8
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 6,
+          "wasted": 5
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": false,
+          "acts_used": 8,
+          "wasted": 8
+        }
+      ],
+      "aggregate": {
+        "n_episodes": 40,
+        "breakthrough_rate": 0.95,
+        "mean_acts_to_breakthrough": 2.578947,
+        "mean_wasted_acts": 1.9
+      },
+      "halves": {
+        "first": {
+          "n_episodes": 20,
+          "breakthrough_rate": 0.95,
+          "mean_acts_to_breakthrough": 3.105263,
+          "mean_wasted_acts": 2.4
+        },
+        "second": {
+          "n_episodes": 20,
+          "breakthrough_rate": 0.95,
+          "mean_acts_to_breakthrough": 2.052632,
+          "mean_wasted_acts": 1.4
+        }
+      },
+      "report": {
+        "schema": "option-death/1",
+        "threshold": 0.75,
+        "arm_floor": 0.1,
+        "gamma": 0.847545917,
+        "alive_mass": {},
+        "cells": [],
+        "dead_families": []
+      },
+      "verdicts_sample": {}
+    },
+    "B": {
+      "label": "attribution+termination",
+      "episodes": [
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        }
+      ],
+      "aggregate": {
+        "n_episodes": 40,
+        "breakthrough_rate": 1.0,
+        "mean_acts_to_breakthrough": 1.475,
+        "mean_wasted_acts": 0.475
+      },
+      "halves": {
+        "first": {
+          "n_episodes": 20,
+          "breakthrough_rate": 1.0,
+          "mean_acts_to_breakthrough": 1.7,
+          "mean_wasted_acts": 0.7
+        },
+        "second": {
+          "n_episodes": 20,
+          "breakthrough_rate": 1.0,
+          "mean_acts_to_breakthrough": 1.25,
+          "mean_wasted_acts": 0.25
+        }
+      },
+      "report": {
+        "schema": "option-death/1",
+        "threshold": 0.75,
+        "arm_floor": 0.1,
+        "gamma": 0.962221796,
+        "alive_mass": {
+          "dynamic-trace": 0.0,
+          "obfuscation-peeling": 0.0,
+          "replay-harness-verification": 0.0,
+          "static-decompile": 0.0
+        },
+        "cells": [
+          {
+            "kind": "detection_trigger",
+            "family": "dynamic-trace",
+            "deaths": 6,
+            "alpha": 7.0,
+            "beta": 1.0,
+            "p_dead": 0.875,
+            "dead": true
+          },
+          {
+            "kind": "encryption_layer",
+            "family": "obfuscation-peeling",
+            "deaths": 5,
+            "alpha": 6.0,
+            "beta": 1.0,
+            "p_dead": 0.857142857,
+            "dead": true
+          },
+          {
+            "kind": "missing_env_entry",
+            "family": "replay-harness-verification",
+            "deaths": 3,
+            "alpha": 4.0,
+            "beta": 1.0,
+            "p_dead": 0.8,
+            "dead": true
+          },
+          {
+            "kind": "tool_limit",
+            "family": "static-decompile",
+            "deaths": 5,
+            "alpha": 6.0,
+            "beta": 1.0,
+            "p_dead": 0.857142857,
+            "dead": true
+          }
+        ],
+        "dead_families": [
+          "dynamic-trace",
+          "obfuscation-peeling",
+          "replay-harness-verification",
+          "static-decompile"
+        ]
+      },
+      "verdicts_sample": {
+        "crypto-core-identification": {
+          "family": "crypto-core-identification",
+          "dead": false,
+          "p_dead": 0.060171713,
+          "kind": null,
+          "alpha": 1.0,
+          "beta": 15.619104787775585,
+          "weight_multiplier": 1.0,
+          "threshold": 0.75
+        },
+        "dynamic-trace": {
+          "family": "dynamic-trace",
+          "dead": true,
+          "p_dead": 0.875,
+          "kind": "detection_trigger",
+          "alpha": 7.0,
+          "beta": 1.0,
+          "weight_multiplier": 0.1,
+          "threshold": 0.75
+        },
+        "obfuscation-peeling": {
+          "family": "obfuscation-peeling",
+          "dead": true,
+          "p_dead": 0.857142857,
+          "kind": "encryption_layer",
+          "alpha": 6.0,
+          "beta": 1.0,
+          "weight_multiplier": 0.1,
+          "threshold": 0.75
+        },
+        "replay-harness-verification": {
+          "family": "replay-harness-verification",
+          "dead": true,
+          "p_dead": 0.8,
+          "kind": "missing_env_entry",
+          "alpha": 4.0,
+          "beta": 1.0,
+          "weight_multiplier": 0.1,
+          "threshold": 0.75
+        },
+        "static-decompile": {
+          "family": "static-decompile",
+          "dead": true,
+          "p_dead": 0.857142857,
+          "kind": "tool_limit",
+          "alpha": 6.0,
+          "beta": 1.0,
+          "weight_multiplier": 0.1,
+          "threshold": 0.75
+        }
+      }
+    },
+    "C": {
+      "label": "cause-free control",
+      "episodes": [
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 7,
+          "wasted": 6
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 6,
+          "wasted": 5
+        },
+        {
+          "breakthrough": false,
+          "acts_used": 8,
+          "wasted": 8
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 6,
+          "wasted": 5
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 5,
+          "wasted": 4
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 4,
+          "wasted": 3
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 2,
+          "wasted": 1
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 3,
+          "wasted": 2
+        },
+        {
+          "breakthrough": true,
+          "acts_used": 1,
+          "wasted": 0
+        },
+        {
+          "breakthrough": false,
+          "acts_used": 8,
+          "wasted": 8
+        }
+      ],
+      "aggregate": {
+        "n_episodes": 40,
+        "breakthrough_rate": 0.95,
+        "mean_acts_to_breakthrough": 2.578947,
+        "mean_wasted_acts": 1.9
+      },
+      "halves": {
+        "first": {
+          "n_episodes": 20,
+          "breakthrough_rate": 0.95,
+          "mean_acts_to_breakthrough": 3.105263,
+          "mean_wasted_acts": 2.4
+        },
+        "second": {
+          "n_episodes": 20,
+          "breakthrough_rate": 0.95,
+          "mean_acts_to_breakthrough": 2.052632,
+          "mean_wasted_acts": 1.4
+        }
+      },
+      "report": {
+        "schema": "option-death/1",
+        "threshold": 0.75,
+        "arm_floor": 0.1,
+        "gamma": 0.847545917,
+        "alive_mass": {},
+        "cells": [],
+        "dead_families": []
+      },
+      "verdicts_sample": {}
+    }
+  }
+}

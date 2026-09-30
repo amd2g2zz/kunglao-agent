@@ -76,10 +76,31 @@ class PosteriorStrategyStore:
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
+        kwargs: dict = {}
+        kwargs.update(self._feature_prior_kwargs())
+        kwargs.update(self._termination_kwargs(prior.keys()))
         receipt = q_cells.sample_method_family(
-            state_fingerprint, prior, self._qstore, rng=rng,
-            **self._feature_prior_kwargs())
+            state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         return str(receipt["family"])
+
+    def _termination_kwargs(self, families=None) -> dict:
+        """#461 Phase 2 wiring (option-death termination): thread the
+        per-candidate death verdicts into call site 2 — dead options
+        sample at ARM_FLOOR (rlvr.termination; floor-not-delete, the
+        PARK posture). ``families`` defaults to the proposal prior's
+        keys (the verdict face's candidate set — verdicts(ws,
+        prior.keys())); the zero-registry rule returns {} there, so a
+        day-one workspace threads no kwarg at all. Fail-open: any
+        failure yields {} (the sampler stays termination-blind, the
+        pre-change draw)."""
+        try:
+            from rlvr import termination as _term  # noqa: PLC0415
+            fams = families if families is not None \
+                else self._proposal_prior().keys()
+            verdicts = _term.verdicts(self.ws, fams)
+            return {"death": verdicts} if verdicts else {}
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            return {}
 
     def _feature_prior_kwargs(self) -> dict:
         """#460 Part B wiring (predict-before-try): thread the live
