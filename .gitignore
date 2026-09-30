@@ -35,10 +35,12 @@ dist/
 **/bins/
 test_workspace/
 runs/
-# ...EXCEPT pinned fixture trees (#460): the feature-mining regression
-# truth mirrors the live runs/ layout (run dirs + ws audit streams) —
-# sanitized copies, committed on purpose; live process runs/ stays ignored
-!tests/fixtures/**/runs/
+# ...EXCEPT the #460 feature-mining pinned fixture tree (scoped: the
+# golden-fixture allowlist in tests/test_no_tracked_ignored_files.py
+# keeps its own contract untouched — #472 enforcement-not-rules held);
+# the fixture mirrors the live runs/ layout (run dirs + ws audit
+# streams) as sanitized copies, committed on purpose
+!tests/fixtures/feature-mining-460/**/runs/
 
 # Eval harness generated receipts (reproducible via scripts/kunglao-eval.py --all)
 eval/receipts/
