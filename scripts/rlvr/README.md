@@ -46,6 +46,10 @@ scripts/rlvr/
 │                        #   Phase 1) — intervention-born failure-cause
 │                        #   objects as runs/obstacles/OBS-<n>.json,
 │                        #   read into the state signature's ob= segment
+├── termination.py      # option-death estimator (issue 461 Phase 2) —
+│                        #   the learned "when to quit": Beta per
+│                        #   (obstacle-kind, method-family), floor-
+│                        #   not-delete sampler verdicts (PARK posture)
 └── README.md            # this document
 ```
 
@@ -169,6 +173,17 @@ Recording-only: no dispatch/gate/settlement face imports this module
 (the 396 freeze wall, extended with full-module-string checks); no
 gate reads the registry — attribution is evidence, never a verdict,
 never an obstacle claim.
+
+### termination — the issue-461 option-death estimator (Phase 2)
+
+| face | home |
+|------|------|
+| `SCHEMA`, `DEATH_THRESHOLD`, `ARM_FLOOR`, `PRIOR_ALPHA/BETA` | `rlvr.termination` (option-death/1 report; policy constants — mean rule 0.75, floor 0.1; ADR-001 posture, never runtime-tuned) |
+| `report(ws, snap=None)` | `rlvr.termination` (the deterministic cell-level receipt: deaths/alpha/beta/p_dead/dead per (kind, family) sorted, per-family alive mass, post-replay gamma; no wall clock; fail-open reads) |
+| `verdicts(ws, families, snap=None)` | `rlvr.termination` (the sampler-threading face: state-conditioned per-family verdicts; ZERO-REGISTRY RULE — no obstacle rows = {} so hosts thread no kwarg; base cell Beta(1, 1+alive) never dead) |
+| `option_dead(ws, family, snap=None)` | `rlvr.termination` (the single-family decision face — always answers; kind-conditioning is the foreign-snapshot guard, the live floor is family-global) |
+| `main()` | `rlvr.termination` (CLI `report` subcommand — offline diagnostic; live faces are library calls consumed by the sampler hosts) |
+| `_death_multiplier()` | `rlvr.q_cells` (the sampler-side duck-typed verdict application: weight x multiplier, additive receipt block, malformed -> 1.0 fail-open; the sampler never imports the termination/obstacles faces — the import wall) |
 
 ### liveness — from `scripts/heartbeat.py` (continuity core) + `scripts/liveness_policy.py` (constants)
 

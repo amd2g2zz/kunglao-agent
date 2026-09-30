@@ -1127,7 +1127,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: c567931da72a88ebe92cda12d26c80c985e5882ae41a6d2a0a982e983e6d3dc2
+    sha256: a0773ea8049281c52a098273c701bc8722f4f580685035ab2a63c4b349016d97
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
@@ -1147,7 +1147,7 @@ files:
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
-    sha256: 7f19bc8c0624260b7ed83f6b2e9b72db97ed257e6b5c12760de35876f08d7546
+    sha256: 0c53245457d4602999affe97bf3bb5c1d1cb0d0857b58ce292496ad80790469f
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
@@ -1159,7 +1159,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: ba661b85cb250d20c83f2f3d9caa49c5e197b4c7644a26bf554424c06594ab9c
+    sha256: b51c911726fbcf9f6fcbe0258609f65bc94d4261196d1fa7c500c7069896a429
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1175,7 +1175,11 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 4992a0874e9c845187100cf4969d065befc7ae8dd6e0017ad87ef8ced18e0147
+    sha256: 3758e17f92145aa6d2a750f430bb66081dee6d35173be3d6e81c36da6274e821
+  - src: scripts/rlvr/termination.py
+    dest: .claude/scripts/rlvr/termination.py
+    kind: scaffold
+    sha256: f61ce645f32fb8c1f8dfceaab3981f482db456014c33234292110c285dbaa996
   - src: scripts/rlvr/triples.py
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold
@@ -1191,7 +1195,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: e334a4b08e085482cc78716515b5ccfb312e9b853d0ce58cb86c988ae3bfcb69
+    sha256: a96112299824ea629aa14959cb59237cc595a323739b185b0ab4f1e8b1cba604
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

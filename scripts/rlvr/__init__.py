@@ -67,6 +67,14 @@ map):
   ``runs/obstacles/OBS-<n>.json`` evidence files, read tolerantly into
   the canonical state signature's ob= segment (attribution enters as
   state — never a verdict, never a gate).
+
+- ``rlvr.termination`` — the option-death estimator (issue 461
+  Phase 2): the learned "when to quit" — a derived Beta posterior per
+  (obstacle-kind, method-family) over the obstacle registry (death
+  evidence) and the q-cell fold's family success mass (alive
+  evidence); verdicts floor a dead option's sampler weight (ARM_FLOOR,
+  never removed — PARK revivability); no store, no gate, no verdict
+  face: pure folds + duck-typed verdict data.
 """
 from __future__ import annotations
 
@@ -81,6 +89,7 @@ from . import q_cells
 from . import reward
 from . import scalar
 from . import state
+from . import termination
 from . import triples
 from . import winrate
 from .ledger import (
@@ -247,6 +256,14 @@ from .obstacles import (
     record as record_obstacle,
     validate_obstacle,
 )
+from .termination import (
+    ARM_FLOOR,
+    DEATH_THRESHOLD,
+    SCHEMA as OPTION_DEATH_SCHEMA,
+    option_dead,
+    report as option_death_report,
+    verdicts as option_death_verdicts,
+)
 
 __all__ = [
     # modules
@@ -261,6 +278,7 @@ __all__ = [
     "reward",
     "scalar",
     "state",
+    "termination",
     "triples",
     "winrate",
     # ledger faces (issue 420 Phase 2)
@@ -415,4 +433,11 @@ __all__ = [
     "record_obstacle",
     "read_obstacles",
     "obstacle_digest",
+    # option-death faces (issue 461 Phase 2)
+    "OPTION_DEATH_SCHEMA",
+    "DEATH_THRESHOLD",
+    "ARM_FLOOR",
+    "option_dead",
+    "option_death_report",
+    "option_death_verdicts",
 ]
