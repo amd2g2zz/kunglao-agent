@@ -21,9 +21,11 @@ the strategy-object spec in issue 429):
   - the YAML seam: both artifact families load as plain YAML with their
     declared schema strings
 
-All fixtures are SYNTHETIC (privacy rule). The posterior store is a parallel
-work stream (issue 428): every learned-state touchpoint here is an explicit
-stub of the compose.StrategyStore protocol seam.
+All fixtures are SYNTHETIC (privacy rule). The store seam is REAL since
+issue 462 W3 (rlvr.strategy_store.PosteriorStrategyStore over the landed
+q_cells/posteriors faces) — most learned-state touchpoints exercise the
+real chain; the explicit _Store stub survives for targeted
+scheduling/ranking pins.
 """
 from __future__ import annotations
 
@@ -477,11 +479,260 @@ def test_round_strategy_yaml_seam(tmp_path):
     assert latest is not None and latest["content_hash"] == obj["content_hash"]
 
 
-# ------------------------------------------------- store seam fallback pin
+# ------------------------------------------------- store seam: the real face
 
-def test_store_seam_degrades_to_identity(tmp_path):
+def test_load_store_returns_the_posterior_store(tmp_path):
+    """W3 (#462): the store seam is REAL — load_store returns the
+    PosteriorStrategyStore over the landed posterior/q-cell faces, never
+    a silent fake-policy fallback."""
+    from rlvr.strategy_store import PosteriorStrategyStore
     store = compose.load_store(tmp_path)
-    assert isinstance(store, compose.IdentityStore)
-    assert store.method_lead("any") is None
+    assert isinstance(store, PosteriorStrategyStore)
+    # cold workspace, no q-cell log: the seam's documented fallback face
+    # (None cell count -> compose falls back to the settled-ledger total)
+    assert store.method_lead("abcdabcdabcd") is None
     assert store.decayed_weight("task/whatever") == 1.0
-    assert store.cell_count("any") is None
+    assert store.cell_count("abcdabcdabcd") is None
+
+
+def test_load_store_silent_identity_degrade_stays_closed():
+    """The stale-import tripwire (issue 462 W3 acceptance): if the store
+    import ever goes stale again, load_store must FAIL LOUDLY — the
+    silent IdentityStore degrade (method_lead=None, unit weights) was the
+    defect this wiring closes. AST-based: docstring prose may explain the
+    closed defect; the CODE may never reference the fallback again."""
+    import ast as _ast
+    tree = _ast.parse(
+        (SCRIPTS / "rlvr" / "compose.py").read_text(encoding="utf-8"))
+    body = None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef) \
+                and node.name == "load_store":
+            body = node
+            break
+    assert body is not None, "load_store vanished from compose.py"
+    names = {n.id for n in _ast.walk(body) if isinstance(n, _ast.Name)}
+    names |= {n.attr for n in _ast.walk(body)
+              if isinstance(n, _ast.Attribute)}
+    assert "IdentityStore" not in names, \
+        "load_store silently degrades to IdentityStore again"
+    assert "PosteriorsStore" not in names, \
+        "load_store points at a nonexistent store face again"
+
+
+def test_posterior_store_method_lead_and_cells_follow_evidence(tmp_path):
+    """The real store's learned faces on a seeded workspace: settled rows
+    declaring one family + banked q-cell rows make the lead and the cell
+    population real (no stub in sight)."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/lead-1", "static-decompile")
+    _ok_row(ws, "task/lead-2", "static-decompile")
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch", claim="tr-m1-d1")
+    q_cells.observe(ws, fp, "static-decompile", 1.0)
+    store = compose.load_store(ws)
+    assert store.cell_count(fp) == 2
+    # the only proposal channel face: the sample degenerates to it
+    assert store.method_lead(fp) == "static-decompile"
+    # another state carries no cell mass of its own (state-conditioned)
+    assert store.cell_count("ffffffffffff") == 0
+
+
+def test_posterior_store_decayed_weight_fades_old_rows(tmp_path):
+    ws = _ws(tmp_path)
+    # settled() orders by (ts, rollout_id): zzz sorts LAST, so it is the
+    # stream's freshest end (weight 1.0); aaa sits one settlement back
+    _ok_row(ws, "task/aaa-old", "method-a")
+    _ok_row(ws, "task/zzz-new", "method-a")
+    store = compose.load_store(ws)
+    w_new = store.decayed_weight("task/zzz-new")
+    w_old = store.decayed_weight("task/aaa-old")
+    assert w_new == 1.0
+    assert 0.0 < w_old < 1.0  # γ-decayed under the shipped DTS schedule
+    # foreign ids keep the unit weight (no invented decay for unknown rows)
+    assert store.decayed_weight("task/not-in-ledger") == 1.0
+
+
+def test_prior_channel_counts_proposals_never_outcomes(tmp_path):
+    """Review follow-up (W3 MEDIUM): the P_LLM proposal prior counts the
+    two PROPOSAL faces only — dispatch rows and settled method_family
+    signals. Settlement-source q-cell rows are OUTCOME data; counting
+    them would skew the prior toward dispatch-heavy families."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    # one declared proposal: static-decompile
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch", claim="tr-m1-d1")
+    # five settlement rows for another family: OUTCOME data, no proposal
+    for _ in range(5):
+        q_cells.observe(ws, fp, "dynamic-trace", 0.0)
+    store = compose.load_store(ws)
+    prior = store._proposal_prior()
+    assert prior == {"static-decompile": 1.0}
+    assert store.method_lead(fp) == "static-decompile"
+
+
+def test_prior_channel_intersects_the_registered_vocabulary(tmp_path):
+    """462 design-review MEDIUM-3: the PRODUCTION prior gets the same
+    registry intersect the W4 sampler face has — a retired token must
+    never ride the prior into the loop prompt (the lead is advisory,
+    but steering declarations the fail-closed #432 gate rejects is the
+    lockstep hazard in advisory form)."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    # a retired token's declarations (recorded while registered)
+    q_cells.append_observation(ws, fp, "zz-retired-token", None,
+                               source="dispatch")
+    q_cells.append_observation(ws, fp, "static-decompile", None,
+                               source="dispatch")
+    store = compose.load_store(ws)
+    prior = store._proposal_prior()
+    assert prior == {"static-decompile": 1.0}, \
+        "retired tokens never ride the production prior"
+    assert store.method_lead(fp) == "static-decompile"
+
+
+# --------------------------------------------- the consumer seam (462 W2)
+
+def test_write_strategy_emits_the_sections_seam(tmp_path):
+    """W2 (#462): the producer/consumer seam is ALIGNED — write_strategy
+    emits ``runs/round-strategy.json`` shaped
+    ``{schema, round, sections:[{title, body}]}`` (the shape the live
+    loop-prompt seam reads), derived deterministically from the versioned
+    strategy object. The tick files stay the reconstructable ledger."""
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
+    # budget telemetry present: the budget line rides the lead section
+    # (advisory context for the lead decision — the warm branch)
+    (ws / "cost_events.jsonl").write_text(
+        json.dumps({"cost_usd": 0.5}) + "\n", encoding="utf-8")
+    obj = compose.compose(ws, tick=1)  # the REAL store (W3) — no stub
+    compose.write_strategy(ws, obj)
+    seam_path = ws / "runs" / "round-strategy.json"
+    seam = json.loads(seam_path.read_text(encoding="utf-8"))
+    assert seam["schema"] == "round-strategy/1"
+    assert seam["round"] == 1
+    assert seam["sections"], "non-empty sections"
+    for sec in seam["sections"]:
+        assert set(sec) == {"title", "body"}
+        assert sec["body"].strip()
+    titles = {s["title"] for s in seam["sections"]}
+    assert "dispatch-lead" in titles
+    # the live loop-prompt seam renders REAL strategy content now
+    import strategy_sections
+    rendered = strategy_sections.render(ws)
+    assert rendered != ""
+    assert "round-strategy" in rendered
+    assert "method lead" in rendered
+    assert "budget:" in rendered
+    assert strategy_sections.pointer(ws) == "runs/round-strategy.json"
+
+
+def test_seam_is_deterministic_and_self_healing(tmp_path):
+    """Same strategy object -> byte-identical seam file (the round field
+    is part of the seam's identity: it names the round the strategy is
+    in force for); a DELETED or CORRUPT (including non-UTF-8 — the W2
+    review MEDIUM-1 case) seam is re-emitted byte-exact by the next
+    write_strategy call, which must never raise on the seam face."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
+    obj1 = compose.compose(ws, tick=1)
+    compose.write_strategy(ws, obj1)
+    seam_path = ws / "runs" / "round-strategy.json"
+    first = seam_path.read_bytes()
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    # deleted -> re-emitted
+    seam_path.unlink()
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    # corrupt (non-UTF-8 bytes) -> repaired, never raised (the tick write
+    # dedups unchanged, but the seam face still heals itself)
+    seam_path.write_bytes(b"\xff\xfe broken \xff")
+    compose.write_strategy(ws, obj1)
+    assert seam_path.read_bytes() == first
+    assert strategy_sections.render(ws) != ""
+
+
+def test_workguard_guidance_renders_the_composed_strategy(tmp_path):
+    """The W2 acceptance integration pin: the WORKGUARD turn-exit
+    guidance (the live loop-prompt dynamic face) renders non-empty
+    strategy sections produced by the REAL compose chain."""
+    import workguard
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/s1", "static-decompile")
+    _ok_row(ws, "task/s2", "static-decompile")
+    compose.write_strategy(ws, compose.compose(ws, tick=1))
+    result = {"claims": [{"id": "C-1", "why": workguard.WHY_DISPATCHABLE}],
+              "walls": [], "active_workers": []}
+    guidance = workguard.turn_exit_guidance(Path(ws), result)
+    assert "WORKGUARD" in guidance
+    assert "<round-strategy" in guidance
+    assert "method lead" in guidance
+
+
+def test_cold_seam_renders_nothing_cleanly(tmp_path):
+    """A silent (below-threshold) strategy still emits the seam FILE, but
+    with empty bodies — and the consumers render NOTHING (no headers, no
+    placeholder noise; the pre-existing seam contract). UNCONDITIONAL:
+    budget telemetry present does not break the cold-start silence (the
+    W2 review MEDIUM-2 case — budget_hint is advisory context for a
+    lead; a lead-less strategy renders nothing)."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    compose.write_strategy(ws, compose.compose(ws, tick=1))
+    seam = json.loads(
+        (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8"))
+    assert seam["sections"] == []
+    assert strategy_sections.render(ws) == ""
+    assert strategy_sections.pointer(ws) == "runs/round-strategy.json"
+    # the same cold silence holds with budget telemetry on the workspace
+    # (the REAL telemetry face: state.COST_EVENTS_REL, ws root)
+    (ws / "cost_events.jsonl").write_text(
+        json.dumps({"cost_usd": 0.1}) + "\n", encoding="utf-8")
+    compose.write_strategy(ws, compose.compose(ws, tick=2))
+    seam2 = json.loads(
+        (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8"))
+    assert seam2["sections"] == [], \
+        "budget telemetry must not break the cold-start silence"
+    assert strategy_sections.render(ws) == ""
+
+
+def test_injection_changes_with_evidence_across_two_runs(tmp_path):
+    """The #429 §9 central clause, mechanically demonstrated through the
+    REAL chain end to end (settled evidence -> card library -> store ->
+    compose -> seam): two decision events with different evidence produce
+    VISIBLY different injected content, every changed line citing its
+    backing ledger row."""
+    import strategy_sections
+    ws = _ws(tmp_path)
+    # run 1: two green rounds of method-a — the injection prefers it
+    _ok_row(ws, "task/r1-a", "static-decompile")
+    _ok_row(ws, "task/r1-b", "static-decompile")
+    obj1 = compose.compose(ws, tick=1)
+    compose.write_strategy(ws, obj1)
+    seam1 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")
+    rendered1 = strategy_sections.render(ws)
+    assert "static-decompile" in rendered1
+    assert "dead path" not in rendered1
+
+    # run 2: the environment contradicted the favored family — method-a
+    # just FAILED on a new unit (a settled red row citing the new unit)
+    _dead_row(ws, "task/r2-dead", "static-decompile")
+    obj2 = compose.compose(ws, tick=2)
+    compose.write_strategy(ws, obj2)
+    seam2 = (ws / "runs" / "round-strategy.json").read_text(encoding="utf-8")
+    rendered2 = strategy_sections.render(ws)
+    # the injected content CHANGED, and the change is attributable
+    assert seam2 != seam1
+    assert "dead path" in rendered2
+    assert "task/r2-dead" in rendered2
+    assert "task/r2-dead" in obj2["composed_from"]
+    assert obj2["hooks"]["cards"] != obj1["hooks"]["cards"]

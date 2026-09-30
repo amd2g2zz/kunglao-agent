@@ -1347,6 +1347,101 @@ class TestUnifiedAuditTrail:
         assert actions == ["method_family_recorded", "dispatch_attempt",
                            "dispatch_result"]
 
+    def test_dispatch_envelope_kernel_samples_the_family(
+            self, stub_repo, tmp_path):
+        """W4 (#462): an UNDECLARED run gets a kernel-sampled family —
+        the DTS call site 2 draw rides the envelope AND the stream
+        records the receipt (real sampled values, not the inert
+        placeholder)."""
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        assert ctx.state.method_family == ""  # nothing declared
+        detail: dict = {"acts": []}
+        terminal = _run_dispatch_act(ctx, "C-004", set(), detail)
+        assert terminal is None
+        rows = self._rows(ctx.ws)
+        actions = [r["action"] for r in rows]
+        assert actions == ["method_family_recorded", "dispatch_attempt",
+                           "dispatch_result"]
+        rec = json.loads(rows[0]["detail"])
+        fam = rec["method_family"]
+        assert fam, "the sampler must produce a real family token"
+        # the sampled family rode the envelope (inside kunglao_dispatch)
+        prompt_file = (Path(ctx.state.evidence_dir)
+                       / "dispatch-prompt-C-004.md")
+        envelope = json.loads(
+            prompt_file.read_text(encoding="utf-8").splitlines()[0])
+        assert envelope["kunglao_dispatch"]["method_family"] == fam
+        # the DTS receipt rides the row (the deterministic sampler face)
+        assert rec["envelope"]["schema"] == "q-cell-sample/1"
+        assert fam in rec["envelope"]["candidates"]
+        # declared runs keep the proposal-channel face (no sample)
+        ctx2 = self._ctx(stub_repo, tmp_path, ws=tmp_path / "ws-declared")
+        ctx2.state.method_family = "static-decompile"
+        _run_dispatch_act(ctx2, "C-005", set(), {"acts": []})
+        rec2 = json.loads(self._rows(ctx2.ws)[0]["detail"])
+        assert rec2["method_family"] == "static-decompile"
+        assert rec2["envelope"] is None  # no sampler receipt for a proposal
+
+    def test_dispatch_envelope_sampler_failure_stays_fail_open(
+            self, stub_repo, tmp_path, monkeypatch, capsys):
+        """W4 review MEDIUM-2: a sampler crash NEVER breaks the dispatch
+        loop — the envelope mints undeclared (byte-compatible v1 shape),
+        no method_family_recorded row, the dispatch act still lands."""
+        from e2e.checkpoints import _run_dispatch_act
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("sampler exploded")
+
+        monkeypatch.setattr("rlvr.q_cells.sample_method_family", _boom)
+        ctx = self._ctx(stub_repo, tmp_path)
+        detail: dict = {"acts": []}
+        terminal = _run_dispatch_act(ctx, "C-004", set(), detail)
+        capsys.readouterr()
+        assert terminal is None  # the loop proceeds
+        rows = self._rows(ctx.ws)
+        actions = [r["action"] for r in rows]
+        assert actions == ["dispatch_attempt", "dispatch_result"]
+        prompt_file = (Path(ctx.state.evidence_dir)
+                       / "dispatch-prompt-C-004.md")
+        envelope = json.loads(
+            prompt_file.read_text(encoding="utf-8").splitlines()[0])
+        assert "method_family" not in envelope["kunglao_dispatch"]
+
+    def test_dispatch_envelope_prior_never_rides_retired_tokens(
+            self, stub_repo, tmp_path, capsys):
+        """W4 review MEDIUM-1: the history prior is INTERSECTED with the
+        #432 registry — a retired token recorded while registered must
+        never ride the prior again (the fail-closed vocabulary gate would
+        lockstep-reject every dispatch in the workspace)."""
+        from rlvr import q_cells
+        ctx = self._ctx(stub_repo, tmp_path)
+        # history: two rows of a since-retired token, one registered
+        for _ in range(2):
+            q_cells.append_observation(
+                Path(ctx.ws), "abcdabcdabcd", "zz-retired-token", None,
+                source="dispatch")
+        q_cells.append_observation(
+            Path(ctx.ws), "abcdabcdabcd", "static-decompile", None,
+            source="dispatch")
+        from e2e.checkpoints import _sample_envelope_family
+        capsys.readouterr()
+        fam, receipt = _sample_envelope_family(Path(ctx.ws))
+        assert fam == "static-decompile", \
+            "retired tokens never ride the prior"
+        assert receipt["schema"] == "q-cell-sample/1"
+        assert "zz-retired-token" not in receipt["candidates"]
+        # outcome rows never enter any prior: five settlement rows for
+        # the registered family must not inflate its share (the shared
+        # proposal-channel definition — review MEDIUM)
+        for _ in range(5):
+            q_cells.observe(Path(ctx.ws), "abcdabcdabcd",
+                            "static-decompile", 1.0)
+        fam2, receipt2 = _sample_envelope_family(Path(ctx.ws))
+        assert receipt2["candidates"]["static-decompile"]["p_llm"] \
+            == pytest.approx(1.0), \
+            "settlement-source rows must not inflate the prior"
+
     # -- the stats reader is tolerant --------------------------------------
 
     def test_stats_tolerate_corrupt_and_blank_lines(self, stub_repo, tmp_path):
