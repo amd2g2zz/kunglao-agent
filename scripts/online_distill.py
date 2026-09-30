@@ -31,11 +31,12 @@ CLI (production faces; the e2e loop imports the module directly):
   python online_distill.py <ws> --land <attempt-dir>  # validate + oracle + land
 
 Audit rows (both vocabularies register the three words):
-  distill_attempt / distill_result / candidate_landed — 17-field rows
-  via kunglao_log on the production faces; the e2e host emits through
-  its own stream writer with the same words.
+  distill_attempt / distill_result / candidate_landed — 17-field rows;
+  the --land CLI face emits the production rows via kunglao_log, the
+  e2e host emits through its own stream writer with the same words.
 
-Stdlib only; deterministic serialization; no network, no LLM.
+Repo-local siblings (harness_common / kunglao_log) + stdlib only;
+deterministic serialization; no network, no LLM.
 """
 from __future__ import annotations
 
@@ -50,6 +51,8 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from harness_common import utc_now_z as _utc_now  # the Family F single source
 
 # the canonical warn — ONE implementation (process-wide dedupe + the
 # ledger face); import-guarded so a scripts/-less host context still
@@ -84,11 +87,6 @@ _MARKER_RE = re.compile(
 #: the probe-evidence faces this engine reads (never re-runs a probe)
 DIE_EVIDENCE = "evidence/die.json"
 APKID_EVIDENCE = "evidence/apkid.json"
-
-
-def _utc_now() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---------------------------------------------------------------------------
@@ -746,6 +744,21 @@ def emit_trigger_row(ws, trigger: Trigger, allowed: bool, reason: str,
         }, sort_keys=True, ensure_ascii=False))
 
 
+def _emit_production_row(ws, action: str, *, detail: dict,
+                         tool: str | None = None) -> bool:
+    """The --land CLI face's production rows (distill_result /
+    candidate_landed) via kunglao_log — the 17-field schema, actor
+    `orchestrator` (the loop protocol's orchestrator invokes the
+    engine). Never raises: a logging failure degrades to False."""
+    try:
+        import kunglao_log
+    except ImportError:
+        return False
+    return kunglao_log.emit(
+        ws, "orchestrator", action, tool=tool,
+        detail=json.dumps(detail, sort_keys=True, ensure_ascii=False))
+
+
 def stamp_trigger(ws, triggers: list[Trigger]) -> bool:
     """Persist the trigger state the orchestrator's tick reads."""
     if not triggers:
@@ -837,6 +850,23 @@ def main(argv: list[str] | None = None) -> int:
                                  str(cand.get("name")), oracle)
             if got:
                 landed.append(str(got[0]))
+                _emit_production_row(
+                    ws, "candidate_landed",
+                    tool=str(got[0].relative_to(ws)),
+                    detail={"attempt": attempt_dir.name,
+                            "name": str(cand.get("name")),
+                            "capability": cand.get("capability"),
+                            "tool_path": str(got[0].relative_to(ws))})
+        result_detail = {
+            "attempt": attempt_dir.name, "phase": "result",
+            "validated": True, "violations": [],
+            "hops": len(report.get("hops") or []),
+            "oracle": {"satisfied": bool(landed),
+                       "sample_source": source,
+                       "landed": landed}}
+        _emit_production_row(ws, "distill_result",
+                             detail=result_detail,
+                             tool=(landed[0] if landed else None))
         print(json.dumps({"landed": landed, "sample_source": source},
                          sort_keys=True))
         return 0

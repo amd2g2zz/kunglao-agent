@@ -747,7 +747,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: f09be0b737e2a47a3e1583a8125cdd77f7395754f35cf760a05985d33e0513ff
+    sha256: 472395b87a3fe438e96c009c26c831215abcc4218094887ee42ecd907e09be58
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
