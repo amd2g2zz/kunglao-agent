@@ -2060,3 +2060,68 @@ class TestFactLanding473:
         assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
         monkeypatch.delenv("KUNGLAO_E2E_ACT_TIMEOUT_S", raising=False)
         assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
+
+
+class TestVerifierDispatch484:
+    """#484: DISPATCH_VERIFIER decisions dispatch a verifier act — the
+    missing consumer that promotes maker products toward CONVERGED."""
+
+    def _ctx(self, stub_repo, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode="auto", started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        runner = ScriptedRunner()
+        return checkpoints.RunContext(
+            state=state, runner=runner,
+            face=llm_faces.face_for("auto", runner, ev_dir),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+
+    def test_verifier_act_fires_with_contract(self, stub_repo, tmp_path):
+        from e2e.checkpoints import _run_verifier_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=0, stdout='{"result": "done"}')
+        dispatched: set = set()
+        detail: dict = {"acts": []}
+        assert _run_verifier_act(ctx, "C-005", dispatched, detail) is None
+        prompt = (Path(ctx.state.evidence_dir)
+                  / "dispatch-prompt-V-C-005.md").read_text(encoding="utf-8")
+        assert "kunglao-verifier" in prompt
+        assert "you VERIFY, you never make" in prompt
+        assert "NEVER write facts" in prompt
+        assert "STATUS: DONE" in prompt
+        assert "V:C-005" in dispatched  # in-flight; freed on failure only
+
+    def test_verifier_act_rollback_on_timeout(self, stub_repo, tmp_path):
+        from e2e.checkpoints import _run_verifier_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("claude", "-p", rc=-1, stdout="")
+        dispatched: set = set()
+        detail: dict = {"acts": []}
+        _run_verifier_act(ctx, "C-005", dispatched, detail)
+        assert "V:C-005" not in dispatched
+        assert detail["acts"][-1]["outcome"] == "ERROR"  # rc!=0, not timed
+
+    def test_loop_dispatches_verifier_on_decision(self, stub_repo,
+                                                  tmp_path, monkeypatch):
+        # convergence says DISPATCH_VERIFIER → a verifier act launches
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.state.budget_seconds = 10_000  # FakeClock epoch exceeds 100
+        ctx.runner.on("heartbeat_tick", rc=0, stdout="ok")
+        ctx.runner.on("convergence_check", rc=1,
+                      stdout='{"decision": "DISPATCH_VERIFIER"}')
+        ctx.runner.on("priority_ratio", rc=0,
+                      stdout='[{"claim_id": "C-005"}]')
+        ctx.runner.on("claude", "-p", rc=0, stdout='{"result": "done"}')
+        from e2e.checkpoints import _loop_one_tick
+        flow, terminal, _ = _loop_one_tick(ctx, set(), {"acts": []}, 0, 0)
+        assert flow == "continue" and terminal is None
+        launched = [Path(c) for c in [f"dispatch-prompt-V-C-005.md"]]
+        assert (Path(ctx.state.evidence_dir) / "dispatch-prompt-V-C-005.md"
+                ).is_file()
