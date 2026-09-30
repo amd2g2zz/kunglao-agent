@@ -359,6 +359,50 @@ passes — the fixture's oracle satisfaction is earned on real bytes.
   own budgets, not a competing value claim (no second decision
   source, #462's single-source ruling extended).
 
+## Design outlook (owner research directive, 2026-09-30 — planned transitions, not retrofits)
+
+Four findings from the skill-distillation/self-evolution literature review
+(ASI, Code2Skill, ACE, Alita, MCP-Zero, plus a cost-accounting critique)
+pin where this capability heads next. Each is recorded HERE so it is a
+planned transition, never a surprise retrofit:
+
+- **O1 — skills-as-code preference.** An induced candidate prefers
+  EXECUTABLE form (script/tool) over prose method notes: executable,
+  verified skills beat text memory (ASI/Voyager's central result). This
+  design already lands code — `tools-local/<name>.py` is the deliverable
+  and the manifest's `methods[]` prose is provenance/metadata, not the
+  product. The standing rule going forward: a prose-only method note is
+  second-class and lands only when no code form is possible (the
+  validator may later REQUIRE an executable candidate for tiers that
+  have one).
+- **O3 — version-stamps + drift re-audit.** Every shelf entry —
+  including newly landed run-local candidates — should carry
+  environment-version stamps (dependency surface, platform surface);
+  drift detection (the #467 deploy-gate pattern) triggers re-audit, and
+  a stale entry is DEMOTED, not deleted (demotion keeps the audit trail
+  and the posterior history). The tier-1 manifest already carries the
+  oracle outcome + sample sha256; the version stamps are the next
+  manifest field.
+- **O4 — deprecation by cost.** A candidate that keeps getting selected
+  and keeps losing (posterior negative) RETIRES (PARK-style) instead of
+  bloating the shelf — retrieval-counted cost. The #461 posterior
+  machinery shape is the intended reuse; the budget ledger's global
+  counters are already the raw selection/landing signal this would
+  consume.
+- **O5 — visibility→retrieval threshold.** Full-shelf visibility (the
+  43 one-liners read by the LLM worker) is fine at today's size, but
+  THIS capability is what starts the shelf growing (every landed
+  candidate is a future retrieval candidate). Planned transition: past
+  a stated threshold (order 100 entries), the full-index read switches
+  to posterior-ranked semantic retrieval (ASI's retrieval face). The
+  marker contract is unchanged — the worker still reports the semantic
+  miss; only the shelf-reading face changes.
+
+Adjacent awareness (out of scope here): post-run workspace script
+harvesting (separate card) will feed the SAME run-local landing surface
+this change builds; `land_candidate` + the manifest shape are the
+generic landing API — a second producer must reuse them, not fork them.
+
 ## Design-Review Dispositions (openspec gate, 2026-09-30)
 
 The adversarial design review (independent subagent, vs the #462
