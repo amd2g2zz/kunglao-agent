@@ -527,11 +527,15 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
 def q_cells_seed_state(ws) -> tuple[random.Random, int]:
     """THE shared per-round seed source for call site 2 — the #251
     contract f(store state, round): sha256 over the canonical fold
-    payload plus the round axis (priority_ratio.round_index, the
-    convergence ledger's RAW snapshot-row count — single source, lazily
-    imported to keep this module's import cost off every recorder call).
-    The sample moves when evidence moves OR the round advances; no wall
-    clock anywhere."""
+    payload PLUS the round axis mixed INSIDE the hashed doc
+    (priority_ratio.round_index, the convergence ledger's RAW
+    snapshot-row count — single source, lazily imported to keep this
+    module's import cost off every recorder call). The sample moves
+    when evidence moves OR the round advances — including the
+    evidence-free cold workspace (distinct rounds produce distinct
+    seeds; the #251 per-round-cold-start property, 462 design-review
+    MEDIUM-1: the round used to be computed and returned but never
+    hashed, freezing the cold draw); no wall clock anywhere."""
     from priority_ratio import round_index  # noqa: PLC0415
     rnd = round_index(ws)
     store = default_store(ws)
@@ -546,6 +550,7 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
             "floor": schedule.gamma_floor,
             "ema_lambda": schedule.ema_lambda,
         },
+        "round": rnd,
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True,
@@ -617,6 +622,63 @@ def observe(ws, signature_hash: str, method_family: str,
     settlement wiring calls this from settled round_credit rows)."""
     return append_observation(ws, signature_hash, method_family, credit,
                               source="settlement")
+
+
+def observe_settlement(ws, dispatch_id: str, credit) -> dict:
+    """THE settlement feed's match-and-bank face (issue 462 W5): bank one
+    settled round credit into the q cell the dispatch opened.
+
+    Matches the LATEST pending dispatch row carrying this dispatch
+    identity — the envelope's claim id (what the production ALLOW tail
+    records; the row's explicit ``dispatch_id`` field is the test/
+    override face) — or the honest gap. Banked rows stay pending forever
+    (the log is append-only and never rewritten): a repeat settlement of
+    the SAME dispatch id cannot double-bank because identical replays
+    are refused by the ledger and any re-settlement (the late-cite
+    amendment) is blocked from re-banking by the settlement-presence
+    guard in scalar.settle_round_credit; a future ledger PRUNE +
+    re-settle of the same claim would re-bank into the stale row — the
+    named v1 limitation. The credit
+    arriving here is the settled #433 ladder value (verified = admission
+    ticket, cited-toward-stage = value — the ladder ran upstream in
+    scalar.round_credit); the append boundary clamps it into [0, 1]
+    (r_r is rail-clamped per #429 §4). No matching dispatch row is the
+    honest gap: no row, never a fabricated bucket. Fail-open: telemetry
+    never breaks settlement."""
+    did = str(dispatch_id or "")
+    try:
+        match = None
+        for row in reversed(JSONLQStore(ws).observations()):
+            if not isinstance(row, dict) \
+                    or str(row.get("source") or "") != "dispatch" \
+                    or row.get("credit") is not None:
+                continue
+            if did and (str(row.get("claim") or "") == did
+                        or str(row.get("dispatch_id") or "") == did):
+                match = row
+                break
+        if match is None:
+            warn("q_cells.observe_settlement",
+                 f"no pending dispatch row for {did!r} — credit not "
+                 f"banked (the honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did}
+        out = append_observation(ws, str(match.get("signature_hash")),
+                                 str(match.get("method_family")), credit,
+                                 source="settlement",
+                                 claim=match.get("claim"),
+                                 agent=match.get("agent"),
+                                 dispatch_id=did)
+        return {"appended": out["appended"], "matched": True,
+                "reason": None if out["appended"] else "write-failed",
+                "dispatch_id": did,
+                "signature_hash": match.get("signature_hash"),
+                "method_family": match.get("method_family")}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.observe_settlement", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did}
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:

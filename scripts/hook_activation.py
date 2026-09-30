@@ -751,6 +751,9 @@ def deploy_workspace_copy(ws: Path) -> dict:
     identical-sha targets are skipped idempotently. Returns a report dict
     {copied, skipped, entries, touched, digest}. Fail-loud on unreadable
     manifest — a silently empty deployment would unregister the gates.
+    Also fail-loud when the resolved framework env root does not cover
+    the tree's hard third-party imports (issue 467 gate): the deployed
+    code would die per tick under that env's venv.
 
     #783 T5: the deployment leaves the digest CARRIER
     (<ws>/.claude/deployed-manifest.json) behind — the check-stale third
@@ -763,6 +766,35 @@ def deploy_workspace_copy(ws: Path) -> dict:
 
     if not _MF.is_file():
         raise RuntimeError(f"deployment manifest missing: {_MF}")
+    # issue 467 (manifest-vs-imports gate): refuse BEFORE any workspace
+    # mutation when the framework env project — the same root the hook
+    # commands resolve as their `uv run --project` target — does not
+    # declare the hard third-party imports of the tree being deployed.
+    # The mixed-drift shape (executing tree newer than the serving env)
+    # is exactly the stale-skill-package incident: code lands, manifest
+    # lags, every numpy-backed face dies per tick and fails open.
+    _env_root = _framework_project_root()
+    if _env_root is None:
+        warn("dep_surface_gate",
+             "framework env project unresolvable — import-coverage "
+             "unverified (proceeding; mirrors the hook-entry fallback)")
+    else:
+        import dep_surface_gate as _dsg
+        _report = _dsg.check(
+            surface_root=Path(__file__).resolve().parent.parent,
+            env_root=_env_root)
+        if not _report["ok"]:
+            _mods = ", ".join(
+                f"{m['module']} (dist {m['dist']}, needed by "
+                f"{m['needed_by'][0]})"
+                for m in _report["missing"])
+            raise RuntimeError(
+                f"deployment refused: the framework env project "
+                f"{_env_root} does not declare: {_mods}. The deployed "
+                f"code cannot run under that env (every affected face "
+                f"would fail open per tick). Update the skill package "
+                f"at that root (git pull / plugin update), then re-run "
+                f"init/upgrade.")
     import yaml as _yaml
     data = _yaml.safe_load(_MF.read_text(encoding="utf-8")) or {}
     ws = ws.resolve()
