@@ -245,3 +245,24 @@ def test_proven_resets_and_dispatch_proceeds(tmp_path):
     ok, msg = check_max_retries(str(ws), worker_id='w1', claim_id='C-001')
     assert ok is True
     assert 'retry=0' in msg or 'no record' in msg.lower() or msg == ''
+
+
+def test_corrupt_counter_file_warns_and_fails_open(tmp_path, capsys):
+    """#472 MEDIUM: a corrupt retry-counter file must leave ONE
+    rate-limited warn — the pass@k cap never silently resets."""
+    import kunglao_log
+    ws = tmp_path / 'ws'
+    ws.mkdir()
+    (ws / 'runs').mkdir()
+    (ws / 'runs' / '.retry-counter.yaml').write_text(
+        'counters: [unclosed\n', encoding='utf-8')
+    kunglao_log._WARN_LAST.pop('retry_counter_read', None)
+    capsys.readouterr()
+    # fail-open {} unchanged: a corrupt counter must not break the gate
+    assert read_retry_counter(str(ws)) == {}
+    err = capsys.readouterr().err
+    assert 'retry_counter_read' in err
+    # rate-limited: the second read of the same corrupt content does not
+    # warn again (per-(op, reason) process-wide dedupe)
+    assert read_retry_counter(str(ws)) == {}
+    assert capsys.readouterr().err == ''

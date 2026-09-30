@@ -165,7 +165,20 @@ class AutoLlmFace:
         """Execution phase (#459): the headless claude act — safe to run
         in a pool thread (its subprocess + parse + result row share no
         mutable state with the other acts of the wave)."""
-        prompt = Path(req.prompt_file).read_text(encoding="utf-8")
+        # #472 guard: the prompt read is the known pre-subprocess crash
+        # point — a missing/undecodable prompt file yields an ERROR
+        # record + explained rc-null instead of losing the wave's act.
+        try:
+            prompt = Path(req.prompt_file).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            audit.emit_dispatch_result(
+                req.workspace, req.claim, mode=self.mode, rc=None,
+                stderr_full=f"prompt file unreadable: "
+                            f"{type(exc).__name__}: {exc}",
+                exit_null_reason="prompt_file_unreadable")
+            return ActRecord(req.claim, self.mode, "ERROR",
+                             {"error": f"{type(exc).__name__}: {exc}",
+                              "guard": "prompt_file"})
         # #456 fix: run IN the workspace (the agent must read/write the
         # claim register, facts, target material) — NOT in the repo.
         # The prompt carries the repo path for script access.
@@ -334,6 +347,26 @@ def face_for(mode: str, runner: CommandRunner,
     raise ValueError(f"unknown llm mode {mode!r}")
 
 
+def _wave_act(face, req: model.DispatchRequest, handle) -> ActRecord:
+    """#472 act cage — the ONE place a raising act is converted to
+    evidence. Every dispatched act lands: an Exception from a face's
+    run_dispatch still completes the act's ATTEMPT/RESULT pair (rc=None
+    with the caged reason — there was no subprocess exit to fabricate)
+    and yields an ERROR ActRecord (the existing outcome vocabulary), so
+    sibling acts and the tick's records survive one act's crash.
+    BaseException (operator interrupts) still propagates."""
+    try:
+        return face.run_dispatch(req, handle)
+    except Exception as exc:  # noqa: BLE001 — the cage; record, never lose
+        audit.emit_dispatch_result(
+            req.workspace, req.claim, mode=face.mode, rc=None,
+            stderr_full=f"{type(exc).__name__}: {exc}",
+            exit_null_reason="wave_act_exception")
+        return ActRecord(req.claim, face.mode, "ERROR",
+                         {"error": f"{type(exc).__name__}: {exc}",
+                          "caged": "wave_act"})
+
+
 def run_dispatch_parallel(
         face, launched: list[tuple[model.DispatchRequest, object]]
         ) -> list[ActRecord]:
@@ -346,13 +379,27 @@ def run_dispatch_parallel(
     them to land: a timeout on one act never cancels the others (each
     subprocess carries its own timeout). Returns ActRecords in LANDING
     order (as_completed); a wave of one runs inline (no pool spin-up —
-    the common single-claim tick keeps its exact sequential behavior)."""
+    the common single-claim tick keeps its exact sequential behavior).
+    #472: every act goes through the _wave_act cage (pool wave and
+    inline wave alike) — one crashing act is recorded as an ERROR act,
+    never an uncaged exception that loses the whole wave."""
     if len(launched) <= 1:
-        return [face.run_dispatch(req, handle) for req, handle in launched]
+        return [_wave_act(face, req, handle) for req, handle in launched]
     with ThreadPoolExecutor(max_workers=len(launched)) as pool:
-        futures = [pool.submit(face.run_dispatch, req, handle)
+        futures = [pool.submit(_wave_act, face, req, handle)
                    for req, handle in launched]
-        return [future.result() for future in as_completed(futures)]
+        results: list[ActRecord] = []
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as exc:  # noqa: BLE001 — cage belt: the
+                # submit path itself failed before _wave_act could cage
+                results.append(
+                    ActRecord("unknown", getattr(face, "mode", "?"),
+                              "ERROR",
+                              {"error": f"{type(exc).__name__}: {exc}",
+                               "caged": "future_belt"}))
+        return results
 
 
 class AutonomousFace:
