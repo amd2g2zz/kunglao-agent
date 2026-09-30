@@ -53,7 +53,7 @@
       EX-6 results re-verified byte-identical) → evidence
       .claude/reviews/461p2-option-death-pass.md (reviewer-461p2) →
       review_gate.py mint OK.
-- [ ] 9. Ship: push feat/option-death-461p2, PR to dev (openspec
+- [x] 9. Ship: push feat/option-death-461p2, PR to dev (openspec
       mapping table, EX-6 results, gates), CI five legs green,
       `gh pr merge --merge`; comment on #461 summarizing P1+P2; CLOSE
       #461 (both phases delivered).

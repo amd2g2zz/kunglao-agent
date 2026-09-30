@@ -112,6 +112,8 @@ when_to_read:
     symbolic solving is needed.
   references/re-library/patterns/decode/patterns-decode.md: When a sample uses layered decryption or
     obfuscated strings.
+  references/re-library/patterns/decode/byte-transform-id.md: When an unknown position-local byte
+    transform defeats every registered decode tool.
   references/re-library/patterns/simulation/patterns-simulation.md: When a sample contains a custom
     VM/emulator or shellcode to simulate.
   references/re-library/patterns/catalog/patterns.md: When identifying which general RE pattern category a
@@ -473,6 +475,10 @@ cards:
   to: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
   domain: android
   family: case-distilled
+- from: references/re-library/byte-transform-id.md
+  to: references/re-library/patterns/decode/byte-transform-id.md
+  domain: patterns
+  family: decode
 - from: references/re-library/case-dispatch-budget-partition.md
   to: references/re-library/method/case-distilled/case-dispatch-budget-partition.md
   domain: method

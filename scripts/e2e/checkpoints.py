@@ -35,6 +35,7 @@ from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     promote_claims, ranked_claims as _ranked_claims,
     record_result as _record, resolve_task_dir,
     resume_plan, tail as _tail, top_claim as _top_claim,
+    _load_repo_module,
 )
 import kunglao_log  # #472: the canonical warn (spec-unreadable trace)
 
@@ -658,6 +659,136 @@ def _dispatch_wave(ctx: RunContext, claims: list[str],
 _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
 
 
+def _maybe_distill(ctx: RunContext, detail: dict) -> None:
+    """Online distillation tick step: scan the workspace for miss
+    signals (the worker's shelf-miss marker / an unknown-format probe
+    failure), and when one fires with budget remaining, run ONE
+    bounded distillation act through the LLM faces DIRECTLY (never
+    _launch_dispatch — the kernel envelope sampler is not a consumer
+    distillation may acquire), validate the act's report, run its
+    candidates against the anchored sample bytes, and land satisfied
+    candidates in the run-local tool shelf. At most one act per tick;
+    every refusal/rejection lands its row; a scan failure is a
+    rate-limited warn (the loop never breaks on the capability)."""
+    # the engine (single source); resolve from the repo tree like every
+    # runtime repo-module import (twin-resolution guard — no bare-path insert)
+    od = _load_repo_module(ctx.repo, "online_distill")
+
+    try:
+        triggers = od.scan_triggers(ctx.ws)
+    except Exception as exc:  # noqa: BLE001 — capability, never the loop
+        from kunglao_log import warn
+        warn("e2e.distill_scan", f"{type(exc).__name__}: {exc}")
+        return
+    if not triggers:
+        return
+    ws = ctx.ws
+    trigger = triggers[0]
+    state_before = od.ledger_state(ws)
+    receipt = od.reserve_act(ws, trigger.token,
+                             source_file=trigger.source_file,
+                             sample_hint=trigger.sample_hint)
+    trigger_detail = {"kind": trigger.kind, "token": trigger.token,
+                      "sample_hint": trigger.sample_hint,
+                      "source_file": trigger.source_file}
+    if receipt is None:
+        audit.emit_distill_result(
+            str(ws), "attempt-refused", validated=False, phase="refused",
+            refusal_reason=od.refuse_reason(ws, trigger.token),
+            oracle=None, trigger_token=trigger.token)
+        detail.setdefault("distill", []).append(
+            {"trigger": trigger_detail, "refused": True})
+        return
+    attempt = receipt["attempt"]
+    audit.emit_distill_attempt(
+        str(ws), attempt, phase="dispatched", trigger=trigger_detail,
+        budget={"per_run_used": receipt["per_run_used"],
+                "per_run_budget": receipt["per_run_budget"],
+                "hops_remaining": (int(state_before["hops_budget"])
+                                   - int(state_before["hops_used"]))})
+    # mint the prompt + envelope (reserved non-register claim space)
+    prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{attempt}.md"
+    prompt_file.parent.mkdir(parents=True, exist_ok=True)
+    prompt_file.write_text(
+        json.dumps({"kunglao_dispatch": {
+            "version": 1, "claim": f"distill-{attempt}", "tier": 1,
+            "tools": ["Read", "Grep", "Glob", "Bash", "WebSearch"],
+            "agent": "kunglao-distill"}})
+        + f"\ntoken: {trigger.token}\n"
+        + (f"sample: {trigger.sample_hint}\n"
+           if trigger.sample_hint else "")
+        + "\nDistillation act: retrieve from the local re-library first"
+          " (references/re-library/), then the web face (URL + access"
+          " date recorded; never directly proven). Extract METHODS"
+          " (methodology-first), discard case specifics. Recursive case"
+          " expansion: depth <= 1, breadth <= 3, every hop budgeted."
+          " Write runs/distill-candidates/" + attempt + "/report.json"
+          " (schema distill-report/1) with candidates + their oracle"
+          " declarations.\n",
+        encoding="utf-8")
+    request = model.DispatchRequest(
+        claim=f"distill-{attempt}", workspace=str(ws),
+        prompt_file=str(prompt_file), run_id=ctx.state.run_id,
+        agent="kunglao-distill",
+        tools=("Read", "Grep", "Glob", "Bash", "WebSearch"))
+    # synchronous single-act chain, faces DIRECT (no sampler ride)
+    request_launched = ctx.face.launch_dispatch(request)
+    act = ctx.face.run_dispatch(request, request_launched)
+    ctx.acts.append(act.to_dict())
+    # validate the act's report
+    attempt_dir = ws / od.REPORTS_DIRNAME / attempt
+    report = od._read_json(attempt_dir / "report.json")
+    if not isinstance(report, dict):
+        audit.emit_distill_result(
+            str(ws), attempt, validated=False,
+            violations=["report missing or unreadable"], hops=0)
+        detail.setdefault("distill", []).append(
+            {"attempt": attempt, "validated": False})
+        return
+    ok, violations = od.validate_report(ctx.repo, ws, report)
+    hops = len(report.get("hops") or [])
+    if not ok:
+        audit.emit_distill_result(
+            str(ws), attempt, validated=False, violations=violations,
+            hops=0)
+        detail.setdefault("distill", []).append(
+            {"attempt": attempt, "validated": False,
+             "violations": violations})
+        return
+    od.commit_hops(ws, report)
+    sample, source = od.resolve_sample(ws, trigger)
+    oracle_out: dict = {"satisfied": False, "sample_source": source}
+    if sample is not None:
+        import hashlib
+        sample_sha = hashlib.sha256(sample.read_bytes()).hexdigest()
+        landed: list[str] = []
+        for cand in report.get("candidates") or []:
+            if not isinstance(cand, dict):
+                continue
+            decl = cand.get("oracle") or {}
+            expect_rc, marker = od._expect_of(decl)
+            outcome = od.run_candidate(
+                attempt_dir / f"{cand.get('name')}.py", sample,
+                expect_rc=expect_rc, expect_stdout_contains=marker)
+            outcome["sample_sha256"] = sample_sha
+            outcome["sample_source"] = source
+            oracle_out = outcome
+            got = od.land_candidate(ws, attempt_dir, report,
+                                    str(cand.get("name")), outcome)
+            if got:
+                landed.append(str(got[0]))
+                audit.emit_candidate_landed(
+                    str(ws), attempt, str(cand.get("name")),
+                    tool_path=str(got[0].relative_to(ws)),
+                    capability=str(cand.get("capability") or ""))
+    audit.emit_distill_result(
+        str(ws), attempt, validated=True, violations=[], hops=hops,
+        oracle=oracle_out)
+    detail.setdefault("distill", []).append(
+        {"attempt": attempt, "validated": True, "hops": hops,
+         "sample_source": source})
+
+
 def _verdict_face(ctx: RunContext, detail: dict,
                   tick_wait_seconds: int) -> model.CheckpointResult | None:
     """Post-loop verdict act per mode (dry/auto write it; orchestrator
@@ -741,6 +872,9 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                                 out_d, total_ms,
                                 {**detail, "failed_step": "decide-parse"}),
                 total_ms)
+    # online distillation tick step: one bounded act per tick when a
+    # miss signal fires with budget (a capability, never the loop)
+    _maybe_distill(ctx, detail)
     ctx.sleep_fn(tick_wait_seconds)
     return "continue", None, total_ms
 

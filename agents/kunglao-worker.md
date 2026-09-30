@@ -47,9 +47,25 @@ ONE claim (or report a blocker on it); end your report with next questions.
 
 - `references/_INDEX.md` — a methodology card may cover this problem class (grep the index for the claim's domain).
 - `tools/_INDEX.yaml` — a registered CLI may cover this capability.
+- `tools-local/` (workspace) — in-run distilled tools from the online
+  distillation capability; each lands with a `<name>.manifest.json`
+  (capability, provenance, oracle outcome). Usable immediately: run
+  `python tools-local/<name>.py` like any registered CLI.
 - `scripts/` — an existing parameterized CLI may be reusable.
 - `tools/tool-search.py --find <kw>` — the one search face; the dispatch
   context `instrument_menu` lists what is available.
+
+## Shelf-miss reporting (online distillation trigger)
+
+When you have read the tool index (category table + per-tool contract
+entries) and NO registered tool — and no `tools-local/` candidate — can
+serve the claim's capability, report it as a marker line in your
+worker-status file: `shelf-miss: <capability-token>` (optionally
+`shelf-miss: <token> sample=<workspace-relative-sample-path>`). The
+token is YOUR vocabulary (e.g. `crypto:decode`, `static:overlay`,
+`android:unidbg-harness`) — never a registry lookup. The marker
+triggers the online distillation capability (bounded, budget-governed);
+without it the miss is invisible.
 
 ## Working rules
 

@@ -30,6 +30,6 @@
       short-write raise path, rc marker drift) -> all five fixed ->
       round 2 PASS; .claude/reviews/461p1-attribution-state-pass.md
       evidence; review_gate.py mint OK; subagent-review JSON (Gate 5).
-- [ ] 9. Ship: push feat/attribution-state-461-p1, PR to dev with the
+- [x] 9. Ship: push feat/attribution-state-461-p1, PR to dev with the
       openspec mapping table, gates, Phase-2 out-of-scope disclosure;
       CI five legs green; merge. Do NOT close issue 461.
