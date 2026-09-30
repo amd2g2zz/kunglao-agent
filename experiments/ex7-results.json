@@ -1,0 +1,1758 @@
+{
+  "arms": [
+    "kernel",
+    "kernel-g1",
+    "uniform",
+    "eps-greedy"
+  ],
+  "checkpoints": [
+    5,
+    10,
+    25,
+    50,
+    100
+  ],
+  "classes": [
+    "arm-kdf",
+    "mod-crypto-js",
+    "mod-crypto",
+    "net-verify-license",
+    "req-sign",
+    "smc-x86",
+    "web-pack-sign",
+    "win-kdf"
+  ],
+  "discriminators": {
+    "detail": {
+      "D1_implementation_defect": false,
+      "D2_early_drag_clause": true,
+      "D2_gamma_drag_dominant_clause": false,
+      "D3_statekey_flip_shipped_gamma": false,
+      "D3prime_statekey_flip_gamma1": false,
+      "D4_kernel_healthy": true
+    },
+    "fired": [
+      "D4",
+      "D2"
+    ],
+    "headline": "D4",
+    "precedence": [
+      "D1",
+      "D4",
+      "D2",
+      "D3",
+      "D3'"
+    ]
+  },
+  "pre_registration": {
+    "design_amended_after_review": true,
+    "openspec_change": "kernel-judgment-experiment",
+    "primary_endpoints": "kernel_vs_uniform mean cumulative regret at n=100, one per regime",
+    "seed_policy": "exactly 200 seeds/regime, run once, never re-tuned"
+  },
+  "regimes": {
+    "R1": {
+      "arms": {
+        "eps-greedy": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.82125,
+            "10": 3.256875,
+            "25": 5.870625,
+            "50": 7.5725,
+            "100": 9.8084375
+          },
+          "waste": {
+            "5": 5.68875,
+            "10": 5.68875,
+            "25": 5.68875,
+            "50": 5.68875,
+            "100": 5.68875
+          }
+        },
+        "kernel": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 2.050625,
+            "10": 4.1015625,
+            "25": 10.2665625,
+            "50": 20.629375,
+            "100": 41.3003125
+          },
+          "waste": {
+            "5": 5.976875,
+            "10": 5.976875,
+            "25": 5.976875,
+            "50": 5.976875,
+            "100": 5.976875
+          }
+        },
+        "kernel-g1": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.998125,
+            "10": 3.83625,
+            "25": 8.6903125,
+            "50": 15.966875,
+            "100": 29.25
+          },
+          "waste": {
+            "5": 5.20375,
+            "10": 5.20375,
+            "25": 5.20375,
+            "50": 5.20375,
+            "100": 5.20375
+          }
+        },
+        "uniform": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 2.076875,
+            "10": 4.1684375,
+            "25": 10.444375,
+            "50": 20.8490625,
+            "100": 41.6209375
+          },
+          "waste": {
+            "5": 6.569375,
+            "10": 6.569375,
+            "25": 6.569375,
+            "50": 6.569375,
+            "100": 6.569375
+          }
+        }
+      },
+      "class_signature_hashes": {
+        "arm-kdf": "99808ebe51ec",
+        "mod-crypto": "ed48901f91d3",
+        "mod-crypto-js": "3c4a543c2f3d",
+        "net-verify-license": "13af11565303",
+        "req-sign": "0d5447b4c5f0",
+        "smc-x86": "955283d778a3",
+        "web-pack-sign": "cd3b8bfc78ff",
+        "win-kdf": "0ad05ee43866"
+      },
+      "ground_truth": {
+        "arm-kdf": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "mod-crypto": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "mod-crypto-js": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "net-verify-license": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "req-sign": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "smc-x86": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "web-pack-sign": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "win-kdf": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.55,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        }
+      },
+      "horizon": 100,
+      "name": "aligned-sparse",
+      "pairs": {
+        "eps-greedy_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 20,
+              "n": 184,
+              "p_value": 2.5835219865078984e-29,
+              "ties": 16,
+              "verdict": "A_BETTER",
+              "wins": 164
+            },
+            "10": {
+              "losses": 1,
+              "n": 198,
+              "p_value": 9.907040322354938e-58,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 197
+            },
+            "25": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "50": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 80,
+              "n": 200,
+              "p_value": 0.0056851559967503055,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 120
+            },
+            "10": {
+              "losses": 80,
+              "n": 200,
+              "p_value": 0.0056851559967503055,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 120
+            },
+            "25": {
+              "losses": 80,
+              "n": 200,
+              "p_value": 0.0056851559967503055,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 120
+            },
+            "50": {
+              "losses": 80,
+              "n": 200,
+              "p_value": 0.0056851559967503055,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 120
+            },
+            "100": {
+              "losses": 80,
+              "n": 200,
+              "p_value": 0.0056851559967503055,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 120
+            }
+          }
+        },
+        "kernel-g1_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 62,
+              "n": 178,
+              "p_value": 6.309452312515454e-05,
+              "ties": 22,
+              "verdict": "A_BETTER",
+              "wins": 116
+            },
+            "10": {
+              "losses": 27,
+              "n": 192,
+              "p_value": 2.283532995836016e-25,
+              "ties": 8,
+              "verdict": "A_BETTER",
+              "wins": 165
+            },
+            "25": {
+              "losses": 0,
+              "n": 199,
+              "p_value": 2.4892061111444567e-60,
+              "ties": 1,
+              "verdict": "A_BETTER",
+              "wins": 199
+            },
+            "50": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 71,
+              "n": 200,
+              "p_value": 4.9729734792134965e-05,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 129
+            },
+            "10": {
+              "losses": 71,
+              "n": 200,
+              "p_value": 4.9729734792134965e-05,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 129
+            },
+            "25": {
+              "losses": 71,
+              "n": 200,
+              "p_value": 4.9729734792134965e-05,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 129
+            },
+            "50": {
+              "losses": 71,
+              "n": 200,
+              "p_value": 4.9729734792134965e-05,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 129
+            },
+            "100": {
+              "losses": 71,
+              "n": 200,
+              "p_value": 4.9729734792134965e-05,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 129
+            }
+          }
+        },
+        "kernel_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 75,
+              "n": 176,
+              "p_value": 0.05919615140062471,
+              "ties": 24,
+              "verdict": "NO_SEPARATION",
+              "wins": 101
+            },
+            "10": {
+              "losses": 70,
+              "n": 184,
+              "p_value": 0.0014563008113307437,
+              "ties": 16,
+              "verdict": "A_BETTER",
+              "wins": 114
+            },
+            "25": {
+              "losses": 68,
+              "n": 191,
+              "p_value": 8.411757648898675e-05,
+              "ties": 9,
+              "verdict": "A_BETTER",
+              "wins": 123
+            },
+            "50": {
+              "losses": 63,
+              "n": 194,
+              "p_value": 1.1847801490443627e-06,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 131
+            },
+            "100": {
+              "losses": 72,
+              "n": 199,
+              "p_value": 0.00011790194533226099,
+              "ties": 1,
+              "verdict": "A_BETTER",
+              "wins": 127
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 81,
+              "n": 198,
+              "p_value": 0.012672957953535634,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 117
+            },
+            "10": {
+              "losses": 81,
+              "n": 198,
+              "p_value": 0.012672957953535634,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 117
+            },
+            "25": {
+              "losses": 81,
+              "n": 198,
+              "p_value": 0.012672957953535634,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 117
+            },
+            "50": {
+              "losses": 81,
+              "n": 198,
+              "p_value": 0.012672957953535634,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 117
+            },
+            "100": {
+              "losses": 81,
+              "n": 198,
+              "p_value": 0.012672957953535634,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 117
+            }
+          }
+        }
+      },
+      "params": {
+        "n_strong": 2,
+        "name": "aligned-sparse",
+        "p_strong": 0.55,
+        "p_weak": 0.05
+      },
+      "per_class_regret_final": {
+        "eps-greedy": {
+          "arm-kdf": 10.1275,
+          "mod-crypto": 9.425,
+          "mod-crypto-js": 9.5,
+          "net-verify-license": 10.3675,
+          "req-sign": 9.73,
+          "smc-x86": 9.8725,
+          "web-pack-sign": 9.7875,
+          "win-kdf": 9.6575
+        },
+        "kernel": {
+          "arm-kdf": 41.355,
+          "mod-crypto": 41.225,
+          "mod-crypto-js": 41.56,
+          "net-verify-license": 41.345,
+          "req-sign": 41.1275,
+          "smc-x86": 41.1775,
+          "web-pack-sign": 41.4125,
+          "win-kdf": 41.2
+        },
+        "kernel-g1": {
+          "arm-kdf": 29.45,
+          "mod-crypto": 29.1525,
+          "mod-crypto-js": 29.26,
+          "net-verify-license": 29.425,
+          "req-sign": 28.9975,
+          "smc-x86": 29.31,
+          "web-pack-sign": 29.4575,
+          "win-kdf": 28.9475
+        },
+        "uniform": {
+          "arm-kdf": 41.5725,
+          "mod-crypto": 41.6425,
+          "mod-crypto-js": 41.5825,
+          "net-verify-license": 41.7575,
+          "req-sign": 41.625,
+          "smc-x86": 41.57,
+          "web-pack-sign": 41.59,
+          "win-kdf": 41.6275
+        }
+      },
+      "seed_count": 200,
+      "strong_arms": {
+        "arm-kdf": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "mod-crypto": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "mod-crypto-js": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "net-verify-license": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "req-sign": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "smc-x86": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "web-pack-sign": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ],
+        "win-kdf": [
+          "dynamic-trace",
+          "obfuscation-peeling"
+        ]
+      }
+    },
+    "R2": {
+      "arms": {
+        "eps-greedy": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.8275,
+            "10": 3.248125,
+            "25": 5.8246875,
+            "50": 7.529375,
+            "100": 9.7484375
+          },
+          "waste": {
+            "5": 5.455,
+            "10": 5.455,
+            "25": 5.455,
+            "50": 5.455,
+            "100": 5.455
+          }
+        },
+        "kernel": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 2.0646875,
+            "10": 4.1528125,
+            "25": 10.3803125,
+            "50": 20.7590625,
+            "100": 41.4878125
+          },
+          "waste": {
+            "5": 6.375625,
+            "10": 6.375625,
+            "25": 6.375625,
+            "50": 6.375625,
+            "100": 6.375625
+          }
+        },
+        "kernel-g1": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 2.0496875,
+            "10": 4.09125,
+            "25": 9.9796875,
+            "50": 19.1971875,
+            "100": 36.0640625
+          },
+          "waste": {
+            "5": 6.08125,
+            "10": 6.08125,
+            "25": 6.08125,
+            "50": 6.08125,
+            "100": 6.08125
+          }
+        },
+        "uniform": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 2.0940625,
+            "10": 4.1909375,
+            "25": 10.441875,
+            "50": 20.8734375,
+            "100": 41.6675
+          },
+          "waste": {
+            "5": 6.450625,
+            "10": 6.450625,
+            "25": 6.450625,
+            "50": 6.450625,
+            "100": 6.450625
+          }
+        }
+      },
+      "class_signature_hashes": {
+        "arm-kdf": "99808ebe51ec",
+        "mod-crypto": "ed48901f91d3",
+        "mod-crypto-js": "3c4a543c2f3d",
+        "net-verify-license": "13af11565303",
+        "req-sign": "0d5447b4c5f0",
+        "smc-x86": "955283d778a3",
+        "web-pack-sign": "cd3b8bfc78ff",
+        "win-kdf": "0ad05ee43866"
+      },
+      "ground_truth": {
+        "arm-kdf": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.55,
+          "structural-anchoring": 0.55
+        },
+        "mod-crypto": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.55,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.55,
+          "structural-anchoring": 0.05
+        },
+        "mod-crypto-js": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.55,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.55,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "net-verify-license": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.55,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.55,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "req-sign": {
+          "anti-analysis-discrimination": 0.55,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "smc-x86": {
+          "anti-analysis-discrimination": 0.55,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.55,
+          "pair-match-verification": 0.05,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "web-pack-sign": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.55,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.55,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.05
+        },
+        "win-kdf": {
+          "anti-analysis-discrimination": 0.05,
+          "crypto-core-identification": 0.05,
+          "dynamic-trace": 0.05,
+          "hypothesis-falsification": 0.05,
+          "kdf-chain-reconstruction": 0.05,
+          "obfuscation-peeling": 0.05,
+          "pair-match-verification": 0.55,
+          "protocol-flow-reconstruction": 0.05,
+          "red-team-verification": 0.05,
+          "replay-harness-verification": 0.05,
+          "static-decompile": 0.05,
+          "structural-anchoring": 0.55
+        }
+      },
+      "horizon": 100,
+      "name": "class-specific-sparse",
+      "pairs": {
+        "eps-greedy_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 27,
+              "n": 190,
+              "p_value": 6.755685915516637e-25,
+              "ties": 10,
+              "verdict": "A_BETTER",
+              "wins": 163
+            },
+            "10": {
+              "losses": 3,
+              "n": 197,
+              "p_value": 1.2688917331223315e-53,
+              "ties": 3,
+              "verdict": "A_BETTER",
+              "wins": 194
+            },
+            "25": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "50": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 79,
+              "n": 194,
+              "p_value": 0.011780425578763857,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 115
+            },
+            "10": {
+              "losses": 79,
+              "n": 194,
+              "p_value": 0.011780425578763857,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 115
+            },
+            "25": {
+              "losses": 79,
+              "n": 194,
+              "p_value": 0.011780425578763857,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 115
+            },
+            "50": {
+              "losses": 79,
+              "n": 194,
+              "p_value": 0.011780425578763857,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 115
+            },
+            "100": {
+              "losses": 79,
+              "n": 194,
+              "p_value": 0.011780425578763857,
+              "ties": 6,
+              "verdict": "A_BETTER",
+              "wins": 115
+            }
+          }
+        },
+        "kernel-g1_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 70,
+              "n": 176,
+              "p_value": 0.008150448639403575,
+              "ties": 24,
+              "verdict": "A_BETTER",
+              "wins": 106
+            },
+            "10": {
+              "losses": 66,
+              "n": 188,
+              "p_value": 5.3682951862038116e-05,
+              "ties": 12,
+              "verdict": "A_BETTER",
+              "wins": 122
+            },
+            "25": {
+              "losses": 38,
+              "n": 192,
+              "p_value": 9.241672580199124e-18,
+              "ties": 8,
+              "verdict": "A_BETTER",
+              "wins": 154
+            },
+            "50": {
+              "losses": 4,
+              "n": 197,
+              "p_value": 6.1868280955315236e-52,
+              "ties": 3,
+              "verdict": "A_BETTER",
+              "wins": 193
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 93,
+              "n": 197,
+              "p_value": 0.4762667150679856,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "10": {
+              "losses": 93,
+              "n": 197,
+              "p_value": 0.4762667150679856,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "25": {
+              "losses": 93,
+              "n": 197,
+              "p_value": 0.4762667150679856,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "50": {
+              "losses": 93,
+              "n": 197,
+              "p_value": 0.4762667150679856,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "100": {
+              "losses": 93,
+              "n": 197,
+              "p_value": 0.4762667150679856,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            }
+          }
+        },
+        "kernel_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 72,
+              "n": 158,
+              "p_value": 0.30101553819656734,
+              "ties": 42,
+              "verdict": "NO_SEPARATION",
+              "wins": 86
+            },
+            "10": {
+              "losses": 83,
+              "n": 175,
+              "p_value": 0.5454726578478964,
+              "ties": 25,
+              "verdict": "NO_SEPARATION",
+              "wins": 92
+            },
+            "25": {
+              "losses": 87,
+              "n": 194,
+              "p_value": 0.17237156543983867,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 107
+            },
+            "50": {
+              "losses": 82,
+              "n": 191,
+              "p_value": 0.05964782114888856,
+              "ties": 9,
+              "verdict": "NO_SEPARATION",
+              "wins": 109
+            },
+            "100": {
+              "losses": 81,
+              "n": 196,
+              "p_value": 0.0181887995521925,
+              "ties": 4,
+              "verdict": "A_BETTER",
+              "wins": 115
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 95,
+              "n": 199,
+              "p_value": 0.5707535104620824,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "10": {
+              "losses": 95,
+              "n": 199,
+              "p_value": 0.5707535104620824,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "25": {
+              "losses": 95,
+              "n": 199,
+              "p_value": 0.5707535104620824,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "50": {
+              "losses": 95,
+              "n": 199,
+              "p_value": 0.5707535104620824,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            },
+            "100": {
+              "losses": 95,
+              "n": 199,
+              "p_value": 0.5707535104620824,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 104
+            }
+          }
+        }
+      },
+      "params": {
+        "n_strong": 2,
+        "name": "class-specific-sparse",
+        "p_strong": 0.55,
+        "p_weak": 0.05
+      },
+      "per_class_regret_final": {
+        "eps-greedy": {
+          "arm-kdf": 9.7025,
+          "mod-crypto": 10.04,
+          "mod-crypto-js": 9.6925,
+          "net-verify-license": 10.25,
+          "req-sign": 9.44,
+          "smc-x86": 10.015,
+          "web-pack-sign": 9.5025,
+          "win-kdf": 9.345
+        },
+        "kernel": {
+          "arm-kdf": 41.705,
+          "mod-crypto": 41.3125,
+          "mod-crypto-js": 41.5625,
+          "net-verify-license": 41.5,
+          "req-sign": 41.6375,
+          "smc-x86": 41.555,
+          "web-pack-sign": 41.225,
+          "win-kdf": 41.405
+        },
+        "kernel-g1": {
+          "arm-kdf": 36.8025,
+          "mod-crypto": 35.1875,
+          "mod-crypto-js": 36.0925,
+          "net-verify-license": 35.39,
+          "req-sign": 37.2875,
+          "smc-x86": 37.425,
+          "web-pack-sign": 35.475,
+          "win-kdf": 34.8525
+        },
+        "uniform": {
+          "arm-kdf": 41.665,
+          "mod-crypto": 41.5425,
+          "mod-crypto-js": 41.7375,
+          "net-verify-license": 41.725,
+          "req-sign": 41.8825,
+          "smc-x86": 41.585,
+          "web-pack-sign": 41.6425,
+          "win-kdf": 41.56
+        }
+      },
+      "seed_count": 200,
+      "strong_arms": {
+        "arm-kdf": [
+          "structural-anchoring",
+          "static-decompile"
+        ],
+        "mod-crypto": [
+          "pair-match-verification",
+          "static-decompile"
+        ],
+        "mod-crypto-js": [
+          "replay-harness-verification",
+          "pair-match-verification"
+        ],
+        "net-verify-license": [
+          "hypothesis-falsification",
+          "pair-match-verification"
+        ],
+        "req-sign": [
+          "obfuscation-peeling",
+          "anti-analysis-discrimination"
+        ],
+        "smc-x86": [
+          "obfuscation-peeling",
+          "anti-analysis-discrimination"
+        ],
+        "web-pack-sign": [
+          "pair-match-verification",
+          "hypothesis-falsification"
+        ],
+        "win-kdf": [
+          "structural-anchoring",
+          "pair-match-verification"
+        ]
+      }
+    },
+    "R3": {
+      "arms": {
+        "eps-greedy": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.4017499999999998,
+            "10": 2.1281249999999994,
+            "25": 3.0491249999999983,
+            "50": 4.072125000000001,
+            "100": 6.0866250000000015
+          },
+          "waste": {
+            "5": 1.688125,
+            "10": 1.688125,
+            "25": 1.688125,
+            "50": 1.688125,
+            "100": 1.688125
+          }
+        },
+        "kernel": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.9769999999999996,
+            "10": 3.9663749999999998,
+            "25": 9.891374999999996,
+            "50": 19.828875000000004,
+            "100": 39.60825000000002
+          },
+          "waste": {
+            "5": 1.865625,
+            "10": 1.865625,
+            "25": 1.865625,
+            "50": 1.865625,
+            "100": 1.865625
+          }
+        },
+        "kernel-g1": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.9807500000000007,
+            "10": 3.9048749999999988,
+            "25": 9.494624999999996,
+            "50": 18.1905,
+            "100": 33.95175000000001
+          },
+          "waste": {
+            "5": 1.865625,
+            "10": 1.865625,
+            "25": 1.865625,
+            "50": 1.865625,
+            "100": 1.865625
+          }
+        },
+        "uniform": {
+          "n_seeds": 200,
+          "regret": {
+            "5": 1.990124999999999,
+            "10": 4.004999999999999,
+            "25": 10.036875000000004,
+            "50": 20.081625000000003,
+            "100": 39.973125000000024
+          },
+          "waste": {
+            "5": 1.888125,
+            "10": 1.888125,
+            "25": 1.888125,
+            "50": 1.888125,
+            "100": 1.888125
+          }
+        }
+      },
+      "class_signature_hashes": {
+        "arm-kdf": "99808ebe51ec",
+        "mod-crypto": "ed48901f91d3",
+        "mod-crypto-js": "3c4a543c2f3d",
+        "net-verify-license": "13af11565303",
+        "req-sign": "0d5447b4c5f0",
+        "smc-x86": "955283d778a3",
+        "web-pack-sign": "cd3b8bfc78ff",
+        "win-kdf": "0ad05ee43866"
+      },
+      "ground_truth": {
+        "arm-kdf": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.75,
+          "hypothesis-falsification": 0.15,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.15,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.15,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.75,
+          "static-decompile": 0.75,
+          "structural-anchoring": 0.75
+        },
+        "mod-crypto": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.75,
+          "dynamic-trace": 0.75,
+          "hypothesis-falsification": 0.75,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.15,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.15,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.75,
+          "static-decompile": 0.15,
+          "structural-anchoring": 0.15
+        },
+        "mod-crypto-js": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.15,
+          "hypothesis-falsification": 0.15,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.75,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.75,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.15,
+          "static-decompile": 0.75,
+          "structural-anchoring": 0.75
+        },
+        "net-verify-license": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.75,
+          "hypothesis-falsification": 0.15,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.75,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.15,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.15,
+          "static-decompile": 0.75,
+          "structural-anchoring": 0.75
+        },
+        "req-sign": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.15,
+          "hypothesis-falsification": 0.15,
+          "kdf-chain-reconstruction": 0.75,
+          "obfuscation-peeling": 0.15,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.75,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.75,
+          "static-decompile": 0.75,
+          "structural-anchoring": 0.15
+        },
+        "smc-x86": {
+          "anti-analysis-discrimination": 0.75,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.15,
+          "hypothesis-falsification": 0.15,
+          "kdf-chain-reconstruction": 0.75,
+          "obfuscation-peeling": 0.15,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.75,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.75,
+          "static-decompile": 0.15,
+          "structural-anchoring": 0.15
+        },
+        "web-pack-sign": {
+          "anti-analysis-discrimination": 0.75,
+          "crypto-core-identification": 0.75,
+          "dynamic-trace": 0.15,
+          "hypothesis-falsification": 0.75,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.15,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.75,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.15,
+          "static-decompile": 0.15,
+          "structural-anchoring": 0.15
+        },
+        "win-kdf": {
+          "anti-analysis-discrimination": 0.15,
+          "crypto-core-identification": 0.15,
+          "dynamic-trace": 0.15,
+          "hypothesis-falsification": 0.75,
+          "kdf-chain-reconstruction": 0.15,
+          "obfuscation-peeling": 0.75,
+          "pair-match-verification": 0.15,
+          "protocol-flow-reconstruction": 0.15,
+          "red-team-verification": 0.15,
+          "replay-harness-verification": 0.75,
+          "static-decompile": 0.15,
+          "structural-anchoring": 0.75
+        }
+      },
+      "horizon": 100,
+      "name": "dense-easy",
+      "pairs": {
+        "eps-greedy_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 13,
+              "n": 196,
+              "p_value": 1.4427504034464007e-39,
+              "ties": 4,
+              "verdict": "A_BETTER",
+              "wins": 183
+            },
+            "10": {
+              "losses": 2,
+              "n": 200,
+              "p_value": 2.501776602005736e-56,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 198
+            },
+            "25": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "50": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 83,
+              "n": 194,
+              "p_value": 0.05228311767336205,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 111
+            },
+            "10": {
+              "losses": 83,
+              "n": 194,
+              "p_value": 0.05228311767336205,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 111
+            },
+            "25": {
+              "losses": 83,
+              "n": 194,
+              "p_value": 0.05228311767336205,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 111
+            },
+            "50": {
+              "losses": 83,
+              "n": 194,
+              "p_value": 0.05228311767336205,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 111
+            },
+            "100": {
+              "losses": 83,
+              "n": 194,
+              "p_value": 0.05228311767336205,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 111
+            }
+          }
+        },
+        "kernel-g1_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 98,
+              "n": 190,
+              "p_value": 0.7169046430967033,
+              "ties": 10,
+              "verdict": "NO_SEPARATION",
+              "wins": 92
+            },
+            "10": {
+              "losses": 85,
+              "n": 197,
+              "p_value": 0.06369102606287878,
+              "ties": 3,
+              "verdict": "NO_SEPARATION",
+              "wins": 112
+            },
+            "25": {
+              "losses": 38,
+              "n": 198,
+              "p_value": 5.2208399536787445e-19,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 160
+            },
+            "50": {
+              "losses": 7,
+              "n": 198,
+              "p_value": 1.0984535005111319e-47,
+              "ties": 2,
+              "verdict": "A_BETTER",
+              "wins": 191
+            },
+            "100": {
+              "losses": 0,
+              "n": 200,
+              "p_value": 1.2446030555722283e-60,
+              "ties": 0,
+              "verdict": "A_BETTER",
+              "wins": 200
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 96,
+              "n": 194,
+              "p_value": 0.9427889997065577,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 98
+            },
+            "10": {
+              "losses": 96,
+              "n": 194,
+              "p_value": 0.9427889997065577,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 98
+            },
+            "25": {
+              "losses": 96,
+              "n": 194,
+              "p_value": 0.9427889997065577,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 98
+            },
+            "50": {
+              "losses": 96,
+              "n": 194,
+              "p_value": 0.9427889997065577,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 98
+            },
+            "100": {
+              "losses": 96,
+              "n": 194,
+              "p_value": 0.9427889997065577,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 98
+            }
+          }
+        },
+        "kernel_vs_uniform": {
+          "regret": {
+            "5": {
+              "losses": 93,
+              "n": 184,
+              "p_value": 0.9412590347294773,
+              "ties": 16,
+              "verdict": "NO_SEPARATION",
+              "wins": 91
+            },
+            "10": {
+              "losses": 87,
+              "n": 193,
+              "p_value": 0.19495973532361924,
+              "ties": 7,
+              "verdict": "NO_SEPARATION",
+              "wins": 106
+            },
+            "25": {
+              "losses": 86,
+              "n": 198,
+              "p_value": 0.07535614736054397,
+              "ties": 2,
+              "verdict": "NO_SEPARATION",
+              "wins": 112
+            },
+            "50": {
+              "losses": 79,
+              "n": 193,
+              "p_value": 0.0141787774426824,
+              "ties": 7,
+              "verdict": "A_BETTER",
+              "wins": 114
+            },
+            "100": {
+              "losses": 86,
+              "n": 199,
+              "p_value": 0.06504501335635778,
+              "ties": 1,
+              "verdict": "NO_SEPARATION",
+              "wins": 113
+            }
+          },
+          "waste": {
+            "5": {
+              "losses": 94,
+              "n": 194,
+              "p_value": 0.7197120938004639,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 100
+            },
+            "10": {
+              "losses": 94,
+              "n": 194,
+              "p_value": 0.7197120938004639,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 100
+            },
+            "25": {
+              "losses": 94,
+              "n": 194,
+              "p_value": 0.7197120938004639,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 100
+            },
+            "50": {
+              "losses": 94,
+              "n": 194,
+              "p_value": 0.7197120938004639,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 100
+            },
+            "100": {
+              "losses": 94,
+              "n": 194,
+              "p_value": 0.7197120938004639,
+              "ties": 6,
+              "verdict": "NO_SEPARATION",
+              "wins": 100
+            }
+          }
+        }
+      },
+      "params": {
+        "n_strong": 4,
+        "name": "dense-easy",
+        "p_strong": 0.75,
+        "p_weak": 0.15
+      },
+      "per_class_regret_final": {
+        "eps-greedy": {
+          "arm-kdf": 6.129,
+          "mod-crypto": 5.987999999999999,
+          "mod-crypto-js": 6.246,
+          "net-verify-license": 6.143999999999997,
+          "req-sign": 5.975999999999998,
+          "smc-x86": 5.756999999999996,
+          "web-pack-sign": 6.125999999999998,
+          "win-kdf": 6.327000000000001
+        },
+        "kernel": {
+          "arm-kdf": 39.50100000000004,
+          "mod-crypto": 39.70500000000005,
+          "mod-crypto-js": 39.32400000000003,
+          "net-verify-license": 39.62700000000003,
+          "req-sign": 39.85800000000005,
+          "smc-x86": 39.29100000000005,
+          "web-pack-sign": 39.69600000000003,
+          "win-kdf": 39.864000000000004
+        },
+        "kernel-g1": {
+          "arm-kdf": 32.89200000000002,
+          "mod-crypto": 34.43100000000003,
+          "mod-crypto-js": 33.37200000000001,
+          "net-verify-license": 33.97800000000002,
+          "req-sign": 33.04800000000001,
+          "smc-x86": 34.54800000000001,
+          "web-pack-sign": 35.86800000000002,
+          "win-kdf": 33.477000000000004
+        },
+        "uniform": {
+          "arm-kdf": 39.849000000000046,
+          "mod-crypto": 39.84600000000003,
+          "mod-crypto-js": 40.254000000000055,
+          "net-verify-license": 39.90300000000003,
+          "req-sign": 39.90900000000001,
+          "smc-x86": 40.41300000000003,
+          "web-pack-sign": 40.128000000000014,
+          "win-kdf": 39.48300000000003
+        }
+      },
+      "seed_count": 200,
+      "strong_arms": {
+        "arm-kdf": [
+          "replay-harness-verification",
+          "dynamic-trace",
+          "static-decompile",
+          "structural-anchoring"
+        ],
+        "mod-crypto": [
+          "replay-harness-verification",
+          "hypothesis-falsification",
+          "dynamic-trace",
+          "crypto-core-identification"
+        ],
+        "mod-crypto-js": [
+          "structural-anchoring",
+          "obfuscation-peeling",
+          "static-decompile",
+          "protocol-flow-reconstruction"
+        ],
+        "net-verify-license": [
+          "obfuscation-peeling",
+          "dynamic-trace",
+          "structural-anchoring",
+          "static-decompile"
+        ],
+        "req-sign": [
+          "kdf-chain-reconstruction",
+          "static-decompile",
+          "replay-harness-verification",
+          "protocol-flow-reconstruction"
+        ],
+        "smc-x86": [
+          "replay-harness-verification",
+          "anti-analysis-discrimination",
+          "protocol-flow-reconstruction",
+          "kdf-chain-reconstruction"
+        ],
+        "web-pack-sign": [
+          "protocol-flow-reconstruction",
+          "crypto-core-identification",
+          "hypothesis-falsification",
+          "anti-analysis-discrimination"
+        ],
+        "win-kdf": [
+          "hypothesis-falsification",
+          "replay-harness-verification",
+          "obfuscation-peeling",
+          "structural-anchoring"
+        ]
+      }
+    }
+  },
+  "replay": {
+    "expected": "NO_SEPARATION (the honest floor at this table scale)",
+    "n_trials": 200,
+    "replays": [
+      {
+        "arms": {
+          "kernel": {
+            "first_act_success_rate": 0.0
+          },
+          "uniform": {
+            "first_act_success_rate": 0.0
+          }
+        },
+        "env_success_probs": {
+          "static_re": 0.0
+        },
+        "run_id": "e2e-fix-221504-b",
+        "task_id": "mod-crypto-js-l1b-v1"
+      },
+      {
+        "arms": {
+          "kernel": {
+            "first_act_success_rate": 0.0
+          },
+          "uniform": {
+            "first_act_success_rate": 0.0
+          }
+        },
+        "env_success_probs": {
+          "static-decompile": 1.0,
+          "synthesis": 0.0
+        },
+        "run_id": "e2e-fix-211504-a",
+        "task_id": "rust-apk-beacon-v1"
+      }
+    ],
+    "sign_test": {
+      "losses": 0,
+      "n": 0,
+      "p_value": 1.0,
+      "ties": 400,
+      "verdict": "NO_SEPARATION",
+      "wins": 0
+    },
+    "table": "tests/fixtures/feature-mining-460/golden/feature-table.jsonl",
+    "table_rows": 3,
+    "underpowered": true,
+    "usable_runs": 2
+  },
+  "schema": "ex7-kernel-judgment/1",
+  "vocabulary": [
+    "anti-analysis-discrimination",
+    "crypto-core-identification",
+    "dynamic-trace",
+    "hypothesis-falsification",
+    "kdf-chain-reconstruction",
+    "obfuscation-peeling",
+    "pair-match-verification",
+    "protocol-flow-reconstruction",
+    "red-team-verification",
+    "replay-harness-verification",
+    "static-decompile",
+    "structural-anchoring"
+  ]
+}
