@@ -47,6 +47,20 @@ def _ws(tmp_path, task_spec=None, evidence=None):
 
 
 # ---------- prescan 探测状态（显式记录，消灭"跳过且不记录"） ----------
+# #669 retirement (#460 Part B): per-project_type probe-set membership
+# gating is GONE — both probe tools record a DIRECT capability fact on
+# every type (report item > host presence > evidence presence >
+# missing). Host presence is injected (``_which_tool``) so the tests
+# stay host-independent.
+
+
+@pytest.fixture(autouse=True)
+def _no_host_tools(monkeypatch):
+    """Default: neither tool on the host (tests opt into presence by
+    re-patching _which_tool)."""
+    monkeypatch.setattr(intake_promise, "_which_tool",
+                        lambda tool: None)
+
 
 def test_apkid_missing_explicit_warn(tmp_path):
     """apkid 探测 FAIL（WARN-tier）→ missing + fix 提示显式记录。"""
@@ -63,22 +77,33 @@ def test_apkid_available(tmp_path):
     rep = _report(_item("apkid", "PASS"))
     p = intake_promise.build(rep, None, ws)
     assert p["prescan"]["apkid"]["state"] == "available"
-    assert p["prescan"]["die"]["state"] == "not_probed"
+    # no die report item and no host die: the DIRECT fact (missing)
+    assert p["prescan"]["die"]["state"] == "missing"
 
 
-def test_not_probed_is_explicit(tmp_path):
-    """探针层不在 project_type 集内 → not_probed 显式记录，不静默缺键。"""
+def test_absent_report_item_probes_host_presence_directly(tmp_path,
+                                                           monkeypatch):
+    """#460 Part B: 探针层不在 toolchain 报告内 → DIRECT presence fact
+    （host which > evidence > missing），显式记录，不静默缺键，无
+    per-project_type "probe set" 会员门。"""
     ws = _ws(tmp_path)
-    rep = _report(_item("apkid", "PASS"))
+    monkeypatch.setattr(intake_promise, "_which_tool",
+                        lambda tool: "/usr/local/bin/apkid"
+                        if tool == "apkid" else None)
+    rep = _report(_item("apkid", "PASS"))  # a report WITHOUT die
     p = intake_promise.build(rep, None, ws)
-    assert p["prescan"]["die"]["state"] == "not_probed"
+    assert p["prescan"]["die"]["state"] == "missing"
+    assert "probe set" not in p["prescan"]["die"]["note"]
     assert "note" in p["prescan"]["die"]
+    # absent from the report but present on the host: apkid via the
+    # report item still wins (the capability authority when present)
+    assert p["prescan"]["apkid"]["state"] == "available"
 
 
 def test_apkid_promise_mirrors_probe_state_on_android(tmp_path):
     """issue 209: once _check_android emits the apkid item, the promise
     state mirrors the probe (FAIL → missing / WARN → degraded / PASS →
-    available) — the fabricated not_probed branch stops firing on android."""
+    available) — the report item stays the capability authority."""
     ws = _ws(tmp_path)
     for probe_status, probe_state in (("FAIL", "missing"),
                                       ("WARN", "degraded"),
@@ -89,15 +114,15 @@ def test_apkid_promise_mirrors_probe_state_on_android(tmp_path):
         assert p["prescan"]["apkid"]["tier"] == "WARN"
 
 
-def test_apkid_not_probed_retained_off_android(tmp_path):
-    """issue 209: windows/linux reports carry no apkid item → the explicit
-    not_probed record (with the first-claim note) is retained, not a
-    silently missing key."""
-    ws = _ws(tmp_path)
+def test_absent_item_evidence_presence_is_a_fact(tmp_path):
+    """issue 209 shape, #460 retirement: windows/linux reports carry no
+    apkid item — a previously-produced evidence/apkid.json is still an
+    explicit capability fact (available), never a missing key."""
+    ws = _ws(tmp_path, evidence={"summary": {"obfuscator": []}})
     rep = _report(_item("jadx", "PASS"), _item("die", "WARN"))
     p = intake_promise.build(rep, None, ws)
-    assert p["prescan"]["apkid"]["state"] == "not_probed"
-    assert "note" in p["prescan"]["apkid"]
+    assert p["prescan"]["apkid"]["state"] == "available"
+    assert "evidence/apkid.json" in p["prescan"]["apkid"]["note"]
 
 
 # ---------- 混淆先验（与 route_capability #692 WP6 同源同键） ----------
