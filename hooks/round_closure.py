@@ -14,7 +14,10 @@ Since issue 462 the closure event is ALSO the production host of the
 kernel's round-closure faces (#429 §6: Stop(worker) IS the round
 closure): W1 composes + versions ONE round-strategy object per decision
 event (the compose single-point's host), and W6 builds + drains the T2
-unblocking-value priority queue (no longer eval-only).
+unblocking-value priority queue (no longer eval-only). Since the online
+distillation capability the closure also scans the report surface for
+shelf-miss signals (marker / unknown-format probe) and stamps the
+trigger state the orchestrator's tick consumes.
 
 Pure-closure posture, fail-open double cage: any error -> rc 0, silent.
 A closure observation must never disturb the subagent's own stop path.
@@ -96,6 +99,14 @@ def _kernel_faces(ws: Path) -> None:
         unchanged workspace re-write nothing — the per-decision-event
         invariant is "per SubagentStop with marker-resolved workspace,
         deduped by content" (#462 recorded scope).
+      - Online distillation trigger face: scan the just-completed
+        worker's report surface for miss signals (the shelf-miss marker
+        in worker status files / an unknown-format probe failure). A
+        firing signal emits the production trigger row
+        (distill_attempt, phase=triggered — a SIGNAL: the act itself is
+        the orchestrator's decision per the loop protocol) and stamps
+        runs/distill-trigger.json the orchestrator's tick reads. Budget
+        is checked here so the row carries the honest refusal.
 
     Fail-open double cage: each face is wrapped separately — a kernel
     failure is one rate-limited warn and never disturbs the subagent's
@@ -115,6 +126,17 @@ def _kernel_faces(ws: Path) -> None:
             verification_ladder.drain_t2_queue(ws)
     except Exception as exc:  # noqa: BLE001 — kernel face, never blocks
         warn("round_closure_t2", f"{type(exc).__name__}: {exc}")
+    try:
+        with scripts_on_path():
+            import online_distill
+            triggers = online_distill.scan_triggers(ws)
+            for t in triggers:
+                reason = online_distill.refuse_reason(ws, t.token)
+                online_distill.emit_trigger_row(
+                    ws, t, allowed=(not reason), reason=reason)
+            online_distill.stamp_trigger(ws, triggers)
+    except Exception as exc:  # noqa: BLE001 — capability, never blocks
+        warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
 
 
 def main_with_payload(payload: dict) -> int:

@@ -46,6 +46,95 @@ def _act_timeout_s() -> int:
 
 CLAUDE_ACT_TIMEOUT_S = _act_timeout_s()
 
+#: the default tool rack for auto-mode acts (byte-compatible with the
+#: pre-rack history); a request declaring its own tools rack rides it
+#: through verbatim (the distill act declares a WebSearch-inclusive
+#: rack — retrieval needs the web face).
+DEFAULT_RACK = ("Read", "Write", "Edit", "Bash", "Grep", "Glob")
+
+#: the distill act's agent identity (the reserved non-register claim
+#: space is distill-<attempt-n>; these acts never enter the claim
+#: register or the ranker)
+DISTILL_AGENT = "kunglao-distill"
+
+
+#: the envelope's legacy default tools value — requests constructed
+#: without an explicit rack carry this; it is NOT a real rack (the
+#: historical claude act always ran the DEFAULT_RACK below), so the
+#: rack derivation treats it as undeclared.
+LEGACY_UNDECLARED_RACK = ("grep", "python3")
+
+
+def _rack_of(req: model.DispatchRequest) -> tuple[str, ...]:
+    """The act's tool rack: a request declaring a rack of its own rides
+    it verbatim (the distill act declares a WebSearch-inclusive rack);
+    the envelope default and the legacy undeclared value keep the exact
+    historical DEFAULT_RACK (byte-compatibility for every existing
+    request shape — pins included)."""
+    declared = tuple(req.tools or ())
+    if declared and declared not in (DEFAULT_RACK, LEGACY_UNDECLARED_RACK):
+        return declared
+    return DEFAULT_RACK
+
+
+#: the scripted distillation candidate: a REAL parameter-recovery
+#: decoder implementing the re-library method (anchor-differential
+#: keystream view over a known structural header, period detection,
+#: structural verify) — it recovers the key from the sample bytes; no
+#: fixture constants are baked in. The dry face scripts the retrieval
+#: content; the candidate itself genuinely runs in the engine's oracle.
+_DRY_DISTILL_CANDIDATE = '''#!/usr/bin/env python3
+"""transform-recover — anchor-differential byte-transform recovery.
+
+Method (from the re-library decode card): when an unknown byte-level
+transform is position-local, invert the additive component first,
+recover the keystream view over a KNOWN structural anchor (magic +
+version + reserved zeros), detect the keystream period, then verify by
+re-decoding the anchor and declared structure. No key material is
+baked in — everything is recovered from the sample bytes.
+"""
+import hashlib
+import json
+import sys
+
+ANCHOR = b"KLG1" + (3).to_bytes(2, "little") + b"\\x00" * 10
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(json.dumps({"error": "usage: transform-recover <sample>"}))
+        return 2
+    data = open(argv[1], "rb").read()
+    n = min(len(ANCHOR), len(data))
+    # keystream view: invert the position add, then xor with the anchor
+    stream = [((data[i] - i) & 0xFF) ^ ANCHOR[i] for i in range(n)]
+    period = None
+    for p in range(1, 17):
+        if all(stream[i] == stream[i % p] for i in range(n)):
+            period = p
+            break
+    if period is None:
+        print(json.dumps({"error": "no period <= 16 fits the anchor"}))
+        return 1
+    key = bytes(stream[:period])
+    plain = bytes((((data[i] - i) & 0xFF) ^ key[i % period])
+                  for i in range(len(data)))
+    ok = plain.startswith(ANCHOR)
+    print(json.dumps({
+        "magic": plain[:4].decode("ascii", "replace"),
+        "magic=KLG1": "yes" if ok else "no",
+        "period": period,
+        "key_hex": key.hex(),
+        "plain_sha256": hashlib.sha256(plain).hexdigest(),
+        "anchor_verified": ok,
+    }))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
+'''
+
 
 class CommandRunner:
     """The subprocess seam. Captured output + hard timeout; timeouts come
@@ -168,7 +257,7 @@ class AutoLlmFace:
             req.workspace, req.claim, mode=self.mode,
             command=["claude", "-p", f"<prompt-file:{req.prompt_file}>",
                      "--output-format", "json",
-                     "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"],
+                     "--allowedTools", ",".join(_rack_of(req))],
             cwd=str(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
         return None
 
@@ -196,7 +285,7 @@ class AutoLlmFace:
         # The prompt carries the repo path for script access.
         ws = Path(req.workspace)
         cmd = ["claude", "-p", prompt, "--output-format", "json",
-               "--allowedTools", "Read,Write,Edit,Bash,Grep,Glob"]
+               "--allowedTools", ",".join(_rack_of(req))]
         started = time.monotonic()
         outcome = self.runner.run(cmd, cwd=str(ws),
                                   timeout=CLAUDE_ACT_TIMEOUT_S)
@@ -262,7 +351,14 @@ class DryLlmFace:
     verify-note + reimpl artifact the C7 promotion path consumes, and
     (on the verdict step) evidence/verdict.json. Honest limitation: the
     dry reimpl is a stub — a REAL checker run on it may honestly FAIL;
-    dry mode tests the pipeline, not the solver."""
+    dry mode tests the pipeline, not the solver.
+
+    Distill acts (agent kunglao-distill) get their own responder: the
+    scripted retrieval CONTENT lands as a real report + a REAL
+    parameter-recovery candidate — the engine's validation, oracle,
+    and landing then run their genuine code paths on it (the dry face
+    scripts the LLM's reading, never the verification).
+    """
 
     mode = "dry"
 
@@ -286,6 +382,8 @@ class DryLlmFace:
                      handle=None) -> ActRecord:
         ws = Path(req.workspace)
         started = time.monotonic()
+        if req.agent == DISTILL_AGENT:
+            return self._distill_act(req, ws, started)
         artifacts: list[str] = []
         with self._lock:
             n = self.claim_counter.get(req.claim, 0) + 1
@@ -322,6 +420,67 @@ class DryLlmFace:
                 "    return 42\n", encoding="utf-8")
             artifacts.append(str(reimpl))
         duration_ms = int((time.monotonic() - started) * 1000)
+        audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
+                                   rc=0, duration_ms=duration_ms,
+                                   artifacts=artifacts)
+        return ActRecord(req.claim, self.mode, "DISPATCHED",
+                         {"artifacts": artifacts})
+
+    def _distill_act(self, req: model.DispatchRequest, ws: Path,
+                     started: float) -> ActRecord:
+        """The scripted distillation act: re-library retrieval content +
+        a REAL anchor-differential recovery candidate, staged in the
+        attempt directory the engine validates + oracles + lands. The
+        prompt's JSON header carries the trigger echo (token, sample
+        hint) — the scripted responder reads exactly what the real LLM
+        would read."""
+        attempt = req.claim.split("distill-", 1)[-1] or "attempt-1"
+        attempt_dir = ws / "runs" / "distill-candidates" / attempt
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        prompt = ""
+        try:
+            prompt = Path(req.prompt_file).read_text(encoding="utf-8")
+        except OSError:
+            prompt = ""
+        token, sample_hint = "crypto:decode", None
+        for line in prompt.splitlines():
+            if line.startswith("token: "):
+                token = line[len("token: "):].strip()
+            elif line.startswith("sample: "):
+                sample_hint = line[len("sample: "):].strip() or None
+        (attempt_dir / "transform-recover.py").write_text(
+            _DRY_DISTILL_CANDIDATE, encoding="utf-8")
+        report = {
+            "schema": "distill-report/1",
+            "trigger": {"kind": "shelf-miss", "token": token,
+                        "sample_hint": sample_hint},
+            "sources": [
+                {"kind": "relibrary", "ref": "references/re-library/"
+                                            "patterns/decode/"
+                                            "byte-transform-id.md"},
+            ],
+            "hops": [],
+            "methods": [
+                "unknown byte-transform identification: invert the "
+                "position-add first, recover the keystream view over a "
+                "known structural anchor, detect the period, verify by "
+                "re-decoding the header",
+            ],
+            "candidates": [
+                {"name": "transform-recover",
+                 "file": "transform-recover.py",
+                 "capability": token,
+                 "oracle": {"expect_rc": 0,
+                            "expect_stdout_contains": "magic=KLG1"}},
+            ],
+        }
+        report_path = attempt_dir / "report.json"
+        report_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False)
+            + "\n", encoding="utf-8")
+        duration_ms = int((time.monotonic() - started) * 1000)
+        artifacts = [str(report_path),
+                     str(attempt_dir / "transform-recover.py")]
         audit.emit_dispatch_result(req.workspace, req.claim, mode=self.mode,
                                    rc=0, duration_ms=duration_ms,
                                    artifacts=artifacts)

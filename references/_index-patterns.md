@@ -3,6 +3,7 @@
 > Row summaries are the card frontmatter descriptions, byte-for-byte.
 | File | Summary |
 |---|---|
+| [byte-transform-id.md](re-library/patterns/decode/byte-transform-id.md) | Identify and invert unknown position-local byte transforms via anchor-differential keystream recovery, period detection, and bounded parameter search. When a sample carries a custom encryption/encoding layer that no registered tool decodes. |
 | [patterns-debugging.md](re-library/patterns/debugging/patterns-debugging.md) | Debugging and dynamic-analysis patterns. When validation logic is hidden or symbolic solving is needed. |
 | [patterns-decode.md](re-library/patterns/decode/patterns-decode.md) | Decode and deobfuscation patterns. When a sample uses layered decryption or obfuscated strings. |
 | [patterns-simulation.md](re-library/patterns/simulation/patterns-simulation.md) | Simulation and execution patterns. When a sample contains custom VM/emulator or shellcode. |

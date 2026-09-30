@@ -47,7 +47,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 561937faefa4f4b1465a3e5fa71b1096d1cff0c31c85994dba7acec5248776e4
+    sha256: 9753e01bb4de4d7f2207a70a30f725573fdbe1e15d26bf9b5ef97758ee331b7d
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -115,7 +115,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 66246034f127f0e184b5ca956a14c46d771b378a84d5f5b96ce1897b598ac3bb
+    sha256: ae2bc45715f304a66780888af8da154f0f8b356196839c2dc6ddcf0058a047da
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -459,7 +459,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 72fb8c2e4321405849a652a7311a89a4ab3916afe64d0e080736083ca96daf92
+    sha256: d0afdd1de650673014f13688f9b72f8d8847829ca674c4f887aea17c4f931892
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
@@ -744,6 +744,10 @@ files:
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
     sha256: dd94e5003639701888eaa908965ddab413a62e159cd1275e89cc5973fc3103e7
+  - src: scripts/online_distill.py
+    dest: .claude/scripts/online_distill.py
+    kind: scaffold
+    sha256: 472395b87a3fe438e96c009c26c831215abcc4218094887ee42ecd907e09be58
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -1207,11 +1211,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 24dff8e06dc74851f165ba536a018c52fa88c540fb9b3ae93f4b31a4a546ae2f
+    sha256: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 2187eabe5f7891c0e73e53de3428a8dd2f1fc24350bf2d24f6838dad6c95d7a5
+    sha256: 6966246d6efa71ae31cd696b35f425aa4de814a50e08ee57119c5afe4ba763d1
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1239,7 +1243,7 @@ files:
   - src: references/_index-patterns.md
     dest: .claude/references/_index-patterns.md
     kind: asset
-    sha256: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
+    sha256: 325109c4972975d882309580ca35fa7178a617a2261df670f26f698f4786470d
   - src: references/_index-platforms.md
     dest: .claude/references/_index-platforms.md
     kind: asset
@@ -1383,7 +1387,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 0a19c5b74f1c1035e1408b57f8a8415662ee0026f168dfb4b065cb871f7c98e6
+    sha256: 9416777579a646363958d3212a584035473cfdcfd41e6f5cf2327bd4b3d505b0
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -1536,6 +1540,10 @@ files:
     dest: .claude/references/re-library/patterns/debugging/patterns-debugging.md
     kind: asset
     sha256: 451be392f3c0cb4445ccfb477a17588f65ed77ea5f525a45db2d04e21d67d3fa
+  - src: references/re-library/patterns/decode/byte-transform-id.md
+    dest: .claude/references/re-library/patterns/decode/byte-transform-id.md
+    kind: asset
+    sha256: d411e600f25faffe7bec856c5b9f13746d03acbb858891c742725f07291101f2
   - src: references/re-library/patterns/decode/patterns-decode.md
     dest: .claude/references/re-library/patterns/decode/patterns-decode.md
     kind: asset
@@ -1771,7 +1779,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 7509516817234768d30da19ee6237f6ded8f668afbb60cce07025f9ba6e97a1d
+    sha256: 3ef0376c52bffb9742816dd19f1fca6c1c344e8a7f3fe870e402392570346900
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
