@@ -55,8 +55,12 @@
 - [x] Three registrations for new files (README / ext-scan /
       deploy-manifest --write, in order) + re-library index
       registration for the card
-- [ ] Gates: pytest suites green, ruff clean, quality_gates --quick,
-      comment_hygiene_lint clean; paired re-mint when comments land
-- [ ] Review gate: independent code-reviewer PASS → evidence
-      `.claude/reviews/458-*.md` → mint; PR with openspec mapping
-      table + fixture evidence + budget-cap proof
+- [x] Gates: pytest suites green, ruff clean, quality_gates --quick
+      ALL-PASS, comment_hygiene_lint clean (no new debt landed, no
+      re-mint needed)
+- [x] Review gate: independent code-reviewer PASS → evidence
+      `.claude/reviews/458-implementation.md` (reviewer-impl-458;
+      FAIL->fix->PASS round: the auto-rack byte-compatibility break
+      + safe expectation coercion + type-garbage fail-closed) →
+      minted; PR with openspec mapping table + fixture evidence +
+      budget-cap proof
