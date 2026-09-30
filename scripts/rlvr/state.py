@@ -40,6 +40,17 @@ derives that encoding from EXISTING files only:
   phase             ``<ws>/.hook_state.json`` "phase"
                     (DISPATCH/MONITOR/VERIFY/IDLE — the issue-461/issue-527
                     dispatch-lifecycle vocabulary)
+  obstacles         ``runs/obstacles/OBS-*.json`` (rlvr.obstacles, the
+                    issue-461 attribution face): {present, count, kinds}
+                    digest, kinds = sorted ``kind=count`` pattern — the
+                    attributed-dead-end inventory as a discriminable
+                    signature dim (without causes in state, all
+                    dead-ends look identical). Cumulative by design:
+                    every recorded failure advances the signature;
+                    consumers joining dispatch-time signatures expect
+                    drift as attribution accumulates (the fold joins
+                    each row's RECORDED hash). No V term — attribution
+                    is evidence, not progress
   sides             RESERVED: always {} — the side-trajectory tree is
                     v0.2 (owner design pin 2026-09-26); the field exists
                     so signatures never re-key when sides land
@@ -47,9 +58,15 @@ derives that encoding from EXISTING files only:
 
 Canonical forms (pure, order-stable):
 
-  signature_str  ``state-sig/1|fc=<bucket>|fv=<verified>|cp=<pattern|->|
-                 bg=<bucket>|ch=<k/n|->|ph=<phase|->|sd=-``
+  signature_str  ``state-sig/2|fc=<bucket>|fv=<verified>|cp=<pattern|->|
+                 bg=<bucket>|ch=<k/n|->|ph=<phase|->|ob=<kinds|->|sd=-``
   signature_hash sha256(signature_str)[:12] — the short table key
+
+state-sig/2 is the eight-segment form: the ob= segment (issue 461
+Phase 1 attribution face) inserts BEFORE the reserved sides tail, so
+sides never re-keys and future dims need no further version bump;
+historical seven-segment rows keep their own tag in the append-only
+streams.
 
 ## V(s) anchor (deterministic, lookup-only)
 
@@ -97,7 +114,7 @@ import numpy as np  # issue 420: ordered-float reductions (see _seq_sum)
 
 from kunglao_log import iter_jsonl
 
-SCHEMA = "state-sig/1"
+SCHEMA = "state-sig/2"
 SITUATIONS_REL = "runs/situation-stream.jsonl"
 SITUATION_SCHEMA = "situation/1"
 
@@ -340,6 +357,18 @@ def phase(ws) -> str | None:
     return str(value) if value else None
 
 
+def obstacle_face(ws) -> dict:
+    """The attribution digest over runs/obstacles/ (rlvr.obstacles.face,
+    lazy import — the _probe_signal_progress precedent; this module
+    stays dependency-light at import time). Tolerant: a missing or
+    corrupt registry is the empty digest, never a raise."""
+    try:
+        from rlvr import obstacles
+        return obstacles.face(ws)
+    except Exception:  # noqa: BLE001 — face absence is honest emptiness
+        return {"present": False, "count": 0, "kinds": ""}
+
+
 # ---------- canonical snapshot + signature -------------------------------
 
 def snapshot(ws) -> dict:
@@ -362,25 +391,29 @@ def snapshot(ws) -> dict:
                    "present": (Path(ws) / COST_EVENTS_REL).is_file()},
         "chain": None if chain is None else {"k": chain[0], "n": chain[1]},
         "phase": phase(ws),
+        "obstacles": obstacle_face(ws),
         "sides": {},  # RESERVED: v0.2 side-trajectory tree (owner pin)
     }
 
 
 def signature_str(snap: dict) -> str:
     """The canonical signature string — the issue-386 Q-table key form.
-    Order-stable; '-' marks an absent dim; sides stays '-' until v0.2."""
+    Order-stable; '-' marks an absent dim; ob= is the attributed
+    dead-end inventory (issue 461); sides stays '-' until v0.2."""
     pattern = (snap.get("claims") or {}).get("pattern") or "-"
     chain = snap.get("chain")
     chain_part = "-" if not chain else f"{chain['k']}/{chain['n']}"
     phase_part = snap.get("phase") or "-"
     budget = snap.get("budget") or {}
     facts = snap.get("facts") or {}
+    kinds = (snap.get("obstacles") or {}).get("kinds") or "-"
     return (f"{SCHEMA}|fc={facts.get('bucket', 0)}"
             f"|fv={facts.get('verified', 0)}"
             f"|cp={pattern}"
             f"|bg={budget.get('bucket', 0)}"
             f"|ch={chain_part}"
             f"|ph={phase_part}"
+            f"|ob={kinds}"
             f"|sd=-")
 
 

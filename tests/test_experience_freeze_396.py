@@ -95,6 +95,36 @@ class TestImportDirection:
         touch = imports & set(RECORDING_MODULES)
         assert not touch, f"{src.name} imports recording: {touch}"
 
+    def test_decision_face_never_imports_attribution_recording(self):
+        """The obstacle registry (issue 461 attribution face) is
+        recording-only in Phase 1: the same wall as the settlement-rules
+        direction, checked on FULL module strings — a decision face
+        doing ``from rlvr import obstacles`` records the module
+        ``rlvr`` and the alias ``obstacles`` only under a bare-name
+        check, so EVERY import form is expanded here (the hooks idiom
+        ``from rlvr import q_cells as _qc429`` is the shape to catch).
+        Legitimate package imports (rlvr.q_cells & co.) record their
+        full names and never match the obstacles suffix."""
+        for src in DECISION_SOURCES:
+            assert src.is_file(), f"decision face missing: {src}"
+            tree = ast.parse(src.read_text(encoding="utf-8"))
+            mods = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for a in node.names:
+                        mods.add(a.name)
+                elif isinstance(node, ast.ImportFrom):
+                    base = node.module or ""
+                    if node.level:  # relative: resolve to the package
+                        base = f"rlvr.{base}" if base else "rlvr"
+                    if base:
+                        mods.add(base)
+                    for a in node.names:
+                        mods.add(f"{base}.{a.name}" if base else a.name)
+            bad = {m for m in mods if m == "obstacles"
+                   or m.endswith(".obstacles")}
+            assert not bad, f"{src.name} imports attribution: {bad}"
+
     def test_recording_never_imports_settlement_rules(self):
         """Recording reads the ledger read-face only — it must not import
         the frozen rules module (reward_settlement) at all.

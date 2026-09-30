@@ -115,7 +115,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: e0745d7897e92b25d1e3fc772ccd0bd67a3b1d3f0d5265e54c820c82ca95fb3c
+    sha256: 66246034f127f0e184b5ca956a14c46d771b378a84d5f5b96ce1897b598ac3bb
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -963,7 +963,7 @@ files:
   - src: scripts/state_signature.py
     dest: .claude/scripts/state_signature.py
     kind: scaffold
-    sha256: acec272d80b49b43c7f51f41f1574c01d865dd7a03de04b71e170eb29eaa3521
+    sha256: d0dd6d7bea5d3bc443f32529d7ac1cafdf4f23de07ccc43923fd50987854a7f2
   - src: scripts/status_defs.py
     dest: .claude/scripts/status_defs.py
     kind: scaffold
@@ -1115,7 +1115,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 9a778d22d9bc6582a16f77a224a8b5c4eb09442765d3d211128e82d05fe128b6
+    sha256: 3d41091eb07be19b740cc03fb54fe67fc53047b6c99192ffb8211b79ac67678f
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
@@ -1128,6 +1128,10 @@ files:
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
     sha256: cedcd3e28cb2a0989d88401ec410f28a12c9652515a39a6ca5cb43a9b932f069
+  - src: scripts/rlvr/obstacles.py
+    dest: .claude/scripts/rlvr/obstacles.py
+    kind: scaffold
+    sha256: 7f19bc8c0624260b7ed83f6b2e9b72db97ed257e6b5c12760de35876f08d7546
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
@@ -1151,7 +1155,7 @@ files:
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: 9455f4feb07a4f8aab019cdca212869e8ea4f0fa80182a856a1e3b435f537e2b
+    sha256: b4aa604cdc31f2885e40f8d3beb70a5d96b9906554ff559f9f3b8144f312da9d
   - src: scripts/rlvr/triples.py
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold

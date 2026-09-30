@@ -229,7 +229,7 @@ class TestSnapshotAndSignature:
 
     def test_snapshot_document_shape(self, tmp_path):
         snap = ssig.snapshot(self._full_ws(tmp_path))
-        assert snap["schema"] == "state-sig/1"
+        assert snap["schema"] == "state-sig/2"
         assert snap["facts"] == {"count": 5, "verified": 4, "bucket": 2}
         assert snap["claims"] == {"pattern": "OPEN=1|PROVEN=1"}
         assert snap["budget"]["fraction"] == pytest.approx(0.2)
@@ -241,8 +241,8 @@ class TestSnapshotAndSignature:
 
     def test_signature_str_byte_pinned(self, tmp_path):
         sig = ssig.signature_str(ssig.snapshot(self._full_ws(tmp_path)))
-        assert sig == ("state-sig/1|fc=2|fv=4|cp=OPEN=1|PROVEN=1"
-                       "|bg=1|ch=2/4|ph=VERIFY|sd=-")
+        assert sig == ("state-sig/2|fc=2|fv=4|cp=OPEN=1|PROVEN=1"
+                       "|bg=1|ch=2/4|ph=VERIFY|ob=-|sd=-")
 
     def test_signature_deterministic_and_order_stable(self, tmp_path):
         ws = self._full_ws(tmp_path)
@@ -261,7 +261,71 @@ class TestSnapshotAndSignature:
 
     def test_cold_workspace_signature(self, tmp_path):
         sig = ssig.signature_str(ssig.snapshot(tmp_path))
-        assert sig == "state-sig/1|fc=0|fv=0|cp=-|bg=0|ch=-|ph=-|sd=-"
+        assert sig == "state-sig/2|fc=0|fv=0|cp=-|bg=0|ch=-|ph=-|ob=-|sd=-"
+
+
+# ---------- obstacle face (issue 461 attribution-in-state) ----------
+
+class TestObstacleFace:
+    """Intervention-born obstacle objects enter the canonical state:
+    digest in the snapshot, ob= segment in the signature, V untouched.
+    Attribution is evidence, never progress, never a verdict."""
+
+    @staticmethod
+    def _obstacle(ws: Path, kind: str, n: str = "p.txt",
+                  family: str = "dynamic-trace") -> None:
+        d = ws / "runs" / "probes"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / n).write_text(
+            "cmd: isolation probe\nrc=1\nverbatim output\n",
+            encoding="utf-8")
+        from rlvr import obstacles
+        out = obstacles.record(
+            ws, kind=kind, cause=f"synthetic {kind} (probe rc=1)",
+            evidence_path=f"runs/probes/{n}", method_family=family,
+            ts="2026-09-30T00:00:00Z")
+        assert out["appended"] is True, out
+
+    def test_snapshot_obstacles_digest(self, tmp_path):
+        snap = ssig.snapshot(tmp_path)
+        assert snap["obstacles"] == {"present": False, "count": 0,
+                                     "kinds": ""}
+
+    def test_two_obstacles_canonical_ob_segment(self, tmp_path):
+        self._obstacle(tmp_path, "detection_trigger", "p1.txt")
+        self._obstacle(tmp_path, "missing_env_entry", "p2.txt")
+        snap = ssig.snapshot(tmp_path)
+        assert snap["obstacles"] == {
+            "present": True, "count": 2,
+            "kinds": "detection_trigger=1|missing_env_entry=1"}
+        sig = ssig.signature_str(snap)
+        assert "|ob=detection_trigger=1|missing_env_entry=1|" in sig
+
+    def test_different_causes_different_signatures(self, tmp_path):
+        ws_a, ws_b = tmp_path / "a", tmp_path / "b"
+        ws_a.mkdir(), ws_b.mkdir()
+        self._obstacle(ws_a, "detection_trigger")
+        self._obstacle(ws_b, "encryption_layer")
+        sig_a = ssig.signature_str(ssig.snapshot(ws_a))
+        sig_b = ssig.signature_str(ssig.snapshot(ws_b))
+        assert sig_a != sig_b
+        assert ssig.signature_hash(ssig.snapshot(ws_a)) != \
+            ssig.signature_hash(ssig.snapshot(ws_b))
+
+    def test_v_anchor_untouched_by_obstacles(self, tmp_path):
+        _fact(tmp_path, "F001", "PROVEN")
+        _cost(tmp_path, [10.0])
+        v0 = ssig.v_anchor(ssig.snapshot(tmp_path))
+        self._obstacle(tmp_path, "detection_trigger")
+        self._obstacle(tmp_path, "tool_limit", "p2.txt")
+        assert ssig.v_anchor(ssig.snapshot(tmp_path)) == v0
+
+    def test_corrupt_registry_row_tolerated(self, tmp_path):
+        self._obstacle(tmp_path, "detection_trigger")
+        d = tmp_path / "runs" / "obstacles"
+        (d / "OBS-002.json").write_text("{broken", encoding="utf-8")
+        snap = ssig.snapshot(tmp_path)  # never raises
+        assert snap["obstacles"]["count"] == 1
 
 
 # ---------- V anchor (deterministic, lookup-only) ----------
@@ -270,7 +334,7 @@ class TestVAnchor:
     @staticmethod
     def _snap(*, count=0, verified=0, fraction=0.0, present=True,
               chain=None) -> dict:
-        return {"schema": "state-sig/1",
+        return {"schema": "state-sig/2",
                 "facts": {"count": count, "verified": verified,
                           "bucket": ssig.fact_bucket(count)},
                 "claims": {"pattern": "OPEN=1" if count else ""},
@@ -352,7 +416,7 @@ class TestSituationStream:
         assert row["schema"] == "situation/1"
         assert row["trigger"] == "worker_return"
         assert row["tick"] == 3
-        assert row["state"]["schema"] == "state-sig/1"
+        assert row["state"]["schema"] == "state-sig/2"
         assert row["signature"] == ssig.signature_str(row["state"])
         assert row["signature_hash"] == ssig.signature_hash(row["state"])
         p = tmp_path / "runs" / "situation-stream.jsonl"
