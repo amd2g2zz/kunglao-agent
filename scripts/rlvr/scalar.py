@@ -73,14 +73,17 @@ RULE_RED = "tier/red"
 #
 # Declared in reward-rules.yaml round_credit.value_ladder; FIRST-MATCH:
 #   cited / used-toward-stage verified artifact -> FULL 1.0
-#   stage-milestone artifact (layer falls, key recovered) -> FULL plus
-#     the existing V-jump attribution face — unchanged by issue 433; a
-#     milestone artifact is by construction used toward its stage, so it
-#     enters through the citation leg and keeps full credit
 #   refuted-with-replay-evidence -> TRACE (information option)
 #   verified but never cited -> TRACE (exploration option, worthless
 #     until cited; demotion reason uncited_verified)
 #   action success / tool ran -> 0
+# No stage-milestone arm is declared: a milestone artifact (layer
+# falls, key recovered) is stage use by construction, so it enters
+# through the cited / used-toward-stage arm and keeps full credit
+# there (plus the existing V-jump attribution face); an unlinked
+# milestone settles the exploration-option trace — the disclosed
+# under-credit-only assumption (issue 438 minor tail removed the
+# declaration-only leg).
 # ``verified`` is the ADMISSION TICKET, ``cited`` the value condition —
 # the issue-433 inversion. The uncited demotion is a CLASS demotion: one
 # trace total per dispatch row per demotion class, never a per-unit
@@ -687,15 +690,17 @@ def question_claims(ws) -> set[str]:
     (answers_question non-null) — the claim-provenance half of the
     issue-433 citation relation (the same surface the verdict scorer
     walks: pq -> claim -> linked fact; a fact on such a claim is used
-    toward the deliverable/stage). Tolerant: a missing or unparseable
-    register degrades to an empty set — no claim face means no
-    claim-provenance citations; the deliverable face is unaffected."""
+    toward the deliverable/stage). Tolerant: a missing, unparseable, or
+    undecodable (invalid UTF-8) register degrades to an empty set — a
+    decode error is a data problem, never a face-killer; no claim face
+    means no claim-provenance citations; the deliverable face is
+    unaffected."""
     import yaml
     try:
         data = yaml.safe_load(
             (Path(ws) / "claim-register.yaml").read_text(
                 encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return set()
     out: set[str] = set()
     if isinstance(data, dict):
