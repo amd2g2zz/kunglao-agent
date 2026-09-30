@@ -13,8 +13,10 @@ VERSIONED SEAM through which every consumer reads the round strategy:
      "round": <int>,
      "sections": [{"title": str, "body": str}, ...]}
 
-The PRODUCER of this object lands with the strategy-object issue (W2); it
-does not exist yet. The seam contract that holds today:
+The PRODUCER of this object is the compose single-point's write face
+(``rlvr.compose.write_strategy`` -> ``write_seam``, issue 462 W2): every
+versioned compose re-emits this file as the derived projection of the
+strategy in force. The seam contract that holds today:
 
   - absent file            -> render() == "" and pointer() is None
                              (renders NOTHING, cleanly — consumers stay

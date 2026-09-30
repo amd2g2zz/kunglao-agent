@@ -568,3 +568,195 @@ def test_dispatch_lifecycle_recording_is_fail_open(tmp_path):
     paths = {"workspace": str(bad)}
     wbs._dispatch_lifecycle(paths, 1, ["Bash"], "C-12", "kunglao-worker",
                             prompt=V1_PROMPT)  # no exception == pass
+
+
+# ------------------------- 10. the seed contract at call site 2 (462 gate)
+
+def test_seed_state_hashes_the_round_cold_start_unfreezes(tmp_path):
+    """462 design-review MEDIUM-1: the #251 contract f(store state,
+    round) — the round rides INSIDE the hashed payload, so distinct
+    rounds produce distinct seeds even on an evidence-free workspace
+    (the round used to be computed and returned but never hashed,
+    freezing the cold draw)."""
+    import json as _json
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    # a fake convergence ledger whose snapshot-row count IS the round:
+    # 0..4 -> five advancing rounds, no evidence anywhere
+    seeds = []
+    for rnd in range(5):
+        ledger = ws / ".convergence_ledger.jsonl"
+        rows = [{"open_count": 1} for _ in range(rnd)] \
+            + [{"type": "event"}]  # the event row is not a snapshot
+        ledger.write_text(
+            "\n".join(_json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8")
+        rng, rnd_out = q_cells.q_cells_seed_state(ws)
+        assert rnd_out == rnd
+        seeds.append(rng.random())
+    assert len(set(seeds)) == 5, \
+        "distinct rounds must produce distinct draws (cold start " \
+        "unfreezes)"
+
+
+# ------------------------------------------- 9. settlement feed (462 W5)
+
+def test_settlement_feed_class_is_a_module_member():
+    """Collection sentinel (review CRITICAL): an edit once glued this
+    class header onto the preceding comment line, dead-nesting all five
+    W5 pins inside the previous function (invisible to ruff, the
+    hygiene lints, and the manifest). A class glued to a comment never
+    becomes a module attribute — this pin fails loudly instead."""
+    import sys
+    assert hasattr(sys.modules[__name__], "TestSettlementFeed462"), \
+        "TestSettlementFeed462 lost its module scope — the W5 pins " \
+        "are not being collected"
+
+
+class TestSettlementFeed462:
+    """issue 462 W5: the settlement feed — settled round credits reach
+    the Q-cell fold. The missing observe() call was the difference
+    between a learning system and a logging system: the fold saw only
+    dispatch rows with credit=None, so cells could never learn."""
+
+    @staticmethod
+    def _cited(aid: str, creator: str) -> dict:
+        return {"id": aid, "creator": creator, "status": "PROVEN",
+                "verify_status": "passes", "cited_by_deliverable": True}
+
+    def test_settle_banks_the_matching_q_cell_credit(self, tmp_path):
+        """The acceptance integration: settle -> observe -> cell credit
+        non-None -> the fold carries real posterior mass."""
+        import rollout_ledger as rl
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        sig = ssig.signature_hash(ssig.snapshot(ws))
+        res = ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
+            [self._cited("F1", "tr-m1-d1")], [],
+            now="2026-09-30T00:00:00Z")
+        assert res["settled"] == 1
+        rows = q_cells.JSONLQStore(ws).observations()
+        banked = [r for r in rows if r["source"] == "settlement"]
+        assert len(banked) == 1
+        assert banked[0]["credit"] is not None
+        assert banked[0]["credit"] == pytest.approx(1.0)  # the ladder value
+        assert banked[0]["signature_hash"] == sig
+        assert banked[0]["method_family"] == "static-symbolic"
+        assert banked[0]["dispatch_id"] == "tr-m1-d1"
+        # the fold now learns: real mass in the cell (shipped default fold)
+        fold = q_cells.fold(q_cells.JSONLQStore(ws))
+        cell = fold.cells[(sig, "static-symbolic")]
+        assert cell.success + cell.failure > 0.0
+        assert rl.fold(ws, "round_credit/tr-m1-d1") is not None
+
+    def test_unmatched_dispatch_is_the_honest_gap(self, tmp_path):
+        """No pending dispatch row for the settled dispatch id: no row,
+        never a fabricated bucket (the record_dispatch_observation
+        posture)."""
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        res = ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m9-z9", "round": 1}],
+            [self._cited("F9", "tr-m9-z9")], [],
+            now="2026-09-30T00:00:00Z")
+        assert res["settled"] == 1  # the ledger row settles fine
+        rows = q_cells.JSONLQStore(ws).observations()
+        assert len(rows) == 1  # only the original dispatch row
+        assert rows[0]["source"] == "dispatch"
+
+    def test_retry_after_recorded_but_unsettled_banks(self, tmp_path):
+        """Review MEDIUM fix: the exactly-once guard tests settlement
+        PRESENCE in the fold, not row existence — a first run that
+        recorded the round_credit identity row but failed/died before
+        settling must bank on the retry (the old row-existence guard
+        silently skipped that round's credit forever)."""
+        import rollout_ledger as rl
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        # the prior run's record face: identity row, NO settlement
+        rl.record(ws, kind="round_credit", anchor="tr-m1-d1",
+                  signals=[{"type": "round_credit_signal",
+                            "source": "scalar_settlement", "value": {},
+                            "ts": "2026-09-30T00:00:00Z"}],
+                  ts="2026-09-30T00:00:00Z")
+        assert rl.fold(ws, "round_credit/tr-m1-d1") is not None
+        assert rl.fold(ws, "round_credit/tr-m1-d1").get(
+            "settlement") is None
+        res = ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
+            [self._cited("F1", "tr-m1-d1")], [],
+            now="2026-09-30T01:00:00Z")
+        assert res["settled"] == 1
+        banked = [r for r in q_cells.JSONLQStore(ws).observations()
+                  if r["source"] == "settlement"]
+        assert len(banked) == 1, \
+            "the retry settlement must bank the credit"
+
+    def test_replay_never_double_banks(self, tmp_path):
+        """The learning clock banks each dispatch credit exactly once: a
+        settlement replay (duplicate fold) appends no second credit row,
+        and the late-cite amendment path refines the LEDGER only — the
+        append-only observation log has no retraction face."""
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        dispatches = [{"dispatch_id": "tr-m1-d1", "round": 1}]
+        ss.settle_round_credit(ws, dispatches,
+                               [self._cited("F1", "tr-m1-d1")], [],
+                               now="2026-09-30T00:00:00Z")
+        # replay: identical settlement (duplicate) banks nothing new
+        ss.settle_round_credit(ws, dispatches,
+                               [self._cited("F1", "tr-m1-d1")], [],
+                               now="2026-09-30T06:00:00Z")
+        # late-cite amendment: refines the ledger, still no second bank
+        ss.settle_round_credit(ws, dispatches,
+                               [self._cited("F2", "tr-m1-d1")], [],
+                               now="2026-09-30T07:00:00Z")
+        banked = [r for r in q_cells.JSONLQStore(ws).observations()
+                  if r["source"] == "settlement"]
+        assert len(banked) == 1
+
+    def test_credit_boundary_clamps_into_the_unit_interval(self, tmp_path):
+        """A negative round credit (waste outran credit) clamps to 0.0 at
+        the observation boundary — r_r is rail-clamped per #429 §4."""
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        sig = ssig.signature_hash(ssig.snapshot(ws))
+        waste = [{"dispatch_id": "tr-m1-d1"}]  # one attributed waste
+        ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
+            [dict(self._cited("F1", "tr-m1-d1"),
+                  cited_by_deliverable=False)], waste,
+            now="2026-09-30T00:00:00Z")
+        banked = [r for r in q_cells.JSONLQStore(ws).observations()
+                  if r["source"] == "settlement"]
+        assert len(banked) == 1
+        assert banked[0]["credit"] == 0.0
+        fold = q_cells.fold(q_cells.JSONLQStore(ws))
+        assert fold.cells[(sig, "static-symbolic")].failure \
+            == pytest.approx(1.0)

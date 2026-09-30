@@ -26,9 +26,15 @@ def _commands(ws: Path) -> list[str]:
             for e in face for h in e.get("hooks", [])]
 
 
-def test_register_invokes_ws_local_when_copies_materialized(tmp_path: Path) -> None:
+def test_register_invokes_ws_local_when_copies_materialized(
+        tmp_path: Path, monkeypatch) -> None:
     import hook_activation as ha
 
+    # hermetic env pin (issue 467 gate): this test owns the deploy/registration
+    # shape, not the env-staleness verdict — a machine may carry an older
+    # production install than the repo surface.
+    monkeypatch.setattr(ha, "_framework_project_root",
+                        lambda: ROOT)
     ha.deploy_workspace_copy(tmp_path)          # materialize manifest
     count = ha.register_hooks(workspace=tmp_path)
     assert count > 0
@@ -76,12 +82,18 @@ def test_resolver_unit(tmp_path: Path):
     assert Path(d2).name == "hooks"
 
 
-def test_upgrade_refresh_keeps_ws_copies_current(tmp_path: Path) -> None:
+def test_upgrade_refresh_keeps_ws_copies_current(tmp_path: Path,
+                                                  monkeypatch) -> None:
     """The #783 loop closes: init deploys -> skill-side copy drifts ->
     deployed_refresh restores workspace bytes from skill truth."""
     import hook_activation as ha
     from deployed_refresh import refresh
 
+    # hermetic env pin (issue 467 gate): refresh runs the manifest-vs-imports
+    # gate against the resolved env root — pin it to the repo so the test
+    # stays machine-independent.
+    monkeypatch.setattr(ha, "_framework_project_root",
+                        lambda: ROOT)
     ha.deploy_workspace_copy(tmp_path)
     ha.register_hooks(workspace=tmp_path)
 
