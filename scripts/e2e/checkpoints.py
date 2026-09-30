@@ -36,6 +36,7 @@ from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     record_result as _record, resolve_task_dir,
     resume_plan, tail as _tail, top_claim as _top_claim,
 )
+import kunglao_log  # #472: the canonical warn (spec-unreadable trace)
 
 #: #459: max dispatch acts launched CONCURRENTLY per tick wave. The acts
 #: are independent `claude -p` processes in one workspace; the loop is
@@ -92,14 +93,30 @@ CLAIM_APPENDS: tuple[dict, ...] = _DEFAULT_CLAIMS
 
 def _resolve_claims(task_spec: Path) -> None:
     """#456 bug-3: resolve PQ/CLAIMS from the unit's task.yaml anchors.
-    Falls back to the py-derive-v1 shape when anchors are absent."""
+    Falls back to the py-derive-v1 shape when anchors are absent.
+
+    #472: the fallback faces are distinguished — spec-ABSENT and
+    anchors-ABSENT are the silent legitimate faces (no anchors to
+    read); spec-UNREADABLE (exists but corrupt, or not a mapping)
+    leaves ONE rate-limited warn so a corrupt spec is never
+    indistinguishable from an absent anchor."""
     global PRIMARY_QUESTIONS, CLAIM_APPENDS
+    if not task_spec.is_file():
+        # absent spec: the documented anchors-absent-adjacent fallback
+        # face — silent (nothing to read is not corruption)
+        PRIMARY_QUESTIONS = _DEFAULT_PQ
+        CLAIM_APPENDS = _DEFAULT_CLAIMS
+        return
     try:
         import yaml as _yaml
         spec = _yaml.safe_load(task_spec.read_text(encoding="utf-8"))
         if not isinstance(spec, dict):
             # empty/null/list-shaped spec: restore defaults — a reused
             # process must not leak the previous unit's resolved claims
+            kunglao_log.warn(
+                "e2e.resolve_claims",
+                f"spec not a mapping ({type(spec).__name__}), "
+                f"defaults restored: {task_spec}")
             PRIMARY_QUESTIONS = _DEFAULT_PQ
             CLAIM_APPENDS = _DEFAULT_CLAIMS
             return
@@ -138,7 +155,14 @@ def _resolve_claims(task_spec: Path) -> None:
              "answers_question": "pq-2", "boundary_type": "confirmed",
              "status": "OPEN", "source": "synthesis"},
         )
-    except Exception:  # never-raise resolver: ANY failure restores defaults
+    except Exception as exc:  # never-raise resolver: ANY failure restores defaults
+        # #472: the restore is silent NO LONGER — a corrupt spec left
+        # one rate-limited trace (anchors-absent above stays silent:
+        # that fallback is the documented #456 behavior, not a defect)
+        kunglao_log.warn(
+            "e2e.resolve_claims",
+            f"spec unreadable, defaults restored: "
+            f"{type(exc).__name__}: {exc}")
         PRIMARY_QUESTIONS = _DEFAULT_PQ
         CLAIM_APPENDS = _DEFAULT_CLAIMS
 
@@ -932,7 +956,23 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
             final_status = "PARTIAL"
             break
         print(f"[{sid}] RUN")
-        result = fn()
+        try:
+            result = fn()
+        except Exception as exc:  # noqa: BLE001 — #472 step cage: a
+            # raising step is converted to a FAIL CheckpointResult via
+            # the canonical _record seam (evidence file + exactly one
+            # audit row), then the loop's FAIL handling applies and
+            # finalize() still writes the report — the harness's
+            # product IS the report; a crash must not lose it. The
+            # error text rides the per-step evidence detail (the
+            # emit_checkpoint detail contract is exactly-those-keys —
+            # pinned by TestUnifiedAuditTrail — so it does NOT join the
+            # audit row; rc=None matches the BLOCKED precedent).
+            # BaseException (operator interrupts) still propagates.
+            result = _record(ctx, checkpoint, name, model.FAIL, None,
+                             None, 0,
+                             {"failed_step": name,
+                              "error": f"{type(exc).__name__}: {exc}"})
         results.append(result)
         state.steps[sid] = result.status
         if result.status == model.FAIL:
