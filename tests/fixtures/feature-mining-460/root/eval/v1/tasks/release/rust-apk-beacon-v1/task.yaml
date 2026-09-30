@@ -1,0 +1,37 @@
+schema: kunglao-eval-task/1
+task_id: rust-apk-beacon-v1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: rust-apk-beacon
+seed: 33731
+rung: l1
+anchors:
+  goal_verbatim: Unpack the Android APK target/beacon.apk, extract the native
+    library lib/arm64-v8a/libcrackme.so, recover the three mutated
+    parameters, and re-implement crackme_verify and crackme_probe
+    reproducing the captured outputs byte-exact.
+  success_criterion: A re-implementation carrying the recovered parameters
+    that reproduces every published and checker-minted probe.
+  verification_method: reproduction
+workspace_scaffold:
+  language: rust/arm64-android
+  files:
+  - target/beacon.apk
+  entry: target/beacon.apk
+  candidate_contract: A Python module exposing verify(data) -> int and
+    probe(data) -> str (16 lowercase hex chars).
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - constant-hit
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 3
+    min_pair_ratio: 1.0

@@ -476,6 +476,10 @@ files:
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
     sha256: 95ef491e032b0eb9b723ab08b5f35d99901f11a34d7299121bde46157e6a230b
+  - src: scripts/feature_mining.py
+    dest: .claude/scripts/feature_mining.py
+    kind: scaffold
+    sha256: dd40f6306543828c6774c9659079584e26cb650e481d8cc100c59c2c4136b544
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -1167,7 +1171,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 744bd9574fcd5ef01ac0279bc18cc5eedf4780e839aa15ac798ca816f2b69816
+    sha256: ca18c3e563c9ee96f0c19b566b5e5965bb4e7d7928de6e491fc26fa48c4e8432
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1751,7 +1755,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 5c13622059aa0c8912f7c2dd0095ed5a91d4b82f10b78b1b15ba7b2c76b37d6b
+    sha256: 5d49f7fae62a8bc89c0c3c6b9f801be30ad2115c9064d48fa57ce0a6e68f07f3
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
