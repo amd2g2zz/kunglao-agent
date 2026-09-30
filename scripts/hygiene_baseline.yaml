@@ -160,6 +160,8 @@ files:
     r1: 1
   scripts/failure_analysis_gate.py:
     r1: 43
+  scripts/feature_mining.py:
+    r1: 4
   scripts/feedback.py:
     r1: 2
   scripts/fixture_excerpt_lint.py:
@@ -813,6 +815,8 @@ files:
     r1: 1
   tests/test_falsifier_family18_164.py:
     r1: 3
+  tests/test_feature_mining_460.py:
+    r1: 2
   tests/test_feedback.py:
     r1: 2
   tests/test_fix_98_deadlock.py:

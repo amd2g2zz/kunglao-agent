@@ -1,0 +1,21 @@
+{
+  "budget_consumed_seconds": 120.5,
+  "budget_seconds": 7200,
+  "family": "chain",
+  "lane": "algorithm",
+  "llm_mode": "auto",
+  "max_ticks": 60,
+  "repo": "fixture-root",
+  "run_id": "e2e-fix-231630-c",
+  "started_ts": "2026-09-29T23:16:30Z",
+  "steps": {
+    "C1-init": "PASS",
+    "C2-hooks": "PASS"
+  },
+  "task_dir": "eval/v1/tasks/chain/chain-l2-py-v1",
+  "tick_wait_seconds": 300,
+  "type": "linux",
+  "unit": "chain-l2-py-v1",
+  "ws": "ws/e2e-ws-gone",
+  "ws_root": "ws"
+}

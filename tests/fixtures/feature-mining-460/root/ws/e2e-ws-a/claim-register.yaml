@@ -1,0 +1,30 @@
+claims:
+- id: C-001
+  status: PROVEN
+  boundary_type: positive_observation
+  evidence_tier_attempted: 0
+  promotion_attempts: 0
+  depends_on: []
+  evidence: init-verified by construction (scaffold gate)
+  title: Analysis lane — algorithm (scaffold decision)
+- id: C-002
+  status: PROVEN
+  boundary_type: positive_observation
+  evidence_tier_attempted: 0
+  promotion_attempts: 0
+  depends_on: []
+  evidence: init-verified by construction (scaffold gate)
+  title: Project type — linux (scaffold decision)
+- id: C-004
+  statement: The target for unknown is characterizable; its key parameters are recoverable from the workspace material.
+  answers_question: pq-1
+  boundary_type: analysis
+  promotion_gate: parameters derived from evidence and confirmed by the checker
+  status: OPEN
+  source: static_re
+- id: C-005
+  statement: A re-implementation for unknown satisfies the success criterion.
+  answers_question: pq-2
+  boundary_type: confirmed
+  status: OPEN
+  source: synthesis

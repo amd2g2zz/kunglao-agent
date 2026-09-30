@@ -1,0 +1,15 @@
+{
+  "budget": {"consumed_seconds": 373.11, "remaining_seconds": 6826.89, "seconds": 7200},
+  "checkpoints": [],
+  "evidence_dir": "runs/e2e/e2e-fix-211504-a",
+  "exit_code": 0,
+  "family": "release",
+  "final_status": "FAIL",
+  "llm_mode": "auto",
+  "oracle": {},
+  "run_id": "e2e-fix-211504-a",
+  "schema": "e2e-run-report/1",
+  "total_duration_ms": 57212,
+  "unit": "rust-apk-beacon-v1",
+  "workspace": "ws/e2e-ws-a"
+}

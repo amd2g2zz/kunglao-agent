@@ -1,0 +1,27 @@
+{
+  "budget_consumed_seconds": 10869.44,
+  "budget_seconds": 10800,
+  "family": "release",
+  "lane": "static",
+  "llm_mode": "auto",
+  "max_ticks": 60,
+  "method_family": "",
+  "repo": "fixture-root",
+  "run_id": "e2e-fix-221504-b",
+  "started_ts": "2026-09-29T14:15:04Z",
+  "steps": {
+    "C1-init": "PASS",
+    "C2-hooks": "PASS",
+    "C3-heartbeat": "PASS",
+    "C4-entry": "PASS",
+    "C5-analysis": "PASS",
+    "C6-loop": "BLOCKED",
+    "C6-pre": "PASS"
+  },
+  "task_dir": "eval/v1/tasks/release/mod-crypto-js-l1b-v1",
+  "tick_wait_seconds": 300,
+  "type": "linux",
+  "unit": "mod-crypto-js-l1b-v1",
+  "ws": "ws/e2e-ws-b",
+  "ws_root": "ws"
+}
