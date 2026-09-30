@@ -60,7 +60,6 @@ Reproduce:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import random
 import sys
@@ -70,6 +69,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+from _hooks_path import load_module_by_path  # noqa: E402  (#863 Family B)
 from rlvr import obstacles, q_cells, state as ssig, termination  # noqa: E402
 
 RESULTS_REL = Path("experiments") / "ex6-results.json"
@@ -88,12 +88,11 @@ ARM_LABELS = {
 def _truth() -> dict[str, dict]:
     """EX-4's TRAJECTORY as the environment truth table (family ->
     step entry). The four failing families fail with their trajectory
-    kind/cause/probe when tried; the breakthrough family succeeds."""
-    spec = importlib.util.spec_from_file_location(
+    kind/cause/probe when tried; the breakthrough family succeeds.
+    Loaded through the ONE by-path loader (#863 Family B delegation)."""
+    ex4 = load_module_by_path(
         "ex4_attribution_trap", ROOT / "experiments" / "ex4_attribution_trap.py"
     )
-    ex4 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ex4)
     return {entry["family"]: entry for entry in ex4.TRAJECTORY}
 
 
