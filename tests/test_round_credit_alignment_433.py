@@ -10,14 +10,17 @@ method-family policy learned fact-farming.
 
 The fix (value ladder, FIRST-MATCH):
   cited-by-deliverable / used-toward-stage verified -> FULL 1.0
-  stage-milestone artifact                          -> FULL (plus the
-    existing V-jump attribution face — untouched by this change; a
-    milestone artifact is by construction used toward its stage)
   refuted-with-replay-evidence                      -> TRACE 0.01
   verified but never cited                          -> TRACE 0.01
     (demotion reason ``uncited_verified`` — the exploration option,
     worthless until cited)
   action success / tool ran                         -> 0
+
+Stage-milestone artifacts have NO separate ladder arm (the
+declaration-only leg was removed, issue 438 minor tail): a milestone
+is stage use by construction, so it rides the used-toward-stage arm
+(pinned below); an unlinked milestone settles the exploration-option
+trace — the disclosed under-credit-only assumption.
 
 ``verified`` demotes from sufficient condition to ADMISSION TICKET;
 ``cited / used-toward-stage`` is the value condition. The uncited
@@ -260,6 +263,26 @@ class TestCitationChokepoint:
         rows = ss.fact_artifacts(ws)
         assert rows[0]["answers_question"] is False
 
+    def test_undecodable_register_degrades_to_no_claim_citations(
+            self, tmp_path):
+        """Issue 438 minor tail: an invalid-UTF-8 register is a DATA
+        problem — the tolerant read degrades to no claim-provenance
+        citations, the same empty-set idiom as the missing-register face.
+        A UnicodeDecodeError escaping here would kill the whole
+        settlement face: fact_artifacts calls question_claims for every
+        workspace read, so the decode failure must never raise past
+        this read."""
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_bytes(
+            b"claims:\n"
+            b"  - id: C-\xff\xfe-001\n"
+            b"    answers_question: pq-main\n")
+        self._fact(ws, "F205-d", "tr-m1-d1", claim_id="C-001")
+        assert ss.question_claims(ws) == set()
+        rows = ss.fact_artifacts(ws)
+        assert rows[0]["answers_question"] is False
+
     def test_end_to_end_claim_provenance_settles_full(self, tmp_path):
         """The whole chain: register + fact frontmatter -> fact_artifacts
         -> round_credit settles the question-linked fact FULL and the
@@ -358,10 +381,15 @@ class TestRulesDeclareTheLadder:
         assert ladder["trace"] == 0.01
         legs = ladder["legs"]
         assert legs["cited_or_used_toward_stage_verified"] == "full"
-        assert legs["stage_milestone"] == "full"
         assert legs["refuted_with_replay_evidence"] == "trace"
         assert legs["uncited_verified"] == "trace"
         assert legs["action_success_tool_ran"] == 0.0
+        # RE-MINT (issue 438 minor tail): the stage_milestone leg is
+        # gone — it was declaration-only (no settlement face reads it;
+        # milestone artifacts earn full credit through the
+        # used-toward-stage citation leg). A declared leg with zero
+        # enforcement consumers must not linger in the rules table.
+        assert "stage_milestone" not in legs
 
     def test_ladder_note_states_the_inversion_and_class_demotion(self):
         doc = rs.load_rules(RULES_PATH)
