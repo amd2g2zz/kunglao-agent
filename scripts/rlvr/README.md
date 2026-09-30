@@ -42,6 +42,10 @@ scripts/rlvr/
 │                        #   append-only runs/posterior-store.jsonl + fold/read
 │                        #   γ decay + pseudo-count priors + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
+├── obstacles.py         # obstacle/1 attribution registry (issue 461
+│                        #   Phase 1) — intervention-born failure-cause
+│                        #   objects as runs/obstacles/OBS-<n>.json,
+│                        #   read into the state signature's ob= segment
 └── README.md            # this document
 ```
 
@@ -145,10 +149,26 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 | current face | final home |
 |---|---|
 | `SCHEMA`, `TERMINAL_FACT_STATUSES`, `FACT_BUCKET_EDGES`, `BUDGET_BUCKET_EDGES`, `W_CHAIN/W_FACTS/W_BUDGET/W_SIDES` | `rlvr.state` |
-| `snapshot()`, `signature_str()`, `signature_hash()` | `rlvr.state` (the Q-table key faces) |
-| `v_anchor()`, `v_from_workspace()` | `rlvr.state` (deterministic V(s); the empirical correction stays the documented v0.2 seam) |
+| `snapshot()`, `signature_str()`, `signature_hash()` | `rlvr.state` (the Q-table key faces; state-sig/2 carries the ob= attribution segment, issue 461 Phase 1) |
+| `v_anchor()`, `v_from_workspace()` | `rlvr.state` (deterministic V(s); the empirical correction stays the documented v0.2 seam; obstacles carry NO V term — attribution is evidence, not progress) |
 | `append_snapshot()`, `read_situations()` | `rlvr.state` (the situation snapshot stream) |
 | `fact_face()`, `fact_bucket()`, `claim_pattern()`, `budget_fraction()`, `budget_bucket()`, `chain_progress()`, `phase()` | `rlvr.state` |
+| `obstacle_face()` | `rlvr.state` (lazy delegation to the obstacles face below) |
+
+### obstacles — the issue-461 attribution registry (Phase 1)
+
+| face | home |
+|---|---|
+| `SCHEMA`, `KINDS`, `OBSTACLES_REL`, `CAUSE_MAX` | `rlvr.obstacles` (obstacle/1 over runs/obstacles/OBS-<n>.json — runs/, not evidence/: the evidence-index pipeline sweeps evidence/ as raw evidence and an obstacle row is a derivation from its probe artifact) |
+| `validate_obstacle()` | `rlvr.obstacles` (structural + artifact-existence + probe-marker shape; pure) |
+| `record()` | `rlvr.obstacles` (loud-result fail-open; exclusive-create mint; CLI `record` subcommand) |
+| `read()`, `face()` | `rlvr.obstacles` (tolerant parsed-n-sorted read; {present, count, kinds} digest consumed by `rlvr.state.obstacle_face`) |
+| `main()` | `rlvr.obstacles` (CLI face — the worker protocol's sanctioned producer; shares the library validation path) |
+
+Recording-only: no dispatch/gate/settlement face imports this module
+(the 396 freeze wall, extended with full-module-string checks); no
+gate reads the registry — attribution is evidence, never a verdict,
+never an obstacle claim.
 
 ### liveness — from `scripts/heartbeat.py` (continuity core) + `scripts/liveness_policy.py` (constants)
 
