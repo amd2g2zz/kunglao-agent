@@ -424,7 +424,9 @@ def timed():
 # is populated-by-construction at every site that emits it. epoch left via
 # the tick axis — emit inherits the convergence-ledger tick when the kwarg
 # is omitted, so every event carries the axis (an unreadable ledger stays a
-# documented null: "tick_ledger_unreadable"). duration_ms / arm /
+# documented null: "tick_ledger_unreadable"; #472: an explicit garbage
+# epoch also lands a documented null — "value_unparseable" — never a
+# fabricated or silently re-inherited axis). duration_ms / arm /
 # hypothesis_ref / matched_rule stay: their values live in caller-side
 # execution structure (timing wrapper, actor/action context, settlement),
 # so a site that genuinely cannot know one keeps the honest documented
@@ -442,6 +444,40 @@ def _resolve_epoch(ws, epoch: int | None) -> tuple[int | None, str | None]:
     if inherited is None:
         return None, "tick_ledger_unreadable"
     return inherited, None
+
+
+def _safe_int(value) -> int | None:
+    """#472: the emit-site numeric coercion — the never-raise contract is
+    unconditional. None passes through; int() applies (numeric strings
+    coerce exactly as before); a non-numeric value coerces to None. The
+    except set is load-bearing: int(float('inf')) raises OverflowError
+    (an ArithmeticError, NOT a ValueError subclass), so a ValueError-only
+    cage would leave a live raise path. Applied ONLY at the event-dict
+    construction site — never before _resolve_epoch (a coerced-to-None
+    epoch must not be silently re-inherited from the tick ledger)."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _coerce_numerics(duration_ms, exit, epoch, reasons) -> dict:
+    """#472: coerce the three numeric fields at the event-dict site
+    (AFTER epoch-axis resolution) and document each coerced null as
+    ``value_unparseable`` in `reasons` — a garbage explicit epoch lands
+    null + documented instead of being silently re-inherited as the
+    tick (a fabricated axis). Returns the coerced {field: value} map;
+    a caller reason already in `reasons` keeps precedence."""
+    coerced = {"duration_ms": _safe_int(duration_ms),
+               "exit": _safe_int(exit),
+               "epoch": _safe_int(epoch)}
+    for field, raw in (("duration_ms", duration_ms), ("exit", exit),
+                       ("epoch", epoch)):
+        if raw is not None and coerced[field] is None:
+            reasons[field] = "value_unparseable"
+    return coerced
 
 
 def emit(ws, actor: str, action: str, *, claim: str | None = None,
@@ -503,9 +539,12 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     face for epoch (unlike trace_id's sentinel above): ``epoch=None`` is
     treated exactly as omitted and the axis is stamped anyway — the axis
     always exists (0 = cold start), so a caller passing None to mean
-    "unknown" receives the tick, not a null. Only a genuinely unreadable
-    ledger leaves the field null, documented as
-    ``tick_ledger_unreadable`` (honesty rule: a missing measurement is
+    "unknown" receives the tick, not a null. Two documented nulls remain:
+    a genuinely unreadable ledger leaves the field null as
+    ``tick_ledger_unreadable``, and (#472) an explicit GARBAGE epoch
+    lands null as ``value_unparseable`` — the no-fabrication rule
+    overrides the no-explicit-null rule, so a bad input is never silently
+    swapped for the inherited axis (honesty rule: a missing measurement is
     explained, never fabricated).
 
     #58 S3: version already auto-fills from the cached _repo_sha(); an
@@ -528,6 +567,11 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     reasons: dict = {}
     if null_reasons:
         reasons.update({str(k): str(v) for k, v in null_reasons.items()})
+    # #472: numeric coercion at the event-dict site (after epoch-axis
+    # resolution — see _coerce_numerics). The AUTO_NULL sweep below only
+    # fills absent reasons, so "omitted" never overwrites
+    # "value_unparseable".
+    numerics = _coerce_numerics(duration_ms, exit, epoch, reasons)
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -535,11 +579,11 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "claim": str(claim) if claim is not None else None,
         "tool": str(tool) if tool is not None else None,
         "artifact": str(artifact) if artifact is not None else None,
-        "duration_ms": int(duration_ms) if duration_ms is not None else None,
-        "exit": int(exit) if exit is not None else None,
+        "duration_ms": numerics["duration_ms"],
+        "exit": numerics["exit"],
         "detail": str(detail) if detail is not None else None,
         "arm": str(arm) if arm is not None else None,
-        "epoch": int(epoch) if epoch is not None else None,
+        "epoch": numerics["epoch"],
         "hypothesis_ref": str(hypothesis_ref) if hypothesis_ref is not None else None,
         "matched_rule": str(matched_rule) if matched_rule is not None else None,
         "trace_id": trace_id,

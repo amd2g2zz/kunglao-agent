@@ -90,11 +90,11 @@ files:
   scripts/dual_gate.py:
     r1: 3
   scripts/e2e/audit.py:
-    r1: 1
+    r1: 4
   scripts/e2e/checkpoints.py:
-    r1: 18
+    r1: 22
   scripts/e2e/llm_faces.py:
-    r1: 10
+    r1: 12
   scripts/e2e/model.py:
     r1: 6
   scripts/e2e/runtime.py:
@@ -182,6 +182,8 @@ files:
     r1: 9
   scripts/hook_activation.py:
     r1: 78
+  scripts/hook_exit_codes.py:
+    r1: 6
   scripts/hooks_selfcheck.py:
     r1: 38
   scripts/hypothesis_seeder.py:
@@ -221,7 +223,7 @@ files:
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 29
+    r1: 33
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -719,8 +721,8 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 14
-    r2: 4
+    r1: 19
+    r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
   tests/test_encoding_declarations.py:
@@ -891,7 +893,7 @@ files:
   tests/test_heartbeat_window_4.py:
     r1: 2
   tests/test_hook_exit_codes.py:
-    r1: 1
+    r1: 4
   tests/test_hook_registration_entry.py:
     r1: 9
   tests/test_hook_registry_singlesource.py:
@@ -968,7 +970,7 @@ files:
   tests/test_kunglao_init.py:
     r1: 28
   tests/test_kunglao_log.py:
-    r1: 5
+    r1: 6
   tests/test_kunglao_log_channel_699.py:
     r1: 5
   tests/test_kunglao_redteam_verdict_layer.py:
@@ -1009,7 +1011,7 @@ files:
   tests/test_machine_check_contract.py:
     r1: 6
   tests/test_max_retries_604.py:
-    r1: 1
+    r1: 2
   tests/test_mcp_env_e2e.py:
     r1: 4
   tests/test_mcp_prefix_enforcement.py:

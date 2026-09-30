@@ -15,7 +15,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 266dbb82ccefdf6836f1746fba8d4d44a7feab85ea483d5f2175ea468bda96f6
+    sha256: 8ac8b20b3f00a492ca97152b94cbb629d80e2b9d4e9701f6f749c9d0db7b2cca
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -75,7 +75,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 366d864fe83f11aa5b2156420120164ea48e89ab4c3ee7fe3bf5d27c1884021a
+    sha256: 0fdfc30cc262277b02e6d6f2d8112796de25315aeea763e380976ec97455f767
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -539,7 +539,7 @@ files:
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
-    sha256: 1264ec58070b22ea1c339cae30618bebbc632f68db8f7514bda763a3726b5e01
+    sha256: 0c444b08b554be0a242aca071dbdcd8c9707185542255cd1b2eae342abcc95f1
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
@@ -643,7 +643,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: f65f38d5f72fd29017872147a42134280748a5774db918dc04961bd877b9dfff
+    sha256: 5fcd386229932bbac8464e824089ffd7fc85226a598898257398bccf54bf00f0
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -1187,7 +1187,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 232006173d72ea7ea5a7035e9d85468fbf3a38ecb4bc5927b3e2c051b839d2e5
+    sha256: 09f74b21f2320de9dd47abeeba502ff52fa69c8b1b5dfe72096f4028ebf2c63e
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
