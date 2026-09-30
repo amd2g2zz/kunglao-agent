@@ -2014,3 +2014,49 @@ class TestPipelineStepCage472:
         assert by_step[sid]["status"] == "FAIL"
         assert "RuntimeError: checkpoint exploded" in (
             by_step[sid]["detail"]["error"])
+
+
+class TestFactLanding473:
+    """#473: envelope carries the incremental-facts + STATUS contract;
+    act timeout is env-overridable with a safe default."""
+
+    def _ctx(self, stub_repo, tmp_path, mode="dry"):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode=mode, started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        return checkpoints.RunContext(
+            state=state, runner=ScriptedRunner(),
+            face=llm_faces.face_for(mode, ScriptedRunner(), ev_dir),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+
+    def test_envelope_carries_fact_landing_contract(self, stub_repo,
+                                                    tmp_path):
+        from e2e.checkpoints import _run_dispatch_act
+        ctx = self._ctx(stub_repo, tmp_path)
+        detail: dict = {"acts": []}
+        _run_dispatch_act(ctx, "C-005", set(), detail)
+        prompt = (Path(ctx.state.evidence_dir)
+                  / "dispatch-prompt-C-005.md").read_text(encoding="utf-8")
+        assert "INCREMENTALLY" in prompt
+        assert "positive_observation" in prompt
+        assert "STATUS: DONE" in prompt and "STATUS: BLOCKED" in prompt
+        assert "zero facts is a failed act" in prompt
+
+    def test_act_timeout_env_override_and_garbage_fallback(self, monkeypatch):
+        import importlib
+        from e2e import llm_faces as lf
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "3600")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 3600
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "garbage")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
+        monkeypatch.setenv("KUNGLAO_E2E_ACT_TIMEOUT_S", "-5")
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800
+        monkeypatch.delenv("KUNGLAO_E2E_ACT_TIMEOUT_S", raising=False)
+        assert importlib.reload(lf).CLAUDE_ACT_TIMEOUT_S == 1800

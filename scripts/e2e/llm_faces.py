@@ -20,6 +20,7 @@ No face ever degrades silently: every act lands in structured evidence.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import threading
@@ -32,7 +33,18 @@ from e2e import audit, model
 
 #: per-command timeouts (seconds) — every subprocess call is bounded.
 SCRIPT_TIMEOUT_S = 600
-CLAUDE_ACT_TIMEOUT_S = 1_800
+def _act_timeout_s() -> int:
+    """#473: env-overridable act timeout — rounds may run longer acts
+    without code changes. Garbage falls back to the default."""
+    raw = os.environ.get("KUNGLAO_E2E_ACT_TIMEOUT_S", "")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 1_800
+    return value if value > 0 else 1_800
+
+
+CLAUDE_ACT_TIMEOUT_S = _act_timeout_s()
 
 
 class CommandRunner:
