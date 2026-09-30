@@ -77,8 +77,28 @@ class PosteriorStrategyStore:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
         receipt = q_cells.sample_method_family(
-            state_fingerprint, prior, self._qstore, rng=rng)
+            state_fingerprint, prior, self._qstore, rng=rng,
+            **self._feature_prior_kwargs())
         return str(receipt["family"])
+
+    def _feature_prior_kwargs(self) -> dict:
+        """#460 Part B wiring (predict-before-try): thread the live
+        instance features + the workspace's mined feature table into
+        call site 2 WHEN the KUNGLAO_PREDICT_BEFORE_TRY flag is on —
+        without this the flag-on path would be dead code at the
+        production seam. Fail-open: any extraction/loading failure
+        yields {} (the sampler stays flag-off-identical)."""
+        try:
+            from rlvr import feature_prior as _fp  # noqa: PLC0415
+            if not _fp.enabled():
+                return {}
+            features = _fp.features_from_workspace(self.ws)
+            if not features:
+                return {}
+            return {"features": features,
+                    "feature_table": _fp.default_table_path(self.ws)}
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            return {}
 
     def decayed_weight(self, row_id: str) -> float:
         """γ-decayed weight of one settled backing row (unit weight for
