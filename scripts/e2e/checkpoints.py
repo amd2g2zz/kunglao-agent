@@ -581,7 +581,18 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(
         json.dumps({"kunglao_dispatch": dispatch_meta})
-        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n",
+        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
+        "worker contract (from #473 live evidence rounds 5-7A):\n"
+        "1. Pin facts INCREMENTALLY — the moment a finding is established "
+        "(mapped structure, a constant with partial verification, decoded "
+        "case semantics) write facts/F<NNN>.md with boundary_type: "
+        "positive_observation. Do NOT batch facts at the end; final numeric "
+        "claims UPGRADE earlier facts rather than waiting for full "
+        "verification. An act that times out with zero facts is a failed "
+        "act.\n"
+        "2. End your final message with a line 'STATUS: DONE' (or 'STATUS: "
+        "BLOCKED' with the reason) so the orchestrator parses your outcome "
+        "precisely.\n",
         encoding="utf-8")
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
