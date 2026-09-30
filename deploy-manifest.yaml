@@ -308,6 +308,10 @@ files:
     dest: .claude/scripts/decision_pending.py
     kind: scaffold
     sha256: c172f0f91ca4db7515ff8425b010baa45580b9af4c24268716bf560f9d1fa70a
+  - src: scripts/dep_surface_gate.py
+    dest: .claude/scripts/dep_surface_gate.py
+    kind: scaffold
+    sha256: 7a6a0a16f59fb1f6597e3fc08e2183003fcec8c3d35540f94adb4fe4629bd9a8
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
@@ -319,7 +323,7 @@ files:
   - src: scripts/deployed_refresh.py
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
-    sha256: dc3a29301663d76b0dd82e3492b912d4f2a0a6bc713f7716c55b60a5a7d8170c
+    sha256: b4bf33fc0d8ae150bbe6527bc302988b5ed2e2f00766a90a23041de26cba75cc
   - src: scripts/detector_liveness.py
     dest: .claude/scripts/detector_liveness.py
     kind: scaffold
@@ -527,7 +531,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: c1ab0a6fd3d0cd3f1d7ba159af74116d63bfd4161bb4083f20f5a3eca18aff7c
+    sha256: 51ab3c614284a430d03bdb057f455755b1d32a32122845b5a6252b2277798da1
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -1751,7 +1755,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 5c13622059aa0c8912f7c2dd0095ed5a91d4b82f10b78b1b15ba7b2c76b37d6b
+    sha256: baa11ca8890aeb91c3cd60630fdf7340711b078a32ced21dd381ba698814802b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

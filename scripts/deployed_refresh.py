@@ -20,7 +20,7 @@ import shutil
 import time
 from pathlib import Path
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn  # canonical warn (single implementation)
 
 
 def _norm(b: bytes) -> bytes:
@@ -44,6 +44,14 @@ def refresh(ws: Path, *, dry: bool = False,
     backup_dir = None
     modified: list[str] = []
     pruned: list[str] = []
+
+    # issue 467 (manifest-vs-imports gate): the never-raise migration
+    # contract stands — a gap between the deployed code's hard imports
+    # and the serving env project's manifest surfaces as a warn + a
+    # dep_gap detail part, never as an exception into the migration.
+    dep_gap = _dep_gap_detail()
+    if dep_gap:
+        warn("dep_surface_gate", dep_gap)
 
     def _backup(f: Path, rel_dest: str) -> None:
         nonlocal backup_dir
@@ -125,9 +133,33 @@ def refresh(ws: Path, *, dry: bool = False,
         parts.append(f"overwritten_modified={len(modified)}")
     if pruned:
         parts.append(f"pruned_orphans={len(pruned)}")
+    if dep_gap:
+        parts.append(f"dep_gap={dep_gap}")
     if carrier_digest:
         parts.append(f"carrier={carrier_digest[:8]}")
     return "deployed_refresh(" + ",".join(parts) + ")"
+
+
+def _dep_gap_detail() -> str:
+    """The issue-467 gap string ('' when the env covers the surface) —
+    computed against the EXECUTING tree and the hook env resolution, the
+    same pair the hook commands will use at runtime."""
+    try:
+        import dep_surface_gate as dsg
+        env_root = dsg.framework_env_root()
+        if env_root is None:
+            return ""
+        report = dsg.check(
+            surface_root=Path(__file__).resolve().parent.parent,
+            env_root=env_root)
+        if report["ok"]:
+            return ""
+        mods = ",".join(m["module"] for m in report["missing"])
+        return (f"env {env_root} lacks {mods} "
+                f"— update the skill package at that root")
+    except Exception as exc:  # noqa: BLE001 — never raises into the migration
+        warn("dep_surface_gate", f"gate check failed ({exc!r})")
+        return ""
 
 
 def item(ws: Path, dry: bool) -> str:
