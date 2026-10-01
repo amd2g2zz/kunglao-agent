@@ -1124,6 +1124,10 @@ files:
     dest: .claude/scripts/ws_layout.py
     kind: scaffold
     sha256: ac0e31417467dda128b0fcd2550ebf7f878c869783d0b8f8af561fa58cf4dbcf
+  - src: scripts/ws_yaml.py
+    dest: .claude/scripts/ws_yaml.py
+    kind: scaffold
+    sha256: 2e351efc7060ea7a5ff17becae4a13aed5b90b5308ac9b5f3a7c22bc5c2cbb5b
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
@@ -1199,7 +1203,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c9c526bd744475b531554b2d3fb6d015ee11e90709305000c8e18483131b6548
+    sha256: 8e20d46d1602faff9dbc9e7346aad73a75752375b1338c63c9ecc43075bb4ebf
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1787,7 +1791,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3ef0376c52bffb9742816dd19f1fca6c1c344e8a7f3fe870e402392570346900
+    sha256: 689cf09e55fa9b027471be4be11b28934535572799a92a8c40ec51481a23efd7
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

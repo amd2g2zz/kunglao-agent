@@ -148,8 +148,9 @@ class ScriptedRunner(llm_faces.CommandRunner):
         self.queues: list[tuple[tuple[str, ...], list[tuple[int, str]]]] = []
         self.calls: list[str] = []
 
-    def on(self, *needles: str, rc: int = 0, stdout: str = "") -> None:
-        self.rules.append((needles, rc, stdout))
+    def on(self, *needles: str, rc: int = 0, stdout: str = "",
+           stderr: str = "") -> None:
+        self.rules.append((needles, rc, stdout, stderr))
 
     def seq(self, *needles: str, outcomes: list[tuple[int, str]]) -> None:
         self.queues.append((needles, list(outcomes)))
@@ -160,11 +161,15 @@ class ScriptedRunner(llm_faces.CommandRunner):
         self.calls.append(" ".join(argv))
         for needles, queue in self.queues:
             if all(n in " ".join(argv) for n in needles) and queue:
-                rc, stdout = queue.pop(0)
-                return model.CmdOutcome(rc=rc, stdout=stdout, stderr="")
-        for needles, rc, stdout in self.rules:
+                item = queue.pop(0)
+                rc, stdout = item[0], item[1]
+                stderr = item[2] if len(item) > 2 else ""
+                return model.CmdOutcome(rc=rc, stdout=stdout,
+                                        stderr=stderr)
+        for needles, rc, stdout, stderr in self.rules:
             if all(n in " ".join(argv) for n in needles):
-                return model.CmdOutcome(rc=rc, stdout=stdout, stderr="")
+                return model.CmdOutcome(rc=rc, stdout=stdout,
+                                        stderr=stderr)
         raise AssertionError(f"unscripted command: {argv}")
 
 
@@ -2125,3 +2130,96 @@ class TestVerifierDispatch484:
         launched = [Path(c) for c in [f"dispatch-prompt-V-C-005.md"]]
         assert (Path(ctx.state.evidence_dir) / "dispatch-prompt-V-C-005.md"
                 ).is_file()
+
+
+class TestYamlCorruption482:
+    """#482: loud-stop on consecutive CRASHED, resume breaker reset,
+    and the YAML-safe state writer."""
+
+    def _ctx(self, stub_repo, tmp_path, budget=10_000):
+        ws = tmp_path / "ws"
+        ws.mkdir(parents=True, exist_ok=True)
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="a1", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=budget,
+            llm_mode="dry", started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        return checkpoints.RunContext(
+            state=state, runner=ScriptedRunner(),
+            face=llm_faces.face_for("dry", ScriptedRunner(), ev_dir),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+
+    def test_three_crashed_ticks_stop_loudly(self, stub_repo, tmp_path,
+                                             monkeypatch):
+        monkeypatch.setenv("KUNGLAO_CRASHED_STOP_N", "3")
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.on("heartbeat_tick", rc=0, stdout="ok")
+        ctx.runner.on("convergence_check", rc=65,
+                      stdout='{"decision": "CRASHED"}',
+                      stderr="yaml.scanner.ScannerError: mapping values")
+        from e2e.checkpoints import _loop_one_tick
+        detail: dict = {"acts": []}
+        terminal = None
+        for tick in range(1, 4):
+            flow, terminal, _ = _loop_one_tick(
+                ctx, set(), detail, 0, 0)
+            assert flow == "continue" or terminal is not None
+            if terminal is not None:
+                break
+        assert terminal is not None, "3 crashed ticks must stop"
+        assert terminal.status == model.BLOCKED
+        det = terminal.detail
+        assert det["stop_class"] == "convergence-crashed"
+        assert det["crashed_ticks"] == 3
+        assert "ScannerError" in det["stderr_tail"]
+
+    def test_single_crashed_tick_does_not_stop(self, stub_repo, tmp_path,
+                                               monkeypatch):
+        monkeypatch.setenv("KUNGLAO_CRASHED_STOP_N", "3")
+        ctx = self._ctx(stub_repo, tmp_path)
+        ctx.runner.seq("heartbeat_tick", outcomes=[(0, "ok"), (0, "ok")])
+        ctx.runner.seq("convergence_check", outcomes=[
+            (65, '{"decision": "CRASHED"}'),
+            (1, '{"decision": "DISPATCH"}')])
+        ctx.runner.on("priority_ratio", rc=0,
+                      stdout='[{"claim_id": "C-005"}]')
+        from e2e.checkpoints import _loop_one_tick
+        for _ in range(2):
+            flow, terminal, _ = _loop_one_tick(
+                ctx, set(), {"acts": []}, 0, 0)
+            assert terminal is None
+
+    def test_ws_yaml_set_with_colon_roundtrips(self, tmp_path):
+        import subprocess, sys as _sys
+        f = tmp_path / "reg.yaml"
+        f.write_text("claims:\n- id: C-004\n  evidence: old\n",
+                     encoding="utf-8")
+        prose = "mapped (facts/F007: 0x19d68 AES-shaped 0x1a1fc pass)"
+        r = subprocess.run(
+            [_sys.executable, "scripts/ws_yaml.py", "set", str(f),
+             "claims.0.evidence", f'"{prose}"'],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        import yaml
+        doc = yaml.safe_load(f.read_text(encoding="utf-8"))
+        assert doc["claims"][0]["evidence"] == prose
+
+    def test_ws_yaml_get_del_and_exit_codes(self, tmp_path):
+        import subprocess, sys as _sys
+        f = tmp_path / "s.yaml"
+        f.write_text("a:\n  b: 1\n", encoding="utf-8")
+        r = subprocess.run(
+            [_sys.executable, "scripts/ws_yaml.py", "get", str(f), "a.b"],
+            capture_output=True, text=True)
+        assert r.returncode == 0 and "1" in r.stdout
+        r = subprocess.run(
+            [_sys.executable, "scripts/ws_yaml.py", "del", str(f), "a.b"],
+            capture_output=True, text=True)
+        assert r.returncode == 0
+        r = subprocess.run(
+            [_sys.executable, "scripts/ws_yaml.py", "get", str(f), "a.z"],
+            capture_output=True, text=True)
+        assert r.returncode == 5
