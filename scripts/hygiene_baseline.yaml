@@ -92,7 +92,7 @@ files:
   scripts/e2e/audit.py:
     r1: 7
   scripts/e2e/checkpoints.py:
-    r1: 26
+    r1: 28
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
@@ -725,7 +725,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 20
+    r1: 21
     r2: 5
   tests/test_emit_gate_880.py:
     r1: 4

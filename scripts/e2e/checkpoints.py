@@ -656,6 +656,50 @@ def _dispatch_wave(ctx: RunContext, claims: list[str],
         _land_dispatch(ctx, act.claim, act, dispatched, detail)
 
 
+def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
+                       detail: dict) -> model.CheckpointResult | None:
+    """#484: DISPATCH_VERIFIER decisions finally act — a verifier face for
+    the claim (maker-checker: verify, never make). Same rollback semantics
+    as worker acts; single act (verification is light, no wave)."""
+    vkey = f"V:{claim}"
+    if vkey in dispatched:
+        return None  # already verifying; wait for the act to land
+    dispatched.add(vkey)
+    prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-V-{claim}.md"
+    prompt_file.parent.mkdir(parents=True, exist_ok=True)
+    prompt_file.write_text(
+        json.dumps({"kunglao_dispatch": {
+            "version": 1, "claim": claim, "tier": 1,
+            "agent": "kunglao-verifier"}})
+        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
+        "VERIFIER contract (maker-checker #484): you VERIFY, you never "
+        "make. Read the claim's facts and artifacts, run the workspace's "
+        "verification faces (replay_equivalence, oracle probes, byte-exact "
+        "comparisons), and write runs/verification-"
+        f"{claim}.md with a frontmatter verdict (verified|refuted) plus "
+        "evidence citations (file:line). NEVER write facts/F*.md. If a "
+        "state file must change, edit it with python3 + the yaml library "
+        "(safe_dump) — never hand-edit YAML (#482). End with STATUS: DONE "
+        "or STATUS: BLOCKED.\n",
+        encoding="utf-8")
+    request = model.DispatchRequest(
+        claim=claim, workspace=str(ctx.ws),
+        prompt_file=str(prompt_file), run_id=ctx.state.run_id,
+        method_family=getattr(ctx.state, "method_family", "") or None)
+    act = ctx.face.dispatch_act(request)
+    ctx.acts.append(act.to_dict())
+    detail["acts"].append(act.to_dict())
+    if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+        dispatched.discard(vkey)
+        return None
+    # verification landed → attempt promotion through the repo gate;
+    # a refusal is honest progress info, never fatal (#819 fail-closed)
+    promote = promote_claims(ctx.repo, ctx.ws, [claim])
+    detail.setdefault("promotions", []).append(
+        {claim: promote.get("ok"), "promoted": promote.get("promoted")})
+    return None
+
+
 _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
 
 
@@ -862,7 +906,11 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                 ctx, "C6", "loop", model.FAIL,
                 failed.rc if failed else None, failed, total_ms,
                 {**detail, "failed_step": "priority_ratio"}), total_ms)
-        if decision == "DISPATCH":
+        if decision == "DISPATCH_VERIFIER":
+            terminal = _run_verifier_act(ctx, claims[0], dispatched, detail)
+            if terminal is not None:
+                return "stop", terminal, total_ms
+        elif decision == "DISPATCH":
             # #459: dispatch up to max-parallel acts concurrently (launch
             # all, wait for all); rollback + budget guard stay per-act /
             # global inside the wave.
