@@ -344,6 +344,10 @@ files:
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
     sha256: e71bd4c15080947a732b1d5e3d53404a40dd564832ebb927e98f4de1b13c734e
+  - src: scripts/distill_spine.py
+    dest: .claude/scripts/distill_spine.py
+    kind: scaffold
+    sha256: 7ceb91051938fb028fd44621e726ad5648c95fce3714fd0f8ad36da62dac6521
   - src: scripts/dual_gate.py
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
@@ -1195,7 +1199,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: a96112299824ea629aa14959cb59237cc595a323739b185b0ab4f1e8b1cba604
+    sha256: b119d8353facd89029050115f08cad40d19fb6415703446db1bb4b7e2ae47f3f
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1783,7 +1787,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3ef0376c52bffb9742816dd19f1fca6c1c344e8a7f3fe870e402392570346900
+    sha256: 16aa10dd05ba819d2527dae043298af385082ee1d8af8cb532103ed512fef049
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
