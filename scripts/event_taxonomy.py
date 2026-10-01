@@ -175,6 +175,9 @@ EMIT_ACTIONS = [
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "harvest_landed",     # #477 workspace script harvest landing
+    "harvest_scan",       # #477 workspace script harvest sweep
+    "script_harvested",   # #477 per-script classification (landed/archived)
     "bridge_lint_findings",  # issue 252 hypothesis-bridge cold-start lint findings (digest face)
     "candidate_landed",   # online distillation: a distilled candidate landed in the run-local tool shelf (tools-local, with provenance manifest)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
