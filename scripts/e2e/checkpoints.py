@@ -859,6 +859,50 @@ def _verdict_face(ctx: RunContext, detail: dict,
     return None
 
 
+def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
+    """Budget guard + heartbeat tick + adjudication; returns
+    (terminal_or_None, tick_outcome, total_ms)."""
+    if not _guard_budget(ctx):
+        return (_record(ctx, "C6", "loop", model.BLOCKED, None,
+                        None, total_ms,
+                        {**detail, "stop_class": "budget-exhausted"}),
+                None, total_ms)
+    out_tick, ms = ctx.py("heartbeat_tick.py", str(ctx.ws))
+    total_ms += ms
+    if out_tick.rc == 2:
+        return (_record(ctx, "C6", "loop", model.BLOCKED, 2,
+                        out_tick, total_ms,
+                        {**detail, "stop_class": "idle-circuit-breaker"}),
+                None, total_ms)
+    if model.adjudicate("C6-loop", out_tick.rc) != model.PASS:
+        return (_record(ctx, "C6", "loop", model.FAIL,
+                        out_tick.rc, out_tick, total_ms,
+                        {**detail, "failed_step": "tick"}), None, total_ms)
+    return None, out_tick, total_ms
+
+
+def _crashed_loud_stop(ctx: RunContext, detail: dict, decision,
+                       out_d, total_ms: int) -> bool:
+    """#482: a crashing convergence face must never spin silently —
+    N consecutive CRASHED ticks (env KUNGLAO_CRASHED_STOP_N, default 3)
+    stop the run with the stderr tail surfaced. Returns True and parks
+    the terminal CheckpointResult on detail when the stop fires."""
+    if decision != "CRASHED":
+        detail["consecutive_crashed"] = 0
+        return False
+    n = int(detail.get("consecutive_crashed", 0)) + 1
+    detail["consecutive_crashed"] = n
+    limit = int(os.environ.get("KUNGLAO_CRASHED_STOP_N", "3"))
+    if n < limit:
+        return False
+    detail["_crashed_terminal"] = _record(
+        ctx, "C6", "loop", model.BLOCKED, out_d.rc, out_d, total_ms,
+        {**{k: v for k, v in detail.items() if k != "_crashed_terminal"},
+         "stop_class": "convergence-crashed", "crashed_ticks": n,
+         "stderr_tail": (out_d.stderr or "")[-400:]})
+    return True
+
+
 def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                    tick_wait_seconds: int, total_ms: int
                    ) -> tuple[str, model.CheckpointResult | None, int]:
@@ -867,23 +911,9 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     Returns (flow, terminal_result, total_ms): flow is 'continue' or
     'break' (CONVERGED); terminal_result is set only when the loop must
     stop with a recorded outcome (FAIL/BLOCKED)."""
-    if not _guard_budget(ctx):
-        return ("stop", _record(ctx, "C6", "loop", model.BLOCKED, None,
-                                None, total_ms,
-                                {**detail, "stop_class": "budget-exhausted"}),
-                total_ms)
-    out_tick, ms = ctx.py("heartbeat_tick.py", str(ctx.ws))
-    total_ms += ms
-    if out_tick.rc == 2:
-        return ("stop", _record(ctx, "C6", "loop", model.BLOCKED, 2,
-                                out_tick, total_ms,
-                                {**detail,
-                                 "stop_class": "idle-circuit-breaker"}),
-                total_ms)
-    if model.adjudicate("C6-loop", out_tick.rc) != model.PASS:
-        return ("stop", _record(ctx, "C6", "loop", model.FAIL,
-                                out_tick.rc, out_tick, total_ms,
-                                {**detail, "failed_step": "tick"}), total_ms)
+    terminal, out_tick, total_ms = _tick_prelude(ctx, detail, total_ms)
+    if terminal is not None:
+        return "stop", terminal, total_ms
     out_d, ms = ctx.py("convergence_check.py", str(ctx.ws), "--json")
     total_ms += ms
     decision, _doc = _decide(out_d)
@@ -892,6 +922,8 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                                     tick=detail.get("ticks"), rc=out_d.rc)
     if decision == "CONVERGED":
         return "break", None, total_ms
+    if _crashed_loud_stop(ctx, detail, decision, out_d, total_ms):
+        return ("stop", detail.pop("_crashed_terminal"), total_ms)
     stop_class = _STOP_DECISIONS.get(decision or "")
     if stop_class:
         return ("stop", _record(ctx, "C6", "loop", model.BLOCKED,
@@ -1080,6 +1112,38 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
 # ---------------------------------------------------------------------------
 
 
+def _resume_hygiene(plan, state) -> None:
+    """#482: a resumed run resets the stale no-op streak."""
+    if plan and any(step == "RUN" for step in plan.values()):
+        _reset_noop_breaker(state)
+
+
+def _final_verdict_of(evidence_dir: Path):
+    oracle_doc = (evidence.load_checkpoint(evidence_dir, "ORACLE")
+                  or {}).get("detail", {})
+    return ({"verdict": oracle_doc.get("verdict"),
+             "min_pair_ratio": oracle_doc.get("min_pair_ratio")}
+            if oracle_doc else None)
+
+
+def _reset_noop_breaker(state) -> None:
+    """#482: a resumed workspace is not a stalled one — the persisted
+    no-op streak belongs to the previous (ended) run."""
+    try:
+        import json as _json
+        nb = Path(state.ws) / "runs" / ".heartbeat-noop.json"
+        if nb.is_file():
+            doc = _json.loads(nb.read_text(encoding="utf-8"))
+            if isinstance(doc, dict) and doc.get("count"):
+                doc["count"] = 0
+                nb.write_text(_json.dumps(doc), encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        # non-silent per #275: the fallback itself must stay visible
+        import sys as _sys
+        print(f"e2e: noop-breaker reset skipped: "
+              f"{type(exc).__name__}", file=_sys.stderr)
+
+
 def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
                  sleep_fn=None, report_sink: list | None = None) -> int:
     """Execute the runbook pipeline; returns the process exit code.
@@ -1126,11 +1190,7 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
         state.budget_consumed_seconds = max(
             state.budget_consumed_seconds,
             clock.monotonic() - state.started_monotonic)
-        oracle_doc = (evidence.load_checkpoint(evidence_dir, "ORACLE")
-                      or {}).get("detail", {})
-        final_verdict = ({"verdict": oracle_doc.get("verdict"),
-                          "min_pair_ratio": oracle_doc.get("min_pair_ratio")}
-                         if oracle_doc else None)
+        final_verdict = _final_verdict_of(evidence_dir)
         report = evidence.build_report(
             state, results, final_status=status, exit_code=code,
             final_verdict=final_verdict)
@@ -1148,6 +1208,7 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
         return finalize(model.EXIT_BUDGET_PARTIAL, "PARTIAL")
 
     plan = resume_plan(evidence_dir)
+    _resume_hygiene(plan, state)
     steps: list[tuple[str, str, object]] = [
         ("C1", "init", lambda: checkpoint_c1(ctx)),
         ("C2", "hooks", lambda: checkpoint_c2(ctx)),

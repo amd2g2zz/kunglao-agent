@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 4
   scripts/e2e/checkpoints.py:
-    r1: 25
+    r1: 29
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
@@ -446,6 +446,8 @@ files:
     r1: 1
   scripts/ws_layout.py:
     r1: 4
+  scripts/ws_yaml.py:
+    r1: 1
   scripts/zero_output_fingerprint.py:
     r1: 1
   tests/_factories.py:
@@ -725,7 +727,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 21
+    r1: 22
     r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
