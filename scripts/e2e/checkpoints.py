@@ -1283,6 +1283,8 @@ def _harvest_scripts(ctx: RunContext) -> dict | None:
         try:
             kunglao_log.warn("e2e_harvest",
                              "harvest engine raised; skipped")
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — the warn fallback too
+            import sys as _sys
+            print(f"e2e: harvest engine raised: {type(exc).__name__}",
+                  file=_sys.stderr)
         return None
