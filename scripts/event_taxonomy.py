@@ -226,6 +226,8 @@ EMIT_ACTIONS = [
     "guard_unresolved",  # issue 304 fix-settlement refusal face: guard evidence present but file/anchor not found (GUARD_UNRESOLVED)
     "handroll_warn",      # issue 243 WARN floor: >50-line workspace script matching an available CLI/toolbox capability word (never a REJECT)
     "harness_drift",  # exp3 Part A, boundary widened by the P1 audit: a spawned session escaped its workspace and modified the integrity surface (harness: agents/hooks/skills/scripts; graded: eval/v1/tasks/**) — drift detected at session exit, files restored from HEAD, session row marked harness_contaminated (eval_loop_runner)
+    "harvest_landed",     # #477 workspace script harvest landing
+    "harvest_scan",       # #477 workspace script harvest sweep
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
     "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
@@ -292,6 +294,7 @@ EMIT_ACTIONS = [
     "rollout_settled",    # unified-reward tick face: adapters + settlement summary per rollup run
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
+    "script_harvested",   # #477 per-script classification (landed/archived)
     "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
     "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary

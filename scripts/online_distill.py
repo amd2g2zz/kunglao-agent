@@ -261,6 +261,7 @@ def ledger_state(ws) -> dict:
         fresh = _fresh_ledger()
         fresh["corrupt"] = False
         fresh["run_started_epoch"] = 0.0
+        fresh.setdefault("harvest_used", 0)  # #477 rider defaults
         return fresh
     raw = _read_json(path)
     if not isinstance(raw, dict) \
@@ -273,6 +274,7 @@ def ledger_state(ws) -> dict:
             "per_run_used": 0, "hops_used": 0,
             "reason": "budget_ledger_unreadable"})
         dead["run_started_epoch"] = 0.0
+        dead.setdefault("harvest_used", 0)  # #477 rider defaults
         return dead
     doc = _clamp(raw)
     doc.setdefault("run_id", "dstr-unknown")
@@ -289,6 +291,7 @@ def ledger_state(ws) -> dict:
     doc["corrupt"] = False
     started_at = _epoch_of(doc.get("run_started_ts", ""))
     doc["run_started_epoch"] = started_at if started_at is not None else 0.0
+    doc.setdefault("harvest_used", 0)  # #477 rider default (carry-safe)
     return doc
 
 
@@ -428,6 +431,13 @@ def reinit_run(ws) -> dict:
         fresh = _fresh_ledger()
         if isinstance(doc, dict) and isinstance(doc.get("global"), dict):
             fresh["global"] = dict(doc["global"])
+        if isinstance(doc, dict) and "harvest_used" in doc:
+            # #477 rider counters ride this ledger with the spine's own
+            # semantics: the cap carries over, the per-run counter resets
+            # with the run (mirrors per_run_used).
+            fresh["harvest_used"] = 0
+            if "harvest_budget" in doc:
+                fresh["harvest_budget"] = doc["harvest_budget"]
         _atomic_write_json(ws / LEDGER_NAME, fresh)
         return fresh
 

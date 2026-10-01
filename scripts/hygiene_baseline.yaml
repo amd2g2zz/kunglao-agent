@@ -92,9 +92,9 @@ files:
   scripts/dual_gate.py:
     r1: 3
   scripts/e2e/audit.py:
-    r1: 4
+    r1: 7
   scripts/e2e/checkpoints.py:
-    r1: 29
+    r1: 32
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
@@ -150,7 +150,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 1
   scripts/event_taxonomy.py:
-    r1: 115
+    r1: 118
     r2: 1
   scripts/exogenous.py:
     r1: 2
@@ -269,6 +269,8 @@ files:
     r1: 6
   scripts/obligation_discovery.py:
     r1: 1
+  scripts/online_distill.py:
+    r1: 4
   scripts/oracle_cadence.py:
     r1: 9
     r2: 1
@@ -377,6 +379,8 @@ files:
     r1: 2
   scripts/scalar_settlement.py:
     r1: 1
+  scripts/script_harvest.py:
+    r1: 4
   scripts/shell_defaults.py:
     r1: 1
   scripts/stale_blocker_prune.py:
@@ -1255,6 +1259,8 @@ files:
     r1: 6
   tests/test_script_discipline.py:
     r1: 5
+  tests/test_script_harvest_engine_477.py:
+    r1: 1
   tests/test_secondstop_anchor_831.py:
     r1: 2
   tests/test_self_cap_smoke.py:
