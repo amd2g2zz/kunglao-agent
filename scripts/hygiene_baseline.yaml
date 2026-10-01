@@ -92,7 +92,7 @@ files:
   scripts/e2e/audit.py:
     r1: 4
   scripts/e2e/checkpoints.py:
-    r1: 28
+    r1: 29
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
