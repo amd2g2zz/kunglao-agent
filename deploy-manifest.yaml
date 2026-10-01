@@ -459,7 +459,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 1995a971878cb21e0c435e3ec317607fa915a2227e5017efc8ac174bfd2918aa
+    sha256: abb80b4797caa01e8e4237ef67d62923347486d9e6fa12005f2c98f692c6ed55
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
