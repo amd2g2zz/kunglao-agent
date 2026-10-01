@@ -155,6 +155,10 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # recoverable from git history (and documents the original #443
 # zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
 BASELINE_COMMIT = "cabc7d9"  # the #51 value-flag-removal commit — decide() outputs frozen at the 2026-09-05 re-pin (see below)
+# 2026-10-01 SEMANTIC re-pin (#491, #484 completion): PARTIALS_AND_FREE_SLOT
+# now precedes WORK_AND_FREE_SLOT (verify-first interleave). Drifted case:
+# order_opens_beat_partials (DISPATCH -> DISPATCH_VERIFIER) — the intended
+# change; all other 30 cases byte-identical.
 ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 
 # 2026-09-06 corpus re-pin (#108 oracle gate — INTENTIONAL decide() contract

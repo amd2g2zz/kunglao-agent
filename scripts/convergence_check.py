@@ -1867,13 +1867,14 @@ STAGE_PROBES = {
     # the saturation/failure/ladder tail so a stuck worker can never be
     # masked by an unblocked-open claim whose dispatch would collide.
     # #342: VERIFY_STALE at index 0 — a PARTIAL fact older than
-    # VERIFY_STALE_TICKS takes the slot before ANY claim dispatch (the
-    # verifier can no longer be starved by a healthy claim frontier).
-    # Fresh partials leave the probe list byte-identical to the pre-#342
-    # order below: WORK_AND_FREE_SLOT still wins, DISPATCH stays the
-    # verdict, no extra tick passes.
+    # VERIFY_STALE first (the verifier can never be starved), then
+    # PARTIALS_AND_FREE_SLOT BEFORE claim dispatch (#484 completion:
+    # maker-checker interleave — verify what exists before making more;
+    # the seven-round starved-verifier failure mode is this slot's old
+    # order). WORK_AND_FREE_SLOT follows; verification landing consumes
+    # the partials so the next tick returns to DISPATCH.
     State.SCHEDULE: [Event.VERIFY_STALE,
-                     Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
+                     Event.PARTIALS_AND_FREE_SLOT, Event.WORK_AND_FREE_SLOT,
                      Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
                      Event.FAILURE_ARTIFACTS_DUE,
                      Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,

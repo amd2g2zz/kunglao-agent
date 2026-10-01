@@ -163,11 +163,16 @@ def test_verify_stale_preempts_dispatchable_open_claims(tmp_path):
 
 
 # ------------------------------------------------------------------
-# acceptance (b): fresh partial keeps exit 1 (DISPATCH priority preserved)
+# acceptance (b): fresh partial routes to the VERIFIER (#484 completion:
+    # PARTIALS_AND_FREE_SLOT now precedes WORK_AND_FREE_SLOT — the
+    # seven-round starved-verifier failure mode is this slot's old order)
 # ------------------------------------------------------------------
 
-def test_fresh_partial_keeps_dispatch_priority_exit_1(tmp_path, monkeypatch):
-    """age < N + open claims + free slot -> exit 1. The env knob (issue:
+def test_fresh_partial_routes_to_verifier_exit_2(tmp_path, monkeypatch):
+    """age < N + open claims + free slot -> exit 2. #484 completion:
+    PARTIALS_AND_FREE_SLOT precedes WORK_AND_FREE_SLOT (verify-first
+    interleave; the #342 fresh-partial DISPATCH priority is superseded
+    by the seven-round starved-verifier evidence). The env knob (issue:
     configurable) pins freshness deterministically at date granularity."""
     monkeypatch.setenv(ENV_N, "999999")
     fact = _write_fact_file(tmp_path, "F001-config-xor", FRESH_DAY)
@@ -175,7 +180,7 @@ def test_fresh_partial_keeps_dispatch_priority_exit_1(tmp_path, monkeypatch):
         tmp_path,
         index_rows=["F001-config-xor | PARTIAL | C-001 | x"],
         facts=[fact])
-    assert _run_cc(ws) == cc.EXIT_DISPATCH == 1
+    assert _run_cc(ws) == cc.EXIT_VERIFY == 2
 
 
 def test_default_threshold_keeps_recent_verify_attempt_fresh(tmp_path):
@@ -233,7 +238,8 @@ def test_unparseable_created_fails_open_never_stale(tmp_path):
         "# no frontmatter at all\n", encoding="utf-8")
     snap = cc._decide_inputs(ws)
     assert not cc._verify_stale(snap)
-    assert _run_cc(ws) == cc.EXIT_DISPATCH
+    # not stale, but partials exist -> the verifier slot (#484 order)
+    assert _run_cc(ws) == cc.EXIT_VERIFY
 
 
 def test_future_created_clamps_to_fresh(tmp_path):
