@@ -88,13 +88,12 @@ def test_stuck_workers_present_at_schedule_index_2() -> None:
         f"got {probes[0]!r}")
     assert probes[3] is cc.Event.STUCK_WORKERS_PRESENT, (
         f"STUCK_WORKERS_PRESENT must sit at index 3 of STAGE_PROBES[SCHEDULE] "
-        f"(#595 semantics, displaced by #342's VERIFY_STALE at 0), "
-        f"got {probes[3]!r} at position 3")
-    # original entries preserved (not replaced): WORK_AND_FREE_SLOT,
-    # PARTIALS_AND_FREE_SLOT stay in relative order (now 1/2); the
-    # remaining tail stays in order.
-    assert probes[1] is cc.Event.WORK_AND_FREE_SLOT
-    assert probes[2] is cc.Event.PARTIALS_AND_FREE_SLOT
+        f"(#595 semantics, displaced by #342 VERIFY_STALE at 0 and the #484 "
+        f"PARTIALS slot at 1), got {probes[3]!r} at position 3")
+    # #484 completion: PARTIALS_AND_FREE_SLOT precedes WORK_AND_FREE_SLOT
+    # (verify-first interleave; the seven-round starved-verifier mode).
+    assert probes[1] is cc.Event.PARTIALS_AND_FREE_SLOT
+    assert probes[2] is cc.Event.WORK_AND_FREE_SLOT
     tail = probes[4:]
     assert tail == [cc.Event.WORK_NO_FREE_SLOT,
                     cc.Event.FAILURE_ARTIFACTS_DUE,

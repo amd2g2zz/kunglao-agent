@@ -1309,7 +1309,7 @@ files:
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
-    r1: 6
+    r1: 7
   tests/test_stuck_gate.py:
     r1: 1
   tests/test_subagent_injection.py:
@@ -1436,7 +1436,7 @@ files:
   tests/test_verify_backlog_face_342.py:
     r1: 1
   tests/test_verify_stale_342.py:
-    r1: 5
+    r1: 8
   tests/test_verify_truth_609.py:
     r1: 2
   tests/test_violation_capture_718.py:
