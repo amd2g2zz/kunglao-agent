@@ -580,15 +580,15 @@
     "worker_cap": 3
   },
   "order_opens_beat_partials": {
-    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "action": "Dispatch a verifier for 1 partial fact(s). Do NOT declare PROVEN without sign-off.",
     "active_blockers": [],
     "active_workers": 0,
     "anomalies": [],
     "anomaly_count": 0,
     "blocked_open_count": 0,
-    "decision": "DISPATCH",
+    "decision": "DISPATCH_VERIFIER",
     "done_artifact_violations": [],
-    "exit_code": 1,
+    "exit_code": 2,
     "failure_blocked": [],
     "free_slots": 3,
     "note_layer_gaps": [],

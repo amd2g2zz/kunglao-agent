@@ -287,7 +287,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 4d05f23475e5c2fea7122d5ebe96c8b85726be019c53bbaa8b1aaeed49123af8
+    sha256: f5b2e24fd641b97ca07c00b1b03baee903c44814ce5a3466dcc46a3b0cde5477
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1203,7 +1203,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 8e20d46d1602faff9dbc9e7346aad73a75752375b1338c63c9ecc43075bb4ebf
+    sha256: f7c01df363a8d71f00512f7ad8094bc8c34ee783634aea2289082910b2df6077
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

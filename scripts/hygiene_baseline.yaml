@@ -629,8 +629,8 @@ files:
   tests/test_debug_flag_task_spec_25.py:
     r1: 3
   tests/test_decide_regression_anchor.py:
-    r1: 63
-    r2: 38
+    r1: 64
+    r2: 39
   tests/test_decide_schema_routing.py:
     r1: 6
   tests/test_decide_state_machine.py:
@@ -1317,7 +1317,7 @@ files:
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
-    r1: 6
+    r1: 7
   tests/test_stuck_gate.py:
     r1: 1
   tests/test_subagent_injection.py:
@@ -1444,7 +1444,7 @@ files:
   tests/test_verify_backlog_face_342.py:
     r1: 1
   tests/test_verify_stale_342.py:
-    r1: 5
+    r1: 8
   tests/test_verify_truth_609.py:
     r1: 2
   tests/test_violation_capture_718.py:
