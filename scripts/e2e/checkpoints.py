@@ -1191,6 +1191,7 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
             state.budget_consumed_seconds,
             clock.monotonic() - state.started_monotonic)
         final_verdict = _final_verdict_of(evidence_dir)
+        _harvest_scripts(ctx)  # #477: once per finalize; cages itself
         report = evidence.build_report(
             state, results, final_status=status, exit_code=code,
             final_verdict=final_verdict)
@@ -1301,3 +1302,50 @@ def _abort_contaminated(ctx: RunContext, evidence_dir: Path,
     else:
         print(evidence.render_summary(report))
     return model.EXIT_CHECKPOINT_FAIL
+
+
+def _harvest_scripts(ctx: RunContext) -> dict | None:
+    """#477: the post-run workspace script harvest, hosted at finalize —
+    sweep worker scripts, classify by success trace, verify against the
+    sample, land candidates into tools-local/ (never the global shelf),
+    and emit the audit rows. Fail-open: a raising engine never breaks
+    finalize (the optional capability must not cost the report)."""
+    import script_harvest  # repo-top module; cheap import, fail-open
+    try:
+        result = script_harvest.run_harvest(
+            Path(ctx.ws), since_epoch=0.0)
+        if not (result.get("swept") or []):
+            return result  # nothing swept -> no rows at all (#477 spec)
+        audit.emit_harvest_scan(
+            str(ctx.ws), swept=len(result.get("swept") or []),
+            candidates=len(result.get("candidates") or []),
+            skipped=len(result.get("skipped") or []),
+            archived=len(result.get("archived") or []),
+            playbook=(result.get("playbook")
+                      and "runs/harvest-playbook.json") or None)
+        for cand in (result.get("landed") or []):
+            audit.emit_script_harvested(
+                str(ctx.ws), cand.get("name") or "",
+                script=cand.get("script") or "",
+                signals=cand.get("signals") or {},
+                facts=cand.get("facts") or [])
+        for cand in (result.get("archived") or []):
+            audit.emit_script_harvested(
+                str(ctx.ws), cand.get("name") or "",
+                script=cand.get("script") or "",
+                signals={}, facts=[])
+        for cand in (result.get("landed") or []):
+            name = cand.get("name") or ""
+            audit.emit_harvest_landed(
+                str(ctx.ws), name,
+                tool_path=f"tools-local/{name}.py")
+        return result
+    except Exception:  # noqa: BLE001 — the harvest never breaks finalize
+        try:
+            kunglao_log.warn("e2e_harvest",
+                             "harvest engine raised; skipped")
+        except Exception as exc:  # noqa: BLE001 — the warn fallback too
+            import sys as _sys
+            print(f"e2e: harvest engine raised: {type(exc).__name__}",
+                  file=_sys.stderr)
+        return None

@@ -459,7 +459,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: d0afdd1de650673014f13688f9b72f8d8847829ca674c4f887aea17c4f931892
+    sha256: abb80b4797caa01e8e4237ef67d62923347486d9e6fa12005f2c98f692c6ed55
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
@@ -747,7 +747,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: 472395b87a3fe438e96c009c26c831215abcc4218094887ee42ecd907e09be58
+    sha256: 97de2640dd7f6e36de091455f00006e6e9ca06bdf2983d9f737e85900fe08702
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -952,6 +952,10 @@ files:
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
     sha256: d6ed12c3573255af5121d4c12c7ee0be55f0915a6a490c94e7b4ae3350bbbe1c
+  - src: scripts/script_harvest.py
+    dest: .claude/scripts/script_harvest.py
+    kind: scaffold
+    sha256: 4fb8d252131d73044c19d8131e6a61feaae5203bf1239f782e31f5172e7cf43e
   - src: scripts/settle_by_need.py
     dest: .claude/scripts/settle_by_need.py
     kind: scaffold
@@ -1199,7 +1203,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 6ee5ab8cf8b42e72dfbb7be25a574f7505ee2b0d00b5d82b1eddb9dcf7513b9e
+    sha256: 8e20d46d1602faff9dbc9e7346aad73a75752375b1338c63c9ecc43075bb4ebf
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1787,7 +1791,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 33d5d4ef4a15207ec7745f8556507397ea6f5985610057581ccd0e364b2498f7
+    sha256: 689cf09e55fa9b027471be4be11b28934535572799a92a8c40ec51481a23efd7
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

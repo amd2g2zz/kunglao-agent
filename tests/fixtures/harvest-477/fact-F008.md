@@ -1,0 +1,27 @@
+---
+id: F008-byte-noise-digest
+type: fact
+schema_rev: 2
+title: "Anchored-sample digest via the nondeterministic helper"
+status: PROVEN
+verify_status: passes
+created: 2026-10-01
+last_reviewed: 2026-10-01
+source: static-decompile
+confidence: high
+claim_id: C-004
+boundary_type: confirmed
+promotion_gate: ""
+provenance:
+  - {role: sample_raw, path: bins/sample.bin, content_sha256: "8a091f8c7cf24346b19168931dbd5789fefc0dc06f07d1832140566b1830bef1", credibility: A1}
+  - {role: recompute_script, path: scripts/byte_noise.py, content_sha256: "0000000000000000000000000000000000000000000000000000000000000000", credibility: A2}
+  - {role: disassembled_s, path: evidence/dump.txt, content_sha256: "1111111111111111111111111111111111111111111111111111111111111111", credibility: A2}
+claim: "Anchored-sample digest extracted by the harvested script"
+reproduce: "python ../scripts/byte_noise.py ../bins/sample.bin"
+expected: "digest line with a time suffix (nondeterministic — must archive)"
+verified: 2026-10-01
+---
+
+Fixture fact for the script-harvest chain: the worker ran
+scripts/byte_digest.py against the anchored sample and the digest line
+it produced is the fact payload (success-trace discriminator input).
