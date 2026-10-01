@@ -61,7 +61,7 @@ analysis; a workspace that is not initialized is refused work.
    guess or default an anchor. For help turning a folk ask ("我要纯算")
    into these answers, point the user at the README section **"How to
    state the task"** (`README.md`, anchor `#how-to-state-the-task`).
-   **Lane (issue 208 — asked by the script)** — `lane: malware | algorithm |
+   **Lane (asked by the script)** — `lane: malware | algorithm |
    protocol | web | data | app` is the analysis-MATERIAL contract: it
    decides whether `bins/<sha>` is required at all and which toolchain gate
    applies. `malware` = binary sample (current behavior, kept byte-for-byte
@@ -88,7 +88,7 @@ analysis; a workspace that is not initialized is refused work.
    scaffold never clobbers it), `goal-operationalization.yaml` (from
    `templates/state/`; the Phase-0 goal operationalization skeleton — the
    orchestrator pre-registers it mechanically before the first dispatch;
-   the verbatim task itself stays in `task-oracle.yaml`, #128).
+   the verbatim task itself stays in `task-oracle.yaml`).
 3. **Write CLAUDE.md** — render the type-appropriate workspace contract from
    `templates/CLAUDE.md.base.tmpl`; the task_spec constraints (vm_detonation,
    scope exclusions, depth) are rendered INTO the contract.
@@ -118,7 +118,7 @@ analysis; a workspace that is not initialized is refused work.
    subagents to `<ws>/.claude/agents/`, records the MCP supply state in
    `env-manifest.yaml` (missing registrations become MANUAL entries with
    their register command — init never runs `claude mcp add` itself), and
-   writes the deployment ledger. Deployment is WORKSPACE-SCOPED (#25 D4):
+   writes the deployment ledger. Deployment is WORKSPACE-SCOPED:
    the hooks live in `<ws>/.claude/settings.json` and fire only for
    sessions opened inside `<ws>` — a Claude session started elsewhere
    (another project, the repo checkout, home) loads none of them, so
@@ -140,7 +140,7 @@ default — an undecided type pends, exit 8). `--target NAME` names the
 analysis target under `bins/`; containers additionally resolve
 `target_object`. `--no-hooks` skips hook deployment (the only legal skip);
 `--builtin-skills a,b` deploys named built-in auxiliary skills (opt-in,
-default none; kunglao-bundled names only, #25 D2).
+default none; kunglao-bundled names only).
 
 ## No arguments
 
@@ -159,8 +159,7 @@ never guess, no bare argparse-style error dump.
 With a workspace but no `--type`, never silently default to `windows`:
 route into the intake type-alignment sequence — a magic-number sniff is
 only a suggestion, the operator confirms the type before scaffolding, and
-an unresolved ambiguity is surfaced as a decision_pending item
-(schema; not implemented here).
+an unresolved ambiguity is surfaced as a decision_pending item.
 
 ## Examples
 

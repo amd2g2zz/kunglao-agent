@@ -1,6 +1,6 @@
 ---
 name: pefile-signature
-lane: malware  # issue 208: analysis material contract — malware binary lane only
+lane: malware  # analysis material contract — malware binary lane only
 description: Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert
   chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json
   + evidence/packer-scan.json. Pure local.
@@ -252,7 +252,7 @@ WRITE both output files (`evidence/signature.json` + `evidence/packer-scan.json`
 yourself — failure modes still write JSON (degraded / `not a PE` / `invalid`),
 never a return without files. The one-line summary comes after both exist.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: append to
+**Liveness + artifacts (canonical log / W-15 rule)**: append to
 `runs/worker-status-pefile-signature-<id>.md` as an append-only log parsed
 by the single canonical parse point (`hooks/lib_kunglao.py` — LAST
 `status:` token wins). Canonical vocabulary ONLY — `status: in-progress` /

@@ -93,9 +93,6 @@ Next steps:
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
-(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table;
- zero-args guard below the router, per-command examples + next steps —
- menu/hints render skills/subcommands.yaml, the single source)
 ```
 
 
@@ -132,4 +129,3 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent resume ~/cases/synth-dropper`
 - `/kunglao-agent upgrade ~/cases/synth-dropper`
 - `/kunglao-agent help`
-(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table)
