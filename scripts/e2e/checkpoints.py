@@ -750,6 +750,41 @@ def _maybe_distill(ctx: RunContext, detail: dict) -> None:
                 "per_run_budget": receipt["per_run_budget"],
                 "hops_remaining": (int(state_before["hops_budget"])
                                    - int(state_before["hops_used"]))})
+    # the act STARTS with formulation (issue 487): enumerate the problem
+    # from the environment snapshot + obstacles, retrieve per facet,
+    # record
+    # the coverage matrix. Fail-open rider: a formulation failure is one
+    # rate-limited warn and the act proceeds unformulated.
+    form_doc: dict | None = None
+    try:
+        qf = _load_repo_module(ctx.repo, "query_formulation")
+        form_doc = qf.formulate_and_retrieve(ws, trigger,
+                                             repo=Path(ctx.repo))
+    except Exception as exc:  # noqa: BLE001 — capability, never the loop
+        from kunglao_log import warn
+        warn("e2e.distill_formulate", f"{type(exc).__name__}: {exc}")
+    # the audit face of the matrix: per-facet verdict + hit paths (the
+    # full scored matrix rides the dispatch prompt); the tick detail
+    # carries the compact formulation beside it (design: formulation +
+    # coverage)
+    coverage_detail = None
+    formulation_detail = None
+    if form_doc:
+        _cov = form_doc.get("coverage") or {}
+        coverage_detail = {
+            "corpus": _cov.get("corpus"),
+            "summary": _cov.get("summary"),
+            "facets": [
+                {"kind": f.get("kind"), "face": f.get("face"),
+                 "query": f.get("query"), "verdict": f.get("verdict"),
+                 "hits": [h.get("path") for h in f.get("hits") or []]}
+                for f in _cov.get("facets") or []],
+        }
+        formulation_detail = [
+            {"kind": f.get("kind"), "face": f.get("face"),
+             "query": f.get("query")}
+            for f in (form_doc.get("formulation") or {}).get("facets")
+            or []]
     # mint the prompt + envelope (reserved non-register claim space)
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{attempt}.md"
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -761,6 +796,13 @@ def _maybe_distill(ctx: RunContext, detail: dict) -> None:
         + f"\ntoken: {trigger.token}\n"
         + (f"sample: {trigger.sample_hint}\n"
            if trigger.sample_hint else "")
+        + ("\nProblem formulation (#487): retrieve PER FACET below — "
+           "hit cards are validated starting points; corpus-lack facets "
+           "are the web-face priorities.\n"
+           + json.dumps({"facets": form_doc["formulation"]["facets"],
+                         "coverage": form_doc["coverage"]},
+                        sort_keys=True, ensure_ascii=False) + "\n"
+           if form_doc else "")
         + "\nDistillation act: retrieve from the local re-library first"
           " (references/re-library/), then the web face (URL + access"
           " date recorded; never directly proven). Extract METHODS"
@@ -785,19 +827,23 @@ def _maybe_distill(ctx: RunContext, detail: dict) -> None:
     if not isinstance(report, dict):
         audit.emit_distill_result(
             str(ws), attempt, validated=False,
-            violations=["report missing or unreadable"], hops=0)
+            violations=["report missing or unreadable"], hops=0,
+            coverage=coverage_detail)
         detail.setdefault("distill", []).append(
-            {"attempt": attempt, "validated": False})
+            {"attempt": attempt, "validated": False,
+             "formulation": formulation_detail,
+             "coverage": coverage_detail})
         return
     ok, violations = od.validate_report(ctx.repo, ws, report)
     hops = len(report.get("hops") or [])
     if not ok:
         audit.emit_distill_result(
             str(ws), attempt, validated=False, violations=violations,
-            hops=0)
+            hops=0, coverage=coverage_detail)
         detail.setdefault("distill", []).append(
             {"attempt": attempt, "validated": False,
-             "violations": violations})
+             "violations": violations, "formulation": formulation_detail,
+             "coverage": coverage_detail})
         return
     od.commit_hops(ws, report)
     sample, source = od.resolve_sample(ws, trigger)
@@ -827,10 +873,11 @@ def _maybe_distill(ctx: RunContext, detail: dict) -> None:
                     capability=str(cand.get("capability") or ""))
     audit.emit_distill_result(
         str(ws), attempt, validated=True, violations=[], hops=hops,
-        oracle=oracle_out)
+        oracle=oracle_out, coverage=coverage_detail)
     detail.setdefault("distill", []).append(
         {"attempt": attempt, "validated": True, "hops": hops,
-         "sample_source": source})
+         "sample_source": source, "formulation": formulation_detail,
+         "coverage": coverage_detail})
 
 
 def _verdict_face(ctx: RunContext, detail: dict,
