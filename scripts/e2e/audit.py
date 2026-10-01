@@ -117,12 +117,14 @@ AUDIT_ACTIONS = (CHECKPOINT_ACTIONS | KERNEL_ACTIONS | DISTILL_ACTIONS
                  | frozenset({
                      "dispatch_attempt", "dispatch_result",
                      "convergence_decision", "oracle_verdict",
+                     "harvest_landed", "harvest_scan",
+                     "script_harvested",
                  }))
 
 #: report category buckets (§5) — anything outside them still counts in
 #: line_count, it just does not inflate a bucket (garbage stays visible).
 CATEGORIES = ("checkpoint", "dispatch", "decision", "oracle", "kernel",
-              "distill")
+              "distill", "harvest")
 
 
 def audit_path(ws) -> Path:
@@ -393,6 +395,30 @@ def emit_distill_result(ws, attempt: str, *, validated: bool,
     return emit(ws, "orchestrator", "distill_result", detail=detail)
 
 
+def emit_harvest_scan(ws, *, swept: int, candidates: int, skipped: int,
+                      archived: int, playbook: str | None) -> bool:
+    """#477: the post-run sweep summary row (one per finalize host)."""
+    return emit(ws, "orchestrator", "harvest_scan",
+                detail={"swept": swept, "candidates": candidates,
+                        "skipped": skipped, "archived": archived,
+                        "playbook": playbook})
+
+
+def emit_script_harvested(ws, name: str, *, script: str, signals: dict,
+                          facts: list) -> bool:
+    """#477: one row per classified script (landed or archived — the
+    detail carries which via `disposition`)."""
+    return emit(ws, "orchestrator", "script_harvested", artifact=script,
+                detail={"name": name, "signals": signals, "facts": facts})
+
+
+def emit_harvest_landed(ws, name: str, *, tool_path: str) -> bool:
+    """#477: one row per tools-local landing (tool carries the landed
+    path — the detail stays summary-only)."""
+    return emit(ws, "orchestrator", "harvest_landed", tool=tool_path,
+                detail={"name": name})
+
+
 def emit_candidate_landed(ws, attempt: str, name: str, *,
                           tool_path: str | None = None,
                           capability: str | None = None) -> bool:
@@ -420,6 +446,8 @@ def _category(action: str) -> str | None:
         return "oracle"
     if action in KERNEL_ACTIONS:
         return "kernel"
+    if action.startswith("harvest_") or action == "script_harvested":
+        return "harvest"
     return None
 
 
