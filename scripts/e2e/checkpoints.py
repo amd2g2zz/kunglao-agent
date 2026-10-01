@@ -1137,8 +1137,11 @@ def _reset_noop_breaker(state) -> None:
             if isinstance(doc, dict) and doc.get("count"):
                 doc["count"] = 0
                 nb.write_text(_json.dumps(doc), encoding="utf-8")
-    except (OSError, ValueError):
-        pass  # resume must not fail on breaker-state hygiene
+    except (OSError, ValueError) as exc:
+        # non-silent per #275: the fallback itself must stay visible
+        import sys as _sys
+        print(f"e2e: noop-breaker reset skipped: "
+              f"{type(exc).__name__}", file=_sys.stderr)
 
 
 def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
