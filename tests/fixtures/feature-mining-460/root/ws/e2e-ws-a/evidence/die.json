@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "source": "die",
+    "tool": "DIE diec.exe (5-call merge)",
+    "die_path": "diec",
+    "binary": "target/beacon.apk",
+    "flag_calls": [
+      "diec -j <path>",
+      "diec -j -e <path>",
+      "diec -j -b <path>",
+      "diec -j -S Hash <path>",
+      "diec -j -S Resource <path>"
+    ]
+  },
+  "detects": [],
+  "records": [
+    {
+      "name": "beacon.apk",
+      "offset": 0,
+      "size": 61440,
+      "entropy": 6.8,
+      "status": ""
+    }
+  ],
+  "overall_status": "ok",
+  "total_entropy": 6.8,
+  "hashes": {
+    "md5": "0f1e2d3c4b5a6978879665544332211f"
+  },
+  "resources": {},
+  "version_info": {},
+  "manifest": "",
+  "derived": {
+    "language": null,
+    "compiler_version": null,
+    "compiler_string": null,
+    "sign_tool": null,
+    "operation_system": null,
+    "detected_packer": null,
+    "section_table": [
+      {
+        "name": "beacon.apk",
+        "offset": 0,
+        "size": 61440,
+        "entropy": 6.8,
+        "status": ""
+      }
+    ],
+    "high_entropy_sections": []
+  },
+  "call_errors": {}
+}

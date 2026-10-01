@@ -8,7 +8,13 @@ prompt bodies, no secrets). `root/` is a mining root:
   C-004 dispatch prompt declares the registered #432 token
   `static-decompile` (envelope-wins path); `ws/e2e-ws-a` carries a
   rollout ledger settlement for `task/C-005` (settled-dispatched-claim
-  join).
+  join). #460 intake-battery era: `ws/e2e-ws-a` additionally carries
+  the battery artifacts (`evidence/die.json` + `evidence/apkid.json` +
+  the `evidence/intake-battery.json` ledger over the staged entry
+  `target/beacon.apk`, and the promise prescan states flipped to
+  `available` via the usable-evidence chain) — synthesized demo data
+  in the exact battery byte-shapes; the golden row proves battery
+  outputs are minable with zero miner changes.
 - `runs/e2e/e2e-fix-221504-b` — timeout / blocked / rc-null triple;
   `ws/e2e-ws-b` carries die.json + apkid.json + difficulty.json
   (probe-present path).
