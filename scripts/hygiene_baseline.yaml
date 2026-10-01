@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 7
   scripts/e2e/checkpoints.py:
-    r1: 32
+    r1: 35
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
@@ -204,8 +204,10 @@ files:
     r1: 2
   scripts/instrument_menu.py:
     r1: 6
+  scripts/intake_battery.py:
+    r1: 4
   scripts/intake_promise.py:
-    r1: 5
+    r1: 6
   scripts/jadx_exec.py:
     r1: 14
   scripts/kunglao-decide.py:
@@ -213,7 +215,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 200
+    r1: 204
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
@@ -832,7 +834,7 @@ files:
   tests/test_feature_mining_460.py:
     r1: 2
   tests/test_feature_prior_460b.py:
-    r1: 2
+    r1: 3
     r2: 1
   tests/test_feedback.py:
     r1: 2
@@ -961,6 +963,8 @@ files:
     r1: 14
   tests/test_install_unidbg_165.py:
     r1: 1
+  tests/test_intake_battery_460.py:
+    r1: 2
   tests/test_intake_promise_813.py:
     r1: 7
   tests/test_intent_aware_completion.py:

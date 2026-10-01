@@ -73,15 +73,27 @@ def _which_tool(tool: str) -> str | None:
 _EVIDENCE_FILES = {"die": "evidence/die.json", "apkid": "evidence/apkid.json"}
 
 
+def _probe_evidence_usable(tool: str, doc: object) -> bool:
+    """#460 intake battery fold (F1): a probe artifact is a capability
+    fact only when it is USABLE — the difficulty-calibration rules (the
+    single usability source feature_mining already trusts): die needs a
+    surviving data block, apkid needs status ok. A fail-open
+    unavailable/error artifact (the battery writes those when a probe
+    tool is missing) records the capability as ABSENT, not available."""
+    from difficulty_calibration import _apkid_usable, _die_usable
+    return _apkid_usable(doc) if tool == "apkid" else _die_usable(doc)
+
+
 def _probe_evidence_present(ws: Path, tool: str) -> bool:
-    """The tool's probe artifact exists and parses (a produced artifact
-    is a capability fact, independent of the current install)."""
+    """The tool's probe artifact exists and is USABLE (a produced artifact
+    is a capability fact, independent of the current install — a
+    fail-open artifact is not)."""
     p = ws / _EVIDENCE_FILES.get(tool, f"evidence/{tool}.json")
     try:
-        json.loads(p.read_text(encoding="utf-8"))
-        return True
+        doc = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
+    return _probe_evidence_usable(tool, doc)
 
 
 def _prescan(report, ws: Path) -> dict:
