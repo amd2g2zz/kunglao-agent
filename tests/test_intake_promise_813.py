@@ -117,8 +117,11 @@ def test_apkid_promise_mirrors_probe_state_on_android(tmp_path):
 def test_absent_item_evidence_presence_is_a_fact(tmp_path):
     """issue 209 shape, #460 retirement: windows/linux reports carry no
     apkid item — a previously-produced evidence/apkid.json is still an
-    explicit capability fact (available), never a missing key."""
-    ws = _ws(tmp_path, evidence={"summary": {"obfuscator": []}})
+    explicit capability fact (available), never a missing key.
+    (#460 intake battery fold: the artifact must be USABLE — status ok —
+    a fail-open unavailable artifact is an absence, not a capability.)"""
+    ws = _ws(tmp_path, evidence={"status": "ok",
+                                 "summary": {"obfuscator": []}})
     rep = _report(_item("jadx", "PASS"), _item("die", "WARN"))
     p = intake_promise.build(rep, None, ws)
     assert p["prescan"]["apkid"]["state"] == "available"

@@ -1,0 +1,22 @@
+{
+  "schema": "intake-battery/1",
+  "generated_at": "2026-09-29T05:25:45Z",
+  "sample": "target/beacon.apk",
+  "lane": "algorithm",
+  "probes": [
+    {
+      "probe": "die-probe",
+      "ran": true,
+      "outcome": "produced",
+      "evidence": "evidence/die.json",
+      "detail": "probe ran (exit 0)"
+    },
+    {
+      "probe": "apkid-prescan",
+      "ran": true,
+      "outcome": "produced",
+      "evidence": "evidence/apkid.json",
+      "detail": "probe ran (status ok, exit 0)"
+    }
+  ]
+}

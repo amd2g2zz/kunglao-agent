@@ -245,6 +245,25 @@ def _hook_sweep(ctx: RunContext) -> list[dict]:
     return sweep
 
 
+def _staged_entry(task_dir: Path) -> str | None:
+    """#460 intake battery: the task's declared analysis entry
+    (task.yaml workspace_scaffold.entry), the battery's probe subject on
+    the e2e face. Tolerant — a task without a declared entry runs no
+    battery (explicit, never a raise)."""
+    import yaml  # noqa: PLC0415 — lazy (C1-only; a hard repo dep)
+
+    try:
+        doc = yaml.safe_load(
+            (Path(task_dir) / "task.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    entry = (doc.get("workspace_scaffold") or {}).get("entry") \
+        if isinstance(doc.get("workspace_scaffold"), dict) else None
+    return str(entry) if isinstance(entry, str) and entry.strip() else None
+
+
 def checkpoint_c1(ctx: RunContext) -> model.CheckpointResult:
     """C1 init: pending(exit 8) → resolve(verbatim anchors, flags
     repeated) → exit 0. Sub-step rcs ride detail."""
@@ -286,12 +305,28 @@ def checkpoint_c1(ctx: RunContext) -> model.CheckpointResult:
                    "answers_file": str(answers_path),
                    "scaffolded": sorted(
                        p.name for p in ctx.ws.glob("*") if p.is_file())})
+    # #460 intake probe battery (the instrument face): after the
+    # resolved init, run die-probe + apkid-prescan over the STAGED
+    # entry — probe features exist from run #1, feeding the mined
+    # feature table (the EX-5 re-evaluation substrate). An instrument:
+    # the sub-step rc rides the detail and NEVER changes the C1 verdict.
+    total_ms = ms_a + ms_c
+    if status_c == model.PASS:
+        entry = _staged_entry(Path(ctx.state.task_dir))
+        if entry is not None:
+            out_b, ms_b = ctx.py("intake_battery.py", str(ctx.ws), entry)
+            total_ms += ms_b
+            detail.update({"sub_battery_rc": out_b.rc,
+                           "battery_ms": ms_b,
+                           "battery_entry": entry})
+        else:
+            detail["battery_skipped"] = "no declared workspace entry"
     final = model.PASS if (status_a == model.PASS and
                            status_c == model.PASS) else (
         model.BLOCKED if model.BLOCKED in (status_a, status_c)
         else model.FAIL)
     return _record(ctx, "C1", "init", final, out_c.rc, out_c,
-                   ms_a + ms_c, detail, [answers_path])
+                   total_ms, detail, [answers_path])
 
 
 def checkpoint_c2(ctx: RunContext) -> model.CheckpointResult:

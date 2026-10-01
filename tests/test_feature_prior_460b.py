@@ -458,8 +458,12 @@ def test_prescan_direct_fact_chain(tmp_path, monkeypatch):
     assert p["prescan"]["apkid"]["state"] == "available"
     assert p["prescan"]["die"]["state"] == "missing"
     # evidence presence upgrades die: the artifact exists, fact holds
+    # (#460 intake battery fold: the artifact must be USABLE — a
+    # surviving data block — a parseable-but-empty file is an absence)
     (ws / "evidence").mkdir()
-    (ws / "evidence" / "die.json").write_text('{"ok": 1}', encoding="utf-8")
+    (ws / "evidence" / "die.json").write_text(
+        '{"detects": [{"values": [{"name": "UPX", "type": "packer"}]}],'
+        ' "derived": {"detected_packer": "upx"}}', encoding="utf-8")
     p2 = intake_promise.build(rep, None, ws)
     assert p2["prescan"]["die"]["state"] == "available"
 
