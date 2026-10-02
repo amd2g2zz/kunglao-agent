@@ -204,8 +204,44 @@ def _open_claims(reg: dict):
     return out
 
 
+def _fact_verification_owed(workspace: Path, fact_id: str) -> bool:
+    """#500: read the fact file's own verification state (schema layer).
+
+    True when verification is owed; False only on an explicit NOT-owed
+    value: `passes`, or a date-shaped value (the migrated/verified-at
+    form). Everything else — pending/partial, `fails`/`stale` (note-layer
+    vocabulary workers demonstrably cross-copy), typos, a missing
+    `verified:` field, or an unreadable/missing file — is owed: an
+    unknown verification state never silently vanishes from the partial
+    count (fail-closed). The search is bounded to the frontmatter block
+    (the module's own discipline: never parse stray body text).
+    """
+    path = workspace / "facts" / f"{fact_id}.md"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return True
+    head = text.split("---", 2)[1] if text.startswith("---") else text[:2000]
+    m = _FACT_FM_VERIFIED_RE.search(head)
+    if m is None:
+        return True
+    value = str(m.group(1)).strip().lower()
+    if value in ("", "pending", "partial", "fails", "stale"):
+        return True
+    return not (value == "passes" or _DATE_VALUE_RE.match(value) is not None)
+
+
 def _partial_facts(workspace: Path):
-    """Count facts needing verification from facts/_INDEX.md."""
+    """Count facts needing verification from facts/_INDEX.md.
+
+    #500 vocabulary bridge: the index status column is workflow-layer by
+    contract (state-mapping.md §2 — PARTIALLY-VERIFIED etc.), but workers
+    have been observed copying the schema-layer status (INFERRED) into it
+    (round-8A field evidence). Both shapes count: a row is partial when its
+    workflow status matches PARTIAL_STATUSES, OR when the row says INFERRED
+    and the fact file still owes verification. Verified facts (passes)
+    never count, under either vocabulary.
+    """
     idx = workspace / "facts" / "_INDEX.md"
     if not idx.exists():
         return []
@@ -220,6 +256,9 @@ def _partial_facts(workspace: Path):
         status = parts[1].upper()
         if any(s in status for s in PARTIAL_STATUSES):
             partial.append({"fact": parts[0], "status": parts[1]})
+        elif status == "INFERRED" and _fact_verification_owed(
+                workspace, parts[0]):
+            partial.append({"fact": parts[0], "status": parts[1]})
     return partial
 
 
@@ -227,6 +266,8 @@ def _partial_facts(workspace: Path):
 
 _FACT_FM_CREATED_RE = re.compile(r"^created:\s*([^\n]+)", re.M)
 _FACT_FM_VERIFIED_RE = re.compile(r"^verified:\s*([^\n]+)", re.M)
+# a verified-at date value (migrated/verified-at form): not owed
+_DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
 def _verify_stale_ticks() -> float:

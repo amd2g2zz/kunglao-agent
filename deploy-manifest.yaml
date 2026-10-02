@@ -287,7 +287,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: f5b2e24fd641b97ca07c00b1b03baee903c44814ce5a3466dcc46a3b0cde5477
+    sha256: 6e7f41a925267571fc470e057ab9eea00528689b861b318fa9ff2de0fe96d4c2
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: ab41efd5b8e1ed3c1b43933ba3dde2e3063a2fe37e4a2de81a337c2494a3af6e
+    sha256: 34d10b1cf70917c79d1ebf17f2b89cb38a35afe082f68652fb4e081de15643c1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 6966246d6efa71ae31cd696b35f425aa4de814a50e08ee57119c5afe4ba763d1
+    sha256: 6bc57169c48f8b8cee7db1c1f42226b85f828aec19cc04c0429884d582bf1cff
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1687,7 +1687,7 @@ files:
   - src: references/schemas/state-mapping.md
     dest: .claude/references/schemas/state-mapping.md
     kind: asset
-    sha256: 43bca1e5717201a544e4246ad1cb07004f00776bc36ae51020778998b2c04dae
+    sha256: 2db6a3cff3cacc186039d678425add667d1fc1b8474ff5fc17b4340e2fa030db
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
