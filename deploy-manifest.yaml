@@ -347,7 +347,7 @@ files:
   - src: scripts/distill_spine.py
     dest: .claude/scripts/distill_spine.py
     kind: scaffold
-    sha256: 7ceb91051938fb028fd44621e726ad5648c95fce3714fd0f8ad36da62dac6521
+    sha256: 5e58c6df40e2c86851d985d6e64d534b358735d4eae00b16049c2788bbbf1fce
   - src: scripts/dual_gate.py
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
@@ -755,7 +755,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: 97de2640dd7f6e36de091455f00006e6e9ca06bdf2983d9f737e85900fe08702
+    sha256: 12e73a018e06f55587bbd2b1de84306fa93645e702798a6ebe829315819db128
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -1211,7 +1211,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 0d9deeaadf1bb7b2ce01a132f8e3df2d22658b4980b2e8f3244a1f4d73d98b97
+    sha256: 95b2bbc973a297d91cb1b8604900cff110c0f8f5d0bf0b31cde97ff06901886b
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2059,7 +2059,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: c3bcb1215bea04c8da1cdce627483cb6c78cbb684bf156324263927e618780af
+    sha256: b997795d06f82cc8845df0fd8c74ea751ef9eb8d448fe70397a638c067f7a60c
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
