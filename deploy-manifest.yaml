@@ -1239,7 +1239,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 6966246d6efa71ae31cd696b35f425aa4de814a50e08ee57119c5afe4ba763d1
+    sha256: 6bc57169c48f8b8cee7db1c1f42226b85f828aec19cc04c0429884d582bf1cff
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset

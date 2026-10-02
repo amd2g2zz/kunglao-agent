@@ -112,7 +112,7 @@ files:
   references/re-library/web/risk-control/web-risk-control.md: 0129992b369681e7ec29afbe5c23714b907cc0001c5a79201ae3d374d871aa3b
   references/re-library/web/vm/jsvmp-triage.md: 5046ef868e09cdf2e1eba59caa8bbbf13ba9169071d9bb30be1c4cb3f8b70565
   references/schemas/schema.md: 6de2410a46b805a46296ee0b78b55bb80d57a3132c3c2a3a69dd9b666724c61c
-  references/schemas/state-mapping.md: 43bca1e5717201a544e4246ad1cb07004f00776bc36ae51020778998b2c04dae
+  references/schemas/state-mapping.md: 2db6a3cff3cacc186039d678425add667d1fc1b8474ff5fc17b4340e2fa030db
 symptom_map:
   F1: references/orchestration/failure-modes/failure-modes-lifecycle.md
   F5: references/orchestration/failure-modes/failure-modes-lifecycle.md
