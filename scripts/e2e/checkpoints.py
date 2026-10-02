@@ -493,6 +493,12 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
     total_ms += ms_p
     top = _top_claim(out_p)
     detail.update({"priority_top_claim": top})
+    if not top and _no_open_claims(ctx):
+        # the machine's delivery face: all claims closed, PQs PROVEN —
+        # no dispatchables is the terminal state, not a ranking failure
+        detail["delivered"] = True
+        return _record(ctx, "C6", "pre", model.PASS, 0, None, total_ms,
+                       detail, [goal_op, register, spec_path])
     ok = model.adjudicate("C6-pre", out_p.rc) == model.PASS and bool(top)
     return _record(ctx, "C6", "pre", model.PASS if ok else model.FAIL,
                    out_p.rc, out_p, total_ms, detail,
@@ -916,6 +922,23 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
     return None, out_tick, total_ms
 
 
+def _no_open_claims(ctx: RunContext) -> bool:
+    """Delivery-face test (robust): the register holds no OPEN claims.
+    Deterministic register read — never a stdout-substring guess."""
+    import yaml as _yaml
+    reg = ctx.ws / "claim-register.yaml"
+    try:
+        doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return False
+    for c in doc.get("claims") or []:
+        if str(c.get("status", "")).upper() in ("OPEN", "PARK",
+                                                "PARTIALLY-VERIFIED",
+                                                "STAMP", "UNVERIFIED"):
+            return False
+    return bool(doc.get("claims"))
+
+
 def _crashed_loud_stop(ctx: RunContext, detail: dict, decision,
                        out_d, total_ms: int) -> bool:
     """#482: a crashing convergence face must never spin silently —
@@ -968,6 +991,8 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
         claims, failed, ms = _rank_dispatchable(ctx)
         total_ms += ms
+        if not claims and _no_open_claims(ctx):
+            return "break", None, total_ms  # delivery face -> verdict
         if failed is not None or not claims:
             return ("stop", _record(
                 ctx, "C6", "loop", model.FAIL,

@@ -2223,3 +2223,37 @@ class TestYamlCorruption482:
             [_sys.executable, "scripts/ws_yaml.py", "get", str(f), "a.z"],
             capture_output=True, text=True)
         assert r.returncode == 5
+
+
+class TestDeliveryFaceRobust:
+    """Empty ranking + terminal register = delivery (break to verdict),
+    judged from the register, never a stdout substring."""
+
+    def test_no_open_claims_detects_terminal_register(self, stub_repo,
+                                                      tmp_path):
+        import yaml
+        from e2e.checkpoints import _no_open_claims
+        ctx_ws = tmp_path / "ws"
+        ctx_ws.mkdir()
+        (ctx_ws / "claim-register.yaml").write_text(yaml.safe_dump(
+            {"claims": [{"id": "C-1", "status": "PROVEN"},
+                        {"id": "C-2", "status": "PARKED-OLD"}]}),
+            encoding="utf-8")
+        state = model.RunState(
+            run_id="a1", unit="u", family="f", repo=str(stub_repo),
+            task_dir=str(stub_repo), ws=str(ctx_ws),
+            evidence_dir=str(tmp_path / "ev"), budget_seconds=100,
+            llm_mode="dry", started_ts="t", started_monotonic=0.0,
+            anchors={})
+        ctx = checkpoints.RunContext(
+            state=state, runner=ScriptedRunner(),
+            face=llm_faces.face_for("dry", ScriptedRunner(),
+                                    tmp_path / "ev"),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+        assert _no_open_claims(ctx) is True
+        doc = yaml.safe_load((ctx_ws / "claim-register.yaml")
+                             .read_text(encoding="utf-8"))
+        doc["claims"][1]["status"] = "OPEN"
+        (ctx_ws / "claim-register.yaml").write_text(
+            yaml.safe_dump(doc), encoding="utf-8")
+        assert _no_open_claims(ctx) is False
