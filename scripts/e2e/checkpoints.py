@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -733,12 +734,118 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
         dispatched.discard(vkey)
         return None
-    # verification landed → attempt promotion through the repo gate;
-    # a refusal is honest progress info, never fatal (#819 fail-closed)
+    # verification landed → land the gate-conformant verify-note (#501:
+    # the act's own record name, verification-<claim>.md, is invisible to
+    # the gate's artifact matching), then attempt promotion through the
+    # repo gate; a refusal is honest progress info, never fatal (#819
+    # fail-closed)
+    _land_verify_note(ctx, claim)
     promote = promote_claims(ctx.repo, ctx.ws, [claim])
     detail.setdefault("promotions", []).append(
-        {claim: promote.get("ok"), "promoted": promote.get("promoted")})
+        {claim: promote.get("ok"), "promoted": promote.get("promoted"),
+         "violations": promote.get("violations")})
+    _maybe_redteam(ctx, claim, promote, dispatched, detail)
     return None
+
+
+def _land_verify_note(ctx: RunContext, claim: str) -> None:
+    """#501: mirror the act's verification record into the gate-conformant
+    verify-note (runs/<claim>-verify-note.md). Honest mapping: verdict
+    verified → Overall verdict passes; anything else (refuted/absent)
+    writes no passes — no note at all without a record."""
+    note = Path(ctx.ws) / "runs" / f"{claim}-verify-note.md"
+    if (Path(ctx.ws) / "runs" / f"verify-redteam-{claim}.md").is_file():
+        # #501 review MEDIUM: a landed red-team artifact must keep its
+        # provenance order (gate: rt_m >= note_m). Rewriting the note on
+        # resume would poison every subsequent promotion attempt — keep
+        # the existing note instead.
+        if note.is_file():
+            return
+    record = Path(ctx.ws) / "runs" / f"verification-{claim}.md"
+    try:
+        text = record.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    m = re.search(r"^verdict:\s*(\S+)", text, re.M)
+    if m is None:
+        return
+    verdict = m.group(1).strip().lower()
+    outcome = "passes" if verdict == "verified" else verdict
+    note_text = (f"---\nclaim_id: {claim}\n"
+            f"verifier-identity: e2e-verifier-act-{ctx.state.run_id}\n"
+            f"record: runs/verification-{claim}.md\n---\n\n"
+            f"# {claim} verify-note (mirror of the verifier act record)\n\n"
+            f"The verifier act wrote verdict `{verdict}`; this note is the\n"
+            f"gate-conformant mirror (identity distinct from any red-team\n"
+            f"act by construction).\n\n## Overall verdict\n{outcome}\n")
+    note.write_text(note_text, encoding="utf-8")
+
+
+def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
+                   dispatched: set[str], detail: dict) -> None:
+    """#501: when promotion refused SOLELY for the missing red-team, fire
+    the blind red-team act and retry promotion through the repo gate. A
+    REFUTED verdict never promotes (#819) — the refutation rides the
+    promotion trail instead."""
+    violations = promote.get("violations") or []
+    # trigger on BOTH the never-ran face AND the provenance-order face —
+    # a resumed run may have an artifact that predates a rewritten note;
+    # re-dispatching the act re-lands it with a fresh mtime (self-heal)
+    needs_rt = promote.get("ok") is False and any(
+        ("red-team" in str(v) and "never ran" in str(v))
+        or ("predates" in str(v) and "redteam record" in str(v))
+        for v in violations)
+    if not needs_rt:
+        return
+    rtkey = f"RT:{claim}"
+    if rtkey in dispatched:
+        return
+    dispatched.add(rtkey)
+    prompt_file = (Path(ctx.state.evidence_dir)
+                   / f"dispatch-prompt-RT-{claim}.md")
+    prompt_file.write_text(
+        json.dumps({"kunglao_dispatch": {
+            "version": 1, "claim": claim, "tier": 1,
+            "agent": "kunglao-redteam"}})
+        + f"\n\nclaim: {claim}\n\n"
+        "RED-TEAM contract (maker-checker #819): you are the ATTACKER — "
+        "REFUTE the claim by deriving the answer independently from raw "
+        "evidence. BLIND: never read facts/, notes/, verify-notes, or "
+        f"runs/verification-{claim}.md. Construct your own adversarial "
+        "inputs, compare byte-exact against the ground-truth artifacts, "
+        "and report every divergence. WRITE the artifact "
+        f"runs/verify-redteam-{claim}.md with: frontmatter "
+        f"`claim: {claim}` and `verifier-identity: redteam-act-"
+        f"{ctx.state.run_id}`, your attack narrative, and a final line "
+        "`RED-TEAM VERDICT: CONFIRMED` (attacked, failed to refute) or "
+        "`RED-TEAM VERDICT: REFUTED` or `RED-TEAM VERDICT: "
+        "UNVERIFIED-WITH-GAP`. End with STATUS: DONE or STATUS: BLOCKED.\n",
+        encoding="utf-8")
+    request = model.DispatchRequest(
+        claim=claim, workspace=str(ctx.ws),
+        prompt_file=str(prompt_file), run_id=ctx.state.run_id,
+        agent="kunglao-redteam",
+        method_family=getattr(ctx.state, "method_family", "") or None)
+    act = ctx.face.dispatch_act(request)
+    ctx.acts.append(act.to_dict())
+    detail["acts"].append(act.to_dict())
+    if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+        dispatched.discard(rtkey)
+        return
+    artifact = Path(ctx.ws) / "runs" / f"verify-redteam-{claim}.md"
+    if not artifact.is_file():
+        detail.setdefault("promotions", []).append(
+            {claim: False, "redteam": "artifact-missing"})
+        return
+    retry = promote_claims(ctx.repo, ctx.ws, [claim])
+    row = {claim: retry.get("ok"), "promoted": retry.get("promoted"),
+           "violations": retry.get("violations")}
+    if retry.get("ok") is False:
+        art = artifact.read_text(encoding="utf-8", errors="replace")
+        m = re.search(r"RED-TEAM VERDICT\s*[:\-]?\s*(\S+)", art,
+                      re.IGNORECASE)
+        row["redteam"] = m.group(1) if m else "unparsed"
+    detail.setdefault("promotions", []).append(row)
 
 
 _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
