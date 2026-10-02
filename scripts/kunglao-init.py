@@ -162,6 +162,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
+import intake_battery  # noqa: E402  # #460: intake probe battery (die-probe + apkid-prescan instrument, features from run #1)
 import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
@@ -3487,6 +3488,31 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         else:
             print(f"kunglao-init: WARNING uv env not materialized: "
                   f"{uv_env['detail']}", file=sys.stderr)
+
+    # #460 intake probe battery (the instrument face): die-probe +
+    # apkid-prescan run ONCE over the aligned sample BEFORE the promise
+    # block (probe, then record) — die/apkid features exist from run #1,
+    # feeding the feature-conditioned prior and the mined table instead
+    # of waiting for learned ordering. WARN-tier instrument: every probe
+    # failure records an absence fact in evidence/intake-battery.json and
+    # never blocks init; instruments degrade, they don't gate. An
+    # unexpected defect follows the promise block's pattern (ERROR line +
+    # env_incident — silent skipping is the pathology, #813).
+    if not skip_toolchain:
+        try:
+            _battery = intake_battery.run_battery(ws, target_name, lane)
+            _outcomes = ", ".join(
+                f"{_r['probe']}={_r['outcome']}" for _r in _battery["probes"])
+            print(f"kunglao-init: intake-battery written: "
+                  f"evidence/intake-battery.json ({_outcomes})")
+        except Exception as exc:  # noqa: BLE001 — instrument, never gates
+            print(f"kunglao-init: ERROR intake-battery failed: {exc}",
+                  file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"intake-battery: {exc}")
+            except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
+                warn("run_3", f"{type(exc).__name__}: {exc}")
 
     # #813: Phase 0 预扫描 promise — apkid/DIE 探测状态、混淆先验、java
     # 可达性显式落盘（消灭"跳过且不记录"）。WARN-tier：promise 写失败不卡

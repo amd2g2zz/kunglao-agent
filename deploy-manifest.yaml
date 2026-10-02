@@ -347,7 +347,7 @@ files:
   - src: scripts/distill_spine.py
     dest: .claude/scripts/distill_spine.py
     kind: scaffold
-    sha256: 7ceb91051938fb028fd44621e726ad5648c95fce3714fd0f8ad36da62dac6521
+    sha256: 5e58c6df40e2c86851d985d6e64d534b358735d4eae00b16049c2788bbbf1fce
   - src: scripts/dual_gate.py
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
@@ -588,10 +588,14 @@ files:
     dest: .claude/scripts/instrument_menu.py
     kind: scaffold
     sha256: f41cc60132c90067875aabbc09b3881a931f2c62a6dd99381dbb7ffbd79d147a
+  - src: scripts/intake_battery.py
+    dest: .claude/scripts/intake_battery.py
+    kind: scaffold
+    sha256: 5b53257b5e19101bc561b320b633bcb9858d1cb797ac6f2d828d768105329167
   - src: scripts/intake_promise.py
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
-    sha256: cc799d9a3ff5ea1269b9785baac7e3cda53f3b8ffd27991bd9103d5b6b6209c4
+    sha256: c2c18f80e8321d950662dfdb1db97643afdef000ed52794ed132fdbf7f792660
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
@@ -615,7 +619,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 576577a61428a30794a0650443f887fc1dfab8ff0aa404e059fe1f7b4f429ed6
+    sha256: 66910755492e49e849db0503d60ea89426be3c17293cad8b0d2916edb3f44891
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -751,7 +755,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: 116d24d8b783bf9ef1f32eddb112b2facea98c711d1aff1183e7ef42f6b1197f
+    sha256: 22efc922f54b85c20fbd882c348fe67f485a2e515d06e630e57427e16c0b1841
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -1211,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 7ed3a7734579062a2eb12710d6c2f72fbcd83c533583915ef425d36909519f04
+    sha256: 423571e9cad574fd66c77343acb2f6b41df4d00527b74c7556e5dcb499c89f01
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1799,7 +1803,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ae945970100dcd0a4ce260eb4fe204205cb394accb8e4e27f3bdcb859c1c7b22
+    sha256: 01e9cd0d916183a41dffed28fc2b7d16ca8e9b8ba9f27b343c21c542c6b5d7ac
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -2059,7 +2063,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: c3bcb1215bea04c8da1cdce627483cb6c78cbb684bf156324263927e618780af
+    sha256: b997795d06f82cc8845df0fd8c74ea751ef9eb8d448fe70397a638c067f7a60c
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset

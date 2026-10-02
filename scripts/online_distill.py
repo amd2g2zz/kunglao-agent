@@ -723,6 +723,17 @@ def land_candidate(ws, attempt_dir, report: dict, candidate_name: str,
         "hops": report.get("hops") or [],
         "methods": report.get("methods") or [],
         "oracle": oracle,
+        # #478 PR2 (owner challenge: file-landing != toolchain): the
+        # usage metadata rides the manifest so the run-local shelf scan
+        # (tool-search --find, fourth source) surfaces an INVOCABLE,
+        # behavior-annotated candidate — the next worker decides
+        # without opening the file.
+        "usage": {
+            "invoke": f"python {TOOLS_LOCAL_DIRNAME}/{candidate_name}.py"
+                      " <sample-path>",
+            "verified": "oracle satisfied on the anchored sample "
+                        "(self-declared)",
+        },
         "landed_ts": _utc_now(),
     }
     manifest_path = tools_dir / f"{candidate_name}.manifest.json"

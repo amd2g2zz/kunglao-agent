@@ -245,6 +245,25 @@ def _hook_sweep(ctx: RunContext) -> list[dict]:
     return sweep
 
 
+def _staged_entry(task_dir: Path) -> str | None:
+    """#460 intake battery: the task's declared analysis entry
+    (task.yaml workspace_scaffold.entry), the battery's probe subject on
+    the e2e face. Tolerant — a task without a declared entry runs no
+    battery (explicit, never a raise)."""
+    import yaml  # noqa: PLC0415 — lazy (C1-only; a hard repo dep)
+
+    try:
+        doc = yaml.safe_load(
+            (Path(task_dir) / "task.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    entry = (doc.get("workspace_scaffold") or {}).get("entry") \
+        if isinstance(doc.get("workspace_scaffold"), dict) else None
+    return str(entry) if isinstance(entry, str) and entry.strip() else None
+
+
 def checkpoint_c1(ctx: RunContext) -> model.CheckpointResult:
     """C1 init: pending(exit 8) → resolve(verbatim anchors, flags
     repeated) → exit 0. Sub-step rcs ride detail."""
@@ -286,12 +305,28 @@ def checkpoint_c1(ctx: RunContext) -> model.CheckpointResult:
                    "answers_file": str(answers_path),
                    "scaffolded": sorted(
                        p.name for p in ctx.ws.glob("*") if p.is_file())})
+    # #460 intake probe battery (the instrument face): after the
+    # resolved init, run die-probe + apkid-prescan over the STAGED
+    # entry — probe features exist from run #1, feeding the mined
+    # feature table (the EX-5 re-evaluation substrate). An instrument:
+    # the sub-step rc rides the detail and NEVER changes the C1 verdict.
+    total_ms = ms_a + ms_c
+    if status_c == model.PASS:
+        entry = _staged_entry(Path(ctx.state.task_dir))
+        if entry is not None:
+            out_b, ms_b = ctx.py("intake_battery.py", str(ctx.ws), entry)
+            total_ms += ms_b
+            detail.update({"sub_battery_rc": out_b.rc,
+                           "battery_ms": ms_b,
+                           "battery_entry": entry})
+        else:
+            detail["battery_skipped"] = "no declared workspace entry"
     final = model.PASS if (status_a == model.PASS and
                            status_c == model.PASS) else (
         model.BLOCKED if model.BLOCKED in (status_a, status_c)
         else model.FAIL)
     return _record(ctx, "C1", "init", final, out_c.rc, out_c,
-                   ms_a + ms_c, detail, [answers_path])
+                   total_ms, detail, [answers_path])
 
 
 def checkpoint_c2(ctx: RunContext) -> model.CheckpointResult:
@@ -458,6 +493,12 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
     total_ms += ms_p
     top = _top_claim(out_p)
     detail.update({"priority_top_claim": top})
+    if not top and _no_open_claims(ctx):
+        # the machine's delivery face: all claims closed, PQs PROVEN —
+        # no dispatchables is the terminal state, not a ranking failure
+        detail["delivered"] = True
+        return _record(ctx, "C6", "pre", model.PASS, 0, None, total_ms,
+                       detail, [goal_op, register, spec_path])
     ok = model.adjudicate("C6-pre", out_p.rc) == model.PASS and bool(top)
     return _record(ctx, "C6", "pre", model.PASS if ok else model.FAIL,
                    out_p.rc, out_p, total_ms, detail,
@@ -928,6 +969,23 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
     return None, out_tick, total_ms
 
 
+def _no_open_claims(ctx: RunContext) -> bool:
+    """Delivery-face test (robust): the register holds no OPEN claims.
+    Deterministic register read — never a stdout-substring guess."""
+    import yaml as _yaml
+    reg = ctx.ws / "claim-register.yaml"
+    try:
+        doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return False
+    for c in doc.get("claims") or []:
+        if str(c.get("status", "")).upper() in ("OPEN", "PARK",
+                                                "PARTIALLY-VERIFIED",
+                                                "STAMP", "UNVERIFIED"):
+            return False
+    return bool(doc.get("claims"))
+
+
 def _crashed_loud_stop(ctx: RunContext, detail: dict, decision,
                        out_d, total_ms: int) -> bool:
     """#482: a crashing convergence face must never spin silently —
@@ -980,6 +1038,8 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
         claims, failed, ms = _rank_dispatchable(ctx)
         total_ms += ms
+        if not claims and _no_open_claims(ctx):
+            return "break", None, total_ms  # delivery face -> verdict
         if failed is not None or not claims:
             return ("stop", _record(
                 ctx, "C6", "loop", model.FAIL,
