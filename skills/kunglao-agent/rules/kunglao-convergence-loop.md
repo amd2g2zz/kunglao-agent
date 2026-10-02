@@ -12,7 +12,7 @@ MONITOR (read state and claims) / DISPATCH (dispatch workers per priority_ratio.
 VERIFY (independent verification). It does not decompile itself, does not scan
 strings, does not gather new evidence.
 
-## 2. First-action invariant — the convergence check opens every round
+## 2. First-action invariant — the convergence check is the first tool of every round
 
 Before any output or action in a round, run the convergence check first
 (re-read ground truth from disk, never from memory):
