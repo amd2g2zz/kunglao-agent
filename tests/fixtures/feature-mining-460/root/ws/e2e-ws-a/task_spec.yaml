@@ -10,15 +10,15 @@ promise:
   generated_at: '2026-09-29T05:25:44Z'
   prescan:
     apkid:
-      state: not_probed
+      state: available
       tier: WARN
-      note: layer not in this project_type's probe set - must still run at first claim (#669)
+      note: evidence/apkid.json present (probe artifact exists)
     die:
-      state: not_probed
+      state: available
       tier: WARN
-      note: layer not in this project_type's probe set - must still run at first claim (#669)
+      note: evidence/die.json present (probe artifact exists)
   obfuscation_prior:
-    source: null
+    source: evidence/apkid.json
     obfuscators: []
   java_reachability:
     verdict: unreachable

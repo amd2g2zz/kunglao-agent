@@ -17,7 +17,7 @@ Filters (combinable, AND semantics):
 Discovery mode (issue #476, #162: THE single search entry — no per-tier
 search tools exist):
   --find <keyword>              case-insensitive substring search across
-                                ALL THREE data sources:
+                                ALL FOUR data sources:
                                   1. the internal registry
                                      (tools/_INDEX.yaml);
                                   2. the typed ext catalog
@@ -32,7 +32,13 @@ search tools exist):
                                      its own generator's schema is left
                                      untouched; type/consume are DERIVED
                                      at query time: type=reference,
-                                     consume=read).
+                                     consume=read);
+                                  4. the run-local shelf
+                                     (<ws>/tools-local/*.manifest.json —
+                                     #474/#477/#478 landed tools; the
+                                     manifests ARE the registry, scanned
+                                     at query time; workspace via --ws
+                                     or the cwd walk-up presence probe).
                                 Hits carry name + score + kind + type +
                                 consume + source + usage + one-line
                                 description — a hit decides without
@@ -95,6 +101,18 @@ INTERNAL_SOURCE = "tools/_INDEX.yaml"  # resolution registry for internal hits
 REFERENCES_INDEX_REL = ("references", "_INDEX.yaml")
 REFERENCES_HEAD_LINES = 80   # haystack/description read depth per card
 REFERENCE_USAGE_TEMPLATE = "read {source} (capability reference)"
+
+# #478 PR2 fourth data source: the run-local shelf. The landed-tool
+# manifests under <ws>/tools-local/ ARE the registry (distill-manifest/1
+# from #474/#478 landings, harvest-manifest/1 from #477) — scanned at
+# query time, never rewritten, no third store. This closes the
+# owner-challenged gap: a landed tool that nothing surfaces is file-
+# landing, not a toolchain.
+RUN_LOCAL_DIRNAME = "tools-local"
+RUN_LOCAL_USAGE_TEMPLATE = "python {source} <sample-path>"
+# cwd walk-up presence probe (the kunglao_log workspace-marker idiom):
+# the first ancestor holding any of these is the workspace.
+WS_MARKERS = ("tools-local", "task_spec.yaml", "runs")
 
 
 def load_index(index_path: Path) -> list[dict]:
@@ -228,6 +246,83 @@ def find_references(repo_root: Path, ref_paths: list[str],
             "usage": REFERENCE_USAGE_TEMPLATE.format(source=source),
             "description": _reference_description(head),
         })
+    return hits
+
+
+# ---- #478 PR2 fourth data source: the run-local shelf ---------------------
+
+def resolve_workspace(start=None):
+    """The workspace whose run-local shelf --find scans: explicit path,
+    else the cwd walk-up presence probe (first ancestor holding a
+    workspace marker — tools-local / task_spec.yaml / runs). None
+    outside any workspace: the fourth source then stays silent (the
+    other three remain fully queryable)."""
+    try:
+        import os
+        cur = Path(start) if start else Path(os.getcwd())
+        for cand in (cur, *cur.parents):
+            if any((cand / m).exists() for m in WS_MARKERS):
+                return cand
+    except OSError:
+        pass
+    return None
+
+
+def _run_local_entry(doc: dict, manifest_path: Path) -> dict:
+    """One landed-tool hit projection from its manifest. Derives the
+    usage line and the verified-behavior annotation when the manifest
+    predates the usage block (old shelves stay discoverable)."""
+    name = str(doc.get("name")
+               or manifest_path.name.removesuffix(".manifest.json"))
+    source = f"{RUN_LOCAL_DIRNAME}/{name}.py"
+    usage = doc.get("usage") if isinstance(doc.get("usage"), dict) else {}
+    invoke = str(usage.get("invoke")
+                 or RUN_LOCAL_USAGE_TEMPLATE.format(source=source))
+    oracle = doc.get("oracle") if isinstance(doc.get("oracle"), dict) else {}
+    verified = str(usage.get("verified")
+                   or ("oracle satisfied (self-declared)"
+                       if oracle.get("satisfied") else "unverified"))
+    methods = [str(m) for m in (doc.get("methods") or []) if str(m)]
+    capability = str(doc.get("capability") or "unknown")
+    desc = (f"run-local landed tool (capability {capability}"
+            + (f"; methods: {', '.join(methods)}" if methods else "")
+            + f"); {verified}")
+    return {
+        "name": name,
+        "kind": "run-local",
+        "type": "tool",        # an executable landed in the run-local shelf
+        "consume": "invoke",
+        "capability": capability,
+        "source": source,
+        "usage": invoke,
+        "description": desc,
+    }
+
+
+def load_run_local(ws) -> list[dict]:
+    """Scan <ws>/tools-local/*.manifest.json — the run-local registry.
+    Absent shelf / unreadable or malformed manifests degrade to
+    silence, one bad manifest never bricks the query face."""
+    if ws is None:
+        return []
+    shelf = Path(ws) / RUN_LOCAL_DIRNAME
+    if not shelf.is_dir():
+        return []
+    out: list[dict] = []
+    for f in sorted(shelf.glob("*.manifest.json")):
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict):
+            out.append(_run_local_entry(doc, f))
+    return out
+
+
+def find_run_local(entries: list[dict], terms: list[str],
+                   mode: str = "any") -> list[dict]:
+    hits = [e for e in entries
+            if _haystack_hit(_ext_haystack(e).lower(), terms, mode)]
     return hits
 
 
@@ -382,7 +477,7 @@ def _emit(hits: list[dict], as_json: bool, text_formatter) -> None:
 
 
 def _find_mode(args, tools: list[dict], index_path: Path) -> int:
-    """--find: the #162 unified typed search face (all three sources)."""
+    """--find: the #162 unified typed search face (all four sources)."""
     terms = [t.strip().lower() for t in args.find.split(",") if t.strip()]
     if not terms:
         print("error: --find needs at least one keyword", file=sys.stderr)
@@ -392,11 +487,15 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
     ref_paths = load_reference_paths(refs_index)
     repo_root = index_path.parent.parent
+    run_local = load_run_local(resolve_workspace(args.ws))
     # dedup by source path: a re-library card enumerated by both the ext
     # index and the references index surfaces once (typed ext entry wins)
     hits = find_internal(tools, terms, mode) + find_ext(ext, terms, mode)
     seen_sources = {str(h.get("source", "")) for h in hits}
     for h in find_references(repo_root, ref_paths, terms, mode):
+        if h["source"] not in seen_sources:
+            hits.append(h)
+    for h in find_run_local(run_local, terms, mode):
         if h["source"] not in seen_sources:
             hits.append(h)
     if args.type is not None:
@@ -421,13 +520,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="cost budget filter, inclusive: probe < cheap < deep")
     ap.add_argument("--find", default=None, metavar="KEYWORD[,KEYWORD...]",
                     help="discovery mode (#162): case-insensitive keyword "
-                         "search over ALL THREE data sources (internal "
-                         "registry, typed ext catalog, references index); "
+                         "search over ALL FOUR data sources (internal "
+                         "registry, typed ext catalog, references index, "
+                         "run-local landed-tool shelf); "
                          "comma-separated terms combine boolean-style via "
                          "--match (default any = OR); hits carry name + "
                          "score + type + consume + source + usage + "
                          "description; mutually exclusive with "
                          "--capability/--tier/--cost-max")
+    ap.add_argument("--ws", default=None, metavar="PATH",
+                    help="with --find: the workspace whose run-local "
+                         "shelf (tools-local/*.manifest.json) is scanned "
+                         "as the fourth source; default = the cwd walk-up "
+                         "presence probe (tools-local / task_spec.yaml / "
+                         "runs marker); no workspace found -> that source "
+                         "stays silent")
     ap.add_argument("--match", choices=("any", "all"), default=None,
                     help="multi-term boolean mode for --find: any = OR "
                          "(default), all = AND (every term must match)")

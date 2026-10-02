@@ -1,0 +1,17 @@
+{
+  "tool": "apkid",
+  "version": "2.1.5",
+  "target": "target/beacon.apk",
+  "scanned_at": "2026-09-29T05:25:45Z",
+  "findings": [],
+  "summary": {
+    "packer": [],
+    "compiler": [],
+    "obfuscator": [],
+    "anti_vm": [],
+    "anti_debug": [],
+    "total": 0
+  },
+  "status": "ok",
+  "reason": ""
+}

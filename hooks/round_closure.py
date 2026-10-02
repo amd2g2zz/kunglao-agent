@@ -134,7 +134,13 @@ def _kernel_faces(ws: Path) -> None:
                 reason = online_distill.refuse_reason(ws, t.token)
                 online_distill.emit_trigger_row(
                     ws, t, allowed=(not reason), reason=reason)
-            online_distill.stamp_trigger(ws, triggers)
+            # #487: the stamp carries the problem formulation + the
+            # per-facet coverage matrix (fail-open — a formulation
+            # failure stamps the pre-#487 shape and warns once)
+            formulation = (online_distill.formulate_for_trigger(
+                ws, triggers[0]) if triggers else None)
+            online_distill.stamp_trigger(ws, triggers,
+                                         formulation=formulation)
     except Exception as exc:  # noqa: BLE001 — capability, never blocks
         warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
 

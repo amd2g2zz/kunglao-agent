@@ -379,15 +379,19 @@ def emit_distill_result(ws, attempt: str, *, validated: bool,
                         oracle: dict | None = None,
                         phase: str = "result",
                         refusal_reason: str | None = None,
-                        trigger_token: str | None = None) -> bool:
+                        trigger_token: str | None = None,
+                        coverage: dict | None = None) -> bool:
     """One distill RESULT row per dispatched attempt (validation +
     oracle outcome; rejections included). Budget refusals ride the same
     word with phase="refused", keyed to the trigger (nothing
-    dispatched)."""
+    dispatched). The row's detail carries the per-facet coverage
+    matrix summary when the act ran with a formulation."""
     detail: dict = {"attempt": attempt, "phase": phase,
                     "validated": validated,
                     "violations": list(violations or []),
                     "hops": hops, "oracle": oracle}
+    if coverage:
+        detail["coverage"] = coverage
     if refusal_reason:
         detail["refusal_reason"] = refusal_reason
     if trigger_token:
