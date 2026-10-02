@@ -132,7 +132,7 @@ The goal→operationalization translation is a mechanical pre-registration — `
 
 1. Fill `deliverables:` / `acceptance:` / `not_done:` / `diff_vs_verbatim:` / `generalization:` + `declared_ts:`.
 2. Pass `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/goal_operationalization.py <WORKSPACE>/goal-operationalization.yaml` — the validator refuses an unaudited translation (empty not-done counterexamples, missing diff declaration, `generalization` left `required`/`unknown` without the `fresh-input` probe case, a `not-applicable` claim not declared as a diff entry, missing timestamp).
-3. State the oracle behavior: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged.
+3. State the oracle behavior statement: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged.
 
 The not-done counterexamples are the load-bearing half: concrete negatives in the "X does not count as done" form — for protocol client simulation the fresh-input case IS the master oracle; replay is the verification ladder, never the closure. After `--stamp-dispatch` the file is append-only — the not_done constitution can grow, never shrink or reword; delivery restates it (`--restatement`); any other drift becomes a re-scope record; ambiguity escalates only through ask_for_direction, never a silent edit.
 

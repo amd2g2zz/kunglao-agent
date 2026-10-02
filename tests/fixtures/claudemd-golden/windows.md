@@ -71,7 +71,7 @@ tool means you have left the orchestrator role — hand the work to an agent.
 |-------|----------------|------------------|
 | `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
 | `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
-| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis | attack-test a claim before it is promoted to PROVEN |
+| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis (both the claim layer… | attack-test a claim before it is promoted to PROVEN |
 | `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
 | `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
