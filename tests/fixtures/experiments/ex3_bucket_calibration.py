@@ -36,7 +36,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+# fixture copy (from experiments/, owner ruling 2026-10-03): the
+# repo root is one level deeper under tests/fixtures/experiments/
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import state_signature as ssig  # noqa: E402

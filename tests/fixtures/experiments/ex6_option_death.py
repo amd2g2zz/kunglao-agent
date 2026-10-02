@@ -65,7 +65,9 @@ import random
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+# fixture copy (from experiments/, owner ruling 2026-10-03): the
+# repo root is one level deeper under tests/fixtures/experiments/
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -91,7 +93,8 @@ def _truth() -> dict[str, dict]:
     kind/cause/probe when tried; the breakthrough family succeeds.
     Loaded through the ONE by-path loader (#863 Family B delegation)."""
     ex4 = load_module_by_path(
-        "ex4_attribution_trap", ROOT / "experiments" / "ex4_attribution_trap.py"
+        "ex4_attribution_trap", ROOT / "tests" / "fixtures" / "experiments"
+        / "ex4_attribution_trap.py"  # sibling fixture (owner ruling 2026-10-03: experiments/ is local-only)
     )
     return {entry["family"]: entry for entry in ex4.TRAJECTORY}
 

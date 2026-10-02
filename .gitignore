@@ -104,3 +104,7 @@ docs/superpowers/
 
 # #364 campaign distillation scratch (untracked; D1 workspace material never committed)
 .scratch-d1/
+
+# local-only judgment-experiment artifacts (owner ruling 2026-10-03:
+# never synced to the remote)
+/experiments/

@@ -28,9 +28,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+FIXTURES = ROOT / "tests" / "fixtures" / "experiments"
+sys.path.insert(0, str(FIXTURES))
 
 import state_signature as ssig  # noqa: E402
-from experiments.ex3_bucket_calibration import replay, verdict  # noqa: E402
+from ex3_bucket_calibration import replay, verdict  # noqa: E402
 
 TS = "2026-09-27T00:00:00Z"
 

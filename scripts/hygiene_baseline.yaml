@@ -466,6 +466,10 @@ files:
     r1: 1
   tests/experiment_difficulty_15.py:
     r1: 1
+  tests/fixtures/experiments/ex3_bucket_calibration.py:
+    r1: 2
+  tests/fixtures/experiments/ex6_option_death.py:
+    r1: 2
   tests/test_acceptance.py:
     r1: 2
   tests/test_acceptance_689.py:

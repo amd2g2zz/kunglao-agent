@@ -32,7 +32,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 def _load_ex6():
     spec = importlib.util.spec_from_file_location(
-        "ex6_option_death", ROOT / "experiments" / "ex6_option_death.py"
+        "ex6_option_death", ROOT / "tests" / "fixtures" / "experiments"
+        / "ex6_option_death.py"
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
