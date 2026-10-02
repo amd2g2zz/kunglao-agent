@@ -244,7 +244,7 @@ Write ONLY `evidence/verdict.json` (the caller's `output_path`); stay honest
 in `self_audit` and `degraded[]`; questions without a PROVEN answering fact
 land in `unresolved[]`, never silently dropped.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: append to
+**Liveness + artifacts (canonical log / W-15 rule)**: append to
 `runs/worker-status-verdict-scorer-<id>.md` as an append-only log parsed by
 the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /

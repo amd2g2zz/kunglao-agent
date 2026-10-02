@@ -14,22 +14,6 @@ description: >-
   artifacts. Convergence loop, failure gate, and reference protocols are loaded on
   demand from references/.
 
-v0.1.2 additions (this version):
-- SessionStart enforcement persistence — always_arm + renew on session start
-- Observability lifeline — init full-path log + 19 silent modules wired
-- Rollup write-loop automation — claim terminal state triggers lessons/outcome
-- Lessons nursery two-stage lifecycle — draft → active + trigger_precision gate
-- Lessons utility telemetry + deprecate — CBM quartet + tombstone
-- Dispatch context block mechanization — worker channel + verifier BLIND
-- Hypothesis persistence + restart rehydration 
-- Strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence
-- Workspace export tool — zone-based routing (carrier/evidence/scratch)
-- v0.1.2 milestone audit — 4-piece set: white-box + black-box + log + regression
-- MCP prefix enforcement (security) — rejects mcp__unknown__/mcp__external__
-- Worker budget refactor — split into core/gates/sinks modules
-- Coverage OBSERVATION-only policy — drift guard tests
-- E2E DoD 9 regression — init exit-4 → no subsequent repair
-
 triggers:
   - run kunglao-agent
   - continue kunglao-agent
@@ -126,6 +110,8 @@ Run in order; any FAIL blocks the next step.
 
 ## Phase 1 Activate
 
+### 1.1 Hook + heartbeat activation
+
 Run hook + heartbeat activation before the first dispatch (orchestrator-only, 30-min TTL):
 
 ```bash
@@ -136,11 +122,27 @@ uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py
 
 MUSTs: `--renew` every 30 min; `--reconcile` every tick (self-heals zombie workers); cron acceptance HARD — `heartbeat_loop_prompt.py --verify` non-zero = CronCreate did not take. A PASSING dispatch auto-renews the TTL, flips phase to DISPATCH, and writes the dispatch event.
 
-**Oracle backfill (gate power-on)**: before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker) — without it the completion gate judges nothing. The heartbeat tick reports `oracle_registered`; false + marker still present = backfill skipped — do it now.
+### 1.2 Oracle backfill (gate power-on)
 
-**Goal operationalization pre-registration (Phase 0)**: the goal→operationalization translation is a mechanical pre-registration — `<WORKSPACE>/goal-operationalization.yaml`. Before the first dispatch, fill `deliverables:` / `acceptance:` / `not_done:` / `diff_vs_verbatim:` / `generalization:` + `declared_ts:` and pass `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/goal_operationalization.py <WORKSPACE>/goal-operationalization.yaml` — the validator refuses an unaudited translation (empty not-done counterexamples, missing diff declaration, `generalization` left `required`/`unknown` without the `fresh-input` probe case, a `not-applicable` claim not declared as a diff entry, missing timestamp). The not-done counterexamples are the load-bearing half: concrete negatives in the "X does not count as done" form — for protocol client simulation the fresh-input case IS the master oracle; replay is the verification ladder, never the closure. Phase 0 also states the oracle behavior statement: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged. After `--stamp-dispatch` the file is append-only — the not_done constitution can grow, never shrink or reword; delivery restates it (`--restatement`); any other drift becomes a re-scope record; ambiguity escalates only through ask_for_direction, never a silent edit.
+Before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker) — without it the completion gate judges nothing. The heartbeat tick reports `oracle_registered`; false + marker still present = backfill skipped — do it now.
 
-**Tick binding**: run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault. **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action. **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins. Stop the loop at closeout: `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
+### 1.3 Goal operationalization pre-registration
+
+The goal→operationalization translation is a mechanical pre-registration — `<WORKSPACE>/goal-operationalization.yaml`. Before the first dispatch:
+
+1. Fill `deliverables:` / `acceptance:` / `not_done:` / `diff_vs_verbatim:` / `generalization:` + `declared_ts:`.
+2. Pass `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/goal_operationalization.py <WORKSPACE>/goal-operationalization.yaml` — the validator refuses an unaudited translation (empty not-done counterexamples, missing diff declaration, `generalization` left `required`/`unknown` without the `fresh-input` probe case, a `not-applicable` claim not declared as a diff entry, missing timestamp).
+3. State the oracle behavior statement: (a) red is information, feeding the posterior updates; (b) cases stay anchored to captured ground truth; (c) acceptance is machine-judged.
+
+The not-done counterexamples are the load-bearing half: concrete negatives in the "X does not count as done" form — for protocol client simulation the fresh-input case IS the master oracle; replay is the verification ladder, never the closure. After `--stamp-dispatch` the file is append-only — the not_done constitution can grow, never shrink or reword; delivery restates it (`--restatement`); any other drift becomes a re-scope record; ambiguity escalates only through ask_for_direction, never a silent edit.
+
+### 1.4 Tick binding
+
+Run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault.
+
+- **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action.
+- **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins.
+- **Teardown**: stop the loop at closeout with `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
 ## Phase 2 Dispatch Loop
 
@@ -172,9 +174,16 @@ The shape is fixed: a **v1 canonical JSON envelope** opening the dispatch prompt
 
 **Dispatch is fire-and-continue**: launch the worker as a BACKGROUND task and return to the tick loop immediately — NEVER wait inline on a worker's completion. A foreground Task call blocks the whole orchestrator: parallelism collapses to 1, the tick loop never fires, smart pings are never sent, and stuck workers sit undetected. The per-turn flow: convergence check → dispatch top claims (background, ≤3) → immediately re-enter MONITOR (enumerate ALL workers, TaskOutput non-blocking, ping silent ones, TaskStop delivered ones). Completion is discovered ON A LATER TICK via the worker-status flip + TaskOutput — then classify, update `claim-register.yaml`, re-run `priority_ratio.py`, dispatch the new top. `hooks/worker_budget_gates.py` counts active workers from `runs/worker-status-*.md` (`scan_active_workers`), so a dispatched-but-unwritten worker is invisible to the ≤3 gate — which is why the worker-side rule (status file FIRST, before any tool use) is mandatory, and why the orchestrator must not fire 4 launches in one turn assuming the gate will catch it.
 
-**Plan-to-execute (owner ruling: dispatch carries intent, not a plan)** — the FIRST dispatch of a claim needs NO pre-existing plan (never ghostwrite one); planning is the worker's first act of execution (`runs/plan-C<NN>.md`, citing `dispatch-anchor: <dispatch_ts>`). Any RE-dispatch beyond the planning round requires the plan reference; the plan-author provenance check REJECTS an uncited pre-dispatch plan. Plans carry the state machine + `revision: N`; re-planning appends a `## revision-N` segment. When `plan_reviser.py --check` exits 3 (`suggest_revision`), you MUST produce a revision via `--apply` — "no change" still records a no-change revision. The dispatch prompt must carry `facts-snapshot:` or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt.
+**Plan-to-execute (owner ruling: dispatch carries intent, not a plan)** — the FIRST dispatch of a claim needs NO pre-existing plan (never ghostwrite one); planning is the worker's first act of execution (`runs/plan-C<NN>.md`, citing `dispatch-anchor: <dispatch_ts>`). Any RE-dispatch beyond the planning round requires the plan reference; the plan-author provenance check REJECTS an uncited pre-dispatch plan. Plans carry the state machine + `revision: N`; re-planning appends a `## revision-N` segment. When `plan_reviser.py --check` exits 3 (`suggest_revision`), you MUST produce a revision via `--apply` — "no change" still records a no-change revision. The dispatch prompt must carry `facts-snapshot:` or the dispatch is REJECTED; deviating from the top-ranked claim requires `reasoning:` in the prompt.
 
-**Online distillation (shelf-miss dispatch protocol)** — when a worker's status carries a `shelf-miss: <token>` marker (or `runs/distill-trigger.json` exists — the SubagentStop closure stamps it after scanning), the tool shelf has no viable candidate for that capability. If the budget allows (check `runs/distill-budget.json` — per-run caps are hard; the engine CLI is the single spender), dispatch ONE distillation act: a `kunglao-distill` agent act with the reserved claim id `distill-<attempt-n>` (never in the claim register), instructing formulation-first retrieval: the dispatch prompt CARRIES the stamped problem formulation + per-facet coverage matrix from `runs/distill-trigger.json` (the facets are the retrieval queries, retrieve PER FACET; hit cards are validated starting points; corpus-lack facets are the web-face priorities), then retrieval from the local re-library FIRST then the web face (URL + access date recorded; never directly proven), METHODS extraction over case specifics, and case expansion capped at depth 1 / breadth 3 (every hop budgeted). The act stages its report + candidates under `runs/distill-candidates/<attempt>/`; then run the engine's landing face (`uv run --project $REPO python $REPO/scripts/online_distill.py <ws> --land runs/distill-candidates/<attempt>`) — the ENGINE validates the report, runs every candidate against the anchored sample bytes, and lands satisfied candidates into `<ws>/tools-local/` (usable immediately in-run; the global shelf is NEVER written at runtime — promotion is a post-run wave through the standing distill quality gate). Workers land their `shelf-miss` marker the moment full-shelf selection fails; distillation frequency is budget-governed, never prohibited.
+**Online distillation (shelf-miss dispatch protocol)** — when a worker's status carries a `shelf-miss: <token>` marker (or `runs/distill-trigger.json` exists — the SubagentStop closure stamps it after scanning), the tool shelf has no viable candidate for that capability. Handle it as a bounded, budget-governed act:
+
+1. **Check the budget**: `runs/distill-budget.json` — per-run caps are hard; the engine CLI is the single spender. No budget → no distillation.
+2. **Dispatch ONE distillation act**: a `kunglao-distill` agent act with the reserved claim id `distill-<attempt-n>` (never in the claim register). Formulation-first retrieval: the dispatch prompt CARRIES the stamped problem formulation + per-facet coverage matrix from `runs/distill-trigger.json` — the facets are the retrieval queries, retrieve PER FACET; hit cards are validated starting points; corpus-lack facets are the web-face priorities. Instruct: retrieval from the local re-library FIRST, then the web face (URL + access date recorded; never directly proven); METHODS extraction over case specifics; case expansion capped at depth 1 / breadth 3 (every hop budgeted).
+3. **Stage**: the act stages its report + candidates under `runs/distill-candidates/<attempt>/`.
+4. **Land**: run the engine's landing face — `uv run --project $REPO python $REPO/scripts/online_distill.py <ws> --land runs/distill-candidates/<attempt>`. The ENGINE validates the report, runs every candidate against the anchored sample bytes, and lands satisfied candidates into `<ws>/tools-local/` (usable immediately in-run). The global shelf is NEVER written at runtime — promotion is a post-run wave through the standing distill quality gate.
+
+Workers land their `shelf-miss` marker the moment full-shelf selection fails; distillation frequency is budget-governed, never prohibited.
 
 **Tool-first**: the toolfirst gate is ADVISORY (REJECT demoted) — a keyword hit without a marker only logs a `toolfirst_advisory` ledger row and proceeds, it never rejects. The citation contract stands: a dispatch whose task matches a registered `tools/_INDEX.yaml` capability carries `tool-catalog: <tool-name>` (or `tool-catalog: none (reasoning: ...)`). **T1_DIRECT (the affirmative)**: if a registered tool directly covers the task, execute it first before any decomposition (`tool-catalog: <name>` if applicable) — the same line the eval loop prompt injects; production dispatch paths take it from this contract.
 
@@ -191,14 +200,14 @@ The shape is fixed: a **v1 canonical JSON envelope** opening the dispatch prompt
 **State-layered tool diagnosis**: diagnose AT the failing layer, never generalize one layer's symptom to total failure ("the MCP is dead" from an unreachable endpoint is the canonical error):
 
 ```
-installed?   -> no -> install (ownership tier per issue 202)           | yes v
+installed?   -> no -> install (per the ownership tiers)                | yes v
 registered?  -> no -> register (agent-do)                              | yes v
 connects?    -> no -> connection-layer diagnosis (port/token/env/deps) | yes v
 capable?     -> no -> capability probe (version/API/contract)          | yes v
 input ready? -> no -> input completeness (path/permission/format)      | yes -> use it
 ```
 
-Four rules: (1) repair AT the failed layer N — jumping to another tool on a layer failure is INVALID (fallback belongs to the decompiler XOR family, issue 210, chosen by lane — never triggered by a layer failure); (2) gathered facts gate the next action — mechanical gate: `echo '{"python_version": "3.14"}' | python <SKILL_DIR>/scripts/decision_lint.py "pip install idapro"` (exit 1 = BLOCKED); (3) recommending a fallback while the primary is present-and-repairable is decision invalidity; (4) reports name the LAYER, never a "dead" verdict.
+Four rules: (1) repair AT the failed layer N — jumping to another tool on a layer failure is INVALID (fallback belongs to the decompiler XOR family (issue 210), chosen by lane — never triggered by a layer failure); (2) gathered facts gate the next action — mechanical gate: `echo '{"python_version": "3.14"}' | python <SKILL_DIR>/scripts/decision_lint.py "pip install idapro"` (exit 1 = BLOCKED); (3) recommending a fallback while the primary is present-and-repairable is decision invalidity; (4) reports name the LAYER, never a "dead" verdict.
 
 **Script discipline**: any reusable logic a worker needs references an existing CLI in `scripts/` or is written as a parameterized CLI there — never inlined as an inline `python -c` snippet or a heredoc in a dispatch prompt; one-off diagnostics may run inline. Check `tools/_INDEX.yaml` before writing new scripts. Checklist → `references/contracts/cli-script-checklist.md`.
 
@@ -269,7 +278,7 @@ Read `references/orchestration/failure-modes/failure-modes.md` (index; 18 F-rows
 
 | Symptom | Countermeasure | Enforcement |
 | --- | --- | --- |
-| Idles with slots free (F1) | Dispatch `priority_ratio.py` #1 now | convergence_check exit 1 |
+| Idles with slots free (F1) | Dispatch the top-ranked claim from `priority_ratio.py` now | convergence_check exit 1 |
 | Forgot heartbeat (F2) | Schedule `/loop 5m` or CronCreate before first dispatch | worker_budget `check_heartbeat_alive` |
 | Pings only the last-dispatched worker (F3) | Enumerate ALL workers each tick | heartbeat_tick.py |
 | Doesn't re-plan after worker return (F4) | Re-read worker output + re-run `priority_ratio.py` | priority audit |
@@ -284,7 +293,7 @@ Read `references/orchestration/failure-modes/failure-modes.md` (index; 18 F-rows
 
 **The orchestrator is NOT an analyst**: never decompile, emulate, scan strings, or gather novel evidence — that is delegated to workers (worker = maker, you = checker). Never ask the user "should I do X?" — act per this contract; ask only when the next action is genuinely unrecoverable without user input (contradicting CTI, blocked on access, zero OPEN claims + empty fact base). Do not query CTI/OSINT, extract IOCs, or attribute to a threat actor — the job ends at a byte-anchored, verified RE fact base.
 
-**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — rank via `priority_ratio.py`, dispatch the top within ≤3 workers + tier gate (background, fire-and-continue); deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
+**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — rank via `priority_ratio.py`, dispatch the top within ≤3 workers + tier gate (background, fire-and-continue); deviate from the top-ranked claim only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
 
 **Read/write boundary**: read state — always allowed; read evidence — for VERIFY reproduction and cross-fact patterns; read evidence AND write facts from it — FORBIDDEN unless through a worker, or marked `synthesis: true` + source and — when the external malware-veri-notes skill is installed — passed through `verify-note.py`.
 

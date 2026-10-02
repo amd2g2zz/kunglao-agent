@@ -9,8 +9,8 @@ description: >-
   oracle/) are sha256-normalized before/after; any byte difference aborts
   with `RC_IRON_RULE=4` and the pre-upgrade snapshot stays on disk for
   forensics. Use `--dry-run` to print the per-item plan without writing.
-  Wraps `scripts/kunglao_upgrade.py` + the post-upgrade git
-  snapshot path (, legacy no-git workspaces only). Use when an
+  Wraps `scripts/kunglao_upgrade.py` + the post-upgrade git snapshot path
+  (legacy no-git workspaces only). Use when an
   initialized workspace's version stamp trails the skill package and you
   want it brought current without losing analysis data.
 arguments: [workspace]
@@ -95,15 +95,17 @@ trips the rule.
 
 ## Related
 
+- This skill is a render surface of `skills/subcommands.yaml` (the
+  subcommand UX single source) — keep the frontmatter argument-hint in
+  sync with the registry.
 - Declarative convergence upgrade (CLI shape + migration registry).
 - Post-upgrade git snapshot for legacy no-git workspaces + explicit banner.
-- Single-source subcommand UX design D4 (this skill is a render surface of `skills/subcommands.yaml`).
 
-## Deploy-surface items (#755, migration entry 0.1.4)
+## Deploy-surface items (migration entry 0.1.4)
 
-The `0.1.4` migration completes the deployment surface Wave-1 could not
-touch. Every item is idempotent and WARN-only (a degraded item never flips
-the exit code):
+The `0.1.4` migration completes the deployment surface so an older
+workspace reaches parity with the current install. Every item is idempotent
+and WARN-only (a degraded item never flips the exit code):
 
 | Item | Behavior |
 |------|----------|
