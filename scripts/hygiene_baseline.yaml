@@ -304,6 +304,8 @@ files:
     r1: 7
   scripts/provider_health.py:
     r1: 2
+  scripts/query_formulation.py:
+    r1: 3
   scripts/re_pin_references.py:
     r1: 1
     r2: 1
@@ -1161,6 +1163,8 @@ files:
     r1: 5
     r2: 2
   tests/test_qtable_p3.py:
+    r1: 5
+  tests/test_query_formulation_487.py:
     r1: 5
   tests/test_recall_inject.py:
     r1: 5

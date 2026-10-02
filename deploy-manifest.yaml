@@ -47,7 +47,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 9753e01bb4de4d7f2207a70a30f725573fdbe1e15d26bf9b5ef97758ee331b7d
+    sha256: 46c56a40bde61bd6bbfeacbc66bda26e5bc3591a60c99b0ed6c044f00ebeac72
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -755,7 +755,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: 12e73a018e06f55587bbd2b1de84306fa93645e702798a6ebe829315819db128
+    sha256: 22efc922f54b85c20fbd882c348fe67f485a2e515d06e630e57427e16c0b1841
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -836,6 +836,10 @@ files:
     dest: .claude/scripts/provider_health.py
     kind: scaffold
     sha256: c4eae8039836094cdc6775a032287f99301c59cca1882bcd33037fc3258d87ab
+  - src: scripts/query_formulation.py
+    dest: .claude/scripts/query_formulation.py
+    kind: scaffold
+    sha256: 45174bdaada256ae10020a62cb080422b79c3041bc14764dd79b7edecd183290
   - src: scripts/rank_face.py
     dest: .claude/scripts/rank_face.py
     kind: scaffold
@@ -1211,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 95b2bbc973a297d91cb1b8604900cff110c0f8f5d0bf0b31cde97ff06901886b
+    sha256: 423571e9cad574fd66c77343acb2f6b41df4d00527b74c7556e5dcb499c89f01
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1799,7 +1803,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: daf051edeffafb289b42a7c3e43825333100d84262b5b90a3370917087ce03aa
+    sha256: 01e9cd0d916183a41dffed28fc2b7d16ca8e9b8ba9f27b343c21c542c6b5d7ac
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

@@ -14,6 +14,10 @@ the standing quality bar.
 
 Organs (each fail-closed where it guards a budget, fail-open where it
 rides a host):
+  formulate         the query-formulation delegate (issue 487):
+                    problem enumeration + faceted retrieval
+                    coverage before any retrieval (lazy sibling
+                    import, fail-open, no budget face)
   scan_triggers     the two mechanical miss signals (nothing else)
   budget ledger     runs/distill-budget.json — per-run act + hop caps,
                     engine-minted run identity, workspace-lifetime
@@ -780,8 +784,33 @@ def _emit_production_row(ws, action: str, *, detail: dict,
         detail=json.dumps(detail, sort_keys=True, ensure_ascii=False))
 
 
-def stamp_trigger(ws, triggers: list[Trigger]) -> bool:
-    """Persist the trigger state the orchestrator's tick reads."""
+def formulate_for_trigger(ws, trigger) -> dict | None:
+    """Organ 0 delegate (issue 487): problem enumeration + faceted
+    retrieval coverage for ONE trigger, through the sibling
+    query_formulation module. Fail-open rider — a missing module or a
+    formulation failure is one rate-limited warn and None (the act
+    proceeds unformulated, the pre-formulation prompt shape);
+    formulation debits no budget."""
+    try:
+        import query_formulation  # noqa: PLC0415 — lazy sibling import
+    except ImportError as exc:
+        _warn("online_distill_formulate", f"import: {exc}")
+        return None
+    try:
+        return query_formulation.formulate_and_retrieve(ws, trigger)
+    except Exception as exc:  # noqa: BLE001 — capability, never the act
+        _warn("online_distill_formulate", f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def stamp_trigger(ws, triggers: list[Trigger],
+                  formulation: dict | None = None) -> bool:
+    """Persist the trigger state the orchestrator's tick reads. Since
+    the query-formulation change (issue 487) the stamp also carries
+    the problem formulation + coverage matrix (when the formulation
+    face produced them) — the object the orchestrator's dispatch
+    prompt consumes: facets are the retrieval queries, corpus-lack
+    facets are the web-face priorities."""
     if not triggers:
         return False
     doc = {
@@ -792,6 +821,9 @@ def stamp_trigger(ws, triggers: list[Trigger]) -> bool:
              "sample_hint": t.sample_hint, "source_file": t.source_file}
             for t in triggers],
     }
+    if isinstance(formulation, dict):
+        doc["formulation"] = formulation.get("formulation") or formulation
+        doc["coverage"] = formulation.get("coverage")
     _atomic_write_json(Path(ws) / TRIGGER_STAMP, doc)
     return True
 
@@ -826,7 +858,10 @@ def main(argv: list[str] | None = None) -> int:
             allowed, reason = budget_allows(ws), refuse_reason(ws, t.token)
             allowed = allowed and not reason
             emit_trigger_row(ws, t, allowed, reason)
-        return 0 if stamp_trigger(ws, triggers) else 0
+        formulation = (formulate_for_trigger(ws, triggers[0])
+                       if triggers else None)  # scan = formulate
+        stamp_trigger(ws, triggers, formulation=formulation)
+        return 0
     if args.reinit:
         doc = reinit_run(ws)
         print(json.dumps({"run_id": doc["run_id"]}, sort_keys=True))
