@@ -287,7 +287,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: f5b2e24fd641b97ca07c00b1b03baee903c44814ce5a3466dcc46a3b0cde5477
+    sha256: 6e7f41a925267571fc470e057ab9eea00528689b861b318fa9ff2de0fe96d4c2
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 423571e9cad574fd66c77343acb2f6b41df4d00527b74c7556e5dcb499c89f01
+    sha256: 00067f259e4a8bc489d0229f3ea09ade60fe4e7695b5805bf53c05c86b0e2173
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1687,7 +1687,7 @@ files:
   - src: references/schemas/state-mapping.md
     dest: .claude/references/schemas/state-mapping.md
     kind: asset
-    sha256: 43bca1e5717201a544e4246ad1cb07004f00776bc36ae51020778998b2c04dae
+    sha256: 2db6a3cff3cacc186039d678425add667d1fc1b8474ff5fc17b4340e2fa030db
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
