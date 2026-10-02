@@ -21,7 +21,7 @@ evidence-indexed.
 The workspace must already exist and be initialized (see
 `/kunglao-agent:init`); a workspace that is not initialized is refused work.
 
-## Stale-workspace gate (#748, machine-checkable)
+## Stale-workspace gate (machine-checkable)
 
 Before entering the loop, run:
 
@@ -33,26 +33,26 @@ This emits a JSON envelope `{status, rc, workspace_stamp, skill_version, advice}
 Three terminal outcomes:
 
 - `status="current"` + `rc=0` → proceed with the loop.
-- `status="stale"` + `rc=5` → **refuse**. Workspace template stamp is older than
-  the active skill version, so the gates added in v0.1.2 / v0.1.3
-  (`completion_gate`, `violation_capture`, `_path_hygiene`,
-  `orchestrator_tool_guard`) would silently not register, producing the
-  #717 三层闸门 escape pattern. **Direct the operator to**
+- `status="stale"` + `rc=5` → **refuse**. The workspace's template stamp is
+  older than the active skill version, so the hooks the current version
+  registers (`completion_gate`, `violation_capture`, `_path_hygiene`,
+  `orchestrator_tool_guard`) would silently not load — every gate the
+  loop relies on would be missing. **Direct the operator to**
   `/kunglao-agent:upgrade <workspace>` and **stop**. The user must
   explicitly run upgrade; do not auto-fix.
 - `status="no-stamp"` + `rc=5` → refuse and direct to
   `/kunglao-agent:init <workspace>` first.
 - `status="deploy-drift"` + `rc=5` → refuse. The workspace carries deployed
   framework copies (`.claude/hooks`) whose digest no longer matches the
-  skill package's deployment manifest (#783 T5) — hand-edited copies,
-  missing digest carrier, or content deployed by an older skill build.
-  Same remediation: `/kunglao-agent:upgrade <workspace>` (its refresh
-  restores the copies and re-stamps the carrier), then re-run the gate.
+  skill package's deployment manifest — hand-edited copies, a missing
+  digest carrier, or content deployed by an older skill build. Same
+  remediation: `/kunglao-agent:upgrade <workspace>` (its refresh restores
+  the copies and re-stamps the carrier), then re-run the gate.
 
-The gate runs in <50ms and produces a parseable contract — agents should
-call it once at entry rather than reasoning about stamps themselves.
+The gate runs in <50ms and produces a parseable contract — call it once at
+entry rather than reasoning about stamps yourself.
 
-## Heartbeat self-check (#754, machine-checked)
+## Heartbeat self-check (machine-checked)
 
 After the stale gate passes — and before any dispatch — run:
 
@@ -70,7 +70,7 @@ reconcile → continuous-tick verify. Exit contract (never proceed on failure):
 - `rc=5` — identical to check-stale refusal : stale or missing stamp.
 - `rc=6` + stderr `heartbeat verify failed — run /kunglao-agent:resume for
   re-arm guidance` — monitoring is NOT verifiably alive (a lone registration
-  tick counts as dead: that was the blind spot). Direct to
+  tick counts as dead). Direct to
   `/kunglao-agent:resume`; do not hand-wave a dispatch through.
 - `rc=7` + stderr `analysis entry refused - oracle anchors missing ...` —
   the required intake answers are not in `task_spec.yaml`

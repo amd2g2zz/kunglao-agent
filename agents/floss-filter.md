@@ -1,6 +1,6 @@
 ---
 name: floss-filter
-lane: malware  # issue 208: analysis material contract — malware binary lane only
+lane: malware  # analysis material contract — malware binary lane only
 description: 'Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)
   + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer
   A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not
@@ -266,7 +266,7 @@ WRITE `evidence/floss-filtered.json` yourself (Layer A inventory + Layer B
 top-K); on failure write the error JSON to the same `output_path`, never
 return bare prose. The one-line return summary comes only after the file exists.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: append to
+**Liveness + artifacts (canonical log / W-15 rule)**: append to
 `runs/worker-status-floss-filter-<id>.md` as an append-only log parsed by
 the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /

@@ -1,6 +1,6 @@
 ---
 name: ghidra-light
-lane: malware  # issue 208: analysis material contract — malware binary lane only
+lane: malware  # analysis material contract — malware binary lane only
 description: 'Stage 4 light static reconnaissance via Ghidra. For local-file samples with detected language
   Go/Rust/OLLVM/C/C++/.NET. **Two-tier strategy**: (1) try Ghidra MCP bridge if a GUI instance with a
   real project is online; (2) AUTONOMOUSLY fall back to Ghidra analyzeHeadless (no GUI required) — create
@@ -385,7 +385,7 @@ WRITE `evidence/static-ghidra.json` yourself — the file is the deliverable;
 failure paths write degraded output with the reason, never a silent return.
 The one-line return summary comes only after the file exists.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: append to
+**Liveness + artifacts (canonical log / W-15 rule)**: append to
 `runs/worker-status-ghidra-light-<id>.md` as an append-only log parsed by
 the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Use the canonical vocabulary ONLY — `status: in-progress` /

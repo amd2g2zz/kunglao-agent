@@ -122,7 +122,7 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    pick whichever layer answers the claim fastest and say why.
 3. **Headless-first** — default to headless browsing;
    escalate to headful ONLY as the anti-fraud upgrade path (see ladder below).
-4. **Write files or you FAILED** (W-15 lesson) — same §1c file contract as
+4. **Write files or you FAILED** (W-15) — same §1c file contract as
    kunglao-worker: worker-status first, `facts/Fxxx.md` immediately after each
    fact, report + progress.txt last, DONE line carries
    `artifacts:` (+ `notes:` per K2 below).
@@ -139,7 +139,7 @@ Cite your dispatch anchor as provenance — a `dispatch-anchor: <dispatch_ts>`
 line carrying the dispatch_ts from your KUNGLAO_DISPATCH_CONTEXT block: a
 plan you did not author in your session breaks your contract (maker !=
 checker), and any re-dispatch beyond the planning round requires that plan
-reference. `if-fails:` (per-step, issue 250) — every ENUMERATED step under
+reference. `if-fails:` (per-step) — every ENUMERATED step under
 `steps:` is followed by an `if-fails:` line carrying condition + action
 ("if wakaru unpack yields one monolith -> switch to webcrack-first order").
 The plan-first gate REJECTS a re-dispatch plan whose enumerated steps
@@ -180,7 +180,7 @@ WRITE the deliverables yourself, in this order: `runs/worker-status-web-re-<task
 (one appended status line per state change), `facts/F<NNN>.md` immediately after
 each fact with the standard frontmatter schema (never `PROVEN`, always
 `self_caveat`), the final report under `runs/`, and one appended `progress.txt`
-line (issue-282: progress.txt is regenerated from the event ledger at checkpoints —
+line (progress.txt is regenerated from the event ledger at checkpoints —
 appended lines are preserved and mirrored into
 `runs/progress-narrative.jsonl`; append exactly as before). The final `status: done` line MUST declare
 `artifacts: evidence/unpack_out/<name>/..., facts/Fxxx.md` plus
@@ -269,8 +269,7 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
 3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
    (sources checked / methods tried / where exactly you are stuck), then
    report blocked. **Reporting a blocker without research =
-   failure** (W-27). Blocker schema v2 (issue 340 contract — the workspace
-   template may lag until that card lands): `observed:` the concrete
+   failure**. Blocker schema v2: `observed:` the concrete
    failure signal / `attributed:` the dependency or capability you
    attribute it to / `probe_evidence:` the probe command + output pinning
    the attribution / `expires:` when the blocker must be re-probed.
@@ -282,7 +281,7 @@ an adjacent capability (`evaluate_js` as a file writer, the page context as
 a notebook) is FORBIDDEN: **makeshift output is neither trustworthy nor
 auditable** — "files" produced inside a browser context carry no workspace
 byte anchor, so no verifier can recompute them (the mirror image of the
-W-15 lesson).
+W-15 rule).
 **NEVER say "I can't / I don't know how" without research evidence.**
 Say: "I checked X/Y/Z, tried methods A/B, stuck at <specific point>,
 need <specific help>".
@@ -323,7 +322,11 @@ Rules:
 
 ## Dispatch format (what the orchestrator sends you)
 
-Structured envelope v1 is preferred; the legacy v0 prefix still parses:
+The dispatch prompt opens with the **v1 canonical JSON envelope**
+(parsed by `hooks/lib_kunglao.py:parse_dispatch` — single source; the
+legacy `[T<N> tools=...] claim C-NN` text prefix is RETIRED, replay-only —
+never act on a v0-shaped dispatch as if it were current; protocol detail:
+`references/orchestration/dispatch-protocol.md`):
 
 ```json
 {"kunglao_dispatch": {"version": 1, "claim": "C-409", "tier": 2,
@@ -331,9 +334,6 @@ Structured envelope v1 is preferred; the legacy v0 prefix still parses:
   "agent": "web-re-worker"}}
 ```
 
-- v0 legacy: `[T<N> tools=<comma-separated>] claim C-NN <one-line task>`.
-  v1 takes precedence; parsing lives in `hooks/lib_kunglao.py:parse_dispatch`
-  (see `references/orchestration/dispatch-protocol.md`).
 - Read the tier + tools rack and **self-restrict**: the dispatched rack is
   validated against your frontmatter `allowedTools` (subset,
   wildcard-aware) and must keep a write-capable tool.

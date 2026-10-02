@@ -95,39 +95,39 @@ files:
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
-    sha256: ecd0d84ba206d78e4b8cff1786965126c9816830fa1d1660bd2ab7321e10ab8a
+    sha256: 6382d48430394cb3d26adb568ad62cf37a493ea883e2270cdc818f49373ebbf8
   - src: agents/ghidra-light.md
     dest: .claude/agents/ghidra-light.md
     kind: agent
-    sha256: 9fd6e2ba46daf721b8ae1bcc1800ccd2390af8c933f11c4548a08e7a34dc6caf
+    sha256: 5efb62b367e7fb7ebefd5535ed10e7b7da13c96737cafd7d9416f3a970141820
   - src: agents/go-symbols.md
     dest: .claude/agents/go-symbols.md
     kind: agent
-    sha256: a77a7be32871e21ec7be435089f3ec8a5cda849a7dc808b8cf4b5ac3b63e04c5
+    sha256: afc9bd9b811324866aac218764c35acf798a2d021c9abdf72301854c2fb059b9
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: 7b02d46e6a1a41e69f172d94cfbcaba89638696603cb7d61b85871d7b2b16d54
+    sha256: 83fb318553adc7bbc67fc8fff6289dc1ea5070ffb62c2951bcd289a956f0037c
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: d7a8f75ed8249274ee958b2f0c9bb6fc7a9289fe030e4601be67c63dfd8019bd
+    sha256: 07432dafdbbce033655b120f8082c88f9c5f40d7fe44bedb1985059d63929b15
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: ae2bc45715f304a66780888af8da154f0f8b356196839c2dc6ddcf0058a047da
+    sha256: c55b5548e4e02003586fa5f23b43a6ed212b1a19ed35e217739c9a86183e7c9a
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
-    sha256: 4691a39264e4b74cc1d2a83dec84ccd4d3aa6f7f1699647d63324ae2bc8e9f6a
+    sha256: 97911bb5efb52aa5cdfec2d68c6233f8643d3b8d1cf28e50fd89b645b467bab0
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: 92b6bab9cd2c16068ed367f2e3cf7508db2d3aff42d0c2a6021f8ec467817905
+    sha256: b6ed0a85850015a5ba7ef31222a7c9e5c3978f9ff888c4fac285f86920f50eb6
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 7ab39d6833b09210e8f45c1478dd175d5c7eb25f546558079dbb9457b1e44aa1
+    sha256: 9034d40b87822615f4c9ee9d0fc94b57727285ce837afa4efe63f029624c48f0
   - src: scripts/_boot.py
     dest: .claude/scripts/_boot.py
     kind: scaffold
