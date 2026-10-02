@@ -46,6 +46,7 @@ import yaml
 from hypothesis_store import (Hypothesis, HypothesisStore, InvalidTransition,
                               PQ_BODY_MARKER_FMT, PQ_GROUP_FMTS)
 from status_defs import TERMINAL as TERMINAL_STATUSES
+from kunglao_log import warn  # canonical warn: ONE impl (dedupe + ledger face)
 from tool_value import NEGATIVE_SETTLEMENTS, POSITIVE_SETTLEMENTS
 from _scriptlib import claims_of, load_register_doc
 
