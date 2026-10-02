@@ -467,7 +467,7 @@ files:
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
-    sha256: a9a2ec5296279f9316ac3863ca61cc867520872cdda589056e031ce579534836
+    sha256: f779e4c23cad053dd46de7fdc19aee9be7859a350c8b20d77efaccc25fb22c3d
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
@@ -551,7 +551,7 @@ files:
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
-    sha256: 8b95e0577ccea5e2cb4b3de15bcd1420fe7354b62104aa630e807fc98165a9c6
+    sha256: 85f2cf024056134b6b10d52b678c112173f77ed514b1f5f740ec432e78489e91
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold

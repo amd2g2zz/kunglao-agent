@@ -137,7 +137,7 @@ def test_loader_wiring_is_delegated():
 # --------------------------------------------------------------------------
 
 def _load_util():
-    sys.path.insert(0, str(ROOT / "hooks"))  # noqa: noqa — test-only, restored below
+    sys.path.insert(0, str(ROOT / "hooks"))  # test-only, restored below
     try:
         import _path_hygiene
         return _path_hygiene

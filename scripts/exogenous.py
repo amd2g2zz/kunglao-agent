@@ -34,7 +34,7 @@ component -> None (normal settlement; fail-closed stays fail-closed).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 ENV_STATE_REL = Path("runs") / "env-state.json"

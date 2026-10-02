@@ -14,7 +14,6 @@ every gate id the workflow names exists in GATES (drift now fails loudly).
 """
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 

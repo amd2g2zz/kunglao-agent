@@ -15,7 +15,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO / "scripts"
@@ -24,7 +23,6 @@ if str(SCRIPTS) not in sys.path:
 
 import reward_settlement as rs  # noqa: E402
 import rollout_ledger as rl  # noqa: E402
-import exogenous  # noqa: E402
 from harness_common import utc_now_z  # noqa: E402
 
 NOW = utc_now_z()
