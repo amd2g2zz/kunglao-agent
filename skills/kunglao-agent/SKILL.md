@@ -207,7 +207,7 @@ capable?     -> no -> capability probe (version/API/contract)          | yes v
 input ready? -> no -> input completeness (path/permission/format)      | yes -> use it
 ```
 
-Four rules: (1) repair AT the failed layer N — jumping to another tool on a layer failure is INVALID (fallback belongs to the decompiler XOR family, chosen by lane — never triggered by a layer failure); (2) gathered facts gate the next action — mechanical gate: `echo '{"python_version": "3.14"}' | python <SKILL_DIR>/scripts/decision_lint.py "pip install idapro"` (exit 1 = BLOCKED); (3) recommending a fallback while the primary is present-and-repairable is decision invalidity; (4) reports name the LAYER, never a "dead" verdict.
+Four rules: (1) repair AT the failed layer N — jumping to another tool on a layer failure is INVALID (fallback belongs to the decompiler XOR family (issue 210), chosen by lane — never triggered by a layer failure); (2) gathered facts gate the next action — mechanical gate: `echo '{"python_version": "3.14"}' | python <SKILL_DIR>/scripts/decision_lint.py "pip install idapro"` (exit 1 = BLOCKED); (3) recommending a fallback while the primary is present-and-repairable is decision invalidity; (4) reports name the LAYER, never a "dead" verdict.
 
 **Script discipline**: any reusable logic a worker needs references an existing CLI in `scripts/` or is written as a parameterized CLI there — never inlined as an inline `python -c` snippet or a heredoc in a dispatch prompt; one-off diagnostics may run inline. Check `tools/_INDEX.yaml` before writing new scripts. Checklist → `references/contracts/cli-script-checklist.md`.
 
