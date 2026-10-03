@@ -24,9 +24,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+FIXTURES = ROOT / "tests" / "fixtures" / "experiments"
+sys.path.insert(0, str(FIXTURES))
 
 import state_signature as ssig  # noqa: E402
-from experiments.ex4_attribution_trap import (  # noqa: E402
+from ex4_attribution_trap import (  # noqa: E402
     TRAJECTORY,
     replay,
 )
