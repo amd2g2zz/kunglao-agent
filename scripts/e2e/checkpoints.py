@@ -698,6 +698,42 @@ def _dispatch_wave(ctx: RunContext, claims: list[str],
         _land_dispatch(ctx, act.claim, act, dispatched, detail)
 
 
+def _partial_claim_ids(ctx: RunContext) -> list:
+    """#508: the DISPATCH_VERIFIER decision's own evidence — the claims
+    whose facts are still awaiting verification. The probe counted those
+    partials (that is WHY it decided DISPATCH_VERIFIER); the priority
+    ranking skips PARKed claims, so the partials themselves are the
+    verifier target source. Reuses the repo probe's partial set; the
+    claim column is content-matched (F-token + C-token), order-preserving
+    dedup. Fail-open: any error yields [] (the honest FAIL stands)."""
+    try:
+        cc = _load_repo_module(Path(ctx.repo), "convergence_check")
+        partials = {str(p.get("fact")) for p in
+                    cc._partial_facts(Path(ctx.ws))}
+    except Exception:  # noqa: BLE001 — fail-open at the seam
+        return []
+    if not partials:
+        return []
+    idx = Path(ctx.ws) / "facts" / "_INDEX.md"
+    if not idx.is_file():
+        return []
+    out: list = []
+    for line in idx.read_text(encoding="utf-8",
+                              errors="replace").splitlines():
+        if "|" not in line:
+            continue
+        parts = [q.strip() for q in line.split("|") if q.strip()]
+        fid = next((q for q in parts if re.match(r"F\d{3}", q)), None)
+        if fid is None or not any(fid == p or p.startswith(fid)
+                                  for p in partials):
+            continue
+        claim = next((q for q in parts
+                      if re.fullmatch(r"C-\d{1,4}[a-z]?", q)), None)
+        if claim and claim not in out:
+            out.append(claim)
+    return out
+
+
 def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
                        detail: dict) -> model.CheckpointResult | None:
     """#484: DISPATCH_VERIFIER decisions finally act — a verifier face for
@@ -1115,6 +1151,21 @@ def _crashed_loud_stop(ctx: RunContext, detail: dict, decision,
     return True
 
 
+def _dispatch_targets(ctx: RunContext,
+                      decision: str | None) -> tuple[list,
+                                                     object | None, int]:
+    """#459 + #508: the tick's dispatch targets. The priority ranking
+    first; for a DISPATCH_VERIFIER decision whose ranking came back
+    empty, the partial facts' claims are the targets (PARKed claims are
+    unrankable, but the decision was made FOR those partials)."""
+    claims, failed, ms = _rank_dispatchable(ctx)
+    if decision == "DISPATCH_VERIFIER" and not claims:
+        derived = _partial_claim_ids(ctx)
+        if derived:
+            return derived, None, ms  # the empty ranking is satisfied
+    return claims, failed, ms
+
+
 def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                    tick_wait_seconds: int, total_ms: int
                    ) -> tuple[str, model.CheckpointResult | None, int]:
@@ -1143,7 +1194,7 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                                 {**detail, "stop_class": stop_class}),
                 total_ms)
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
-        claims, failed, ms = _rank_dispatchable(ctx)
+        claims, failed, ms = _dispatch_targets(ctx, decision)
         total_ms += ms
         if not claims and _no_open_claims(ctx):
             return "break", None, total_ms  # delivery face -> verdict
