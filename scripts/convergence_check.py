@@ -231,6 +231,56 @@ def _fact_verification_owed(workspace: Path, fact_id: str) -> bool:
     return not (value == "passes" or _DATE_VALUE_RE.match(value) is not None)
 
 
+# #505: digit-anchored form of index_schema.FACT_ID_RE (the schema
+# grammar ^F[0-9A-Za-z-]+$ is too loose for content-based recovery —
+# it also matches prose like "Facts"; the digit anchor keeps
+# F001 / F001-alpha / F002(...) findable without false positives)
+_FACT_ID_RE_505 = re.compile(r"^(F\d{3}[0-9A-Za-z-]*)(\s*\(.*\))?$")
+
+#: the closed status vocabulary both layers write into the column —
+#: the #500 bridge set plus the remaining schema statuses, so a row's
+#: status token is findable under either layer's vocabulary.
+_ALL_ROW_STATUSES = frozenset(PARTIAL_STATUSES) | {
+    "INFERRED", "OPEN", "PROVEN", "NEGATIVE", "REFUTED", "DEFERRED",
+    "VERIFIED", "STAMP",
+}
+
+
+def _row_fact_and_status(parts: list[str]) -> tuple[str | None, str | None]:
+    """#505: recover (fact_id, status) from an index row by CONTENT.
+
+    Workers hand-write rows in at least three shapes (canonical 4-col,
+    leading-pipe 5-col markdown, ids with parenthetical suffixes) — a
+    position-based read (parts[1]) mistook the fact-id column for the
+    status under the leading-pipe shape (round-8B field evidence). The
+    id token matches F<NNN> with an optional (...) suffix; the status
+    token is the first non-id token containing a known status word
+    (exact match preferred; a substring match covers annotated PARTIAL-
+    family cells — the downstream INFERRED comparison stays exact, so
+    an annotated INFERRED cell parses but does not enter the INFERRED
+    branch; the sanctioned single writer emits bare statuses).
+    """
+    fid = None
+    status = None
+    for tok in parts:
+        m = _FACT_ID_RE_505.match(tok)
+        if fid is None and m:
+            fid = m.group(1)
+            continue
+        if tok.upper() in _ALL_ROW_STATUSES:
+            status = tok
+            break
+    if status is None:
+        for tok in parts:
+            if _FACT_ID_RE_505.match(tok):
+                continue
+            up = tok.upper()
+            if any(s in up for s in _ALL_ROW_STATUSES):
+                status = tok
+                break
+    return fid, status
+
+
 def _partial_facts(workspace: Path):
     """Count facts needing verification from facts/_INDEX.md.
 
@@ -241,6 +291,11 @@ def _partial_facts(workspace: Path):
     workflow status matches PARTIAL_STATUSES, OR when the row says INFERRED
     and the fact file still owes verification. Verified facts (passes)
     never count, under either vocabulary.
+
+    #505 row-shape bridge: the row is parsed by CONTENT (the id token and
+    the status token are found, not assumed by position), so the observed
+    leading-pipe/extra-column/parenthetical-id shapes read identically to
+    the canonical `F<id> | <status> | <claim> | <conclusion>` row.
     """
     idx = workspace / "facts" / "_INDEX.md"
     if not idx.exists():
@@ -251,14 +306,18 @@ def _partial_facts(workspace: Path):
         if "|" not in line:
             continue
         parts = [p.strip() for p in line.split("|")]
+        parts = [p for p in parts if p]
         if len(parts) < 2:
             continue
-        status = parts[1].upper()
+        fid, status_tok = _row_fact_and_status(parts)
+        if fid is None or status_tok is None:
+            continue
+        status = status_tok.upper()
         if any(s in status for s in PARTIAL_STATUSES):
-            partial.append({"fact": parts[0], "status": parts[1]})
+            partial.append({"fact": fid, "status": status_tok})
         elif status == "INFERRED" and _fact_verification_owed(
-                workspace, parts[0]):
-            partial.append({"fact": parts[0], "status": parts[1]})
+                workspace, fid):
+            partial.append({"fact": fid, "status": status_tok})
     return partial
 
 
