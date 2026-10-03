@@ -217,7 +217,7 @@ Four rules: (1) repair AT the failed layer N — jumping to another tool on a la
 2. **Specialist agents first** — ghidra-light, floss-filter, pefile-signature, go-symbols, verdict-scorer; general-purpose only when no specialist fits. Mechanical: the worker_budget agenttype gate compares the dispatched agent against `route_capability.py`'s recommendation and REJECTS a deviation without `agent-reasoning:` in the prompt.
 3. **Cost is informational, never a stop reason** — `cost_override=true` in `analysis_state.txt` on request.
 4. **Poll every worker, don't wait** — `cat worker-status-*.md` for ALL workers each turn.
-5. **The false-completion trap** — committing / updating `_INDEX.md` / progress.txt RECORDS state, doesn't CHANGE it. Open-claim count is the truth.
+5. **The false-completion trap** — committing / updating `_INDEX.md` / progress.txt RECORDS state, doesn't CHANGE it. Open-claim count is the truth. When a fact lands, the `facts/_INDEX.md` row goes through `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/update_index.py upsert` (the single sanctioned writer — its validator refuses malformed rows) — never hand-written: hand-written rows drift in shape and vocabulary, and the convergence probe stops seeing them.
 
 ## Convergence health
 
