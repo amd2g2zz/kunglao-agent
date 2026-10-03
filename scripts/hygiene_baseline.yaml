@@ -61,7 +61,7 @@ files:
   scripts/contracts.py:
     r1: 12
   scripts/convergence_check.py:
-    r1: 160
+    r1: 163
     r2: 2
   scripts/convergence_health.py:
     r1: 18
@@ -1112,6 +1112,8 @@ files:
   tests/test_outcome_forensics_146.py:
     r1: 5
     r2: 1
+  tests/test_partial_proven_510.py:
+    r1: 2
   tests/test_pdl_collapse_582.py:
     r1: 1
   tests/test_pkg_detect.py:

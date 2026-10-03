@@ -281,6 +281,31 @@ def _row_fact_and_status(parts: list[str]) -> tuple[str | None, str | None]:
     return fid, status
 
 
+#: #510: claim-terminal statuses — a fact of a terminal claim owes no
+#: independent verification (the register is authoritative, state-mapping
+#: §1; the claim-level gate already demanded note + red-team).
+_TERMINAL_CLAIM_STATUSES = frozenset({"PROVEN", "REFUTED", "NEGATIVE"})
+
+
+def _terminal_claims(workspace: Path) -> set:
+    """#510: ids of claims whose register status is terminal. Fail-open:
+    an unreadable register yields the empty set (the fact-level
+## partial signal stands unchanged)."""
+    try:
+        import yaml as _yaml
+        reg = workspace / "claim-register.yaml"
+        doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — fail-open at the seam
+        return set()
+    out = set()
+    for c in doc.get("claims") or []:
+        if str(c.get("status", "")).upper() in _TERMINAL_CLAIM_STATUSES:
+            cid = str(c.get("id") or "").strip()
+            if cid:
+                out.add(cid)
+    return out
+
+
 def _partial_facts(workspace: Path):
     """Count facts needing verification from facts/_INDEX.md.
 
@@ -300,6 +325,9 @@ def _partial_facts(workspace: Path):
     idx = workspace / "facts" / "_INDEX.md"
     if not idx.exists():
         return []
+    # #510: the register is authoritative — facts of terminal claims
+    # (PROVEN/REFUTED/NEGATIVE) owe no independent verification
+    terminal = _terminal_claims(workspace)
     partial = []
     for line in idx.read_text(encoding="utf-8", errors="replace").splitlines():
         # Format per SKILL.md: F<id> | <status> | <claim_id> | <conclusion>
@@ -311,6 +339,10 @@ def _partial_facts(workspace: Path):
             continue
         fid, status_tok = _row_fact_and_status(parts)
         if fid is None or status_tok is None:
+            continue
+        claim = next((q for q in parts
+                      if re.fullmatch(r"C-\d{1,4}[a-z]?", q)), None)
+        if claim is not None and claim in terminal:
             continue
         status = status_tok.upper()
         if any(s in status for s in PARTIAL_STATUSES):
