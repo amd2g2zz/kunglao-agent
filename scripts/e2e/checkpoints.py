@@ -1064,6 +1064,46 @@ def _maybe_distill(ctx: RunContext, detail: dict) -> None:
          "coverage": coverage_detail})
 
 
+def _verdict_prompt(ctx: RunContext) -> str:
+    """#513: the verdict act's full contract — inputs, schema skeleton,
+    output path. A bare one-liner produced no file (combat wt1:
+    BLOCKED verdict-missing with all claims PROVEN)."""
+    ws = str(ctx.ws)
+    return (
+        "You are the verdict-scorer. Working directory is the analysis "
+        f"workspace {ws}.\n"
+        "READ these inputs:\n"
+        f"- {ws}/task_spec.yaml (primary_questions[])\n"
+        f"- {ws}/claim-register.yaml (claims: status, answers_question)\n"
+        f"- {ws}/facts/_INDEX.md and the fact files it names\n"
+        "\n"
+        "WRITE the file "
+        f"{ws}/evidence/verdict.json with EXACTLY this JSON shape:\n"
+        "{\n"
+        '  "_meta": {"source": "verdict-scorer", "schema_version": "v11", '
+        '"queried_at": "<ISO8601>", "methodology": '
+        '"task_spec.primary_questions coverage + fact-citation '
+        'validity"},\n'
+        '  "sample_sha256": "<sha256 of the workspace target if '
+        'present, else null>",\n'
+        '  "analysis_verdict": {\n'
+        '    "complete": <true iff EVERY primary_question answered>,\n'
+        '    "correct": <false if any contradiction>,\n'
+        '    "primary_questions": [{"id": "<pq-id>", "answered": <bool>, '
+        '"cited_fact": "<F-id>", "confidence_band": "<band>", "gap": '
+        '<null|str>}],\n'
+        '    "unresolved": [<unanswered pq-ids>],\n'
+        '    "contradictions": [],\n'
+        '    "degraded": []},\n'
+        '  "self_audit": {"evidence_strength": "<strong|mixed|weak>", '
+        '"ignored_evidence": [], "open_questions": []}}\n'
+        "\n"
+        "Rules: a question is answered only by a PROVEN claim linked via "
+        "answers_question citing a real fact id; do not invent evidence; "
+        "unanswered questions go to unresolved[] with a gap string.\n"
+        "Use the Write tool to create the file, then reply done.")
+
+
 def _verdict_face(ctx: RunContext, detail: dict,
                   tick_wait_seconds: int) -> model.CheckpointResult | None:
     """Post-loop verdict act per mode (dry/auto write it; orchestrator
@@ -1072,8 +1112,7 @@ def _verdict_face(ctx: RunContext, detail: dict,
         act = ctx.face.verdict_act(ctx.ws)
     elif ctx.face.mode == "auto":
         act = ctx.face.verdict_act(
-            ctx.ws, prompt="verdict-scorer: write evidence/verdict.json "
-                           "per analysis_verdict schema v11")
+            ctx.ws, prompt=_verdict_prompt(ctx))
     else:
         deadline = ctx.clock.monotonic() + max(
             0.0, ctx.state.budget_remaining_seconds())
