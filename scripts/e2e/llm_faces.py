@@ -332,9 +332,12 @@ class AutoLlmFace:
         return self.run_dispatch(req)
 
     def verdict_act(self, ws: Path, prompt: str) -> ActRecord:
+        # #513: run IN the workspace with Read/Write/Grep — the old face
+        # ran cwd=repo with no tools and produced nothing
         outcome = self.runner.run(
-            ["claude", "-p", prompt, "--output-format", "json"],
-            cwd=self.runner.repo, timeout=CLAUDE_ACT_TIMEOUT_S)
+            ["claude", "-p", prompt, "--output-format", "json",
+             "--allowedTools", "Read,Write,Grep,Glob"],
+            cwd=Path(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
         return ActRecord(
             "verdict", self.mode,
             "DISPATCHED" if outcome.rc == 0 else
