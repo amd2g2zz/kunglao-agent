@@ -1166,6 +1166,18 @@ def _dispatch_targets(ctx: RunContext,
     return claims, failed, ms
 
 
+def _verifier_tick(ctx: RunContext, claims: list, dispatched: set,
+                   detail: dict):
+    """#508b: dispatch the verifier for the first partial-bearing claim
+    NOT already verified — the derived list may put a DONE claim first
+    (its facts were never re-marked); the next claim gets the act instead
+    of the dedup key swallowing the tick."""
+    target = next((c for c in claims if f"V:{c}" not in dispatched), None)
+    if target is None:
+        return None
+    return _run_verifier_act(ctx, target, dispatched, detail)
+
+
 def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                    tick_wait_seconds: int, total_ms: int
                    ) -> tuple[str, model.CheckpointResult | None, int]:
@@ -1204,7 +1216,7 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                 failed.rc if failed else None, failed, total_ms,
                 {**detail, "failed_step": "priority_ratio"}), total_ms)
         if decision == "DISPATCH_VERIFIER":
-            terminal = _run_verifier_act(ctx, claims[0], dispatched, detail)
+            terminal = _verifier_tick(ctx, claims, dispatched, detail)
             if terminal is not None:
                 return "stop", terminal, total_ms
         elif decision == "DISPATCH":

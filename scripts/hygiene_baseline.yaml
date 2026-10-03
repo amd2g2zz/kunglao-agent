@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 7
   scripts/e2e/checkpoints.py:
-    r1: 41
+    r1: 42
   scripts/e2e/llm_faces.py:
     r1: 13
   scripts/e2e/model.py:
@@ -1460,6 +1460,8 @@ files:
   tests/test_verifier_blind.py:
     r1: 2
   tests/test_verifier_identity_825.py:
+    r1: 1
+  tests/test_verifier_parked_508.py:
     r1: 1
   tests/test_verify_backlog_face_342.py:
     r1: 1

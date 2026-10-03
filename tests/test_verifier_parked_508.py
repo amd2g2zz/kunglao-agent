@@ -106,3 +106,15 @@ def test_park_is_not_a_worker_dispatch_target(ctx):
     flow, terminal, _ = checkpoints._loop_one_tick(
         ctx, set(), {"acts": []}, 0, 0)
     assert terminal is not None and terminal.status == "FAIL"
+
+
+def test_verified_head_claim_does_not_swallow_the_tick(ctx):
+    """#508b: the derived list may put an ALREADY-verified claim first
+    (its facts were never re-marked) — the next claim gets the act, the
+    dedup key must not eat the whole tick."""
+    dispatched = {"V:C-005"}  # C-005 already verified earlier
+    flow, terminal, _ = checkpoints._loop_one_tick(
+        ctx, dispatched, {"acts": []}, 0, 0)
+    assert flow == "continue" and terminal is None
+    prompt = Path(ctx.state.evidence_dir) / "dispatch-prompt-V-C-004.md"
+    assert prompt.is_file(), "C-004 never got its verifier act"
