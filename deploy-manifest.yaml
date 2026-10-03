@@ -1215,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 8fb28f5a828655e02e3fddab0263d005d1948993e516059deb348d6e9676d014
+    sha256: d1fcc6a4539b09a1c1a456364f35c0383036294ca037416bc76b5a1fc99a0103
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
