@@ -698,7 +698,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        claim: str | None = None,
                        agent: str | None = None,
                        dispatch_id: str | None = None,
-                       ts: str | None = None) -> dict:
+                       ts: str | None = None,
+                       fingerprint: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -719,6 +720,7 @@ def append_observation(ws, signature_hash: str, method_family: str,
         "claim": claim,
         "agent": agent,
         "dispatch_id": dispatch_id,
+        "fingerprint": fingerprint,
         "credit": credit_out,
     }
     appended = _append_row(Path(ws) / OBS_REL, row)
@@ -778,7 +780,8 @@ def observe_settlement(ws, dispatch_id: str, credit) -> dict:
                                  source="settlement",
                                  claim=match.get("claim"),
                                  agent=match.get("agent"),
-                                 dispatch_id=did)
+                                 dispatch_id=did,
+                                 fingerprint=match.get("fingerprint"))
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -810,7 +813,8 @@ def declared_family(envelope_meta, prompt_text: str) -> str | None:
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
-                                agent: str | None = None) -> dict:
+                                agent: str | None = None,
+                                fingerprint: str | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
@@ -825,7 +829,8 @@ def record_dispatch_observation(ws, prompt: str, *,
                     "family": None, "signature_hash": None}
         sig = ssig.signature_hash(ssig.snapshot(ws))
         out = append_observation(ws, sig, family, None, source="dispatch",
-                                 claim=claim, agent=agent)
+                                 claim=claim, agent=agent,
+                                 fingerprint=fingerprint)
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer

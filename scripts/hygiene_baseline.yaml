@@ -61,7 +61,7 @@ files:
   scripts/contracts.py:
     r1: 12
   scripts/convergence_check.py:
-    r1: 164
+    r1: 165
     r2: 2
   scripts/convergence_health.py:
     r1: 18
@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 8
   scripts/e2e/checkpoints.py:
-    r1: 46
+    r1: 51
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -357,6 +357,8 @@ files:
     r1: 1
   scripts/rlvr/liveness.py:
     r1: 14
+  scripts/rlvr/meta_arms.py:
+    r1: 6
   scripts/rlvr/priors.py:
     r1: 2
   scripts/rlvr/q_cells.py:
@@ -745,7 +747,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 24
+    r1: 25
     r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
@@ -1246,6 +1248,8 @@ files:
   tests/test_rho_verifier_823p2.py:
     r1: 1
   tests/test_rl_wiring_518.py:
+    r1: 4
+  tests/test_rlvr_p0_524.py:
     r1: 1
   tests/test_roi_settlement_49.py:
     r1: 2
