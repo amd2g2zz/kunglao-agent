@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 8
   scripts/e2e/checkpoints.py:
-    r1: 46
+    r1: 51
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -357,6 +357,8 @@ files:
     r1: 1
   scripts/rlvr/liveness.py:
     r1: 14
+  scripts/rlvr/pattern_lib.py:
+    r1: 2
   scripts/rlvr/priors.py:
     r1: 2
   scripts/rlvr/q_cells.py:
@@ -1120,6 +1122,8 @@ files:
     r2: 1
   tests/test_partial_proven_510.py:
     r1: 2
+  tests/test_pattern_lib_518.py:
+    r1: 1
   tests/test_pdl_collapse_582.py:
     r1: 1
   tests/test_pkg_detect.py:

@@ -1,0 +1,35 @@
+schema: kunglao-pattern/1
+id: PAT-003
+title: js obfuscation peeling (string-array rotation)
+family_hint: obfuscation-peeling
+weight: 2.0
+features:
+  target_surface: [text, net]
+  languages: [javascript]
+  scaffold_kinds: [bundle.js]
+playbook:
+  flow:
+    - Identify the loader shape FIRST (string-array + rotation function
+      + decoder wrapper is one family with a handful of live variants);
+      the peeling order is loader -> decoder -> call-site rewrite, never
+      call-site first.
+    - Run the decoder in Node (exec the rotation verbatim) instead of
+      statically inverting it — extract the decoded table, then map
+      call sites through it.
+    - Self-integrity checks (hash-of-source timers, debug probes) are
+      DETECTION, not logic — neutralize by running the code in a clean
+      runtime, not by patching the check.
+    - Automation fingerprints (webdriver/Playwright/cdc markers) matter
+      only when driving a real browser; a Node-side reimplementation of
+      the transform bypasses the whole detection lane.
+    - Keep the peeling artifacts (decoded table + rewritten source) in
+      scratch — the fact chain cites the decoder derivation, the port,
+      and the equivalence evidence.
+  negative_tests:
+    - decoded string table used without call-site verification
+    - transform ported without running the original verbatim first
+provenance:
+  mined_from_families: [mod-crypto-js, req-sign, web-pack-sign]
+  evidence: the family memory of four eval generations (l1a/l1b/l2/l3
+    rungs) — the peeling order and the detection-vs-logic split recur
+    at every difficulty tier.

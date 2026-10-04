@@ -1172,6 +1172,10 @@ files:
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
     sha256: 0c53245457d4602999affe97bf3bb5c1d1cb0d0857b58ce292496ad80790469f
+  - src: scripts/rlvr/pattern_lib.py
+    dest: .claude/scripts/rlvr/pattern_lib.py
+    kind: scaffold
+    sha256: 7d59d5f3e60080685611beac878e8359dba4c6ba45f74883d7b1f1a6a5e66644
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
@@ -1219,7 +1223,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 422fb2dec5c4cc82ecfe70bfbc9f107c4934a8d6771b4ea28da20963d83552b4
+    sha256: 278d9335711af2c3d96b0e6e5aabf45ba2f8f3c6466d5b5197772fbb2c605d86
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

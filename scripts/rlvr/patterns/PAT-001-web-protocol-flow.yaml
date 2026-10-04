@@ -1,0 +1,48 @@
+schema: kunglao-pattern/1
+id: PAT-001
+title: web protocol-flow reconstruction (bootstrap-first)
+family_hint: protocol-flow-reconstruction
+weight: 3.0
+features:
+  target_surface:
+  - net
+  - web
+  languages:
+  - javascript
+  scaffold_kinds:
+  - sdk.js
+playbook:
+  flow:
+  - 'Map the endpoint lattice BEFORE touching crypto: hit the service root and follow redirects/links
+    to enumerate route names. Every field death in the combat matrix was a flow-order error, not a crypto
+    failure (constants recovered by every arm while sessions failed at 0/N).'
+  - 'BOOTSTRAP FIRST: a session/token/sid is usually minted by the root or an init endpoint — never call
+    the challenge or protected route before the bootstrap handshake succeeds (the observed no_session
+    400 class).'
+  - Capture the full challenge object per endpoint (params, salts, difficulty, version fields) and diff
+    two fresh sessions to split per-session values from static ones.
+  - 'Reconstruct the transform in Node by running the served SDK verbatim first; only then port. Version-rotation
+    fields in the config mean MULTIPLE transform variants may be live: identify the selector, implement
+    the variant set, switch per session.'
+  - 'Respect single-use semantics: sids/tokens/nonces are typically consumed on first use — a replay attempt
+    must be a NEGATIVE test you expect to fail, never a retry strategy.'
+  - 'Timing envelopes: if the protocol specifies a minimum think-time, honor it in the client (sleep,
+    don''t skip) — anti-automation floors are graded, not advisory.'
+  - 'Deliverable discipline: the client takes --base, mints its OWN fresh session each run, completes
+    the full round trip, and exits 0. Self-verifying battery scripts are not the contract deliverable.'
+  negative_tests:
+  - captured token replay across sessions must be rejected
+  - wrong/mutated key or constant must fail signature checks
+  - skipping the bootstrap must fail with the no-session error
+  field_notes:
+  - 'a decoy config channel exists in some families: a constant published by a public config endpoint
+    that the real path never uses — verify each constant against behavioral evidence, not presence'
+provenance:
+  mined_from_families:
+  - web-pack-sign
+  - req-sign
+  - mod-crypto-js
+  - net-verify-license
+  evidence: three-arm head-to-head 2026-10-04 (constants 100% recovered by all arms; dynamic face 0/N
+    for all) + combat matrix rounds; the flow steps are the delta between the static face passing and
+    the session face failing.

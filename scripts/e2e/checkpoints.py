@@ -430,6 +430,20 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
 
     total_ms = 0
     detail: dict = {}
+    # #518 PR-3: cross-run warm start — seed the canonical mined feature
+    # table (mining pool only; holdout rows filtered at mint) into the
+    # workspace so the sampler's predict-before-try face has data from
+    # tick zero. Best-effort: a missing table seeds nothing.
+    try:
+        _ft_src = Path(ctx.repo) / "eval" / "v1" / "feature-table.jsonl"
+        if _ft_src.is_file():
+            _ft_dst = ctx.ws / "runs" / "feature-table.jsonl"
+            _ft_dst.parent.mkdir(parents=True, exist_ok=True)
+            _ft_dst.write_text(_ft_src.read_text(encoding="utf-8"),
+                               encoding="utf-8")
+    except OSError:
+        pass  # the warm start is an optimization, never a gate
+
     # C6-pre-1: goal-operationalization FROM the verbatim anchors
     doc = build_goal_op_doc(ctx.state.anchors)
     goal_op = ctx.ws / "goal-operationalization.yaml"
@@ -517,7 +531,29 @@ def _rank_dispatchable(ctx: RunContext) -> tuple[list[str],
     return claims, (None if ok and claims else out), ms
 
 
-def _sample_envelope_family(ws) -> tuple[str, dict | None]:
+def _sampler_prior(store, registered: list[str]) -> dict | None:
+    """The proposal prior over DECLARED families only (#518 PR-3: the
+    prior build extracted from the sampler to keep its C901 below 12).
+    Q-cell DISPATCH rows only (outcome data never enters any prior),
+    intersected with the registry; no registry -> None (nothing to
+    propose)."""
+    counts: dict[str, int] = {}
+    for row in store.observations():
+        if not isinstance(row, dict) \
+                or str(row.get("source") or "") != "dispatch":
+            continue  # outcome rows never enter any prior
+        fam = str(row.get("method_family") or "").strip()
+        if fam and fam in registered:
+            counts[fam] = counts.get(fam, 0) + 1
+    if counts:
+        return {fam: float(n) for fam, n in sorted(counts.items())}
+    if not registered:
+        return None
+    return {fam: 1.0 for fam in registered}
+
+
+def _sample_envelope_family(ws, feature_boost: dict | None = None
+                            ) -> tuple[str, dict | None]:
     """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
 
     The P_LLM x Q draw (``rlvr.q_cells.sample_method_family``) picks the
@@ -544,20 +580,16 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
         from rlvr import state as rlvr_state
         store = q_cells.default_store(ws)
         registered = sorted(method_families.registered_tokens())
-        counts: dict[str, int] = {}
-        for row in store.observations():
-            if not isinstance(row, dict) \
-                    or str(row.get("source") or "") != "dispatch":
-                continue  # outcome rows never enter any prior
-            fam = str(row.get("method_family") or "").strip()
-            if fam and fam in registered:
-                counts[fam] = counts.get(fam, 0) + 1
-        if counts:
-            prior = {fam: float(n) for fam, n in sorted(counts.items())}
-        else:
-            if not registered:
-                return "", None
-            prior = {fam: 1.0 for fam in registered}
+        prior = _sampler_prior(store, registered)
+        if prior is None:
+            return "", None
+        if feature_boost:
+            # #518 PR-3 (the #460 feature-conditioned face, proposal
+            # channel only): a matched pattern's family_hint rides as a
+            # proposal multiplier — outcome data still never enters any
+            # prior, and the registry intersection below still applies.
+            prior = {fam: w * feature_boost.get(fam, 1.0)
+                     for fam, w in prior.items()}
         rng, _round = q_cells.q_cells_seed_state(ws)
         # #460 Part B wiring (predict-before-try): thread the live
         # instance features + the mined feature table into call site 2
@@ -606,6 +638,22 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     if claim in dispatched:
         return None, None
     dispatched.add(claim)
+    # #518 PR-3: the expertise layer — a feature-matched pattern's
+    # playbook rides the dispatch prompt (the F1 mechanism: the novice
+    # driver gets the champion's track map). Fail-open to a
+    # byte-unchanged prompt; the pattern is additive, never load-bearing.
+    _pattern = None
+    playbook_block = ""
+    try:
+        from rlvr import pattern_lib
+        _pattern = pattern_lib.match_pattern(
+            pattern_lib.load_patterns(),
+            pattern_lib.features_from_task(ctx.state.task_dir))
+        if _pattern is not None:
+            playbook_block = ("\n" + pattern_lib.render_playbook(_pattern)
+                              + "\n")
+    except Exception:  # noqa: BLE001 — expertise never breaks the loop
+        _pattern, playbook_block = None, ""
     # kernel-facing hook (audit §4): the envelope's method_family is the
     # declared proposal when the run carries one, else the DTS-sampled
     # draw (W4, issue 462) — the sampled family rides the envelope AND
@@ -613,7 +661,9 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     method_family = getattr(ctx.state, "method_family", "") or ""
     receipt: dict | None = None
     if not method_family:
-        method_family, receipt = _sample_envelope_family(ctx.ws)
+        method_family, receipt = _sample_envelope_family(
+            ctx.ws, feature_boost=pattern_lib.family_boost(_pattern)
+            if _pattern is not None else None)
     dispatch_meta: dict = {
         "version": 1, "claim": claim, "tier": 1,
         "tools": ["grep", "python3"],
@@ -635,7 +685,8 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "act.\n"
         "2. End your final message with a line 'STATUS: DONE' (or 'STATUS: "
         "BLOCKED' with the reason) so the orchestrator parses your outcome "
-        "precisely.\n",
+        "precisely.\n"
+        + playbook_block,
         encoding="utf-8")
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
@@ -687,6 +738,12 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
             audit.emit_posterior_update(
                 str(ctx.ws), str(res.get("method_family") or claim),
                 {"credit": credit})
+            # #518 PR-3: the posteriors store (γ-schedule replay) finally
+            # has a production write site — same event, same fail-open
+            _load_repo_module(ctx.repo, "rlvr.posteriors").record(
+                str(ctx.ws), str(res.get("signature_hash") or ""),
+                str(res.get("method_family") or ""),
+                1 if credit >= 1.0 else 0)
         if act.outcome == "TIMEOUT":
             fam = str(res.get("method_family") or "unattributed")
             # evidence = the act's own execution record: the obstacles
