@@ -287,7 +287,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 36d3873a1b9ce7e8ab90b6fba45c2f314f51810dbd033146810321f5e1fe547f
+    sha256: 2b78d53c2ba0546b23ab387313868d269ef445c037d432ebf3fcb5b23f9fdc8e
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1168,6 +1168,10 @@ files:
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
     sha256: cedcd3e28cb2a0989d88401ec410f28a12c9652515a39a6ca5cb43a9b932f069
+  - src: scripts/rlvr/meta_arms.py
+    dest: .claude/scripts/rlvr/meta_arms.py
+    kind: scaffold
+    sha256: 390665ee966f7f80f08e28705200af2dbbcdbda9f171663d392fcc88e18ccf18
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1180,10 +1184,14 @@ files:
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
     sha256: 2df2c2889491aa7b3bde8efe058692a0b209b9d2c92676ec6951b7133c359a31
+  - src: scripts/rlvr/probes.py
+    dest: .claude/scripts/rlvr/probes.py
+    kind: scaffold
+    sha256: 158d04d146035c876d439bd8c9cb7c9a2dced4b804ce1f1cc7ed74ceac113e65
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: b51c911726fbcf9f6fcbe0258609f65bc94d4261196d1fa7c500c7069896a429
+    sha256: bd6efa3b79cabfb031972cf58602cdaa17be81b64a6db831952cf24b77c35f65
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1219,7 +1227,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 422fb2dec5c4cc82ecfe70bfbc9f107c4934a8d6771b4ea28da20963d83552b4
+    sha256: 3782a8f4c18e08b1a158f75cecf03e7ae26f4e3b12ae4d87eaccee1c5f0b2b51
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

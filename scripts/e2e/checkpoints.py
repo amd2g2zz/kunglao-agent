@@ -38,7 +38,8 @@ from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     resume_plan, tail as _tail, top_claim as _top_claim,
     _load_repo_module,
 )
-import kunglao_log  # #472: the canonical warn (spec-unreadable trace)
+import kunglao_log  # #472: the canonical warn
+from ws_yaml import canonical_dump as _canonical_dump  # #524 AD3 (spec-unreadable trace)
 
 #: #459: max dispatch acts launched CONCURRENTLY per tick wave. The acts
 #: are independent `claude -p` processes in one workspace; the loop is
@@ -434,7 +435,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
     doc = build_goal_op_doc(ctx.state.anchors)
     goal_op = ctx.ws / "goal-operationalization.yaml"
     goal_op.write_text(
-        yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100),
+        _canonical_dump(doc),
         encoding="utf-8")
     out_g, ms_g = ctx.py("goal_operationalization.py", str(goal_op))
     total_ms += ms_g
@@ -454,7 +455,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
         if question["id"] not in existing:
             spec["primary_questions"].append(dict(question))
     spec_path.write_text(
-        yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=100),
+        _canonical_dump(spec),
         encoding="utf-8")
     # C6-pre-3: claims C-004/C-005 into claim-register.yaml
     register = ctx.ws / "claim-register.yaml"
@@ -466,8 +467,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
         if claim["id"] not in reg_ids:
             reg_doc["claims"].append(dict(claim))
     register.write_text(
-        yaml.safe_dump(reg_doc, sort_keys=False, allow_unicode=True,
-                       width=100), encoding="utf-8")
+        _canonical_dump(reg_doc), encoding="utf-8")
     # C6-pre-4 mechanical: env_check → OVERALL=PASS; decide → DISPATCH
     out_e, ms_e = ctx.py("env_check.py", str(ctx.ws))
     total_ms += ms_e
@@ -517,6 +517,23 @@ def _rank_dispatchable(ctx: RunContext) -> tuple[list[str],
     return claims, (None if ok and claims else out), ms
 
 
+def _pooled_or_flat(store, counts: dict[str, int],
+                    ws: str) -> dict[str, float]:
+    """#524 item 5: settled dispatch rows feed the META-ARM hierarchical
+    pool (strong shrinkage + fingerprint tempering); the declaration
+    counts remain the no-outcome / pooling-failure face."""
+    settled_rows = [r for r in store.observations()
+                    if isinstance(r, dict) and r.get("credit") is not None]
+    try:
+        from rlvr import meta_arms as _ma
+        fp = _ma.env_fingerprint(ws)
+        pooled = _ma.hierarchical_prior(settled_rows, sorted(counts), fp)
+        return {fam: pooled.get(fam, float(counts[fam]))
+                for fam in sorted(counts)}
+    except Exception:  # noqa: BLE001 — pooling is an upgrade, not a gate
+        return {fam: float(n) for fam, n in sorted(counts.items())}
+
+
 def _sample_envelope_family(ws) -> tuple[str, dict | None]:
     """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
 
@@ -553,7 +570,7 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
             if fam and fam in registered:
                 counts[fam] = counts.get(fam, 0) + 1
         if counts:
-            prior = {fam: float(n) for fam, n in sorted(counts.items())}
+            prior = _pooled_or_flat(store, counts, str(ws))
         else:
             if not registered:
                 return "", None
@@ -645,10 +662,31 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     # row and the settlement gets its match target. Fail-open telemetry:
     # the audit verdict found every envelope frozen at Beta(1,1) because
     # this write site was never wired (architect audit 2026-10-04).
-    _load_repo_module(ctx.repo, "rlvr.q_cells").record_dispatch_observation(
+    try:
+        from rlvr import meta_arms as _ma
+        _fp = _ma.env_fingerprint(str(ctx.ws), Path(ctx.repo))
+    except Exception:  # noqa: BLE001 — telemetry never breaks dispatch
+        _fp = None
+    qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
+    qc_mod.record_dispatch_observation(
         str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
         envelope_meta={"method_family": method_family} if method_family else None,
-        claim=claim)
+        claim=claim, fingerprint=_fp)
+    # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record
+    try:
+        if method_family:
+            from rlvr import meta_arms as _ma2
+            _rows = [r for r in qc_mod.JSONLQStore(
+                str(ctx.ws)).observations() if isinstance(r, dict)]
+            _fams = sorted({str(r.get("method_family")) for r in _rows
+                            if r.get("method_family")} | {method_family})
+            receipt = dict(receipt or {})
+            receipt["propensity"] = round(_ma2.mc_propensity(
+                _rows, method_family, _fams), 4)
+            if _fp:
+                receipt["fingerprint"] = _fp
+    except Exception:  # noqa: BLE001 — propensity is a bonus, never a gate
+        pass
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
@@ -670,6 +708,25 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     _settle_dispatch_outcome(ctx, claim, act)
 
 
+def _facts_citing(ws, claim: str) -> int:
+    """Fact files whose frontmatter cites `claim` (claim_id / claim_ids)
+    — the fact-production signal for the continuous credit. Cheap
+    substring scan; malformed files count as 0 (fail-open)."""
+    try:
+        n = 0
+        for f in (Path(ws) / "facts").glob("*.md"):
+            try:
+                head = f.read_text(encoding="utf-8",
+                                   errors="replace")[:2000]
+            except OSError:
+                continue
+            if str(claim) in head:
+                n += 1
+        return n
+    except OSError:
+        return 0
+
+
 def _settle_dispatch_outcome(ctx: RunContext, claim: str,
                              act: object) -> None:
     """#518 PR-2 (RC6, W2+W3): bank the act's outcome credit into the
@@ -681,12 +738,26 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
     fail-open, never an exception into the landing path."""
     try:
         qc = _load_repo_module(ctx.repo, "rlvr.q_cells")
-        credit = 1.0 if act.outcome == "DISPATCHED" else 0.0
+        # #524 item 2: continuous credit — binary floor + fact-production
+        # signal (hindsight: a failed act that produced retained facts
+        # banks partial credit; a success with zero facts banks only
+        # half). Cost (duration_ms) is already in the dispatch_result
+        # audit row — normalization happens at analysis time, the banked
+        # value stays in [0,1].
+        _n_facts = _facts_citing(ctx.ws, claim)
+        _bin = 1.0 if act.outcome == "DISPATCHED" else 0.0
+        credit = min(1.0, _bin * 0.5 + 0.5 * min(1.0, _n_facts / 2.0))
         res = qc.observe_settlement(str(ctx.ws), claim, credit)
         if res.get("matched") and res.get("appended"):
+            # #524 item 3: censoring made visible — a TIMEOUT is
+            # right-censored (unknown-not-failed), recorded on the
+            # settlement row for KM analysis; the arm posterior still
+            # counts it as failure (time is cost — expert-adjudicated)
             audit.emit_posterior_update(
                 str(ctx.ws), str(res.get("method_family") or claim),
-                {"credit": credit})
+                {"credit": credit,
+                 "censored": act.outcome == "TIMEOUT",
+                 "facts_citing": _n_facts})
         if act.outcome == "TIMEOUT":
             fam = str(res.get("method_family") or "unattributed")
             # evidence = the act's own execution record: the obstacles

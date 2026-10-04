@@ -126,7 +126,8 @@ from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
 import oracle_anchors  # noqa: E402  # #306: the intake stamp vocabulary (task_spec anchors)
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
+from ws_yaml import canonical_dump as _canonical_dump  # #524 AD2  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 # #103 exception tiering: the exception family a JUDGMENT-INPUT reader
@@ -1945,7 +1946,7 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
     if reopened:
         data["_audit"] = (data.get("_audit") or []) + [
             f"#607 stuck-worker reopen: {', '.join(reopened)} @ {now}"]
-        reg.write_text(_yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+        reg.write_text(_canonical_dump(data), encoding="utf-8")
     return reopened
 
 
