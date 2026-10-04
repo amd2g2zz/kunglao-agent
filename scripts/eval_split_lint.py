@@ -36,11 +36,11 @@ def _constant_forms(value) -> set[str]:
     if len(s) < _MIN_FORM_LEN:
         return forms
     forms.add(s.lower())
+    # even length + all-hex makes bytes.fromhex total here; the int form
+    # is how a leaked key hides as an int literal (the same alternate
+    # form the eval checkers grade)
     if len(s) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in s):
-        try:
-            forms.add(str(int.from_bytes(bytes.fromhex(s), "big")))
-        except ValueError:
-            pass
+        forms.add(str(int.from_bytes(bytes.fromhex(s), "big")))
     return forms
 
 

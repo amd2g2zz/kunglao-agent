@@ -54,17 +54,19 @@ def boundary_face(candidate: Path, outdir: Path):
         {"in": "45" * 128, "want": 2},
     ]
     script = (outdir / "_boundary_driver.py")
+    # exec-compile load (not importlib spec loading): the #863 Family-B
+    # confinement pins importlib spec loading to four sanctioned hosts,
+    # and a corpus checker must not grow a fifth site.
     script.write_text(
         "import json, sys\n"
-        f"sys.path.insert(0, {str(outdir)!r})\n"
-        "import importlib.util as iu\n"
-        f"spec = iu.spec_from_file_location('c', {str(candidate)!r})\n"
-        "m = iu.module_from_spec(spec); spec.loader.exec_module(m)\n"
+        f"_src = open({str(candidate)!r}, encoding='utf-8').read()\n"
+        "_ns = {}\n"
+        f"exec(compile(_src, {str(candidate)!r}, 'exec'), _ns)\n"
         "for line in sys.stdin:\n"
         "    c = json.loads(line)\n"
         "    data = bytes.fromhex(c['in'])\n"
-        "    v = getattr(m, 'verify', None)\n"
-        "    rc = v(data) if v else m.main_rc(data)\n"
+        "    v = _ns.get('verify')\n"
+        "    rc = v(data) if v else _ns['main_rc'](data)\n"
         "    print(json.dumps({'rc': rc}))\n", encoding="utf-8")
     matched = total = 0
     failures = []
