@@ -134,7 +134,10 @@ def test_launch_opens_pending_and_land_banks(tmp_path):
     checkpoints._land_dispatch(ctx, "C-004", _act("C-004", "DISPATCHED"),
                                dispatched, {"acts": []})
     sett = [r for r in _obs(ctx) if r.get("credit") is not None]
-    assert len(sett) == 1 and sett[0]["credit"] == 1.0, sett
+    # #524 continuous credit: a fact-less success banks the binary floor
+    # (0.5); fact production earns the other half
+    assert len(sett) == 1 and sett[0]["credit"] == 0.5, sett
+    assert sett[0].get("fingerprint"), "#524: fp rides the settlement row"
 
 
 def test_timeout_banks_zero_and_floors_obstacle(tmp_path):
@@ -162,7 +165,7 @@ def test_banked_settlement_emits_posterior_update(tmp_path):
                                dispatched, {"acts": []})
     rows = _ledger_rows(ctx, "posterior_updated")
     assert rows, "the §4 kernel hook must fire at the bank site"
-    assert rows[-1]["detail"]["counts"]["credit"] == 1.0
+    assert rows[-1]["detail"]["counts"]["credit"] == 0.5  # #524 floor
 
 
 # ------------------------------------------------------------------ W4
@@ -196,5 +199,5 @@ def test_sampler_fold_sees_the_observation(tmp_path):
     checkpoints._land_dispatch(ctx, "C-004", _act("C-004", "DISPATCHED"),
                                d, {"acts": []})
     obs = _obs(ctx)
-    assert any(r.get("credit") == 1.0 and r.get("method_family") == FAMILY
-               for r in obs), obs
+    assert any(r.get("credit") == 0.5 and r.get("method_family") == FAMILY
+               for r in obs), obs  # #524: fact-less success = binary floor

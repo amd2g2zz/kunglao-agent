@@ -1447,9 +1447,14 @@ class TestUnifiedAuditTrail:
             q_cells.observe(Path(ctx.ws), "abcdabcdabcd",
                             "static-decompile", 1.0)
         fam2, receipt2 = _sample_envelope_family(Path(ctx.ws))
-        assert receipt2["candidates"]["static-decompile"]["p_llm"] \
-            == pytest.approx(1.0), \
-            "settlement-source rows must not inflate the prior"
+        # #524 supersedes the #429 separation: settled outcomes now feed
+        # the hierarchical proposal pool (the warm-start). The invariants
+        # that REMAIN: retired tokens never ride (asserted above), and
+        # PENDING (unsettled) rows move nothing — the weight shift here
+        # comes from the five settled rows pulling the pooled mean off
+        # the flat 1.0 toward the evidence mean (0.857 = (5+1)/(5+2))
+        w2 = receipt2["candidates"]["static-decompile"]["p_llm"]
+        assert w2 == pytest.approx(6.0 / 7.0, abs=0.02), w2
 
     # -- the stats reader is tolerant --------------------------------------
 
