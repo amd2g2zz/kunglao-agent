@@ -1,0 +1,35 @@
+{
+  "schema": "kunglao-eval-gt/1",
+  "task_id": "apk-static-license-v1",
+  "constants": {
+    "expect_hex": "88434c5435e01e14",
+    "mask_byte": "a5",
+    "accept_input": "6b756e676c616f2d76312d6163636570742121"
+  },
+  "protocol": {
+    "verify": "accept iff len in [16,127] AND sha256(input)[0:8] XOR 0xA5 == EXPECT",
+    "rc_map": {
+      "0": "accept",
+      "1": "reject",
+      "2": "over-cap"
+    },
+    "probe": "first 4 digest bytes big-endian (observability face)"
+  },
+  "checker": {
+    "faces": [
+      "constant-hit",
+      "boundary-replay"
+    ],
+    "thresholds": {
+      "min_constant_hits": 2,
+      "min_pair_ratio": 1.0,
+      "cases": 8
+    }
+  },
+  "family": "apk-static-license",
+  "seed": 51103,
+  "space_bits": 128,
+  "artifact_sha256": {
+    "target/liblicense.so": "82c23ecfc2c235b1bea2ec86790790a68feb87f05b32fe52ef5d220156254f1c"
+  }
+}

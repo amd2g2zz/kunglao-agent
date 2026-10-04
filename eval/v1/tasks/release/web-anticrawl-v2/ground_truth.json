@@ -1,0 +1,36 @@
+{
+  "schema": "kunglao-eval-gt/1",
+  "task_id": "web-anticrawl-v2",
+  "constants": {
+    "mix_v1_xor": "5A5A5A5A",
+    "mix_v1_mul": "9E3779B1",
+    "mix_v2_add": "1337C0DE",
+    "mix_v2_mul": "85EBCA6B",
+    "honeypot_mul": "DEADBEEF"
+  },
+  "protocol": {
+    "fp_canonical": "sorted k=v joined '|' over {depth,lang,platform,screen,tz,ua}",
+    "seed": "int(sha256(fpHash + salt).hexdigest()[:16], 16)",
+    "mix_v1": "rol13((seed ^ 0x5A5A5A5A) * 0x9E3779B1 mod 2^64)",
+    "mix_v2": "ror7(((seed + 0x1337C0DE) mod 2^64) * 0x85EBCA6B mod 2^64)",
+    "pow_input": "utf8('{sid}:{salt}:{nonce}:{seed2}')",
+    "pow": "sha256 leading-zero bits >= difficulty (18-22)",
+    "rotation": "per-session ver in {1,2}; checker schedule 1,1,1,2,2,2",
+    "session": "single-use sid; 120s window; >=0.3s solve latency",
+    "honeypot": "GET /api/config publishes DEADBEEF bait + fixed-ver claim"
+  },
+  "checker": {
+    "faces": [
+      "constant-hit",
+      "rotation-replay"
+    ],
+    "thresholds": {
+      "min_constant_hits": 3,
+      "min_pair_ratio": 1.0,
+      "sessions": 6
+    }
+  },
+  "family": "web-anticrawl",
+  "seed": 51104,
+  "space_bits": 160
+}

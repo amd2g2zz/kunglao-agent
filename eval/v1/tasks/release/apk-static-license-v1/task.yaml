@@ -1,0 +1,43 @@
+schema: kunglao-eval-task/1
+task_id: apk-static-license-v1
+tier: release
+family: apk-static-license
+anchors:
+  goal_verbatim: Recover the single license constant checked by the native library's license_verify and
+    build a re-implementation that reproduces its accept/reject boundary.
+  success_criterion: A re-implementation reproduces license_verify's accept set and reject set byte-exact
+    (accept >= 16B inputs hashing to the constant; reject everything else).
+  verification_method: reproduction
+workspace_scaffold:
+  files:
+  - target/liblicense.so
+  language: c/arm64-android
+  entry: target/liblicense.so
+  candidate_contract: 'A Python module exposing verify(data: bytes) -> int (0 pass, nonzero reject) reproducing
+    the native gate semantics exactly.'
+eval_version: eval-v1.1
+source: constructed
+seed: 51103
+rung: l2
+ground_truth:
+  file: ground_truth.json
+  space_bits: 128
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - constant-hit
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_client.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 1
+    min_pair_ratio: 1.0
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

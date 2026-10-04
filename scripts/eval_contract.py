@@ -57,6 +57,25 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                            "target_surface": "net"},
     "req-sign": {"suffix": ".js", "response_language": "JavaScript",
                  "target_surface": "text"},
+    # ---- release tier, combat matrix (#518: interpolation holdout) ------
+    # Fresh instances of mined families; the anti-overfit split keeps them
+    # out of the mining pool (eval/v1/split.yaml + eval_split_lint.py).
+    # Candidates are Python clients/modules by construction (bench contract).
+    "web-token": {"suffix": ".py", "response_language": "Python",
+                  "target_surface": "net"},
+    "web-pow-lite": {"suffix": ".py", "response_language": "Python",
+                     "target_surface": "net"},
+    "apk-static-license": {"suffix": ".py", "response_language": "Python",
+                           "target_surface": "binary"},
+    "web-anticrawl": {"suffix": ".py", "response_language": "Python",
+                      "target_surface": "net"},
+    "apk-webview-attest": {"suffix": ".py", "response_language": "Python",
+                           "target_surface": "net"},
+    # rust-apk-beacon predates the matrix split but is part of the same
+    # holdout tier; its family row was missing on dev (two parity tests
+    # were red locally) — registered here so the ladder can judge it.
+    "rust-apk-beacon": {"suffix": ".py", "response_language": "Python",
+                        "target_surface": "binary"},
     "mod-crypto-js": {"suffix": ".js", "response_language": "JavaScript",
                       "target_surface": "text"},
     # ---- misdirection tier (eval_misdirection registry) -----------------
