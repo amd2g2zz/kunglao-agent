@@ -1630,8 +1630,14 @@ def _scan_proven_facts(workspace: Path) -> dict[str, str]:
         parts = [p.strip() for p in line.split("|")]
         if len(parts) < 4:
             continue
-        if parts[1].upper() == "PROVEN":
-            proven[parts[0]] = parts[3]
+        # #507: content-based (fact_id, status) via the #505 row parser —
+        # the positional parts[1] read skipped PROVEN rows in the
+        # leading-pipe 5-column shape workers actually hand-write, so the
+        # contradiction heuristic ran on a silently-shrunk PROVEN set.
+        fid, status = _row_fact_and_status(parts)
+        if fid is not None and status == "PROVEN":
+            tail = [p for p in parts if p and p != fid]
+            proven[fid] = tail[-1] if tail else ""
     return proven
 
 

@@ -61,7 +61,7 @@ files:
   scripts/contracts.py:
     r1: 12
   scripts/convergence_check.py:
-    r1: 163
+    r1: 164
     r2: 2
   scripts/convergence_health.py:
     r1: 18
@@ -1280,6 +1280,8 @@ files:
   tests/test_scalar_interval_390.py:
     r1: 1
   tests/test_scalar_settlement_379.py:
+    r1: 1
+  tests/test_scan_proven_507.py:
     r1: 1
   tests/test_scan_waiting_902.py:
     r1: 2
