@@ -17,6 +17,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from kunglao_log import warn  # canonical fail-open trace (#275)
+
 #: family -> meta-arm. The three meta-arms name the APPROACH class
 #: (expert-3 clustering, #523 contract): structural probing, constraint
 #: derivation, hypothesis falsification.
@@ -138,15 +140,16 @@ def env_fingerprint(ws, repo: Path | None = None) -> str:
             if prev.get("key") == key:
                 return str(prev["fingerprint"])
         except (OSError, ValueError, KeyError):
-            pass
+            warn("meta_arms.env_fingerprint_cache",
+                 "cache unreadable; recomputing")
     cli = "unknown"
     try:
         r = subprocess.run(["claude", "--version"], capture_output=True,
                            text=True, timeout=10, errors="replace")
         if r.returncode == 0 and r.stdout.strip():
             cli = r.stdout.strip().splitlines()[0][:40]
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        warn("meta_arms.cli_version", f"{type(exc).__name__}: {exc}")
     agent_sha = ""
     repo = repo or Path(__file__).resolve().parents[2]
     for cand in (repo / "agents" / "kunglao-worker.md",
@@ -164,6 +167,6 @@ def env_fingerprint(ws, repo: Path | None = None) -> str:
         cache_p.parent.mkdir(parents=True, exist_ok=True)
         cache_p.write_text(json.dumps({"key": key, "fingerprint": fp}),
                            encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("meta_arms.fp_cache_write", f"{type(exc).__name__}: {exc}")
     return fp

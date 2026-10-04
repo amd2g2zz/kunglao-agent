@@ -685,8 +685,8 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
                 _rows, method_family, _fams), 4)
             if _fp:
                 receipt["fingerprint"] = _fp
-    except Exception:  # noqa: BLE001 — propensity is a bonus, never a gate
-        pass
+    except Exception as exc:  # noqa: BLE001 — bonus, never a gate
+        kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,

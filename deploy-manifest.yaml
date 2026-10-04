@@ -1171,7 +1171,7 @@ files:
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: 390665ee966f7f80f08e28705200af2dbbcdbda9f171663d392fcc88e18ccf18
+    sha256: 113e35cd8a8430fb6bcf1fcb0ead6cb1fa94c83e2583a5e6d5d0adbc1154a0b4
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1184,10 +1184,6 @@ files:
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
     sha256: 2df2c2889491aa7b3bde8efe058692a0b209b9d2c92676ec6951b7133c359a31
-  - src: scripts/rlvr/probes.py
-    dest: .claude/scripts/rlvr/probes.py
-    kind: scaffold
-    sha256: 158d04d146035c876d439bd8c9cb7c9a2dced4b804ce1f1cc7ed74ceac113e65
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
@@ -1227,7 +1223,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 0b70fe0755bc2162594562922ba8644149d310c67fad4bd74553e0ac93d30fec
+    sha256: aad567a7e3632a956847a280391dd14decaaaba36b75f0243d924cde0a32e2d1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
