@@ -1,0 +1,41 @@
+schema: kunglao-pattern/1
+id: PAT-002
+title: native static gate (boundary-class battery + oracle execution)
+family_hint: static-decompile
+weight: 2.5
+features:
+  target_surface:
+  - binary
+  languages:
+  - c
+  scaffold_kinds:
+  - libgate.so
+  - liblicense.so
+  - libattest.so
+  - libcrackme.so
+playbook:
+  flow:
+  - 'Anchor the gate in symbols/strings first (.dynsym, .rodata): the comparison constant usually has
+    a named neighbor. Cross-check any derived constant against actual byte presence (MOVZ/MOVK pairs,
+    table walks) before claiming provenance.'
+  - 'Recover the primitive exactly, then test BOUNDARY CLASSES, not just the golden path: empty/oversized
+    inputs, length-threshold splits (hash-only-the-tail past a prefix length class is a real field bug
+    a golden-path battery missed), prefix/suffix variants, sign/width edges.'
+  - 'Execute the real bytes when possible: unicorn/emulator over the actual .so against the reimplementation
+    on identical inputs — the library is the oracle, your port is the hypothesis.'
+  - 'Deliverable: verify(data)->rc module semantics exactly as the gate''s observable contract (0/nonzero),
+    never a boolean flip.'
+  negative_tests:
+  - reimplementation vs emulator divergence on any boundary class
+  - constants claimed without byte-level anchoring
+  field_notes:
+  - anti-debug poison paths are decoys in clean environments — verify by execution, not by reading the
+    check
+provenance:
+  mined_from_families:
+  - arm-kdf
+  - smc-x86
+  - mod-crypto-native
+  - win-kdf
+  evidence: red-team round 8A refutations (the len>16 hashing class the golden matrix missed; the PRNG/rcon
+    constant with no byte anchor) — the boundary-class discipline is the direct countermeasure.
