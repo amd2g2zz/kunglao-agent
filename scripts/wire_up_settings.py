@@ -88,8 +88,11 @@ WIRE_UP_HOOK_FILES = frozenset({
 # (#381); this export gives the tests-side the same single source.
 # #601: orchestrator_tool_guard joins — same FILE, second PreToolUse
 # matcher row (MCP host-channel face beside the Bash face).
+# #516: write_guard joins — same FILE, second PreToolUse matcher row (the
+# Bash register face beside the Edit|Write|MultiEdit face).
 DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py",
-                                     "orchestrator_tool_guard.py"})
+                                     "orchestrator_tool_guard.py",
+                                     "write_guard.py"})
 
 
 # #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The

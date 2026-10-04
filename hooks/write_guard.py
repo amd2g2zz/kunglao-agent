@@ -55,6 +55,7 @@ except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
 import json
 import locale
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -479,6 +480,35 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
                     f"blocker[?] adjudication crashed "
                     f"({type(exc).__name__}: {exc}); fail-closed.")
     if carrier == CARRIER_REGISTER:
+        # #516: single-writer enforcement — the register post-image must be
+        # a canonical safe_dump round-trip (ws_yaml.py's own rendering,
+        # single-sourced). Hand-typed YAML — valid or not — is refused on
+        # the tool face; the sanctioned mutator is ws_yaml.py alone.
+        try:
+            import yaml as _y516
+            from ws_yaml import canonical_dump
+            pending_text = (shadow / rel).read_text(
+                encoding="utf-8", errors="replace")
+            try:
+                doc516 = _y516.safe_load(pending_text)
+            except _y516.YAMLError:
+                doc516 = None
+            if not isinstance(doc516, dict) or \
+                    pending_text.rstrip("\n") != \
+                    canonical_dump(doc516).rstrip("\n"):
+                violations.append(
+                    "register-writer: post-image is not a canonical "
+                    "safe_dump round-trip (single-writer #516). Mutate "
+                    "claim-register.yaml ONLY via scripts/ws_yaml.py "
+                    "(set/del/get dotted paths); hand-typed YAML — valid "
+                    "or not — is refused on the tool face.")
+                _dbg("adjudicate[register] register-writer leg: "
+                     "non-canonical post-image")
+        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
+            violations.append(
+                f"register-writer: adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
+    if carrier == CARRIER_REGISTER:
         # #819: evidence-gated ->PROVEN. Evidence lives in runs/*.md of the
         # REAL workspace (not the shadow — this tool call does not write
         # evidence). Fail-closed: a crashed gate blocks the write.
@@ -580,8 +610,76 @@ def _emit_block(ws: Path | None, payload: dict, artifact: str, detail: str) -> N
         warn("event_emit", f"cannot emit event: {exc}")
 
 
+# ---------- #516: the Bash register face ----------
+# The Edit|Write|MultiEdit matcher never saw cat-heredoc / python
+# open(...,'w') / sed -i writes — combat wt1 landed the fourth register
+# corruption with ZERO write_blocked events while the same guard was
+# actively blocking facts writes in the same acts. Each pattern below is
+# one observed worker freehand channel; read-only shapes (grep/cat/ls,
+# python reads, ws_yaml get) match none of them and stay allowed.
+_BASH_REGISTER_TOKEN = "claim-register.yaml"
+_BASH_SANCTIONED = re.compile(r"\bpython3?\s+\S*ws_yaml\.py\b")
+_BASH_REDIRECT = re.compile(r">{1,2}\s*\S*claim-register\.yaml")
+_BASH_INPLACE = re.compile(r"\b(?:sed|perl|awk)\b[^|;&]*\s-i\b")
+_BASH_TEE = re.compile(r"\btee\b[^|;&]*\s\S*claim-register\.yaml")
+_BASH_COPY_DEST = re.compile(
+    r"\b(?:cp|mv|install|rsync)\b[^|;&]*\s\S*claim-register\.yaml\s*$")
+_BASH_DESTRUCTIVE = re.compile(r"\brm\b[^|;&]*\s\S*claim-register\.yaml")
+_BASH_TRUNCATE = re.compile(r"\btruncate\b")
+_BASH_PYTHON = re.compile(r"\bpython3?\b")
+_BASH_PY_WRITE = re.compile(
+    r"open\([^)]*['\"][wa+]|write_text\(|safe_dump\(|\.write\(")
+
+
+def bash_register_block(payload: dict, ws: Path | None) -> str | None:
+    """#516 judgment for one Bash tool call. None = allow; str = the block
+    reason. The fast path (command never mentions the register) exits
+    before workspace resolution — this hook rides EVERY Bash call."""
+    cmd = (payload.get("tool_input") or {}).get("command")
+    if not isinstance(cmd, str) or _BASH_REGISTER_TOKEN not in cmd:
+        return None
+    if _BASH_SANCTIONED.search(cmd):
+        return None  # the sanctioned mutator itself
+    write_intent = bool(
+        _BASH_REDIRECT.search(cmd)
+        or _BASH_INPLACE.search(cmd)
+        or _BASH_TEE.search(cmd)
+        or _BASH_COPY_DEST.search(cmd)
+        or _BASH_DESTRUCTIVE.search(cmd)
+        or _BASH_TRUNCATE.search(cmd)
+        or (_BASH_PYTHON.search(cmd) and _BASH_PY_WRITE.search(cmd)))
+    if not write_intent:
+        return None
+    if ws is None:
+        # fail-closed: a register-shaped write we cannot place in a
+        # workspace is not adjudicable — same posture as the unresolvable
+        # carrier write on the file face.
+        return ("claim-register write in an unresolvable workspace "
+                "(no claim-register.yaml + facts/ ancestor)")
+    return (
+        "claim-register.yaml is single-writer (#516): direct Bash writes "
+        "are refused. Mutate it via `python3 scripts/ws_yaml.py "
+        "set|del <ws>/claim-register.yaml <dotted.path> <value>` "
+        "(canonical safe_dump); reads (grep/cat/ws_yaml get) stay "
+        "allowed. If this was a read-only python one-liner, use "
+        "ws_yaml get instead.")
+
+
 def main() -> int:
     payload = _read_payload()
+    if str(payload.get("tool_name") or "") == "Bash":
+        # #516: write_guard's second PreToolUse row — the Bash face.
+        ws_bash = resolve_workspace(payload)
+        reason = bash_register_block(payload, ws_bash)
+        if reason:
+            detail = f"write_guard: BLOCK — {reason}"
+            print(detail, file=sys.stderr)
+            _emit_block(ws_bash, payload,
+                        "claim-register.yaml (Bash face)", detail)
+            _dbg("exit BLOCK rc=2 — bash register face (#516)")
+            return RC_BLOCK
+        _dbg("exit ALLOW rc=0 — bash face, no register write intent")
+        return RC_ALLOW
     ti = payload.get("tool_input") or {}
     raw_target = ti.get("file_path")
     if not raw_target:

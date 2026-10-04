@@ -91,7 +91,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 366d38f89088fb14f8e6f0b19b00dcb534c45c438a3cb711ca853e30fb4a53d1
+    sha256: a058f0d37999c0ff91f0b84013e18771b8a73ffcf274169bf6fa4b5fc93ebf74
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -539,7 +539,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 51ab3c614284a430d03bdb057f455755b1d32a32122845b5a6252b2277798da1
+    sha256: e8789a6ee5f65f0e63583d90117cc2fd799c167d02c91d2cb50655312f4492e8
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -883,7 +883,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 9865ebc37b22230a3d62823cf2421861b211576bb0cc1128ba21c7cf14eb2b89
+    sha256: a80acd0ad20858e3e765750f92ea2665e4243a3989fa3e5cb037dae8cffe06a4
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -1115,7 +1115,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: c50003c86ff856326e42dc7d4f9f3050aca92b586eef36587812cc95a33f890f
+    sha256: f9bf42cb3dabe2fe658cef8bd3aaa7a0ab4b6cf6304eab735c7e0a06c93a5d0e
   - src: scripts/worker_death.py
     dest: .claude/scripts/worker_death.py
     kind: scaffold
@@ -1139,7 +1139,7 @@ files:
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
-    sha256: 2e351efc7060ea7a5ff17becae4a13aed5b90b5308ac9b5f3a7c22bc5c2cbb5b
+    sha256: 33dc8d9d9e1da14b14759e94b8be1b7a58da84916e288138d55416677b273cec
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 5956d30798b7cc35df8e1cf058460c31a1ba89ae4fc9948b8a31dce8a98ab38b
+    sha256: 12004e794757998d5efa395f66646ef43920f239385473d5202bda7baf4f3e6c
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

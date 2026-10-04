@@ -972,6 +972,7 @@ _DEPLOYED_WIRING = (
     ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
     ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
     ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
+    ("PreToolUse", "Bash", "write_guard.py"),  # #516 register Bash face
     ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
     ("PostToolUse", "Agent", "worker_pulse.py"),
     ("PostToolUse", "Agent", "state_anchor.py"),
@@ -1199,6 +1200,14 @@ def register_hooks(workspace: Path | None = None,
     # mode it exists to stop is "nobody dispatched, so nothing was armed") —
     # arming is target-based (path is a contract carrier), not TTL-based.
     pre, added = _ensure(pre, "Edit|Write|MultiEdit", "write_guard.py")
+    count += added
+    # #516: write_guard's SECOND PreToolUse row — the Bash register face.
+    # Register writes via cat-heredoc / python open('w') / sed -i bypassed
+    # the Edit|Write matcher entirely (combat wt1: the fourth register
+    # corruption landed with zero write_blocked events). The in-hook fast
+    # path exits before workspace resolution for commands that never
+    # mention the register, so this row is cheap for every other Bash call.
+    pre, added = _ensure(pre, "Bash", "write_guard.py")
     count += added
     # #675: this double registration (worker_budget Pre+Post) is pinned by
     # wire_up_settings.DOUBLE_REGISTERED_HOOKS — test count anchors derive

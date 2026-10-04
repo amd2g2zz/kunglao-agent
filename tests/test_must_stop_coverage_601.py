@@ -368,7 +368,8 @@ class TestMcpFaceWiring:
     def test_double_registration_sentinel_updated(self):
         import wire_up_settings
         assert wire_up_settings.DOUBLE_REGISTERED_HOOKS == frozenset({
-            "worker_budget.py", "orchestrator_tool_guard.py"})
+            "worker_budget.py", "orchestrator_tool_guard.py",
+            "write_guard.py"})  # #516: the Bash register face
 
     def test_emit_action_words_registered(self):
         import event_taxonomy
