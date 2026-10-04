@@ -268,6 +268,23 @@ def check_register_transitions(ws: Path, new_text: str,
 
     old_text=None means the register is new — every PROVEN claim counts as a
     transition (fresh registers cannot mint PROVEN without evidence either)."""
+    # #516: fail-closed on an unparseable NEW text — "cannot read" is not
+    # "no transitions". The wt1 combat corruption (ScannerError line 44,
+    # evidence prose carrying `): `) reached this gate as {} and sailed
+    # through the empty-map early return below. Only the NEW side is
+    # fail-closed: an unparseable OLD text is a repair case, and the
+    # canonical-writer leg in write_guard adjudicates what lands.
+    try:
+        new_doc = yaml.safe_load(new_text)
+    except yaml.YAMLError:
+        new_doc = None
+    if not isinstance(new_doc, dict):
+        return {"ok": False,
+                "violations": ["register-writer: the new register text "
+                               "does not parse as a YAML mapping "
+                               "(fail-closed, #516 — mutate via "
+                               "scripts/ws_yaml.py)"],
+                "waivers": []}
     old = _load_statuses(old_text or "")
     new = _load_statuses(new_text)
     claims = _load_claims(new_text)

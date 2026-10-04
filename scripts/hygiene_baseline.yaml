@@ -183,7 +183,7 @@ files:
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 78
+    r1: 80
   scripts/hook_exit_codes.py:
     r1: 6
   scripts/hooks_selfcheck.py:
@@ -324,7 +324,7 @@ files:
   scripts/refutation_propagate.py:
     r1: 3
   scripts/register_proven_gate.py:
-    r1: 12
+    r1: 13
   scripts/release_check_selfcheck.py:
     r1: 3
   scripts/release_receipt.py:
@@ -445,7 +445,7 @@ files:
   scripts/winrate_curve.py:
     r1: 3
   scripts/wire_up_settings.py:
-    r1: 26
+    r1: 27
   scripts/worker_death.py:
     r1: 9
   scripts/write_gate.py:
@@ -455,7 +455,7 @@ files:
   scripts/ws_layout.py:
     r1: 4
   scripts/ws_yaml.py:
-    r1: 1
+    r1: 4
   scripts/zero_output_fingerprint.py:
     r1: 1
   tests/_factories.py:
@@ -917,7 +917,7 @@ files:
   tests/test_hook_registration_entry.py:
     r1: 9
   tests/test_hook_registry_singlesource.py:
-    r1: 18
+    r1: 19
   tests/test_hooks_resolve_workspace_delegation_865.py:
     r1: 3
     r2: 1
@@ -1062,7 +1062,7 @@ files:
   tests/test_monitor_wiring_620c.py:
     r1: 2
   tests/test_must_stop_coverage_601.py:
-    r1: 5
+    r1: 6
   tests/test_no_absolute_paths.py:
     r1: 3
   tests/test_no_cti_agents.py:
@@ -1196,6 +1196,8 @@ files:
     r1: 1
   tests/test_register_proven_gate.py:
     r1: 2
+  tests/test_register_writer_516.py:
+    r1: 1
   tests/test_reject_emit_624.py:
     r1: 1
   tests/test_release_receipt.py:
@@ -1516,7 +1518,7 @@ files:
   tests/test_write_guard_686.py:
     r1: 3
   tests/test_write_guard_register_gate_819.py:
-    r1: 1
+    r1: 3
   tests/test_write_guard_supersedes_528.py:
     r1: 3
   tests/test_write_guard_unlock_820.py:

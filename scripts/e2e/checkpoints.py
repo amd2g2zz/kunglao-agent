@@ -756,9 +756,11 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         "comparisons), and write runs/verification-"
         f"{claim}.md with a frontmatter verdict (verified|refuted) plus "
         "evidence citations (file:line). NEVER write facts/F*.md. If a "
-        "state file must change, edit it with python3 + the yaml library "
-        "(safe_dump) — never hand-edit YAML (#482). End with STATUS: DONE "
-        "or STATUS: BLOCKED.\n",
+        "state file must change, mutate it ONLY via `python3 "
+        "scripts/ws_yaml.py set|del <file> <dotted.path> <value>` — "
+        "claim-register.yaml is single-writer (#516) and direct writes "
+        "(cat/sed/python-open/Edit/Write) are refused by the write guard. "
+        "End with STATUS: DONE or STATUS: BLOCKED.\n",
         encoding="utf-8")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),

@@ -52,13 +52,37 @@ def _walk(doc, segments, *, create=False):
 
 def _coerce(raw: str):
     """Scalar literals stay literal-string ONLY when quoted; otherwise
-    yaml-load the single scalar so numbers/bools keep their types."""
+    yaml-load the single scalar so numbers/bools keep their types.
+
+    #516: a bare load that yields a CONTAINER (dict/list — prose carrying
+    `key: value` inside it parses as a mapping) falls back to the literal
+    string. The unquoted-prose-with-colon shape is exactly the four-run
+    register corruption class; the setter must never turn it into a
+    mapping. Nested values are set through dotted paths, one scalar at a
+    time, so container coercion has no legitimate caller."""
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
         return raw[1:-1]
     try:
-        return yaml.safe_load(raw)
+        loaded = yaml.safe_load(raw)
     except yaml.YAMLError:
         return raw
+    if isinstance(loaded, (dict, list)):
+        return raw
+    return loaded
+
+
+# #516: THE canonical register serialization, single-sourced here because
+# ws_yaml.py is the register's only sanctioned tool-face mutator — the
+# write guard's round-trip adjudication and every ws_yaml write agree by
+# construction instead of by kwargs copy-drift.
+CANONICAL_KWARGS = dict(sort_keys=False, allow_unicode=True,
+                        default_flow_style=False)
+
+
+def canonical_dump(doc) -> str:
+    """The single-writer rendering (#516). Hand-typed YAML — valid or not —
+    is refused at the write gate; only this serialization passes."""
+    return yaml.safe_dump(doc, **CANONICAL_KWARGS)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -95,8 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyError as exc:
         print(f"ws_yaml: path not found: {dotted} ({exc})", file=sys.stderr)
         return 5
-    text = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True,
-                          default_flow_style=False)
+    text = canonical_dump(doc)
     if yaml.safe_load(text) != doc:  # refuse non-round-tripping writes
         print("ws_yaml: write refused (non-round-tripping)",
               file=sys.stderr)
