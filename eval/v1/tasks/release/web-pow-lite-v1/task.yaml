@@ -1,0 +1,44 @@
+schema: kunglao-eval-task/1
+task_id: web-pow-lite-v1
+tier: release
+family: web-pow-lite
+anchors:
+  goal_verbatim: Reverse the served JS SDK, recover the challenge protocol (session-bound input, difficulty,
+    solver loop), and build a client that solves the low-difficulty proof for fresh sessions and retrieves
+    the protected payload.
+  success_criterion: client.py completes 4/4 fresh sessions solving the served difficulty and retrieving
+    the protected payload.
+  verification_method: reproduction
+workspace_scaffold:
+  files:
+  - capture/sdk.js
+  language: javascript
+  entry: capture/sdk.js
+  candidate_contract: A Python CLI client.py invoked as `python3 client.py --base <url>`; solves the session-bound
+    PoW challenge and completes retrieval per the success criterion.
+eval_version: eval-v1.1
+source: constructed
+seed: 51102
+rung: l1
+ground_truth:
+  file: ground_truth.json
+  space_bits: 128
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - constant-hit
+  - replay-roundtrip
+  entrypoint: checker.py
+  self_check_candidate: reference_client.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_constant_hits: 2
+    min_pair_ratio: 1.0
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed

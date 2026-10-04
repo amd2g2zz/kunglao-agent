@@ -1,0 +1,32 @@
+{
+  "schema": "kunglao-eval-gt/1",
+  "task_id": "apk-webview-attest-v2",
+  "constants": {
+    "js_mix_xor": "5F5F5F5F",
+    "js_mix_mul": "C0FFEE11",
+    "native_mask_hex": "c42b916f18d37a05"
+  },
+  "protocol": {
+    "js_layer": "challenge PoW (10-14 bits) over '{sid}:{salt}:{nonce}:{seed2}', seed2=rol13((seed^0x5F5F5F5F)*0xC0FFEE11)",
+    "bridge": "verify success -> {attest_seed (16B), js_nonce}",
+    "native_layer": "claimed = sha256(attest_seed||js_nonce)[:8] XOR MASK (MASK in libattest.so only)",
+    "final": "POST /attest {seed, nonce, claimed_hex} -> protected payload; attest single-use"
+  },
+  "checker": {
+    "faces": [
+      "constant-hit",
+      "dual-layer-replay"
+    ],
+    "thresholds": {
+      "min_constant_hits": 2,
+      "min_pair_ratio": 1.0,
+      "sessions": 4
+    }
+  },
+  "family": "apk-webview-attest",
+  "seed": 51105,
+  "space_bits": 128,
+  "artifact_sha256": {
+    "target/libattest.so": "2cb4f4dadeac91ce397c9ab0a38797474f7e71c2d277d74e853dba3ee07a1e58"
+  }
+}

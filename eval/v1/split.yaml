@@ -1,0 +1,28 @@
+schema: kunglao-eval-split/1
+# #518 anti-overfit split — the mining/holdout firewall. The corpus is the
+# mining pool's raw material; the holdout is the ONLY surface capability
+# verdicts are judged on. Mining-pool numbers are development telemetry,
+# never capability claims.
+#
+# interpolation holdout = the six matrix units: fresh instances of mined
+#   families (three-arm baselines measured 2026-10-04: kunglao matrix3 +
+#   bare/rsk head-to-head).
+# extrapolation holdout = constructions NOT present in the mining pool.
+#   REQUIRED non-empty before the v0.1.6 capability verdict (append then).
+#
+# Enforcement: scripts/eval_split_lint.py hard-fails any holdout instance
+# constant (raw or even-hex decimal-int form) or holdout unit-id that
+# reaches a prior_store_root. Priors are feature-keyed (observable sample
+# features), never identity-keyed — identity-keying is memorization.
+holdout:
+  interpolation:
+    - web-token-v1
+    - web-pow-lite-v1
+    - apk-static-license-v1
+    - rust-apk-beacon-v1
+    - web-anticrawl-v2
+    - apk-webview-attest-v2
+  extrapolation: []
+mining: "complement — every eval/v1/tasks/release unit NOT listed in holdout"
+prior_store_roots:
+  - scripts/rlvr/patterns

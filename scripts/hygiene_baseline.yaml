@@ -129,6 +129,8 @@ files:
     r1: 1
   scripts/eval_checker.py:
     r1: 3
+  scripts/eval_contract.py:
+    r1: 1
   scripts/eval_control_arm.py:
     r1: 1
   scripts/eval_crypto.py:
@@ -140,6 +142,8 @@ files:
   scripts/eval_native_sources.py:
     r1: 1
   scripts/eval_native_targets.py:
+    r1: 1
+  scripts/eval_split_lint.py:
     r1: 1
   scripts/eval_targets.py:
     r1: 4
@@ -784,8 +788,10 @@ files:
   tests/test_eval_loop_runner_334.py:
     r1: 1
   tests/test_eval_native_332.py:
-    r1: 6
+    r1: 7
   tests/test_eval_release_332.py:
+    r1: 1
+  tests/test_eval_split_lint_518.py:
     r1: 1
   tests/test_eval_tf_graders_356.py:
     r1: 1
