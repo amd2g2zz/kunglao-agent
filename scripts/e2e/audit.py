@@ -106,6 +106,9 @@ CHECKPOINT_ACTIONS = frozenset({
 KERNEL_ACTIONS = frozenset({
     "method_family_recorded", "strategy_composed",
     "posterior_updated", "mainline_decision",
+    # #518 W4: the open-loop alarm — >=3 kernel dispatch events with
+    # zero banked settlements (the frozen-posterior signature)
+    "posterior_frozen",
 })
 #: online distillation rows (the capability's own words; one attempt
 #: row per dispatched act, one result row per attempt — rejections and

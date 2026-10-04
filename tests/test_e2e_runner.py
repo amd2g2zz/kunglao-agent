@@ -1349,8 +1349,10 @@ class TestUnifiedAuditTrail:
         terminal = _run_dispatch_act(ctx, "C-004", set(), detail)
         assert terminal is None
         actions = [r["action"] for r in self._rows(ctx.ws)]
+        # #518 PR-2: every dispatch closes its loop — the bank site's
+        # §4 posterior_updated row lands after dispatch_result
         assert actions == ["method_family_recorded", "dispatch_attempt",
-                           "dispatch_result"]
+                           "dispatch_result", "posterior_updated"]
 
     def test_dispatch_envelope_kernel_samples_the_family(
             self, stub_repo, tmp_path):
@@ -1366,8 +1368,10 @@ class TestUnifiedAuditTrail:
         assert terminal is None
         rows = self._rows(ctx.ws)
         actions = [r["action"] for r in rows]
+        # #518 PR-2: every dispatch closes its loop — the bank site's
+        # §4 posterior_updated row lands after dispatch_result
         assert actions == ["method_family_recorded", "dispatch_attempt",
-                           "dispatch_result"]
+                           "dispatch_result", "posterior_updated"]
         rec = json.loads(rows[0]["detail"])
         fam = rec["method_family"]
         assert fam, "the sampler must produce a real family token"

@@ -92,9 +92,9 @@ files:
   scripts/dual_gate.py:
     r1: 3
   scripts/e2e/audit.py:
-    r1: 7
+    r1: 8
   scripts/e2e/checkpoints.py:
-    r1: 42
+    r1: 46
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -745,7 +745,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 22
+    r1: 24
     r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
@@ -1244,6 +1244,8 @@ files:
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:
+    r1: 1
+  tests/test_rl_wiring_518.py:
     r1: 1
   tests/test_roi_settlement_49.py:
     r1: 2
