@@ -640,6 +640,15 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
                                  envelope=receipt)
+    # #518 PR-2 (RC6, W1): open the pending q-cell observation at the
+    # dispatch ALLOW-tail seam — the sampler's fold gets its dispatch
+    # row and the settlement gets its match target. Fail-open telemetry:
+    # the audit verdict found every envelope frozen at Beta(1,1) because
+    # this write site was never wired (architect audit 2026-10-04).
+    _load_repo_module(ctx.repo, "rlvr.q_cells").record_dispatch_observation(
+        str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
+        envelope_meta={"method_family": method_family} if method_family else None,
+        claim=claim)
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
@@ -658,6 +667,74 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
         dispatched.discard(claim)
+    _settle_dispatch_outcome(ctx, claim, act)
+
+
+def _settle_dispatch_outcome(ctx: RunContext, claim: str,
+                             act: object) -> None:
+    """#518 PR-2 (RC6, W2+W3): bank the act's outcome credit into the
+    q cell its dispatch opened, and feed a TIMEOUT act to the obstacles
+    registry (the termination floor's input — repeat-offender families
+    decay with zero sampler changes). Credit is the per-act ladder's
+    v1 shape: DISPATCHED=1.0, every failure class=0.0 (the #433 ladder
+    refinement rides the promotion path, not here). Telemetry posture:
+    fail-open, never an exception into the landing path."""
+    try:
+        qc = _load_repo_module(ctx.repo, "rlvr.q_cells")
+        credit = 1.0 if act.outcome == "DISPATCHED" else 0.0
+        res = qc.observe_settlement(str(ctx.ws), claim, credit)
+        if res.get("matched") and res.get("appended"):
+            audit.emit_posterior_update(
+                str(ctx.ws), str(res.get("method_family") or claim),
+                {"credit": credit})
+        if act.outcome == "TIMEOUT":
+            fam = str(res.get("method_family") or "unattributed")
+            # evidence = the act's own execution record: the obstacles
+            # validator demands a probe-execution marker (command/rc/
+            # output), and a timed-out act genuinely has one
+            ev_rel = f"runs/act-timeout-{claim}.md"
+            ev_path = ctx.ws / ev_rel
+            ev_path.parent.mkdir(parents=True, exist_ok=True)
+            ev_path.write_text(
+                f"command: claude -p dispatch-prompt-{claim}.md\n"
+                f"exit=124 (timeout, CLAUDE_ACT_TIMEOUT_S exceeded)\n"
+                f"observed: outcome={act.outcome} family={fam} "
+                f"detail={json.dumps(act.detail, ensure_ascii=False)[:400]}\n",
+                encoding="utf-8")
+            _load_repo_module(ctx.repo, "rlvr.obstacles").record(
+                str(ctx.ws), kind="other",
+                cause=f"act-timeout: CLAUDE_ACT_TIMEOUT_S exceeded on "
+                      f"{claim} (family {fam})",
+                evidence_path=ev_rel,
+                method_family=fam, claim=claim)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("_settle_dispatch_outcome", f"{type(exc).__name__}: {exc}")
+
+
+def _posterior_drift_check(ctx: RunContext) -> None:
+    """#518 PR-2 (W4): the frozen-posterior alarm — the open-loop
+    signature the combat matrix exhibited silently (alpha=beta=1.0
+    across every envelope). The q-cell store DEDUPES dispatch rows by
+    (signature, family), so the honest signal is: the audit stream has
+    seen >=3 kernel dispatch events (method_family_recorded) while the
+    store has banked zero settlements. Named audit row, never an
+    exception."""
+    try:
+        qc = _load_repo_module(ctx.repo, "rlvr.q_cells")
+        obs = [r for r in qc.JSONLQStore(str(ctx.ws)).observations()
+               if isinstance(r, dict)]
+        settled = sum(1 for r in obs if r.get("credit") is not None)
+        kernel_events = int(
+            (audit.read_stats(str(ctx.ws)).get("categories") or {})
+            .get("kernel", 0))
+        if kernel_events >= 3 and settled == 0:
+            audit.emit(str(ctx.ws), "orchestrator", "posterior_frozen",
+                       detail={"kernel_events": kernel_events,
+                               "settled": 0})
+    except Exception as exc:  # noqa: BLE001 — alarm, never the producer
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("_posterior_drift_check", f"{type(exc).__name__}: {exc}")
 
 
 def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
@@ -1261,6 +1338,8 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     # online distillation tick step: one bounded act per tick when a
     # miss signal fires with budget (a capability, never the loop)
     _maybe_distill(ctx, detail)
+    # #518 PR-2 (W4): the frozen-posterior alarm rides every tick tail
+    _posterior_drift_check(ctx)
     ctx.sleep_fn(tick_wait_seconds)
     return "continue", None, total_ms
 
