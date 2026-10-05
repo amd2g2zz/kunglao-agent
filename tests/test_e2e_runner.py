@@ -1534,7 +1534,8 @@ class TestClaimRollbackAndDynamicClaims:
         dispatched: set = set()
         detail: dict = {"acts": []}
         assert _run_dispatch_act(ctx, "C-005", dispatched, detail) is None
-        assert "C-005" in dispatched
+        # #523 G2 K4 (RC3): settled acts release their key
+        assert "C-005" not in dispatched
         assert detail["acts"][-1]["outcome"] == "DISPATCHED"
 
     def test_resolve_claims_reads_top_level_task_spec(self, tmp_path):
@@ -1627,7 +1628,9 @@ class TestReviewFixes456R2:
         d: dict = {"acts": []}
         _run_dispatch_act(ctx, "C-005", dispatched, d)
         assert d["acts"][-1]["outcome"] == "DISPATCHED"
-        assert "C-005" in dispatched  # landed act stays claimed
+        # #523 G2 K4 (RC3): a settled act RELEASES its key — settlement
+        # is the completion signal; the forever-pin was the P2 stall
+        assert "C-005" not in dispatched
 
     def test_resolve_claims_never_raises_and_restores_defaults(
             self, tmp_path):
@@ -1732,7 +1735,7 @@ class TestParallelDispatch459:
         assert flow == "continue" and terminal is None
         # BOTH acts recorded — the tick waited for the whole wave
         assert {a["claim"] for a in detail["acts"]} == {"C-004", "C-005"}
-        assert dispatched == {"C-004", "C-005"}  # clean landings stay claimed
+        assert dispatched == set()  # #523 K4: settled landings release keys
         # audit stream: attempts in launch order, THEN results as they land
         rows = self._dispatch_rows(ctx.ws)
         assert [r["action"] for r in rows] == [
@@ -1779,7 +1782,7 @@ class TestParallelDispatch459:
         assert flow == "continue" and terminal is None
         outcomes = {a["claim"]: a["outcome"] for a in detail["acts"]}
         assert outcomes == {"C-004": "DISPATCHED", "C-005": "TIMEOUT"}
-        assert dispatched == {"C-004"}  # only the timed-out claim freed
+        assert dispatched == set()  # #523 K4: both settled acts release
 
     def test_budget_exhaustion_mid_wave_stops_launches_not_inflight(
             self, stub_repo, tmp_path, monkeypatch):
@@ -1802,7 +1805,7 @@ class TestParallelDispatch459:
         assert flow == "continue" and terminal is None
         assert len(guard_calls) == 3  # guard consulted per launch
         assert [a["claim"] for a in detail["acts"]] == ["C-004"]
-        assert dispatched == {"C-004"}
+        assert dispatched == set()  # #523 K4: the landed act released
         assert len([c for c in ctx.runner.calls
                     if c.startswith("claude -p")]) == 1
 

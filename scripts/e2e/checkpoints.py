@@ -527,7 +527,9 @@ def _pooled_or_flat(store, counts: dict[str, int],
     try:
         from rlvr import meta_arms as _ma
         fp = _ma.env_fingerprint(ws)
-        pooled = _ma.hierarchical_prior(settled_rows, sorted(counts), fp)
+        # #523 G2 K2: the settled filter wraps the pool — extreme
+        # posteriors floor to the exploration minimum (zero-info skip)
+        pooled = _settled_filtered_prior(settled_rows, sorted(counts), fp)
         return {fam: pooled.get(fam, float(counts[fam]))
                 for fam in sorted(counts)}
     except Exception:  # noqa: BLE001 — pooling is an upgrade, not a gate
@@ -705,7 +707,16 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
         dispatched.discard(claim)
+    # #523 G2 K4 (RC3): a SETTLED act releases its in-flight key whether
+    # the promotion later succeeds or not — the settlement itself is the
+    # completion signal (the success-forever key pinned re-decisions to a
+    # silent no-op, burning budget in the P2 stall shape). The plain and
+    # the V: forms both release; re-dispatch remains possible, the pin is
+    # gone.
     _settle_dispatch_outcome(ctx, claim, act)
+    if act.outcome == "DISPATCHED":
+        dispatched.discard(claim)
+        dispatched.discard("V:" + claim)
 
 
 def _facts_citing(ws, claim: str) -> int:
@@ -1036,6 +1047,33 @@ def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
 
 _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
 
+# ---- #523 G2 K1: Luby restart schedule (Luby/Sinclair/Zuckerman 1993) ----
+# The universal restart sequence 1,1,2,1,1,2,4,... replaces the fixed
+# 1800s act timeout (the P1 death: doomed acts burned a quarter of the
+# run budget each). Base unit reads the env so CI can pin it.
+LUBY_BASE_S = int(os.environ.get("KUNGLAO_LUBY_BASE_S", "300"))
+
+
+def _luby_units(n: int) -> int:
+    """The nth unit of the universal restart sequence (0-indexed):
+    1,1,2,1,1,2,4,... — the classic SAT-solver formulation (Luby,
+    Sinclair & Zuckerman 1993) mapped through luby(i) with i = n+1."""
+    def _luby(i: int) -> int:
+        for k in range(1, 30):
+            if i == (1 << k) - 1:
+                return 1 << (k - 1)
+        k = 1
+        while True:
+            if (1 << (k - 1)) <= i < (1 << k) - 1:
+                return _luby(i - (1 << (k - 1)) + 1)
+            k += 1
+    return _luby(n + 1)
+
+
+def _luby_timeout_s(retry_count: int) -> int:
+    """The act timeout for a claim's nth attempt: Luby(n) * base."""
+    return _luby_units(max(0, retry_count)) * LUBY_BASE_S
+
 
 def _maybe_distill(ctx: RunContext, detail: dict) -> None:
     """Online distillation tick step: scan the workspace for miss
@@ -1355,6 +1393,100 @@ def _dispatch_targets(ctx: RunContext,
     return claims, failed, ms
 
 
+
+
+def _settled_filtered_prior(rows: list[dict], families: list[str],
+                            current_fp: str | None = None
+                            ) -> dict[str, float]:
+    """#523 G2 K2 — the DAPO zero-information skip at proposal time:
+    meta-arms whose pooled posterior is settled (p >= 0.9 success or
+    p <= 0.1) are floored to the exploration minimum; the proposal mass
+    moves to the unproven arms. Reuses meta_arms pooling (one
+    implementation)."""
+    try:
+        from rlvr import meta_arms as _ma
+        pooled = _ma.hierarchical_prior(rows, families, current_fp)
+        out = {}
+        for fam, w in pooled.items():
+            if w >= 0.9 or w <= 0.1:
+                out[fam] = 0.05  # ARM_FLOOR: revivable, never removed
+            else:
+                out[fam] = w
+        return out
+    except Exception:  # noqa: BLE001 — filter degrades to the pool
+        from rlvr import meta_arms as _ma
+        return _ma.hierarchical_prior(rows, families, current_fp)
+
+
+# ---- K3: vocabulary-immune computed flow ----
+
+
+def _open_claim_count(ctx: RunContext) -> int:
+    """The register's open (non-terminal) claim count — the computed
+    delivery check's single source (mirrors _no_open_claims but returns
+    the count for observability)."""
+    try:
+        import yaml as _y
+        reg = _y.safe_load(
+            (ctx.ws / "claim-register.yaml").read_text(encoding="utf-8"))
+        claims = (reg or {}).get("claims") or []
+        return sum(1 for c in claims if str(c.get("status", "")
+                   ).upper() not in ("PROVEN", "REFUTED", "CLOSED"))
+    except (OSError, ValueError):
+        return -1  # unreadable = unknown, NOT zero (fail-closed read)
+
+
+def _kernel_flow_for_decision(decision: str | None, *, all_open: bool
+                              ) -> str:
+    """#523 G2 K3 — every decision string maps to a COMPUTED flow; the
+    P4/AD1 death class (SATURATED/INVALID falling through to an eternal
+    sleep) cannot recur. Known vocabulary routes as before; unknown or
+    terminal-sounding words fall to the delivery check:
+    no open claims -> deliver; open claims -> wait."""
+    if decision == "CONVERGED":
+        return "break"
+    if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
+        return "dispatch"
+    if decision in _STOP_DECISIONS:
+        return "stop"
+    # SATURATED / INVALID / None-tick / anything the vocabulary grows
+    # tomorrow: the computed delivery check decides (never the spin)
+    return "deliver" if not all_open else "wait"
+
+
+
+def _kernel_pre_dispatch(ctx, decision, out_d, detail, total_ms,
+                         tick_wait_seconds):
+    """#523 G2 K3: map the convergence decision to a computed flow
+    BEFORE any dispatch branch. Returns None when the tick should
+    proceed to dispatch; otherwise the (flow, terminal, total_ms) the
+    tick must return."""
+    flow_k = _kernel_flow_for_decision(
+        decision, all_open=bool(_open_claim_count(ctx)))
+    if flow_k == "stop":
+        stop_class = _STOP_DECISIONS.get(decision or "",
+                                         "convergence-" + str(decision))
+        return ("stop", _record(ctx, "C6", "loop", model.BLOCKED,
+                                out_d.rc, out_d, total_ms,
+                                {**detail, "stop_class": stop_class}),
+                total_ms)
+    if flow_k == "deliver":
+        return "break", None, total_ms  # computed delivery -> verdict
+    if flow_k == "wait":
+        # unknown decision + open claims: an observable wait, never a
+        # silent spin — the drift alarm and the tick cap still bound it.
+        # The distill capability still runs (a wait is not a reason to
+        # starve the online-learning side — #458's contract)
+        audit.emit(str(ctx.ws), "orchestrator", "kernel_wait",
+                   detail={"decision": str(decision),
+                           "tick": detail.get("ticks")})
+        _maybe_distill(ctx, detail)
+        _posterior_drift_check(ctx)
+        ctx.sleep_fn(tick_wait_seconds)
+        return "continue", None, total_ms
+    return None
+
+
 def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
                    tick_wait_seconds: int, total_ms: int
                    ) -> tuple[str, model.CheckpointResult | None, int]:
@@ -1376,12 +1508,12 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
         return "break", None, total_ms
     if _crashed_loud_stop(ctx, detail, decision, out_d, total_ms):
         return ("stop", detail.pop("_crashed_terminal"), total_ms)
-    stop_class = _STOP_DECISIONS.get(decision or "")
-    if stop_class:
-        return ("stop", _record(ctx, "C6", "loop", model.BLOCKED,
-                                out_d.rc, out_d, total_ms,
-                                {**detail, "stop_class": stop_class}),
-                total_ms)
+    # #523 G2 K3: the computed flow replaces the string-switch — every
+    # decision word maps through the kernel (P4/AD1 spin impossible)
+    pre = _kernel_pre_dispatch(ctx, decision, out_d, detail, total_ms,
+                               tick_wait_seconds)
+    if pre is not None:
+        return pre
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
         claims, failed, ms = _dispatch_targets(ctx, decision)
         total_ms += ms
