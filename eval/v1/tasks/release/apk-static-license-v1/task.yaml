@@ -12,9 +12,9 @@ anchors:
   verification_method: reproduction
 workspace_scaffold:
   files:
-  - target/liblicense.so
-  language: c/arm64-android
-  entry: target/liblicense.so
+  - target/liccheck-v1.apk
+  language: arm64-android
+  entry: target/liccheck-v1.apk
   candidate_contract: 'A Python module exposing verify(data: bytes) -> int (0 pass,
     nonzero reject) reproducing the native gate semantics exactly.'
 eval_version: eval-v1.1
@@ -44,3 +44,6 @@ contamination:
   held_out: true
   distiller_excluded: true
   provenance: constructed
+tools:
+  decompiler_lane: required
+  unpack: apk

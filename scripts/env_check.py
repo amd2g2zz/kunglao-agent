@@ -858,6 +858,27 @@ BLOCKING_CHECKS = frozenset({
     "venv_sample", "template_version",
 })
 DEGRADED_CHECKS = frozenset({"vm_reachability", "ghidra", "mcp_registered"})
+#: matrix4c parity: a task that DECLARES the decompiler lane
+#: (task_spec tools.decompiler_lane=required) arms the supply rows —
+#: toolless analysis on native targets was the field finding (asl:
+#: probe correctly FAILed, the unconditional waiver let it pass).
+LANE_ARMED_CHECKS = frozenset({"ghidra", "mcp_registered"})
+
+
+def _decompiler_lane_required(ws: Path) -> bool:
+    """True when the workspace task_spec declares the decompiler lane.
+    Unreadable/absent spec = not declared (fail-open to the historic
+    degraded semantics; the declared contract is opt-in)."""
+    try:
+        import yaml as _y
+        spec = _y.safe_load((Path(ws) / "task_spec.yaml").read_text(
+            encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return False
+    tools = spec.get("tools") if isinstance(spec, dict) else None
+    if not isinstance(tools, dict):
+        return False
+    return str(tools.get("decompiler_lane", "")).lower() == "required"
 GATE_REPORT_TTL_SECONDS = 600  # mirrors hooks/env_check_gate.py third check
 
 
@@ -910,8 +931,10 @@ def run(ws: Path) -> tuple[int, dict]:
     # get the "T3-restricted:" detail prefix and never flip overall.
     graded: dict[str, dict] = {}
     degraded: list[str] = []
+    lane_required = _decompiler_lane_required(ws)
     for name, (status, detail) in checks.items():
-        blocking = name not in DEGRADED_CHECKS
+        blocking = (name not in DEGRADED_CHECKS
+                    or (lane_required and name in LANE_ARMED_CHECKS))
         if status == "FAIL" and not blocking:
             detail = f"T3-restricted: {detail}"
             degraded.append(name)

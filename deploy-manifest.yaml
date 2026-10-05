@@ -331,7 +331,7 @@ files:
   - src: scripts/difficulty_calibration.py
     dest: .claude/scripts/difficulty_calibration.py
     kind: scaffold
-    sha256: 37d5a3da607d0538f1ba37a93171ddcc789a8c2e150647c25d40acd54bbd6def
+    sha256: d92433cbdda7a11bb35749319bf1e9819cc6d670a098b45ebc361c48286a1468
   - src: scripts/difficulty_thresholds.py
     dest: .claude/scripts/difficulty_thresholds.py
     kind: scaffold
@@ -367,7 +367,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: 9c34e6664f909928201c1b4b6a0f7bdead3692c260b9207914ac6e0a548913ae
+    sha256: 3c1806e666f5c50d0158eb9119a31b8efaa86461f7f4a12dff574a49ee170db9
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold

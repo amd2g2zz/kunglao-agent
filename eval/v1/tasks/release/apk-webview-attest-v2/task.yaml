@@ -13,10 +13,10 @@ anchors:
   verification_method: reproduction
 workspace_scaffold:
   files:
+  - target/attestapp-v1.apk
   - capture/sdk.js
-  - target/libattest.so
-  language: javascript+c/arm64-android
-  entry: capture/sdk.js
+  language: arm64-android+javascript
+  entry: target/attestapp-v1.apk
   candidate_contract: A Python CLI client.py invoked as `python3 client.py --base
     <url>`; completes the JS challenge and the native attestation claim per the success
     criterion.
@@ -47,3 +47,6 @@ contamination:
   held_out: true
   distiller_excluded: true
   provenance: constructed
+tools:
+  decompiler_lane: required
+  unpack: apk
