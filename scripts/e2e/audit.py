@@ -106,6 +106,8 @@ CHECKPOINT_ACTIONS = frozenset({
 KERNEL_ACTIONS = frozenset({
     "method_family_recorded", "strategy_composed",
     "posterior_updated", "mainline_decision",
+    # #523 G2 K3: the observable wait on unknown decisions
+    "kernel_wait",
     # #518 W4: the open-loop alarm — >=3 kernel dispatch events with
     # zero banked settlements (the frozen-posterior signature)
     "posterior_frozen",
