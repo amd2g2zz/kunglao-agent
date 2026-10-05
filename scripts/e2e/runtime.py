@@ -34,6 +34,10 @@ class RunContext:
     clock: object
     sleep_fn: object
     acts: list[dict] = field(default_factory=list)
+    # K1 wiring (matrix4): per claim-key dispatch-attempt ladder — the
+    # Luby schedule's index. Default-empty keeps every older test and
+    # the emit-dispatch path working unchanged.
+    attempts: dict[str, int] = field(default_factory=dict)
 
     @property
     def ws(self) -> Path:

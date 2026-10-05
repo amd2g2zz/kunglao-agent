@@ -625,6 +625,12 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     if claim in dispatched:
         return None, None
     dispatched.add(claim)
+    # K1 wiring (matrix4): the per-key attempt ladder — every launch
+    # of this claim-key climbs one rung of the Luby sequence, so a
+    # timed-out re-dispatch earns MORE room, not the same ceiling.
+    attempt = ctx.attempts.get(claim, 0)
+    ctx.attempts[claim] = attempt + 1
+    ladder_timeout_s = _luby_timeout_s(attempt)
     # kernel-facing hook (audit §4): the envelope's method_family is the
     # declared proposal when the run carries one, else the DTS-sampled
     # draw (W4, issue 462) — the sampled family rides the envelope AND
@@ -692,7 +698,8 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
-        method_family=method_family or None)
+        method_family=method_family or None,
+        timeout_s=ladder_timeout_s)
     return request, ctx.face.launch_dispatch(request)
 
 
@@ -1049,9 +1056,13 @@ _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
 
 # ---- #523 G2 K1: Luby restart schedule (Luby/Sinclair/Zuckerman 1993) ----
 # The universal restart sequence 1,1,2,1,1,2,4,... replaces the fixed
-# 1800s act timeout (the P1 death: doomed acts burned a quarter of the
-# run budget each). Base unit reads the env so CI can pin it.
-LUBY_BASE_S = int(os.environ.get("KUNGLAO_LUBY_BASE_S", "300"))
+# act timeout (the P1 death). Base unit reads the env so CI can pin
+# it. The default is flat-parity 1800 (matrix4 wt1/wpl: matrix2's own
+# baseline says 28-36min acts are normal — the ladder GROWS from
+# today's behavior, 1800/1800/3600/7200..., never shrinks below it);
+# the fast-discovery base stays env-selectable pending Kaplan-Meier
+# hazard data (the intended feed per the design contract).
+LUBY_BASE_S = int(os.environ.get("KUNGLAO_LUBY_BASE_S", "1800"))
 
 
 def _luby_units(n: int) -> int:
