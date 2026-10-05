@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """#523 G3 / matrix3 P5: read_sample_sha256 only reports a GENUINE
 recorded hash.
 
