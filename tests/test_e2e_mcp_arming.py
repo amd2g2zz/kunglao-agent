@@ -92,3 +92,20 @@ def test_rack_carries_the_mcp_prefix(tmp_path):
         mcp_prefixes=("mcp__ida-pro-vm",))
     rack = llm_faces._rack_of(req)
     assert any(r.startswith("mcp__ida-pro-vm") for r in rack), rack
+
+
+def test_legacy_supply_honors_registered_mcp(tmp_path):
+    """The 3-path OR holds on the legacy (linux/windows) branch too: a
+    workspace-registered decompiler MCP satisfies the supply — matrix4d
+    field finding: native units died at the ARMED gate with the MCP
+    registered, because the legacy face only knew GHIDRA_HOME."""
+    import env_check
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / ".mcp.json").write_text(json.dumps(
+        {"mcpServers": {"ida-pro-vm": {
+            "type": "http", "url": "http://127.0.0.1:8745/mcp"}}}),
+        encoding="utf-8")
+    status, msg = env_check.check_ghidra_typed(ws, "linux")
+    assert status == "PASS", (status, msg)
+    assert "ida-pro-vm" in msg, msg
