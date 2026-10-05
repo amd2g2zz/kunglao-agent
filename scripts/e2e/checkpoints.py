@@ -1474,10 +1474,13 @@ def _kernel_pre_dispatch(ctx, decision, out_d, detail, total_ms,
         return "break", None, total_ms  # computed delivery -> verdict
     if flow_k == "wait":
         # unknown decision + open claims: an observable wait, never a
-        # silent spin — the drift alarm and the tick cap still bound it
+        # silent spin — the drift alarm and the tick cap still bound it.
+        # The distill capability still runs (a wait is not a reason to
+        # starve the online-learning side — #458's contract)
         audit.emit(str(ctx.ws), "orchestrator", "kernel_wait",
                    detail={"decision": str(decision),
                            "tick": detail.get("ticks")})
+        _maybe_distill(ctx, detail)
         _posterior_drift_check(ctx)
         ctx.sleep_fn(tick_wait_seconds)
         return "continue", None, total_ms

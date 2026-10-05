@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 58
+    r1: 59
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
