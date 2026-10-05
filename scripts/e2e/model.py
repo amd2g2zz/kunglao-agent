@@ -261,6 +261,24 @@ def check_contamination(ws: Path) -> list[str]:
     return violations
 
 
+def resolve_candidate(ws: Path, task_yaml: Path) -> Path:
+    """The oracle face's replay candidate: the unit's OWN declaration
+    (task.yaml checker.candidate, ws-relative) when present, else the
+    smoke-rehearsal default artifacts/derive_reimpl.py. matrix4b G3:
+    the combat units' contract is a ws-root client.py — the hardcoded
+    rehearsal shape sent finished work to a no-candidate BLOCK."""
+    import yaml  # local import: yaml is a repo dependency, keep lean
+    try:
+        doc = yaml.safe_load(Path(task_yaml).read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        doc = {}
+    declared = ((doc.get("checker") or {}).get("candidate")
+                if isinstance(doc.get("checker"), dict) else None)
+    if isinstance(declared, str) and declared.strip():
+        return Path(ws) / declared.strip().lstrip("/")
+    return Path(ws) / "artifacts" / "derive_reimpl.py"
+
+
 def resolve_checker(repo: Path, family: str, unit: str) -> Path | None:
     """Checker path resolved from the REPO tree (never a /tmp copy)."""
     checker = Path(repo) / "eval/v1/tasks" / family / unit / "checker.py"

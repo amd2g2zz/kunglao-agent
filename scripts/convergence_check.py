@@ -532,6 +532,12 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
         status = (c.get("status") or "UNKNOWN").upper()
         if status not in TERMINAL or status == RETRACTED:
             continue
+        # scaffold seeds (init's lane/type/material decisions) are
+        # question-less BY DESIGN — closed PROVEN at birth, before the
+        # operator's questions exist. matrix4b: they must not hold
+        # CONVERGED hostage on finished work.
+        if str(c.get("claim_class") or "").lower() == "scaffold":
+            continue
         aq = c.get("answers_question")
         if not aq:
             out.append({"id": c.get("id"), "status": status})

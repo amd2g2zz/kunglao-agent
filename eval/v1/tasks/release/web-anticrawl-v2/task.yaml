@@ -3,20 +3,22 @@ task_id: web-anticrawl-v2
 tier: release
 family: web-anticrawl
 anchors:
-  goal_verbatim: 'Defeat the served anti-crawl shield across rotating transform versions: recover the
-    fingerprint canonicalization, both mix transforms, and the PoW input layout from the heavily obfuscated
-    SDK, and build a client that completes fresh sessions under server-side rotation and difficulty jitter.'
-  success_criterion: client.py completes 6/6 fresh sessions under the scheduled adversarial rotation (ver
-    1,1,1,2,2,2) with difficulty jitter, retrieving the protected payload each time; captured tokens never
-    replay.
+  goal_verbatim: 'Defeat the served anti-crawl shield across rotating transform versions:
+    recover the fingerprint canonicalization, both mix transforms, and the PoW input
+    layout from the heavily obfuscated SDK, and build a client that completes fresh
+    sessions under server-side rotation and difficulty jitter.'
+  success_criterion: client.py completes 6/6 fresh sessions under the scheduled adversarial
+    rotation (ver 1,1,1,2,2,2) with difficulty jitter, retrieving the protected payload
+    each time; captured tokens never replay.
   verification_method: reproduction
 workspace_scaffold:
   files:
   - capture/sdk.js
   language: javascript
   entry: capture/sdk.js
-  candidate_contract: A Python CLI client.py invoked as `python3 client.py --base <url>`; defeats the
-    rotating-version anti-crawl shield (fingerprint binding + PoW + timing envelope) per the success criterion.
+  candidate_contract: A Python CLI client.py invoked as `python3 client.py --base
+    <url>`; defeats the rotating-version anti-crawl shield (fingerprint binding +
+    PoW + timing envelope) per the success criterion.
 eval_version: eval-v1.1
 source: constructed
 seed: 51104
@@ -39,6 +41,7 @@ checker:
   thresholds:
     min_constant_hits: 3
     min_pair_ratio: 1.0
+  candidate: client.py
 contamination:
   held_out: true
   distiller_excluded: true

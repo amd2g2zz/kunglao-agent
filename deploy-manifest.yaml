@@ -287,7 +287,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: a06a4f8728680b397a5f7899870c3eef4115fd3c7335ab06bfcedff392cd49de
+    sha256: 60a49c3c451161eb4a63a99fdf34b59664a82848970b0a398208fe4c4dd60092
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -623,7 +623,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 66910755492e49e849db0503d60ea89426be3c17293cad8b0d2916edb3f44891
+    sha256: e32c76203f0f614eb0a17cf4809dc321de924c224f7883c63a9ddf9ef5cf5a3e
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1143,7 +1143,7 @@ files:
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
-    sha256: 33dc8d9d9e1da14b14759e94b8be1b7a58da84916e288138d55416677b273cec
+    sha256: 571aeb2981f92f95fbc35174a5380f405ef8252c6ab45b690131f27e024ced81
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
