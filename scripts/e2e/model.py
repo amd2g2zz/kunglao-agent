@@ -438,6 +438,9 @@ class DispatchRequest:
     # only by the C6 loop's launch (never the v1 envelope on disk —
     # serialized ONLY when set, the method_family precedent).
     timeout_s: int | None = None
+    # MCP arming: the unit-declared servers' tool prefixes riding the
+    # rack — runtime-only (never serialized; the envelope stays clean).
+    mcp_prefixes: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         emitted_ts = self.emitted_ts or utc_now()

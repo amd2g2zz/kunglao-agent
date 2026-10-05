@@ -61,3 +61,8 @@ anti_debug:
     keystream is silently corrupted (wrong-key observable, never an exception or log
     line)'
   self_defending: poison-semantics
+tools:
+  mcp_servers:
+    ida-pro-vm: http://127.0.0.1:8745/mcp
+  decompiler_lane: required
+  unpack: apk

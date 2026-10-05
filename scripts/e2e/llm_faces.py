@@ -80,6 +80,14 @@ def _rack_of(req: model.DispatchRequest) -> tuple[str, ...]:
     historical DEFAULT_RACK (byte-compatibility for every existing
     request shape — pins included)."""
     declared = tuple(req.tools or ())
+    mcp = tuple(getattr(req, "mcp_prefixes", ()) or ())
+    if mcp:
+        # the unit-declared MCP servers ride the rack (the arming face:
+        # a registered server an act may not call is decoration)
+        if declared and declared not in (DEFAULT_RACK,
+                                         LEGACY_UNDECLARED_RACK):
+            return declared + mcp
+        return DEFAULT_RACK + mcp
     if declared and declared not in (DEFAULT_RACK, LEGACY_UNDECLARED_RACK):
         return declared
     return DEFAULT_RACK
