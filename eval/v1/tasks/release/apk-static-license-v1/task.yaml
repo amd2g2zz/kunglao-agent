@@ -47,3 +47,5 @@ contamination:
 tools:
   decompiler_lane: required
   unpack: apk
+  mcp_servers:
+    ida-pro-vm: http://127.0.0.1:8745/mcp

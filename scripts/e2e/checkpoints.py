@@ -458,6 +458,8 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
         _canonical_dump(spec),
         encoding="utf-8")
     _merge_unit_tools(ctx.ws, Path(ctx.state.task_dir) / "task.yaml")
+    ctx.mcp_prefixes = tuple(_arm_mcp_supply(
+        ctx, Path(ctx.state.task_dir) / "task.yaml"))
     # C6-pre-3: claims C-004/C-005 into claim-register.yaml
     register = ctx.ws / "claim-register.yaml"
     reg_doc = (yaml.safe_load(register.read_text(encoding="utf-8"))
@@ -700,7 +702,8 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         method_family=method_family or None,
-        timeout_s=ladder_timeout_s)
+        timeout_s=ladder_timeout_s,
+        mcp_prefixes=getattr(ctx, "mcp_prefixes", ()) or ())
     return request, ctx.face.launch_dispatch(request)
 
 
@@ -1436,6 +1439,51 @@ def _settled_filtered_prior(rows: list[dict], families: list[str],
 
 
 # ---- K3: vocabulary-immune computed flow ----
+
+
+def _arm_mcp_supply(ctx: RunContext, task_yaml: "Path"
+                    ) -> list[str]:
+    """MCP arming: a unit's tools.mcp_servers {name: url} declaration
+    reaches the WORKER, not just the gate — the server lands in
+    ws/.mcp.json (the gate's workspace surface), the sudo-free
+    approval flag flips (a workspace-scope registration without
+    enableAllProjectMcpServers hangs pending-approval forever), and
+    the tool prefixes return to ride the act rack. No declaration:
+    nothing changes."""
+    import yaml as _y
+    try:
+        doc = _y.safe_load(Path(task_yaml).read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return []
+    servers = ((doc.get("tools") or {}).get("mcp_servers")
+               if isinstance(doc.get("tools"), dict) else None)
+    if not isinstance(servers, dict) or not servers:
+        return []
+    ws = Path(ctx.ws)
+    mcp_path = ws / ".mcp.json"
+    try:
+        mcp_doc = _y.safe_load(mcp_path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        mcp_doc = {}
+    entries = mcp_doc.get("mcpServers") or {}
+    prefixes: list[str] = []
+    for name, url in servers.items():
+        if isinstance(url, str) and url.strip():
+            entries[str(name)] = {"type": "http", "url": url.strip()}
+            prefixes.append("mcp__" + str(name))
+    mcp_doc["mcpServers"] = entries
+    mcp_path.write_text(json.dumps(mcp_doc, indent=2, sort_keys=True),
+                        encoding="utf-8")
+    set_path = ws / ".claude" / "settings.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        settings = json.loads(set_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        settings = {}
+    settings["enableAllProjectMcpServers"] = True
+    set_path.write_text(json.dumps(settings, indent=2, sort_keys=True),
+                        encoding="utf-8")
+    return sorted(prefixes)
 
 
 def _merge_unit_tools(ws, task_yaml: "Path") -> None:
