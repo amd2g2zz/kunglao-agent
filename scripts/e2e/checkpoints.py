@@ -919,7 +919,12 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         "VERIFIER contract (maker-checker #484): you VERIFY, you never "
         "make. Read the claim's facts and artifacts, run the workspace's "
         "verification faces (replay_equivalence, oracle probes, byte-exact "
-        "comparisons), and write runs/verification-"
+        "comparisons). When the claim answers a primary question under a "
+        "reproduction-verified task, the controlled-comparison artifact "
+        "MUST land as evidence/replay-<claim>.json (schema "
+        "replay-equivalence/1, one matched pair minimum) — the engine's "
+        "convergence face scans exactly that name; any other filename "
+        "starves the reproduction gate. Write runs/verification-"
         f"{claim}.md with a frontmatter verdict (verified|refuted) plus "
         "evidence citations (file:line). NEVER write facts/F*.md. If a "
         "state file must change, mutate it ONLY via `python3 "
@@ -1650,10 +1655,12 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
     observed ratio >= the task's required min_pair_ratio; a missing or
     unreadable evidence file FAILs (the checker always writes it — no
     vacuous pass)."""
-    candidate = ctx.ws / "artifacts" / "derive_reimpl.py"
+    candidate = model.resolve_candidate(
+        ctx.ws, Path(ctx.state.task_dir) / "task.yaml")
     if not candidate.is_file():
         return _record(ctx, "ORACLE", "oracle", model.BLOCKED, None, None,
-                       0, {"stop_class": "no-candidate"},
+                       0, {"stop_class": "no-candidate",
+                           "expected": str(candidate)},
                        [candidate])
     checker = model.resolve_checker(
         ctx.repo, family_of(Path(ctx.state.task_dir)), ctx.state.unit)

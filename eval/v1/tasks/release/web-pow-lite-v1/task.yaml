@@ -3,19 +3,20 @@ task_id: web-pow-lite-v1
 tier: release
 family: web-pow-lite
 anchors:
-  goal_verbatim: Reverse the served JS SDK, recover the challenge protocol (session-bound input, difficulty,
-    solver loop), and build a client that solves the low-difficulty proof for fresh sessions and retrieves
-    the protected payload.
-  success_criterion: client.py completes 4/4 fresh sessions solving the served difficulty and retrieving
-    the protected payload.
+  goal_verbatim: Reverse the served JS SDK, recover the challenge protocol (session-bound
+    input, difficulty, solver loop), and build a client that solves the low-difficulty
+    proof for fresh sessions and retrieves the protected payload.
+  success_criterion: client.py completes 4/4 fresh sessions solving the served difficulty
+    and retrieving the protected payload.
   verification_method: reproduction
 workspace_scaffold:
   files:
   - capture/sdk.js
   language: javascript
   entry: capture/sdk.js
-  candidate_contract: A Python CLI client.py invoked as `python3 client.py --base <url>`; solves the session-bound
-    PoW challenge and completes retrieval per the success criterion.
+  candidate_contract: A Python CLI client.py invoked as `python3 client.py --base
+    <url>`; solves the session-bound PoW challenge and completes retrieval per the
+    success criterion.
 eval_version: eval-v1.1
 source: constructed
 seed: 51102
@@ -38,6 +39,7 @@ checker:
   thresholds:
     min_constant_hits: 2
     min_pair_ratio: 1.0
+  candidate: client.py
 contamination:
   held_out: true
   distiller_excluded: true

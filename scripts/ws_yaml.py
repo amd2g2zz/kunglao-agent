@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import sys
 
+from pathlib import Path
+
 import yaml
 
 
@@ -96,7 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         with open(path, encoding="utf-8") as fh:
-            doc = yaml.safe_load(fh)
+            old_text = fh.read()
+            doc = yaml.safe_load(old_text)
     except (OSError, yaml.YAMLError) as exc:
         print(f"ws_yaml: unreadable/invalid target: {exc}", file=sys.stderr)
         return 3
@@ -126,6 +129,18 @@ def main(argv: list[str] | None = None) -> int:
         return 4
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
+    if cmd != "get" and Path(path).name == "claim-register.yaml":
+        # matrix4b G2: the sanctioned register write settles its claim
+        # transitions (the settlement ledger face). Workers write the register
+        # ONLY through this tool (single-writer), so without this leg
+        # every real promotion lands row-less and the C7 settlement
+        # gate starves. Fail-open: observability never breaks the set.
+        try:
+            from register_proven_gate import emit_settlements
+            emit_settlements(Path(path).parent, text, old_text)
+        except Exception as exc:  # noqa: BLE001 — never breaks the write
+            from kunglao_log import warn
+            warn("ws_yaml.settle", f"{type(exc).__name__}: {exc}")
     return 0
 
 
