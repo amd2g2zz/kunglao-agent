@@ -329,7 +329,7 @@ class AutoLlmFace:
             req.claim, self.mode, result_status,
             {"cmd": ["claude", "-p"], "rc": outcome.rc,
              "cwd": str(ws),
-             "timeout": CLAUDE_ACT_TIMEOUT_S,
+             "timeout": _req_timeout_s(req),
              "timed_out": outcome.timed_out,
              "duration_ms": duration_ms,
              "stdout_tail": outcome.stdout[-model.TAIL_CHARS:],
