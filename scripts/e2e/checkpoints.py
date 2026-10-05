@@ -1430,8 +1430,12 @@ def _open_claim_count(ctx: RunContext) -> int:
         reg = _y.safe_load(
             (ctx.ws / "claim-register.yaml").read_text(encoding="utf-8"))
         claims = (reg or {}).get("claims") or []
+        # DEFERRED is a decline, not actionable work (matrix4 wac: the
+        # engine ranked it unprioritized and BLOCKED with zero OPEN
+        # claims) — it does not keep a register open.
         return sum(1 for c in claims if str(c.get("status", "")
-                   ).upper() not in ("PROVEN", "REFUTED", "CLOSED"))
+                   ).upper() not in
+                   ("PROVEN", "REFUTED", "CLOSED", "DEFERRED"))
     except (OSError, ValueError):
         return -1  # unreadable = unknown, NOT zero (fail-closed read)
 
@@ -1447,8 +1451,12 @@ def _kernel_flow_for_decision(decision: str | None, *, all_open: bool
         return "break"
     if decision in ("DISPATCH", "DISPATCH_VERIFIER"):
         return "dispatch"
+    # matrix4 root (asl/wac/awa): a stop word over a SETTLED register
+    # is a DELIVERY — three units died 5/5-PROVEN one gate short of the
+    # verdict because BLOCKED terminated before the computed check ran.
+    # Stop words only stop when open work remains that cannot proceed.
     if decision in _STOP_DECISIONS:
-        return "stop"
+        return "deliver" if not all_open else "stop"
     # SATURATED / INVALID / None-tick / anything the vocabulary grows
     # tomorrow: the computed delivery check decides (never the spin)
     return "deliver" if not all_open else "wait"
