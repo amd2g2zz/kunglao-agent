@@ -416,6 +416,10 @@ class DispatchRequest:
     # method family; the envelope gains the key ONLY when set, so the v1
     # canonical envelope stays byte-compatible for current runs.
     method_family: str | None = None
+    # matrix4 K1 wiring: the Luby ladder's per-attempt timeout; set
+    # only by the C6 loop's launch (never the v1 envelope on disk —
+    # serialized ONLY when set, the method_family precedent).
+    timeout_s: int | None = None
 
     def to_dict(self) -> dict:
         emitted_ts = self.emitted_ts or utc_now()
@@ -432,6 +436,8 @@ class DispatchRequest:
         }
         if self.method_family:
             out["method_family"] = self.method_family
+        if self.timeout_s:
+            out["timeout_s"] = self.timeout_s
         return out
 
 

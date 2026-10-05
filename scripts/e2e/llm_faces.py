@@ -46,6 +46,14 @@ def _act_timeout_s() -> int:
 
 CLAUDE_ACT_TIMEOUT_S = _act_timeout_s()
 
+
+def _req_timeout_s(req) -> int:
+    """The effective act timeout: the request's Luby-ladder value when
+    the C6 loop set one (matrix4 K1 wiring), else the flat default."""
+    override = getattr(req, "timeout_s", None)
+    return override if isinstance(override, int) and override > 0 \
+        else CLAUDE_ACT_TIMEOUT_S
+
 #: the default tool rack for auto-mode acts (byte-compatible with the
 #: pre-rack history); a request declaring its own tools rack rides it
 #: through verbatim (the distill act declares a WebSearch-inclusive
@@ -258,7 +266,7 @@ class AutoLlmFace:
             command=["claude", "-p", f"<prompt-file:{req.prompt_file}>",
                      "--output-format", "json",
                      "--allowedTools", ",".join(_rack_of(req))],
-            cwd=str(ws), timeout=CLAUDE_ACT_TIMEOUT_S)
+            cwd=str(ws), timeout=_req_timeout_s(req))
         return None
 
     def run_dispatch(self, req: model.DispatchRequest,
@@ -288,7 +296,7 @@ class AutoLlmFace:
                "--allowedTools", ",".join(_rack_of(req))]
         started = time.monotonic()
         outcome = self.runner.run(cmd, cwd=str(ws),
-                                  timeout=CLAUDE_ACT_TIMEOUT_S)
+                                  timeout=_req_timeout_s(req))
         duration_ms = int((time.monotonic() - started) * 1000)
         # Parse the claude -p JSON for the agent's actual result
         # (rc=0 does NOT mean the analysis succeeded — #456 bug 2)
@@ -321,7 +329,7 @@ class AutoLlmFace:
             req.claim, self.mode, result_status,
             {"cmd": ["claude", "-p"], "rc": outcome.rc,
              "cwd": str(ws),
-             "timeout": CLAUDE_ACT_TIMEOUT_S,
+             "timeout": _req_timeout_s(req),
              "timed_out": outcome.timed_out,
              "duration_ms": duration_ms,
              "stdout_tail": outcome.stdout[-model.TAIL_CHARS:],
