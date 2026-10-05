@@ -367,7 +367,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: d9248322d36a20827b3cadbf769a3e3f865c75bea9d0531ec5256c30dd23d0a5
+    sha256: 9c34e6664f909928201c1b4b6a0f7bdead3692c260b9207914ac6e0a548913ae
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold

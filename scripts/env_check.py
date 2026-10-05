@@ -82,6 +82,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -639,14 +640,30 @@ def check_init_complete(ws: Path) -> tuple[bool, str]:
     return init_state.init_complete(ws)
 
 
+# matrix3 P5: the ONLY genuine task_spec shape is a top-level
+# ``sample_sha256: <64-hex>`` key. A substring line-scan misfired on
+# anchor prose naming an algorithm ("sha256(seed||nonce)") and armed
+# the bins/ probe against workspaces that recorded no hash at all.
+_SAMPLE_SHA_KEY_RE = re.compile(
+    r"^\s*sample_sha256:\s*[\"\']?([0-9a-fA-F]{64})[\"\']?\s*$")
+
+
 def read_sample_sha256(ws: Path) -> str | None:
-    """Sample sha256 from task_spec.yaml (best-effort; not a hard requirement)."""
+    """Sample sha256 from task_spec.yaml (best-effort; not a hard
+    requirement).
+
+    Only a GENUINE recorded hash counts: the top-level
+    ``sample_sha256`` key carrying a full 64-hex value. Prose that
+    mentions sha256 (anchors quoting an algorithm name) is not a
+    record; a non-hex value is not a hash. Everything else degrades
+    to None — the bins/ verification simply does not fire."""
     tspec = ws / "task_spec.yaml"
     if not tspec.exists():
         return None
     for line in tspec.read_text(encoding="utf-8", errors="replace").splitlines():
-        if "sha256" in line.lower() and ":" in line:
-            return line.split(":", 1)[1].strip().strip('"').strip("'")
+        m = _SAMPLE_SHA_KEY_RE.match(line)
+        if m:
+            return m.group(1).lower()
     return None
 
 
