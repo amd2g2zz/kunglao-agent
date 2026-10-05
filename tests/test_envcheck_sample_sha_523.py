@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""#523 G3 / matrix3 P5: read_sample_sha256 only reports a GENUINE
+"""matrix3 P5: read_sample_sha256 only reports a GENUINE
 recorded hash.
 
 matrix3's apk-webview-attest-v2 died at C6-pre with ``no sample under
