@@ -457,6 +457,7 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
     spec_path.write_text(
         _canonical_dump(spec),
         encoding="utf-8")
+    _merge_unit_tools(ctx.ws, Path(ctx.state.task_dir) / "task.yaml")
     # C6-pre-3: claims C-004/C-005 into claim-register.yaml
     register = ctx.ws / "claim-register.yaml"
     reg_doc = (yaml.safe_load(register.read_text(encoding="utf-8"))
@@ -1435,6 +1436,28 @@ def _settled_filtered_prior(rows: list[dict], families: list[str],
 
 
 # ---- K3: vocabulary-immune computed flow ----
+
+
+def _merge_unit_tools(ws, task_yaml: "Path") -> None:
+    """Toolchain parity: the unit's task.yaml tools declaration lands
+    in the workspace task_spec (the product file the env gates read).
+    A unit without a tools section changes nothing."""
+    import yaml as _y
+    try:
+        doc = _y.safe_load(Path(task_yaml).read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return
+    tools = doc.get("tools") if isinstance(doc, dict) else None
+    if not isinstance(tools, dict) or not tools:
+        return
+    spec_path = Path(ws) / "task_spec.yaml"
+    try:
+        spec = _y.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        spec = {}
+    merged = {**(spec.get("tools") or {}), **tools}
+    spec["tools"] = merged
+    spec_path.write_text(_canonical_dump(spec), encoding="utf-8")
 
 
 def _open_claim_count(ctx: RunContext) -> int:
