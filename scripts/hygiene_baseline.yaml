@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 59
+    r1: 61
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -353,6 +353,8 @@ files:
     r1: 2
   scripts/rlvr/feature_prior.py:
     r1: 2
+  scripts/rlvr/incremental_reward.py:
+    r1: 3
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -947,6 +949,8 @@ files:
     r1: 2
   tests/test_ida_scripting_card_163.py:
     r1: 3
+  tests/test_incremental_reward_539.py:
+    r1: 1
   tests/test_index_capability_annotations.py:
     r1: 3
   tests/test_index_docs_contract.py:
