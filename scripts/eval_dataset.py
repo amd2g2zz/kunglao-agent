@@ -146,6 +146,47 @@ def load_task(tdir: Path) -> dict:
     return yaml.safe_load((Path(tdir) / "task.yaml").read_text(encoding="utf-8"))
 
 
+def primary_questions(task: dict) -> list[dict]:
+    """The task's primary questions — the loop spine's question set.
+
+    Explicit first: a task.yaml ``primary_questions`` list passes through
+    STRICTLY validated (each item carries a non-empty string ``id`` and
+    ``q``; ``need`` optional; ``reproduction: true`` bit preserved). A
+    malformed explicit entry raises ValueError — the harness refuses to
+    run a unit whose question contract is broken rather than silently
+    degrading to the derived default (the #77 empty-set lesson).
+
+    Absent/empty: the derived default every eval unit carries — ONE
+    completion question restating the success criterion, need
+    yes_no_with_evidence, the reproduction bit armed when the declared
+    verification method is a replay oracle (replay_equivalence arms the
+    controlled-comparison face from the same method answer).
+    """
+    raw = task.get("primary_questions")
+    if isinstance(raw, list) and raw:
+        out: list[dict] = []
+        for i, q in enumerate(raw):
+            if not isinstance(q, dict) or not q.get("id") or not q.get("q"):
+                raise ValueError(
+                    f"primary_questions[{i}] must carry non-empty string "
+                    f"'id' and 'q', got {q!r}")
+            item = {"id": str(q["id"]), "q": str(q["q"])}
+            if q.get("need") is not None:
+                item["need"] = str(q["need"])
+            if q.get("reproduction") is True:
+                item["reproduction"] = True
+            out.append(item)
+        return out
+    return [{
+        "id": "PQ-DELIVER",
+        "q": ("Does the delivered candidate satisfy the success criterion "
+              f"verbatim: {task['anchors']['success_criterion']}"),
+        "need": "yes_no_with_evidence",
+        "reproduction": task["anchors"]["verification_method"]
+        in ("reproduction", "replay-evidence"),
+    }]
+
+
 # ---- validator (the executable mirror of schemas/eval-task-v1.json) ------
 def _validate_identity(task: dict, errors: list[str]) -> None:
     if task.get("schema") != "kunglao-eval-task/1":

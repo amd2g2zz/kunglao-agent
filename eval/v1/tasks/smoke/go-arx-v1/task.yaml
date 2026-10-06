@@ -12,6 +12,15 @@ anchors:
   success_criterion: A re-implementation carrying the three recovered constants that
     reproduces the 16 captured pairs and the checker-minted stdin probes.
   verification_method: reproduction
+primary_questions:
+- id: PQ-CONSTANTS
+  q: What are the three mutated constants embedded in target/sample_kdf.go?
+  need: protocol_description
+- id: PQ-DELIVER
+  q: Does the delivered KDF re-implementation reproduce the 16 captured pairs and
+    the checker-minted stdin probes byte-exact?
+  need: yes_no_with_evidence
+  reproduction: true
 workspace_scaffold:
   language: go
   files:
