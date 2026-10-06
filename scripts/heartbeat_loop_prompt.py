@@ -95,6 +95,9 @@ BLOCKED and CONVERGED is unreachable, no matter how good the deliverable is):
    2. The declared probe cases are ARMED (oracle/ case files + oracle/client.py) and green:
       `python {orr} <ws> --json` — with generalization required|unknown, zero armed cases
       keeps CONVERGED closed even after the operationalization passes.
+WRITE CONTRACTS (the guards refuse and the FIRST refusal burns wall — know them up front):
+   facts/F<NNN>.md MUST carry frontmatter id: F<NNN> + type: fact + title + status;
+   claim-register.yaml ONLY via scripts/ws_yaml.py set|del — direct Bash/Edits are refused (#516).
 Per-tick output contract: fill runs/.heartbeat-tick.json action_taken every tick with what the
 tick advanced (dispatched/verified/solved/reactivated); an empty field = idle fault.
 Worker pings use SendMessage "[ping HH:MM] step? stuck? eta?" and append replies to

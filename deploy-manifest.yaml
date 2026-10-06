@@ -531,7 +531,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: b357ec674505dc3d1f190c4af2ed8d7558c668891c39818c44b115bb9391bb81
+    sha256: 90f213c97f2fd8072608b7a5e91a30042957cfb11dc22fb44f22db25e6a016f2
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -1703,7 +1703,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 5145cdcf253b60923b90f48dffd39885047bc4de220a6c1fdaad62cd97950ade
+    sha256: 81dbd81214ac741978fd9ffe0c9157975d3268bb5c472329e96a79ee4763a218
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
