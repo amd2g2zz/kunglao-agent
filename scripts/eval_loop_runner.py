@@ -1649,8 +1649,10 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     q_cell_rows = _q_cell_face(ws) if arm == ARM else 0
     harness_failure, hf_reason = (classify_harness_failure(metrics, q_cell_rows)
                                   if arm == ARM else (False, ""))
-    if harness_failure:
-        status = "harness_failure"
+    # NOTE: the terminal status class stays untouched (the #380 P3-8
+    # discipline — exhausted/session_error are honest terminal rows);
+    # the harness class rides excluded_from_performance + governance,
+    # never as a status rewrite
 
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
@@ -1659,7 +1661,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         evidence_ref=res["evidence"], arm=arm)
     row["gap_redo"] = gap_redo["ran"]
     if arm == ARM:
-        row["governance"] = governance_block(metrics, status, q_cell_rows)
+        gov = governance_block(metrics, status, q_cell_rows)
+        if harness_failure:
+            gov["harness_failure"] = True
+            gov["harness_failure_reason"] = hf_reason
+        row["governance"] = gov
         row["excluded_from_performance"] = harness_failure
         if harness_failure:
             print(f"[kunglao-agent] eval_loop: {tdir.name} EXCLUDED from "
