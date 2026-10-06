@@ -527,11 +527,11 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: ee9ce0d684c2547cac044d3f1325d83a8300008d5f027c4f84bb779d650f3ec3
+    sha256: 6e9438d5e9c4339907dc13981c49ad4abdad9259262f30fd91085840505101f7
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: d5a23b5120f3bba9267f186c05a7d0da05713c5bd065ea73f38dee969a7217ec
+    sha256: b357ec674505dc3d1f190c4af2ed8d7558c668891c39818c44b115bb9391bb81
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -571,7 +571,7 @@ files:
   - src: scripts/infeasible_signal.py
     dest: .claude/scripts/infeasible_signal.py
     kind: scaffold
-    sha256: a839fce1d2402e2f2b9963f345f383623ef26af2c4080c2b6647c21abe6887c2
+    sha256: cbf3e66aa8d8a59ecae1c3520d58fb1d77eeeab596917dc597b806eeee9cdb43
   - src: scripts/init_channel_default.py
     dest: .claude/scripts/init_channel_default.py
     kind: scaffold
@@ -1223,7 +1223,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 4da0384360d02c15de371423c64a14a6a32c96d4d960196390a2bae4319909ee
+    sha256: 81c15c3b9f7ddb54d9362c98decd804478c340661c5f95f543d06de0634ab7b6
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1699,7 +1699,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: b9d33ec8370aa4340e3dcd8e363139ad427cf113edabcd50fed313df2e873515
+    sha256: 5145cdcf253b60923b90f48dffd39885047bc4de220a6c1fdaad62cd97950ade
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

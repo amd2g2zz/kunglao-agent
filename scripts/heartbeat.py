@@ -37,6 +37,7 @@ from rlvr.liveness import (  # noqa: E402,F401
     HEARTBEAT_LOG_NAME,
     TICK_HISTORY_CAP,
     TICK_HISTORY_KEY,
+    _parse_hb_ts,  # hooks/heartbeat_touch.py dedups sidecar pulses through it
     append_tick,
     append_tick_log,
     evaluate_tick_continuity,
@@ -64,7 +65,7 @@ __all__ = [
     "TICK_INTERVAL_DEFAULT_MIN",
     "append_tick", "append_tick_log", "heartbeat_log_path",
     "newest_sidecar_ts", "gap_alarm", "evaluate_tick_continuity",
-    "reset_continuity_baseline",
+    "reset_continuity_baseline", "_parse_hb_ts",
     # the CLI faces (this module)
     "LOOP_MARKER_KEY", "heartbeat_register", "mark_loop_registered",
     "heartbeat_check", "heartbeat_off", "utc_now",
