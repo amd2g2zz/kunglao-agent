@@ -71,6 +71,12 @@ def _load_state(ws: Path) -> dict:
         data = json.loads((Path(ws) / STATE_FILE).read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return data
+    except FileNotFoundError:
+        # Cold start: the state file first appears when an evaluate() call
+        # persists one — its absence on a fresh workspace is the normal
+        # pre-signal state, not a warnable anomaly (the 2026-10-06 smoke
+        # pilot logged FileNotFoundError warns on every cold first tick).
+        return {}
     except (OSError, json.JSONDecodeError) as exc:
         warn("_load_state", f"{type(exc).__name__}: {exc}")
     return {}

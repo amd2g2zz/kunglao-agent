@@ -65,6 +65,8 @@ def constitution(ws: str) -> str:
     """
     skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
     cc = str(skill_dir / "scripts" / "convergence_check.py")
+    go = str(skill_dir / "scripts" / "goal_operationalization.py")
+    orr = str(skill_dir / "scripts" / "oracle_runner.py")
     diff_line = _difficulty_guidance(ws)
     return f"""[kunglao-agent CONSTITUTION — injected once per session; the cron heartbeat no longer repeats it]
 Decision semantics (run `python {cc} {ws} --json`, read `decision`, then act — every decision MUST produce a convergence-advancing action; no action = idle fault):
@@ -74,6 +76,9 @@ Decision semantics (run `python {cc} {ws} --json`, read `decision`, then act —
                  worker death: any runs/.worker-death-*.json surfaced by the decision/stuck report ->
                  dispatch a RESUME claim per record: read its artifacts list FIRST, verify + absorb
                  the existing products, continue from where the worker died — do NOT redo from zero
+                 verification-undeclared BLOCKED (zero open claims, action names empty
+                 goal-operationalization.yaml fields) -> complete the PRE-DISPATCH CONTRACT; there
+                 is no claim to self-recover while the delivery contract is unaudited
    DEFERRED   -> check whether reactivation is possible (e.g. VM reachable again -> restore the claim)
    PARK       -> legal idle on external gates: record the wake_condition, then stop the heartbeat
                  (revive via mission_stall.py when the wake condition is met); a tick rc=2 with
@@ -82,6 +87,14 @@ Decision semantics (run `python {cc} {ws} --json`, read `decision`, then act —
    CONVERGED  -> run the closing checklist (blind_gate sign-off spot-check + kunglao-verify.py L1
                  re-run) + handoff-check PASS first, then stop the heartbeat (no cleanup before
                  convergence — deletion breaks dispatch)
+PRE-DISPATCH CONTRACT (do once, before the first dispatch — while it is unaudited EVERY decide is
+BLOCKED and CONVERGED is unreachable, no matter how good the deliverable is):
+   1. goal-operationalization.yaml passes `python {go} <ws>/goal-operationalization.yaml`
+      (draft: true = unaudited: fill deliverables/acceptance/not_done/diff_vs_verbatim/
+      probe_cases, validate, then --stamp-dispatch — it is append-only after the stamp).
+   2. The declared probe cases are ARMED (oracle/ case files + oracle/client.py) and green:
+      `python {orr} <ws> --json` — with generalization required|unknown, zero armed cases
+      keeps CONVERGED closed even after the operationalization passes.
 Per-tick output contract: fill runs/.heartbeat-tick.json action_taken every tick with what the
 tick advanced (dispatched/verified/solved/reactivated); an empty field = idle fault.
 Worker pings use SendMessage "[ping HH:MM] step? stuck? eta?" and append replies to
