@@ -76,7 +76,7 @@ def incremental_reward(phi_before: float, phi_after: float, *,
 
 
 def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
-                  s_hash: str = "") -> None:
+                  s_hash: str = "", propensity: float | None = None) -> None:
     """Stash the launch-side state at dispatch time — the settle face
     reads it to close the transition. Fail-open telemetry: never raises
     into the dispatch path."""
@@ -90,6 +90,8 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             "a": str(action_key),
             "s": str(s_hash),
             "phi": potential(ws) if phi is None else float(phi),
+            **({"propensity": float(propensity)}
+               if propensity is not None else {}),
         }), encoding="utf-8")
     except OSError as exc:  # telemetry, never the producer — but loud (#275)
         from kunglao_log import warn  # noqa: PLC0415
@@ -129,6 +131,8 @@ def append_transition(ws, claim: str, outcome: str, *,
             "r_settle": (round(float(r_settle), 6)
                          if r_settle is not None else None),
             "done": bool(done),
+            **({"propensity": launch["propensity"]}
+               if launch.get("propensity") is not None else {}),
         }
         out = ws / TRANSITIONS_REL
         out.parent.mkdir(parents=True, exist_ok=True)

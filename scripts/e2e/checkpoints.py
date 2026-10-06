@@ -671,18 +671,6 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "STATUS: DONE (or STATUS: BLOCKED + reason) well before the cap. "
         "An act killed at the cap banks zero facts credit.\n",
         encoding="utf-8")
-    if method_family:
-        audit.emit_method_family(str(ctx.ws), claim, method_family,
-                                 envelope=receipt)
-    # #539 PR-1: stash the launch-side Φ for the transition ledger —
-    # the settle face closes the (s, a, o, s', r) row from it. Pure
-    # telemetry, fail-open.
-    try:
-        ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-        ir.record_launch(str(ctx.ws), claim,
-                         action_key=method_family or "unattributed")
-    except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
-        kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     # #518 PR-2 (RC6, W1): open the pending q-cell observation at the
     # dispatch ALLOW-tail seam — the sampler's fold gets its dispatch
     # row and the settlement gets its match target. Fail-open telemetry:
@@ -698,9 +686,12 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
         envelope_meta={"method_family": method_family} if method_family else None,
         claim=claim, fingerprint=_fp)
-    # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record
+    # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record.
+    # SAMPLER receipts only: a declared proposal (method_family set by the
+    # run) is not a behavior-policy decision — its envelope stays None and
+    # the policy comparison correctly skips it
     try:
-        if method_family:
+        if method_family and receipt is not None:
             from rlvr import meta_arms as _ma2
             _rows = [r for r in qc_mod.JSONLQStore(
                 str(ctx.ws)).observations() if isinstance(r, dict)]
@@ -713,6 +704,20 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
                 receipt["fingerprint"] = _fp
     except Exception as exc:  # noqa: BLE001 — bonus, never a gate
         kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+    # the emit rides AFTER the propensity block: the receipt mutation
+    # post-emit never reached the durable audit row (the round-1 G3
+    # envelopes carry candidates but no propensity — the DR-OPE record
+    # face was silently broken)
+    if method_family:
+        audit.emit_method_family(str(ctx.ws), claim, method_family,
+                                 envelope=receipt)
+    try:
+        ir2 = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+        ir2.record_launch(str(ctx.ws), claim,
+                          action_key=method_family or "unattributed",
+                          propensity=(receipt or {}).get("propensity"))
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
+        kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
