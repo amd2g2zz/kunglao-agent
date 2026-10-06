@@ -1040,6 +1040,8 @@ files:
     r1: 8
   tests/test_logging_schema_818.py:
     r1: 1
+  tests/test_loop_completion_contract_523.py:
+    r1: 1
   tests/test_machine_check_contract.py:
     r1: 6
   tests/test_max_retries_604.py:
