@@ -12,6 +12,16 @@ anchors:
   success_criterion: A sign() re-implementation carrying the two recovered constants
     that reproduces every captured and checker-minted pair.
   verification_method: reproduction
+primary_questions:
+- id: PQ-CONSTANTS
+  q: What are the two load-bearing round constants in target/sign_bundle.js (distinct
+    from the decoys)?
+  need: protocol_description
+- id: PQ-DELIVER
+  q: Does the delivered sign() re-implementation reproduce every captured and
+    checker-minted pair?
+  need: yes_no_with_evidence
+  reproduction: true
 workspace_scaffold:
   language: javascript
   files:

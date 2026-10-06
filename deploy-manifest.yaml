@@ -423,11 +423,11 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: 97f5f29f9da5159471e7a521169d647ed50f92e14b7d93c88b24a65933bb7603
+    sha256: dfa9d717f283ec0b1f26350ebec03943cb321f62e0dc854d1dc2f0dd0465638f
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: e93d38d1eb4848125725e7146e9a8a1377c3e18811f85cb295ce808eb64e785b
+    sha256: b7e05221b3691c7791b5c53e6539c20aabba3ffb2c331bc15e4df31babfec159
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
-    sha256: 484fede125ab23ba932cbb6f91b7f15c40ee793190f58b73b590377b8b8bc505
+    sha256: 78c2daed662db901b7d4585730f845cd4c49e7776130dabe11609a63a05ea212
   - src: scripts/eval_split_lint.py
     dest: .claude/scripts/eval_split_lint.py
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 9ba38aefc5e6e6f34b81b2ec8c3890bc743f4c8dab0a74623d7a3675681d225d
+    sha256: b2cf639612bc614f4f404c76eb8f1fb29838e898a6b91f30078f562a38c8fb2a
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

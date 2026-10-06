@@ -136,13 +136,15 @@ files:
   scripts/eval_crypto.py:
     r1: 1
   scripts/eval_dataset.py:
-    r1: 2
+    r1: 3
   scripts/eval_loop_runner.py:
-    r1: 4
+    r1: 8
   scripts/eval_native_sources.py:
     r1: 1
   scripts/eval_native_targets.py:
     r1: 1
+  scripts/eval_smoke_runner.py:
+    r1: 2
   scripts/eval_split_lint.py:
     r1: 2
   scripts/eval_targets.py:
@@ -799,6 +801,8 @@ files:
     r1: 1
   tests/test_eval_harness.py:
     r1: 16
+  tests/test_eval_loop_closure_523.py:
+    r1: 1
   tests/test_eval_loop_runner_334.py:
     r1: 1
   tests/test_eval_native_332.py:

@@ -12,6 +12,15 @@ anchors:
   success_criterion: A derive() re-implementation that reproduces every published
     and checker-minted probe output exactly.
   verification_method: reproduction
+primary_questions:
+- id: PQ-PARAMS
+  q: What are the three parameters of the derivation in target/derive.py?
+  need: protocol_description
+- id: PQ-DELIVER
+  q: Does the delivered derive() re-implementation reproduce every published and
+    checker-minted probe output exactly?
+  need: yes_no_with_evidence
+  reproduction: true
 workspace_scaffold:
   language: python
   files:
