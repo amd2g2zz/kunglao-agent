@@ -1160,6 +1160,10 @@ files:
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
     sha256: 32bbec9346156ed47ca0d8300f9f2974466f0a06182831b4f18c13840fd9d221
+  - src: scripts/rlvr/incremental_reward.py
+    dest: .claude/scripts/rlvr/incremental_reward.py
+    kind: scaffold
+    sha256: 0693a30f17d9978e737de860634db0a6d3e56dd911d81ca492a53f4bae3992eb
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold

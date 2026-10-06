@@ -668,6 +668,15 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
                                  envelope=receipt)
+    # #539 PR-1: stash the launch-side Φ for the transition ledger —
+    # the settle face closes the (s, a, o, s', r) row from it. Pure
+    # telemetry, fail-open.
+    try:
+        ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+        ir.record_launch(str(ctx.ws), claim,
+                         action_key=method_family or "unattributed")
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
+        kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     # #518 PR-2 (RC6, W1): open the pending q-cell observation at the
     # dispatch ALLOW-tail seam — the sampler's fold gets its dispatch
     # row and the settlement gets its match target. Fail-open telemetry:
@@ -769,6 +778,22 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
         _n_facts = _facts_citing(ctx.ws, claim)
         _bin = 1.0 if act.outcome == "DISPATCHED" else 0.0
         credit = min(1.0, _bin * 0.5 + 0.5 * min(1.0, _n_facts / 2.0))
+        # #539 PR-1: the transition row — s from the launch stash, Φ(s′)
+        # computed now, r_incr = ALPHA·ΔΦ − LAMBDA·cost, r_settle = the
+        # ladder credit above. The cost face: duration_ms rides the act's
+        # audit row; wall seconds serve when it is absent.
+        try:
+            ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+            _dur_ms = getattr(act, "duration_ms", None) or 0
+            ir.append_transition(
+                str(ctx.ws), claim, str(act.outcome),
+                status=str(getattr(act, "status", "") or ""),
+                facts=_n_facts,
+                seconds=float(_dur_ms) / 1000.0,
+                r_settle=credit)
+        except Exception as exc:  # noqa: BLE001 — telemetry
+            kunglao_log.warn("e2e.transition",
+                             f"{type(exc).__name__}: {exc}")
         res = qc.observe_settlement(str(ctx.ws), claim, credit)
         if res.get("matched") and res.get("appended"):
             # #524 item 3: censoring made visible — a TIMEOUT is
