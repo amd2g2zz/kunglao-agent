@@ -91,8 +91,10 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             "s": str(s_hash),
             "phi": potential(ws) if phi is None else float(phi),
         }), encoding="utf-8")
-    except OSError:
-        pass  # telemetry, never the producer
+    except OSError as exc:  # telemetry, never the producer — but loud (#275)
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("incremental_reward.record_launch",
+             f"{type(exc).__name__}: {exc}")
 
 
 def append_transition(ws, claim: str, outcome: str, *,
@@ -134,7 +136,10 @@ def append_transition(ws, claim: str, outcome: str, *,
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         launch_p.unlink(missing_ok=True)  # stash consumed
         return row
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError) as exc:  # loud telemetry (#275)
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("incremental_reward.append_transition",
+             f"{type(exc).__name__}: {exc}")
         return None  # telemetry, never the producer
 
 

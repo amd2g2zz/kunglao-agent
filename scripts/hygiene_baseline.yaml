@@ -354,7 +354,7 @@ files:
   scripts/rlvr/feature_prior.py:
     r1: 2
   scripts/rlvr/incremental_reward.py:
-    r1: 1
+    r1: 3
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
