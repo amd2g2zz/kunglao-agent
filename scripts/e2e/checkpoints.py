@@ -663,7 +663,13 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "act.\n"
         "2. End your final message with a line 'STATUS: DONE' (or 'STATUS: "
         "BLOCKED' with the reason) so the orchestrator parses your outcome "
-        "precisely.\n",
+        "precisely.\n"
+        f"3. ACT BUDGET: this act is KILLED at {ladder_timeout_s}s — no "
+        "extension, no in-act retry (the subprocess cap is external). "
+        "Schedule accordingly: pin each fact the moment it is established, "
+        "write the deliverable before 70% of the budget, and END with "
+        "STATUS: DONE (or STATUS: BLOCKED + reason) well before the cap. "
+        "An act killed at the cap banks zero facts credit.\n",
         encoding="utf-8")
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
@@ -784,12 +790,17 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
         # audit row; wall seconds serve when it is absent.
         try:
             ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-            _dur_ms = getattr(act, "duration_ms", None) or 0
+            # G3-matrix fix: ActRecord carries duration in DETAIL
+            # (claim/mode/outcome/detail) — the first wiring read a
+            # phantom act.duration_ms and every TIMEOUT row banked
+            # r_incr=0.0 instead of the -cost term
+            _dur_ms = (act.detail or {}).get("duration_ms") \
+                if isinstance(act.detail, dict) else None
             ir.append_transition(
                 str(ctx.ws), claim, str(act.outcome),
-                status=str(getattr(act, "status", "") or ""),
+                status=str(getattr(act, "mode", "") or ""),
                 facts=_n_facts,
-                seconds=float(_dur_ms) / 1000.0,
+                seconds=float(_dur_ms or 0) / 1000.0,
                 r_settle=credit)
         except Exception as exc:  # noqa: BLE001 — telemetry
             kunglao_log.warn("e2e.transition",
@@ -960,7 +971,12 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         "scripts/ws_yaml.py set|del <file> <dotted.path> <value>` — "
         "claim-register.yaml is single-writer (#516) and direct writes "
         "(cat/sed/python-open/Edit/Write) are refused by the write guard. "
-        "End with STATUS: DONE or STATUS: BLOCKED.\n",
+        "End with STATUS: DONE or STATUS: BLOCKED.\n"
+        f"ACT BUDGET: this act is KILLED at {llm_faces.CLAUDE_ACT_TIMEOUT_S}s "
+        "— verify ONLY (never expand scope), write the verification file "
+        "before 70% of the budget, and END before the cap. A verifier "
+        "killed at the cap leaves the claim unverified and the loop "
+        "blocked.\n",
         encoding="utf-8")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),

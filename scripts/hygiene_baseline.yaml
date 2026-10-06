@@ -482,6 +482,8 @@ files:
     r1: 2
   tests/test_acceptance_689.py:
     r1: 4
+  tests/test_act_budget_523.py:
+    r1: 1
   tests/test_adversarial_gate_909.py:
     r1: 2
   tests/test_adversarial_loop_909.py:
