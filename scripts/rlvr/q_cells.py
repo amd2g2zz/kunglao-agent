@@ -896,7 +896,8 @@ def observe_settlement(ws, dispatch_id: str, credit,
     amendment) is blocked from re-banking by the settlement-presence
     guard in scalar.settle_round_credit; a future ledger PRUNE +
     re-settle of the same claim would re-bank into the stale row — the
-    named v1 limitation. The credit arriving here is the settled #433 ladder value (verified = admission
+    named v1 limitation. The credit arriving here is the settled #433
+    ladder value (verified = admission
     ticket, cited-toward-stage = value — the ladder ran upstream in
     scalar.round_credit); the append boundary clamps it into [0, 1]
     (r_r is rail-clamped per #429 §4). No matching dispatch row is the

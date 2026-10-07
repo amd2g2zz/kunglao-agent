@@ -566,7 +566,45 @@ def _cold_seed_prior(ws, registered: list[str]) -> dict[str, float]:
     return prior
 
 
-def _sample_envelope_family(ws, require_family: str | None = None) -> tuple[str, dict | None]:
+def _sampler_extras(ws, prior: dict) -> dict:
+    """The #460/#461/#545 optional sampler kwargs, each fail-open to its
+    pre-wiring shape (a broken extra never breaks the loop): the
+    predict-before-try feature prior (flag-gated), the option-death
+    verdicts, the cross-task warm-start pools (#545), and the keyed
+    consumption arm context (#545 — the same recipe/verif/tier the
+    dispatch meta records, so the keyed read matches the keyed write)."""
+    kwargs: dict = {}
+    try:
+        from rlvr import feature_prior as _fp
+        if _fp.enabled():
+            features = _fp.features_from_workspace(ws)
+            if features:
+                kwargs = {"features": features,
+                          "feature_table": _fp.default_table_path(ws)}
+    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
+        kunglao_log.warn("e2e.feature_prior",
+                         f"{type(_exc).__name__}: {_exc}")
+    try:
+        from rlvr import termination as _t461
+        _death = _t461.verdicts(ws, prior.keys())
+    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
+        kunglao_log.warn("e2e.termination", f"{type(_exc).__name__}: {_exc}")
+        _death = {}
+    if _death:
+        kwargs["death"] = _death
+    try:
+        from rlvr import strategy_store as _ss
+        pools = _ss.warm_pools(ws, prior.keys())
+        if pools:
+            kwargs["warm_pools"] = pools
+    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
+        kunglao_log.warn("e2e.warm_pools", f"{type(_exc).__name__}: {_exc}")
+    kwargs["arm_context"] = dict(_DISPATCH_ARM_CONTEXT)
+    return kwargs
+
+
+def _sample_envelope_family(ws, require_family: str | None = None
+                            ) -> tuple[str, dict | None]:
     """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
 
     The P_LLM x Q draw (``rlvr.q_cells.sample_method_family``) picks the
@@ -621,47 +659,7 @@ def _sample_envelope_family(ws, require_family: str | None = None) -> tuple[str,
             vals = list(prior.values())
             prior[require_family] = (sum(vals) / len(vals)) if vals else 1.0
         rng, _round = q_cells.q_cells_seed_state(ws)
-        # #460 Part B wiring (predict-before-try): thread the live
-        # instance features + the mined feature table into call site 2
-        # when KUNGLAO_PREDICT_BEFORE_TRY is on — fail-open to the
-        # flag-off sampler shape (a broken prior never breaks the loop)
-        kwargs: dict = {}
-        try:
-            from rlvr import feature_prior as _fp
-            if _fp.enabled():
-                features = _fp.features_from_workspace(ws)
-                if features:
-                    kwargs = {"features": features,
-                              "feature_table": _fp.default_table_path(ws)}
-        except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-            kunglao_log.warn("e2e.feature_prior",
-                             f"{type(_exc).__name__}: {_exc}")
-            kwargs = {}
-        # #461 Phase 2 wiring (option-death termination): thread the
-        # per-candidate death verdicts — dead options sample at the
-        # ARM_FLOOR, never removed (the PARK posture: revivable by new
-        # alive evidence). Fail-open to the termination-blind sampler
-        # shape; the zero-registry rule threads no kwarg at all.
-        try:
-            from rlvr import termination as _t461
-            _death = _t461.verdicts(ws, prior.keys())
-        except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-            kunglao_log.warn("e2e.termination",
-                             f"{type(_exc).__name__}: {_exc}")
-            _death = {}
-        if _death:
-            kwargs["death"] = _death
-        # #545 WS2 wiring: the warm start (cross-task anchor pools) +
-        # the keyed consumption read (the dispatch meta's arm context).
-        try:
-            from rlvr import strategy_store as _ss
-            pools = _ss.warm_pools(ws, prior.keys())
-            if pools:
-                kwargs["warm_pools"] = pools
-        except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-            kunglao_log.warn("e2e.warm_pools",
-                             f"{type(_exc).__name__}: {_exc}")
-        kwargs["arm_context"] = dict(_DISPATCH_ARM_CONTEXT)
+        kwargs = _sampler_extras(ws, prior)
         receipt = q_cells.sample_method_family(
             rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
         return str(receipt["family"]), receipt
