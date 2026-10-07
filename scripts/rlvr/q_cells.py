@@ -693,13 +693,27 @@ def _append_row(path: Path, row: dict) -> bool:
         return False
 
 
+def arm_key(method_family: str, context_recipe: str,
+            verification_mode: str, tier) -> str:
+    """#539 WS1: the 4-dim arm key (family|recipe|verif|tier) — the
+    anti-explosion compromise: tool_sequence/budget/control ride as
+    feature columns, never as key dimensions. Tier buckets to int."""
+    try:
+        t = int(tier)
+    except (TypeError, ValueError):
+        t = 0
+    return f"{method_family}|{context_recipe}|{verification_mode}|{t}"
+
+
 def append_observation(ws, signature_hash: str, method_family: str,
                        credit: float | None = None, *, source: str,
                        claim: str | None = None,
                        agent: str | None = None,
                        dispatch_id: str | None = None,
                        ts: str | None = None,
-                       fingerprint: str | None = None) -> dict:
+                       fingerprint: str | None = None,
+                       arm_key_col: str | None = None,
+                       action_type: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -722,6 +736,12 @@ def append_observation(ws, signature_hash: str, method_family: str,
         "dispatch_id": dispatch_id,
         "fingerprint": fingerprint,
         "credit": credit_out,
+        # #539 WS1 dual-write: the 4-dim arm key + the policy's action
+        # type. The posterior fold still keys method_family — the
+        # keyed-consumption switch lands with the cross-task store (WS2),
+        # so this PR is recording-only (zero behavior change).
+        "arm_key": arm_key_col,
+        "action_type": action_type,
     }
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended, "row": row}
@@ -828,9 +848,19 @@ def record_dispatch_observation(ws, prompt: str, *,
             return {"appended": False, "reason": "undeclared",
                     "family": None, "signature_hash": None}
         sig = ssig.signature_hash(ssig.snapshot(ws))
+        # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
+        # (v1 back-fill defaults keep legacy shapes identical)
+        meta = envelope_meta if isinstance(envelope_meta, dict) else {}
+        recipe = str(meta.get("context_recipe") or "facts_snapshot")
+        verif = str(meta.get("verification_mode") or "none")
+        tier = meta.get("tier", 0)
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
-                                 fingerprint=fingerprint)
+                                 fingerprint=fingerprint,
+                                 arm_key_col=arm_key(family, recipe,
+                                                     verif, tier),
+                                 action_type=str(meta.get("action_type")
+                                                 or "dispatch"))
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer

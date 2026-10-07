@@ -1,6 +1,6 @@
-# Kunglao v0.2 主计划：从经验路由器到可学习的策略控制器
+# Kunglao RLVR 收官计划（本版本）：从经验路由器到可学习的策略控制器
 
-状态：owner 讨论定稿（2026-10-07），取代 external-smdp-phase-b.md 作为总纲
+状态：owner 裁定 2026-10-07——WS1-WS5 全部是本版本范围（无 v0.1.7/v0.2 顺延；发版三件套在 WS5 证据之后）；取代 external-smdp-phase-b.md 作为总纲
 前置裁决（全部已锁定）：
 - 基础模型**永远冻结**——外部 RL/记忆/搜索/验证/调度是超越 model+CC 的唯一来源
 - **critic 出局**（不具备条件；bandit 级方法覆盖信用分配，数据证明不够再议）
@@ -56,8 +56,8 @@ L3 发现层          障碍→生成历史里没有的新臂（expansion move�
 ## 3. 工作流（优先级序）
 
 ### WS0 交付线（进行中，不改算法）
-- G3 round-2 终局 + 80/20 计量（regret-weighted decision points，诚实报数）
-- v0.1.6 发版三件套（owner 门）
+- G3 round-2 终局 + 80/20 初测（regret-weighted decision points，诚实报数）
+- 发版三件套移至 WS5 证据之后（owner 2026-10-07：这个版本就要解决）
 - CI 管道病（#538）：checkout TLS 波次 + pull_request 事件丢失，观察项不阻塞
 
 ### WS1 动作空间升级（PR-3a，schema 层）

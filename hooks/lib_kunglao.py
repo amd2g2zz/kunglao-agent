@@ -68,6 +68,34 @@ DISPATCH_JSON_START_RE = re.compile(
 )
 
 DISPATCH_PROTOCOL_VERSION = 1
+# v2 (issue #539 WS1): the external-SMDP action tuple rides the envelope —
+# action_type (the policy's chosen act, incl. distill/recall meta-actions),
+# context_recipe, verification_mode, branch_budget, control. v1 envelopes
+# stay first-class: every v2 field defaults on a v1 read (back-fill, never
+# reject). The 4-dim arm key (family|recipe|verif|tier) is DERIVED, not
+# carried — tier already rides the envelope.
+DISPATCH_PROTOCOL_VERSIONS = (1, 2)
+ACTION_TYPES = ("dispatch", "verify", "recall-history", "distill-online",
+                "distill-hybrid", "replan", "rollback", "stop")
+CONTEXT_RECIPES = ("minimal", "facts_snapshot", "facts_anti_hints",
+                   "full_recall")
+VERIFICATION_MODES = ("none", "replay_probe", "oracle_case", "red_team")
+
+
+def envelope_v2_defaults(payload: dict) -> dict:
+    """The v2 action fields with v1 back-fill defaults — the ONE face
+    every consumer reads the action tuple through (kwargs-drift guard)."""
+    return {
+        "action_type": str(payload.get("action_type") or "dispatch"),
+        "context_recipe": str(payload.get("context_recipe")
+                              or "facts_snapshot"),
+        "verification_mode": str(payload.get("verification_mode")
+                                 or "none"),
+        "branch_budget": (payload.get("branch_budget")
+                          if isinstance(payload.get("branch_budget"), dict)
+                          else {}),
+        "control": str(payload.get("control") or "continue"),
+    }
 
 
 # ---- #567 SECURITY: MCP tool prefix enforcement (single source) ----
@@ -154,7 +182,7 @@ def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | N
     payload = payload_obj.get("kunglao_dispatch")
     if not isinstance(payload, dict):
         return (0, [], None, None)
-    if int(payload.get("version", 0)) != DISPATCH_PROTOCOL_VERSION:
+    if int(payload.get("version", 0)) not in DISPATCH_PROTOCOL_VERSIONS:
         return (0, [], None, None)
     claim_id = payload.get("claim")
     tier = int(payload.get("tier", 0))

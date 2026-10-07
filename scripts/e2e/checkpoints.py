@@ -642,10 +642,17 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     receipt: dict | None = None
     if not method_family:
         method_family, receipt = _sample_envelope_family(ctx.ws)
+    # #539 WS1: the v2 action tuple — action_type dispatch (the worker
+    # act), context recipe = the facts-snapshot assembly this prompt
+    # actually ships, verification_mode none (verification is a SEPARATE
+    # act, never bundled into the maker)
     dispatch_meta: dict = {
-        "version": 1, "claim": claim, "tier": 1,
+        "version": 2, "claim": claim, "tier": 1,
         "tools": ["grep", "python3"],
-        "agent": "kunglao-worker"}
+        "agent": "kunglao-worker",
+        "action_type": "dispatch",
+        "context_recipe": "facts_snapshot",
+        "verification_mode": "none"}
     if method_family:
         dispatch_meta["method_family"] = method_family
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
@@ -684,7 +691,12 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
     qc_mod.record_dispatch_observation(
         str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
-        envelope_meta={"method_family": method_family} if method_family else None,
+        envelope_meta=({"method_family": method_family,
+                        "action_type": "dispatch",
+                        "context_recipe": "facts_snapshot",
+                        "verification_mode": "none",
+                        "tier": 1}
+                       if method_family else None),
         claim=claim, fingerprint=_fp)
     # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record.
     # SAMPLER receipts only: a declared proposal (method_family set by the
@@ -958,8 +970,11 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(
         json.dumps({"kunglao_dispatch": {
-            "version": 1, "claim": claim, "tier": 1,
-            "agent": "kunglao-verifier"}})
+            "version": 2, "claim": claim, "tier": 1,
+            "agent": "kunglao-verifier",
+            "action_type": "verify",
+            "context_recipe": "facts_snapshot",
+            "verification_mode": "replay_probe"}})
         + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
         "VERIFIER contract (maker-checker #484): you VERIFY, you never "
         "make. Read the claim's facts and artifacts, run the workspace's "

@@ -35,7 +35,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: bbe2993e1352de0fa142b6d4cbd78d0612866cc6318ebbad7d587db9fdc8845b
+    sha256: cfb0a70ce23eb8277d32a2d5148338583e297d064f75b77af8afa4581a08fcfc
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -1195,7 +1195,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: bd6efa3b79cabfb031972cf58602cdaa17be81b64a6db831952cf24b77c35f65
+    sha256: 4748fad1feb3c05881beab11be1a386f3fd0cc543b4812127c795ed69b6513ae
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1231,7 +1231,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 6214efeb46513590ccd0b3f701082b86d8462830922a7693458b18b2f00b7ea2
+    sha256: ee5616ca7846dc4c234d83b93cbc872b3607bb9a40ad57dfcf54430008ea0207
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

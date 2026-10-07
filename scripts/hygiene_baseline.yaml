@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 60
+    r1: 61
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -366,7 +366,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 2
   scripts/rlvr/q_cells.py:
-    r1: 18
+    r1: 21
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
@@ -485,6 +485,8 @@ files:
   tests/test_acceptance_689.py:
     r1: 4
   tests/test_act_budget_523.py:
+    r1: 1
+  tests/test_action_space_539.py:
     r1: 1
   tests/test_adversarial_gate_909.py:
     r1: 2
