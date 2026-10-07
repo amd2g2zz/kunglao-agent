@@ -94,6 +94,44 @@ def _scan_unit(repo: Path, unit: str,
     return out
 
 
+def _scan_posterior_store(paths: list[Path],
+                          units: list[str]) -> list[str]:
+    """#545: the schema-aware posterior-store face. Every scalar VALUE
+    inside a ``posterior-store/1`` row is checked against the holdout
+    unit-ids — a store row carrying a holdout unit-id means the
+    write-face filter (rlvr.strategy_store.append_row, filter BEFORE
+    append) was bypassed, so the violation names the row. The generic
+    whole-file scan above still covers the raw bytes; this class exists
+    so the failure is attributable to the exact row."""
+    out: list[str] = []
+    for p in paths:
+        if p.name != "posterior-store.jsonl":
+            continue
+        try:
+            lines = p.read_text(encoding="utf-8",
+                                errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # malformed bytes: the generic scan still sees them
+            blob = " ".join(_walk_constants(row)).lower()
+            for unit in units:
+                if unit.lower() in blob:
+                    out.append(
+                        f"LEAK[POSTERIOR_STORE_UNIT_ID] {unit}: "
+                        f"posterior-store.jsonl row {ln} carries the "
+                        f"holdout unit-id — the write-face filter was "
+                        f"bypassed (priors are feature-keyed, never "
+                        f"identity-keyed, #518)")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     repo = Path(__file__).resolve().parents[1]
@@ -129,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for unit in interp + extrap:
         violations += _scan_unit(repo, unit, texts)
+    violations += _scan_posterior_store(files, interp + extrap)
 
     if violations:
         print("\n".join(violations))

@@ -162,6 +162,17 @@ BASE_BETA = 1.0
 # ADR-001 governance procedure (replay evidence + pins).
 SHRINK_CAP = 8.0
 
+# #548 follow-up (rides WS2, #545): the Φ tiebreaker weight on the
+# credit READ face. The censored-review verdict (PR #549) showed
+# censored-with-facts rows moving Φ +0.079 while clean failures moved
+# −0.009, both banking ≈0.5 credit — the punishment did not track state
+# work. The tiebreak shifts the effective credit by
+# PHI_TIEBREAK_WEIGHT · phi_delta BEFORE the [0,1] clamp, so at equal
+# banked credit the row that moved the state forward folds stronger.
+# Policy constant (NOT fitted); rows without a phi_delta field are
+# bit-identical to the pre-change fold (the determinism wall).
+PHI_TIEBREAK_WEIGHT = 0.25
+
 
 def _seq_sum(values) -> float:
     """Input-order float64 reduction — the settlement determinism axiom
@@ -315,13 +326,20 @@ class Fold:
         """(success, failure) mass over ALL signatures — the family
         global aggregate the anchor is built from.
 
+        #545 keyed consumption: cells are keyed by the 4-dim arm_key
+        (family|recipe|verif|tier) since WS1's dual-write, so the family
+        aggregate pools every cell whose key's FAMILY PART matches
+        (``family_of_action``) — legacy family-keyed cells match
+        directly. Consumers that read by family (termination.alive,
+        the anchor) are family-addressed, never key-addressed.
+
         numpy adoption (issue 420 Phase 2, README rule 1): the mass
         accumulation runs through _seq_sum — cell insertion order,
         bit-identical to the former += loop and interpreter-stable
         (builtin sum() went Neumaier in 3.12)."""
         cells = [(cell.success, cell.failure)
-                 for (_sig, fam), cell in self.cells.items()
-                 if fam == family]
+                 for (_sig, key), cell in self.cells.items()
+                 if family_of_action(key) == family]
         return (_seq_sum([s for s, _ in cells]),
                 _seq_sum([f for _, f in cells]))
 
@@ -331,6 +349,42 @@ def _credit_of(row: dict):
     if isinstance(c, bool) or not isinstance(c, (int, float)):
         return None
     return float(c)
+
+
+def _phi_delta_of(row: dict) -> float:
+    """The row's Φ movement (the #548 tiebreaker raw material); absent or
+    non-numeric fields fail open to 0.0 (the bit-identity wall)."""
+    pd = row.get("phi_delta")
+    if isinstance(pd, bool) or not isinstance(pd, (int, float)):
+        return 0.0
+    return float(pd)
+
+
+def tiebroken_credit(credit: float, phi_delta) -> float:
+    """The #548 tiebreaker on the credit read: clamp01(credit +
+    PHI_TIEBREAK_WEIGHT · phi_delta). phi_delta=0/None is bit-identical
+    to the raw credit (the branch makes the wall auditable)."""
+    credit = max(0.0, min(1.0, float(credit)))
+    pd = phi_delta if isinstance(phi_delta, (int, float)) \
+        and not isinstance(phi_delta, bool) else 0.0
+    if pd == 0.0:
+        return credit
+    return max(0.0, min(1.0, credit + PHI_TIEBREAK_WEIGHT * float(pd)))
+
+
+def family_of_action(action_key: str) -> str:
+    """The FAMILY part of a consumed action key: the 4-dim arm_key's
+    first segment, or the key itself for legacy family-keyed rows (the
+    dual-write tolerance — #539 WS1 recorded the key, #545 consumes it)."""
+    k = str(action_key or "")
+    return k.split("|", 1)[0] if "|" in k else k
+
+
+def _action_key_of(row: dict) -> str:
+    """The row's consumption key: the arm_key column when present, else
+    the bare method_family (old logs keep folding exactly as before)."""
+    ak = str(row.get("arm_key") or "").strip()
+    return ak or str(row.get("method_family") or "")
 
 
 def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
@@ -349,7 +403,19 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     Age = append-order distance from the END of the global credit stream
     (uniform tree decay; no wall clock — machine-independent replay).
     Pending rows (credit=None) count toward n_pending only, never
-    posterior mass."""
+    posterior mass.
+
+    #545 keyed consumption: rows group by the 4-dim arm_key
+    (family|recipe|verif|tier — dual-written since WS1); rows without an
+    arm_key fall back to the bare method_family, so old logs fold
+    exactly as before (the dual-write tolerance). The read face stays
+    family-addressed through ``family_of_action`` /
+    ``Fold.family_mass``.
+
+    #548 tiebreaker: a row's effective credit runs through
+    ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
+    [0,1] clamp; rows without phi_delta are bit-identical to the
+    pre-change fold."""
     schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
             if isinstance(r, dict) and _credit_of(r) is not None]
@@ -365,10 +431,11 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         weights[i] = w
     cells: dict[tuple[str, str], CellCounts] = {}
     for i, row in enumerate(rows):
-        credit = max(0.0, min(1.0, _credit_of(row)))
+        credit = tiebroken_credit(_credit_of(row),
+                                  row.get("phi_delta"))
         weight = weights[i]
         key = (str(row.get("signature_hash") or ""),
-               str(row.get("method_family") or ""))
+               _action_key_of(row))
         cell = cells.get(key)
         if cell is None:
             cell = CellCounts(key[0], key[1])
@@ -382,7 +449,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         if not isinstance(row, dict) or _credit_of(row) is not None:
             continue
         key = (str(row.get("signature_hash") or ""),
-               str(row.get("method_family") or ""))
+               _action_key_of(row))
         cell = cells.get(key) or CellCounts(key[0], key[1])
         cells[key] = CellCounts(cell.signature_hash, cell.family,
                                 cell.success, cell.failure,
@@ -396,7 +463,8 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
 
 def cell_posterior(fold_view: Fold, signature_hash: str,
                    family: str, *,
-                   feature_pool=None) -> tuple[float, float]:
+                   feature_pool=None, warm_pool=None,
+                   arm_key: str | None = None) -> tuple[float, float]:
     """The SHRUNK Beta posterior used for sampling — (alpha, beta).
 
     Anchor = the family's global aggregate LEAVE-ONE-OUT (this cell's
@@ -404,33 +472,48 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     anchor and stands on its local evidence alone, no self-echo). A
     nowhere-observed family yields the wide Beta(1,1) prior.
 
-    ``feature_pool`` (#460 Part B, predict-before-try) is an optional
-    duck-typed FeaturePool (``.success``/``.failure``/``.rows`` —
-    scripts/rlvr/feature_prior.py): its similarity-discounted masses
-    are added to the anchor masses BEFORE the single SHRINK_CAP, so
-    the family/global pool stays the base borrow and total borrowed
-    pseudo-observations never exceed the cap. None (default) or a
-    zero-mass pool is bit-identical to the pre-change kernel — the
-    determinism wall. The live face pools every table row; the replay
-    passes exclude_run by explicit run id (leave-instance-out is the
-    replay's split, not a live-face filter)."""
+    ``arm_key`` (#545 keyed consumption): address the cell at the 4-dim
+    action key (family|recipe|verif|tier). The legacy cell at the bare
+    family key (old logs — the dual-write tolerance) POOLS into the
+    local mass, and the leave-one-out anchor subtracts BOTH, so a
+    key-addressed read never self-echoes its own family-grain history.
+
+    ``feature_pool`` (#460 Part B, predict-before-try) and ``warm_pool``
+    (#545, the cross-task posterior store) are optional duck-typed
+    pools (``.success``/``.failure``/``.rows`` — FeaturePool shape):
+    their masses are added to the anchor masses BEFORE the single
+    SHRINK_CAP, so the family/global pool stays the base borrow and
+    total borrowed pseudo-observations never exceed the cap. None
+    (default) or a zero-mass pool is bit-identical to the pre-change
+    kernel — the determinism wall. The feature face pools every table
+    row; the replay passes exclude_run by explicit run id
+    (leave-instance-out is the replay's split, not a live-face filter)."""
     cell = fold_view.cells.get(
-        (signature_hash, family),
+        (signature_hash, arm_key or family),
         CellCounts(signature_hash, family))
+    s_local, f_local = cell.success, cell.failure
+    if arm_key and arm_key != family:
+        legacy = fold_view.cells.get((signature_hash, family))
+        if legacy is not None:
+            s_local += legacy.success
+            f_local += legacy.failure
     fam_s, fam_f = fold_view.family_mass(family)
-    s_anchor = max(fam_s - cell.success, 0.0)
-    f_anchor = max(fam_f - cell.failure, 0.0)
+    s_anchor = max(fam_s - s_local, 0.0)
+    f_anchor = max(fam_f - f_local, 0.0)
     if feature_pool is not None:
         s_anchor += float(feature_pool.success)
         f_anchor += float(feature_pool.failure)
+    if warm_pool is not None:
+        s_anchor += float(warm_pool.success)
+        f_anchor += float(warm_pool.failure)
     n_anchor = s_anchor + f_anchor
     if n_anchor <= 0.0:
-        return (BASE_ALPHA + cell.success, BASE_BETA + cell.failure)
+        return (BASE_ALPHA + s_local, BASE_BETA + f_local)
     m = (BASE_ALPHA + s_anchor) / (
         BASE_ALPHA + BASE_BETA + n_anchor)
     w = min(SHRINK_CAP, n_anchor)
-    return (BASE_ALPHA + w * m + cell.success,
-            BASE_BETA + w * (1.0 - m) + cell.failure)
+    return (BASE_ALPHA + w * m + s_local,
+            BASE_BETA + w * (1.0 - m) + f_local)
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +619,9 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                          gamma: float | GammaSchedule | None = None, *,
                          features: Mapping | None = None,
                          feature_table=None,
-                         death: Mapping | None = None) -> dict:
+                         death: Mapping | None = None,
+                         warm_pools: Mapping | None = None,
+                         arm_context: Mapping | None = None) -> dict:
     """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
@@ -570,7 +655,17 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     an additive ``death`` block (dead, p_dead, the EFFECTIVE
     multiplier). Absent/empty/all-alive(×1.0) leaves the draw
     byte-identical to the pre-change kernel; malformed multipliers
-    fail open to 1.0 (never delete, never amplify)."""
+    fail open to 1.0 (never delete, never amplify).
+
+    #545 warm start: ``warm_pools`` is the cross-task posterior store's
+    per-candidate anchor pools ({family → duck-typed pool}); their
+    LAMBDA-tempered masses ride the SAME anchor face as the feature
+    pools (never a local-cell write), and candidates with contributing
+    rows carry an additive ``posterior_store`` receipt block — the warm
+    start is traceable, 逐句可归因. ``arm_context`` (recipe/verif/tier —
+    the dispatch meta) keys the per-candidate cell read at the 4-dim
+    arm_key; candidates carry an additive ``arm_key`` receipt field.
+    Both None (default) = the pre-#545 sampler, byte-identical."""
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
     schedule = _resolve_schedule(gamma)
@@ -584,9 +679,19 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     cand_doc: dict[str, dict] = {}
     weights: dict[str, float] = {}
     for family in order:
+        ak = None
+        if arm_context is not None:
+            ak = arm_key(family,
+                         str(arm_context.get("context_recipe")
+                             or "facts_snapshot"),
+                         str(arm_context.get("verification_mode")
+                             or "none"),
+                         arm_context.get("tier", 0))
+        warm = (warm_pools or {}).get(family)
         alpha, beta = cell_posterior(
             fold_view, sig, family,
-            feature_pool=pools.get(family) if pools else None)
+            feature_pool=pools.get(family) if pools else None,
+            warm_pool=warm, arm_key=ak)
         child = random.Random(f"qcell/{base}/{family}")
         theta = child.betavariate(alpha, beta)
         multiplier, death_doc = _death_multiplier(death, family)
@@ -598,6 +703,9 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             "theta": round(theta, 6),
             "weight": round(weights[family], 6),
         }
+        if ak is not None:
+            # additive field — no arm_context, no field (byte identity)
+            cand["arm_key"] = ak
         if death_doc is not None:
             # additive block — no verdict, no block (byte identity)
             cand["death"] = death_doc
@@ -608,6 +716,13 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                 "pool_success": round(pool.success, 9),
                 "pool_failure": round(pool.failure, 9),
                 "rows": pool.rows,
+            }
+        if warm is not None and warm.rows > 0:
+            # additive block — the warm start is traceable to its rows
+            cand["posterior_store"] = {
+                "success": round(warm.success, 9),
+                "failure": round(warm.failure, 9),
+                "rows": warm.rows,
             }
         cand_doc[family] = cand
     # numpy adoption (issue 420 Phase 2, README rule 1): the sampling
@@ -713,7 +828,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        ts: str | None = None,
                        fingerprint: str | None = None,
                        arm_key_col: str | None = None,
-                       action_type: str | None = None) -> dict:
+                       action_type: str | None = None,
+                       phi_delta: float | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -725,6 +841,14 @@ def append_observation(ws, signature_hash: str, method_family: str,
             warn("q_cells.append", f"non-numeric credit dropped: {credit!r}")
         else:
             credit_out = max(0.0, min(1.0, float(credit)))
+    phi_out = None
+    if phi_delta is not None:
+        if isinstance(phi_delta, bool) or not isinstance(phi_delta,
+                                                         (int, float)):
+            warn("q_cells.append",
+                 f"non-numeric phi_delta dropped: {phi_delta!r}")
+        else:
+            phi_out = round(float(phi_delta), 6)
     row = {
         "schema": OBS_SCHEMA,
         "ts": ts or _now(),
@@ -737,11 +861,12 @@ def append_observation(ws, signature_hash: str, method_family: str,
         "fingerprint": fingerprint,
         "credit": credit_out,
         # #539 WS1 dual-write: the 4-dim arm key + the policy's action
-        # type. The posterior fold still keys method_family — the
-        # keyed-consumption switch lands with the cross-task store (WS2),
-        # so this PR is recording-only (zero behavior change).
+        # type. #545 WS2: the fold consumes the arm_key (family fallback
+        # for old logs) and the phi_delta tiebreaker rides the credit
+        # read (consumption-only — the row field is one optional column).
         "arm_key": arm_key_col,
         "action_type": action_type,
+        "phi_delta": phi_out,
     }
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended, "row": row}
@@ -756,7 +881,8 @@ def observe(ws, signature_hash: str, method_family: str,
                               source="settlement")
 
 
-def observe_settlement(ws, dispatch_id: str, credit) -> dict:
+def observe_settlement(ws, dispatch_id: str, credit,
+                       *, phi_delta: float | None = None) -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -770,13 +896,21 @@ def observe_settlement(ws, dispatch_id: str, credit) -> dict:
     amendment) is blocked from re-banking by the settlement-presence
     guard in scalar.settle_round_credit; a future ledger PRUNE +
     re-settle of the same claim would re-bank into the stale row — the
-    named v1 limitation. The credit
-    arriving here is the settled #433 ladder value (verified = admission
+    named v1 limitation. The credit arriving here is the settled #433
+    ladder value (verified = admission
     ticket, cited-toward-stage = value — the ladder ran upstream in
     scalar.round_credit); the append boundary clamps it into [0, 1]
     (r_r is rail-clamped per #429 §4). No matching dispatch row is the
     honest gap: no row, never a fabricated bucket. Fail-open: telemetry
-    never breaks settlement."""
+    never breaks settlement.
+
+    #545: the matched dispatch row's ``arm_key`` rides the settlement
+    row (keyed consumption — the banked credit lands in the arm cell
+    the dispatch opened, family fallback for legacy rows) and
+    ``phi_delta`` threads to the row (the #548 tiebreaker raw
+    material). The result carries ``arm_key``/``fingerprint`` so the
+    cross-task store's write face (rlvr.strategy_store) can key its row
+    without a second scan."""
     did = str(dispatch_id or "")
     try:
         match = None
@@ -801,12 +935,16 @@ def observe_settlement(ws, dispatch_id: str, credit) -> dict:
                                  claim=match.get("claim"),
                                  agent=match.get("agent"),
                                  dispatch_id=did,
-                                 fingerprint=match.get("fingerprint"))
+                                 fingerprint=match.get("fingerprint"),
+                                 arm_key_col=match.get("arm_key"),
+                                 phi_delta=phi_delta)
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
                 "signature_hash": match.get("signature_hash"),
-                "method_family": match.get("method_family")}
+                "method_family": match.get("method_family"),
+                "arm_key": match.get("arm_key"),
+                "fingerprint": match.get("fingerprint")}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.observe_settlement", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "matched": False,
@@ -986,17 +1124,21 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     unattributed += u3
     approximated += a3
     cells = []
-    for (sig, fam) in sorted(set(fold_view.cells) | set(pendings)):
-        cell = fold_view.cells.get((sig, fam),
-                                   CellCounts(sig, fam))
-        cells.append({
-            "signature_hash": sig, "method_family": fam,
+    for (sig, ak) in sorted(set(fold_view.cells) | set(pendings)):
+        cell = fold_view.cells.get((sig, ak),
+                                   CellCounts(sig, ak))
+        entry = {
+            "signature_hash": sig,
+            "method_family": family_of_action(ak),
             "credit_observations": int(round(
                 _weighted_count(cell.success, cell.failure, rep_gamma))),
             "success": round(cell.success, 9),
             "failure": round(cell.failure, 9),
-            "pending": cell.n_pending + pendings.get((sig, fam), 0),
-        })
+            "pending": cell.n_pending + pendings.get((sig, ak), 0),
+        }
+        if "|" in ak:  # #545 keyed consumption: the cell's 4-dim key
+            entry["arm_key"] = ak
+        cells.append(entry)
     families: dict[str, dict] = {}
     for c in cells:
         f = families.setdefault(c["method_family"],
@@ -1038,14 +1180,19 @@ def cell_table(ws, gamma: float | GammaSchedule | None = None) -> dict:
     shipped DTS default fold when gamma is None)."""
     schedule = _resolve_schedule(gamma)
     fold_view = fold(default_store(ws), gamma=schedule)
-    cells = [{
-        "signature_hash": c.signature_hash,
-        "method_family": c.family,
-        "success": round(c.success, 9),
-        "failure": round(c.failure, 9),
-        "pending": c.n_pending,
-    } for c in sorted(fold_view.cells.values(),
-                      key=lambda c: (c.signature_hash, c.family))]
+    cells = []
+    for c in sorted(fold_view.cells.values(),
+                    key=lambda c: (c.signature_hash, c.family)):
+        entry = {
+            "signature_hash": c.signature_hash,
+            "method_family": family_of_action(c.family),
+            "success": round(c.success, 9),
+            "failure": round(c.failure, 9),
+            "pending": c.n_pending,
+        }
+        if "|" in c.family:
+            entry["arm_key"] = c.family
+        cells.append(entry)
     return {"schema": CELLS_SCHEMA, "workspace": str(ws),
             "gamma": float(schedule.gamma()), "cells": cells}
 
