@@ -18,7 +18,7 @@ name: release-check
 
 concurrency:
   # one live run per ref — a new push cancels the superseded run instead of
-  # queueing stale suites behind it on the 2-runner pool
+  # queueing stale suites behind it (runner routing: see runner-probe)
   group: release-check-${{ github.ref }}
   cancel-in-progress: true
 
@@ -29,21 +29,61 @@ on:
     branches: [ "dev", "master" ]
 
 env:
-  # Runner image pre-installs python3.11 (default python3); uv picks the
-  # interpreter via this env.
+  # uv picks the interpreter via this env on both tiers (self-hosted
+  # image python + uv-managed 3.11 on GitHub-hosted — see the
+  # provisioning step; host-agnostic since the 2026-10-07 routing).
   UV_PYTHON: python3.11
 
 # The four legs only read the repo and upload run artifacts — no write
 # surface is needed (CodeQL actions/missing-workflow-permissions).
 permissions:
   contents: read
+  # runner-probe lists workflow runs (actions:read) to see whether the
+  # single-slot self-hosted runner is currently occupied
+  actions: read
 
 jobs:
+  runner-probe:
+    # Owner routing (2026-10-07): SELF-HOSTED FIRST, the free
+    # GitHub-hosted tier as overflow when ours is insufficient, and back
+    # to queueing on self-hosted when the free quota is spent. Actions
+    # has no native priority queue — this probe (~20s, itself on the
+    # free tier) approximates it: when any OTHER release-check run is
+    # in_progress/queued (our single-slot runner busy or spoken for)
+    # the legs route to ubuntu-latest; otherwise self-hosted. Any probe
+    # failure defaults BACK to self-hosted — the conservative arm of
+    # the priority order (queue beats wrong-tier speed). Quota-exhausted
+    # posture: an ubuntu-latest leg that cannot start for billing fails
+    # fast; rerun when the self-hosted slot frees (the documented wait).
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.probe.outputs.runner }}
+    steps:
+      - name: Probe the self-hosted slot (busy => free overflow)
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          busy=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=50" \
+            --jq '[.workflow_runs[] | select(.name == "release-check"
+              and .status != "completed"
+              and .id != ${{ github.run_id }})] | length' \
+            || echo "")
+          if [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
+            echo 'runner="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runner=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+          fi
+
   lint-hygiene:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
     # with "command not found" — the python-3.11 label pins the right host.
-    runs-on: [self-hosted, python-3.11]
+    needs: runner-probe
+    # self-hosted first; ubuntu-latest when the probe saw the slot busy
+    # (owner routing 2026-10-07 — see runner-probe for the full order)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -55,9 +95,6 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       # Official installer (astral.sh). The former `pip install --user uv`
       # broke when the runner image began enforcing PEP 668
@@ -68,6 +105,14 @@ jobs:
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: CI YAML selfcheck (issue #147)
       run: uv run python scripts/release_check_selfcheck.py
@@ -111,7 +156,10 @@ jobs:
       run: uv run python scripts/structural_check.py .
 
   docs-contract:
-    runs-on: [self-hosted, python-3.11]
+    needs: runner-probe
+    # self-hosted first; ubuntu-latest when the probe saw the slot busy
+    # (owner routing 2026-10-07 — see runner-probe for the full order)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -122,13 +170,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
@@ -137,7 +190,10 @@ jobs:
       run: uv run python -m pytest -m docs -n auto --dist loadgroup -q --junitxml=.pytest-docs.xml
 
   unit-fast:
-    runs-on: [self-hosted, python-3.11]
+    needs: runner-probe
+    # self-hosted first; ubuntu-latest when the probe saw the slot busy
+    # (owner routing 2026-10-07 — see runner-probe for the full order)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -148,13 +204,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
@@ -173,7 +234,10 @@ jobs:
         if-no-files-found: error
 
   integration:
-    runs-on: [self-hosted, python-3.11]
+    needs: runner-probe
+    # self-hosted first; ubuntu-latest when the probe saw the slot busy
+    # (owner routing 2026-10-07 — see runner-probe for the full order)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -184,13 +248,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
