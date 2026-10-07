@@ -130,7 +130,7 @@ files:
   scripts/eval_checker.py:
     r1: 3
   scripts/eval_contract.py:
-    r1: 1
+    r1: 2
   scripts/eval_control_arm.py:
     r1: 1
   scripts/eval_crypto.py:

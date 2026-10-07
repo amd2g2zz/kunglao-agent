@@ -38,7 +38,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 # The corpus root: repo-local eval/ by default; KUNGLAO_EVAL_ROOT
+<<<<<<< HEAD
 # redirects to an operator-local corpus (owner ruling: eval
+=======
+# redirects to an operator-local corpus (the 2026-10-07 ruling — eval
+>>>>>>> df2084cd (feat: the blocked-path measurement faces — local corpus root + the L3 ablation switch (#546))
 # data is intermediate-process material; blocked-path measurements run
 # against experiments/bp-corpus without touching the repo tree).
 # Read at CALL time (an import-time constant would freeze the env for
