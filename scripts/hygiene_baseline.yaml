@@ -130,7 +130,7 @@ files:
   scripts/eval_checker.py:
     r1: 3
   scripts/eval_contract.py:
-    r1: 1
+    r1: 2
   scripts/eval_control_arm.py:
     r1: 1
   scripts/eval_crypto.py:
@@ -144,7 +144,7 @@ files:
   scripts/eval_native_targets.py:
     r1: 1
   scripts/eval_split_lint.py:
-    r1: 1
+    r1: 2
   scripts/eval_targets.py:
     r1: 4
   scripts/eval_tf_graders.py:
@@ -796,7 +796,7 @@ files:
   tests/test_eval_release_332.py:
     r1: 1
   tests/test_eval_split_lint_518.py:
-    r1: 1
+    r1: 2
   tests/test_eval_tf_graders_356.py:
     r1: 1
   tests/test_eval_tf_shadow_356.py:

@@ -104,6 +104,13 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                   "target_surface": "text"},
     "tf-chain4": {"suffix": ".txt", "response_language": "Text answer document",
                   "target_surface": "text"},
+    # ---- blocked-path constructions (#546 WS4 measurement face) ---------
+    # novel-ISA/novel-cipher units: no known family shortcut; the graded
+    # candidate is the same answer.txt digest contract as tf-chain*.
+    "tf-novelvm": {"suffix": ".txt", "response_language": "Text answer document",
+                   "target_surface": "text"},
+    "tf-novelcipher": {"suffix": ".txt", "response_language": "Text answer document",
+                       "target_surface": "text"},
     # ---- chain tier (eval_chain registry, issue 370) ---------------------
     # multi-layer decryption-chain units: the analysis subject is the
     # committed obfuscated bundle (text surface); the graded candidate is
