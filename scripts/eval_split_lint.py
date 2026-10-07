@@ -61,13 +61,29 @@ def _walk_constants(node) -> list[str]:
     return []
 
 
+# corpus tiers, release first (the interpolation holdout lives there);
+# extrapolation units may live in any tier (the #546 blocked-path units
+# live under toolflex)
+_TIERS: tuple[str, ...] = ("release", "smoke", "misdirection", "toolflex",
+                           "chain")
+
+
+def _holdout_gt(repo: Path, unit: str) -> Path | None:
+    """A holdout unit's ground_truth.json, resolved across corpus tiers."""
+    for tier in _TIERS:
+        p = repo / "eval" / "v1" / "tasks" / tier / unit / "ground_truth.json"
+        if p.is_file():
+            return p
+    return None
+
+
 def _scan_unit(repo: Path, unit: str,
                texts: dict) -> list[str]:
     """One holdout unit against every prior-store file: constants (all
     forms) and the unit-id itself. Missing/unreadable ground_truth is its
     own violation — an unlintable holdout is an unauditable holdout."""
-    gt = repo / "eval" / "v1" / "tasks" / "release" / unit / "ground_truth.json"
-    if not gt.is_file():
+    gt = _holdout_gt(repo, unit)
+    if gt is None:
         return [f"LEAK[HOLDOUT_GT_MISSING] {unit}: no ground_truth.json — "
                 f"an unlintable holdout is an unauditable holdout"]
     try:

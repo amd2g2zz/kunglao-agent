@@ -34,10 +34,22 @@ HOLDOUT_UNITS = (
     "rust-apk-beacon-v1", "web-anticrawl-v2", "apk-webview-attest-v2",
 )
 
+# corpus tiers, release first — holdout ground truth resolves across tiers
+# (the #546 blocked-path extrapolation units live under toolflex)
+_TIERS = ("release", "smoke", "misdirection", "toolflex", "chain")
+
+
+def _gt_path(unit: str) -> Path:
+    for tier in _TIERS:
+        p = ROOT / "eval/v1/tasks" / tier / unit / "ground_truth.json"
+        if p.is_file():
+            return p
+    raise FileNotFoundError(f"no ground_truth.json for holdout unit {unit}")
+
 
 def _gt_constants(unit: str) -> dict:
-    gt = ROOT / "eval" / "v1" / "tasks" / "release" / unit / "ground_truth.json"
-    return json.loads(gt.read_text(encoding="utf-8")).get("constants") or {}
+    return json.loads(_gt_path(unit).read_text(encoding="utf-8")).get(
+        "constants") or {}
 
 
 def _run_lint(store: Path) -> subprocess.CompletedProcess:
@@ -57,8 +69,8 @@ def test_split_registry_exists_and_valid():
     assert sorted(interp) == sorted(HOLDOUT_UNITS), interp
     assert not (set(interp) & set(extrap))
     for u in interp + extrap:
-        gt = (ROOT / "eval/v1/tasks/release" / u / "ground_truth.json")
-        consts = json.loads(gt.read_text(encoding="utf-8")).get("constants")
+        consts = json.loads(_gt_path(u).read_text(encoding="utf-8")).get(
+            "constants")
         assert consts, f"holdout unit {u} has no constants block"
 
 

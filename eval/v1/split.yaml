@@ -22,7 +22,9 @@ holdout:
     - rust-apk-beacon-v1
     - web-anticrawl-v2
     - apk-webview-attest-v2
-  extrapolation: []
+  extrapolation:
+    - tf-novelvm-rust-v1
+    - tf-novelcipher-c-v1
 mining: "complement — every eval/v1/tasks/release unit NOT listed in holdout"
 prior_store_roots:
   - scripts/rlvr/patterns
