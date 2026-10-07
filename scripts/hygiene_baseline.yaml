@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 72
+    r1: 74
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -1585,6 +1585,8 @@ files:
     r1: 1
     r2: 1
   tests/test_ws4_expansion_546.py:
+    r1: 1
+  tests/test_ws4_wiring_546.py:
     r1: 1
   tests/test_ws_layout_delegation_863c.py:
     r1: 5
