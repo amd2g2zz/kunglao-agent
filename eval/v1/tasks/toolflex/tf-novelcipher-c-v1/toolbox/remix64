@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+# toolbox/remix64 — constructed blocked-path fold decoy tool (#546).
+# Synthetic; seed 54602. Flag-CLI b-variant of mix64: same private decoy
+# fold (not the NXC-64 construction) — never grades.
+"""usage: remix64 --payload <payload>       (16-hex decoy fold)
+"""
+import sys
+
+MA = 0x4A3D9F17E6C25B08
+MB = 0xD81F640B93C7A25E
+M64 = 0xFFFFFFFFFFFFFFFF
+
+
+def fold(data):
+    h = MA
+    for b in data:
+        h = ((h + b) * MB) & M64
+    return (h ^ (h >> 27)) & M64
+
+
+def main(argv):
+    payload = None
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--payload" and i + 1 < len(argv):
+            payload = argv[i + 1]
+            i += 2
+        else:
+            sys.stderr.write("usage: remix64 --payload <payload>\n")
+            return 2
+    if payload is None:
+        sys.stderr.write("usage: remix64 --payload <payload>\n")
+        return 2
+    try:
+        raw = open(payload, "rb").read()
+    except OSError as exc:
+        sys.stderr.write("remix64: cannot read: %s\n" % exc)
+        return 2
+    print("%016x" % fold(raw))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+# toolbox/mix64 — constructed blocked-path fold decoy tool (#546).
+# Synthetic; seed 54602. A plausible-but-wrong 16-hex fold: its private
+# transform is NOT the NXC-64 construction, so its output never grades.
+"""usage: mix64 <payload>       (16-hex decoy fold; not the NXC-64 digest)
+"""
+import sys
+
+# decoy constants (seed 54602, distinct from NXC-64's IV/RC/ODD)
+MA = 0x4A3D9F17E6C25B08
+MB = 0xD81F640B93C7A25E
+M64 = 0xFFFFFFFFFFFFFFFF
+
+
+def fold(data):
+    h = MA
+    for b in data:
+        h = ((h + b) * MB) & M64
+    return (h ^ (h >> 27)) & M64
+
+
+def main(argv):
+    if len(argv) != 1:
+        sys.stderr.write("usage: mix64 <payload>\n")
+        return 2
+    try:
+        raw = open(argv[0], "rb").read()
+    except OSError as exc:
+        sys.stderr.write("mix64: cannot read: %s\n" % exc)
+        return 2
+    print("%016x" % fold(raw))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

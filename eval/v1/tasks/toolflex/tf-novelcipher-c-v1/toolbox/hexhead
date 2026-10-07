@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+# toolbox/hexhead — constructed blocked-path inspect tool (#546).
+# Synthetic; seed 54602. Size + hex head only — no digest path.
+"""usage: hexhead <file>       (size + first 16 bytes in hex)
+"""
+import sys
+
+
+def main(argv):
+    if len(argv) != 1:
+        sys.stderr.write("usage: hexhead <file>\n")
+        return 2
+    try:
+        raw = open(argv[0], "rb").read()
+    except OSError as exc:
+        sys.stderr.write("hexhead: cannot read: %s\n" % exc)
+        return 2
+    sys.stdout.write("size=%d head=%s\n" % (len(raw), raw[:16].hex()))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

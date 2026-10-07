@@ -1,0 +1,73 @@
+schema: kunglao-eval-task/1
+task_id: tf-novelcipher-c-v1
+eval_version: eval-v1.3
+tier: toolflex
+source: constructed
+family: tf-novelcipher
+seed: 54602
+anchors:
+  goal_verbatim: 'Workspace puzzle: produce answer.txt in the workspace root.
+    The digests come from a private permutation-network construction (the
+    NXC-64 digest — private S-box, per-round constants, position-dependent
+    mixing; not SHA/AES/RC4 and not any stock XOR fold). For each probe
+    input (probes/payload-0.bin .. probes/payload-2.bin) in index order and
+    finally the main material (target/payload.bin), compute the 16-hex-char
+    NXC-64 digest and write one line per input into answer.txt (4 lines,
+    lowercase hex, in that order). The reference implementation is
+    target/src/cipher.c (prebuilt convenience copy: target/cipher).'
+  success_criterion: answer.txt carries the four digests byte-exact (lowercase
+    16-hex per line, probes in index order then target/payload.bin) as fixed
+    by the unit's construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: c
+  files:
+  - target/README.txt
+  - target/cipher
+  - target/payload.bin
+  - target/src/cipher.c
+  - toolbox/hexhead
+  - toolbox/byterate
+  - toolbox/mix64
+  - toolbox/remix64
+  - probes/payload-0.bin
+  - probes/payload-1.bin
+  - probes/payload-2.bin
+  entry: target/README.txt
+  candidate_contract: 'answer.txt — four 16-hex-char lowercase lines: probes
+    in index order, then target/payload.bin.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+toolflex:
+  manifest: manifest.json
+  k: 2
+  roles:
+  - inspect
+  - fold
+  minimum_required_set:
+    inspect:
+    - hexhead
+    - byterate
+    fold:
+    - mix64
+    - remix64
+  blocked_variants:
+  - block-hexhead
+  - block-mix64
