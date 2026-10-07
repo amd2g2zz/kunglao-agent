@@ -38,6 +38,10 @@ from rlvr.state import fact_face, _oracle_status_progress
 
 TRANSITIONS_REL = "runs/transitions.jsonl"
 LAUNCH_REL = "runs/dispatch-launch-{claim}.json"
+# #550: action-type-scoped stashes — a verify/red-team act keeps its own
+# stash so it never clobbers a pending dispatch stash for the same claim
+# (the untyped path stays byte-identical for in-flight workspaces).
+LAUNCH_REL_TYPED = "runs/dispatch-launch-{claim}--{action_type}.json"
 
 # ---- policy constants (design doc §2; NOT fitted) ------------------------
 ALPHA = 1.0          # potential-difference weight
@@ -75,14 +79,36 @@ def incremental_reward(phi_before: float, phi_after: float, *,
     return round(ALPHA * (phi_after - phi_before) - LAMBDA_COST * cost, 6)
 
 
+def _launch_path(ws: Path, claim: str, action_type: str) -> Path:
+    """The stash path for one action type: ""/"dispatch" keeps the
+    legacy untyped filename (in-flight workspaces keep working); any
+    other type lands the scoped sibling (#550)."""
+    if action_type in ("", "dispatch"):
+        return ws / LAUNCH_REL.format(claim=claim)
+    return ws / LAUNCH_REL_TYPED.format(claim=claim, action_type=action_type)
+
+
+def verify_credit(verdict: str) -> float:
+    """#550: the verifier verdict -> settle credit. verified / CONFIRMED
+    bank 1.0 (an adversarial pass that failed to refute IS success);
+    refuted, unverified-with-gap, timeout, and everything else bank 0.0
+    — an unverifiable verification decided nothing."""
+    return 1.0 if str(verdict).strip().lower() == "verified" \
+        or str(verdict).strip().upper() == "CONFIRMED" else 0.0
+
+
 def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
-                  s_hash: str = "", propensity: float | None = None) -> None:
+                  s_hash: str = "", propensity: float | None = None,
+                  action_type: str = "dispatch",
+                  variant: str = "") -> None:
     """Stash the launch-side state at dispatch time — the settle face
     reads it to close the transition. Fail-open telemetry: never raises
-    into the dispatch path."""
+    into the dispatch path. #550: action_type scopes the stash (a verify
+    act cannot clobber a pending dispatch stash); the variant marker
+    (verify | redteam) rides the doc for the row's provenance."""
     try:
         ws = Path(ws)
-        p = ws / LAUNCH_REL.format(claim=claim)
+        p = _launch_path(ws, claim, action_type)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -90,6 +116,8 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             "a": str(action_key),
             "s": str(s_hash),
             "phi": potential(ws) if phi is None else float(phi),
+            "action_type": str(action_type or "dispatch"),
+            **({"variant": str(variant)} if variant else {}),
             **({"propensity": float(propensity)}
                if propensity is not None else {}),
         }), encoding="utf-8")
@@ -103,14 +131,19 @@ def append_transition(ws, claim: str, outcome: str, *,
                       status: str = "", facts: int = 0,
                       tokens: float = 0.0, seconds: float = 0.0,
                       r_settle: float | None = None,
-                      done: bool = False) -> dict | None:
+                      done: bool = False,
+                      action_type: str = "dispatch",
+                      variant: str = "") -> dict | None:
     """Close one transition: read the launch stash, compute Φ(s′) and
     r_t, append the row. Returns the row (None when no launch stash —
     a settle without a recorded launch logs nothing rather than
-    inventing a before-state). Fail-open telemetry."""
+    inventing a before-state). Fail-open telemetry. #550: the stash is
+    action-type-scoped (verify acts close against their own stash) and
+    the row carries the additive action_type column plus the o.variant
+    provenance marker when set."""
     try:
         ws = Path(ws)
-        launch_p = ws / LAUNCH_REL.format(claim=claim)
+        launch_p = _launch_path(ws, claim, action_type)
         if not launch_p.is_file():
             return None
         launch = json.loads(launch_p.read_text(encoding="utf-8"))
@@ -121,10 +154,15 @@ def append_transition(ws, claim: str, outcome: str, *,
         row = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "dispatch_id": str(claim),
+            "action_type": str(launch.get("action_type")
+                               or action_type or "dispatch"),
             "s": str(launch.get("s") or ""),
             "a": str(launch.get("a") or ""),
             "o": {"status": str(outcome), "class": str(status),
-                  "facts": int(facts)},
+                  "facts": int(facts),
+                  **({"variant": str(variant
+                                     or launch.get("variant") or "")}
+                     if variant or launch.get("variant") else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
             "r_incr": r_incr,
