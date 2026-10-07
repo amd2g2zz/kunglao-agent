@@ -642,10 +642,17 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     receipt: dict | None = None
     if not method_family:
         method_family, receipt = _sample_envelope_family(ctx.ws)
+    # #539 WS1: the v2 action tuple — action_type dispatch (the worker
+    # act), context recipe = the facts-snapshot assembly this prompt
+    # actually ships, verification_mode none (verification is a SEPARATE
+    # act, never bundled into the maker)
     dispatch_meta: dict = {
-        "version": 1, "claim": claim, "tier": 1,
+        "version": 2, "claim": claim, "tier": 1,
         "tools": ["grep", "python3"],
-        "agent": "kunglao-worker"}
+        "agent": "kunglao-worker",
+        "action_type": "dispatch",
+        "context_recipe": "facts_snapshot",
+        "verification_mode": "none"}
     if method_family:
         dispatch_meta["method_family"] = method_family
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
@@ -663,20 +670,14 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "act.\n"
         "2. End your final message with a line 'STATUS: DONE' (or 'STATUS: "
         "BLOCKED' with the reason) so the orchestrator parses your outcome "
-        "precisely.\n",
+        "precisely.\n"
+        f"3. ACT BUDGET: this act is KILLED at {ladder_timeout_s}s — no "
+        "extension, no in-act retry (the subprocess cap is external). "
+        "Schedule accordingly: pin each fact the moment it is established, "
+        "write the deliverable before 70% of the budget, and END with "
+        "STATUS: DONE (or STATUS: BLOCKED + reason) well before the cap. "
+        "An act killed at the cap banks zero facts credit.\n",
         encoding="utf-8")
-    if method_family:
-        audit.emit_method_family(str(ctx.ws), claim, method_family,
-                                 envelope=receipt)
-    # #539 PR-1: stash the launch-side Φ for the transition ledger —
-    # the settle face closes the (s, a, o, s', r) row from it. Pure
-    # telemetry, fail-open.
-    try:
-        ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-        ir.record_launch(str(ctx.ws), claim,
-                         action_key=method_family or "unattributed")
-    except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
-        kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     # #518 PR-2 (RC6, W1): open the pending q-cell observation at the
     # dispatch ALLOW-tail seam — the sampler's fold gets its dispatch
     # row and the settlement gets its match target. Fail-open telemetry:
@@ -690,11 +691,19 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
     qc_mod.record_dispatch_observation(
         str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
-        envelope_meta={"method_family": method_family} if method_family else None,
+        envelope_meta=({"method_family": method_family,
+                        "action_type": "dispatch",
+                        "context_recipe": "facts_snapshot",
+                        "verification_mode": "none",
+                        "tier": 1}
+                       if method_family else None),
         claim=claim, fingerprint=_fp)
-    # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record
+    # #524 item 1: propensity (MC) rides the receipt — the DR-OPE record.
+    # SAMPLER receipts only: a declared proposal (method_family set by the
+    # run) is not a behavior-policy decision — its envelope stays None and
+    # the policy comparison correctly skips it
     try:
-        if method_family:
+        if method_family and receipt is not None:
             from rlvr import meta_arms as _ma2
             _rows = [r for r in qc_mod.JSONLQStore(
                 str(ctx.ws)).observations() if isinstance(r, dict)]
@@ -707,6 +716,20 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
                 receipt["fingerprint"] = _fp
     except Exception as exc:  # noqa: BLE001 — bonus, never a gate
         kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+    # the emit rides AFTER the propensity block: the receipt mutation
+    # post-emit never reached the durable audit row (the round-1 G3
+    # envelopes carry candidates but no propensity — the DR-OPE record
+    # face was silently broken)
+    if method_family:
+        audit.emit_method_family(str(ctx.ws), claim, method_family,
+                                 envelope=receipt)
+    try:
+        ir2 = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+        ir2.record_launch(str(ctx.ws), claim,
+                          action_key=method_family or "unattributed",
+                          propensity=(receipt or {}).get("propensity"))
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
+        kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
@@ -784,12 +807,17 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
         # audit row; wall seconds serve when it is absent.
         try:
             ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-            _dur_ms = getattr(act, "duration_ms", None) or 0
+            # G3-matrix fix: ActRecord carries duration in DETAIL
+            # (claim/mode/outcome/detail) — the first wiring read a
+            # phantom act.duration_ms and every TIMEOUT row banked
+            # r_incr=0.0 instead of the -cost term
+            _dur_ms = (act.detail or {}).get("duration_ms") \
+                if isinstance(act.detail, dict) else None
             ir.append_transition(
                 str(ctx.ws), claim, str(act.outcome),
-                status=str(getattr(act, "status", "") or ""),
+                status=str(getattr(act, "mode", "") or ""),
                 facts=_n_facts,
-                seconds=float(_dur_ms) / 1000.0,
+                seconds=float(_dur_ms or 0) / 1000.0,
                 r_settle=credit)
         except Exception as exc:  # noqa: BLE001 — telemetry
             kunglao_log.warn("e2e.transition",
@@ -942,8 +970,11 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(
         json.dumps({"kunglao_dispatch": {
-            "version": 1, "claim": claim, "tier": 1,
-            "agent": "kunglao-verifier"}})
+            "version": 2, "claim": claim, "tier": 1,
+            "agent": "kunglao-verifier",
+            "action_type": "verify",
+            "context_recipe": "facts_snapshot",
+            "verification_mode": "replay_probe"}})
         + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
         "VERIFIER contract (maker-checker #484): you VERIFY, you never "
         "make. Read the claim's facts and artifacts, run the workspace's "
@@ -960,7 +991,12 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         "scripts/ws_yaml.py set|del <file> <dotted.path> <value>` — "
         "claim-register.yaml is single-writer (#516) and direct writes "
         "(cat/sed/python-open/Edit/Write) are refused by the write guard. "
-        "End with STATUS: DONE or STATUS: BLOCKED.\n",
+        "End with STATUS: DONE or STATUS: BLOCKED.\n"
+        f"ACT BUDGET: this act is KILLED at {llm_faces.CLAUDE_ACT_TIMEOUT_S}s "
+        "— verify ONLY (never expand scope), write the verification file "
+        "before 70% of the budget, and END before the cap. A verifier "
+        "killed at the cap leaves the claim unverified and the loop "
+        "blocked.\n",
         encoding="utf-8")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),

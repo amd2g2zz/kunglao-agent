@@ -35,7 +35,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: bbe2993e1352de0fa142b6d4cbd78d0612866cc6318ebbad7d587db9fdc8845b
+    sha256: cfb0a70ce23eb8277d32a2d5148338583e297d064f75b77af8afa4581a08fcfc
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -1163,7 +1163,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: 934d1797bac493f62ecad7e96608585a8d8570beb0915cdd443121086e45f535
+    sha256: 09e53427af4bf587a9a68dd6ea29d413c1b9f99d83533bceb14c3fe1b169cd49
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1180,6 +1180,10 @@ files:
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
     sha256: 0c53245457d4602999affe97bf3bb5c1d1cb0d0857b58ce292496ad80790469f
+  - src: scripts/rlvr/policy_compare.py
+    dest: .claude/scripts/rlvr/policy_compare.py
+    kind: scaffold
+    sha256: 2234cfd89da061842a266916f48041d872f6f8adcc4adeddef20b6472aadc627
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
@@ -1191,7 +1195,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: bd6efa3b79cabfb031972cf58602cdaa17be81b64a6db831952cf24b77c35f65
+    sha256: 4748fad1feb3c05881beab11be1a386f3fd0cc543b4812127c795ed69b6513ae
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1227,7 +1231,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 94ec8823769636ea26e95acc4ad2d8b8b9b10b854c533634ac3e9bfcef512fe5
+    sha256: ee5616ca7846dc4c234d83b93cbc872b3607bb9a40ad57dfcf54430008ea0207
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
