@@ -447,7 +447,7 @@ files:
   - src: scripts/eval_split_lint.py
     dest: .claude/scripts/eval_split_lint.py
     kind: scaffold
-    sha256: cf39e55a212c27f2df8dece47b9f5342d93c690b8800288c036a7d8b9d8c9ec7
+    sha256: c79ddb9774552de173dbec5c696fc74a55dbc959894ebe9fb22c0078e7d12ed5
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
@@ -1199,7 +1199,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 4748fad1feb3c05881beab11be1a386f3fd0cc543b4812127c795ed69b6513ae
+    sha256: 227de522008da4cb3b4380fb7565dfd735a50e52b9ac27727243a7e5a37fc315
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 3758e17f92145aa6d2a750f430bb66081dee6d35173be3d6e81c36da6274e821
+    sha256: 514d253c534f55688c8a3f361dd62379572608f045f0a8766666f55efa0b7d2b
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1235,7 +1235,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 0f770c64dc136a4d3c49db20f254924eee7c51c31ac7e14de2b681540cfdd82c
+    sha256: ea91eb9c14077ab5fa43bdb7a3d471a5e0f68e2cbfea28d8d1c5976153f25553
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

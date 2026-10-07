@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 63
+    r1: 66
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -144,7 +144,7 @@ files:
   scripts/eval_native_targets.py:
     r1: 1
   scripts/eval_split_lint.py:
-    r1: 1
+    r1: 2
   scripts/eval_targets.py:
     r1: 4
   scripts/eval_tf_graders.py:
@@ -368,7 +368,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 21
+    r1: 29
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
@@ -376,7 +376,7 @@ files:
   scripts/rlvr/state.py:
     r1: 2
   scripts/rlvr/strategy_store.py:
-    r1: 4
+    r1: 9
   scripts/rlvr/triples.py:
     r1: 3
   scripts/rlvr/winrate.py:
@@ -475,7 +475,7 @@ files:
   tests/_tiers.py:
     r1: 1
   tests/conftest.py:
-    r1: 1
+    r1: 2
   tests/experiment_difficulty_15.py:
     r1: 1
   tests/fixtures/experiments/ex3_bucket_calibration.py:
@@ -757,7 +757,7 @@ files:
   tests/test_dynamic_channel_698.py:
     r1: 1
   tests/test_e2e_runner.py:
-    r1: 30
+    r1: 31
     r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
@@ -1192,7 +1192,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_q_cells_429.py:
-    r1: 5
+    r1: 7
     r2: 2
   tests/test_qtable_p3.py:
     r1: 5
@@ -1268,6 +1268,8 @@ files:
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_p0_524.py:
+    r1: 1
+  tests/test_rlvr_termination_461.py:
     r1: 1
   tests/test_roi_settlement_49.py:
     r1: 2
@@ -1557,6 +1559,17 @@ files:
     r1: 3
   tests/test_write_guard_unlock_820.py:
     r1: 1
+  tests/test_ws2_ablation_545.py:
+    r1: 1
+  tests/test_ws2_declared_rides_545.py:
+    r1: 1
+  tests/test_ws2_holdout_firewall_545.py:
+    r1: 1
+  tests/test_ws2_tiebreaker_545.py:
+    r1: 2
+  tests/test_ws2_warm_start_545.py:
+    r1: 1
+    r2: 1
   tests/test_ws3_compose_lead_544.py:
     r1: 1
     r2: 1
