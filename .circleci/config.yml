@@ -1,0 +1,62 @@
+# Circle CI — the third capacity tier (owner 2026-10-07: parallel free
+# resources to speed CI). Routing order across the fleet: our self-hosted
+# slot takes the long leg when free (see .github/workflows/release-check.yml
+# runner-probe), GitHub's free tier runs the short legs in parallel, and
+# this config splits the LONG tail: CircleCI runs the integration+slow
+# suite INDEPENDENTLY — an extra signal that also backfills whenever the
+# other tiers queue.
+#
+# Activation (one-time, owner): circleci.com -> log in with GitHub ->
+# Add Projects -> follow amd2g2zz/kunglao-agent. Public-repo OSS credits
+# apply (~400k/month; Linux medium = 10 credits/min).
+#
+# The GitHub status check this posts ("ci/circleci: integration") can be
+# added to branch protection as required — start as observation, gate it
+# once trusted.
+version: 2.1
+
+jobs:
+  integration:
+    # EXACT mirror of the GitHub Actions integration leg ("not fast"
+    # markers, xdist auto workers, loadgroup distribution): locked deps
+    # via uv — drift from the Actions leg is a bug
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+
+      - run:
+          name: Install uv (the documented dependency manager)
+          command: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
+
+      - run:
+          name: CI YAML selfcheck (issue #147 — same gate as Actions)
+          command: uv run python scripts/release_check_selfcheck.py
+
+      - run:
+          name: Install dependencies (locked)
+          command: uv sync --locked
+
+      - run:
+          name: Integration + slow tier (xdist parallel)
+          # EXACT mirror of the Actions integration leg's invocation —
+          # the Actions side stays the source of truth; drift here is a
+          # bug. Coverage is OBSERVATION only (#463), never a gate.
+          command: |
+            uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q \
+              --junitxml=.pytest-result.xml \
+              --cov=scripts --cov=hooks --cov-report=xml --cov-report=term \
+              2>&1 | tee pytest-circle.log
+
+      - store_artifacts:
+          path: pytest-circle.log
+
+workflows:
+  release-check-circle:
+    # same trigger surface as the Actions workflow: dev/master pushes +
+    # PRs; one live run per ref is enforced by the Actions side's
+    # concurrency group — CircleCI's own queue dedups per-branch too
+    jobs:
+      - integration
