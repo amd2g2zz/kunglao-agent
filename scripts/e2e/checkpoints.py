@@ -539,6 +539,25 @@ def _pooled_or_flat(store, counts: dict[str, int],
         return {fam: float(n) for fam, n in sorted(counts.items())}
 
 
+def _cold_seed_prior(ws, registered: list[str]) -> dict[str, float]:
+    """WS3 (#544): a fresh workspace's first dispatch rides the
+    intake-seeded proposal means instead of the flat 1.0 face when a
+    FULL-coverage llm-prior/1 doc exists; partial coverage or any read
+    failure fails open to the historical uniform face (the determinism
+    wall keeps the wall)."""
+    prior = {fam: 1.0 for fam in registered}
+    try:
+        from rlvr import priors as _p3
+        seeded = _p3.intake_prior_weights(ws, allowed=registered)
+        if seeded:
+            prior = {fam: float(seeded[fam]) for fam in registered}
+    except Exception as exc:  # noqa: BLE001 — fail-open, but loud (#275)
+        from kunglao_log import warn
+        warn("e2e.cold_seed_prior",
+             f"{type(exc).__name__}: {exc} (fail-open: uniform proposal)")
+    return prior
+
+
 def _sample_envelope_family(ws) -> tuple[str, dict | None]:
     """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
 
@@ -579,7 +598,7 @@ def _sample_envelope_family(ws) -> tuple[str, dict | None]:
         else:
             if not registered:
                 return "", None
-            prior = {fam: 1.0 for fam in registered}
+            prior = _cold_seed_prior(ws, registered)
         rng, _round = q_cells.q_cells_seed_state(ws)
         # #460 Part B wiring (predict-before-try): thread the live
         # instance features + the mined feature table into call site 2

@@ -657,7 +657,9 @@ def _budget_hint(snap: dict) -> str | None:
 def _silent_sections(snap: dict) -> dict:
     """Cold-start / below-threshold silence: no lead, no cards, no
     focus — the policy constants still render (they are loop plumbing,
-    not learned claims)."""
+    not learned claims). WS3 (#544) lifts exactly ONE field out of the
+    silence via _cold_sections (the seeded intake lead); everything
+    else in this dict is the unchanged silence contract."""
     return {
         "dispatch": {"method_lead": None, "anti_hints": [],
                      "budget_hint": _budget_hint(snap)},
@@ -666,6 +668,28 @@ def _silent_sections(snap: dict) -> dict:
         "hooks": {"cards": []},
         "amendments": [],
     }
+
+
+def _cold_sections(ws: Path, snap: dict) -> dict:
+    """The below-n_min sections (WS3 #544): the silence plus — when a
+    valid llm-prior/1 doc exists — its top family as method_lead. The
+    seed REPLACES SILENCE, it does not claim signal: every other field
+    stays byte-identical to _silent_sections, and a missing/corrupt
+    prior degrades to exactly the old full silence (fail-open)."""
+    sections = _silent_sections(snap)
+    try:
+        from rlvr import priors as _priors
+        lead = _priors.intake_prior_lead(_priors.read_intake_prior(ws))
+    except Exception as exc:  # noqa: BLE001 — never breaks compose, loud (#275)
+        warn("compose.cold_seed_lead",
+             f"{type(exc).__name__}: {exc} (fail-open: full silence)")
+        lead = None
+    if lead:
+        sections = {
+            **sections,
+            "dispatch": {**sections["dispatch"], "method_lead": lead},
+        }
+    return sections
 
 
 def compose(ws, tick: int, *, store: StrategyStore | None = None,
@@ -693,7 +717,7 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
     cell = store.cell_count(fp)
     evidence_count = len(rows) if cell is None else int(cell)
     if evidence_count < n_min:
-        sections = _silent_sections(snap)
+        sections = _cold_sections(ws, snap)
     else:
         scheduled = schedule_cards(cards, store, settled_total=len(rows),
                                    top_k=top_k)

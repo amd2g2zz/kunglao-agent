@@ -77,6 +77,9 @@ decomposition).
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import time
 from pathlib import Path
 
 import numpy as np  # issue 420: ordered-float reductions + exact counts
@@ -249,3 +252,190 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         },
         "workspaces": [str(p) for p in paths],
     }
+
+
+# ===========================================================================
+# WS3 (#544): the cold-start intake seeding face — replaces the silent
+# Beta(1,1) below n_min. EXP-WS3-A (experiments/exp-ws3-calibration.md,
+# read-only, never committed): Spearman ρ = −0.3714 (n=6 task families,
+# 44 transitions) < the 0.2 gate → BETA_SEED_CAP = 0.5 — near-uniform
+# seeding. This face ships because it replaces SILENCE, not because the
+# prior is known-good; the uniform SNIPS arm measures whatever signal
+# exists from round 1 (no dead zone). The LLM self-assessment source is
+# a schema consumer (the init worker fills it); the mechanical fallback
+# here is keyword-hit scoring over the declared task features — zero
+# invention, fully deterministic.
+# ===========================================================================
+
+SEED_SCHEMA = "llm-prior/1"
+BETA_SEED_CAP = 0.5  # the ONLY new WS3 constant (EXP-WS3-A verdict)
+SEED_SOURCES = ("heuristic-fallback", "llm-self-assessment")
+_SEED_CALIBRATION = {"method": "exp-ws3-a", "rho": -0.3714, "n": 6}
+_SEED_PROVENANCE = {"experiment": "experiments/exp-ws3-calibration.md"}
+SEED_REL = "runs/llm-prior.json"
+
+
+def _spec_text(spec: dict) -> str:
+    """The declared task features as one lowercase scoring surface:
+    every string VALUE, walked in sorted-key order (deterministic);
+    keys never score (a key named `verification_method` is schema, not
+    task content)."""
+    parts: list[str] = []
+
+    def _walk(node) -> None:
+        if isinstance(node, dict):
+            for key in sorted(node, key=str):
+                _walk(node[key])
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _walk(item)
+        elif isinstance(node, str):
+            parts.append(node)
+        else:
+            parts.append(str(node))
+
+    _walk(spec)
+    return " ".join(parts).lower()
+
+
+def heuristic_family_scores(spec: dict, families) -> dict[str, int]:
+    """Mechanical keyword scoring: each family's OWN token words (the
+    hyphen-split registry token) counted as substrings over the spec
+    surface. Integer hit counts, deterministic, no invention — the
+    `llm-self-assessment` source replaces exactly this dict."""
+    text = _spec_text(spec if isinstance(spec, dict) else {})
+    scores: dict[str, int] = {}
+    for fam in sorted(set(families)):
+        hits = 0
+        for word in str(fam).split("-"):
+            if word:
+                hits += text.count(word)
+        scores[str(fam)] = int(hits)
+    return scores
+
+
+def seed_intake_prior(ws, *, families=None,
+                      source: str = "heuristic-fallback") -> dict:
+    """Write runs/llm-prior.json: weak Beta pseudo-counts per family with
+    TOTAL mass exactly BETA_SEED_CAP, means strictly in (0, 0.5)
+    (skepticism-first: cap-0.5 seeding never commits hard), ordered by
+    the mechanical scores. Fail-open: missing task_spec or an empty
+    family set writes NOTHING and returns {} (the current behavior);
+    an unknown source raises ValueError (a made-up provenance is not a
+    fail-open case)."""
+    if source not in SEED_SOURCES:
+        raise ValueError(f"unknown seed source {source!r}")
+    from kunglao_log import warn
+
+    ws = Path(ws)
+    spec: dict | None
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(
+            (ws / "task_spec.yaml").read_text(encoding="utf-8"))
+        spec = loaded if isinstance(loaded, dict) else None
+    except (OSError, ValueError):
+        spec = None
+    if spec is None:
+        return {}
+    fams = sorted(set(families)) if families is not None else None
+    if fams is None:
+        import method_families
+
+        fams = sorted(method_families.registered_tokens())
+    if not fams:
+        return {}
+    scores = heuristic_family_scores(spec, fams)
+    smax = max(scores.values())
+    weights = {f: scores[f] + 1 for f in fams}
+    total_w = _seq_sum([weights[f] for f in fams])
+    digest = hashlib.sha256(
+        json.dumps(spec, sort_keys=True,
+                                 ensure_ascii=False, default=str)
+        .encode("utf-8")).hexdigest()
+    fam_doc: dict[str, dict] = {}
+    for fam in fams:
+        mass = BETA_SEED_CAP * weights[fam] / total_w
+        mean = 0.5 * (scores[fam] + 1) / (smax + 2)
+        alpha = mass * mean
+        fam_doc[fam] = {"alpha": alpha, "beta": mass - alpha}
+    doc = {
+        "schema": SEED_SCHEMA,
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "source": source,
+        "task_features_digest": digest,
+        "families": fam_doc,
+        "calibration": dict(_SEED_CALIBRATION),
+        "provenance": dict(_SEED_PROVENANCE),
+    }
+    try:
+        path = ws / SEED_REL
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(doc, ensure_ascii=False,
+                                     sort_keys=True, indent=2) + "\n",
+            encoding="utf-8")
+    except OSError as exc:  # telemetry, never the producer — but loud (#275)
+        warn("priors.seed_intake_prior", f"{type(exc).__name__}: {exc}")
+        return {}
+    return doc
+
+
+def read_intake_prior(ws) -> dict | None:
+    """Tolerant read: missing / corrupt / wrong-schema / any malformed
+    family row ⇒ None — never an exception, never a fabricated prior
+    (the whole doc is rejected; there is no partial credit for a seed)."""
+    try:
+        raw = (Path(ws) / SEED_REL).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(doc, dict) or doc.get("schema") != SEED_SCHEMA:
+        return None
+    fams = doc.get("families")
+    if not isinstance(fams, dict) or not fams:
+        return None
+    for row in fams.values():
+        if not isinstance(row, dict):
+            return None
+        try:
+            alpha = float(row["alpha"])
+            beta = float(row["beta"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not (alpha > 0.0 and beta > 0.0):
+            return None
+    return doc
+
+
+def intake_prior_lead(doc: dict | None) -> str | None:
+    """The doc's top family by mean alpha/(alpha+beta); ties break
+    alphabetically (deterministic); None-safe on doc/empty."""
+    if not isinstance(doc, dict):
+        return None
+    fams = doc.get("families")
+    if not isinstance(fams, dict) or not fams:
+        return None
+    return min(fams, key=lambda f: (
+        -(float(fams[f]["alpha"]) / (float(fams[f]["alpha"])
+                                     + float(fams[f]["beta"]))), f))
+
+
+def intake_prior_weights(ws, allowed=None) -> dict:
+    """{family: mean} over the doc — the envelope's cold-start proposal
+    face. ``allowed`` requires EXACT coverage (the doc must rank the
+    whole allowed vocabulary or nothing): a doc that predates a registry
+    change cannot rank coherently next to 1.0 fill-ins, so partial
+    coverage fails open to {} (uniform)."""
+    doc = read_intake_prior(ws)
+    if doc is None:
+        return {}
+    fams = doc["families"]
+    if allowed is not None and set(fams) != set(allowed):
+        return {}
+    return {f: float(r["alpha"]) / (float(r["alpha"]) + float(r["beta"]))
+            for f, r in fams.items()}

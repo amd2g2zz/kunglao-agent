@@ -83,8 +83,12 @@ FEATURE_TABLE_REL = Path("runs") / "feature-table.jsonl"
 
 
 def enabled() -> bool:
-    """KUNGLAO_PREDICT_BEFORE_TRY == "1" (exact; anything else is off)."""
-    return os.environ.get(FLAG_ENV, "") == "1"
+    """Default ON since WS3 (#544): the cold-start anchor engages
+    whenever a mined table + live features exist; the explicit opt-out
+    is KUNGLAO_PREDICT_BEFORE_TRY == "0" (exact). Flag off, or flag on
+    without a table/features, is byte-identical to the pre-change
+    kernel — the determinism wall."""
+    return os.environ.get(FLAG_ENV, "") != "0"
 
 
 def default_table_path(ws) -> Path:
