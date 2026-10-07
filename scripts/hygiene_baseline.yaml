@@ -353,6 +353,8 @@ files:
     r1: 1
   scripts/rlvr/compose.py:
     r1: 5
+  scripts/rlvr/expansion.py:
+    r1: 1
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
@@ -1576,6 +1578,8 @@ files:
   tests/test_ws3_intake_prior_544.py:
     r1: 1
     r2: 1
+  tests/test_ws4_expansion_546.py:
+    r1: 1
   tests/test_ws_layout_delegation_863c.py:
     r1: 5
   tests/test_xml_injection_55.py:

@@ -76,7 +76,11 @@ DISPATCH_PROTOCOL_VERSION = 1
 # carried — tier already rides the envelope.
 DISPATCH_PROTOCOL_VERSIONS = (1, 2)
 ACTION_TYPES = ("dispatch", "verify", "recall-history", "distill-online",
-                "distill-hybrid", "replan", "rollback", "stop")
+                "distill-hybrid", "replan", "rollback", "stop",
+                # WS4 (#546): the discovery-layer move — obstacles reach
+                # K + tried arms collapsed => generate novel hypotheses
+                # outside the failed set (verifier-gated admission)
+                "expand")
 CONTEXT_RECIPES = ("minimal", "facts_snapshot", "facts_anti_hints",
                    "full_recall")
 VERIFICATION_MODES = ("none", "replay_probe", "oracle_case", "red_team")
