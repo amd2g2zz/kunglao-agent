@@ -1384,13 +1384,20 @@ class TestUnifiedAuditTrail:
         # the DTS receipt rides the row (the deterministic sampler face)
         assert rec["envelope"]["schema"] == "q-cell-sample/1"
         assert fam in rec["envelope"]["candidates"]
-        # declared runs keep the proposal-channel face (no sample)
+        # declared runs ride the sampler score face now (#545 WS2: the
+        # bypass is closed — the declared family wins the envelope and
+        # the receipt records propensity 1.0, the OPE record the old
+        # envelope-less skip never produced)
         ctx2 = self._ctx(stub_repo, tmp_path, ws=tmp_path / "ws-declared")
         ctx2.state.method_family = "static-decompile"
         _run_dispatch_act(ctx2, "C-005", set(), {"acts": []})
         rec2 = json.loads(self._rows(ctx2.ws)[0]["detail"])
         assert rec2["method_family"] == "static-decompile"
-        assert rec2["envelope"] is None  # no sampler receipt for a proposal
+        env2 = rec2["envelope"]
+        assert env2 is not None
+        assert env2["propensity"] == 1.0
+        assert env2.get("declared") is True
+        assert "static-decompile" in env2["candidates"]
 
     def test_dispatch_envelope_sampler_failure_stays_fail_open(
             self, stub_repo, tmp_path, monkeypatch, capsys):

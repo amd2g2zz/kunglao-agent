@@ -429,18 +429,25 @@ class TestHostWiring:
     def test_envelope_host_threads_verdicts_source_pin(self):
         """scripts/e2e/checkpoints._sample_envelope_family carries the
         termination threading beside the feature-prior kwargs (the
-        action-selection site is wired, not just the advisory lead)."""
+        action-selection site is wired, not just the advisory lead).
+        #545 refactor: the optional-kwargs threading lives in the
+        _sampler_extras helper the sampler site calls — the pin follows
+        the call edge so the wiring stays adjacent and INVOKED."""
         src = (ROOT / "scripts" / "e2e" / "checkpoints.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
-        fn = next(
-            n
+        fns = {
+            n.name: ast.get_source_segment(src, n)
             for n in ast.walk(tree)
-            if isinstance(n, ast.FunctionDef) and n.name == "_sample_envelope_family"
-        )
-        body = ast.get_source_segment(src, fn)
-        assert "termination" in body, "envelope sampler host has no termination threading"
-        assert "verdicts" in body
-        assert "death" in body
+            if isinstance(n, ast.FunctionDef)
+            and n.name in ("_sample_envelope_family", "_sampler_extras")
+        }
+        body = fns.get("_sample_envelope_family") or ""
+        assert "_sampler_extras(" in body, \
+            "the envelope sampler host must invoke the kwargs helper"
+        extras = fns.get("_sampler_extras") or ""
+        assert "termination" in extras, "envelope sampler host has no termination threading"
+        assert "verdicts" in extras
+        assert "death" in extras
 
 
 # ===========================================================================
