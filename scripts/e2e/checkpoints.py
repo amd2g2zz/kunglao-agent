@@ -1336,7 +1336,12 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
     fail-open, never breaks the loop. Registry admission (making an
     admitted novel arm DISPATCHABLE through the #432 vocabulary gate)
     is the named next face on #546 — this move generates, adjudicates,
-    and records; it does not yet mint registry tokens."""
+    and records; it does not yet mint registry tokens. The ablation
+    face: KUNGLAO_EXPANSION=0 disables the move entirely (the L3
+    off-arm of the blocked-path 2x2 delta)."""
+    import os as _os
+    if _os.environ.get("KUNGLAO_EXPANSION", "") == "0":
+        return
     try:
         ex = _load_repo_module(ctx.repo, "rlvr.expansion")
         st = _load_repo_module(ctx.repo, "rlvr.state")
