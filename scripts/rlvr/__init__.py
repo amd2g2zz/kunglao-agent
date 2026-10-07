@@ -90,6 +90,7 @@ from . import reward
 from . import scalar
 from . import state
 from . import termination
+from . import expansion
 from . import triples
 from . import winrate
 from .ledger import (
@@ -268,6 +269,7 @@ from .termination import (
 __all__ = [
     # modules
     "compose",
+    "expansion",
     "feature_prior",
     "ledger",
     "liveness",

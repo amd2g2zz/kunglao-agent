@@ -50,6 +50,11 @@ scripts/rlvr/
 │                        #   the learned "when to quit": Beta per
 │                        #   (obstacle-kind, method-family), floor-
 │                        #   not-delete sampler verdicts (PARK posture)
+├── expansion.py        # discovery-layer operator (issue #546 WS4/L3) —
+│                        #   trigger over sanctioned faces (obstacles K +
+│                        #   collapsed arms), feature-keyed novelty (the
+│                        #   anti-renaming wall), verifier-gated admission
+│                        #   scoring, runs/expansion/E-<n>.json receipts
 └── README.md            # this document
 ```
 
