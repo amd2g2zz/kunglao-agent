@@ -18,7 +18,7 @@ name: release-check
 
 concurrency:
   # one live run per ref — a new push cancels the superseded run instead of
-  # queueing stale suites behind it on the 2-runner pool
+  # queueing stale suites behind it (runner routing: see runner-probe)
   group: release-check-${{ github.ref }}
   cancel-in-progress: true
 
@@ -29,8 +29,9 @@ on:
     branches: [ "dev", "master" ]
 
 env:
-  # Runner image pre-installs python3.11 (default python3); uv picks the
-  # interpreter via this env.
+  # uv picks the interpreter via this env on both tiers (self-hosted
+  # image python + uv-managed 3.11 on GitHub-hosted — see the
+  # provisioning step; host-agnostic since the 2026-10-07 routing).
   UV_PYTHON: python3.11
 
 # The four legs only read the repo and upload run artifacts — no write
@@ -43,7 +44,11 @@ jobs:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
     # with "command not found" — the python-3.11 label pins the right host.
-    runs-on: [self-hosted, python-3.11]
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -55,9 +60,6 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       # Official installer (astral.sh). The former `pip install --user uv`
       # broke when the runner image began enforcing PEP 668
@@ -68,6 +70,14 @@ jobs:
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: CI YAML selfcheck (issue #147)
       run: uv run python scripts/release_check_selfcheck.py
@@ -111,7 +121,11 @@ jobs:
       run: uv run python scripts/structural_check.py .
 
   docs-contract:
-    runs-on: [self-hosted, python-3.11]
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -122,13 +136,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
@@ -137,7 +156,11 @@ jobs:
       run: uv run python -m pytest -m docs -n auto --dist loadgroup -q --junitxml=.pytest-docs.xml
 
   unit-fast:
-    runs-on: [self-hosted, python-3.11]
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -148,13 +171,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
@@ -173,6 +201,12 @@ jobs:
         if-no-files-found: error
 
   integration:
+    # env-bound leg: the eval-native tier needs our host
+    # toolchains (aarch cross-compiler, exec-permitted fixtures) —
+    # ubuntu-latest runs it RED (PermissionError / symbol-not-found,
+    # observed 2026-10-07). Owner routing: self-hosted first; this
+    # leg IS the self-hosted-shaped one. The three shorts run in
+    # parallel on the free tier, so this slot is the only queue.
     runs-on: [self-hosted, python-3.11]
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -184,13 +218,18 @@ jobs:
         fi
         git --version
 
-    - name: Set up Python (pre-installed in runner image)
-      run: python3.11 --version
-
     - name: Install uv (documented dependency manager)
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      # GitHub-hosted ubuntu images no longer preinstall 3.11; uv
+      # fetches its managed build when absent (self-hosted: a no-op).
+      # Runs AFTER the uv install so both tiers share one path.
+      run: |
+        uv python install 3.11
+        uv run python --version
 
     - name: Install dependencies (locked)
       run: uv sync --locked
