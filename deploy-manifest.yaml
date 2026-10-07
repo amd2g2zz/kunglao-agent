@@ -411,7 +411,7 @@ files:
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
-    sha256: ed2fb1183c959e6eb8f077cbdfe86b2fcf4b5eb2c0e9bc1a199677774e6ab506
+    sha256: a4f74fe79244fcff1c2438f9423bdaae0029c75ac4f69912ef33b2a8e606c57a
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
@@ -423,7 +423,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: dfa9d717f283ec0b1f26350ebec03943cb321f62e0dc854d1dc2f0dd0465638f
+    sha256: f444beecfea8ee1b64d277c7e228cb93eaa9e64f76cf7503ce16b0fcca1f2728
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: fb5ad3cb12395a517fd63594bf90fa57a7c0976fecf3261fd43213db69ad57b4
+    sha256: 251d9e9a016d2a446fede56f82700399cf9a721800bd9928edb8e9e0fb78f6fc
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
