@@ -116,7 +116,9 @@ def test_manifest_description_is_readme_one_liner():
     text = README.read_text(encoding="utf-8")
     match = re.search(r"^# kunglao-agent\n\n(.+)$", text, re.MULTILINE)
     assert match, "README opening one-liner not found"
-    assert m["description"] == match.group(1).strip(), (
+    # the reworked README bolds the one-liner (2026-10-08); bold is
+    # presentation — the description carries the plain text
+    assert m["description"] == match.group(1).strip().strip("*"), (
         "plugin.json description must be the README opening one-liner"
     )
 

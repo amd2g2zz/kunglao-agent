@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760" font-family="'SF Mono','Menlo','Cascadia Code',monospace">
+  <defs>
+    <linearGradient id="tb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f3e"/><stop offset="1" stop-color="#1f2330"/></linearGradient>
+  </defs>
+  <rect width="1180" height="760" rx="12" fill="#11131a"/>
+  <!-- title bar -->
+  <rect width="1180" height="36" rx="12" fill="url(#tb)"/>
+  <circle cx="22" cy="18" r="6" fill="#ff5f57"/><circle cx="42" cy="18" r="6" fill="#febc2e"/><circle cx="62" cy="18" r="6" fill="#28c840"/>
+  <text x="590" y="23" fill="#8b93a7" font-size="13" text-anchor="middle">~/cases/synth-dropper — kunglao-agent</text>
+  <!-- user prompt -->
+  <text x="28" y="74" fill="#e6e9f0" font-size="14" font-weight="bold">&#9654; What does this binary do, and where does it phone home?</text>
+  <!-- agent line -->
+  <text x="28" y="112" fill="#7aa2f7" font-size="14" font-weight="bold">&#9670; kunglao-orchestrator</text>
+  <text x="28" y="134" fill="#a9b1d6" font-size="13">Goal anchored. Decomposing into claims and arming the mechanical oracle&#8230;</text>
+  <!-- tool card: convergence -->
+  <rect x="28" y="152" width="1124" height="106" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="152" width="1124" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="170" fill="#9ece6a" font-size="13">&#9889; Bash(kunglao decide &#8901; 12s)</text>
+  <text x="44" y="194" fill="#c0caf5" font-size="13">$ uv run --project . python scripts/convergence_check.py . --json</text>
+  <text x="44" y="214" fill="#73daca" font-size="13">{ "decision": "DISPATCH", "next": "C-404 url-refit-static", "open": 3, "closed": 5,</text>
+  <text x="44" y="234" fill="#73daca" font-size="13">  "oracle": { "armed": 4, "green": 3 }, "budget": { "used_s": 2412, "cap_s": 7200 } }</text>
+  <!-- dispatch card -->
+  <rect x="28" y="274" width="1124" height="120" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="274" width="1124" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="292" fill="#9ece6a" font-size="13">&#9889; Agent(kunglao-worker &#8901; C-404 &#8901; 28m 41s)</text>
+  <text x="44" y="316" fill="#c0caf5" font-size="13">method_lead: prefer `static-decompile` (posterior mean 0.71, 9 settlements)</text>
+  <text x="44" y="336" fill="#c0caf5" font-size="13">ACT BUDGET: this act is KILLED at 1740s — bank facts incrementally, STATUS: DONE before the cap</text>
+  <text x="44" y="356" fill="#ff9e64" font-size="13">&#9654; F087 writes: C2 callback domain `stats-metrics.win` extracted from .rdata @0x0041AC88 (sha256 4f2a&#8230;)</text>
+  <text x="44" y="376" fill="#73daca" font-size="13">&#10004; worker landed: 3 facts, 1 claim PARTIALLY-VERIFIED, 0 blockers</text>
+  <!-- verifier card -->
+  <rect x="28" y="412" width="1124" height="96" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="412" width="1124" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="430" fill="#9ece6a" font-size="13">&#9889; Agent(kunglao-redteam &#8901; blind verify C-404 &#8901; 9m 02s)</text>
+  <text x="44" y="454" fill="#c0caf5" font-size="13">RED-TEAM contract: you are the ATTACKER — refute by deriving from raw evidence. BLIND: no facts/, no maker notes.</text>
+  <text x="44" y="474" fill="#ff9e64" font-size="13">&#9654; runs/verify-redteam-C-404.md &#8594; RED-TEAM VERDICT: CONFIRMED (attacked 3 vectors, failed to refute)</text>
+  <text x="44" y="494" fill="#73daca" font-size="13">&#10004; promotion gate: C-404 &#8594; PROVEN (verifier sign-off banked, replay 18/18 byte-exact)</text>
+  <!-- summary -->
+  <text x="28" y="536" fill="#a9b1d6" font-size="13">Oracle: 4/4 armed cases green &#183; claims 6/8 closed &#183; 0 contradictions &#183; heartbeats alive &#183; win-rate 0.71 &#8593;</text>
+  <!-- statusline -->
+  <rect x="28" y="560" width="1124" height="44" rx="8" fill="#161a2b" stroke="#2a2f45"/>
+  <text x="44" y="587" fill="#9ece6a" font-size="14">&#9670; analyzing</text>
+  <text x="150" y="587" fill="#e6e9f0" font-size="14">C 6/8</text>
+  <text x="230" y="587" fill="#7aa2f7" font-size="14">wr 0.71</text>
+  <text x="320" y="587" fill="#ff9e64" font-size="14">R: static-decompile 12m</text>
+  <text x="530" y="587" fill="#73daca" font-size="14">&#9679;&#9679;&#9675;</text>
+  <text x="590" y="587" fill="#a9b1d6" font-size="14">C-405 &#183; unpack UPX layer</text>
+  <text x="830" y="587" fill="#bb9af7" font-size="14">v &#9650;&#9650;&#9651;&#9650;&#9650;</text>
+  <!-- input -->
+  <rect x="28" y="628" width="1124" height="66" rx="8" fill="#161a2b" stroke="#2a2f45"/>
+  <text x="44" y="662" fill="#7aa2f7" font-size="15">&#9654;</text>
+  <rect x="70" y="646" width="8" height="20" fill="#7aa2f7"><animate attributeName="opacity" values="1;0;1" dur="1.2s" repeatCount="indefinite"/></rect>
+  <text x="700" y="726" fill="#565f89" font-size="12" text-anchor="middle">kunglao-agent — the loop, the fact base, and the mechanical oracle behind every PROVEN</text>
+</svg>

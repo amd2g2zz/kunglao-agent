@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="640" viewBox="0 0 1180 640" font-family="'SF Mono','Menlo','Cascadia Code',monospace">
+  <defs>
+    <linearGradient id="tb2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f3e"/><stop offset="1" stop-color="#1f2330"/></linearGradient>
+  </defs>
+  <rect width="1180" height="640" rx="12" fill="#11131a"/>
+  <rect width="1180" height="36" rx="12" fill="url(#tb2)"/>
+  <circle cx="22" cy="18" r="6" fill="#ff5f57"/><circle cx="42" cy="18" r="6" fill="#febc2e"/><circle cx="62" cy="18" r="6" fill="#28c840"/>
+  <text x="590" y="23" fill="#8b93a7" font-size="13" text-anchor="middle">~/cases/synth-dropper/runs — the learning loop</text>
+  <!-- round strategy -->
+  <rect x="28" y="56" width="560" height="180" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="56" width="560" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="74" fill="#7aa2f7" font-size="13">round-strategy (tick 41 &#8901; composed from 31 settlements)</text>
+  <text x="44" y="100" fill="#c0caf5" font-size="13">method lead : static-decompile   (mean 0.71 &#8593; 6 ticks)</text>
+  <text x="44" y="120" fill="#c0caf5" font-size="13">anti-hints  : emulate-first (dead &#215;4), strings-only (dead &#215;2)</text>
+  <text x="44" y="140" fill="#c0caf5" font-size="13">budget      : bucket:B+ (68% remaining, on-pace)</text>
+  <text x="44" y="160" fill="#9ece6a" font-size="13">arm_key     : static-decompile | facts_snapshot | replay_probe | B</text>
+  <text x="44" y="180" fill="#a9b1d6" font-size="13">&#955; cross-task: 14 rows tempered (LAMBDA 0.25) from posterior store</text>
+  <text x="44" y="200" fill="#a9b1d6" font-size="13">cold-start  : llm-prior seeded (cap 0.5) — the uniform arm measures it</text>
+  <!-- posterior store -->
+  <rect x="612" y="56" width="540" height="180" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="612" y="56" width="540" height="26" rx="8" fill="#222739"/>
+  <text x="628" y="74" fill="#7aa2f7" font-size="13">posterior store (DTS &#8901; Beta per arm &#8901; &#947;-discounted)</text>
+  <text x="628" y="100" fill="#73daca" font-size="13">static-decompile   &#945; 9.3  &#946; 3.1   mean 0.75  &#9633;&#9633;&#9633;&#9633;&#9633;&#9633;&#9632;&#9632;</text>
+  <text x="628" y="120" fill="#73daca" font-size="13">emulate-hybrid     &#945; 2.1  &#946; 4.0   mean 0.34  &#9633;&#9633;&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;  ARM_FLOOR</text>
+  <text x="628" y="140" fill="#ff9e64" font-size="13">unpack-upx         &#945; 1.4  &#946; 2.9   mean 0.33  censored:2 &#934;+0.08 (tiebreak)</text>
+  <text x="628" y="160" fill="#c0caf5" font-size="13">verify:redteam     &#945; 6.8  &#946; 1.2   mean 0.85  verified=1.0 banks</text>
+  <text x="628" y="180" fill="#bb9af7" font-size="13">expand:unicorn-emu &#945; 0.5  &#946; 0.5   COLD &#8212; novelty 1.0, admitted E-2</text>
+  <text x="628" y="200" fill="#565f89" font-size="13">SNIPS: thompson 0.61 &#8776; eps-greedy 0.58 &gt; uniform 0.44 (ESS 41)</text>
+  <!-- expansion receipt -->
+  <rect x="28" y="256" width="1124" height="150" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="256" width="1124" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="274" fill="#bb9af7" font-size="13">expansion move (runs/expansion/E-2 &#8901; the discovery layer)</text>
+  <text x="44" y="300" fill="#c0caf5" font-size="13">trigger   : obstacles=3 (K reached) &#183; collapsed=[emulate-first, strings-only]</text>
+  <text x="44" y="320" fill="#c0caf5" font-size="13">h-1 write-unicorn-emulator  log P -1.20  policy 0.00  novelty 1.00  total  -0.20  &#10004; pending gate</text>
+  <text x="44" y="340" fill="#c0caf5" font-size="13">h-2 unpack-with-hex-rays   log P -0.35  policy 0.33  novelty 0.00  total  -0.02  &#10007; renamed retry</text>
+  <text x="44" y="360" fill="#9ece6a" font-size="13">admitted  : h-1 (feature-keyed novelty — a renamed dead arm never spends the move)</text>
+  <text x="44" y="384" fill="#a9b1d6" font-size="13">provenance: obstacle OBS-7&#8594;OBS-9 &#8594; hypothesis &#8594; admission receipt &#8594; cold seed (llm-prior)</text>
+  <!-- winrate -->
+  <rect x="28" y="428" width="1124" height="160" rx="8" fill="#181b26" stroke="#2a2f45"/>
+  <rect x="28" y="428" width="1124" height="26" rx="8" fill="#222739"/>
+  <text x="44" y="446" fill="#7aa2f7" font-size="13">win-rate curve (rolling 5 over the settlement stream &#8901; scripts/winrate_curve.py --html)</text>
+  <polyline points="60,560 180,552 300,548 420,536 540,540 660,522 780,510 900,498 1020,486 1100,480" fill="none" stroke="#9ece6a" stroke-width="2.5"/>
+  <polyline points="60,572 180,570 300,566 420,560 540,562 660,554 780,550 900,546 1020,542 1100,540" fill="none" stroke="#565f89" stroke-width="2" stroke-dasharray="4 4"/>
+  <text x="1100" y="472" fill="#9ece6a" font-size="13" text-anchor="end">window-5 &#8593; 0.71</text>
+  <text x="60" y="578" fill="#565f89" font-size="12">settlement order &#8594;</text>
+  <text x="700" y="616" fill="#565f89" font-size="12" text-anchor="middle">the loop measures itself — every number traces to a ledger row</text>
+</svg>
