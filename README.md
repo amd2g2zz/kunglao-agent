@@ -301,47 +301,135 @@ One workspace per engagement — scaffolded by init; hooks are wired at workspac
 </details>
 
 <details>
-<summary><strong>Toolchain by target</strong></summary>
+<summary><strong>Toolchain by target</strong> — the `--type` you pick at init locks the HARD tier</summary>
 
-All types require two MCP servers: `ghidra` and `sequential-thinking`.
-Probe any time: `uv run python scripts/mcp_probe.py <ws> --type <t>` (exit
-1 = HARD missing).
+**All types require the two HARD MCP servers** (`ghidra` +
+`sequential-thinking` — commands in the MCP section below). Expand your
+target:
 
-- **windows** — pefile, die, floss, Ghidra/IDA; VMware+vmr-shell or ssh/docker for dynamic; frida-server
-- **linux** — binutils (file/readelf/objdump), Ghidra/IDA; ssh-mcp control plane for dynamic
-- **android** — aapt, jadx, apktool, gitnexus, adb + rooted device, frida-server (+Ghidra for native `.so`)
-- **web** — camoufox-reverse MCP (required, ships with the plugin); docker default channel
-- **macos** — Xcode CLT tools; ssh channel to a Mac host
+<details>
+<summary><strong>windows (PE32+ x86-64)</strong> — native Windows binaries</summary>
 
-Dynamic work needs one execution channel (`KUNGLAO_CHANNEL`): `vmr`
-(VMware), `ssh`, `docker`, `adb` — or `local` for **static-only** work (the
-red line: never execute the sample on the host; a dynamic task
-HARD-rejects on `local`).
+| Tier | Tool | Install |
+|---|---|---|
+| HARD | `pefile` (Python) | `uv pip install pefile` |
+| HARD | `die` (Detect It Easy) | `KUNGLAO_DIE` env or on PATH — [ntinfo.com](https://ntinfo.com) |
+| HARD | `floss` (FLARE FLOSS) | per [flare-floss docs](https://github.com/mandiant/flare-floss) |
+| HARD | Ghidra or IDA | one of them; see the MCP section below |
+| HARD (T2/T3) | VMware + vmr-shell, or an ssh/docker channel | see [Bring your own environment](#bring-your-own-environment) |
+| HARD (T2/T3) | `frida-server` (renamed, custom port) | device/VM-side binary, default port 1337 |
+
+Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory
+forensics) and the IDA-Pro MCP are optional — see the MCP manifest below.
 
 </details>
 
 <details>
-<summary><strong>MCP supply manifest</strong></summary>
+<summary><strong>linux (ELF)</strong> — native Linux binaries / firmware / memory images</summary>
+
+| Tier | Tool | Install |
+|---|---|---|
+| HARD | `file`, `readelf`, `objdump` | `binutils` package |
+| HARD | Ghidra or IDA | one of them |
+| HARD (T2/T3) | VMware + vmr-shell, or an ssh/docker control plane | see [Bring your own environment](#bring-your-own-environment) |
+| HARD (T2/T3) | `frida-server` (renamed, custom port) | device-side binary, port 1337 |
+| WARN | `gdbserver` (host-side PATH), `strace`, `ltrace` | optional extras |
+
+`ssh-mcp` enables the ssh control plane for remote / cloud / docker hosts.
+
+</details>
+
+<details>
+<summary><strong>android (APK / DEX / native .so)</strong> — the hardest target type, most HARD items</summary>
+
+| Tier | Tool | Install |
+|---|---|---|
+| HARD | `aapt` or `aapt2` (or `unzip` fallback) | Android SDK build-tools |
+| HARD | `jadx` (DEX → Java decompiler) | [skylot/jadx](https://github.com/skylot/jadx) |
+| HARD | `apktool` (APK resource decode/rebuild) | [iBotPeaches/Apktool](https://github.com/iBotPeaches/Apktool) |
+| HARD | `gitnexus` (post-decompile graph) | `npm i -g gitnexus` |
+| HARD | Ghidra or IDA | only if the APK contains native `.so` |
+| HARD | `adb` + **a rooted device** with `ro.debuggable=1` | platform-tools + custom frida on device |
+| HARD | `frida-server` (renamed, custom port 1337) | device-side binary |
+| HARD | `android_server` (IDA remote debugging) | device-side binary, port 23946 |
+| WARN | `apkid` | `uv pip install apkid` |
+| WARN | `baksmali` | from [smali releases](https://github.com/baksmali/smali/releases) |
+
+</details>
+
+<details>
+<summary><strong>web &amp; macos</strong> — lightweight toolchains by design</summary>
+
+| Tier | Tool | Install |
+|---|---|---|
+| HARD | `camoufox-reverse` MCP (web) | anti-detect Firefox for hook / trace / network capture (REQUIRED on web) |
+| WARN | `docker` (web channel default) | Docker Desktop, or set `KUNGLAO_CHANNEL=ssh` explicitly |
+| WARN | `lipo`, `otool`, `nm`, `codesign`, `xattr` (macOS) | Xcode Command Line Tools |
+| WARN | `ghidra` MCP (macOS) | recommended — see the manifest below |
+
+</details>
+
+Dynamic work needs one execution channel (`KUNGLAO_CHANNEL`): `vmr`
+(VMware — any guest OS, snapshot/revert is the irreplaceable value),
+`ssh` (any ssh-reachable box), `docker`, `adb` — or `local` for
+**static-only** work (the red line: never execute the sample on the host;
+a dynamic task HARD-rejects on `local`).
+
+</details>
+
+---
+
+## Bring your own environment
+
+Dynamic debugging needs an execution control plane the agent can drive.
+`KUNGLAO_CHANNEL` selects one of five first-class channels — use what your
+environment already has; none is a degraded mode:
+
+| Channel | What it drives | Prerequisites |
+|---|---|---|
+| `vmr` (default) | VMware VM, **any guest OS** — snapshot/revert workflows | vmr-shell skill; `KUNGLAO_VM_HOST` + ports 9876/1337 |
+| `ssh` | Any ssh-reachable box: bare metal, cloud VM, Mac, remote docker host | key auth — the probe runs a real BatchMode `ssh ... true` |
+| `docker` | Local or remote docker daemon | `docker version` green; optional `KUNGLAO_DOCKER_CONTAINER` |
+| `adb` | Android emulator or real device | `adb devices` shows it; `adb forward tcp:1337 tcp:1337` for frida |
+| `local` | **Static-only analysis on the host** | none — the red line below |
+
+> **`local` red line:** local is for **static** work only — never execute,
+> debug, or inject the sample on the host. Any dynamic requirement switches
+> to `vmr`/`ssh`/`docker`/`adb`; init HARD-rejects a dynamic task on
+> `local`.
+
+Channel probes run only for dynamic tasks; ssh-channel execution flows
+through the **ssh-mcp** control plane (`npm i -g ssh-mcp`), plain CLI ssh
+as fallback.
+
+---
+
+## MCP servers
 
 Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a
 workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is
-never overwritten). Probe:
-`uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>`
-— exit 1 = HARD missing.
+never overwritten). Probe any time:
 
-| MCP server | Tier | Scope | Purpose |
-|------------|------|-------|---------|
-| `ghidra` | HARD | required, all types | decompilation / static analysis |
-| `sequential-thinking` | HARD | required, all types | structured reasoning |
-| `x64dbg` | HARD | Windows T3 dynamic | dynamic debugging (VM remote) |
-| `volatility` | WARN | Windows T3 | memory forensics |
-| `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis |
-| `gitnexus` | HARD | Android graph building | post-decompile knowledge graph |
-| `ssh-mcp` | WARN | channel | ssh execution control plane |
-| `virustotal` | WARN | CTI | threat intel hypotheses |
-| `camoufox-reverse` | HARD | web | browser JS reversing — ships with the plugin |
+```bash
+uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
+```
 
-</details>
+(exit 1 = HARD missing, 2 = WARN-only missing.) The full manifest:
+
+| MCP server | Tier | Scope | Purpose | Registration |
+|------------|------|-------|---------|--------------|
+| `ghidra` | HARD | required, all types | decompilation / static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | required, all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `x64dbg` | HARD | Windows T3 dynamic | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
+| `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
+| `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
+| `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
+| `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `camoufox-reverse` | HARD | web | browser JS reversing (hooks / trace / network capture) — REQUIRED on web | ships with the plugin (`.claude-plugin/plugin.json mcpServers`) — enable the plugin; dep: `uv pip install camoufox-reverse-mcp` |
+
+Workspace `.mcp.json` is generated by `kunglao-init` when missing; user
+registrations above are for machines deployed per the kunglao docs.
 
 ---
 
@@ -351,6 +439,93 @@ never overwritten). Probe:
 - Registry admission for discovered arms — making novel methods dispatchable
 - Cross-workspace memory: what works where, feature-keyed
 - The blocked-path measurement corpus — quantifying discovery beyond history
+
+---
+
+## ❓ FAQ
+
+**When does it stop?**
+`CONVERGED` (exit 0): every primary question in `task_spec.yaml` has an
+answer backed by a `PROVEN` fact, zero global contradictions, and the
+completion transaction recomputes clean. Budget and wall-clock caps bound
+the run; exhaustion counts as fail, never as silent success.
+
+**What do the claim statuses mean?**
+`OPEN` (not yet settled), `PARTIALLY-VERIFIED` (facts exist, no blind
+sign-off yet), `PROVEN` (an independent verifier re-derived it blind and
+the gates passed), `STAMP` (self-declared — never trusted as evidence). A
+worker's own sign-off can only ever produce `STAMP`.
+
+**What does the oracle verdict mean?**
+A machine-checked decision against a quantified verification contract — a
+named artifact, a mechanical criterion runnable with no LLM, and a
+threshold. It is the only trusted currency in the system; the settlement
+validator refuses to override it.
+
+**How do I read a FAIL settlement?**
+A FAIL emits a structured gap-note (decoy walls hit, evidence gaps, cost
+overrun — machine signals only) next to the settled row. The same-unit
+retry reads its predecessors' notes, so the next attempt attacks the named
+gap instead of repeating attempt 1.
+
+**What is PARK?**
+The option-death estimator learns, per (obstacle-kind, method-family),
+whether an investment arc is dead. A dead option is PARKed — down-weighted
+out of sampling — never deleted; it revives when the state changes.
+
+**The loop says BLOCKED — is it stuck?**
+`BLOCKED` (exit 4) means every open claim is blocked. The loop runs
+self-recovery on blockers; a SUSPECT/stale premise is auto-invalidated and
+re-derived. Persistent blockers land in `blockers/` with failure
+attribution — **read those records before adding budget**: the remedy for
+a tooling gap (register the missing server / install the missing binary)
+and for a dead method (the sampler already down-weights it) is cheaper
+than more wall-clock.
+
+**init HARD-rejected on a missing tool — what now?**
+The error block names each missing item with its install line. Install,
+then re-run the same init command (idempotent — it re-probes and
+scaffolds only on PASS). For MCP servers the registration commands are in
+the table above; verify with `mcp_probe.py` before re-running.
+
+**A worker keeps timing out (TIMEOUT rows on the ledger).**
+First read the act's artifacts: a TIMEOUT with facts banked is progress
+(credit carries them) — usually the act just needs to be split smaller;
+state the sub-goal so one claim ≈ one bounded attempt. A TIMEOUT with
+zero artifacts on the same family repeatedly means the obstacle registry
+should show the cause — fix the environment (VM reachability, frida
+port, MCP server) rather than retrying.
+
+**How do I see what the loop has learned?**
+`uv run python scripts/winrate_curve.py <ws>` for the trend;
+`runs/round-strategy.json` for the current strategy in force (method
+lead, anti-hints, budget); `runs/posterior-store.jsonl` for the raw
+posterior rows; `runs/q-cell-log.jsonl` for per-arm observations.
+
+**How do I resume after a crash?**
+`/kunglao-agent:resume <workspace>` (or `kunglao resume <workspace>`): a
+read-only breakpoint brief — health, open claims, in-flight workers, crash
+timeline — plus the next action. All state is on disk; no session context
+required.
+
+**Do I need a VM or MCP servers?**
+Static-only tasks need no execution plane at all (`KUNGLAO_CHANNEL=local`).
+Dynamic tasks require one of vmr/ssh/docker/adb. MCP-wise, all types
+require `ghidra` + `sequential-thinking`; web additionally requires
+`camoufox-reverse` (ships with the plugin). Probe:
+`uv run python scripts/mcp_probe.py <ws> --type <type>`.
+
+**My workspace predates a plugin update.**
+`/kunglao-agent:upgrade <workspace>` migrates the scaffold (hooks,
+templates, event vocab) forward; user data is never touched and byte
+drift refuses with RC=4. A version mismatch refuses analysis until
+upgraded.
+
+**Where do facts and evidence live — can I trust them?**
+`facts/F<NNN>.md` (byte-anchored, frontmatter contract) mapped to claims
+by `claim-register.yaml`; every fact cites raw artifacts through
+`evidence/_index.json` (path + sha256) and carries a `reproduce:`
+command. `verifier_sign_off` on the fact names the independent check.
 
 ---
 
