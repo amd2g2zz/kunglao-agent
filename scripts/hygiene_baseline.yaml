@@ -378,7 +378,7 @@ files:
   scripts/rlvr/scalar.py:
     r1: 1
   scripts/rlvr/state.py:
-    r1: 2
+    r1: 1
   scripts/rlvr/strategy_store.py:
     r1: 9
   scripts/rlvr/triples.py:

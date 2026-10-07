@@ -573,6 +573,50 @@ CARRIER_READMES = {
         "  承重的脚本必须升格到 analyses/ 或 evidence/。\n"
     ),
 }
+# The subagent rules (dispatched-act discipline): rendered to
+# <ws>/.claude/rules/kunglao-subagent.md at scaffold. Deliberately free
+# of version markers and issue references — formal content stays clean.
+SUBAGENT_RULES = (
+    "# Subagent rules — dispatched workers, verifiers, red-team acts\n"
+    "\n"
+    "You were dispatched with a contract. These rules hold for every dispatch.\n"
+    "\n"
+    "## Scope\n"
+    "\n"
+    "- Work the dispatched claim ONLY. New needs belong to the orchestrator —\n"
+    "  report them, do not wander.\n"
+    "- The dispatch names your kill time (ACT BUDGET). Deliverables land before\n"
+    "  70% of the budget; end before the cap. A killed act banks its artifacts\n"
+    "  but the claim stays open.\n"
+    "\n"
+    "## Before you build\n"
+    "\n"
+    "- Search the tool catalog first — the recall face in the handbook\n"
+    "  (`tools/tool-search.py --find W1 W2 ...`). A registered tool, template,\n"
+    "  or reference may already do the job; writing a new script is the last\n"
+    "  resort, and a reusable script becomes one under `scripts/` with\n"
+    "  parameters, never inline one-offs.\n"
+    "\n"
+    "## Write contracts\n"
+    "\n"
+    "- Facts land in `facts/F<NNN>.md` with the frontmatter the handbook\n"
+    "  defines; every fact cites byte-anchored artifacts (path + sha256) and\n"
+    "  carries a `reproduce:` command. A conclusion without evidence is a\n"
+    "  note, not a fact.\n"
+    "- State files (`claim-register.yaml`, `task_spec.yaml`, ...) change ONLY\n"
+    "  through `python3 scripts/ws_yaml.py set|del` — single-writer contract;\n"
+    "  direct writes are refused by the write guard.\n"
+    "- Workers make; they never sign off. Verifier acts verify ONLY (never\n"
+    "  read the maker's reasoning). Red-team acts attack: refute by\n"
+    "  independent derivation from raw evidence.\n"
+    "\n"
+    "## Report shape\n"
+    "\n"
+    "- End with `STATUS: DONE` or `STATUS: BLOCKED`.\n"
+    "- Findings summary at most 10 lines; artifacts listed by path.\n"
+    "- A BLOCKED report names the exact blocker and what you tried.\n"
+)
+
 SCAFFOLD_FILES = {
     "analysis_state.txt": (
         "# analysis_state — kunglao-init scaffold (empty-structure stubs, DESIGN §7 0.4)\n"
@@ -2332,6 +2376,17 @@ def scaffold(ws: Path) -> list[Path]:
         p.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(p, text)
         created.append(p)
+    # the subagent rules file: every dispatched act (worker / verifier /
+    # red-team) runs as a Claude session cwd'd at the workspace, and the
+    # .claude/rules/ surface loads into those sessions — the dispatch
+    # contract's ambient half. Static content, no-clobber, registered for
+    # cleanup like every scaffold entry.
+    rules_path = ws / ".claude" / "rules" / "kunglao-subagent.md"
+    if not (rules_path.exists()
+            and rules_path.read_text(encoding="utf-8").strip()):
+        rules_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(rules_path, SUBAGENT_RULES)
+        created.append(rules_path)
     for name, stub in SCAFFOLD_FILES.items():
         p = ws / name
         if p.exists() and p.read_text(encoding="utf-8").strip():

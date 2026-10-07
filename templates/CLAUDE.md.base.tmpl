@@ -42,7 +42,13 @@ The convergence loop runs every round and is the only rule set that survives con
 
 Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`). Key scripts under `{{skill_dir}}/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
-Capability discovery across the asset tiers goes through `uv run --project {{skill_dir}} python {{skill_dir}}/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
+Capability discovery (tool recall) goes through the ONE search face:
+
+```
+uv run --project {{skill_dir}} python {{skill_dir}}/tools/tool-search.py --find W1 W2 ...
+```
+
+**When to search** — before writing any new script (a registered tool may already do it), when a step feels stuck (a reference card may name the move), and at tier boundaries (decompile/emulate/debug tools by keyword). **How** — type keywords naturally: bare words (`--find emulator unicorn`), comma lists (`--find "jadx, apk"`), or repeated flags all flatten to one query; `--match all` narrows to hits containing every term; `--capability`/`--tier`/`--cost-max` may combine in the same query. Each hit states a `type`, a `consume`, and a lexical match score (word overlap, NOT relevance): invoke a tool, fill or adapt a template, or read a reference. The score ranks for your judgment and never gates surfacing — near-miss results stay visible; descriptions state expected outcomes, not guarantees.
 
 ## State files (read every turn, disk is truth)
 

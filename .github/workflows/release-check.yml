@@ -117,6 +117,9 @@ jobs:
       # shrinks it in later batches)
       run: uv run python scripts/silent_except_lint.py
 
+    - name: Formal-code marker ratchet (issue/version numbers in comments)
+      run: uv run python scripts/formal_code_lint.py
+
     - name: Structural integrity check (issue #141)
       run: uv run python scripts/structural_check.py .
 

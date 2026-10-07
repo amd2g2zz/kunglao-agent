@@ -132,6 +132,10 @@ files:
     dest: .claude/scripts/_boot.py
     kind: scaffold
     sha256: cdcd12b131132de58eb3d62b769f9f94b224f5b7827babebdaaea42bf80231e1
+  - src: scripts/_common.py
+    dest: .claude/scripts/_common.py
+    kind: scaffold
+    sha256: 7935c9f0eec4e3c52e2e8365ae76a6a7b62f96f6267b9d355c5cc57da4c0233b
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -504,6 +508,10 @@ files:
     dest: .claude/scripts/fixture_excerpt_lint.py
     kind: scaffold
     sha256: 1b60070200058e9626f438d8a1f6be3225cde48d5ae01514e0ac4ad4c3a439e1
+  - src: scripts/formal_code_lint.py
+    dest: .claude/scripts/formal_code_lint.py
+    kind: scaffold
+    sha256: 3ab49ce8d5a6f997ee5fe1497f1f40b3083fc319f62b08c76b34f83924026920
   - src: scripts/gap_notes.py
     dest: .claude/scripts/gap_notes.py
     kind: scaffold
@@ -623,7 +631,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: e32c76203f0f614eb0a17cf4809dc321de924c224f7883c63a9ddf9ef5cf5a3e
+    sha256: fc855f3dc4f3d885091b646c7f9c587dc4e74384c0d33b1361bc74bb5fca25c9
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1199,11 +1207,11 @@ files:
   - src: scripts/rlvr/priors.py
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
-    sha256: f10a85f2113e87221deeb96f0333612921cece8e847feb3356fe2b625e81fcfc
+    sha256: 6d6bae5a70b5a16c51116b259d6a87471f3727c80ed314380d3e0e9e4207ad47
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 227de522008da4cb3b4380fb7565dfd735a50e52b9ac27727243a7e5a37fc315
+    sha256: 59d1060d4be7e8afba22c4cf4b13206132e81a953efaff0cddad752dcf3b1d2b
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
@@ -1211,11 +1219,11 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: f405443f4f74863f28a35d1fa0963748763be4081c160799f9a84ed9e15dd896
+    sha256: fbac9c77865962bd0bcda8f83396e3f5b440a501151d231a45c6c82b01afd93d
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: b4aa604cdc31f2885e40f8d3beb70a5d96b9906554ff559f9f3b8144f312da9d
+    sha256: 510e2b34f06aa9835219821c8c93f93512d7636e0ed85472c34c8b280c6ee40f
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
@@ -1227,7 +1235,7 @@ files:
   - src: scripts/rlvr/triples.py
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold
-    sha256: 483f408842cd126e37111f4e6ffaf23f1cf658234fd22042d2b21b50c7508ea0
+    sha256: 04fd67076cfcc28b69c2b220f2b4b7aa8df5c677cf875d8270a1e157a0ab1835
   - src: scripts/rlvr/winrate.py
     dest: .claude/scripts/rlvr/winrate.py
     kind: scaffold
@@ -1236,10 +1244,14 @@ files:
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
     sha256: 2d2541cb224ce6ba3ee2ee6bc06bcd3e04b86bd7108d72fae8b91103e607ae05
+  - src: scripts/formal_code_baseline.yaml
+    dest: .claude/scripts/formal_code_baseline.yaml
+    kind: scaffold
+    sha256: 3076e942628ae1ff53b6f5a89edd980a462c8dc86da7141e0d18583d4dea681a
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: fb5ad3cb12395a517fd63594bf90fa57a7c0976fecf3261fd43213db69ad57b4
+    sha256: 151042f5646b07c7bc21e4fd41af6a7cf38349cec2abd3500b97674036245c84
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1715,7 +1727,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 81dbd81214ac741978fd9ffe0c9157975d3268bb5c472329e96a79ee4763a218
+    sha256: 341851e5627e97db6851d744a00421e7fc40cef9d8e9daa2df7b7609d1bec5de
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -2087,7 +2099,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: b997795d06f82cc8845df0fd8c74ea751ef9eb8d448fe70397a638c067f7a60c
+    sha256: 8d6ae4c264f943a6d8a956ecd4dc28d86e09a1b7e785782407966668c5d9eb93
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset

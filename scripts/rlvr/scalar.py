@@ -613,22 +613,7 @@ def scalar_observations(ws, kind: str = "task",
     return out
 
 
-def _seq_sum(values) -> float:
-    """Input-order float64 reduction — the settlement determinism axiom
-    ("float sums in input order") as a numpy primitive (issue 420).
-
-    np.add.accumulate is strictly left-to-right IEEE-754 double addition;
-    the prepended 0.0 seed makes it bit-identical to a Python in-order
-    sum for every finite input, and — unlike builtin sum(), which
-    switched floats to Neumaier compensation in 3.12 — identical on
-    every interpreter. np.sum / np.add.reduce are FORBIDDEN on this
-    path: pairwise summation reorders the bits, and the pins in
-    tests/test_rlvr_bitexact.py are the wall.
-    """
-    arr = np.asarray(values, dtype=np.float64)
-    if arr.size == 0:
-        return 0.0
-    return float(np.add.accumulate(np.concatenate(([0.0], arr)))[-1])
+from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
 
 
 def _ng_from_stats(n: int, xbar: float, m2: float,

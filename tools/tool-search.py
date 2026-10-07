@@ -16,7 +16,17 @@ Filters (combinable, AND semantics):
 
 Discovery mode (issue #476, #162: THE single search entry — no per-tier
 search tools exist):
-  --find <keyword>              case-insensitive substring search across
+  --find W1 W2 ...             THE agent search face — natural input:
+                                bare words (--find emulator unicorn),
+                                comma strings (--find "jadx, apk"), or
+                                repeated flags all flatten to one term
+                                list; --match any|all (default any).
+                                Combines with --capability/--tier/
+                                --cost-max (the filters narrow the
+                                internal registry hits; the other
+                                sources carry no tier and pass through,
+                                each hit's source visible in output).
+                                Case-insensitive substring search across
                                 ALL FOUR data sources:
                                   1. the internal registry
                                      (tools/_INDEX.yaml);
@@ -478,7 +488,16 @@ def _emit(hits: list[dict], as_json: bool, text_formatter) -> None:
 
 def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     """--find: the #162 unified typed search face (all four sources)."""
-    terms = [t.strip().lower() for t in args.find.split(",") if t.strip()]
+    # agent-ergonomic term parsing (the 2026-10-08 owner ruling: the
+    # search must not be rigid): multiple bare words, comma strings,
+    # quoted multi-word lists, and repeated --find flags all flatten to
+    # the same term list — no syntax to remember
+    flat: list[str] = []
+    for token in (args.find or []):
+        flat.extend(x for x in
+                    (s.strip().lower() for s in str(token).replace(",", " ").split())
+                    if x)
+    terms = flat
     if not terms:
         print("error: --find needs at least one keyword", file=sys.stderr)
         return 2
@@ -490,7 +509,10 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     run_local = load_run_local(resolve_workspace(args.ws))
     # dedup by source path: a re-library card enumerated by both the ext
     # index and the references index surfaces once (typed ext entry wins)
-    hits = find_internal(tools, terms, mode) + find_ext(ext, terms, mode)
+    filtered = [e for e in tools
+                if matches(e, args.capability, args.tier, args.cost_max)]
+    hits = find_internal(filtered, terms, mode) \
+        + find_ext(ext, terms, mode)
     seen_sources = {str(h.get("source", "")) for h in hits}
     for h in find_references(repo_root, ref_paths, terms, mode):
         if h["source"] not in seen_sources:
@@ -518,7 +540,8 @@ def main(argv: list[str] | None = None) -> int:
                          "T3 VM-dynamic)")
     ap.add_argument("--cost-max", choices=COST_ORDER, default=None,
                     help="cost budget filter, inclusive: probe < cheap < deep")
-    ap.add_argument("--find", default=None, metavar="KEYWORD[,KEYWORD...]",
+    ap.add_argument("--find", default=None, nargs="+", action="extend",
+                    metavar="KEYWORD",
                     help="discovery mode (#162): case-insensitive keyword "
                          "search over ALL FOUR data sources (internal "
                          "registry, typed ext catalog, references index, "
@@ -568,11 +591,11 @@ def main(argv: list[str] | None = None) -> int:
                          "this script)")
     args = ap.parse_args(argv)
 
-    if args.find is not None and (args.capability or args.tier
-                                  or args.cost_max):
-        ap.error("--find cannot combine with --capability/--tier/--cost-max "
-                 "(ext entries carry no tier/cost_tier; ANDing would "
-                 "silently drop them — run two queries instead)")
+    # --find now COMBINES with the internal filters instead of refusing
+    # (the 2026-10-08 ergonomics ruling): the filters apply to internal
+    # registry hits only; ext/reference/run-local hits carry no tier or
+    # cost_tier and pass through unfiltered — the output marks each hit's
+    # source so the combination is never silently lossy
     if args.match is not None and args.find is None:
         ap.error("--match requires --find (it has no meaning for the "
                  "internal filters)")
