@@ -1321,6 +1321,114 @@ def _luby_timeout_s(retry_count: int) -> int:
     return _luby_units(max(0, retry_count)) * LUBY_BASE_S
 
 
+def _maybe_expand(ctx: RunContext, dispatched: set[str],
+                  detail: dict) -> None:
+    """#546 WS4 wiring: the discovery-layer move. When the workspace's
+    obstacle evidence reaches EXPAND_OBSTACLE_K and a tried family is
+    termination-dead (BOTH sanctioned faces — the state snapshot's
+    obstacle digest + the termination verdicts; rlvr.obstacles is
+    never imported, the 396 freeze wall holds), spend ONE act per run
+    generating novel attack hypotheses OUTSIDE the failed set. The
+    frozen model generates (runs/expansion-hypotheses.json, schema
+    expansion-hypotheses/1); rlvr.expansion.admit adjudicates
+    (feature-keyed novelty — a renamed dead arm never spends the move);
+    the receipt lands runs/expansion/E-<n>.json. The capability face:
+    fail-open, never breaks the loop. Registry admission (making an
+    admitted novel arm DISPATCHABLE through the #432 vocabulary gate)
+    is the named next face on #546 — this move generates, adjudicates,
+    and records; it does not yet mint registry tokens."""
+    try:
+        ex = _load_repo_module(ctx.repo, "rlvr.expansion")
+        st = _load_repo_module(ctx.repo, "rlvr.state")
+        term = _load_repo_module(ctx.repo, "rlvr.termination")
+        import method_families
+
+        snap = st.snapshot(str(ctx.ws))
+        fams = sorted(method_families.registered_tokens())
+        death = term.verdicts(str(ctx.ws), fams) if fams else {}
+        trig = ex.trigger(snap, death)
+        if trig is None:
+            return
+        if "EXPAND" in dispatched:
+            return  # one discovery move per run (the budget face)
+        dispatched.add("EXPAND")
+        prompt_file = (Path(ctx.state.evidence_dir)
+                       / "dispatch-prompt-EXPAND.md")
+        prompt_file.parent.mkdir(parents=True, exist_ok=True)
+        prompt_file.write_text(
+            json.dumps({"kunglao_dispatch": {
+                "version": 2, "claim": "EXPANSION", "tier": 1,
+                "agent": "kunglao-worker",
+                "action_type": "expand",
+                "context_recipe": "facts_snapshot",
+                "verification_mode": "none"}})
+            + "\n\ndiscovery contract (#546): the tried families have "
+            "collapsed. Generate "
+            + str(ex.EXPAND_HYPOTHESES_N)
+            + " NOVEL attack hypotheses that are NOT retries of the "
+            "failed set under a new name — different mechanism, "
+            "different feature shape. WRITE runs/expansion-hypotheses."
+            "json (schema expansion-hypotheses/1): "
+            '{\"hypotheses\": [{\"id\": \"h-1\", \"family\": '
+            '\"your-novel-family-name\", \"features\": '
+            "{\"lane\": \"...\", \"project_type\": \"...\", "
+            "\"target_kind\": {\"language\": \"...\", "
+            "\"entry_suffix\": \"...\"}}, "
+            '\"p_llm\": 0.0}]}'  # the feature-table/1 vocabulary
+            + " — one line of attack narrative per hypothesis. "
+            "ACT BUDGET: this act is KILLED at "
+            f"{llm_faces.CLAUDE_ACT_TIMEOUT_S}s — the hypotheses file "
+            "lands before 70% of the budget. End with STATUS: DONE or "
+            "STATUS: BLOCKED.\n",
+            encoding="utf-8")
+        request = model.DispatchRequest(
+            claim="EXPANSION", workspace=str(ctx.ws),
+            prompt_file=str(prompt_file), run_id=ctx.state.run_id,
+            agent="kunglao-worker",
+            method_family=getattr(ctx.state, "method_family", "") or None)
+        audit.emit(str(ctx.ws), "orchestrator", "expansion_move",
+                   claim="EXPANSION", detail={
+                       "trigger": trig,
+                       "collapsed_arms": trig["collapsed_arms"]})
+        act = ctx.face.dispatch_act(request)
+        ctx.acts.append(act.to_dict())
+        detail["acts"].append(act.to_dict())
+        if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+            dispatched.discard("EXPAND")  # a failed move may retry once
+            return
+        # adjudicate what the model generated, against the workspace's
+        # own tried context (the anti-renaming wall: a hypothesis with
+        # this instance's feature shape is a retry, novelty 0)
+        fp: dict = {}
+        try:
+            from rlvr import feature_prior as _fpl
+            fp = _fpl.features_from_workspace(str(ctx.ws)) or {}
+        except Exception:  # noqa: BLE001 — fail-open at the seam
+            fp = {}
+        hyp_path = ctx.ws / "runs" / "expansion-hypotheses.json"
+        try:
+            doc = json.loads(hyp_path.read_text(encoding="utf-8"))
+            hyps = doc.get("hypotheses") if isinstance(doc, dict) else None
+            hyps = hyps if isinstance(hyps, list) else []
+        except (OSError, ValueError):
+            hyps = []
+        if not hyps:
+            kunglao_log.warn("e2e.expand_hypotheses", "no usable file")
+            return
+        ranked = ex.admit(hyps, [fp] if fp else [])
+        ex.record_receipt(str(ctx.ws), trig, ranked,
+                          [r["id"] for r in ranked])
+        audit.emit(str(ctx.ws), "orchestrator", "expansion_result",
+                   claim="EXPANSION",
+                   detail={"admitted": [r["id"] for r in ranked],
+                           "considered": len(hyps)})
+        detail.setdefault("expansion", []).append(
+            {"trigger": trig, "admitted": [r["id"] for r in ranked]})
+    except Exception as exc:  # noqa: BLE001 — capability, never the loop
+        kunglao_log.warn("e2e.maybe_expand",
+                         f"{type(exc).__name__}: {exc}")
+
+
 def _maybe_distill(ctx: RunContext, detail: dict) -> None:
     """Online distillation tick step: scan the workspace for miss
     signals (the worker's shelf-miss marker / an unknown-format probe
@@ -1862,6 +1970,9 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     # online distillation tick step: one bounded act per tick when a
     # miss signal fires with budget (a capability, never the loop)
     _maybe_distill(ctx, detail)
+    # #546 WS4: the discovery move — obstacles stacked + arms collapsed
+    # => one expand act per run (a capability, never the loop)
+    _maybe_expand(ctx, dispatched, detail)
     # #518 PR-2 (W4): the frozen-posterior alarm rides every tick tail
     _posterior_drift_check(ctx)
     ctx.sleep_fn(tick_wait_seconds)
