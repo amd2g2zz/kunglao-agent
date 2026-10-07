@@ -102,23 +102,28 @@ def _set_flag(value: str | None, monkeypatch):
 
 # --------------------------------------------- 1. flag-gated inertness
 
-def test_flag_defaults_off(monkeypatch):
+def test_flag_defaults_on(monkeypatch):
+    """WS3 (#544) contract change: default ON — the cold-start anchor
+    engages whenever a table + features exist. The explicit opt-out is
+    KUNGLAO_PREDICT_BEFORE_TRY == "0" (exact; everything else is the
+    default-on face)."""
     _set_flag(None, monkeypatch)
-    assert fp.enabled() is False
+    assert fp.enabled() is True
 
 
-def test_flag_on_is_exact_one(monkeypatch):
+def test_flag_off_is_exact_zero(monkeypatch):
     _set_flag("1", monkeypatch)
     assert fp.enabled() is True
     _set_flag("0", monkeypatch)
     assert fp.enabled() is False
     _set_flag("yes", monkeypatch)
-    assert fp.enabled() is False
+    assert fp.enabled() is True
 
 
 def test_flag_off_receipt_is_byte_identical(tmp_path, monkeypatch):
-    """Spec R1: flag off (or on without a table) = the pre-change
-    kernel, byte-identical receipts for the same store + seed."""
+    """Spec R1 (WS3 form): flag off via the explicit "0" opt-out (or on
+    without a table) = the pre-change kernel, byte-identical receipts
+    for the same store + seed."""
     store = q_cells.InMemoryStore([
         {"schema": q_cells.OBS_SCHEMA, "ts": "t", "source": "settlement",
          "signature_hash": "5e5e5e5e5e5e", "method_family": "fam-a",
@@ -126,7 +131,7 @@ def test_flag_off_receipt_is_byte_identical(tmp_path, monkeypatch):
     table = _write_table(tmp_path, [
         _table_row("r-1", _features(),
                    [_outcome("fam-a", settled=True, credit=1.0)])])
-    _set_flag(None, monkeypatch)
+    _set_flag("0", monkeypatch)
     r1 = q_cells.sample_method_family(
         "5e5e5e5e5e5e", {"fam-a": 0.5, "fam-b": 0.5}, store,
         features=_features(), feature_table=table, rng=None)

@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 61
+    r1: 63
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -350,9 +350,9 @@ files:
   scripts/rlvr/__init__.py:
     r1: 1
   scripts/rlvr/compose.py:
-    r1: 2
+    r1: 5
   scripts/rlvr/feature_prior.py:
-    r1: 2
+    r1: 3
   scripts/rlvr/incremental_reward.py:
     r1: 3
   scripts/rlvr/ledger.py:
@@ -364,7 +364,7 @@ files:
   scripts/rlvr/policy_compare.py:
     r1: 1
   scripts/rlvr/priors.py:
-    r1: 2
+    r1: 4
   scripts/rlvr/q_cells.py:
     r1: 21
   scripts/rlvr/reward.py:
@@ -858,7 +858,7 @@ files:
   tests/test_feature_mining_460.py:
     r1: 2
   tests/test_feature_prior_460b.py:
-    r1: 3
+    r1: 4
     r2: 1
   tests/test_feedback.py:
     r1: 2
@@ -1555,6 +1555,12 @@ files:
     r1: 3
   tests/test_write_guard_unlock_820.py:
     r1: 1
+  tests/test_ws3_compose_lead_544.py:
+    r1: 1
+    r2: 1
+  tests/test_ws3_intake_prior_544.py:
+    r1: 1
+    r2: 1
   tests/test_ws_layout_delegation_863c.py:
     r1: 5
   tests/test_xml_injection_55.py:
