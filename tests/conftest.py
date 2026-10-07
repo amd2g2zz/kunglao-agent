@@ -39,6 +39,18 @@ def _fresh_canonical_warn_state(monkeypatch):
     yield
 
 
+# ---------- posterior-store isolation (#545) ----------
+# The WS2 store (scripts/rlvr/patterns/posterior-store.jsonl) is RUNTIME
+# data — no test may ever append to the repo's guarded prior-store root.
+# Every test gets KUNGLAO_POSTERIOR_STORE pointed at a tmp path; tests
+# that exercise the store override it explicitly.
+@pytest.fixture(autouse=True)
+def _isolated_posterior_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
+                       str(tmp_path / "posterior-store-isolated"))
+    yield
+
+
 # ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture
