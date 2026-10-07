@@ -349,4 +349,9 @@ class TestDeterminism:
             rl.record(ws, kind="task", anchor="C-1", signals=sigs)
             rs.settle_workspace(ws, rules_path=RULES_PATH)
             out.append(rl.fold(ws, "task/C-1")["settlement"])
+        # settled_ts is wall-clock bookkeeping (when the settle ran), not
+        # settlement content — the determinism claim covers reward / band /
+        # rule / digest. Comparing the raw dicts flaked on the CI runner
+        # whenever the two settles straddled a second boundary.
+        del out[0]["settled_ts"], out[1]["settled_ts"]
         assert out[0] == out[1]
