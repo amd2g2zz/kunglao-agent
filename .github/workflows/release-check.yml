@@ -38,62 +38,17 @@ env:
 # surface is needed (CodeQL actions/missing-workflow-permissions).
 permissions:
   contents: read
-  # runner-probe lists workflow runs (actions:read) to see whether the
-  # single-slot self-hosted runner is currently occupied
-  actions: read
 
 jobs:
-  runner-probe:
-    # Owner routing (2026-10-07): SELF-HOSTED FIRST, the free
-    # GitHub-hosted tier as overflow when ours is insufficient, and
-    # back to queueing on self-hosted when the free quota is spent —
-    # with all four legs PARALLEL in every case. Our own runner has
-    # ONE job slot: it can never serve four parallel legs, so the
-    # LONGEST leg (integration, ~12min) claims our slot whenever it is
-    # free — maximum utilization of the preferred resource — and the
-    # three short legs always run on the free tier in parallel. Any
-    # probe failure defaults BACK to self-hosted for every leg — the
-    # conservative arm (queue beats wrong-tier speed); quota-exhausted
-    # posture: a billing-blocked free leg fails fast, rerun when the
-    # self-hosted slot frees (the documented wait).
-    runs-on: ubuntu-latest
-    outputs:
-      runner_long: ${{ steps.probe.outputs.runner_long }}
-      runner_short: ${{ steps.probe.outputs.runner_short }}
-    steps:
-      - name: Probe the self-hosted slot (free => long leg claims it)
-        id: probe
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -eu
-          busy=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=50" \
-            --jq '[.workflow_runs[] | select(.name == "release-check"
-              and .status != "completed"
-              and .id != ${{ github.run_id }})] | length' \
-            || echo "")
-          if [ -z "$busy" ]; then
-            # probe failure: conservative default — every leg self-hosted
-            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
-            echo 'runner_short=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
-          elif [ "$busy" -ge 1 ]; then
-            # slot busy or spoken for: total overflow, all four parallel
-            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-            echo 'runner_short="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-          else
-            # slot free: the long leg claims it; shorts stay parallel free
-            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
-            echo 'runner_short="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-          fi
-
   lint-hygiene:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
     # with "command not found" — the python-3.11 label pins the right host.
-    needs: runner-probe
-    # always the free tier in parallel (owner routing 2026-10-07 —
-    # the long leg claims the single self-hosted slot; runner-probe)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -166,10 +121,11 @@ jobs:
       run: uv run python scripts/structural_check.py .
 
   docs-contract:
-    needs: runner-probe
-    # always the free tier in parallel (owner routing 2026-10-07 —
-    # the long leg claims the single self-hosted slot; runner-probe)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -200,10 +156,11 @@ jobs:
       run: uv run python -m pytest -m docs -n auto --dist loadgroup -q --junitxml=.pytest-docs.xml
 
   unit-fast:
-    needs: runner-probe
-    # always the free tier in parallel (owner routing 2026-10-07 —
-    # the long leg claims the single self-hosted slot; runner-probe)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
+    # always the free tier, always parallel (owner routing 2026-10-07):
+    # these three legs are pure Python + uv — verified portable.
+    # The integration leg is NOT (cross toolchains + eval fixtures)
+    # and stays on our self-hosted slot below.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -244,11 +201,13 @@ jobs:
         if-no-files-found: error
 
   integration:
-    needs: runner-probe
-    # the LONG leg claims the self-hosted slot when free (owner
-    # routing 2026-10-07 — max utilization of the preferred
-    # resource; overflow keeps all four legs parallel; runner-probe)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_long) }}
+    # env-bound leg: the eval-native tier needs our host
+    # toolchains (aarch cross-compiler, exec-permitted fixtures) —
+    # ubuntu-latest runs it RED (PermissionError / symbol-not-found,
+    # observed 2026-10-07). Owner routing: self-hosted first; this
+    # leg IS the self-hosted-shaped one. The three shorts run in
+    # parallel on the free tier, so this slot is the only queue.
+    runs-on: [self-hosted, python-3.11]
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

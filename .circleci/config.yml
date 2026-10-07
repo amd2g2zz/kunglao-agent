@@ -17,9 +17,9 @@ version: 2.1
 
 jobs:
   integration:
-    # EXACT mirror of the GitHub Actions integration leg ("not fast"
-    # markers, xdist auto workers, loadgroup distribution): locked deps
-    # via uv — drift from the Actions leg is a bug
+    # The Actions integration leg's PORTABLE subset ("not fast" markers,
+    # xdist auto workers, loadgroup distribution) minus the host-toolchain
+    # native module — an independent parallel signal on every PR
     docker:
       - image: cimg/python:3.11
     steps:
@@ -40,12 +40,17 @@ jobs:
           command: uv sync --locked
 
       - run:
-          name: Integration + slow tier (xdist parallel)
-          # EXACT mirror of the Actions integration leg's invocation —
-          # the Actions side stays the source of truth; drift here is a
-          # bug. Coverage is OBSERVATION only (#463), never a gate.
+          name: Portable integration subset (xdist parallel)
+          # The Actions integration leg MINUS the host-toolchain-bound
+          # module (tests/test_eval_native_332.py needs the self-hosted
+          # cross toolchains — observed RED on ubuntu-latest 2026-10-07:
+          # PermissionError on fixtures / aarch symbol-not-found). This
+          # tier mirrors the PORTABLE subset; the native tier stays the
+          # self-hosted leg's coverage. Coverage is OBSERVATION only
+          # (#463), never a gate.
           command: |
             uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q \
+              --deselect tests/test_eval_native_332.py \
               --junitxml=.pytest-result.xml \
               --cov=scripts --cov=hooks --cov-report=xml --cov-report=term \
               2>&1 | tee pytest-circle.log
