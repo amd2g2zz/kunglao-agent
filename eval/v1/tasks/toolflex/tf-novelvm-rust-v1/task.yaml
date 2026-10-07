@@ -1,0 +1,71 @@
+schema: kunglao-eval-task/1
+task_id: tf-novelvm-rust-v1
+eval_version: eval-v1.3
+tier: toolflex
+source: constructed
+family: tf-novelvm
+seed: 54601
+anchors:
+  goal_verbatim: 'Workspace puzzle: produce answer.txt in the workspace root.
+    The payloads are programs for a private bytecode VM (the KVM-8 custom
+    ISA — its container format and opcode map exist nowhere else). For each
+    probe program (probes/payload-0.bin .. probes/payload-2.bin) in index
+    order and finally the main program (target/payload.bin), compute the
+    16-hex-char digest the VM emits and write one line per program into
+    answer.txt (4 lines, lowercase hex, in that order). No stock digest
+    family computes these; the reference interpreter is target/src/vm.rs.'
+  success_criterion: answer.txt carries the four digests byte-exact (lowercase
+    16-hex per line, probes in index order then target/payload.bin) as fixed
+    by the unit's construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: rust
+  files:
+  - target/README.txt
+  - target/payload.bin
+  - target/src/vm.rs
+  - toolbox/peekbin
+  - toolbox/opcount
+  - toolbox/fold8
+  - toolbox/refold8
+  - probes/payload-0.bin
+  - probes/payload-1.bin
+  - probes/payload-2.bin
+  entry: target/README.txt
+  candidate_contract: 'answer.txt — four 16-hex-char lowercase lines: probes
+    in index order, then target/payload.bin.'
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+toolflex:
+  manifest: manifest.json
+  k: 2
+  roles:
+  - inspect
+  - fold
+  minimum_required_set:
+    inspect:
+    - peekbin
+    - opcount
+    fold:
+    - fold8
+    - refold8
+  blocked_variants:
+  - block-peekbin
+  - block-fold8

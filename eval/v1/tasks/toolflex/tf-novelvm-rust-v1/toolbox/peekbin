@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+# toolbox/peekbin — constructed blocked-path inspect tool (#546).
+# Synthetic; seed 54601. Prints container shape only — no digest path.
+"""usage: peekbin <file>       (container shape: size, magic, data length)
+"""
+import sys
+
+MAGIC = b"KVM8"
+
+
+def main(argv):
+    if len(argv) != 1:
+        sys.stderr.write("usage: peekbin <file>\n")
+        return 2
+    try:
+        raw = open(argv[0], "rb").read()
+    except OSError as exc:
+        sys.stderr.write("peekbin: cannot read: %s\n" % exc)
+        return 2
+    if len(raw) >= 5 and raw[:4] == MAGIC:
+        shape = "KVM8 container: data=%d bytes, code=%d words" % (
+            raw[4], (len(raw) - 5 - raw[4]) // 4)
+    else:
+        shape = "raw blob: %d bytes" % len(raw)
+    head = raw[:16].hex()
+    sys.stdout.write("size=%d\nmagic-head=%s\n%s\n" % (
+        len(raw), head, shape))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

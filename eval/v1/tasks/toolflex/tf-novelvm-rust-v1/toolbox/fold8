@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# toolbox/fold8 — constructed blocked-path fold decoy tool (#546).
+# Synthetic; seed 54601. A plausible-but-wrong 16-hex fold: its private
+# mix is NOT the VM's mixing operator, so its output never grades.
+"""usage: fold8 <payload>       (16-hex decoy fold; not the VM digest)
+"""
+import sys
+
+# decoy constants (seed 54601, distinct from the VM's C1/C2/IV)
+DA = 0x71A3C469D2F80B57
+DB = 0xC25E19F7A03D6B84
+M64 = 0xFFFFFFFFFFFFFFFF
+
+
+def fold(data):
+    h = DA
+    for b in data:
+        h = ((h ^ b) * DB) & M64
+    h ^= h >> 31
+    return h & M64
+
+
+def main(argv):
+    if len(argv) != 1:
+        sys.stderr.write("usage: fold8 <payload>\n")
+        return 2
+    try:
+        raw = open(argv[0], "rb").read()
+    except OSError as exc:
+        sys.stderr.write("fold8: cannot read: %s\n" % exc)
+        return 2
+    print("%016x" % fold(raw))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
