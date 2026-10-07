@@ -529,9 +529,16 @@ def test_dispatch_pending_and_settlement_credit_share_the_fold(tmp_path):
     sig = ssig.signature_hash(ssig.snapshot(ws))
     q_cells.observe(ws, sig, "static-symbolic", 1.0)
     fold = q_cells.fold(q_cells.JSONLQStore(ws))
-    cell = fold.cells[(sig, "static-symbolic")]
-    assert cell.n_pending == 1
-    assert cell.success == pytest.approx(1.0)
+    # #545 keyed consumption: the dispatch row is keyed by its 4-dim
+    # arm_key (WS1 dual-write), the legacy observe() row falls back to
+    # the family key — the family-addressed read pools every cell of
+    # the family (the tolerance face).
+    pend = sum(c.n_pending for k, c in fold.cells.items()
+               if k[0] == sig and q_cells.family_of_action(k[1])
+               == "static-symbolic")
+    s, _f = fold.family_mass("static-symbolic")
+    assert pend == 1
+    assert s == pytest.approx(1.0)
 
 
 # ------------------------------------------------- 8. gate hook wiring
@@ -649,10 +656,12 @@ class TestSettlementFeed462:
         assert banked[0]["signature_hash"] == sig
         assert banked[0]["method_family"] == "static-symbolic"
         assert banked[0]["dispatch_id"] == "tr-m1-d1"
-        # the fold now learns: real mass in the cell (shipped default fold)
+        # the fold now learns: real mass in the family's cells (shipped
+        # default fold; #545 — the banked row rides the dispatch's
+        # arm_key, so the read is family-addressed)
         fold = q_cells.fold(q_cells.JSONLQStore(ws))
-        cell = fold.cells[(sig, "static-symbolic")]
-        assert cell.success + cell.failure > 0.0
+        s, f = fold.family_mass("static-symbolic")
+        assert s + f > 0.0
         assert rl.fold(ws, "round_credit/tr-m1-d1") is not None
 
     def test_unmatched_dispatch_is_the_honest_gap(self, tmp_path):
@@ -758,5 +767,5 @@ class TestSettlementFeed462:
         assert len(banked) == 1
         assert banked[0]["credit"] == 0.0
         fold = q_cells.fold(q_cells.JSONLQStore(ws))
-        assert fold.cells[(sig, "static-symbolic")].failure \
+        assert fold.family_mass("static-symbolic")[1] \
             == pytest.approx(1.0)

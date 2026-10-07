@@ -49,14 +49,216 @@ whatever rows survive.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from pathlib import Path
 
-from kunglao_log import warn  # canonical warn: ONE implementation
+from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
 
 from rlvr import ledger as rl
 from rlvr import posteriors as dts
 from rlvr import q_cells
 from rlvr.compose import method_family_of_row  # the settled-row face
+
+# --------------------------------------------------------------------------
+# the cross-task posterior store (#545, WS2) — append-only JSONL, keyed
+# (family, arm_key, feature_key, fingerprint), living inside the guarded
+# prior_store_root (eval/v1/split.yaml prior_store_roots →
+# scripts/rlvr/patterns). The store is repo-code territory: the OWNER
+# RULING (2026-10-07) keeps everything under eval/ WRITE-FORBIDDEN — this
+# module only ever READS split.yaml (the holdout firewall's filter face),
+# never writes anything under eval/.
+#
+# Write face: the e2e settlement hook (e2e/checkpoints._settle_dispatch_outcome)
+# appends one row per settled dispatch — holdout-filtered BEFORE append,
+# fail-open telemetry (a store failure never breaks settlement).
+# Read face: ``warm_pools`` — cross-task rows enter ONLY as
+# LAMBDA-tempered anchor mass through the sampler's existing pool face
+# (q_cells.cell_posterior's warm_pool), NEVER as a local-cell write; the
+# per-workspace q-cell log stays authoritative for local cells.
+# Firewall: eval_split_lint hard-fails any holdout unit-id reaching the
+# store rows (the write-face filter is the first gate, the lint the
+# second — defense in depth).
+
+STORE_SCHEMA = "posterior-store/1"
+STORE_REL = "posterior-store.jsonl"
+STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
+
+
+def store_root() -> Path:
+    """The store root: env KUNGLAO_POSTERIOR_STORE override, else the
+    skill-dir patterns path (the guarded prior_store_root)."""
+    env = os.environ.get(STORE_ENV, "").strip()
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent / "patterns"
+
+
+def store_path() -> Path:
+    return store_root() / STORE_REL
+
+
+def workspace_id_of(ws) -> str:
+    """The cross-task identity of a workspace: its directory name (stable
+    across the run's lifetime, human-traceable, never an eval unit id)."""
+    return Path(ws).name
+
+
+def holdout_unit_ids() -> set[str]:
+    """The holdout unit-ids from eval/v1/split.yaml (READ-ONLY — the
+    never-write wall). Fail-open to an EMPTY filter with a loud warn:
+    a broken filter read can never block settlement, and the lint face
+    (eval_split_lint) remains the enforcement wall."""
+    try:
+        import yaml  # noqa: PLC0415
+        p = Path(__file__).resolve().parents[2] / "eval" / "v1" \
+            / "split.yaml"
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        hold = doc.get("holdout") or {}
+        ids = list(hold.get("interpolation") or []) \
+            + list(hold.get("extrapolation") or [])
+        return {str(u).lower() for u in ids if u}
+    except Exception as exc:  # noqa: BLE001 — fail-open, loud
+        warn("strategy_store.holdout_ids",
+             f"split.yaml unreadable ({type(exc).__name__}: {exc}) — "
+             f"holdout filter empty; eval_split_lint stays the wall")
+        return set()
+
+
+def feature_key_of(ws) -> str:
+    """The workspace's FEATURE key (feature-keyed, never identity-keyed
+    — the #518 rule): a stable digest over the mined feature tokens.
+    Fail-open to the inert "none" (a broken miner never blocks
+    settlement)."""
+    try:
+        from rlvr import feature_prior as _fp  # noqa: PLC0415
+        feats = _fp.features_from_workspace(ws)
+        toks = sorted(_fp.feature_tokens(feats or {}))
+        if not toks:
+            return "none"
+        return hashlib.sha256(
+            "|".join(toks).encode("utf-8")).hexdigest()[:12]
+    except Exception as exc:  # noqa: BLE001 — fail-open, loud
+        warn("strategy_store.feature_key",
+             f"{type(exc).__name__}: {exc} (feature_key=none)")
+        return "none"
+
+
+def append_row(row: dict) -> dict:
+    """Filter-and-append one store row. THE HOLDOUT FILTER PRECEDES THE
+    APPEND: any row whose serialized form carries a holdout unit-id is
+    refused with a loud warn (the same predicate eval_split_lint
+    enforces — belt and suspenders). Fail-open telemetry: a store
+    failure never breaks settlement."""
+    try:
+        payload = json.dumps(row, ensure_ascii=False).lower()
+        hit = next((u for u in sorted(holdout_unit_ids())
+                    if u in payload), None)
+        if hit is not None:
+            warn("strategy_store.append_row",
+                 f"holdout unit-id {hit!r} refused — the firewall "
+                 f"filter precedes the append")
+            return {"appended": False, "reason": f"holdout-filter:{hit}"}
+        ok = q_cells._append_row(store_path(), row)
+        return {"appended": bool(ok),
+                "reason": None if ok else "write-failed"}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("strategy_store.append_row", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "reason": f"error:{type(exc).__name__}"}
+
+
+def append_store_row(ws=None, *, method_family: str, status: str,
+                     credit, censored: bool = False, facts_citing: int = 0,
+                     propensity=None, phi_delta=None,
+                     dispatch_id: str | None = None, arm_key: str | None
+                     = None, feature_key: str | None = None,
+                     fingerprint: str | None = None,
+                     ts: str | None = None) -> dict:
+    """Build and append one ``posterior-store/1`` row (the settlement
+    hook's face): schema stamp, ts, workspace identity, feature key
+    (ws-derived defaults), the 4-dim arm key, the settled credit, the
+    censoring flag, the fact signal, the OPE propensity, and the Φ
+    tiebreaker — one field, no new machinery (the #548 verdict's fix
+    rides the row). Delegates to ``append_row`` (filter + fail-open)."""
+    from harness_common import utc_now_z  # noqa: PLC0415
+    row = {
+        "schema": STORE_SCHEMA,
+        "ts": ts or utc_now_z(),
+        "workspace_id": workspace_id_of(ws) if ws is not None else "unknown",
+        "arm_key": str(arm_key) if arm_key else str(method_family),
+        "method_family": str(method_family),
+        "feature_key": str(feature_key) if feature_key
+        else (feature_key_of(ws) if ws is not None else "none"),
+        "fingerprint": fingerprint,
+        "status": str(status),
+        "credit": (max(0.0, min(1.0, float(credit)))
+                   if isinstance(credit, (int, float))
+                   and not isinstance(credit, bool) else None),
+        "censored": bool(censored),
+        "facts_citing": int(facts_citing),
+        "propensity": (float(propensity)
+                       if isinstance(propensity, (int, float))
+                       and not isinstance(propensity, bool) else None),
+        "phi_delta": (round(float(phi_delta), 6)
+                      if isinstance(phi_delta, (int, float))
+                      and not isinstance(phi_delta, bool) else None),
+        "provenance": {"dispatch_id": str(dispatch_id or "")},
+    }
+    return append_row(row)
+
+
+def load_rows(ws=None) -> list[dict]:
+    """The tolerant read: schema-filtered rows, oldest first; when ``ws``
+    is given, rows from THAT workspace are excluded (the leave-one-out
+    shape — a workspace never warm-starts from its own rows). Missing
+    store = [], corrupt lines skip, unknown schemas skip."""
+    try:
+        text = store_path().read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    rows = [r for r in iter_jsonl(text.splitlines())
+            if isinstance(r, dict)
+            and str(r.get("schema") or "") == STORE_SCHEMA]
+    if ws is not None:
+        mine = workspace_id_of(ws)
+        rows = [r for r in rows
+                if str(r.get("workspace_id") or "") != mine]
+    return rows
+
+
+def warm_pools(ws, families) -> dict:
+    """The read face — cross-task rows as LAMBDA-tempered anchor pools.
+
+    Every OTHER workspace's settled store row contributes
+    LAMBDA · tiebroken_credit mass to its family's pool (the tempering
+    convention of meta_arms.hierarchical_prior, applied at the store
+    face; the #548 tiebreaker rides the credit). NEVER full weight,
+    NEVER a local-cell write. Returns {family → FeaturePool} (the
+    sampler's duck type) — families without pool rows are absent (a
+    zero-mass pool is a no-op at the anchor)."""
+    rows = load_rows(ws=ws)
+    if not rows:
+        return {}
+    wanted = set(families)
+    acc: dict[str, list[float]] = {}
+    from rlvr import meta_arms as _ma  # noqa: PLC0415 — the temper
+    for r in rows:
+        fam = str(r.get("method_family") or "")
+        if fam not in wanted:
+            continue
+        c = r.get("credit")
+        if isinstance(c, bool) or not isinstance(c, (int, float)):
+            continue  # pending/unknown rows carry no outcome
+        eff = q_cells.tiebroken_credit(float(c), r.get("phi_delta"))
+        s, f, n = acc.get(fam, (0.0, 0.0, 0))
+        acc[fam] = (s + _ma.LAMBDA * eff,
+                    f + _ma.LAMBDA * (1.0 - eff), n + 1)
+    if not acc:
+        return {}
+    from rlvr import feature_prior as _fp  # noqa: PLC0415 — the duck type
+    return {fam: _fp.FeaturePool(s, f, n)
+            for fam, (s, f, n) in sorted(acc.items())}
 
 
 class PosteriorStrategyStore:
@@ -78,10 +280,27 @@ class PosteriorStrategyStore:
         rng, _round = q_cells.q_cells_seed_state(self.ws)
         kwargs: dict = {}
         kwargs.update(self._feature_prior_kwargs())
+        kwargs.update(self._warm_pool_kwargs(prior.keys()))
         kwargs.update(self._termination_kwargs(prior.keys()))
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         return str(receipt["family"])
+
+    def _warm_pool_kwargs(self, families=None) -> dict:
+        """#545 wiring (the cross-task warm start): thread the posterior
+        store's LAMBDA-tempered anchor pools into call site 2 — without
+        this the compose seam would stay store-blind. Fail-open: any
+        failure yields {} (the sampler stays store-blind, the pre-change
+        draw)."""
+        try:
+            fams = families if families is not None \
+                else self._proposal_prior().keys()
+            pools = warm_pools(self.ws, fams)
+            return {"warm_pools": pools} if pools else {}
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.warm_pools",
+                 f"{type(exc).__name__}: {exc}")
+            return {}
 
     def _termination_kwargs(self, families=None) -> dict:
         """#461 Phase 2 wiring (option-death termination): thread the

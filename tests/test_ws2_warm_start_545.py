@@ -137,7 +137,7 @@ def test_fold_groups_by_arm_key_and_family_mass_keeps_prefix_face():
         _obs(sig, "famA", 0.0, arm_key="famA|minimal|none|1"),
         _obs(sig, "famA", 0.0, arm_key=None),  # legacy row, family fallback
     ]
-    view = q_cells.fold(q_cells.InMemoryStore(rows))
+    view = q_cells.fold(q_cells.InMemoryStore(rows), gamma=1.0)
     assert set(k[1] for k in view.cells) == {
         "famA|full|replay|2", "famA|minimal|none|1", "famA"}, \
         "cells must group by the 4-dim arm_key; family-less rows fall back"
@@ -149,7 +149,7 @@ def test_fold_groups_by_arm_key_and_family_mass_keeps_prefix_face():
 def test_cell_posterior_pools_the_legacy_fallback_cell():
     sig = "bbbb0000bbbb"
     view = q_cells.fold(q_cells.InMemoryStore(
-        [_obs(sig, "famB", 1.0, arm_key=None)]))
+        [_obs(sig, "famB", 1.0, arm_key=None)]), gamma=1.0)
     a, b = q_cells.cell_posterior(
         view, sig, "famB", arm_key="famB|full|replay|2")
     assert (a, b) == (2.0, 1.0), \
@@ -159,7 +159,7 @@ def test_cell_posterior_pools_the_legacy_fallback_cell():
 def test_old_logs_without_arm_key_fold_unchanged():
     sig = "cccc0000cccc"
     view = q_cells.fold(q_cells.InMemoryStore(
-        [_obs(sig, "famC", 1.0), _obs(sig, "famC", 0.0)]))
+        [_obs(sig, "famC", 1.0), _obs(sig, "famC", 0.0)]), gamma=1.0)
     cell = view.cells[(sig, "famC")]
     assert cell.success == 1.0 and cell.failure == 1.0
     assert q_cells.cell_posterior(view, sig, "famC") == (2.0, 2.0)

@@ -47,18 +47,20 @@ def _row(sig, credit, phi_delta=None):
 def test_equal_credit_rows_separated_by_phi_delta():
     """The #548 shape: censored-with-facts (+Φ) vs clean failure (−Φ) at
     the same banked credit — the fold must rank the state-moving row
-    stronger."""
+    stronger. gamma=1.0 (the exact-count calibration face) keeps the
+    masses directly checkable."""
     sig = "aaaa0000aaaa"
     censored = _row(sig, 0.5, phi_delta=0.2)   # moved the state forward
     clean = _row(sig, 0.5, phi_delta=-0.05)    # moved it backward
-    view = q_cells.fold(q_cells.InMemoryStore([clean, censored]))
+    view = q_cells.fold(q_cells.InMemoryStore([clean, censored]), gamma=1.0)
     cell = view.cells[(sig, "hypothesis-falsification")]
     w_tb = q_cells.PHI_TIEBREAK_WEIGHT
     assert cell.success == pytest.approx(0.5 + w_tb * 0.2 + 0.5 - w_tb * 0.05)
     assert cell.failure == pytest.approx(2.0 - cell.success)
     # and the same two rows WITHOUT phi_delta fold as a plain tie
     plain = q_cells.fold(q_cells.InMemoryStore(
-        [_row(sig, 0.5), _row(sig, 0.5)])).cells[(sig, "hypothesis-falsification")]
+        [_row(sig, 0.5), _row(sig, 0.5)]),
+        gamma=1.0).cells[(sig, "hypothesis-falsification")]
     assert plain.success == pytest.approx(1.0)
     assert cell.success > plain.success, \
         "the phi_delta tiebreaker must break the equal-credit tie upward " \
@@ -68,7 +70,7 @@ def test_equal_credit_rows_separated_by_phi_delta():
 def test_rows_without_phi_delta_are_bit_identical():
     sig = "bbbb0000bbbb"
     rows = [_row(sig, 1.0), _row(sig, 0.0), _row(sig, 0.5)]
-    view = q_cells.fold(q_cells.InMemoryStore(rows))
+    view = q_cells.fold(q_cells.InMemoryStore(rows), gamma=1.0)
     cell = view.cells[(sig, "hypothesis-falsification")]
     assert cell.success == 1.5 and cell.failure == 1.5, \
         "absent phi_delta: the fold is byte-identical to the pre-change " \
@@ -77,7 +79,8 @@ def test_rows_without_phi_delta_are_bit_identical():
 
 def test_tiebreaker_never_pushes_credit_past_the_rail():
     sig = "cccc0000cccc"
-    view = q_cells.fold(q_cells.InMemoryStore([_row(sig, 1.0, 0.9)]))
+    view = q_cells.fold(q_cells.InMemoryStore([_row(sig, 1.0, 0.9)]),
+                        gamma=1.0)
     cell = view.cells[(sig, "hypothesis-falsification")]
     assert cell.success == 1.0 and cell.failure == 0.0, \
         "the clamp holds: effective credit stays in [0, 1]"
@@ -86,7 +89,7 @@ def test_tiebreaker_never_pushes_credit_past_the_rail():
 def test_non_numeric_phi_delta_fails_open_to_zero(tmp_path):
     sig = "dddd0000dddd"
     view = q_cells.fold(q_cells.InMemoryStore(
-        [_row(sig, 0.5, phi_delta="bogus")]))
+        [_row(sig, 0.5, phi_delta="bogus")]), gamma=1.0)
     cell = view.cells[(sig, "hypothesis-falsification")]
     assert cell.success == 0.5 and cell.failure == 0.5
 
