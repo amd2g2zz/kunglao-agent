@@ -814,6 +814,218 @@ def init_cc_default_workspace(task_dir: Path,
     return ws, prompt
 
 
+# ------------------------------------------- #523 eval closure: the PQ spine
+# Pilot finding (2026-10-06, runs/exp-cc-rl/smoke-kunglao-1usd): the loop
+# arm entered sessions with zero OPEN claims — nothing to dispatch on, no
+# answers_question binding, convergence spine unengaged (dispatch=0 ->
+# no settlement -> no q-cells). The spine is now the HARNESS's to seed:
+# the loop's own claim-opening was the behavior under test, and a harness
+# that depends on it measures goodwill, not capability.
+
+SPINE_CLAIM_BASE = 4        # C-001..C-003 are init's scaffold seeds
+SELFCHECK_TIMEOUT_S = 120.0
+
+
+def seed_question_spine(ws: Path, task: dict) -> list[str]:
+    """Land the task's primary questions in both spine organs:
+
+    1. task_spec.yaml — the question set (convergence's PQ face, the
+       verdict scorer and the reproduction-bit arming all read it there);
+    2. the claim register — ONE OPEN claim per question,
+       answers_question-bound, ids continuing after the scaffold seeds.
+
+    Register write uses ws_yaml.canonical_dump — the #516 single-writer
+    serialization. The runner runs pre-session (no write_guard process),
+    but the serialization contract is honored anyway so the session's
+    canonical round-trip adjudication sees a conforming register. Returns
+    the seeded claim ids.
+    """
+    from ws_yaml import canonical_dump
+
+    ws = Path(ws)
+    pqs = ds.primary_questions(task)
+
+    spec_path = ws / "task_spec.yaml"
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    spec["primary_questions"] = pqs
+    spec_path.write_text(canonical_dump(spec), encoding="utf-8")
+
+    reg_path = ws / "claim-register.yaml"
+    reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+    claims = reg.setdefault("claims", [])
+    bound = {c.get("answers_question") for c in claims
+             if isinstance(c, dict)}
+    next_id = max(SPINE_CLAIM_BASE, 1 + max(
+        (int(str(c.get("id", "C-0")).split("-")[-1] or 0)
+         for c in claims if isinstance(c, dict)), default=3))
+    seeded: list[str] = []
+    for pq in pqs:
+        # idempotence keys on the QUESTION: a re-seed never re-binds an
+        # already-answered question, whatever id it landed under
+        if pq["id"] in bound:
+            continue
+        cid = f"C-{next_id:03d}"
+        next_id += 1
+        claims.append({
+            "id": cid, "status": "OPEN",
+            "answers_question": pq["id"],
+            "title": pq["q"],
+            "depends_on": [], "boundary_type": "positive_observation",
+            "evidence": "", "evidence_tier_attempted": 0,
+            "promotion_attempts": 0,
+        })
+        seeded.append(cid)
+    reg_path.write_text(canonical_dump(reg), encoding="utf-8")
+    return seeded
+
+
+def preflight(ws: Path, *, run_selfcheck=None) -> tuple[bool, list[str]]:
+    """Mechanical preconditions the loop session may not start without.
+
+    1. open_claims > 0 — the spine seeding held (a register that cannot
+       hold an OPEN claim means the session would run claim-less, the
+       exact pilot failure);
+    2. the task oracle is valid — task-oracle.yaml parses, task_text is
+       non-empty, open_items is a list (the completion gate judges
+       through it);
+    3. hooks self-check passes — hooks_selfcheck.py exits 0 on the
+       workspace (the plugin's in-session machinery is wired).
+
+    Failure returns (False, reasons) — the caller emits a harness_error
+    row and skips the session (never burn wall on a workspace the
+    machinery cannot run on). ``run_selfcheck`` is the test seam (defaults
+    to the real subprocess face).
+    """
+    ws = Path(ws)
+    reasons: list[str] = []
+    reg = yaml.safe_load(
+        (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    open_claims = sum(
+        1 for c in reg.get("claims") or []
+        if isinstance(c, dict)
+        and str(c.get("status") or "").upper() == "OPEN")
+    if open_claims < 1:
+        reasons.append(f"open_claims={open_claims} (spine seeding failed)")
+    try:
+        oracle = yaml.safe_load(
+            (ws / "task-oracle.yaml").read_text(encoding="utf-8")) or {}
+        if not str(oracle.get("task_text") or "").strip():
+            reasons.append("task-oracle.yaml task_text empty")
+        if not isinstance(oracle.get("open_items"), list):
+            reasons.append("task-oracle.yaml open_items not a list")
+    except (OSError, yaml.YAMLError) as exc:
+        reasons.append(f"task-oracle.yaml unreadable: {exc}")
+    if run_selfcheck is None:
+        def run_selfcheck(workspace: Path) -> tuple[int, str]:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT_DIR / "hooks_selfcheck.py"),
+                 str(workspace)],
+                capture_output=True, text=True, timeout=SELFCHECK_TIMEOUT_S)
+            return proc.returncode, (proc.stdout or proc.stderr or "")[-400:]
+    try:
+        rc, tail = run_selfcheck(ws)
+    except (OSError, subprocess.SubprocessError) as exc:
+        rc, tail = 1, f"selfcheck launch failed: {exc}"
+    if rc != 0:
+        reasons.append(f"hooks_selfcheck rc={rc}: {tail}")
+    return (not reasons), reasons
+
+
+def _q_cell_face(ws: Path) -> int:
+    """Armed q-cell observation rows (runs/q-cell-log.jsonl) — the
+    learning-spine engagement organ. Absent file = 0 (a missing organ is
+    a zero metric, never a crash)."""
+    path = Path(ws) / "runs" / "q-cell-log.jsonl"
+    if not path.is_file():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8",
+                                            errors="replace").splitlines()
+               if line.strip())
+
+
+def classify_harness_failure(metrics: dict, q_cell_rows: int) -> \
+        tuple[bool, str]:
+    """Zero dispatches AND zero q-cell observations = the spine never
+    engaged — a HARNESS failure, excluded from performance (it measures
+    the harness, not the policy). Rows stay in the receipt with the
+    exclusion marked; the summary splits performance vs harness counts."""
+    if metrics.get("dispatch_count", 0) == 0 and q_cell_rows == 0:
+        return True, ("dispatch_count=0 and q-cell-log rows=0 — the loop "
+                      "spine never engaged (harness class, not capability)")
+    return False, ""
+
+
+def governance_block(metrics: dict, status: str, q_cell_rows: int) -> dict:
+    """The convergence-governance faces — reported SEPARATELY from the
+    candidate-correctness verdict (the owner's split: the checker says
+    whether the answer was right; this block says whether the loop was
+    governed)."""
+    return {
+        "converged": bool(metrics.get("converged")),
+        "session_status": status,
+        "rounds": metrics.get("rounds", 0),
+        "dispatch_count": metrics.get("dispatch_count", 0),
+        "proven_claims": metrics.get("proven_claims", 0),
+        "oracle_green_rate": metrics.get("oracle_green_rate", 0.0),
+        "q_cell_observations": q_cell_rows,
+    }
+
+
+def warm_context_block(source_ws: Path) -> str:
+    """The CC+warm-context arm's context: the SAME train-derived material
+    the K-warm loop reads, rendered as plain text — pattern/anti-hint
+    cards (runs/strategy-cards/, rendered by the compose face's own
+    render_card_block) and the method-family log's family summary
+    (runs/method-family-log.jsonl).
+
+    The arm's question (the experiment doc §5): is K-warm's edge RL, or
+    just extra context? This arm gets the frozen TEXT; K-warm samples
+    from the LIVE store — that difference is the measurement. A source
+    without train material renders a marked COLD block (differential
+    zero — the arm still runs, the receipt shows why it carries no
+    warm signal)."""
+    from rlvr.compose import load_cards, render_card_block
+
+    source = Path(source_ws)
+    lines = ["CONTEXT CARDS — train-derived material (text render of the "
+             "kunglao loop's pattern cards + method-family summary; the "
+             "same store a warm loop reads):"]
+    try:
+        cards = load_cards(source)
+    except Exception as exc:  # noqa: BLE001 — a cold/corrupt store renders cold
+        cards = []
+        lines.append(f"  (cards unreadable: {type(exc).__name__}: {exc})")
+    if not cards:
+        lines.append("  (cold — no train store material at this source)")
+    for card in cards:
+        try:
+            lines.append("  " + render_card_block(card))
+        except Exception as exc:  # noqa: BLE001 — one bad card skips itself
+            lines.append(f"  (card skipped: {type(exc).__name__})")
+    fam_log = source / "runs" / "method-family-log.jsonl"
+    fams: dict[str, list[int]] = {}
+    if fam_log.is_file():
+        for line in fam_log.read_text(encoding="utf-8",
+                                      errors="replace").splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            fam = str(row.get("method_family") or "")
+            if fam:
+                fams.setdefault(fam, [0, 0])
+                fams[fam][1] += 1
+                if row.get("outcome") in ("green", "pass", "settled"):
+                    fams[fam][0] += 1
+    if fams:
+        lines.append("  method-family summary (green/total from the train "
+                     "log):")
+        for fam in sorted(fams):
+            g, t = fams[fam]
+            lines.append(f"    {fam}: {g}/{t}")
+    return "\n".join(lines)
+
+
 # ----------------------------------------------------------------- prompt
 def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
                         extras: list[str], gap_block: str = "") -> str:
@@ -1254,12 +1466,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_BUDGET_USD, wall_cap_s: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
-                  arm: str = ARM) -> dict:
+                  arm: str = ARM,
+                  warm_context_from: Path | None = None) -> dict:
     """One eval task through the FULL pipeline: init -> real session ->
     harvest -> mechanical check -> results row. ``arm`` selects the
-    harness face: "loop" (kunglao-init + plugin session) or "cc-default"
-    (neutral cwd + plugin-less session) — same caps, extractor and
-    checker either way."""
+    harness face: "loop" (kunglao-init + plugin session), "cc-default"
+    (neutral cwd + plugin-less session), or "cc-warm-context" (the
+    cc-default face + the train-store text render — the RL-vs-context
+    attribution arm) — same caps, extractor and checker either way."""
     out = Path(out)
     tdir = ds.resolve_task_dir(task_ref)
     task = ds.load_task(tdir)
@@ -1269,11 +1483,49 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     layer_paths, probe_block = prompt_injection_blocks(tdir, task)
 
     try:
-        if arm == "cc-default":
+        if arm in ("cc-default", "cc-warm-context"):
             ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
                                                    wall_cap_s=wall_cap_s)
+            if arm == "cc-warm-context":
+                # the experiment doc §5's attribution arm: the SAME
+                # train-derived context K-warm reads, as frozen text —
+                # no hooks, no posterior sampling (that difference IS
+                # the arm's question)
+                prompt = (prompt + "\n\n"
+                          + warm_context_block(warm_context_from))
         else:
             ws = init_workspace(tdir, out / "workspaces")
+            # #523 closure: seed the PQ spine + preflight BEFORE the
+            # session — a claim-less/oracle-less/unwired workspace burns
+            # the wall measuring nothing (the pilot's 0/3 class)
+            try:
+                seed_question_spine(ws, task)
+                pf_ok, pf_reasons = preflight(ws)
+            except (OSError, ValueError, yaml.YAMLError) as exc:
+                pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+            if not pf_ok:
+                row = ds.results_row(
+                    task_id=tdir.name, family=task["family"],
+                    checker_kind=task["checker"]["kind"],
+                    metrics={m: 0 for m in ds.REQUIRED_METRICS},
+                    verdict="SKIP",
+                    failures=[{"code": "HARNESS_PREFLIGHT",
+                               "detail": "; ".join(pf_reasons)}],
+                    evidence_ref="", arm=arm)
+                row["loop"] = {"status": "harness_error", "metrics": {},
+                               "checker_rc": 2, "session": {
+                                   "returncode": None, "wall_s": 0.0,
+                                   "timed_out": False,
+                                   "session_cost": None,
+                                   "harness_contaminated": False,
+                                   "harness_drift_files": []},
+                               "workspace": str(ws), "deliverable": None,
+                               "prompt_sha256": None}
+                row["governance"] = governance_block({}, "harness_error", 0)
+                row["excluded_from_performance"] = True
+                print(f"VERDICT {tdir.name} SKIP ({arm}: harness_error — "
+                      f"{'; '.join(pf_reasons)})")
+                return row
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
                                        layer_paths=layer_paths,
@@ -1312,7 +1564,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-        plugin_dir=plugin_dir, plugin=(arm != "cc-default"))
+        plugin_dir=plugin_dir, plugin=(arm == ARM))
     contaminated = bool(drifted)
     status = _session_status(rec, budget_usd)
 
@@ -1362,7 +1614,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         redo_rec, redo_drifted, _redo_restored = run_session_guarded(
             ws, redo_prompt, out, tdir.name, budget_usd=redo_budget,
             wall_cap_s=redo_wall, session_cmd=session_cmd,
-            plugin_dir=plugin_dir, plugin=(arm != "cc-default"),
+            plugin_dir=plugin_dir, plugin=(arm == ARM),
             note=" (gap-redo session)")
         status = _session_status(redo_rec, redo_budget)
         gap_redo["ran"] = True
@@ -1391,12 +1643,33 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
 
     _record_experience(ws, "terminal")  # 396 recording (fail-open)
 
+    # #523 closure: the harness-failure classifier + the governance split
+    # (LOOP arm only — the cc arms have no spine by design; their session
+    # completion rides the existing loop.session face)
+    q_cell_rows = _q_cell_face(ws) if arm == ARM else 0
+    harness_failure, hf_reason = (classify_harness_failure(metrics, q_cell_rows)
+                                  if arm == ARM else (False, ""))
+    # NOTE: the terminal status class stays untouched (the #380 P3-8
+    # discipline — exhausted/session_error are honest terminal rows);
+    # the harness class rides excluded_from_performance + governance,
+    # never as a status rewrite
+
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
         checker_kind=res["checker_kind"], metrics=res["metrics"],
         verdict=res["verdict"], failures=res["failures"],
         evidence_ref=res["evidence"], arm=arm)
     row["gap_redo"] = gap_redo["ran"]
+    if arm == ARM:
+        gov = governance_block(metrics, status, q_cell_rows)
+        if harness_failure:
+            gov["harness_failure"] = True
+            gov["harness_failure_reason"] = hf_reason
+        row["governance"] = gov
+        row["excluded_from_performance"] = harness_failure
+        if harness_failure:
+            print(f"[kunglao-agent] eval_loop: {tdir.name} EXCLUDED from "
+                  f"performance ({hf_reason})", file=sys.stderr)
     row["loop"] = {
         "status": status,
         "metrics": metrics,
@@ -1436,7 +1709,8 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   wall_cap_s: float = DEFAULT_WALL_CAP_S,
                   session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
-                  arm: str = ARM
+                  arm: str = ARM,
+                  warm_context_from: Path | None = None
                   ) -> tuple[int, dict]:
     """The tier face: one kunglao-eval-results/1 doc (arm=loop or
     arm=cc-default) — directly comparable with the #236 bare rows (same
@@ -1456,7 +1730,8 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     for tdir in selected:
         rows.append(run_loop_task(
             tdir.name, out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
-            session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm))
+            session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
+            warm_context_from=warm_context_from))
 
     summary = {
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
@@ -1518,10 +1793,17 @@ def main(argv: list[str] | None = None) -> int:
                          "production face is the real claude CLI")
     ap.add_argument("--plugin-dir", default=None,
                     help="kunglao plugin dir (default: this repo root)")
-    ap.add_argument("--arm", default=ARM, choices=("loop", "cc-default"),
+    ap.add_argument("--arm", default=ARM,
+                    choices=("loop", "cc-default", "cc-warm-context"),
                     help="harness face: loop = kunglao-init + plugin "
                          "session (default); cc-default = plain Claude "
-                         "Code default harness, no plugin, neutral cwd")
+                         "Code default harness, no plugin, neutral cwd; "
+                         "cc-warm-context = cc-default + the train-store "
+                         "text render (the RL-vs-context attribution arm)")
+    ap.add_argument("--warm-context-from", default=None,
+                    help="cc-warm-context arm: the train workspace whose "
+                         "pattern cards + method-family log render into "
+                         "the prompt (required for that arm)")
     ap.add_argument("--out", default=str(
         ds.EVAL_ROOT.parent / "runs" / "eval-loop"),
         help="output dir (default: runs/eval-loop/)")
@@ -1531,7 +1813,9 @@ def main(argv: list[str] | None = None) -> int:
         tasks, Path(args.out), tier=args.tier, budget_usd=args.budget_usd,
         wall_cap_s=args.wall_cap_s, session_cmd=args.session_cmd,
         plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None,
-        arm=args.arm)
+        arm=args.arm,
+        warm_context_from=(Path(args.warm_context_from)
+                           if args.warm_context_from else None))
     return rc
 
 

@@ -178,8 +178,15 @@ def run_tier(tasks: list[str], tier: str, arm: str, candidates: dict[str, Path],
                   f"(p={p_guess:.2e})")
 
     summary = {
-        "pass": sum(1 for r in rows if r["arm"] == arm and r["verdict"] == "PASS"),
-        "fail": sum(1 for r in rows if r["arm"] == arm and r["verdict"] == "FAIL"),
+        # #523 closure: pass/fail exclude harness-failure rows (they are
+        # not capability numbers) — the performance block mirrors these
+        # counts and harness_failures carries the excluded rows
+        "pass": sum(1 for r in rows if r["arm"] == arm
+                    and not r.get("excluded_from_performance")
+                    and r["verdict"] == "PASS"),
+        "fail": sum(1 for r in rows if r["arm"] == arm
+                    and not r.get("excluded_from_performance")
+                    and r["verdict"] == "FAIL"),
         "skip": sum(1 for r in rows if r["arm"] == arm and r["verdict"] == "SKIP"),
         "refused": sum(1 for r in rows if r["arm"] == arm and r["verdict"] == "REFUSED"),
         "baselines": sum(1 for r in rows if r["arm"] == "guess-1ofk"),
@@ -192,6 +199,26 @@ def run_tier(tasks: list[str], tier: str, arm: str, candidates: dict[str, Path],
                         if r["failures"] else "checker reported SKIP")}
             for r in rows
             if r["arm"] == arm and r["verdict"] == "SKIP"],
+        # #523 closure: candidate correctness vs convergence governance —
+        # harness-failure rows (excluded_from_performance) leave the
+        # pass/fail arithmetic and land in their own bucket; the summary
+        # names them so no consumer mistakes a harness class for a
+        # capability number
+        "performance": {
+            "pass": sum(1 for r in rows if r["arm"] == arm
+                        and not r.get("excluded_from_performance")
+                        and r["verdict"] == "PASS"),
+            "fail": sum(1 for r in rows if r["arm"] == arm
+                        and not r.get("excluded_from_performance")
+                        and r["verdict"] == "FAIL"),
+        },
+        "harness_failures": [
+            {"task_id": r["task_id"],
+             "governance": r.get("governance") or {},
+             "reason": (r["failures"][0].get("detail")
+                        if r["failures"] else "")}
+            for r in rows if r["arm"] == arm
+            and r.get("excluded_from_performance")],
     }
     doc = {
         "schema": ds.RESULTS_SCHEMA,
