@@ -1152,6 +1152,10 @@ files:
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
     sha256: a0773ea8049281c52a098273c701bc8722f4f580685035ab2a63c4b349016d97
+  - src: scripts/rlvr/censored_review.py
+    dest: .claude/scripts/rlvr/censored_review.py
+    kind: scaffold
+    sha256: 89c180bbb07b302f22f4452300081cb0707da72ce1c09b24b6e65fbeb60e7eaa
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
@@ -1231,7 +1235,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c62862b767b1263d21239d4c591bac04a8de77e1ff6414caf89523d9abaa277b
+    sha256: 0f770c64dc136a4d3c49db20f254924eee7c51c31ac7e14de2b681540cfdd82c
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
