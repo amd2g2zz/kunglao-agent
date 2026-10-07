@@ -45,21 +45,23 @@ permissions:
 jobs:
   runner-probe:
     # Owner routing (2026-10-07): SELF-HOSTED FIRST, the free
-    # GitHub-hosted tier as overflow when ours is insufficient, and back
-    # to queueing on self-hosted when the free quota is spent. Actions
-    # has no native priority queue — this probe (~20s, itself on the
-    # free tier) approximates it: when any OTHER release-check run is
-    # in_progress/queued (our single-slot runner busy or spoken for)
-    # the legs route to ubuntu-latest; otherwise self-hosted. Any probe
-    # failure defaults BACK to self-hosted — the conservative arm of
-    # the priority order (queue beats wrong-tier speed). Quota-exhausted
-    # posture: an ubuntu-latest leg that cannot start for billing fails
-    # fast; rerun when the self-hosted slot frees (the documented wait).
+    # GitHub-hosted tier as overflow when ours is insufficient, and
+    # back to queueing on self-hosted when the free quota is spent —
+    # with all four legs PARALLEL in every case. Our own runner has
+    # ONE job slot: it can never serve four parallel legs, so the
+    # LONGEST leg (integration, ~12min) claims our slot whenever it is
+    # free — maximum utilization of the preferred resource — and the
+    # three short legs always run on the free tier in parallel. Any
+    # probe failure defaults BACK to self-hosted for every leg — the
+    # conservative arm (queue beats wrong-tier speed); quota-exhausted
+    # posture: a billing-blocked free leg fails fast, rerun when the
+    # self-hosted slot frees (the documented wait).
     runs-on: ubuntu-latest
     outputs:
-      runner: ${{ steps.probe.outputs.runner }}
+      runner_long: ${{ steps.probe.outputs.runner_long }}
+      runner_short: ${{ steps.probe.outputs.runner_short }}
     steps:
-      - name: Probe the self-hosted slot (busy => free overflow)
+      - name: Probe the self-hosted slot (free => long leg claims it)
         id: probe
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,10 +72,18 @@ jobs:
               and .status != "completed"
               and .id != ${{ github.run_id }})] | length' \
             || echo "")
-          if [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
-            echo 'runner="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+          if [ -z "$busy" ]; then
+            # probe failure: conservative default — every leg self-hosted
+            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+            echo 'runner_short=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+          elif [ "$busy" -ge 1 ]; then
+            # slot busy or spoken for: total overflow, all four parallel
+            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+            echo 'runner_short="ubuntu-latest"' >> "$GITHUB_OUTPUT"
           else
-            echo 'runner=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+            # slot free: the long leg claims it; shorts stay parallel free
+            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+            echo 'runner_short="ubuntu-latest"' >> "$GITHUB_OUTPUT"
           fi
 
   lint-hygiene:
@@ -81,9 +91,9 @@ jobs:
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
     # with "command not found" — the python-3.11 label pins the right host.
     needs: runner-probe
-    # self-hosted first; ubuntu-latest when the probe saw the slot busy
-    # (owner routing 2026-10-07 — see runner-probe for the full order)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
+    # always the free tier in parallel (owner routing 2026-10-07 —
+    # the long leg claims the single self-hosted slot; runner-probe)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -157,9 +167,9 @@ jobs:
 
   docs-contract:
     needs: runner-probe
-    # self-hosted first; ubuntu-latest when the probe saw the slot busy
-    # (owner routing 2026-10-07 — see runner-probe for the full order)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
+    # always the free tier in parallel (owner routing 2026-10-07 —
+    # the long leg claims the single self-hosted slot; runner-probe)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -191,9 +201,9 @@ jobs:
 
   unit-fast:
     needs: runner-probe
-    # self-hosted first; ubuntu-latest when the probe saw the slot busy
-    # (owner routing 2026-10-07 — see runner-probe for the full order)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
+    # always the free tier in parallel (owner routing 2026-10-07 —
+    # the long leg claims the single self-hosted slot; runner-probe)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_short) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -235,9 +245,10 @@ jobs:
 
   integration:
     needs: runner-probe
-    # self-hosted first; ubuntu-latest when the probe saw the slot busy
-    # (owner routing 2026-10-07 — see runner-probe for the full order)
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner) }}
+    # the LONG leg claims the self-hosted slot when free (owner
+    # routing 2026-10-07 — max utilization of the preferred
+    # resource; overflow keeps all four legs parallel; runner-probe)
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_long) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
