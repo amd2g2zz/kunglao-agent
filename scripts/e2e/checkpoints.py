@@ -1066,6 +1066,42 @@ def _partial_claim_ids(ctx: RunContext) -> list:
     return out
 
 
+def _record_verify_launch(ctx: RunContext, claim: str,
+                          variant: str) -> None:
+    """#550: verify/red-team acts enter the SMDP ledger — the launch
+    stash is action-type-scoped (never clobbers a pending dispatch
+    stash for the same claim). Fail-open telemetry."""
+    try:
+        ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+        ir.record_launch(str(ctx.ws), claim,
+                         action_key=("verify:redteam"
+                                     if variant == "redteam" else "verify"),
+                         action_type="verify", variant=variant)
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
+        kunglao_log.warn("e2e.verify_launch",
+                         f"{type(exc).__name__}: {exc}")
+
+
+def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
+                          verdict: str = "") -> None:
+    """#550: close the verify/red-team transition — r_settle banks the
+    verdict's credit (verified/CONFIRMED => 1.0, else 0.0); the Φ move
+    from newly verified facts rides r_incr unchanged. Fail-open."""
+    try:
+        ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+        _dur_ms = (act.detail or {}).get("duration_ms") \
+            if isinstance(act.detail, dict) else None
+        ir.append_transition(
+            str(ctx.ws), claim, str(act.outcome), status=variant,
+            facts=_facts_citing(ctx.ws, claim),
+            seconds=float(_dur_ms or 0) / 1000.0,
+            r_settle=ir.verify_credit(verdict),
+            action_type="verify", variant=variant)
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
+        kunglao_log.warn("e2e.verify_settle",
+                         f"{type(exc).__name__}: {exc}")
+
+
 def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
                        detail: dict) -> model.CheckpointResult | None:
     """#484: DISPATCH_VERIFIER decisions finally act — a verifier face for
@@ -1111,10 +1147,12 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         method_family=getattr(ctx.state, "method_family", "") or None)
+    _record_verify_launch(ctx, claim, "verify")
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+        _record_verify_settle(ctx, claim, act, "verify", verdict="")
         dispatched.discard(vkey)
         return None
     # verification landed → land the gate-conformant verify-note (#501:
@@ -1123,6 +1161,17 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     # repo gate; a refusal is honest progress info, never fatal (#819
     # fail-closed)
     _land_verify_note(ctx, claim)
+    _v = ""
+    try:
+        _note = (ctx.ws / "runs" / f"verification-{claim}.md"
+                 ).read_text(encoding="utf-8", errors="replace")
+        _m = re.search(r"^verdict:\s*(\S+)", _note, re.M)
+        if _m:
+            _v = _m.group(1)
+    except OSError as exc:  # loud per #275 — a missing note settles 0.0
+        kunglao_log.warn("e2e.verify_verdict",
+                         f"{type(exc).__name__}: {exc} (settling 0.0)")
+    _record_verify_settle(ctx, claim, act, "verify", verdict=_v)
     promote = promote_claims(ctx.repo, ctx.ws, [claim])
     detail.setdefault("promotions", []).append(
         {claim: promote.get("ok"), "promoted": promote.get("promoted"),
@@ -1209,25 +1258,32 @@ def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         agent="kunglao-redteam",
         method_family=getattr(ctx.state, "method_family", "") or None)
+    _record_verify_launch(ctx, claim, "redteam")
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
+        _record_verify_settle(ctx, claim, act, "redteam", verdict="")
         dispatched.discard(rtkey)
         return
     artifact = Path(ctx.ws) / "runs" / f"verify-redteam-{claim}.md"
     if not artifact.is_file():
+        _record_verify_settle(ctx, claim, act, "redteam", verdict="")
         detail.setdefault("promotions", []).append(
             {claim: False, "redteam": "artifact-missing"})
         return
     retry = promote_claims(ctx.repo, ctx.ws, [claim])
     row = {claim: retry.get("ok"), "promoted": retry.get("promoted"),
            "violations": retry.get("violations")}
+    # one read, one parse: the verdict feeds both the failure row and
+    # the #550 settle credit (CONFIRMED banks 1.0)
+    art = artifact.read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"RED-TEAM VERDICT\s*[:\-]?\s*(\S+)", art,
+                  re.IGNORECASE)
+    verdict = m.group(1) if m else ""
     if retry.get("ok") is False:
-        art = artifact.read_text(encoding="utf-8", errors="replace")
-        m = re.search(r"RED-TEAM VERDICT\s*[:\-]?\s*(\S+)", art,
-                      re.IGNORECASE)
-        row["redteam"] = m.group(1) if m else "unparsed"
+        row["redteam"] = verdict or "unparsed"
+    _record_verify_settle(ctx, claim, act, "redteam", verdict=verdict)
     detail.setdefault("promotions", []).append(row)
 
 
