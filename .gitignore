@@ -108,3 +108,8 @@ docs/superpowers/
 # local-only judgment-experiment artifacts (owner ruling 2026-10-03:
 # never synced to the remote)
 /experiments/
+
+# #545 WS2: the cross-task posterior store is RUNTIME data (learned
+# posteriors across this machine's workspaces) — never committed; the
+# guarded prior_store_root scan covers whatever exists locally.
+scripts/rlvr/patterns/posterior-store.jsonl
