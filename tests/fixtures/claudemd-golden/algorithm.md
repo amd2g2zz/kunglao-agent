@@ -43,13 +43,10 @@ The convergence loop runs every round and is the only rule set that survives con
 
 Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key scripts under `/kunglao/skill-sentinel/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
-Capability discovery (tool recall) goes through the ONE search face:
+Capability discovery (tool recall) goes through the ONE search face —
+`uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/tools/tool-search.py --find QUERY`:
 
-```
-uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/tools/tool-search.py --find W1 W2 ...
-```
-
-**When to search** — before writing any new script (a registered tool may already do it), when a step feels stuck (a reference card may name the move), and at tier boundaries (decompile/emulate/debug tools by keyword). **How** — a real query grammar: quoted phrases are atomic (`"unicorn engine"`), `AND`/`OR`/`NOT` (or `&&`/`||`/`!`) with parentheses — `--find "(ghidra OR jadx) AND dex NOT windows"`; bare words default to the forgiving OR group (`--match all` narrows to AND); `--capability`/`--tier`/`--cost-max` may combine in the same query. Each hit states a `type`, a `consume`, and a keyword match score (lexical, not semantic): invoke a tool, fill or adapt a template, or read a reference. The score ranks candidates for your judgment and never gates surfacing — near-miss results stay visible; descriptions state expected outcomes rather than guaranteed facts.
+**When** — before writing any script (a registered tool may exist), when stuck, at tier boundaries. **How** — a query grammar: quoted phrases are atomic (`"unicorn engine"`), `AND`/`OR`/`NOT` + parentheses (`--find "(ghidra OR jadx) AND dex NOT windows"`); bare words default to the forgiving OR group (`--match all` → AND); `--capability`/`--tier`/`--cost-max` combine in the same query. Each hit states `type`/`consume` and a keyword match score (lexical, not semantic): invoke a tool, fill or adapt a template, or read a reference — the score ranks for judgment, never gates surfacing; descriptions state expected outcomes rather than guaranteed facts.
 
 ## State files (read every turn, disk is truth)
 
