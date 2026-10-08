@@ -69,7 +69,7 @@ class RunContext:
 def resolve_task_dir(repo: Path, unit: str) -> Path:
     """Resolve <corpus>/v1/tasks/<tier>/<unit> — exactly one match or
     refuse. The corpus honors KUNGLAO_EVAL_ROOT (the operator-local
-    corpus face, #546: eval data is intermediate-process material; the
+    corpus face: eval data is intermediate-process material; the
     blocked-path delta runs outside the repo tree)."""
     import os  # noqa: PLC0415
     import yaml  # noqa: PLC0415

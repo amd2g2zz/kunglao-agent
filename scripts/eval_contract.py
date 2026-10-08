@@ -104,11 +104,11 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                   "target_surface": "text"},
     "tf-chain4": {"suffix": ".txt", "response_language": "Text answer document",
                   "target_surface": "text"},
-    # ---- blocked-path constructions (#546 WS4 measurement face) ---------
+    # ---- blocked-path constructions ---------
     # novel-ISA/novel-cipher units: no known family shortcut; the graded
     # candidate is the same answer.txt digest contract as tf-chain*.
-    # The units live in the operator's LOCAL corpus (KUNGLAO_EVAL_ROOT;
-    # the 2026-10-07 eval/ ruling) — the contract rows are code.
+    # The units live in the operator's LOCAL corpus (KUNGLAO_EVAL_ROOT)
+    # — the contract rows are code.
     "tf-novelvm": {"suffix": ".txt", "response_language": "Text answer document",
                    "target_surface": "text"},
     "tf-novelcipher": {"suffix": ".txt", "response_language": "Text answer document",
