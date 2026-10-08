@@ -1146,6 +1146,24 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
                          f"{type(exc).__name__}: {exc}")
 
 
+def _settle_predictions(ctx: RunContext, claim: str,
+                        evidence_text: str) -> None:
+    """The prediction-ledger settle wiring: pending predictions
+    registered against this claim settle (confirmed) when the verifier's
+    observed evidence carries their discriminator — the mechanical
+    containment match the ledger face owns; the transition rows land
+    through the existing settle pipeline unchanged. Fail-open
+    telemetry, never into the landing path (loud per the house rule)."""
+    if not str(evidence_text or "").strip():
+        return
+    try:
+        pl = _load_repo_module(ctx.repo, "rlvr.prediction_ledger")
+        pl.settle_matching(str(ctx.ws), str(claim), evidence_text)
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud
+        kunglao_log.warn("e2e.prediction_settle",
+                         f"{type(exc).__name__}: {exc}")
+
+
 def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
                        detail: dict) -> model.CheckpointResult | None:
     """#484: DISPATCH_VERIFIER decisions finally act — a verifier face for
@@ -1206,6 +1224,7 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     # fail-closed)
     _land_verify_note(ctx, claim)
     _v = ""
+    _note = ""
     try:
         _note = (ctx.ws / "runs" / f"verification-{claim}.md"
                  ).read_text(encoding="utf-8", errors="replace")
@@ -1216,6 +1235,7 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         kunglao_log.warn("e2e.verify_verdict",
                          f"{type(exc).__name__}: {exc} (settling 0.0)")
     _record_verify_settle(ctx, claim, act, "verify", verdict=_v)
+    _settle_predictions(ctx, claim, _note)
     promote = promote_claims(ctx.repo, ctx.ws, [claim])
     detail.setdefault("promotions", []).append(
         {claim: promote.get("ok"), "promoted": promote.get("promoted"),
