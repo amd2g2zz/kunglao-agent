@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import tempfile
 import time
 from collections.abc import Iterable
@@ -124,7 +125,7 @@ def _atomic_write(path: str | Path, payload, binary: bool, *,
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write(payload)
         except BaseException:
-            _unlink_quiet(tmp)
+            _cleanup_tmp(tmp)
             raise
     else:
         tmp = p.with_name(p.name + ".tmp")
@@ -137,13 +138,18 @@ def _atomic_write(path: str | Path, payload, binary: bool, *,
             os.chmod(tmp, mode)
         os.replace(tmp, p)
     except BaseException:
-        _unlink_quiet(tmp)
+        _cleanup_tmp(tmp)
         raise
     return p
 
 
-def _unlink_quiet(tmp: Path) -> None:
+def _cleanup_tmp(tmp: Path) -> None:
+    """Best-effort tmp removal during exception propagation. The leaf
+    cannot reach the repo rate-limited logger (isolation), so the
+    one-trace rule survives as a stderr line — never a silent pass."""
     try:
         tmp.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"[kunglao-agent] atomic-write tmp cleanup failed for "
+              f"{tmp.name}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)

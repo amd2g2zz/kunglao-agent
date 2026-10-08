@@ -135,7 +135,7 @@ files:
   - src: scripts/_common.py
     dest: .claude/scripts/_common.py
     kind: scaffold
-    sha256: 671431978adc03d9bd5cecac102e048f090cb7807593073d1a7c5ad3ad4f0901
+    sha256: f48039c7c726ee493db12d325f7cf83f273c37350c32e28b232baa0a05f2b7e7
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -791,7 +791,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 062422b7e02324b18a7274dade66be2990b1bcf633f4268b2f15d2a212e4412c
+    sha256: 2331518bc931f007a1843d0705650b57c17f3a5e3c7979e45fb7fd9078bc96ab
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -1279,7 +1279,7 @@ files:
   - src: scripts/silent_except_baseline.yaml
     dest: .claude/scripts/silent_except_baseline.yaml
     kind: scaffold
-    sha256: af621d07cfb342524d31566f7d05247d258638ef3499af989e6c4581d2d70445
+    sha256: c07a50bb6c42e13458c31426aef2ffe41a061f206a80d620ea881aceee882877
   - src: scripts/tool_tiers.yaml
     dest: .claude/scripts/tool_tiers.yaml
     kind: scaffold

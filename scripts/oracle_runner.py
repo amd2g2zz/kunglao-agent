@@ -154,7 +154,7 @@ retiring emits the coverage-drop WARN event
 armed-case count shrank.
 """
 from __future__ import annotations
-# fail-open handlers leave ONE rate-limited trace (canonical kunglao_log.warn)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace (kunglao_log.warn)
 from kunglao_log import warn  # ONE implementation (dedupe + ledger face)
 import argparse
 import hashlib
