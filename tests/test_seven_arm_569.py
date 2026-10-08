@@ -49,6 +49,9 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 for p in (str(ROOT), str(SCRIPTS)):
@@ -57,7 +60,10 @@ for p in (str(ROOT), str(SCRIPTS)):
 
 from e2e import checkpoints, model  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
+import eval_matrix_runner as mx  # noqa: E402
 import method_families  # noqa: E402
+
+REAL_CONFIG = ROOT / "docs" / "design" / "ws5-five-arms.yaml"
 
 FAM_WARM = "kdf-chain-reconstruction"   # store rows -> non-flat when live
 FAM_COLD = "obfuscation-peeling"        # no store rows
@@ -233,3 +239,131 @@ def test_declared_family_still_wins_under_the_uniform_scheduler(
     assert receipt["propensity"] == 1.0
     assert receipt.get("declared") is True
     assert FAM_COLD in (receipt["candidates"] or {})
+
+
+# ---- 2. the registry: seven arms + the B2 protocol --------------------------
+
+def test_real_registry_declares_the_seven_arms():
+    doc = mx.load_config(REAL_CONFIG)
+    arms = mx.config_arms(doc)
+    assert [a["id"] for a in arms] == [
+        "cc-bare", "cc-warm-context", "cc-multisample", "kunglao-cold",
+        "kunglao-uniform", "kunglao-warm", "kunglao-warm-no-l1"]
+    by_id = {a["id"]: a for a in arms}
+    assert by_id["cc-multisample"]["runner_face"] == "cc-default"
+    assert by_id["cc-multisample"]["store"] == "none"
+    assert by_id["kunglao-uniform"]["runner_face"] == "loop"
+    assert by_id["kunglao-uniform"]["store"] == "cold"
+
+
+def test_real_registry_b2_declares_the_same_cost_protocol():
+    doc = mx.load_config(REAL_CONFIG)
+    arm = {a["id"]: a for a in mx.config_arms(doc)}["cc-multisample"]
+    sampling = arm["sampling"]
+    assert sampling["mode"] == "multi-sample"
+    assert sampling["samples"] >= 2
+    assert sampling["budget_each"] > 0
+    budget = float(doc["budget"]["budget_usd"])
+    assert sampling["samples"] * sampling["budget_each"] == pytest.approx(
+        budget), "B2's whole point: N samples at the kunglao total budget"
+
+
+def test_real_registry_b3_declares_the_uniform_scheduler():
+    doc = mx.load_config(REAL_CONFIG)
+    arms = mx.config_arms(doc)
+    uniform = {a["id"]: a for a in arms}["kunglao-uniform"]
+    assert uniform["env"] == {"KUNGLAO_SCHEDULER": "uniform"}
+    for other in arms:
+        if other["id"] != "kunglao-uniform":
+            assert "KUNGLAO_SCHEDULER" not in (other.get("env") or {})
+
+
+def test_scheduler_env_is_stripped_from_the_ambient_shell(tmp_path):
+    assert "KUNGLAO_SCHEDULER" in mx.STRIPPED_ENV
+    plan = mx.RunPlan(
+        arm_id="kunglao-uniform", runner_face="loop", unit="u-1",
+        tier="release", corpus="repo", run_dir=tmp_path / "a" / "u",
+        store_kind="cold",
+        env_extra=(("KUNGLAO_SCHEDULER", "uniform"),))
+    env = mx.child_env(plan, {"KUNGLAO_SCHEDULER": "dts", "PATH": "x"})
+    assert env["KUNGLAO_SCHEDULER"] == "uniform", \
+        "the arm's declaration wins; ambient shell state never leaks"
+
+
+def _minimal_multi_config(**over) -> dict:
+    doc = {
+        "schema": "ws5-five-arms/1",
+        "budget": {"budget_usd": 1.0, "wall_cap_s": 60},
+        "arms": [
+            {"id": "cc-multi", "runner_face": "cc-default",
+             "store": "none", "env": {},
+             "sampling": {"mode": "multi-sample", "samples": 2,
+                          "budget_each": 0.5}},
+        ],
+        "units": [{"id": "py-derive-v1", "corpus": "repo",
+                   "tier": "smoke"}],
+        "warm_up": {"store_source": None, "warm_context_source": None},
+    }
+    doc.update(over)
+    return doc
+
+
+@pytest.mark.parametrize("mutate,frag", [
+    ({"sampling": {"mode": "multi-sample", "samples": 2,
+                   "budget_each": 0.4}}, "same-cost"),
+    ({"sampling": {"mode": "bag", "samples": 2, "budget_each": 0.5}},
+     "mode"),
+    ({"sampling": {"mode": "multi-sample", "samples": 1,
+                   "budget_each": 0.5}}, "samples"),
+    ({"sampling": {"mode": "multi-sample", "samples": 0,
+                   "budget_each": 0.5}}, "samples"),
+    ({"sampling": {"mode": "multi-sample", "samples": "two",
+                   "budget_each": 0.5}}, "samples"),
+    ({"sampling": {"mode": "multi-sample", "samples": 2,
+                   "budget_each": 0}}, "budget_each"),
+    ({"sampling": {"mode": "multi-sample", "samples": 2,
+                   "budget_each": -0.5}}, "budget_each"),
+    ({"sampling": "multi-sample"}, "mapping"),
+])
+def test_multisample_validation_refuses(tmp_path, mutate, frag):
+    doc = _minimal_multi_config()
+    doc["arms"][0].update(mutate)
+    p = tmp_path / "arms.yaml"
+    p.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(mx.ConfigError, match=frag):
+        mx.load_config(p)
+
+
+def test_multisample_on_a_loop_arm_refuses(tmp_path):
+    doc = _minimal_multi_config(arms=[
+        {"id": "loop-multi", "runner_face": "loop", "store": "cold",
+         "env": {},
+         "sampling": {"mode": "multi-sample", "samples": 2,
+                      "budget_each": 0.5}}])
+    p = tmp_path / "arms.yaml"
+    p.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(mx.ConfigError, match="cc faces"):
+        mx.load_config(p)
+
+
+# ---- 3. the dry-run B2 rows -------------------------------------------------
+
+def test_dry_run_expands_multisample_rows_at_equal_budget(tmp_path):
+    doc = _minimal_multi_config()
+    cfg = tmp_path / "arms.yaml"
+    cfg.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    out = tmp_path / "matrix"
+    rc = mx.main(["--config", str(cfg), "--dry-run", "--out", str(out)])
+    assert rc == mx.RC_OK
+    progress = json.loads((out / "progress.json").read_text("utf-8"))
+    rows = [r for r in progress["runs"] if r["arm"] == "cc-multi"]
+    assert len(rows) == 2, "N samples -> N child rows per unit"
+    assert sorted(r["sample"] for r in rows) == [0, 1]
+    for row in rows:
+        assert row["argv"][row["argv"].index("--budget-usd") + 1] == "0.5", \
+            "each sample rides budget_each, never the matrix budget"
+        assert row["sample_count"] == 2
+    # the same-cost face surfaced in the plan: N x budget_each = budget
+    assert 2 * 0.5 == pytest.approx(float(doc["budget"]["budget_usd"]))
+    assert rows[0]["run_dir"].endswith("s0")
+    assert rows[1]["run_dir"].endswith("s1")
