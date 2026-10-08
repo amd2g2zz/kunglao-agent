@@ -942,6 +942,47 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
             except Exception as exc:  # noqa: BLE001 — telemetry
                 kunglao_log.warn("e2e.posterior_store",
                                  f"{type(exc).__name__}: {exc}")
+        # the discovery trigger's second feed: a SETTLED FAILURE (non-
+        # timeout) on a family that already failed before is collapse
+        # evidence exactly like a timeout — the blocked-path delta showed
+        # the trigger starved when workers honor their budgets (they
+        # return instead of hanging, so the timeout-only feed stayed
+        # empty and the discovery move never fired on the runs it was
+        # built for). Fail-open: the feed never breaks the settle path.
+        if act.outcome in ("ERROR", "BLOCKED") \
+                and res.get("method_family"):
+            try:
+                _fam = str(res["method_family"])
+                _prior_fails = sum(
+                    1 for r in qc.default_store(str(ctx.ws)).observations()
+                    if isinstance(r, dict)
+                    and str(r.get("source") or "") == "settlement"
+                    and str(r.get("method_family") or "") == _fam
+                    and r.get("credit") is not None
+                    and float(r["credit"]) < 0.5)
+                if _prior_fails >= 1:  # this failure is a REPEAT
+                    _ev_rel = f"runs/act-fail-{claim}.md"
+                    _ev = ctx.ws / _ev_rel
+                    _ev.parent.mkdir(parents=True, exist_ok=True)
+                    _ev.write_text(
+                        f"command: claude -p dispatch-prompt-{claim}.md\n"
+                        f"exit={1 if act.outcome == 'ERROR' else 4} "
+                        f"(settled {act.outcome})\n"
+                        f"observed: outcome={act.outcome} family={_fam} "
+                        f"credit={credit:.2f} "
+                        f"prior_same_family_failures={_prior_fails}\n",
+                        encoding="utf-8")
+                    _load_repo_module(
+                        ctx.repo, "rlvr.obstacles").record(
+                        str(ctx.ws), kind="other",
+                        cause=f"settled-fail: repeat {act.outcome} on "
+                              f"{claim} (family {_fam}, prior fails "
+                              f"{_prior_fails})",
+                        evidence_path=_ev_rel,
+                        method_family=_fam, claim=claim)
+            except Exception as exc:  # noqa: BLE001 — feed, never the path
+                kunglao_log.warn("e2e.fail_obstacle_feed",
+                                 f"{type(exc).__name__}: {exc}")
         if act.outcome == "TIMEOUT":
             fam = str(res.get("method_family") or "unattributed")
             # evidence = the act's own execution record: the obstacles
