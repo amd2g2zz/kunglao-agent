@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 74
+    r1: 73
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -807,6 +807,8 @@ files:
     r1: 1
   tests/test_eval_loop_runner_334.py:
     r1: 1
+  tests/test_eval_matrix_ws5.py:
+    r1: 1
   tests/test_eval_native_332.py:
     r1: 7
   tests/test_eval_release_332.py:
@@ -1339,6 +1341,8 @@ files:
   tests/test_settle_by_need.py:
     r1: 1
   tests/test_settlement_pq_257.py:
+    r1: 1
+  tests/test_seven_arm_569.py:
     r1: 1
   tests/test_shell_defaults.py:
     r1: 1

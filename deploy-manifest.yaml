@@ -435,11 +435,11 @@ files:
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: d7e1cfc32b29d61c51c90f632912f434c20295f60ac693e3e5e69047afdb31ae
+    sha256: 179f691fae0777ed771260d55e47c551dbc4274945d9241b877c8d21d762b36f
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
-    sha256: 2f088b388c4ca9d7fdcbd7092dc931e2954ba59b83d61657d0d71917b51d4ed1
+    sha256: dbff67b52bfbe429d15ac630000f8be077678bd27cc34561825f3d87e5a5500a
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
