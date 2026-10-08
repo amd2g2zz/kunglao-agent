@@ -23,7 +23,6 @@ Usage: bench_intake.py <manifest.yaml> [--strict-counts] [--json]
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import subprocess
 import sys
@@ -31,20 +30,14 @@ from pathlib import Path
 
 import yaml
 
+from _common import sha256_file as _sha256
+
 SCHEMA = "kunglao-bench-manifest/1"
 STRATA = ("S1", "S2", "S3", "S4")
 TIERS = ("A+", "A", "B")
 MODEL_CUTOFF = "2025-08"  # YYYY-MM; first_seen must be >= this
 FULL_COUNTS = {"S1": 8, "S2": 7, "S3": 8, "S4": 7}
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def check(manifest_path: Path,

@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import json
 import os
 import platform
@@ -57,6 +56,7 @@ from harness_common import utc_now_z as _utc_now
 # (ledger path/shelf dir/timeout + the write discipline + the lock) —
 # deliberate reuse, never a second landing API (design D4 disposition).
 import online_distill as od
+from _common import sha256_file, sha256_hex
 from lint_facts import parse_frontmatter
 
 # the canonical warn — ONE implementation (process-wide dedupe + the
@@ -376,15 +376,13 @@ def _verify(ws, cand: dict, sample: Path) -> dict:
     if not r1["stdout"].strip():
         _unstage(tools, name)
         return {"ok": False, "reason": "empty-stdout"}
-    sha1 = hashlib.sha256(
-        r1["stdout"].encode("utf-8", "replace")).hexdigest()
+    sha1 = sha256_hex(r1["stdout"].encode("utf-8", "replace"))
     if r2["rc"] != 0 or not r2["stdout"].strip():
         reason = "argv-contract" if r2["rc"] == 2 else "rc-nonzero"
         _unstage(tools, name)
         return {"ok": False, "reason": reason, "rc": r2["rc"],
                 "stderr_tail": r2["stderr"][-200:]}
-    sha2 = hashlib.sha256(
-        r2["stdout"].encode("utf-8", "replace")).hexdigest()
+    sha2 = sha256_hex(r2["stdout"].encode("utf-8", "replace"))
     if sha1 != sha2:
         _unstage(tools, name)
         return {"ok": False, "reason": "digest-mismatch"}
@@ -397,7 +395,7 @@ def _verify(ws, cand: dict, sample: Path) -> dict:
 
 
 def _file_sha256(p: Path) -> str:
-    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    return sha256_file(p)
 
 
 # ---------------------------------------------------------------------------
