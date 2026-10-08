@@ -79,7 +79,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: dac1f3f3292d79c16fd900f5fde0904b1864e7c4b4daebe07565fa46c46eb03f
+    sha256: b16efde5a07d5f2bfd93c13d2d80c8cb1647d1c0ff814e81222200b085acfeac
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -735,7 +735,7 @@ files:
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold
-    sha256: c184404d67cb45407e98cb79444fac20fd47fc8d138a68edef4ab95f2cc08cd2
+    sha256: 3143ff9fcb1776fa16b6d3daccc67794fa382c56cc8008a9fd2854c7d85796ed
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -1171,7 +1171,7 @@ files:
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
-    sha256: 8e2477ababc75719ce011ee0ac3a62772f6d12a33eb796383960940bef064699
+    sha256: 5442d7ef59e582edb8c4389729f0fa26afaa9ef6533435e93ec079c1ee7a2189
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
@@ -1251,7 +1251,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 0e084b596ad0a8e428903f47474507da0702d186b249729b1c47b7d750ef5267
+    sha256: ff36d86cbfa84846e9f668862ce0eb0f3997fe46d8b98fa7237523d247d45d94
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

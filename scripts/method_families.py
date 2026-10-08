@@ -12,6 +12,12 @@ health signals rendered at the existing Q/report face
 ## Faces
 
   registry      load_registry() / registered_tokens() — the closed set
+  overlay       load_discovered() / the ws-aware registered_tokens() —
+                a workspace's runs/discovered-families.yaml merges into
+                the CANDIDATE ENUMERATION set only (the discovery layer's
+                admitted arms ride it); the repo registry bytes are never
+                touched, and without a workspace the set is exactly the
+                closed one
   validation    declared_value() + validate_method_family() — the ONE
                 gate chokepoint (hooks/worker_budget_sinks.pre_check)
                 imports these; dispatch_gate.py stays family-free
@@ -65,6 +71,11 @@ USAGE_SCHEMA = "method-family-usage/1"
 QUARANTINE_SCHEMA = "method-family-quarantine/1"
 USAGE_REL = "runs/method-family-log.jsonl"
 QUARANTINE_REL = "runs/method-family-quarantine.jsonl"
+
+# the workspace-local discovery overlay (producer: rlvr/expansion.py —
+# this module only READS it; the repo registry stays closed)
+DISCOVERED_SCHEMA = "discovered-families/1"
+DISCOVERED_REL = "runs/discovered-families.yaml"
 
 OTHER = "other"
 OTHER_RE = re.compile(r"^other\((.+)\)$", re.DOTALL)
@@ -123,8 +134,72 @@ def load_registry() -> dict:
     return data
 
 
-def registered_tokens() -> frozenset[str]:
-    return frozenset(f["token"] for f in load_registry()["families"])
+def registered_tokens(ws=None) -> frozenset[str]:
+    """The candidate-enumeration vocabulary. No workspace (or a corrupt
+    overlay) => exactly the closed repo registry; with one, the
+    workspace's admitted discovery arms merge in (repo tokens win — the
+    union cannot shadow a mined token)."""
+    tokens = {f["token"] for f in load_registry()["families"]}
+    if ws is not None:
+        tokens.update(str(r["token"]) for r in load_discovered(ws))
+    return frozenset(tokens)
+
+
+def load_discovered(ws) -> list[dict]:
+    """Tolerant read of the workspace's discovery overlay. Returns only
+    well-formed rows ({token, receipt} with a grammar-valid token);
+    absence, corruption, or a schema mismatch read as EMPTY — the set
+    behind it stays closed, never half-open."""
+    if ws is None:
+        return []
+    path = Path(ws) / DISCOVERED_REL
+    if not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        warn("method_family_overlay",
+             f"unreadable ({type(exc).__name__}: {exc}) — vocabulary "
+             "stays closed")
+        return []
+    if not isinstance(data, dict) or data.get("schema") != DISCOVERED_SCHEMA:
+        warn("method_family_overlay",
+             f"schema mismatch — expected {DISCOVERED_SCHEMA}; vocabulary "
+             "stays closed")
+        return []
+    rows: list[dict] = []
+    for f in data.get("families") or []:
+        if not isinstance(f, dict) or not isinstance(f.get("token"), str) \
+                or not TOKEN_RE.fullmatch(f["token"]) \
+                or not str(f.get("receipt") or "").strip():
+            continue
+        rows.append(f)
+    return rows
+
+
+def _overlay_admits(ws, token: str) -> bool:
+    """The provenance gate behind an overlay declaration: the token's
+    overlay row cites an expansion receipt that (a) exists in the
+    workspace, (b) carries the expansion schema, and (c) lists a
+    hypothesis with THIS family among the move's admitted ids."""
+    for row in load_discovered(ws):
+        if str(row.get("token")) != token:
+            continue
+        rid = str(row.get("receipt") or "").strip()
+        path = Path(ws) / "runs" / "expansion" / f"{rid}.json"
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(doc, dict) or doc.get("schema") != "expansion/1":
+            continue
+        admitted = {str(h) for h in doc.get("admitted") or []}
+        for hyp in doc.get("hypotheses") or []:
+            if isinstance(hyp, dict) \
+                    and str(hyp.get("family") or "") == token \
+                    and str(hyp.get("id") or "") in admitted:
+                return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +219,13 @@ def declared_value(envelope_meta: dict | None, prompt_text: str) -> str | None:
     return None
 
 
-def validate_method_family(value: str | None) -> tuple[bool, str]:
+def validate_method_family(value: str | None,
+                           ws=None) -> tuple[bool, str]:
     """Fail-closed vocabulary check. (True, '') iff the value is a
-    registered token or a well-formed other(<one-line>) escape."""
+    registered token, a workspace-admitted discovery arm (the overlay
+    row's receipt chain must close — see _overlay_admits), or a
+    well-formed other(<one-line>) escape. Without a workspace this is
+    exactly the closed-registry check."""
     if value is None or not str(value).strip():
         return (False,
                 "dispatch declares no method_family (protocol v1 envelope "
@@ -160,6 +239,8 @@ def validate_method_family(value: str | None) -> tuple[bool, str]:
         return (False, f"method-family registry unavailable ({exc}) — "
                        "fail-closed per the 2026-09-28 owner ruling")
     if v in registered:
+        return (True, "")
+    if ws is not None and _overlay_admits(ws, v):
         return (True, "")
     if v == OTHER or v.startswith("other"):
         detail = parse_other_detail(v)

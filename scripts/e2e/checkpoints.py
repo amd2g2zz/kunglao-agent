@@ -640,7 +640,10 @@ def _sample_envelope_family(ws, require_family: str | None = None
         from rlvr import q_cells
         from rlvr import state as rlvr_state
         store = q_cells.default_store(ws)
-        registered = sorted(method_families.registered_tokens())
+        # the candidate set is the ws-aware enumeration: the closed
+        # registry PLUS this workspace's admitted discovery arms (the
+        # overlay path — repo bytes untouched; no overlay = the closed set)
+        registered = sorted(method_families.registered_tokens(ws))
         counts: dict[str, int] = {}
         for row in store.observations():
             if not isinstance(row, dict) \
@@ -1373,13 +1376,15 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
     frozen model generates (runs/expansion-hypotheses.json, schema
     expansion-hypotheses/1); rlvr.expansion.admit adjudicates
     (feature-keyed novelty — a renamed dead arm never spends the move);
-    the receipt lands runs/expansion/E-<n>.json. The capability face:
-    fail-open, never breaks the loop. Registry admission (making an
-    admitted novel arm DISPATCHABLE through the #432 vocabulary gate)
-    is the named next face on #546 — this move generates, adjudicates,
-    and records; it does not yet mint registry tokens. The ablation
-    face: KUNGLAO_EXPANSION=0 disables the move entirely (the L3
-    off-arm of the blocked-path 2x2 delta)."""
+    the receipt lands runs/expansion/E-<n>.json; the admitted family
+    tokens then register into the workspace overlay
+    (runs/discovered-families.yaml) so the vocabulary gate can
+    enumerate — and, receipt-gated, validate — dispatches declaring
+    them. That registry-admission step never touches the repo registry
+    bytes; without the workspace's own receipt chain the gate stays
+    closed. The capability face: fail-open, never breaks the loop.
+    The ablation face: KUNGLAO_EXPANSION=0 disables the move entirely
+    (the L3 off-arm of the blocked-path 2x2 delta)."""
     import os as _os
     if _os.environ.get("KUNGLAO_EXPANSION", "") == "0":
         return
@@ -1462,14 +1467,19 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
             kunglao_log.warn("e2e.expand_hypotheses", "no usable file")
             return
         ranked = ex.admit(hyps, [fp] if fp else [])
-        ex.record_receipt(str(ctx.ws), trig, ranked,
-                          [r["id"] for r in ranked])
+        receipt_doc = ex.record_receipt(str(ctx.ws), trig, ranked,
+                                        [r["id"] for r in ranked])
+        # registry admission: the admitted tokens join the workspace
+        # overlay so the vocabulary gate can validate them later —
+        # fail-open inside (an OSError warns; the loop rides on)
+        ex.register_admitted(str(ctx.ws), receipt_doc)
         audit.emit(str(ctx.ws), "orchestrator", "expansion_result",
                    claim="EXPANSION",
                    detail={"admitted": [r["id"] for r in ranked],
                            "considered": len(hyps)})
         detail.setdefault("expansion", []).append(
-            {"trigger": trig, "admitted": [r["id"] for r in ranked]})
+            {"trigger": trig, "admitted": [r["id"] for r in ranked],
+             "registered_receipt": str(receipt_doc.get("receipt") or "")})
     except Exception as exc:  # noqa: BLE001 — capability, never the loop
         kunglao_log.warn("e2e.maybe_expand",
                          f"{type(exc).__name__}: {exc}")

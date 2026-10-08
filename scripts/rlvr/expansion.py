@@ -31,7 +31,15 @@ operator's mechanical face:
   - ``record_receipt``: one ``runs/expansion/E-<n>.json`` per move
     (schema expansion/1) carrying the full provenance chain:
     obstacle digest -> collapsed arms -> hypotheses with per-score
-    decomposition -> admitted ids. Append-only by index.
+    decomposition -> admitted ids. Append-only by index; the doc names
+    its own index in ``receipt`` so the admission face can cite it.
+  - ``register_admitted``: appends the move's admitted family tokens to
+    the workspace overlay ``runs/discovered-families.yaml`` (schema
+    discovered-families/1; idempotent by token+receipt, tolerant read)
+    — the face that makes an admitted arm DISPATCHABLE: the vocabulary
+    gate merges the overlay into its candidate enumeration, and the
+    declaration path admits an overlay token only while the cited
+    receipt closes in the same workspace.
 
 New arms admitted here seed cold with the WS3 model prior at the
 wiring face (priors.seed_intake_prior families=) — not this module's
@@ -56,10 +64,18 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _common import utc_now_z
+from kunglao_log import warn
 from rlvr.feature_prior import feature_tokens, jaccard
+
+import yaml
 
 SCHEMA = "expansion/1"
 RECEIPT_DIR = "runs/expansion"
+
+#: the workspace-local vocabulary overlay this module writes (the
+#: reader face lives in method_families.load_discovered)
+OVERLAY_SCHEMA = "discovered-families/1"
+OVERLAY_REL = "runs/discovered-families.yaml"
 
 #: obstacle rows (state digest count) required before a move may fire
 EXPAND_OBSTACLE_K = 3
@@ -163,6 +179,7 @@ def record_receipt(ws, trigger_doc: dict, hypotheses: list[dict],
         index += 1
     doc = {
         "schema": SCHEMA,
+        "receipt": f"E-{index}",
         "ts": utc_now_z(),
         "trigger": trigger_doc,
         "hypotheses": hypotheses,
@@ -191,6 +208,69 @@ def read_receipts(ws) -> list[dict]:
         if isinstance(doc, dict) and doc.get("schema") == SCHEMA:
             out.append(doc)
     return out
+
+
+def register_admitted(ws, receipt: dict) -> list[str]:
+    """Registry admission: append the move's admitted family tokens to
+    the workspace overlay (``runs/discovered-families.yaml``, schema
+    discovered-families/1) so the vocabulary gate can enumerate — and,
+    receipt-gated, VALIDATE — dispatches declaring them. Reads the
+    receipt doc ``record_receipt`` returned (its ``receipt`` index,
+    ``hypotheses`` rows and ``admitted`` ids are the provenance chain
+    the gate re-closes later). Idempotent by (token, receipt); rows
+    failing the overlay grammar or already in the closed repo registry
+    are skipped with a warn, never written. The read side is the
+    vocabulary owner's tolerant face, so a corrupt pre-existing overlay
+    is replaced by the normalized merge. Fail-open: an OSError warns
+    and registers nothing (the wiring catches; the loop is never
+    broken by bookkeeping). Returns the tokens actually persisted."""
+    doc = receipt if isinstance(receipt, dict) else {}
+    rid = str(doc.get("receipt") or "").strip()
+    admitted = {str(h) for h in doc.get("admitted") or []}
+    tokens: list[str] = []
+    for hyp in doc.get("hypotheses") or []:
+        if not isinstance(hyp, dict) \
+                or str(hyp.get("id") or "") not in admitted:
+            continue
+        fam = str(hyp.get("family") or "").strip()
+        if fam:
+            tokens.append(fam)
+    if not rid or not tokens:
+        return []
+    import method_families  # the vocabulary owner owns grammar + repo set
+
+    repo = method_families.registered_tokens()
+    rows = method_families.load_discovered(ws)
+    known = {(str(r.get("token")), str(r.get("receipt") or ""))
+             for r in rows}
+    ts = utc_now_z()
+    added: list[str] = []
+    for tok in dict.fromkeys(tokens):
+        if (tok, rid) in known:
+            continue
+        if not method_families.TOKEN_RE.fullmatch(tok):
+            warn("expansion.register_admitted",
+                 f"family {tok!r} fails the token grammar — not registered")
+            continue
+        if tok in repo:
+            continue  # already vocabulary; nothing to admit
+        rows.append({"token": tok, "receipt": rid, "admitted_ts": ts})
+        added.append(tok)
+    if not added:
+        return []
+    try:
+        path = Path(ws) / OVERLAY_REL
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            yaml.safe_dump({"schema": OVERLAY_SCHEMA, "families": rows},
+                           sort_keys=True, allow_unicode=True),
+            encoding="utf-8")
+    except OSError as exc:
+        warn("expansion.register_admitted",
+             f"overlay write failed ({type(exc).__name__}: {exc}) — "
+             "nothing registered")
+        return []
+    return added
 
 
 def main(argv: list[str] | None = None) -> int:
