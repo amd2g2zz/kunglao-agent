@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_runner.py — the WS5 five-arm capability matrix harness.
+"""eval_matrix_runner.py — the WS5 seven-arm capability matrix harness (B2 multi-sample + B3 uniform-scheduler arms included).
 
 MEASUREMENT PREP ONLY: this is ORCHESTRATION — it launches the existing
 per-unit arm runners (scripts/eval_loop_runner.py: the full loop face,
@@ -654,7 +654,7 @@ def launch(plans: list[RunPlan], out: Path, *, budget_usd: float,
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="eval_matrix_runner.py",
-        description="the WS5 five-arm capability matrix harness — "
+        description="the WS5 seven-arm capability matrix harness — "
                     "orchestration only, zero model calls of its own")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG),
                     help="the declarative arm registry")

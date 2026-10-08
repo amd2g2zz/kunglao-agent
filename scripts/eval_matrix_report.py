@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_report.py — the capability-matrix readout face.
+"""eval_matrix_report.py — the capability-matrix readout face (pass@k aggregation + the B-ladder decompositions).
 
 The read side of scripts/eval_matrix_runner.py: per arm x unit matrix
 over COMPLETED runs, the honest 80/20 gate primitives, the B2
@@ -534,7 +534,7 @@ def print_report(report: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="eval_matrix_report.py",
-        description="the five-arm matrix readout — aggregate completed "
+        description="the seven-arm matrix readout — aggregate completed "
                     "runs into the arm x unit matrix + 80/20 primitives")
     ap.add_argument("--out", required=True,
                     help="matrix output dir (the launcher's --out)")
