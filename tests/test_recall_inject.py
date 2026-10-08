@@ -631,3 +631,47 @@ def test_recall_set_hash_carries_content_digest(tmp_path, monkeypatch):
     assert (recall_inject._recall_set_hash(["missing.md"])
             == recall_inject._recall_set_hash(["missing.md"])), (
         "unreadable paths hash to a stable sentinel")
+
+
+# ---- the recall ablation switch (five-arm capability matrix, no-L1 arm) ----
+
+def test_recall_disable_env_zero_short_circuits(tmp_path, monkeypatch):
+    """KUNGLAO_RECALL=0 (exact) disables the recall-history dispatch face:
+    every evaluate() call passes through with NO injected context — before
+    any workspace or dispatch parsing. The no-L1 arm's declared state, not
+    a failure; rc stays 0 (the hook never rejects)."""
+    import recall_inject
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.setenv(recall_inject.RECALL_DISABLE_ENV, "0")
+    rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM),
+                               recall_runner=lambda q: (
+                                   0, "tools-dynamic.md | x | y | z"))
+    assert rc == 0 and stderr == "" and ctx is None
+
+
+def test_recall_disable_env_other_values_leave_recall_on(tmp_path, monkeypatch):
+    """Only the exact "0" disables: unset / "1" / any other value keeps the
+    injection face armed (a switch that half-fires is a silent ablation).
+    A fresh workspace per value — the dispatch-scoped dedup would silence
+    a repeat inject of unchanged content for the same worker."""
+    import recall_inject
+    for value in ("", "1", "false", "off"):
+        ws = _kunglao_ws(tmp_path / f"ws-{value or 'unset'}")
+        if value == "":
+            monkeypatch.delenv(recall_inject.RECALL_DISABLE_ENV,
+                               raising=False)
+        else:
+            monkeypatch.setenv(recall_inject.RECALL_DISABLE_ENV, value)
+        rc, _, ctx = evaluate(_payload(ws, VM_CLAIM),
+                              recall_runner=lambda q: (
+                                  0, "tools-dynamic.md | x | y | z"))
+        assert rc == 0 and ctx is not None, (
+            f"recall must stay ON for {recall_inject.RECALL_DISABLE_ENV}="
+            f"{value!r}")
+
+
+def test_recall_disable_env_is_the_matrix_declared_name():
+    """The switch name is the registry contract: the five-arm config's
+    no-L1 arm declares exactly this env face."""
+    import recall_inject
+    assert recall_inject.RECALL_DISABLE_ENV == "KUNGLAO_RECALL"

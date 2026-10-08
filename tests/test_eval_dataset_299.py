@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 import eval_dataset
@@ -318,3 +319,71 @@ class TestCheckerMath:
             data = yaml.safe_load((tdir / "task.yaml").read_text(encoding="utf-8"))
             assert isinstance(data, dict)
             assert data["schema"] == "kunglao-eval-task/1"
+
+
+class TestCorpusRootEnv:
+    """KUNGLAO_EVAL_ROOT re-points the corpus access face at an
+    operator-local root (the blocked-path measurement convention). The
+    module reads the env ONCE at import; the pin re-executes the module
+    source to observe both faces — unset = the committed eval tree,
+    set = the override root under the same layout. Every test restores
+    the shared module (env unset) before returning — the reload is the
+    SAME module object every other test in the session shares."""
+
+    def _operator_corpus(self, tmp_path):
+        root = tmp_path / "operator-corpus"
+        (root / "v1" / "tasks" / "toolflex" / "probe-unit").mkdir(
+            parents=True, exist_ok=True)
+        (root / "v1" / "tasks" / "toolflex" / "probe-unit" / "task.yaml") \
+            .write_text("schema: kunglao-eval-task/1\n", encoding="utf-8")
+        return root
+
+    def _reload_restored(self, monkeypatch):
+        """Re-execute the shared module with the env unset (the committed
+        corpus face) — the common restore tail of every pin here."""
+        import importlib
+        monkeypatch.delenv("KUNGLAO_EVAL_ROOT", raising=False)
+        import eval_dataset as live
+        importlib.reload(live)
+
+    def test_default_root_is_the_committed_eval_tree(self, monkeypatch):
+        import importlib
+        monkeypatch.delenv("KUNGLAO_EVAL_ROOT", raising=False)
+        import eval_dataset as fresh
+        importlib.reload(fresh)
+        try:
+            assert fresh.EVAL_ROOT == fresh.ROOT / "eval"
+        finally:
+            self._reload_restored(monkeypatch)
+
+    def test_env_override_repoints_task_resolution(self, tmp_path,
+                                                   monkeypatch):
+        import importlib
+        root = self._operator_corpus(tmp_path)
+        monkeypatch.setenv("KUNGLAO_EVAL_ROOT", str(root))
+        import eval_dataset as fresh
+        importlib.reload(fresh)
+        try:
+            # the call-time face (dev contract): the module constant
+            # stays repo-local; eval_root() honors the env at CALL time,
+            # and resolution flows through it
+            assert fresh.eval_root() == root
+            tdir = fresh.resolve_task_dir("probe-unit")
+            assert tdir.name == "probe-unit"
+            assert str(root) in str(tdir)
+        finally:
+            self._reload_restored(monkeypatch)
+
+    def test_override_leaves_repo_corpus_invisible(self, tmp_path,
+                                                   monkeypatch):
+        import importlib
+        root = self._operator_corpus(tmp_path)
+        monkeypatch.setenv("KUNGLAO_EVAL_ROOT", str(root))
+        import eval_dataset as fresh
+        importlib.reload(fresh)
+        try:
+            with pytest.raises(FileNotFoundError):
+                fresh.resolve_task_dir("py-derive-v1")
+        finally:
+            self._reload_restored(monkeypatch)
+
