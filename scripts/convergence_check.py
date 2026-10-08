@@ -1116,6 +1116,13 @@ class Event(str, Enum):
     # list reads exactly as before (#342 restraint: verification cadence
     # only — no distillation/note/recall trigger here or anywhere).
     VERIFY_STALE = "VERIFY_STALE"
+    # Verification-debt gate: D above the policy threshold with
+    # verifiable debt on the books forces the verifier dispatch ahead of
+    # every scheduling flavor below — including the blocked tail, so a
+    # loop can never read BLOCKED while unverified work that others
+    # depend on waits (the debt exists, so verification IS the
+    # highest-priority action).
+    DEBT_GATE = "DEBT_GATE"
     # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
     # BEFORE convergence_check starts; the name exists for observability.
     JADX_INFEASIBLE = "JADX_INFEASIBLE"
@@ -1167,6 +1174,8 @@ class _DecideInputs:
     _open_hyps: list | None = field(default=None, repr=False)
     _oracle: dict | None = field(default=None, repr=False)
     _goal_op: dict | None = field(default=None, repr=False)
+    _debt_face: dict | None = field(default=None, repr=False)
+    _debt_module: object | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -1372,6 +1381,27 @@ class _DecideInputs:
                 self._stale_partials = []
         return self._stale_partials
 
+    def debt_face(self) -> dict:
+        """Verification-debt face (lazy + cached): D over the unverified-
+        but-depended-on claims, read by the rlvr leaf module. Fail-open
+        to the ZERO face (D=0, the pre-feature behavior) on any IO/
+        parse/shape degradation — a broken registry must never
+        manufacture debt, and the reader degrades loudly (warn) inside
+        the leaf. The module handle rides along so the gate threshold
+        stays single-sourced with the leaf's policy constant."""
+        if self._debt_face is None:
+            face = {"D": 0.0, "per_claim": {}, "slope": None, "top": None,
+                    "verifiable_open": []}
+            try:
+                from rlvr import verification_debt as _vd
+                face = _vd.debt(self.workspace)
+                self._debt_module = _vd
+            except _GATE_INPUT_EXC as exc:
+                warn("debt_face",
+                     f"{type(exc).__name__}: {exc} (reading zero debt)")
+            self._debt_face = face
+        return self._debt_face
+
     def ladder_exhausted_ids(self) -> list:
         """#497 ladder-exhaustion marker (ask_for_direction_gate.
         find_ladder_exhaustion): promotion_attempts >= 3 with an empty
@@ -1507,6 +1537,24 @@ def _verify_stale(s: _DecideInputs) -> bool:
         and s.free_slots > 0
 
 
+def _debt_gate(s: _DecideInputs) -> bool:
+    # Verification debt above the policy threshold with verifiable
+    # claims on the books: verify is the highest-priority action. Unlike
+    # the fact-age gate this one carries no free-slot condition by
+    # design — the debt gate must stay able to preempt the BLOCKED tail
+    # (all-open-blocked with verifiable debt is the diagnosed failure
+    # shape), and a verifier dispatch queued over a busy cap still beats
+    # a blocked verdict that pays nothing down. D == gate does not fire
+    # (strict >).
+    face = s.debt_face()
+    if not face["verifiable_open"]:
+        return False
+    gate = getattr(s._debt_module, "DEBT_GATE", None)
+    if gate is None:
+        return False  # module absent: the zero face already said no
+    return float(face["D"]) > float(gate)
+
+
 def _stuck_workers_present(s: _DecideInputs) -> bool:
     # #595: silent-detect — collected stuck_workers were never consumed by the
     # machine. Firing here escalates to BLOCKED so orchestrator intervention
@@ -1582,6 +1630,7 @@ _EVENT_PREDICATES = {
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
     Event.VERIFY_STALE: _verify_stale,
+    Event.DEBT_GATE: _debt_gate,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
     Event.ORACLE_CASE_RED: _oracle_case_red,
@@ -1757,6 +1806,20 @@ def _act_verify_stale(s: _DecideInputs) -> str:
             f"for {age_text} ticks (> {_verify_stale_ticks():g}). Dispatch a "
             f"verifier for the stalest partial - do NOT declare PROVEN "
             f"without sign-off.")
+
+
+def _act_debt(s: _DecideInputs) -> str:
+    # Names the highest-debt claim so the orchestrator can verify
+    # without re-deriving the scan; the threshold rides the leaf's
+    # policy constant (single source).
+    face = s.debt_face()
+    top = face.get("top")
+    gate = getattr(s._debt_module, "DEBT_GATE", 0.0)
+    n = len(face.get("verifiable_open") or [])
+    return (f"Verification debt D={face.get('D')} above gate {gate}: "
+            f"{n} unverified-but-depended-on claim(s). Dispatch a verifier "
+            f"for {top} first - do NOT dispatch new analysis onto "
+            f"unverified debt.")
 
 
 def _act_saturated_queue(s: _DecideInputs) -> str:
@@ -2018,7 +2081,7 @@ STAGE_PROBES = {
     # the seven-round starved-verifier failure mode is this slot's old
     # order). WORK_AND_FREE_SLOT follows; verification landing consumes
     # the partials so the next tick returns to DISPATCH.
-    State.SCHEDULE: [Event.VERIFY_STALE,
+    State.SCHEDULE: [Event.VERIFY_STALE, Event.DEBT_GATE,
                      Event.PARTIALS_AND_FREE_SLOT, Event.WORK_AND_FREE_SLOT,
                      Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
                      Event.FAILURE_ARTIFACTS_DUE,
@@ -2048,6 +2111,7 @@ TRANSITIONS = {
     (State.DRAIN, Event.ORACLE_CASE_RED): (State.BLOCKED, _act_oracle_red),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.VERIFY_STALE): (State.DISPATCH_VERIFIER, _act_verify_stale),
+    (State.SCHEDULE, Event.DEBT_GATE): (State.DISPATCH_VERIFIER, _act_debt),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
     (State.SCHEDULE, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
@@ -2198,6 +2262,15 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             "status": ("declared" if op["present"] and op["valid"]
                        else "invalid" if op["present"] else "undeclared"),
             "blocks": cov,
+        }
+    # Verification-debt face, attached only when debt is on the books
+    # (conditional-key: zero-debt decisions stay byte-identical to the
+    # frozen anchor corpus). Names the highest-debt claim beside the
+    # measured total + slope.
+    if snap.debt_face()["D"] > 0:
+        face = snap.debt_face()
+        decision["verification_debt"] = {
+            "D": face["D"], "slope": face["slope"], "top": face["top"],
         }
     # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
     # (blocker external:true), no active workers, no partials pending.

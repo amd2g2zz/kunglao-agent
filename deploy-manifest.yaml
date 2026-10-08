@@ -291,7 +291,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 60a49c3c451161eb4a63a99fdf34b59664a82848970b0a398208fe4c4dd60092
+    sha256: ca2acc458174be027369bc9d0f49e982cc0a3ca2183710e69b7cd13278d198c5
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1019,7 +1019,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 1380dc6256f6ee077fac06c4adf73f2f400b07f2b138746ef3a24bce2704883c
+    sha256: b752bc1118c463af5341c63d32ea56492bfbe0f78f1cb99ba9224749378b1bba
   - src: scripts/strategy_sections.py
     dest: .claude/scripts/strategy_sections.py
     kind: scaffold
@@ -1167,7 +1167,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 2a12f97123751b48a3edce9308524323719e175a948f5e63dd45c325a1167766
+    sha256: 24577cc5f60c46f77c014fdd952e206e0a333ea6a30eafcf0ef483a779757fd0
   - src: scripts/rlvr/censored_review.py
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
@@ -1175,7 +1175,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: ca18a04030649865872159b9deeb28459c7c1cec6ba5942886240a8a790c92e8
+    sha256: cc73b4fe176b53f75a770b9f72b024f93c196c93eb156fe75582685a6345b37e
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1248,6 +1248,10 @@ files:
     dest: .claude/scripts/rlvr/triples.py
     kind: scaffold
     sha256: 04fd67076cfcc28b69c2b220f2b4b7aa8df5c677cf875d8270a1e157a0ab1835
+  - src: scripts/rlvr/verification_debt.py
+    dest: .claude/scripts/rlvr/verification_debt.py
+    kind: scaffold
+    sha256: e8b3b68ba829cc7df3dcbb544490128cc47b7d92c73f84e9fbf68ff96c4364b0
   - src: scripts/rlvr/winrate.py
     dest: .claude/scripts/rlvr/winrate.py
     kind: scaffold
@@ -1255,7 +1259,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 2d2541cb224ce6ba3ee2ee6bc06bcd3e04b86bd7108d72fae8b91103e607ae05
+    sha256: 23ac13afefbfca6e48598d9df8efb3ffd9808e61b5a2f2160a877983fb1dc619
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
