@@ -364,7 +364,10 @@ class TestCorpusRootEnv:
         import eval_dataset as fresh
         importlib.reload(fresh)
         try:
-            assert fresh.EVAL_ROOT == root
+            # the call-time face (dev contract): the module constant
+            # stays repo-local; eval_root() honors the env at CALL time,
+            # and resolution flows through it
+            assert fresh.eval_root() == root
             tdir = fresh.resolve_task_dir("probe-unit")
             assert tdir.name == "probe-unit"
             assert str(root) in str(tdir)
