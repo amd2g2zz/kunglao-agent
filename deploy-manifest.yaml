@@ -1727,7 +1727,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: b369d043af5b5d234d597b35cb9333550a2a0a4a39f17063f54669b6d237ca83
+    sha256: 69a4b37f83e795012d8203fb7f7ebeb9ab8c10bf4099444974098d5bef99eab2
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -2099,7 +2099,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 8d6ae4c264f943a6d8a956ecd4dc28d86e09a1b7e785782407966668c5d9eb93
+    sha256: 2972a951c3f23890f20944ac2c7578ab5a34868e7c6d508a0c882f5e24238353
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
