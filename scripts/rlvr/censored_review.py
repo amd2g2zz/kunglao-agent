@@ -63,7 +63,8 @@ import argparse
 import json
 import os
 import sys
-import time
+
+from _common import utc_now_z
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -364,7 +365,7 @@ def review(run_dirs: list[str | Path]) -> dict:
             "mean_credit_censored": None, "mean_credit_observed": None})
     return {
         "schema": SCHEMA,
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": utc_now_z(),
         "run_dirs": [str(d) for d in run_dirs],
         "files_scanned": stats["files_scanned"],
         "rows_total": stats["rows_total"],

@@ -33,7 +33,6 @@ import argparse
 import json
 import random
 import sys
-import time
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -42,6 +41,7 @@ if __package__ in (None, ""):
     # imports (the q_cells direct-execution pattern)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _common import utc_now_z
 from rlvr.incremental_reward import read_transitions
 
 MIN_DECISIONS = 40          # below this: underpowered, no verdict
@@ -166,7 +166,7 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
 
     report = {
         "schema": "policy-compare/1",
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": utc_now_z(),
         "workspace": str(ws),
         "decisions": len(decisions),
         "transitions": len(transitions),

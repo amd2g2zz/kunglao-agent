@@ -888,9 +888,7 @@ def read_strategy(ws, tick: int | None = None) -> dict | None:
     return None
 
 
-def _utc_now_z() -> str:
-    from harness_common import utc_now_z
-    return utc_now_z()
+from _common import utc_now_z as _utc_now_z  # the canonical leaf
 
 
 if __name__ == "__main__":  # pragma: no cover — library module

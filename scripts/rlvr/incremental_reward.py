@@ -31,7 +31,8 @@ pin (see scripts/rlvr/triples.py's docstring pin block for the citation).
 from __future__ import annotations
 
 import json
-import time
+
+from _common import utc_now_z
 from pathlib import Path
 
 from rlvr.state import fact_face, _oracle_status_progress
@@ -111,7 +112,7 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
         p = _launch_path(ws, claim, action_type)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "ts": utc_now_z(),
             "claim": str(claim),
             "a": str(action_key),
             "s": str(s_hash),
@@ -152,7 +153,7 @@ def append_transition(ws, claim: str, outcome: str, *,
             float(launch.get("phi", 0.0)), phi_after,
             tokens=tokens, seconds=seconds)
         row = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "ts": utc_now_z(),
             "dispatch_id": str(claim),
             "action_type": str(launch.get("action_type")
                                or action_type or "dispatch"),

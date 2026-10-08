@@ -79,11 +79,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 from pathlib import Path
 
 import numpy as np  # issue 420: ordered-float reductions + exact counts
 
+from _common import utc_now_z
 from rlvr import reward, scalar
 
 RESULT_SCHEMA = "aggregate-prior/1"
@@ -343,7 +343,7 @@ def seed_intake_prior(ws, *, families=None,
         fam_doc[fam] = {"alpha": alpha, "beta": mass - alpha}
     doc = {
         "schema": SEED_SCHEMA,
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": utc_now_z(),
         "source": source,
         "task_features_digest": digest,
         "families": fam_doc,
