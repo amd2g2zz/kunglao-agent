@@ -432,6 +432,14 @@ files:
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
     sha256: 81c8c654dcba279bf17026e4bb1bbb87c63e023a7f33d34600e56a4e2a5dcde1
+  - src: scripts/eval_matrix_report.py
+    dest: .claude/scripts/eval_matrix_report.py
+    kind: scaffold
+    sha256: d7e1cfc32b29d61c51c90f632912f434c20295f60ac693e3e5e69047afdb31ae
+  - src: scripts/eval_matrix_runner.py
+    dest: .claude/scripts/eval_matrix_runner.py
+    kind: scaffold
+    sha256: 2f088b388c4ca9d7fdcbd7092dc931e2954ba59b83d61657d0d71917b51d4ed1
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -1839,7 +1847,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 7ab610c981cc30e14e7352dfce5bf1d29bce8c1d0d3fcb48227f6f4fe6828112
+    sha256: 7241be67c1c3974828e8421e8d87687ba6b1a5e4ab6fb1475983100dcb01327d
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

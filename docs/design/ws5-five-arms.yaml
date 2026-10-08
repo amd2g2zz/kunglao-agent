@@ -1,0 +1,142 @@
+schema: ws5-five-arms/1
+# The WS5 five-arm capability matrix — the arm registry (issue #523, the
+# closeout plan's "终局审判" measurement). DECLARATION ONLY: this file
+# names the arms, their env faces, the corpus, and the warm-up protocol.
+# Nothing executes at read time; the launcher is scripts/eval_matrix_runner.py
+# and the real matrix run is an owner-visible act (harness + --dry-run
+# self-check only until the owner says go).
+#
+# Win condition (closeout plan §0): K-warm > CC+warm-context (not just
+# bare CC) on held-out + extrapolation units, and the layer ablations
+# move in the predicted directions — no L1 (recall) slows cold starts
+# without killing them.
+#
+# All five arms share: the same units, the same per-run budget caps, the
+# same checker. Arms differ ONLY in the declared faces below.
+
+budget:
+  budget_usd: 2.0
+  wall_cap_s: 1800
+
+corpus:
+  # Env var that re-points a child run's corpus access face at the
+  # operator-local root (scripts/eval_dataset.py reads it at import).
+  # Units marked corpus: operator resolve ONLY through this root.
+  operator_root_env: KUNGLAO_EVAL_ROOT
+  # Default operator root (relative to the repo checkout): the
+  # blocked-path corpus built by the WS4 measurement faces. Permanent
+  # local-only material per the owner ruling — never synced to the repo.
+  operator_root_default: experiments/bp-corpus
+  # The release-tier holdout list lives in the split firewall file.
+  # READ-ONLY: the harness never writes under eval/ and never edits the
+  # split; the default units below COPY the interpolation holdout ids and
+  # add the two blocked-path constructions (extrapolation face).
+  holdout_split: eval/v1/split.yaml
+
+warm_up:
+  # The warm arms read the cross-task posterior store through this env
+  # var; the launcher materializes an ISOLATED per-run copy (arms never
+  # share a live store — no cross-arm contamination mid-run) and the
+  # cold arm gets a materialized EMPTY store dir.
+  store_env: KUNGLAO_POSTERIOR_STORE
+  store_file: posterior-store.jsonl
+  # OWNER DECISION (open): the source dir holding the prepared warm
+  # store. Protocol when it is set: the store's settled rows come from
+  # PRIOR train-side workspaces (mining-pool runs — the natural seeds);
+  # holdout unit ids are firewall-excluded at the store's write face and
+  # eval_split_lint is the second gate, so a store built from train runs
+  # cannot carry holdout memory. Null = the warm arms refuse to launch
+  # (the dry-run warns) until the owner names the source.
+  store_source: null
+  # OWNER DECISION (open): the prior train workspace whose pattern cards
+  # + method-family log render into the CC+warm-context arm's prompt
+  # (the RL-vs-context attribution arm). Null = that arm refuses to
+  # launch (the dry-run warns) until the owner names the source.
+  warm_context_source: null
+
+arms:
+  - id: cc-bare
+    runner_face: cc-default
+    store: none
+    description: >
+      Bare Claude Code: plugin-less session, neutral cwd, no claim
+      economy, no gates, no oracle machinery. The baseline the whole
+      matrix is read against.
+    env: {}
+
+  - id: cc-warm-context
+    runner_face: cc-warm-context
+    store: none
+    description: >
+      cc-default + the train-derived context rendered as frozen text
+      (the same material K-warm reads, without hooks or posterior
+      sampling). The attribution arm: does K-warm's edge reduce to
+      extra context?
+    env: {}
+
+  - id: kunglao-cold
+    runner_face: loop
+    store: cold
+    description: >
+      The full kunglao loop against a materialized EMPTY posterior
+      store: the framework's machinery with zero cross-task memory.
+    env: {}
+
+  - id: kunglao-warm
+    runner_face: loop
+    store: warm
+    description: >
+      The full kunglao loop reading the LAMBDA-tempered cross-task
+      store (the warm start). The arm the win condition is about.
+    env: {}
+
+  - id: kunglao-warm-no-l1
+    runner_face: loop
+    store: warm
+    description: >
+      kunglao-warm with the L1 retrieval layer ablated: the exact "0"
+      on the recall switch disables the recall-history dispatch face
+      for the whole session (no injected recall context at any
+      dispatch). Prediction (closeout plan): cold starts get slower,
+      nothing dies. The L2 posterior sampling stays ON — this arm
+      isolates the retrieval layer and nothing else.
+    env:
+      KUNGLAO_RECALL: "0"
+
+# Hermeticity contract (enforced by the launcher, not by this file):
+# the launcher strips KUNGLAO_RECALL / KUNGLAO_EXPANSION /
+# KUNGLAO_PREDICT_BEFORE_TRY from the inherited environment before
+# merging each arm's declared env — ambient shell state can never
+# contaminate an arm. KUNGLAO_PREDICT_BEFORE_TRY stays at its default
+# (off) in every arm: the five-arm design ablates L1 only.
+
+units:
+  # --- interpolation holdout (eval/v1/split.yaml, release tier) — READ,
+  #     never written; the only surface capability verdicts are judged on
+  - id: web-token-v1
+    corpus: repo
+    tier: release
+  - id: web-pow-lite-v1
+    corpus: repo
+    tier: release
+  - id: apk-static-license-v1
+    corpus: repo
+    tier: release
+  - id: rust-apk-beacon-v1
+    corpus: repo
+    tier: release
+  - id: web-anticrawl-v2
+    corpus: repo
+    tier: release
+  - id: apk-webview-attest-v2
+    corpus: repo
+    tier: release
+  # --- extrapolation face: the blocked-path constructions (operator
+  #     corpus, permanent local-only). Every known method family is
+  #     built to die on these — the "can it self-explore" number.
+  - id: tf-novelvm-rust-v1
+    corpus: operator
+    tier: toolflex
+  - id: tf-novelcipher-c-v1
+    corpus: operator
+    tier: toolflex
