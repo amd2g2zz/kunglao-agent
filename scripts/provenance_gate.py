@@ -24,18 +24,11 @@ Provenance block format in fact markdown:
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
 
-
-def _sha256(p: Path) -> str:
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+from _common import sha256_file as _sha256
 
 
 def extract_provenance_refs(fact_text: str) -> list[dict]:

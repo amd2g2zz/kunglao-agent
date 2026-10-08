@@ -56,8 +56,8 @@ import json
 from pathlib import Path
 
 import numpy as np  # issue 420: exact integer aggregation (see _wins)
-import yaml
 
+from _common import read_yaml
 from kunglao_log import iter_jsonl  # #863 Family K single source
 from roi_settlement import ROI_NEGATIVE, ROI_POSITIVE, read_settlements
 
@@ -72,15 +72,11 @@ UNKNOWN_FAMILY = "unknown"
 
 def claim_pq_map(ws) -> dict:
     """claim-register.yaml -> {claim_id: answers_question} (tolerant)."""
-    try:
-        data = yaml.safe_load(
-            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return {}
+    doc, _err = read_yaml(Path(ws) / "claim-register.yaml")
     out: dict[str, str] = {}
-    if not isinstance(data, dict):  # valid YAML, non-mapping top level
+    if doc is None:  # missing / unreadable / non-mapping: EMPTY map
         return out
-    for c in data.get("claims") or []:
+    for c in doc.get("claims") or []:
         if isinstance(c, dict) and c.get("id") and c.get("answers_question"):
             out[str(c["id"])] = str(c["answers_question"])
     return out

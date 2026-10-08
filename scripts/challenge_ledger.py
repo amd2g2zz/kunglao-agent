@@ -67,6 +67,8 @@ import json
 import re
 from pathlib import Path
 
+from _common import sha256_hex as _sha256_bytes
+
 MAX_ADVERSARIAL_ROUNDS = 5  # hard cap: round 6+ is refused, non-configurable
 
 CLAIM_RE = re.compile(r"^C-\d+$")
@@ -111,10 +113,6 @@ def _read_active_round(ws: Path, claim: str) -> int:
 def _set_active_round(ws: Path, claim: str, n: int) -> None:
     """Advance the active round pointer (test + orchestrator face)."""
     _active_round_path(ws, claim).write_text(str(n), encoding="utf-8")
-
-
-def _sha256_bytes(b: bytes) -> str:
-    return hashlib.sha256(b).hexdigest()
 
 
 def _sign(key: bytes, claim: str, round_n: int, snapshot_sha: str,

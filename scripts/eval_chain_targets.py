@@ -20,11 +20,12 @@ stdlib only.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 
 import eval_chain as ch
 import eval_chain_render as rd
+
+from _common import sha256_hex  # noqa: F401 — re-exported to eval_chain_mint
 
 _PACK_MAGIC = b"CF70PK1"
 
@@ -101,10 +102,6 @@ def payload_bytes(cfg: dict, include_junk: bool) -> bytes:
             f"{cfg.get('task_id', cfg['family'])}: payload is not "
             f"ASCII (js peel roundtrip would corrupt it)")
     return data
-
-
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 # ------------------------------------------------------------------ js outer

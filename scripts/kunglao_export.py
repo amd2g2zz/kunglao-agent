@@ -17,12 +17,13 @@ verify subcommand: re-hash every archived file, report mismatches.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import tarfile
 import time
 from pathlib import Path
+
+from _common import sha256_file, sha256_hex
 
 # Manifest format version (orthogonal to #536 skill version)
 MANIFEST_VERSION = "1.0"
@@ -41,15 +42,6 @@ EVIDENCE_EXTS = [".pcap", ".frida.js", ".frida.ts", ".json", ".md", ".yaml"]
 
 # Scratch zone (excluded by default)
 SCRATCH_PATTERNS = ["scratch/", "tmp/", ".cache/"]
-
-
-def sha256_file(p: Path) -> str:
-    """Compute sha256 of file."""
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def classify(path: Path) -> str:
@@ -208,7 +200,7 @@ def verify_manifest(archive: Path) -> int:
                         print(f"  MISSING: {entry['path']}")
                         bad += 1
                         continue
-                    actual = hashlib.sha256(f.read()).hexdigest()
+                    actual = sha256_hex(f.read())
                     if actual != entry["sha256"]:
                         print(f"  SHA MISMATCH: {entry['path']}")
                         bad += 1

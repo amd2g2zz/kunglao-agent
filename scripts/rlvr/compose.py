@@ -60,6 +60,8 @@ import yaml
 from rlvr import ledger as rl  # the package faces (issue 420 Phase 2)
 from rlvr import state as state_signature
 
+from _common import read_yaml
+
 SCHEMA = "round-strategy/1"
 CARD_SCHEMA = "card/1"
 STRATEGY_DIR_REL = PurePosixPath("runs") / "round-strategy"
@@ -326,11 +328,9 @@ def save_card(ws, card: dict) -> dict:
     path = _cards_dir(ws) / f"{card['id']}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        try:
-            existing = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            warn("save_card", f"{type(exc).__name__}: {exc}")
-            existing = None
+        existing, err = read_yaml(path)
+        if existing is None:
+            warn("save_card", err)
         if isinstance(existing, dict) \
                 and existing.get("content_hash") == card["content_hash"]:
             refreshed = dict(existing)
@@ -352,10 +352,9 @@ def supersede_card(ws, old_id: str, new_id: str) -> bool:
     """Record supersession on the OLD card file (history kept — the file
     stays, only the lifecycle pointer moves). True when applied."""
     path = _cards_dir(Path(ws)) / f"{old_id}.yaml"
-    try:
-        card = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        warn("supersede_card", f"{type(exc).__name__}: {exc}")
+    card, err = read_yaml(path)
+    if card is None:
+        warn("supersede_card", err)
         return False
     if not isinstance(card, dict) or card.get("id") != old_id:
         return False
@@ -373,12 +372,11 @@ def load_cards(ws) -> list[dict]:
         return []
     out: list[dict] = []
     for path in sorted(directory.glob("*.yaml")):
-        try:
-            card = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            warn("load_cards", f"{path.name}: {type(exc).__name__}: {exc}")
+        card, err = read_yaml(path)
+        if card is None:
+            warn("load_cards", f"{path.name}: {err}")
             continue
-        if isinstance(card, dict) and _CARD_ID_RE.match(str(card.get("id"))):
+        if _CARD_ID_RE.match(str(card.get("id"))):
             out.append(card)
     return out
 
@@ -757,11 +755,10 @@ def _strategy_dir(ws: Path) -> Path:
 
 
 def _load_yaml(path: Path):
-    try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        warn("compose_io", f"{path.name}: {type(exc).__name__}: {exc}")
-        return None
+    doc, err = read_yaml(path)
+    if doc is None and err is not None:
+        warn("compose_io", f"{path.name}: {err}")
+    return doc
 
 
 def write_strategy(ws, obj: dict) -> dict:
@@ -878,12 +875,11 @@ def read_strategy(ws, tick: int | None = None) -> dict | None:
     if not directory.is_dir():
         return None
     if tick is not None:
-        doc = _load_yaml(directory / f"tick-{int(tick):04d}.yaml")
-        return doc if isinstance(doc, dict) else None
+        return _load_yaml(directory / f"tick-{int(tick):04d}.yaml")
     ticks = sorted(directory.glob("tick-*.yaml"))
     for path in reversed(ticks):
         doc = _load_yaml(path)
-        if isinstance(doc, dict):
+        if doc is not None:
             return doc
     return None
 

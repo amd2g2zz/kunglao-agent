@@ -83,7 +83,7 @@ from pathlib import Path
 
 import numpy as np  # issue 420: ordered-float reductions + exact counts
 
-from _common import utc_now_z
+from _common import read_yaml, utc_now_z
 from rlvr import reward, scalar
 
 RESULT_SCHEMA = "aggregate-prior/1"
@@ -309,15 +309,7 @@ def seed_intake_prior(ws, *, families=None,
     from kunglao_log import warn
 
     ws = Path(ws)
-    spec: dict | None
-    try:
-        import yaml
-
-        loaded = yaml.safe_load(
-            (ws / "task_spec.yaml").read_text(encoding="utf-8"))
-        spec = loaded if isinstance(loaded, dict) else None
-    except (OSError, ValueError):
-        spec = None
+    spec, _err = read_yaml(ws / "task_spec.yaml")
     if spec is None:
         return {}
     fams = sorted(set(families)) if families is not None else None

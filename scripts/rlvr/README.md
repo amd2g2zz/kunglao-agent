@@ -256,6 +256,30 @@ update; DTS Beta sampling stays stdlib `betavariate`):
    import at module top — no guarded degrade path, because the pins
    have no degrade path.
 
+## Direct-execution bootstrap (the repeated `__package__` block)
+
+Face modules that can be run as a file (`python scripts/rlvr/<m>.py`)
+carry, BEFORE their sibling imports, the same three-line prologue:
+
+```python
+if __package__ in (None, ""):
+    # direct-path execution: the package parent (scripts/) is NOT on
+    # sys.path (path[0] is scripts/rlvr/) — insert it before the sibling
+    # imports (the q_cells direct-execution pattern)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+```
+
+Why it cannot move into `_common`: the block must run while `scripts/`
+is still unreachable from `sys.path` — importing the leaf to learn the
+path is the very problem it solves. It is therefore a DOCUMENTED,
+per-file pattern, not a consolidated helper: the `code` line is
+identical in every carrier (expansion, obstacles, policy_compare,
+censored_review, termination, q_cells); only the explanatory comment
+varies. Every face module that grows a direct CLI face copies the guard
+ahead of the first sibling import. Under pytest and under `import rlvr`
+the block is inert (`__package__` is `"rlvr"`), and `scripts/` arrives
+on `sys.path` by the harness instead.
+
 ## Phase 2 execution notes (recorded now, executed after the gate)
 
 - Move bodies per the face map; leave explicit re-export shims at
