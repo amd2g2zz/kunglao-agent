@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_runner.py — the WS5 five-arm capability matrix harness.
+"""eval_matrix_runner.py — the WS5 seven-arm capability matrix harness (B2 multi-sample + B3 uniform-scheduler arms included).
 
 MEASUREMENT PREP ONLY: this is ORCHESTRATION — it launches the existing
 per-unit arm runners (scripts/eval_loop_runner.py: the full loop face,
@@ -11,12 +11,24 @@ the real matrix run is an owner-visible act (the harness ships with a
 --dry-run self-check; no matrix execution happens at review time).
 The readout face lives in scripts/eval_matrix_report.py (--report).
 
-The five arms (docs/design/ws5-five-arms.yaml, the arm registry):
+The seven arms (docs/design/ws5-five-arms.yaml, the arm registry):
 
     cc-bare            bare Claude Code (the runner's cc-default face)
     cc-warm-context    cc-default + the train-store text render
                        (the RL-vs-context attribution arm)
+    cc-multisample     B2 — bare CC sampled N times at the kunglao
+                       arms' total budget: the arm's optional
+                       sampling: {mode: multi-sample, samples: N,
+                       budget_each: X} protocol (N x X must equal the
+                       matrix budget — the same-cost contract). The
+                       launcher expands one arm to N child rows per
+                       unit, each capped at X; the readout aggregates
+                       pass@k at equal cost.
     kunglao-cold       the full loop against a materialized EMPTY store
+    kunglao-uniform    B3 — the harness without learning: the loop with
+                       KUNGLAO_SCHEDULER=uniform (flat priors, the
+                       learned state never influences family selection,
+                       the propensity still rides the envelope)
     kunglao-warm       the full loop reading a warm posterior-store copy
     kunglao-warm-no-l1 kunglao-warm with recall ablated (KUNGLAO_RECALL=0)
 
@@ -105,11 +117,16 @@ STORE_FILE = "posterior-store.jsonl"
 EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
 # hermeticity: stripped from the inherited env before arm env merges
 STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
-                "KUNGLAO_PREDICT_BEFORE_TRY")
+                "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER")
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
 VALID_STORES = ("none", "cold", "warm")
 VALID_CORPORA = ("repo", "operator")
+# the B2 face: a cc arm's optional sampling protocol — N independent
+# samples of the same face at N x budget_each, which must equal the
+# matrix budget (same-cost is the whole point: pass@k at equal cost,
+# never at a discount)
+VALID_SAMPLING_MODES = ("multi-sample",)
 
 RC_OK, RC_REFUSED = 0, 2
 
@@ -158,7 +175,64 @@ def _validate_arm(i: int, arm) -> tuple[str, str]:
             isinstance(k, str) and isinstance(v, str)
             for k, v in env.items()):
         raise ConfigError(f"{where} env must be a str->str mapping")
+    sampling = _validate_sampling(i, arm)
+    if sampling and face == "loop":
+        raise ConfigError(
+            f"{where}: cc faces own the sampling protocol (a loop arm "
+            "is single-draw by design — the multi-sample rebuttal is a "
+            "bare-CC experiment)")
     return aid, face
+
+
+def _validate_sampling(i: int, arm) -> dict:
+    """One arm's optional sampling protocol -> the normalized block ({}
+    when the arm declares none). Multi-sample is the B2 face: N
+    independent child runs of the SAME face at N x budget_each."""
+    where = f"arms[{i}]"
+    sampling = arm.get("sampling")
+    if sampling is None:
+        return {}
+    if not isinstance(sampling, dict):
+        raise ConfigError(f"{where} sampling must be a mapping")
+    mode = sampling.get("mode")
+    if mode not in VALID_SAMPLING_MODES:
+        raise ConfigError(
+            f"{where} sampling.mode must be one of "
+            f"{VALID_SAMPLING_MODES}, got {mode!r}")
+    samples = sampling.get("samples")
+    if not isinstance(samples, int) or isinstance(samples, bool) \
+            or samples < 2:
+        raise ConfigError(
+            f"{where} sampling.samples must be an integer >= 2, got "
+            f"{samples!r}")
+    budget_each = sampling.get("budget_each")
+    if not isinstance(budget_each, (int, float)) \
+            or isinstance(budget_each, bool) or budget_each <= 0:
+        raise ConfigError(
+            f"{where} sampling.budget_each must be a positive number, "
+            f"got {budget_each!r}")
+    return {"mode": str(mode), "samples": samples,
+            "budget_each": float(budget_each)}
+
+
+def _check_same_cost(arms: list, budget: dict) -> None:
+    """The B2 same-cost contract: a multi-sample arm's total spend
+    (samples x budget_each) must equal the matrix budget — pass@k
+    answers "is it just more sampling?" only AT EQUAL COST, so a
+    discounted or inflated B2 arm refuses the whole matrix."""
+    budget_usd = float(budget.get("budget_usd", 2.0))
+    for i, arm in enumerate(arms):
+        sampling = arm.get("sampling") or {}
+        if not sampling:
+            continue
+        total = sampling["samples"] * float(sampling["budget_each"])
+        if abs(total - budget_usd) > 1e-9 * max(1.0, budget_usd):
+            raise ConfigError(
+                f"arms[{i}] ({arm.get('id')}): the same-cost contract "
+                f"violated — {sampling['samples']} x "
+                f"{sampling['budget_each']} = {total} != the matrix "
+                f"budget {budget_usd} (pass@k at equal cost, never at "
+                "a discount)")
 
 
 def _validate_unit(i: int, unit) -> tuple[str, str, str]:
@@ -218,6 +292,7 @@ def load_config(path: Path) -> dict:
     warm = doc.get("warm_up") or {}
     if not isinstance(warm, dict):
         raise ConfigError("warm_up must be a mapping")
+    _check_same_cost(arms, budget)
     return doc
 
 
@@ -264,7 +339,9 @@ def resolve_unit(unit: dict, operator_root: Path | None) -> tuple[bool, str]:
 @dataclass(frozen=True)
 class RunPlan:
     """One (arm, unit) cell of the matrix — everything needed to launch
-    and to account for the run."""
+    and to account for the run. A multi-sample arm expands to
+    sample_count plans per unit (sample_index 0..N-1), each capped at
+    budget_each, each its own run dir s0..s{N-1}."""
     arm_id: str
     runner_face: str
     unit: str
@@ -273,6 +350,9 @@ class RunPlan:
     run_dir: Path
     store_kind: str
     env_extra: tuple[tuple[str, str], ...]  # frozen mapping face
+    sample_index: int = 0
+    sample_count: int = 1
+    budget_each: float | None = None
 
 
 def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
@@ -295,17 +375,29 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
         units = [u for u in units if u["id"] in set(units_filter)]
     plans: list[RunPlan] = []
     for arm in arms:
+        sampling = arm.get("sampling") or {}
+        samples = int(sampling.get("samples", 1)) if sampling else 1
+        budget_each = (float(sampling["budget_each"])
+                       if sampling else None)
         for unit in units:
-            run_dir = Path(out) / arm["id"] / unit["id"]
-            plans.append(RunPlan(
-                arm_id=arm["id"],
-                runner_face=arm["runner_face"],
-                unit=unit["id"],
-                tier=unit["tier"],
-                corpus=unit["corpus"],
-                run_dir=run_dir,
-                store_kind=arm["store"],
-                env_extra=tuple(sorted((arm.get("env") or {}).items()))))
+            base = Path(out) / arm["id"] / unit["id"]
+            # the B2 expansion: one registry arm becomes N child runs
+            # per unit, each its own sample dir, each capped at
+            # budget_each so the arm's total equals the matrix budget
+            for k in range(samples):
+                plans.append(RunPlan(
+                    arm_id=arm["id"],
+                    runner_face=arm["runner_face"],
+                    unit=unit["id"],
+                    tier=unit["tier"],
+                    corpus=unit["corpus"],
+                    run_dir=base / f"s{k}" if samples > 1 else base,
+                    store_kind=arm["store"],
+                    env_extra=tuple(sorted(
+                        (arm.get("env") or {}).items())),
+                    sample_index=k,
+                    sample_count=samples,
+                    budget_each=budget_each))
     return plans
 
 
@@ -403,7 +495,12 @@ def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
 
 def _run_row(plan: RunPlan, status: str, **extra) -> dict:
     row = {"arm": plan.arm_id, "unit": plan.unit, "tier": plan.tier,
-           "corpus": plan.corpus, "status": status}
+           "corpus": plan.corpus, "status": status,
+           "run_dir": str(plan.run_dir)}
+    if plan.sample_count > 1:
+        row["sample"] = plan.sample_index
+        row["sample_count"] = plan.sample_count
+        row["budget_each"] = plan.budget_each
     row.update(extra)
     return row
 
@@ -443,8 +540,12 @@ def _launch_one(plan: RunPlan, *, budget_usd: float, wall_cap_s: float,
         row["status"] = "unresolvable"
         row["detail"] = detail
         return row
+    # the B2 face: a sample row rides budget_each, never the matrix
+    # budget — the same-cost contract makes N x budget_each the total
+    per_run_budget = (plan.budget_each if plan.budget_each is not None
+                      else budget_usd)
     try:
-        argv = child_argv(plan, budget_usd=budget_usd,
+        argv = child_argv(plan, budget_usd=per_run_budget,
                           wall_cap_s=wall_cap_s, session_cmd=session_cmd,
                           plugin_dir=plugin_dir,
                           warm_context_from=warm_context_from)
@@ -553,7 +654,7 @@ def launch(plans: list[RunPlan], out: Path, *, budget_usd: float,
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="eval_matrix_runner.py",
-        description="the WS5 five-arm capability matrix harness — "
+        description="the WS5 seven-arm capability matrix harness — "
                     "orchestration only, zero model calls of its own")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG),
                     help="the declarative arm registry")
@@ -561,7 +662,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="comma-separated unit ids (default: the "
                          "registry's list)")
     ap.add_argument("--arms", default="",
-                    help="comma-separated arm ids (default: all five)")
+                    help="comma-separated arm ids (default: all arms)")
     ap.add_argument("--budget-usd", type=float, default=None,
                     help="per-run session USD cap (default: the "
                          "registry's budget block)")

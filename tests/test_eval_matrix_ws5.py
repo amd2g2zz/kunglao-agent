@@ -133,15 +133,18 @@ def _cell(tmp_path: Path, arm: str, unit: str, *, verdict: str,
 # ---- (a) the registry ------------------------------------------------------
 
 def test_real_registry_declares_the_five_arms():
+    """The seven-arm registry: the five WS5 arms plus the two #569
+    additions (cc-multisample, kunglao-uniform) in the B-ladder order."""
     doc = mx.load_config(REAL_CONFIG)
     arms = mx.config_arms(doc)
     assert [a["id"] for a in arms] == [
-        "cc-bare", "cc-warm-context", "kunglao-cold", "kunglao-warm",
-        "kunglao-warm-no-l1"]
+        "cc-bare", "cc-warm-context", "cc-multisample", "kunglao-cold",
+        "kunglao-uniform", "kunglao-warm", "kunglao-warm-no-l1"]
     assert [a["runner_face"] for a in arms] == [
-        "cc-default", "cc-warm-context", "loop", "loop", "loop"]
+        "cc-default", "cc-warm-context", "cc-default", "loop", "loop",
+        "loop", "loop"]
     assert [a["store"] for a in arms] == [
-        "none", "none", "cold", "warm", "warm"]
+        "none", "none", "none", "cold", "cold", "warm", "warm"]
 
 
 def test_real_registry_no_l1_arm_declares_the_recall_switch():

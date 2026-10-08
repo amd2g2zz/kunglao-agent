@@ -603,6 +603,67 @@ def _sampler_extras(ws, prior: dict) -> dict:
     return kwargs
 
 
+# the harness-without-learning face: the env var flips the envelope
+# sampler's behavior policy to flat-uniform over the registered
+# vocabulary (the measurement arm that isolates the LEARNING's value as
+# warm-DTS minus this face). Exact match only — any other value (set or
+# unset) leaves the learned face byte-identical.
+SCHEDULER_ENV = "KUNGLAO_SCHEDULER"
+SCHEDULER_UNIFORM = "uniform"
+
+
+def _scheduler_uniform() -> bool:
+    """True when the run demands the flat scheduler face: the envelope
+    prior goes flat (1.0 everywhere), the draw reads an EMPTY store
+    (every cell posterior stays the day-one Beta(1,1)) and the learned
+    extras are withheld — the learned state never influences selection."""
+    return os.environ.get(SCHEDULER_ENV, "") == SCHEDULER_UNIFORM
+
+
+def _uniform_propensity(receipt: dict) -> float:
+    """The flat scheduler's OPE weight: the uniform policy picks any of
+    the K candidates with marginal probability exactly 1/K (an
+    exchangeable draw — every family's theta rides the same Beta(1,1),
+    so no family is a priori favored). The MC face would estimate the
+    LEARNED policy's propensity, which this arm forswears."""
+    k = len(receipt.get("candidates") or {})
+    return round(1.0 / max(k, 1), 4)
+
+
+def _stamp_ope_propensity(ctx: RunContext, receipt: dict | None,
+                          declared: bool, method_family: str,
+                          fingerprint: str | None) -> None:
+    """The DR-OPE record on the envelope receipt — three faces, one
+    write site (fail-open: a propensity problem is never a dispatch
+    gate). SAMPLER receipts carry the MC propensity; a DECLARED
+    proposal is the behavior policy itself (deterministic — pi = 1.0,
+    correctly re-weighted for OPE); a UNIFORM-scheduler receipt carries
+    exactly 1/K — the exchangeable draw's marginal action probability,
+    the OPE weight of the policy this measurement arm forswears learning
+    for. The env fingerprint rides when it exists."""
+    if not method_family or receipt is None:
+        return
+    try:
+        if declared:
+            receipt["propensity"] = 1.0
+            receipt["declared"] = True
+        elif str(receipt.get("scheduler") or "") == SCHEDULER_UNIFORM:
+            receipt["propensity"] = _uniform_propensity(receipt)
+        else:
+            from rlvr import meta_arms as _ma2
+            qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
+            _rows = [r for r in qc_mod.JSONLQStore(
+                str(ctx.ws)).observations() if isinstance(r, dict)]
+            _fams = sorted({str(r.get("method_family")) for r in _rows
+                            if r.get("method_family")} | {method_family})
+            receipt["propensity"] = round(_ma2.mc_propensity(
+                _rows, method_family, _fams), 4)
+        if fingerprint:
+            receipt["fingerprint"] = fingerprint
+    except Exception as exc:  # noqa: BLE001 — bonus, never a gate
+        kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+
+
 def _sample_envelope_family(ws, require_family: str | None = None
                             ) -> tuple[str, dict | None]:
     """Kernel W4 (issue 462): DTS call site 2 at envelope synthesis.
@@ -634,37 +695,67 @@ def _sample_envelope_family(ws, require_family: str | None = None
     declared family into the candidates at the mean proposal share
     (never zero — the declared proposal is the strongest proposal
     signal) so the declared-ride receipt names every candidate with its
-    P_LLM weight."""
+    P_LLM weight.
+
+    The uniform scheduler face (``KUNGLAO_SCHEDULER=uniform``) is the
+    harness-without-learning measurement arm: the prior becomes the flat
+    1.0 dict over the registered vocabulary (the pooled posterior and
+    the intake-seeded cold-start proposal are both bypassed), the draw
+    reads an EMPTY store so every cell posterior stays the day-one
+    Beta(1,1), and the learned extras (feature table, death verdicts,
+    warm pools) are withheld — the selection is exchangeable-uniform
+    over the vocabulary and the receipt carries the ``scheduler``
+    marker that the launch face turns into the 1/K propensity (the
+    exact marginal action probability of a uniform policy, recorded for
+    OPE). A declared family still wins the envelope at pi = 1.0."""
     try:
         import method_families
         from rlvr import q_cells
         from rlvr import state as rlvr_state
-        store = q_cells.default_store(ws)
         # the candidate set is the ws-aware enumeration: the closed
         # registry PLUS this workspace's admitted discovery arms (the
         # overlay path — repo bytes untouched; no overlay = the closed set)
         registered = sorted(method_families.registered_tokens(ws))
-        counts: dict[str, int] = {}
-        for row in store.observations():
-            if not isinstance(row, dict) \
-                    or str(row.get("source") or "") != "dispatch":
-                continue  # outcome rows never enter any prior
-            fam = str(row.get("method_family") or "").strip()
-            if fam and fam in registered:
-                counts[fam] = counts.get(fam, 0) + 1
-        if counts:
-            prior = _pooled_or_flat(store, counts, str(ws))
-        else:
+        uniform = _scheduler_uniform()
+        if uniform:
+            # the flat face: 1.0 everywhere — no pooled posterior, no
+            # intake-seeded proposal, no learned shortcut into the prior
             if not registered:
                 return "", None
-            prior = _cold_seed_prior(ws, registered)
+            prior = {fam: 1.0 for fam in registered}
+        else:
+            store = q_cells.default_store(ws)
+            counts: dict[str, int] = {}
+            for row in store.observations():
+                if not isinstance(row, dict) \
+                        or str(row.get("source") or "") != "dispatch":
+                    continue  # outcome rows never enter any prior
+                fam = str(row.get("method_family") or "").strip()
+                if fam and fam in registered:
+                    counts[fam] = counts.get(fam, 0) + 1
+            if counts:
+                prior = _pooled_or_flat(store, counts, str(ws))
+            else:
+                if not registered:
+                    return "", None
+                prior = _cold_seed_prior(ws, registered)
         if require_family and require_family not in prior:
             vals = list(prior.values())
             prior[require_family] = (sum(vals) / len(vals)) if vals else 1.0
         rng, _round = q_cells.q_cells_seed_state(ws)
-        kwargs = _sampler_extras(ws, prior)
-        receipt = q_cells.sample_method_family(
-            rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
+        if uniform:
+            # the draw rides an EMPTY store: every cell posterior stays
+            # the wide Beta(1,1) and no learned extra (feature table,
+            # death verdicts, warm pools) reaches the selection — the
+            # learned state never influences the draw
+            receipt = q_cells.sample_method_family(
+                rlvr_state.snapshot(ws), prior, q_cells.InMemoryStore(()),
+                rng=rng)
+            receipt["scheduler"] = SCHEDULER_UNIFORM
+        else:
+            kwargs = _sampler_extras(ws, prior)
+            receipt = q_cells.sample_method_family(
+                rlvr_state.snapshot(ws), prior, store, rng=rng, **kwargs)
         return str(receipt["family"]), receipt
     except Exception as exc:  # noqa: BLE001 — telemetry, never the loop
         from kunglao_log import warn  # canonical warn: rate-limited
@@ -771,28 +862,9 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
                         **_DISPATCH_ARM_CONTEXT}
                        if method_family else None),
         claim=claim, fingerprint=_fp)
-    # #524 item 1 + #545 WS2: the propensity rides the receipt — the
-    # DR-OPE record. SAMPLER receipts carry the MC propensity; a
-    # DECLARED proposal is the behavior policy itself (deterministic —
-    # π = 1.0, correctly re-weighted for OPE), no longer an envelope-less
-    # skip.
-    try:
-        if method_family and receipt is not None:
-            if declared:
-                receipt["propensity"] = 1.0
-                receipt["declared"] = True
-            else:
-                from rlvr import meta_arms as _ma2
-                _rows = [r for r in qc_mod.JSONLQStore(
-                    str(ctx.ws)).observations() if isinstance(r, dict)]
-                _fams = sorted({str(r.get("method_family")) for r in _rows
-                                if r.get("method_family")} | {method_family})
-                receipt["propensity"] = round(_ma2.mc_propensity(
-                    _rows, method_family, _fams), 4)
-            if _fp:
-                receipt["fingerprint"] = _fp
-    except Exception as exc:  # noqa: BLE001 — bonus, never a gate
-        kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+    # the propensity rides the receipt — the DR-OPE record (see
+    # _stamp_ope_propensity for the three faces)
+    _stamp_ope_propensity(ctx, receipt, declared, method_family, _fp)
     # the emit rides AFTER the propensity block: the receipt mutation
     # post-emit never reached the durable audit row (the round-1 G3
     # envelopes carry candidates but no propensity — the DR-OPE record

@@ -1,6 +1,8 @@
 schema: ws5-five-arms/1
-# The WS5 five-arm capability matrix — the arm registry (issue #523, the
-# closeout plan's "终局审判" measurement). DECLARATION ONLY: this file
+# The WS5 capability matrix — the arm registry (issue #523 built the
+# five arms; issue #569 adds B2 same-cost multi-sampling and B3
+# harness-without-learning, completing the seven-arm B0-B4 ladder that
+# decomposes WHERE the value comes from). DECLARATION ONLY: this file
 # names the arms, their env faces, the corpus, and the warm-up protocol.
 # Nothing executes at read time; the launcher is scripts/eval_matrix_runner.py
 # and the real matrix run is an owner-visible act (harness + --dry-run
@@ -11,8 +13,16 @@ schema: ws5-five-arms/1
 # move in the predicted directions — no L1 (recall) slows cold starts
 # without killing them.
 #
-# All five arms share: the same units, the same per-run budget caps, the
-# same checker. Arms differ ONLY in the declared faces below.
+# The B-ladder reading of the arms:
+#   B0 = cc-bare, B1 = cc-warm-context, B2 = cc-multisample,
+#   B3 = kunglao-uniform, B4 = kunglao-warm (+ kunglao-cold as the
+#   cold-DTS reference and kunglao-warm-no-l1 as the L1 ablation).
+#   learning_value = B4 - B3, architecture_value = B3 - B0,
+#   sampling rebuttal = B4 vs B2@equal-cost — the readout renders all
+#   three.
+#
+# All seven arms share: the same units, the same per-arm total budget
+# caps, the same checker. Arms differ ONLY in the declared faces below.
 
 budget:
   budget_usd: 2.0
@@ -74,6 +84,22 @@ arms:
       extra context?
     env: {}
 
+  - id: cc-multisample
+    runner_face: cc-default
+    store: none
+    sampling:
+      mode: multi-sample
+      samples: 4
+      budget_each: 0.5
+    description: >
+      B2 — bare CC, same-cost multi-sampling: 4 independent samples of
+      plain Claude Code at the kunglao arms' total budget (4 x 0.5 =
+      the 2.0 every arm gets). The readout aggregates pass@k at equal
+      cost. The "is it just more sampling?" rebuttal arm — the cheapest
+      possible concession or acquittal, and the honest scale the
+      learning_value number must clear.
+    env: {}
+
   - id: kunglao-cold
     runner_face: loop
     store: cold
@@ -81,6 +107,22 @@ arms:
       The full kunglao loop against a materialized EMPTY posterior
       store: the framework's machinery with zero cross-task memory.
     env: {}
+
+  - id: kunglao-uniform
+    runner_face: loop
+    store: cold
+    description: >
+      B3 — the harness without learning: the full kunglao loop (gates,
+      write contracts, verification discipline, budget) with the
+      scheduler face frozen. KUNGLAO_SCHEDULER=uniform flattens the
+      envelope sampler's prior to 1.0 everywhere and starves the draw of
+      every learned input, so family selection is exchangeable-uniform
+      over the vocabulary while the propensity still rides the envelope
+      (1/K, the OPE raw material). Approximately kunglao-cold with the
+      scheduler disabled: B4 - B3 isolates the LEARNING's value and
+      B3 - B0 isolates the ARCHITECTURE's value.
+    env:
+      KUNGLAO_SCHEDULER: "uniform"
 
   - id: kunglao-warm
     runner_face: loop
@@ -105,10 +147,12 @@ arms:
 
 # Hermeticity contract (enforced by the launcher, not by this file):
 # the launcher strips KUNGLAO_RECALL / KUNGLAO_EXPANSION /
-# KUNGLAO_PREDICT_BEFORE_TRY from the inherited environment before
-# merging each arm's declared env — ambient shell state can never
-# contaminate an arm. KUNGLAO_PREDICT_BEFORE_TRY stays at its default
-# (off) in every arm: the five-arm design ablates L1 only.
+# KUNGLAO_PREDICT_BEFORE_TRY / KUNGLAO_SCHEDULER from the inherited
+# environment before merging each arm's declared env — ambient shell
+# state can never contaminate an arm. KUNGLAO_PREDICT_BEFORE_TRY stays
+# at its default (off) in every arm: the design ablates L1 only, and
+# KUNGLAO_SCHEDULER is declared exactly where the B3 arm needs it
+# (every other arm rides the learned DTS scheduler).
 
 units:
   # --- interpolation holdout (eval/v1/split.yaml, release tier) — READ,
