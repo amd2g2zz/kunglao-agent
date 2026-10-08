@@ -1181,6 +1181,18 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # health bit. Producer-owned like every other face: the renderer never
     # reads the ledger. Additive fields — readers probe the field set.
     rank = _rank_face(ws, now=now)
+    # The verification-debt face (leaf-read, fail-open): D + slope + the
+    # highest-debt claim + the hot bit against the leaf's gate constant.
+    # Producer-owned display data; the renderer stays a dumb view.
+    try:
+        from rlvr import verification_debt as _vd_mod
+        vd_face = _vd_mod.debt(ws)
+        vd = {"D": vd_face["D"], "slope": vd_face["slope"],
+              "top": vd_face["top"],
+              "hot": vd_face["D"] > _vd_mod.DEBT_GATE}
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("verification_debt_face", f"{type(exc).__name__}: {exc}")
+        vd = {"D": 0.0, "slope": None, "top": None, "hot": False}
     # Issue 134: the rho/Platt calibration face (curve + ECE + current gap
     # + rho_sampler liveness status). Producer-owned like every other face;
     # additive field — readers probe the field set. The face is fail-open
@@ -1241,6 +1253,10 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # while the ranking result itself stays untouched (fail-open).
         "rank": rank["rank"],
         "rank_log": rank["rank_log"],
+        # The verification-debt chip face (D/slope/top + the hot bit).
+        # Additive field — readers probe the field set, never a version
+        # ladder (no-backcompat policy).
+        "vd": vd,
         # Issue 134: rho/Platt calibration face + rho_sampler liveness —
         # PRODUCE only (no gating; consumption is v0.2 #129/#135).
         "calibration": calibration,

@@ -75,6 +75,13 @@ map):
   evidence); verdicts floor a dead option's sampler weight (ARM_FLOOR,
   never removed — PARK revivability); no store, no gate, no verdict
   face: pure folds + duck-typed verdict data.
+
+- ``rlvr.verification_debt`` — the deterministic verification-debt
+  face: D = sum(dependency-count x saturating age-weight) over all
+  unverified-but-depended-on claims, read off the claim register and
+  the claim dependency DAG (direct dependents only, fail-open to zero
+  on broken reads). Consumed by the scheduling gate, the strategy
+  compose face, and the statusline debt chip.
 """
 from __future__ import annotations
 
@@ -92,6 +99,7 @@ from . import state
 from . import termination
 from . import expansion
 from . import triples
+from . import verification_debt
 from . import winrate
 from .ledger import (
     KIND_HYBRID_DISTILL,
@@ -282,6 +290,7 @@ __all__ = [
     "state",
     "termination",
     "triples",
+    "verification_debt",
     "winrate",
     # ledger faces (issue 420 Phase 2)
     "KIND_TASK",

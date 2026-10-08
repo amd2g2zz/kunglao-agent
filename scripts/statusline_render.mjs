@@ -272,6 +272,20 @@ function calibrationBadge(snap) {
   return PALETTE.cyan(text);
 }
 
+// Verification-debt chip: the unverified-but-depended-on debt total the
+// producer computes (leaf module) and ships as snap.vd. Positive debt =
+// amber; above the producer's gate constant (the hot bit, computed
+// Python-side — kunglao logic stays out of Node) = red. Zero or absent =
+// hidden (the absent face, never a placeholder).
+function vdBadge(snap) {
+  const vd = snap.vd && typeof snap.vd === 'object' ? snap.vd : null;
+  if (!vd) return '';
+  const d = Number(vd.D);
+  if (!Number.isFinite(d) || d <= 0) return '';
+  const text = `vd:D=${d.toFixed(1)}`;
+  return vd.hot ? PALETTE.red(text) : PALETTE.amber(text);
+}
+
 // #212 difficulty badge: calibrated tier preferred (the mounted calibration
 // output), the raw-signals calibration score as fallback, the legacy string
 // key last. Absent data = hidden segment, never a placeholder.
@@ -394,6 +408,7 @@ function renderKunglao(snapPath, nowMs) {
   const badge = entropyBadge(snap);
   const rankSeg = rankBadge(snap);
   const calSeg = calibrationBadge(snap);
+  const vdSeg = vdBadge(snap);
   const dots = healthDots(snap.health, snap.health_specs, down);
   const chip = taskChip(snap.now);
   const diff = difficultyBadge(snap);
@@ -415,6 +430,7 @@ function renderKunglao(snapPath, nowMs) {
   if (badge) parts.push(badge);
   if (rankSeg) parts.push(rankSeg);
   if (calSeg) parts.push(calSeg);
+  if (vdSeg) parts.push(vdSeg);
   if (diff) parts.push(diff);
   if (dots) parts.push(dots);
   if (perfSegs.length) parts.push(...perfSegs);

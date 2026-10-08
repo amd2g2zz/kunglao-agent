@@ -621,6 +621,26 @@ def _validate_amendments(obj: dict, errors: list[str]) -> None:
                 f"amendments[{i}].evidence_refs: non-empty list required")
 
 
+def _validate_debt(obj: dict, errors: list[str]) -> None:
+    """The verification-debt state-feature face: D numeric (>= 0), slope
+    present-and-None or numeric, top present-and-None or a non-empty id
+    string."""
+    debt = obj.get("debt")
+    if not isinstance(debt, dict):
+        errors.append("debt: mapping required")
+        return
+    d = debt.get("D")
+    if isinstance(d, bool) or not isinstance(d, (int, float)) or d < 0:
+        errors.append("debt.D: non-negative number required")
+    slope = debt.get("slope")
+    if slope is not None and (isinstance(slope, bool)
+                              or not isinstance(slope, (int, float))):
+        errors.append("debt.slope: null or number required")
+    top = debt.get("top")
+    if top is not None and (not isinstance(top, str) or not top.strip()):
+        errors.append("debt.top: null or non-empty id required")
+
+
 def validate_strategy(obj) -> list[str]:
     """Schema linter for round-strategy/1 ([] = clean). Enforces the
     exact section set — any constitution-side key fails here, which is
@@ -629,8 +649,8 @@ def validate_strategy(obj) -> list[str]:
         return ["strategy: not a mapping"]
     errors: list[str] = []
     allowed_top = {"schema", "tick", "ts", "state_fingerprint",
-                   "composed_from", "content_hash", "dispatch", "loop",
-                   "hooks", "amendments"}
+                   "composed_from", "content_hash", "debt", "dispatch",
+                   "loop", "hooks", "amendments"}
     unknown = sorted(set(obj) - allowed_top)
     if unknown:
         errors.append("unknown top-level keys: " + ",".join(unknown))
@@ -639,6 +659,7 @@ def validate_strategy(obj) -> list[str]:
     _validate_loop(obj, errors)
     _validate_hooks(obj, errors)
     _validate_amendments(obj, errors)
+    _validate_debt(obj, errors)
     return errors
 
 
@@ -690,6 +711,22 @@ def _cold_sections(ws: Path, snap: dict) -> dict:
     return sections
 
 
+# ---------------------------------------------------------------- compose
+
+def _debt_face(ws: Path) -> dict:
+    """The verification-debt state feature, read through the rlvr leaf
+    (lazy import). Fail-open to the zero face: compose never breaks on a
+    broken register, and the degrade is loud inside the leaf itself."""
+    try:
+        from rlvr import verification_debt
+        return verification_debt.debt(ws)
+    except Exception as exc:  # noqa: BLE001 — the face never breaks compose
+        warn("compose.debt_face",
+             f"{type(exc).__name__}: {exc} (fail-open: zero debt)")
+        return {"D": 0.0, "per_claim": {}, "slope": None, "top": None,
+                "verifiable_open": []}
+
+
 def compose(ws, tick: int, *, store: StrategyStore | None = None,
             n_min: int = DEFAULT_N_MIN,
             top_k: int = DEFAULT_TOP_K) -> dict:
@@ -699,7 +736,10 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
     synthesis (deterministic templates) -> scheduling (threshold gate,
     staleness fade, decayed rank, top-k budget). Settlement accumulation
     runs first so the library is current (idempotent, content-addressed).
-    Self-validates before returning (fail-closed compose)."""
+    The verification-debt face rides the object as a state feature (a
+    deterministic workspace fact, not learned content) and renders in
+    the consumer seam only when debt is on the books. Self-validates
+    before returning (fail-closed compose)."""
     ws = Path(ws)
     tick = int(tick)
     if tick < 0:
@@ -714,6 +754,7 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
 
     cell = store.cell_count(fp)
     evidence_count = len(rows) if cell is None else int(cell)
+    _debt = _debt_face(ws)
     if evidence_count < n_min:
         sections = _cold_sections(ws, snap)
     else:
@@ -741,6 +782,11 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
         "composed_from": sorted({str(r.get("rollout_id")) for r in rows}),
         **sections,
     }
+    # the verification-debt state feature rides OUTSIDE the content hash
+    # (the consumers' dedup key stays a function of the four sections —
+    # a debt-only change re-emits the seam, it never re-keys a tick)
+    obj["debt"] = {"D": _debt["D"], "slope": _debt["slope"],
+                   "top": _debt["top"]}
     obj["content_hash"] = strategy_content_hash(
         {name: obj[name] for name in
          ("dispatch", "loop", "hooks", "amendments")})
@@ -868,6 +914,18 @@ def _seam_sections(ws: Path, obj: dict) -> list[dict]:
                    if str(cid) in cards]
     if card_blocks:
         sections.append({"title": "cards", "body": "\n".join(card_blocks)})
+    debt = obj.get("debt") or {}
+    d = debt.get("D")
+    if isinstance(d, (int, float)) and not isinstance(d, bool) and d > 0:
+        slope = debt.get("slope")
+        slope_text = (f"{slope:+.1f}" if isinstance(slope, (int, float))
+                      and not isinstance(slope, bool) else "unknown")
+        sections.append({
+            "title": "verification-debt",
+            "body": (f"verification debt D={d} (slope {slope_text}): "
+                     f"verify {debt.get('top')} first - "
+                     f"do not build further analysis on unverified debt"),
+        })
     return sections
 
 
