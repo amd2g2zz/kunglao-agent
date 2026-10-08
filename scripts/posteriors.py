@@ -30,11 +30,12 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 from pathlib import Path
 
 import yaml
+
+from _common import atomic_write_text
 
 SCHEMA_ID = "posteriors-schema/1"
 LEDGER_REL = "runs/posteriors.yaml"
@@ -232,13 +233,9 @@ class PosteriorLedger:
     def save(self, ws) -> Path:
         """原子写（同目录 tmp + os.replace）；runs/ 缺失则建。"""
         path = Path(ws) / LEDGER_REL
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(
-            yaml.safe_dump(self.to_doc(), allow_unicode=True, sort_keys=True),
-            encoding="utf-8")
-        os.replace(tmp, path)
-        return path
+        return atomic_write_text(
+            path,
+            yaml.safe_dump(self.to_doc(), allow_unicode=True, sort_keys=True))
 
     @classmethod
     def load(cls, ws) -> "PosteriorLedger":

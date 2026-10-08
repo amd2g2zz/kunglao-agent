@@ -36,7 +36,6 @@ Exit codes: 0 = matches found; 1 = no match (closest categories listed);
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from collections import Counter
@@ -44,6 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _common import atomic_write_text
 from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
 
 try:  # PyYAML is a repo dependency; degrade gracefully when absent.
@@ -448,13 +448,9 @@ def load_stats(ws: Path) -> dict:
 def save_stats(ws: Path, stats: dict) -> None:
     """Atomic write (tmp+replace) — a crash mid-update must never corrupt."""
     stats["updated"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    runs = Path(ws) / "runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    p = runs / STATS_FILE
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(stats, ensure_ascii=False, indent=2,
-                              sort_keys=True), encoding="utf-8")
-    os.replace(tmp, p)
+    atomic_write_text(Path(ws) / "runs" / STATS_FILE,
+                      json.dumps(stats, ensure_ascii=False, indent=2,
+                                 sort_keys=True))
 
 
 def record_feedback(ws: Path, pairs) -> int:

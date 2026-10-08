@@ -68,12 +68,12 @@ from _scriptlib import make_warn
 warn = make_warn("plan_drift_detector")
 import gate_telemetry as _gt
 from status_defs import TERMINAL
+from _common import atomic_write_text
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
 
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -609,12 +609,9 @@ def _write_repair_state(state_path: Path, state: dict) -> None:
     os.replace so a concurrent reader sees the old or the new file, never
     a torn one (review round 1, LOW)."""
     try:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = state_path.with_name(state_path.name + ".tmp")
-        tmp.write_text(
-            json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n",
-            encoding="utf-8")
-        os.replace(tmp, state_path)
+        atomic_write_text(
+            state_path,
+            json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n")
     except OSError as exc:
         print(f"[kunglao-agent] plan-repair state write skipped: {exc!r}",
               file=sys.stderr)

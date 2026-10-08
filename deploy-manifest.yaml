@@ -135,7 +135,7 @@ files:
   - src: scripts/_common.py
     dest: .claude/scripts/_common.py
     kind: scaffold
-    sha256: 558b21da3184f2ed32d2e7b162430600a656ff24716ace998f552661ccd5fcf9
+    sha256: 671431978adc03d9bd5cecac102e048f090cb7807593073d1a7c5ad3ad4f0901
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -599,7 +599,7 @@ files:
   - src: scripts/install_reference.py
     dest: .claude/scripts/install_reference.py
     kind: scaffold
-    sha256: 6b0a71e70bc8430608ea073fdb6cfb356c5e69dd95e9ea30ae66511b05101cc5
+    sha256: 350f37e12f71406279f8bbc13d9ccce9744a3bcfce758e3054a2f10b06a204a2
   - src: scripts/install_unidbg.py
     dest: .claude/scripts/install_unidbg.py
     kind: scaffold
@@ -687,7 +687,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 6ae9b40e4aad0343e661de7cc2e9bf1f98df9b4bc5ceb6305ccedd8800e0dc0f
+    sha256: e94f7fb50cbb819ec7368598e1bbde0ca866a37fa9f65020e44354e61363a263
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -775,7 +775,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: 22efc922f54b85c20fbd882c348fe67f485a2e515d06e630e57427e16c0b1841
+    sha256: c1023b28d80487749e818050f7acf2e9b0a063594e9f7dbd7025ca5683a97d2c
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -791,7 +791,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 388964436d889d70386235f311be4554cc22177e2c02bf327139388ab5d1bb4f
+    sha256: 062422b7e02324b18a7274dade66be2990b1bcf633f4268b2f15d2a212e4412c
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -803,7 +803,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: 403b7c07d3366f879c6963cb2ff2074bbb4f3f303c11a9cc79da051fa959531a
+    sha256: a19713fd442966d448d54764f21f6e20348f031cf6c5f4a781eee7fa3c96d92f
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
@@ -823,7 +823,7 @@ files:
   - src: scripts/posteriors.py
     dest: .claude/scripts/posteriors.py
     kind: scaffold
-    sha256: 33d593ae2bb0c59c449f9c427284474c9d923fe51a8883c4c9dd718414a982f2
+    sha256: 6897582b32ef0fa31cd286242a261e2265bfa373e850576ff79347af6a95b633
   - src: scripts/prediction_hit_rate.py
     dest: .claude/scripts/prediction_hit_rate.py
     kind: scaffold
@@ -895,7 +895,7 @@ files:
   - src: scripts/references_recall.py
     dest: .claude/scripts/references_recall.py
     kind: scaffold
-    sha256: 9491f5fa4a72dd7d5c5e1a405c8890f17cf5c376f97ed045bb479bbc50748654
+    sha256: 242018c2946140cc6cc4c55e10baa0447ec41c85eb833e4a8f260af03fc97c69
   - src: scripts/refutation_propagate.py
     dest: .claude/scripts/refutation_propagate.py
     kind: scaffold
@@ -1075,7 +1075,7 @@ files:
   - src: scripts/tool_value.py
     dest: .claude/scripts/tool_value.py
     kind: scaffold
-    sha256: 264a451cd955b4b40745403b2cfd72182273e1a23597da39af5e4f88d89beeed
+    sha256: 415e75a7a10055a98dc28044d29df9e5d10d4ee2d87357d2ab224409960b9316
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
@@ -1111,7 +1111,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: 111a5183c39d188bf147d6f9a05133ffc5fa8e1fcc4474f0d200d530ee157a89
+    sha256: a00f02241157d8318c23111ff64828807dc6729996b46f2654529c5d3106f6e5
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1267,7 +1267,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: ca214d2354ad45dc3ba1d421008f913e875075f441dc1b6070444f791c41c3e0
+    sha256: 9e4bd2c7c80f13efd9639cec9838fc3813349b17c3ee0ffb7fe0e2118527727f
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1279,7 +1279,7 @@ files:
   - src: scripts/silent_except_baseline.yaml
     dest: .claude/scripts/silent_except_baseline.yaml
     kind: scaffold
-    sha256: c07a50bb6c42e13458c31426aef2ffe41a061f206a80d620ea881aceee882877
+    sha256: af621d07cfb342524d31566f7d05247d258638ef3499af989e6c4581d2d70445
   - src: scripts/tool_tiers.yaml
     dest: .claude/scripts/tool_tiers.yaml
     kind: scaffold

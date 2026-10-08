@@ -9,6 +9,8 @@ the formal_code_lint ledger shrinks as they do."""
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -77,3 +79,71 @@ def read_yaml(path: str | Path) -> tuple[dict | None, str | None]:
     if not isinstance(doc, dict):
         return None, "yaml document is not a mapping"
     return doc, None
+
+
+def atomic_write_text(path: str | Path, text: str, *,
+                      unique: bool = False,
+                      mode: int | None = None) -> Path:
+    """THE canonical atomic text write: same-directory tmp +
+    ``os.replace``. Missing parent directories are created; the
+    destination is never observed half-written (a same-filesystem
+    rename is atomic; a tmp in another directory could degrade to
+    copy+delete). Callers serialize their own payload (json.dumps,
+    yaml.safe_dump, plain text) — the leaf only guards the write.
+
+    ``unique=True`` takes a writer-unique tmp name (mkstemp) so two
+    concurrent writers on one destination never share a buffer (the
+    two-writer tear); the plain face is single-writer by contract.
+    ``mode`` chmods the final file before the rename (destination-mode
+    or fixed parity). A failed write unlinks its tmp — never silent
+    residue."""
+    return _atomic_write(path, text, False, unique=unique, mode=mode)
+
+
+def atomic_write_bytes(path: str | Path, data: bytes, *,
+                       unique: bool = False,
+                       mode: int | None = None) -> Path:
+    """The bytes face of the canonical atomic write — same contract as
+    ``atomic_write_text`` for binary payloads."""
+    return _atomic_write(path, data, True, unique=unique, mode=mode)
+
+
+def _atomic_write(path: str | Path, payload, binary: bool, *,
+                  unique: bool, mode: int | None) -> Path:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if unique:
+        fd, name = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".",
+                                    suffix=".tmp")
+        tmp = Path(name)
+        try:
+            if binary:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(payload)
+            else:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(payload)
+        except BaseException:
+            _unlink_quiet(tmp)
+            raise
+    else:
+        tmp = p.with_name(p.name + ".tmp")
+        if binary:
+            tmp.write_bytes(payload)
+        else:
+            tmp.write_text(payload, encoding="utf-8")
+    try:
+        if mode is not None:
+            os.chmod(tmp, mode)
+        os.replace(tmp, p)
+    except BaseException:
+        _unlink_quiet(tmp)
+        raise
+    return p
+
+
+def _unlink_quiet(tmp: Path) -> None:
+    try:
+        tmp.unlink()
+    except OSError:
+        pass

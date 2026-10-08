@@ -56,6 +56,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from _common import atomic_write_text  # noqa: E402
 from harness_common import utc_now_z as _utc_now  # the Family F single source
 
 # the canonical warn — ONE implementation (process-wide dedupe + the
@@ -330,28 +331,10 @@ class _LedgerLock:
 
 
 def _atomic_write_json(path: Path, doc: dict) -> None:
-    """Writer-unique tmp + os.replace + 0644 parity (the house write
-    discipline); non-silent cleanup."""
-    import tempfile
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent),
-                               prefix=path.name + ".",
-                               suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(doc, sort_keys=True, indent=2) + "\n")
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError as cleanup_exc:
-            # the silent-handler house rule: even tmp cleanup leaves the
-            # one trace — a silent pass here would hide disk trouble
-            _warn("online_distill_write",
-                  f"tmp cleanup {tmp}: {type(cleanup_exc).__name__}: "
-                  f"{cleanup_exc}")
-        raise
+    """Writer-unique tmp + os.replace + 0644 parity — the four guards
+    (parents, unique name, mode, cleanup-on-failure) live in the leaf."""
+    atomic_write_text(path, json.dumps(doc, sort_keys=True, indent=2) + "\n",
+                      unique=True, mode=0o644)
 
 
 def reserve_act(ws, token: str, source_file: str | None = None,

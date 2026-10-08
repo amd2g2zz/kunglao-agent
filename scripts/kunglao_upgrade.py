@@ -95,7 +95,8 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import claudemd_frame  # noqa: E402  (#755 G3 pure split/assemble)
+import claudemd_frame  # noqa: E402
+from _common import atomic_write_bytes, atomic_write_text  # noqa: E402  (#755 G3 pure split/assemble)
 import install_reference  # noqa: E402
 import template_version  # noqa: E402
 from hook_activation import (  # noqa: E402
@@ -292,11 +293,8 @@ def _item_global_hook_purge(ws: Path, dry: bool) -> str:
               f"untouched — never purge without a backup",
               why, "global_hook_purge", ws)
         return "global_hook_purge(warn: backup-failed)"
-    tmp = gp.with_name(gp.name + ".tmp143")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                   encoding="utf-8")
-    os.chmod(tmp, gp.stat().st_mode & 0o777)
-    os.replace(tmp, gp)
+    atomic_write_text(gp, json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                      mode=gp.stat().st_mode & 0o777)
     detail = f"removed={len(removed)} files={matched}"
     _emit(ws, "global_hook_purge", detail)
     return f"global_hook_purge(removed={len(removed)}: {matched})"
@@ -435,10 +433,7 @@ def _item_agents_refresh(ws: Path, dry: bool) -> str:
                     == want:
                 unchanged += 1
                 continue
-            tmp = dst.with_name(dst.name + ".tmp755")
-            tmp.write_bytes(payload)
-            import os as _os
-            _os.replace(tmp, dst)
+            atomic_write_bytes(dst, payload)
             deployed.append(name)
         detail = (f"deployed={','.join(deployed)}" if deployed else "noop") \
             + f" unchanged={unchanged}"
@@ -636,7 +631,7 @@ def _write_pending_merge(ws: Path, current: str, reason: str,
     (also recorded inside the marker)."""
     ws = Path(ws)
     ws.joinpath("runs").mkdir(parents=True, exist_ok=True)
-    _atomic_write_bytes(
+    atomic_write_bytes(
         ws / PENDING_MERGE_DIFF_REL,
         _pending_merge_diff(ws, current, reason,
                             req_block).encode("utf-8"))
@@ -650,7 +645,7 @@ def _write_pending_merge(ws: Path, current: str, reason: str,
         "resolve_command": ("python scripts/kunglao.py check-stale "
                             "--resolve <workspace>"),
     }
-    _atomic_write_bytes(
+    atomic_write_bytes(
         ws / PENDING_MERGE_REL,
         yaml.safe_dump(record, sort_keys=False,
                        allow_unicode=True).encode("utf-8"))
@@ -763,10 +758,7 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
         _clear_pending_merge_quiet(ws)
         return "claudemd_merge(noop)"
     target = ws / "CLAUDE.md"
-    tmp = target.with_name(target.name + ".tmp755")
-    tmp.write_text(merged, encoding="utf-8")
-    import os as _os
-    _os.replace(tmp, target)
+    atomic_write_text(target, merged)
     _clear_pending_merge_quiet(ws)  # #5: a successful merge resolves pending
     detail = f"{_frame_label(current, merged)} sections={len(parts.user_sections)}"
     _emit_event("claudemd_merge", "ok", detail)
@@ -1486,13 +1478,6 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
 # config trio refresh (#755 T3: A4 .mcp.json / A5 env-ledger / A6 toolchain)
 # --------------------------------------------------------------------------
 
-def _atomic_write_bytes(target: Path, payload: bytes) -> None:
-    tmp = target.with_name(target.name + ".tmp755")
-    tmp.write_bytes(payload)
-    import os as _os
-    _os.replace(tmp, target)
-
-
 def _item_mcp_refresh(ws: Path, dry: bool) -> str:
     """#755 A4: workspace .mcp.json backfill. Missing -> the init-parity
     scaffold (mcp_probe.build_scaffold_json — the SAME builder init's
@@ -1512,7 +1497,7 @@ def _item_mcp_refresh(ws: Path, dry: bool) -> str:
         import mcp_probe
         text = json.dumps(mcp_probe.build_scaffold_json(), indent=2,
                           ensure_ascii=False) + "\n"
-        _atomic_write_bytes(target, text.encode("utf-8"))
+        atomic_write_bytes(target, text.encode("utf-8"))
         detail = "created(init-parity scaffold)"
         _emit(ws, "mcp_scaffold_refresh", detail)
         return f"mcp_refresh({detail})"
@@ -1573,7 +1558,7 @@ def _item_env_manifest_refresh(ws: Path, dry: bool) -> str:
         data["kunglao_version"] = cur
         payload = yaml.safe_dump(data, sort_keys=False,
                                  allow_unicode=True)
-        _atomic_write_bytes(path, payload.encode("utf-8"))
+        atomic_write_bytes(path, payload.encode("utf-8"))
         detail = f"kunglao_version->{cur}"
         _emit(ws, "env_ledger_refresh", f"refreshed {detail}")
         return f"env_ledger_refresh(refreshed {detail})"
@@ -1595,7 +1580,7 @@ def _item_env_manifest_refresh(ws: Path, dry: bool) -> str:
         }],
     }
     payload = yaml.safe_dump(ledger, sort_keys=False, allow_unicode=True)
-    _atomic_write_bytes(path, payload.encode("utf-8"))
+    atomic_write_bytes(path, payload.encode("utf-8"))
     if dec.defaulted_to_local or dec.warn_reason:
         _warn(f"kunglao-upgrade: WARN — env-manifest backfill channel="
               f"{dec.selected} ({dec.warn_reason or 'defaulted'})",
@@ -1639,7 +1624,7 @@ def _item_toolchain_manifest(ws: Path, dry: bool) -> str:
         _emit(ws, "toolchain_manifest_check", "noop(current)")
         return "toolchain_manifest_check(noop)"
     data["skill_version"] = cur
-    _atomic_write_bytes(report_path,
+    atomic_write_bytes(report_path,
                         (json.dumps(data, sort_keys=True,
                                     separators=(",", ":"),
                                     ensure_ascii=False)
