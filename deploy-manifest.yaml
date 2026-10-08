@@ -1251,7 +1251,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 151042f5646b07c7bc21e4fd41af6a7cf38349cec2abd3500b97674036245c84
+    sha256: c7e81d29e636dfe2c3833f21f7ff31fe2767f4fbaadf5e2b2945f37c6f79583e
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1727,7 +1727,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 341851e5627e97db6851d744a00421e7fc40cef9d8e9daa2df7b7609d1bec5de
+    sha256: b369d043af5b5d234d597b35cb9333550a2a0a4a39f17063f54669b6d237ca83
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1839,7 +1839,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b3aeeeecced4526a831351677c09dd453a924000cf151ab18df0e966ad129e72
+    sha256: 7ab610c981cc30e14e7352dfce5bf1d29bce8c1d0d3fcb48227f6f4fe6828112
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

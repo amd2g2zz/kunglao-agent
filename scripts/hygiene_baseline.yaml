@@ -838,6 +838,7 @@ files:
     r1: 2
   tests/test_ext_index.py:
     r1: 12
+    r2: 1
   tests/test_ext_index_tiers_162.py:
     r1: 1
   tests/test_external_kicker.py:
