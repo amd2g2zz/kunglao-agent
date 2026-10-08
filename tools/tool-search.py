@@ -16,7 +16,19 @@ Filters (combinable, AND semantics):
 
 Discovery mode (issue #476, #162: THE single search entry — no per-tier
 search tools exist):
-  --find <keyword>              case-insensitive substring search across
+  --find QUERY                 THE agent search face — a real query
+                                grammar: quoted phrases are atomic
+                                ("unicorn engine"), AND/OR/NOT (also
+                                && || !) with parentheses
+                                ((ghidra OR jadx) AND "dex" NOT windows),
+                                juxtaposition = AND; bare words / commas
+                                default to the forgiving OR group
+                                (--match all flips to AND). Combines
+                                with --capability/--tier/--cost-max
+                                (the filters narrow the internal registry
+                                hits; the other sources carry no tier and
+                                pass through, source visible per hit).
+                                Case-insensitive substring matching across
                                 ALL FOUR data sources:
                                   1. the internal registry
                                      (tools/_INDEX.yaml);
@@ -80,6 +92,7 @@ from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -231,11 +244,11 @@ def _reference_description(head: str) -> str:
 
 
 def find_references(repo_root: Path, ref_paths: list[str],
-                    terms: list[str], mode: str = "any") -> list[dict]:
+                    query) -> list[dict]:
     hits: list[dict] = []
     for source in ref_paths:
         head = _reference_head(repo_root, source)
-        if not _haystack_hit(f"{source}\n{head}".lower(), terms, mode):
+        if not _haystack_hit(f"{source}\n{head}".lower(), query):
             continue
         hits.append({
             "name": Path(source).stem,
@@ -319,10 +332,9 @@ def load_run_local(ws) -> list[dict]:
     return out
 
 
-def find_run_local(entries: list[dict], terms: list[str],
-                   mode: str = "any") -> list[dict]:
+def find_run_local(entries: list[dict], query) -> list[dict]:
     hits = [e for e in entries
-            if _haystack_hit(_ext_haystack(e).lower(), terms, mode)]
+            if _haystack_hit(_ext_haystack(e).lower(), query)]
     return hits
 
 
@@ -400,25 +412,170 @@ def _ext_haystack(entry: dict) -> str:
 
 # ---- #162 keyword matching: multi-term boolean over the haystacks ----------
 
-def _haystack_hit(haystack: str, terms: list[str], mode: str) -> bool:
-    """any = boolean OR (default), all = boolean AND over the terms."""
+# --------------------------------------------------------------------------
+# The query language (owner ruling: bare space-splitting is
+# ambiguous and there is no logic). Grammar — explicit, tiny, forgiving:
+#
+#   expr   := or_expr
+#   or     := and  (OR  and)*        OR  | ||
+#   and    := not  (AND not)*        AND | &&
+#   not    := NOT not | atom         NOT | !
+#   atom   := '(' expr ')' | "phrase" | term
+#
+# Quoted phrases are ATOMIC (no word-splitting); bare terms and commas
+# are SEPARATORS; an operator-free query collapses to one implicit OR
+# group (the forgiving default) — or AND under --match all. Juxtaposition
+# inside an explicit query is AND. Matching is case-insensitive substring
+# per atom.
+# --------------------------------------------------------------------------
+
+_TOK = re.compile(
+    r"[\s,]*(?:(?P<lpar>\()|(?P<rpar>\))|(?P<not>!|NOT\b)|(?P<and>&&|AND\b)"
+    r"|(?P<or>\|\||OR\b)|\"(?P<phrase>[^\"]*)\"?|(?P<term>[^\s()\"!,]+))",
+    re.VERBOSE | re.IGNORECASE)
+
+
+def _tokenize(query: str) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    pos = 0
+    while pos < len(query):
+        m = _TOK.match(query, pos)
+        if not m or m.end() == pos:
+            break
+        pos = m.end()
+        kind = m.lastgroup
+        if kind is None:
+            continue
+        out.append((kind, m.group(kind)))
+    return out
+
+
+class _Cursor:
+    """Parser position over the token list (module-level helpers keep
+    cyclomatic complexity out of any single function)."""
+
+    def __init__(self, tokens: list[tuple[str, str]]):
+        self.tokens = tokens
+        self.i = 0
+
+    def peek(self) -> str | None:
+        return self.tokens[self.i][0] if self.i < len(self.tokens) else None
+
+    def shift(self) -> None:
+        self.i += 1
+
+    def value(self) -> str:
+        return self.tokens[self.i][1]
+
+
+def _p_atom(cur: _Cursor) -> tuple:
+    kind = cur.peek() or ""
+    if kind == "lpar":
+        cur.shift()
+        node = _p_or(cur)
+        if cur.peek() == "rpar":
+            cur.shift()
+        return node
+    if kind in ("term", "phrase"):
+        val = cur.value().lower()
+        cur.shift()
+        return (kind, val)
+    # an operator where an atom belongs (e.g. trailing AND): consume it
+    # and degrade to a never-match leaf — a loud parse beats a guess
+    if kind:
+        cur.shift()
+    return ("term", "\x00impossible\x00")
+
+
+def _p_not(cur: _Cursor) -> tuple:
+    if cur.peek() == "not":
+        cur.shift()
+        return ("not", _p_not(cur))
+    return _p_atom(cur)
+
+
+def _p_and(cur: _Cursor) -> tuple:
+    # juxtaposition is AND (ghidra NOT windows == ghidra AND NOT windows);
+    # the forgiving bare-terms OR default lives in compile_query, which
+    # never routes operator-free queries into the explicit grammar
+    node = _p_not(cur)
+    while cur.peek() in ("and", "not", "term", "phrase", "lpar"):
+        explicit = cur.peek() == "and"
+        if explicit:
+            cur.shift()
+        node = ("and", node, _p_not(cur))
+    return node
+
+
+def _p_or(cur: _Cursor) -> tuple:
+    node = _p_and(cur)
+    while cur.peek() == "or":
+        cur.shift()
+        node = ("or", node, _p_and(cur))
+    return node
+
+
+def _parse(tokens: list[tuple[str, str]]) -> tuple:
+    """Recursive descent -> nested tuples:
+    ("term", s) | ("phrase", s) | ("and", a, b) | ("or", a, b) | ("not", a)
+    """
+    return _p_or(_Cursor(tokens))
+
+
+def compile_query(query: str, mode: str = "any") -> tuple:
+    """The single compile face: a query string (already flattened from any
+    CLI input shape) -> one AST. Operator-free bare terms collapse to an
+    implicit OR (default) / AND (--match all) group — full back-compat."""
+    tokens = _tokenize(query)
+    kinds = {k for k, _ in tokens}
+    if not (kinds & {"or", "and", "not", "lpar", "rpar", "phrase"}):
+        terms = [v.lower() for k, v in tokens if k == "term"]
+        if len(terms) <= 1:
+            return ("term", terms[0]) if terms else ("term", "\x00none\x00")
+        op = "and" if mode == "all" else "or"
+        node = ("term", terms[0])
+        for term in terms[1:]:
+            node = (op, node, ("term", term))
+        return node
+    return _parse(tokens)
+
+
+def _eval(node: tuple, hay: str) -> bool:
+    op = node[0]
+    if op in ("term", "phrase"):
+        return node[1] in hay
+    if op == "and":
+        return _eval(node[1], hay) and _eval(node[2], hay)
+    if op == "or":
+        return _eval(node[1], hay) or _eval(node[2], hay)
+    if op == "not":
+        return not _eval(node[1], hay)
+    return False
+
+
+def _ast_leaves(node: tuple) -> list[str]:
+    if node[0] in ("term", "phrase"):
+        return [node[1]]
+    if node[0] == "not":
+        return _ast_leaves(node[1])
+    return _ast_leaves(node[1]) + _ast_leaves(node[2])
+
+
+def _haystack_hit(haystack: str, query) -> bool:
+    """The one evaluation chokepoint — `query` is a compiled AST."""
     hay = haystack.lower()
-    if mode == "all":
-        return all(t in hay for t in terms)
-    return any(t in hay for t in terms)
+    return _eval(query, hay)
 
 
-def find_internal(tools: list[dict], terms: list[str],
-                  mode: str = "any") -> list[dict]:
+def find_internal(tools: list[dict], query) -> list[dict]:
     hits = [t for t in tools
-            if _haystack_hit(_internal_haystack(t).lower(), terms, mode)]
+            if _haystack_hit(_internal_haystack(t).lower(), query)]
     return [_find_projection_internal(t) for t in hits]
 
 
-def find_ext(ext: list[dict], terms: list[str],
-             mode: str = "any") -> list[dict]:
+def find_ext(ext: list[dict], query) -> list[dict]:
     hits = [e for e in ext
-            if _haystack_hit(_ext_haystack(e).lower(), terms, mode)]
+            if _haystack_hit(_ext_haystack(e).lower(), query)]
     return [_find_projection_ext(e) for e in hits]
 
 
@@ -478,11 +635,20 @@ def _emit(hits: list[dict], as_json: bool, text_formatter) -> None:
 
 def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     """--find: the #162 unified typed search face (all four sources)."""
-    terms = [t.strip().lower() for t in args.find.split(",") if t.strip()]
-    if not terms:
+    # agent-ergonomic query face (owner rulings: no ambiguous
+    # space-splitting, full logic): every --find token flattens to ONE
+    # query string, then the grammar takes over — quoted phrases are
+    # atomic, AND/OR/NOT + parens express logic, bare terms default to
+    # the forgiving OR group (--match all flips the default to AND)
+    # repeated --find flags OR-join (one query per flag is the natural
+    # shape; a single quoted query carries the full grammar)
+    flat = " OR ".join(str(x) for x in (args.find or []))
+    if not flat.strip():
         print("error: --find needs at least one keyword", file=sys.stderr)
         return 2
     mode = args.match or "any"
+    query = compile_query(flat, mode)
+    terms = _ast_leaves(query)
     ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
     refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
     ref_paths = load_reference_paths(refs_index)
@@ -490,12 +656,15 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     run_local = load_run_local(resolve_workspace(args.ws))
     # dedup by source path: a re-library card enumerated by both the ext
     # index and the references index surfaces once (typed ext entry wins)
-    hits = find_internal(tools, terms, mode) + find_ext(ext, terms, mode)
+    filtered = [e for e in tools
+                if matches(e, args.capability, args.tier, args.cost_max)]
+    hits = find_internal(filtered, query) \
+        + find_ext(ext, query)
     seen_sources = {str(h.get("source", "")) for h in hits}
-    for h in find_references(repo_root, ref_paths, terms, mode):
+    for h in find_references(repo_root, ref_paths, query):
         if h["source"] not in seen_sources:
             hits.append(h)
-    for h in find_run_local(run_local, terms, mode):
+    for h in find_run_local(run_local, query):
         if h["source"] not in seen_sources:
             hits.append(h)
     if args.type is not None:
@@ -518,7 +687,8 @@ def main(argv: list[str] | None = None) -> int:
                          "T3 VM-dynamic)")
     ap.add_argument("--cost-max", choices=COST_ORDER, default=None,
                     help="cost budget filter, inclusive: probe < cheap < deep")
-    ap.add_argument("--find", default=None, metavar="KEYWORD[,KEYWORD...]",
+    ap.add_argument("--find", default=None, action="append",
+                    metavar="QUERY",
                     help="discovery mode (#162): case-insensitive keyword "
                          "search over ALL FOUR data sources (internal "
                          "registry, typed ext catalog, references index, "
@@ -568,11 +738,11 @@ def main(argv: list[str] | None = None) -> int:
                          "this script)")
     args = ap.parse_args(argv)
 
-    if args.find is not None and (args.capability or args.tier
-                                  or args.cost_max):
-        ap.error("--find cannot combine with --capability/--tier/--cost-max "
-                 "(ext entries carry no tier/cost_tier; ANDing would "
-                 "silently drop them — run two queries instead)")
+    # --find now COMBINES with the internal filters instead of refusing
+    # (the 2026-10-08 ergonomics ruling): the filters apply to internal
+    # registry hits only; ext/reference/run-local hits carry no tier or
+    # cost_tier and pass through unfiltered — the output marks each hit's
+    # source so the combination is never silently lossy
     if args.match is not None and args.find is None:
         ap.error("--match requires --find (it has no meaning for the "
                  "internal filters)")
