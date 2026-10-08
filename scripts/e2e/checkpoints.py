@@ -1365,6 +1365,13 @@ def _luby_timeout_s(retry_count: int) -> int:
     return _luby_units(max(0, retry_count)) * LUBY_BASE_S
 
 
+# The discovery-move ablation switch (the five-arm capability matrix):
+# an exact "0" holds the expand act out of the tick tail for the whole
+# session — the arm's declared state, not a failure. Any other value
+# (unset included) leaves the move armed.
+EXPANSION_DISABLE_ENV = "KUNGLAO_EXPANSION"
+
+
 def _maybe_expand(ctx: RunContext, dispatched: set[str],
                   detail: dict) -> None:
     """#546 WS4 wiring: the discovery-layer move. When the workspace's

@@ -43,7 +43,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 19778e5556fefc7dac2d3dc49e49f8c51a5a8ba26d59e572bea400ab49f221c1
+    sha256: 57649d5322eb6b27dfafc3a688cd0ae6a98f039e9cf861e8a9d0a3c255758d7c
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook

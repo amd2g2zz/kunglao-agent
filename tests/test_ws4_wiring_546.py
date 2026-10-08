@@ -157,3 +157,38 @@ def test_the_capability_never_breaks_the_loop(tmp_path):
     ctx = _ctx(tmp_path, _FakeFace(_FakeAct()), tmp_path / "ws2")
     ctx.repo = "/nonexistent-repo-path"
     cp._maybe_expand(ctx, set(), {})  # must not raise
+
+
+# -------------------------------------- the expansion ablation switch
+
+def test_expansion_disable_env_holds_the_move_out(tmp_path, monkeypatch):
+    """KUNGLAO_EXPANSION=0 (exact) holds the expand act out of the tick
+    tail: the trigger never consults, no act is dispatched, no receipt
+    lands — the five-arm matrix's declared off state, not a failure. The
+    switch rides BEFORE the trigger consult (the move is not even armed)."""
+    monkeypatch.setenv(cp.EXPANSION_DISABLE_ENV, "0")
+    ctx, face, ws = _fire(tmp_path, obstacles=4, hypotheses=[
+        {"id": "h-9", "family": "unicorn-emu", "p_llm": 0.3,
+         "features": {"lane": "dynamic", "project_type": "wasm"}}])
+    assert face.requests == []
+    assert not (ws / "runs" / "expansion").exists()
+
+
+def test_expansion_disable_env_other_values_leave_the_move_armed(
+        tmp_path, monkeypatch):
+    """Only the exact "0" disarms: unset / "1" / any other value leaves
+    the existing trigger behavior unchanged (a switch that half-fires is
+    a silent ablation)."""
+    for value in ("", "1", "false"):
+        if value == "":
+            monkeypatch.delenv(cp.EXPANSION_DISABLE_ENV, raising=False)
+        else:
+            monkeypatch.setenv(cp.EXPANSION_DISABLE_ENV, value)
+        _ctx2, face, _ws = _fire(tmp_path, obstacles=0)
+        assert face.requests == []  # baseline no-trigger shape unchanged
+
+
+def test_expansion_disable_env_is_the_matrix_declared_name():
+    """The switch name is the registry contract: the five-arm config's
+    env faces declare exactly this name."""
+    assert cp.EXPANSION_DISABLE_ENV == "KUNGLAO_EXPANSION"

@@ -57,7 +57,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -65,6 +66,7 @@ except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
               file=sys.stderr)
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -78,6 +80,14 @@ from _path_hygiene import (  # #671 sys.path hygiene authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
+
+# The recall ablation switch (the five-arm capability matrix's no-L1 arm):
+# an exact "0" disables the recall-history dispatch face for the whole
+# session — every evaluate() call short-circuits to pass-through and the
+# dispatch proceeds with no injected recall context. Any other value
+# (unset included) leaves recall ON; the switch only ever removes
+# knowledge supply, never rejects a dispatch.
+RECALL_DISABLE_ENV = "KUNGLAO_RECALL"
 # Fallback window for the batched child (see _run_recall_batch): the
 # fast path is in-process memoized recall with NO window; the child only
 # runs when the in-process path cannot. One window with real headroom,
@@ -646,7 +656,14 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     FAILED attempts' settlement gap-notes (runs/gap-notes/<claim>/) as an
     advisory <kunglao-facts> block — context supply only, never a reward
     kind; the settlement matcher ignores advisory carriers.
+
+    Ablation: RECALL_DISABLE_ENV set to exactly "0" short-circuits here —
+    pass-through with no injection, before any workspace or dispatch
+    parsing (the five-arm matrix's no-L1 arm; recall OFF is the arm's
+    declared state, not a failure).
     """
+    if os.environ.get(RECALL_DISABLE_ENV, "").strip() == "0":
+        return 0, "", None
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0, "", None
