@@ -60,6 +60,7 @@ for p in (str(ROOT), str(SCRIPTS)):
 
 from e2e import checkpoints, model  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
+import eval_matrix_report as mr  # noqa: E402
 import eval_matrix_runner as mx  # noqa: E402
 import method_families  # noqa: E402
 
@@ -367,3 +368,179 @@ def test_dry_run_expands_multisample_rows_at_equal_budget(tmp_path):
     assert 2 * 0.5 == pytest.approx(float(doc["budget"]["budget_usd"]))
     assert rows[0]["run_dir"].endswith("s0")
     assert rows[1]["run_dir"].endswith("s1")
+
+
+# ---- 4. the readout: B2 aggregation + the decompositions --------------------
+
+def _b2_cell(tmp_path: Path, unit: str, samples: list[dict]) -> None:
+    """One multi-sample unit dir: s0..s{k} child runs, each its own
+    results doc + workspace ledger."""
+    for k, spec in enumerate(samples):
+        sample_dir = tmp_path / "cc-multisample" / unit / f"s{k}"
+        sample_dir.mkdir(parents=True)
+        ws = tmp_path / "ws" / f"multi-{unit}-{k}"
+        ws.mkdir(parents=True)
+        (sample_dir / "eval-results-20260101T000000Z-1.json").write_text(
+            json.dumps({"schema": "kunglao-eval-results/1", "rows": [{
+                "task_id": unit, "verdict": spec["verdict"],
+                "loop": {"status": spec.get("loop", "completed"),
+                         "session": {"session_cost": {
+                             "total_cost_usd": spec.get("cost", 0.5)},
+                                     "wall_s": 90.0},
+                         "workspace": str(ws)}}]}),
+            encoding="utf-8")
+        rows = spec.get("rows") or []
+        if rows:
+            p = ws / "runs" / "transitions.jsonl"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("".join(json.dumps(r) + "\n" for r in rows),
+                         encoding="utf-8")
+
+
+def _plain_cell(tmp_path: Path, arm: str, unit: str, verdict: str,
+                mean_rows: list[dict], cost: float = 1.0) -> None:
+    run_dir = tmp_path / arm / unit
+    run_dir.mkdir(parents=True)
+    ws = tmp_path / "ws" / f"{arm}-{unit}"
+    ws.mkdir(parents=True)
+    (run_dir / "eval-results-20260101T000000Z-1.json").write_text(
+        json.dumps({"schema": "kunglao-eval-results/1", "rows": [{
+            "task_id": unit, "verdict": verdict,
+            "loop": {"status": "completed",
+                     "session": {"session_cost": {
+                         "total_cost_usd": cost}, "wall_s": 90.0},
+                     "workspace": str(ws)}}]}),
+        encoding="utf-8")
+    p = ws / "runs" / "transitions.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("".join(json.dumps(r) + "\n" for r in mean_rows),
+                 encoding="utf-8")
+
+
+def test_b2_cells_aggregate_pass_at_k_at_equal_cost(tmp_path):
+    _b2_cell(tmp_path, "u-1", [
+        {"verdict": "FAIL", "cost": 0.4},
+        {"verdict": "PASS", "cost": 0.5},
+        {"verdict": "FAIL", "cost": 0.1},
+    ])
+    report = mr.build_report(tmp_path)
+    cell = report["matrix"][0]
+    assert cell["arm"] == "cc-multisample"
+    assert cell["final_status"] == "PASS", "pass@k: any PASS passes"
+    assert cell["pass_at_k"] == 1.0
+    assert cell["budget_usd"] == pytest.approx(1.0), \
+        "the equal-cost face: the samples' summed spend"
+    assert cell["samples"] == 3
+
+
+def test_b2_all_fail_reports_fail_and_zero_pass_at_k(tmp_path):
+    _b2_cell(tmp_path, "u-1", [
+        {"verdict": "FAIL", "cost": 0.5},
+        {"verdict": "FAIL", "cost": 0.5},
+    ])
+    report = mr.build_report(tmp_path)
+    cell = report["matrix"][0]
+    assert cell["final_status"] == "FAIL"
+    assert cell["pass_at_k"] == 0.0
+
+
+def _decomposition_fixture(tmp_path: Path) -> None:
+    """Four arms x two units, hand-computed so the decomposition math is
+    exact: warm (0.4, 0.2), uniform (0.1, 0.1), cc-bare (0.0, 0.0),
+    multisample (pass@k PASS / FAIL with pooled mean_r 0.1 / 0.0)."""
+    _plain_cell(tmp_path, "kunglao-warm", "u-1", "PASS",
+                [{"r_incr": 0.4, "propensity": 0.5}])
+    _plain_cell(tmp_path, "kunglao-warm", "u-2", "PASS",
+                [{"r_incr": 0.2, "propensity": 0.5}])
+    _plain_cell(tmp_path, "kunglao-uniform", "u-1", "FAIL",
+                [{"r_incr": 0.1, "propensity": 0.25}])
+    _plain_cell(tmp_path, "kunglao-uniform", "u-2", "FAIL",
+                [{"r_incr": 0.1, "propensity": 0.25}])
+    _plain_cell(tmp_path, "cc-bare", "u-1", "FAIL", [{"r_incr": 0.0}])
+    _plain_cell(tmp_path, "cc-bare", "u-2", "FAIL", [{"r_incr": 0.0}])
+    _b2_cell(tmp_path, "u-1", [
+        {"verdict": "PASS", "cost": 0.5, "rows": [{"r_incr": 0.1}]},
+        {"verdict": "FAIL", "cost": 0.5, "rows": [{"r_incr": 0.1}]},
+    ])
+    _b2_cell(tmp_path, "u-2", [
+        {"verdict": "FAIL", "cost": 0.5, "rows": [{"r_incr": 0.0}]},
+        {"verdict": "FAIL", "cost": 0.5, "rows": [{"r_incr": 0.0}]},
+    ])
+
+
+def test_decompositions_render_the_three_named_rows(tmp_path):
+    _decomposition_fixture(tmp_path)
+    report = mr.build_report(tmp_path)
+    dec = report["decompositions"]
+    assert set(dec) >= {"learning_value", "architecture_value",
+                        "sampling_check"}
+    lv = dec["learning_value"]
+    assert lv["formula"] == "B4 - B3"
+    assert lv["arm_a"] == "kunglao-warm"
+    assert lv["arm_b"] == "kunglao-uniform"
+    assert lv["per_unit"] == {"u-1": 0.3, "u-2": 0.1}
+    assert lv["mean_delta"] == pytest.approx(0.2)
+    assert lv["ci95"][0] <= lv["mean_delta"] <= lv["ci95"][1]
+    av = dec["architecture_value"]
+    assert av["formula"] == "B3 - B0"
+    assert av["mean_delta"] == pytest.approx(0.1)
+    sc = dec["sampling_check"]
+    assert sc["formula"] == "B4 vs B2@equal-cost"
+    assert sc["per_unit"] == {"u-1": 0.3, "u-2": 0.2}
+    assert sc["mean_delta"] == pytest.approx(0.25)
+    # the pass@k face rides alongside: warm passes both units, B2 passes
+    # one of two at the same spend
+    assert lv["pass_rate_a"] == 1.0 and lv["pass_rate_b"] == 0.0
+    assert sc["pass_rate_b"] == 0.5
+    # the honest-stats discipline is stated on every row
+    for row in (lv, av, sc):
+        assert "paired" in row["note"] and "bootstrap" in row["note"]
+
+
+def test_decompositions_are_deterministic(tmp_path):
+    _decomposition_fixture(tmp_path)
+    a = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+    b = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+    assert a["ci95"] == b["ci95"], "the bootstrap is seeded, not lucky"
+
+
+def test_decompositions_name_missing_arms_without_inventing(tmp_path):
+    _plain_cell(tmp_path, "kunglao-warm", "u-1", "PASS",
+                [{"r_incr": 0.4, "propensity": 0.5}])
+    report = mr.build_report(tmp_path)
+    dec = report["decompositions"]
+    assert dec["learning_value"]["missing_arms"] == ["kunglao-uniform"]
+    assert "mean_delta" not in dec["learning_value"], \
+        "no delta is invented from a one-sided matrix"
+    assert "per_unit" not in dec["learning_value"]
+
+
+def test_decomposition_roles_pin_the_lettered_arms():
+    roles = mr.DECOMPOSITION_ARMS
+    assert roles["learning_value"]["formula"] == "B4 - B3"
+    assert (roles["learning_value"]["arm_a"],
+            roles["learning_value"]["arm_b"]) == ("kunglao-warm",
+                                                  "kunglao-uniform")
+    assert (roles["architecture_value"]["arm_a"],
+            roles["architecture_value"]["arm_b"]) == ("kunglao-uniform",
+                                                      "cc-bare")
+    assert roles["architecture_value"]["formula"] == "B3 - B0"
+    assert (roles["sampling_check"]["arm_a"],
+            roles["sampling_check"]["arm_b"]) == ("kunglao-warm",
+                                                  "cc-multisample")
+    assert roles["sampling_check"]["formula"] == "B4 vs B2@equal-cost"
+
+
+def test_b2_spine_refusal_surfaces_without_dirs(tmp_path):
+    """A multi-sample cell the launcher refused (no dirs on disk) reports
+    the spine's state with its sample count, never a fake matrix row."""
+    spine = {"schema": mx.SCHEMA_PROGRESS, "runs": [
+        {"arm": "cc-multisample", "unit": "u-1", "status": "refused",
+         "detail": "same-cost violated", "sample": k, "sample_count": 2}
+        for k in range(2)]}
+    (tmp_path / "progress.json").write_text(json.dumps(spine),
+                                            encoding="utf-8")
+    report = mr.build_report(tmp_path)
+    cell = report["matrix"][0]
+    assert cell["final_status"] == "refused"
+    assert cell["samples"] == 2

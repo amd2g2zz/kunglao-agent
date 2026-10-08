@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_report.py — the five-arm matrix readout face.
+"""eval_matrix_report.py — the capability-matrix readout face.
 
 The read side of scripts/eval_matrix_runner.py: per arm x unit matrix
-over COMPLETED runs, plus the honest 80/20 gate primitives. Zero model
-calls; everything here is read + aggregate over files the runs wrote.
+over COMPLETED runs, the honest 80/20 gate primitives, the B2
+pass@k-at-equal-cost aggregation, and the B-ladder decompositions.
+Zero model calls; everything here is read + aggregate over files the
+runs wrote.
 
 Per cell (one (arm, unit) run):
   final_status    the mechanical checker verdict (PASS / FAIL / SKIP /
@@ -22,6 +24,13 @@ Per cell (one (arm, unit) run):
                   not rule-fired);
   mean_r          mean r_incr over the arm's decisions.
 
+Multi-sample cells (the B2 same-cost face): a multi-sample arm's run
+dirs live one level deeper (…/<arm>/<unit>/s0..s{N-1}, one child run per
+sample). The cell aggregates them — final_status is pass@k (any PASS
+passes), pass_at_k is the 0/1 face of that, budget_usd is the samples'
+SUMMED spend (equal cost by the same-cost contract), and the decision
+primitives pool across samples. samples names the child-run count.
+
 The 80/20 gate — honest primitives, not a verdict: the umbrella target
 ("80% learned decisions + 20% rules, measured by regret-weighted
 decision points") does not pin a per-decision definition, so this face
@@ -37,6 +46,20 @@ emits what the ledgers honestly support:
                   where the face applies.
 Redefining the gate is the owner's call; these primitives do not move.
 
+The B-ladder decompositions (report["decompositions"]): three named
+rows that split WHERE the value comes from —
+  learning_value      B4 - B3   (kunglao-warm vs kunglao-uniform: the
+                      LEARNED scheduler's worth on the same harness);
+  architecture_value  B3 - B0   (kunglao-uniform vs cc-bare: the static
+                      harness's worth without any learning);
+  sampling_check      B4 vs B2@equal-cost  (the "is it just more
+                      sampling?" rebuttal: warm DTS vs same-cost
+                      multi-sample pass@k).
+Each row pairs the arms per unit (mean_r deltas), reports the mean
+delta with a seeded bootstrap CI over unit resamples, and carries the
+honest-stats note. An arm with no data is named missing — a one-sided
+matrix renders NO number rather than a fabricated delta.
+
 Reads the progress spine (progress.json from the launcher) when present
 and falls back to scanning run dirs — a partially-run matrix reports
 what exists and names what does not (missing is a measurement state,
@@ -51,10 +74,44 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import time
 from pathlib import Path
 
 SCHEMA_REPORT = "ws5-matrix-report/1"
+
+# the B-ladder roles: the lettered arms the decompositions read. Fixed
+# by the matrix design — the registry is the declaration, this is the
+# reading.
+DECOMPOSITION_ARMS = {
+    "learning_value": {
+        "label": ("learning value — the warm DTS scheduler vs the "
+                  "frozen uniform one on the same harness"),
+        "formula": "B4 - B3",
+        "arm_a": "kunglao-warm",
+        "arm_b": "kunglao-uniform"},
+    "architecture_value": {
+        "label": ("architecture value — the static harness vs bare CC "
+                  "with learning frozen"),
+        "formula": "B3 - B0",
+        "arm_a": "kunglao-uniform",
+        "arm_b": "cc-bare"},
+    "sampling_check": {
+        "label": ("sampling rebuttal — warm DTS vs bare-CC multi-sample "
+                  "at the same total budget"),
+        "formula": "B4 vs B2@equal-cost",
+        "arm_a": "kunglao-warm",
+        "arm_b": "cc-multisample"},
+}
+# the bootstrap is seeded: the same matrix renders the same CI twice
+# (determinism wall — no lucky intervals)
+BOOTSTRAP_DRAWS = 1000
+BOOTSTRAP_SEED = 569
+HONEST_STATS_NOTE = ("paired across units (mean_r deltas), multi-seed "
+                     "by construction (one seed per arm run), 95% "
+                     "bootstrap CI over unit resamples — discipline, "
+                     "not verdict: small-N intervals are wide and say "
+                     "so")
 
 
 def newest_results_doc(run_dir: Path) -> dict | None:
@@ -89,13 +146,19 @@ def read_transitions(ws: Path) -> list[dict]:
     return rows
 
 
+def _rewarded_rows(ws: Path | None) -> list[dict]:
+    """Reward-carrying transition rows (the decision primitives' raw
+    material); absent or dirty rows are skipped, never invented."""
+    if not ws:
+        return []
+    return [r for r in read_transitions(ws)
+            if r.get("r_incr") is not None]
+
+
 def _decision_primitives(ws: Path | None) -> dict:
     """Per-run decision primitives off the workspace's transition ledger:
     decisions (rewarded rows), learned (propensity-bearing), mean r."""
-    if not ws:
-        return {"decisions": 0, "learned_decisions": 0, "mean_r": None}
-    rows = [r for r in read_transitions(ws)
-            if r.get("r_incr") is not None]
+    rows = _rewarded_rows(ws)
     if not rows:
         return {"decisions": 0, "learned_decisions": 0, "mean_r": None}
     rs = [float(r["r_incr"]) for r in rows]
@@ -115,17 +178,114 @@ def _transitions_count(ws: Path | None) -> int:
     return len(read_transitions(ws)) if ws else 0
 
 
-def _collect_matrix(out: Path, by_cell: dict[tuple[str, str], dict]) \
-        -> list[dict]:
+def _sample_dirs(unit_dir: Path) -> list[Path]:
+    """The B2 sample run dirs (…/<unit>/s0, s1, …) under a unit dir,
+    in index order; empty when the cell is a single-run face."""
+    if not unit_dir.is_dir():
+        return []
+    out = []
+    for d in unit_dir.iterdir():
+        if d.is_dir() and len(d.name) > 1 and d.name.startswith("s") \
+                and d.name[1:].isdigit():
+            out.append(d)
+    return sorted(out, key=lambda p: int(p.name[1:]))
+
+
+def _aggregate_samples(unit_dir: Path, samples: list[Path],
+                       spine_rows: list[dict]) -> dict:
+    """The B2 cell: pass@k over the sample runs at summed (equal) cost.
+    Each sample is read on its own; the aggregation invents nothing —
+    a sample with no results doc rides its spine row's state, or
+    counts as missing."""
+    spine_by_sample = {}
+    for row in spine_rows:
+        try:
+            spine_by_sample[int(row.get("sample") or 0)] = row
+        except (TypeError, ValueError):
+            continue
+    statuses: list[str] = []
+    verdicts: list[str] = []
+    costs: list[float] = []
+    wall = None
+    transitions = 0
+    facts = 0
+    rows_all: list[dict] = []
+    for i, sample_dir in enumerate(samples):
+        doc = newest_results_doc(sample_dir)
+        if doc and doc.get("rows"):
+            child_row = doc["rows"][0]
+            loop = child_row.get("loop") or {}
+            session = loop.get("session") or {}
+            verdict = child_row.get("verdict")
+            if verdict:
+                verdicts.append(str(verdict))
+            statuses.append(str(verdict))
+            cost = (session.get("session_cost") or {}).get(
+                "total_cost_usd")
+            if cost is not None:
+                costs.append(float(cost))
+            s_wall = session.get("wall_s")
+            if s_wall is not None:
+                wall = max(wall or 0.0, float(s_wall))
+            ws = loop.get("workspace")
+        else:
+            spine = spine_by_sample.get(i) or {}
+            statuses.append(str(spine.get("status") or "missing"))
+            ws = spine.get("workspace")
+        transitions += _transitions_count(ws)
+        facts += _facts_count(ws)
+        rows_all.extend(_rewarded_rows(ws))
+    cell: dict = {
+        "arm": unit_dir.parent.name, "unit": unit_dir.name,
+        "samples": len(samples)}
+    if not verdicts:
+        cell["final_status"] = statuses[0] if statuses else "missing"
+    elif "PASS" in verdicts:
+        cell["final_status"] = "PASS"  # pass@k: any PASS passes
+    elif "FAIL" in verdicts:
+        cell["final_status"] = "FAIL"
+    else:
+        cell["final_status"] = statuses[0]
+    cell["pass_at_k"] = (1.0 if "PASS" in verdicts
+                         else (0.0 if verdicts else None))
+    cell["budget_usd"] = round(sum(costs), 6) if costs else None
+    cell["wall_s"] = wall
+    cell["transitions"] = transitions
+    cell["facts"] = facts
+    if rows_all:
+        rs = [float(r["r_incr"]) for r in rows_all]
+        cell["decisions"] = len(rows_all)
+        cell["learned_decisions"] = sum(
+            1 for r in rows_all if r.get("propensity") is not None)
+        cell["mean_r"] = round(sum(rs) / len(rs), 6)
+    else:
+        cell.update({"decisions": 0, "learned_decisions": 0,
+                     "mean_r": None})
+    return cell
+
+
+def _collect_matrix(out: Path, by_cell: dict[tuple[str, str],
+                                             list[dict]]) -> list[dict]:
     """Per arm x unit cells over the run dirs on disk, enriched from the
-    progress spine when it knows the cell."""
+    progress spine when it knows the cell. Multi-sample cells (the B2
+    face) aggregate their sample dirs; cells that never created a run
+    dir still surface from the spine (a refusal is a state, not an
+    absence)."""
     matrix: list[dict] = []
+    seen: set[tuple[str, str]] = set()
     arm_dirs = sorted(d for d in out.iterdir() if d.is_dir()) \
         if out.is_dir() else []
     for arm_dir in arm_dirs:
         for unit_dir in sorted(d for d in arm_dir.iterdir() if d.is_dir()):
             arm, unit = arm_dir.name, unit_dir.name
-            spine = by_cell.get((arm, unit), {})
+            seen.add((arm, unit))
+            spine_rows = by_cell.get((arm, unit)) or []
+            spine = spine_rows[0] if spine_rows else {}
+            samples = _sample_dirs(unit_dir)
+            if samples:
+                matrix.append(_aggregate_samples(
+                    unit_dir, samples, spine_rows))
+                continue
             doc = newest_results_doc(unit_dir)
             if doc is None and not spine:
                 matrix.append({"arm": arm, "unit": unit,
@@ -155,6 +315,23 @@ def _collect_matrix(out: Path, by_cell: dict[tuple[str, str], dict]) \
                                "transitions": _transitions_count(ws),
                                "facts": _facts_count(ws),
                                **_decision_primitives(ws)})
+    # spine-only cells: the launcher refused/planned them before any run
+    # dir existed — reported states, never silent absences
+    for (arm, unit), rows in sorted(by_cell.items()):
+        if (arm, unit) in seen:
+            continue
+        sample_count = max(
+            [int(r["sample_count"]) for r in rows
+             if isinstance(r.get("sample_count"), int)] or [1])
+        cell = {"arm": arm, "unit": unit,
+                "final_status": rows[0].get("status") or "missing",
+                "transitions": 0, "facts": 0,
+                "decisions": 0, "learned_decisions": 0, "mean_r": None}
+        if sample_count > 1:
+            cell["samples"] = sample_count
+        if rows[0].get("detail"):
+            cell["detail"] = rows[0]["detail"]
+        matrix.append(cell)
     return matrix
 
 
@@ -189,6 +366,71 @@ def _aggregate_arms(matrix: list[dict]) -> dict[str, dict]:
     return arms
 
 
+def _pass_rate(arm_cells: dict[str, dict], units: list[str]) -> float | None:
+    """The arm's PASS share over the paired units (a B2 arm's cell
+    verdicts ARE pass@k by the aggregation)."""
+    if not units:
+        return None
+    hits = sum(1 for u in units
+               if arm_cells[u].get("final_status") == "PASS")
+    return round(hits / len(units), 4)
+
+
+def _bootstrap_ci(values: list[float]) -> list[float]:
+    """The seeded 95% bootstrap CI over unit resamples (percentile
+    face): same matrix in, same interval out — no lucky intervals."""
+    n = len(values)
+    rng = random.Random(BOOTSTRAP_SEED)
+    means = []
+    for _ in range(BOOTSTRAP_DRAWS):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    lo = means[int(0.025 * (BOOTSTRAP_DRAWS - 1))]
+    hi = means[int(0.975 * (BOOTSTRAP_DRAWS - 1))]
+    return [round(lo, 6), round(hi, 6)]
+
+
+def _decompositions(matrix: list[dict]) -> dict:
+    """The three named B-ladder rows. Each pairs its arms per unit on
+    mean_r, reports the mean delta with the seeded bootstrap CI and the
+    pass-rate face, and names any arm with no data — a one-sided matrix
+    renders NO number rather than a fabricated delta."""
+    cells_by_arm: dict[str, dict[str, dict]] = {}
+    for cell in matrix:
+        cells_by_arm.setdefault(cell["arm"], {})[cell["unit"]] = cell
+    out: dict[str, dict] = {}
+    for name, spec in DECOMPOSITION_ARMS.items():
+        missing = [arm for arm in (spec["arm_a"], spec["arm_b"])
+                   if arm not in cells_by_arm]
+        if missing:
+            out[name] = {**spec, "missing_arms": missing}
+            continue
+        arm_a = cells_by_arm[spec["arm_a"]]
+        arm_b = cells_by_arm[spec["arm_b"]]
+        units = sorted(set(arm_a) & set(arm_b))
+        deltas: dict[str, float] = {}
+        for u in units:
+            ra = arm_a[u].get("mean_r")
+            rb = arm_b[u].get("mean_r")
+            if ra is None or rb is None:
+                continue
+            deltas[u] = round(float(ra) - float(rb), 6)
+        row = {**spec, "units": units,
+               "pass_rate_a": _pass_rate(arm_a, units),
+               "pass_rate_b": _pass_rate(arm_b, units)}
+        if deltas:
+            vals = list(deltas.values())
+            row["per_unit"] = deltas
+            row["mean_delta"] = round(sum(vals) / len(vals), 6)
+            row["ci95"] = _bootstrap_ci(vals)
+        row["note"] = (HONEST_STATS_NOTE if deltas else
+                       "no paired units with measurable reward yet — "
+                       "the decomposition waits for data")
+        out[name] = row
+    return out
+
+
 def build_report(out: Path, progress: dict | None = None) -> dict:
     """The readout doc: per arm x unit matrix plus arm aggregates, with
     the regret face applied. ``progress`` is the launcher's spine doc;
@@ -203,9 +445,10 @@ def build_report(out: Path, progress: dict | None = None) -> dict:
                     spine_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 progress = None
-    by_cell: dict[tuple[str, str], dict] = {}
+    by_cell: dict[tuple[str, str], list[dict]] = {}
     for row in (progress or {}).get("runs", []):
-        by_cell[(row.get("arm"), row.get("unit"))] = row
+        by_cell.setdefault(
+            (row.get("arm"), row.get("unit")), []).append(row)
     matrix = _collect_matrix(out, by_cell)
     # the regret face: per unit, best-arm mean_r anchors the post-hoc
     # upper bound; each arm's regret is what it left on the table
@@ -231,7 +474,8 @@ def build_report(out: Path, progress: dict | None = None) -> dict:
                        "decisions. The gate definition itself is the "
                        "owner's call."),
               "matrix": matrix,
-              "arms": dict(sorted(_aggregate_arms(matrix).items()))}
+              "arms": dict(sorted(_aggregate_arms(matrix).items())),
+              "decompositions": _decompositions(matrix)}
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n",
                                      encoding="utf-8")
     return report
@@ -267,6 +511,24 @@ def print_report(report: dict) -> None:
               f"learned={acc['learned_decisions']} "
               f"learned_share={acc['learned_share']} "
               f"regret_total={acc['regret_total']}")
+    # the B-ladder decompositions: the three named rows beneath the arm
+    # aggregates — a missing arm renders WAITING, never a fabricated
+    # number
+    dec = report.get("decompositions") or {}
+    if dec:
+        print("=" * len(header))
+        for name, row in dec.items():
+            if "missing_arms" in row:
+                print(f"{name}: {row['formula']} — WAITING (missing: "
+                      f"{', '.join(row['missing_arms'])})")
+            elif "per_unit" not in row:
+                print(f"{name}: {row['formula']} — WAITING "
+                      f"({row['note']})")
+            else:
+                print(f"{name}: {row['formula']} = {row['mean_delta']} "
+                      f"ci95={row['ci95']} "
+                      f"(pass {row['pass_rate_a']} vs "
+                      f"{row['pass_rate_b']})")
 
 
 def main(argv: list[str] | None = None) -> int:
