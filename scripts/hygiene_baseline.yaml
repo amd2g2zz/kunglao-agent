@@ -1172,6 +1172,8 @@ files:
     r1: 1
   tests/test_pr_template_530.py:
     r1: 1
+  tests/test_prediction_ledger_567.py:
+    r1: 1
   tests/test_preflight_588_590.py:
     r1: 3
   tests/test_premature_termination_detect.py:
