@@ -38,8 +38,42 @@ env:
 # surface is needed (CodeQL actions/missing-workflow-permissions).
 permissions:
   contents: read
+  # runner-probe lists workflow runs to see whether the single
+  # self-hosted slot is occupied
+  actions: read
 
 jobs:
+  runner-probe:
+    # Owner routing: SELF-HOSTED FIRST, free-tier overflow when ours is
+    # busy, queue on self-hosted when the free quota is spent. The three
+    # short legs pin ubuntu-latest (always parallel); the LONG leg
+    # (integration) claims the self-hosted slot when free and overflows
+    # to ubuntu-latest otherwise — one hardware slot can never serve a
+    # five-PR queue. Probe failure defaults BACK to self-hosted.
+    runs-on: ubuntu-latest
+    outputs:
+      runner_long: ${{ steps.probe.outputs.runner_long }}
+      is_selfhosted: ${{ steps.probe.outputs.is_selfhosted }}
+    steps:
+      - name: Probe the self-hosted slot (free => integration claims it)
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          busy=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=50" \
+            --jq '[.workflow_runs[] | select(.name == "release-check"
+              and .status != "completed"
+              and .id != ${{ github.run_id }})] | length' \
+            || echo "")
+          if [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
+            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+            echo 'is_selfhosted="false"' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
+            echo 'is_selfhosted="true"' >> "$GITHUB_OUTPUT"
+          fi
+
   lint-hygiene:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
@@ -204,13 +238,15 @@ jobs:
         if-no-files-found: error
 
   integration:
-    # env-bound leg: the eval-native tier needs our host
-    # toolchains (aarch cross-compiler, exec-permitted fixtures) —
-    # ubuntu-latest runs it RED (PermissionError / symbol-not-found,
-    # observed 2026-10-07). Owner routing: self-hosted first; this
-    # leg IS the self-hosted-shaped one. The three shorts run in
-    # parallel on the free tier, so this slot is the only queue.
-    runs-on: [self-hosted, python-3.11]
+    needs: runner-probe
+    # The LONG leg claims the self-hosted slot when free (max utilization
+    # of the preferred resource) and overflows to ubuntu-latest when the
+    # slot is busy — the single hardware slot can never serve a multi-PR
+    # queue in parallel. On the free tier the env-bound native module
+    # (aarch cross-compiler + exec-permitted fixtures — proven RED on
+    # ubuntu-latest) is DESELECTED exactly like the CircleCI portable
+    # subset; the self-hosted run carries the full suite.
+    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_long) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -245,7 +281,16 @@ jobs:
       # are documented in devkit/docs/quality_gates.md and run via
       # `uv run python devkit/quality_gates.py` (Gate 2 IS pytest green,
       # but Coverage / Test-Count are observation not KPI).
-      run: uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q --junitxml=.pytest-result.xml --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
+      run: |
+        DESELECT=""
+        if [ "${{ needs.runner-probe.outputs.is_selfhosted }}" != "true" ]; then
+          # free-tier overflow: the env-bound native tier needs our host
+          # toolchains — deselect it there (CircleCI portable-subset parity)
+          DESELECT="--deselect tests/test_eval_native_332.py"
+        fi
+        uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q \
+          $DESELECT --junitxml=.pytest-result.xml \
+          --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
 
     - name: Upload coverage report (observation only, #463)
       continue-on-error: true
