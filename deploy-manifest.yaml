@@ -1175,7 +1175,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: e103cf39387b2118acae8781d7de1c05a2fcd4fd5082bee15c54c34ae65ded38
+    sha256: ca18a04030649865872159b9deeb28459c7c1cec6ba5942886240a8a790c92e8
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1187,7 +1187,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: a27ee9eab551b61f5810d78c29a7f813430ce877634f454d52de00f3bc56a492
+    sha256: 582f91e835589bfe81eb2c42d8ee37c37ba06539b22f9797d1a950cd920afca7
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1212,6 +1212,10 @@ files:
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
     sha256: 15433168db21a4013de24ace2c34cd18c423b6df4ee4655faad28412d34cb13d
+  - src: scripts/rlvr/prediction_ledger.py
+    dest: .claude/scripts/rlvr/prediction_ledger.py
+    kind: scaffold
+    sha256: f6b5f8d16463d14b743320674b09fc469e64d28cc57c4953c9ceb0b6f8258d92
   - src: scripts/rlvr/priors.py
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold

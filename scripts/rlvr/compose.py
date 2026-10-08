@@ -794,6 +794,30 @@ def write_strategy(ws, obj: dict) -> dict:
 
 # ------------------------------------------------------ consumer seam (W2)
 
+def _predictions_section(ws: Path) -> dict | None:
+    """The open-prediction backlog, dispatch-adjacent: when the ledger
+    holds pending predictions, ONE line listing them so workers see
+    observations their work could settle (count x age is the controller
+    signal — the line cites both). Determinism note: the age term reads
+    the clock, so an aging backlog legitimately re-renders (new content
+    hash) — the state it describes genuinely changed. Fail-open: any
+    ledger-face failure drops the section (loud), never the strategy."""
+    try:
+        from rlvr import prediction_ledger as pl  # noqa: PLC0415
+        b = pl.backlog(ws)
+        if not b.get("count"):
+            return None
+        items = "; ".join(
+            f"{row.get('id')} — settle when: {row.get('discriminator')}"
+            for row in pl.pending(ws))
+        line = (f"open predictions: {b['count']} "
+                f"(oldest {b['max_age_hours']:.0f}h): {items}")
+        return {"title": "open-predictions", "body": line}
+    except Exception as exc:  # noqa: BLE001 — fail-open, loud per the house rule
+        warn("compose.predictions", f"{type(exc).__name__}: {exc}")
+        return None
+
+
 def _seam_sections(ws: Path, obj: dict) -> list[dict]:
     """The deterministic projection of one strategy object into the
     consumer seam's ``sections:[{title, body}]`` — every sentence
@@ -821,6 +845,14 @@ def _seam_sections(ws: Path, obj: dict) -> list[dict]:
         if hint:
             lines.append(f"budget: {hint}")
         sections.append({"title": "dispatch-lead", "body": "\n".join(lines)})
+    pred = _predictions_section(ws)
+    if pred:
+        # dispatch-adjacent: immediately after the lead block when one
+        # rendered, leading the section list when the strategy is silent
+        sections.insert(
+            1 if sections and sections[0]["title"] == "dispatch-lead"
+            else 0,
+            pred)
     anti = [str(a) for a in (dispatch.get("anti_hints") or [])
             if str(a).strip()]
     if anti:

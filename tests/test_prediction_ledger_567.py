@@ -267,7 +267,53 @@ def test_settle_matching_ignores_expired_predictions(tmp_path):
     assert pl.pending(ws) == []
 
 
-# ------------------------------------- 6. the settled-backlog invariant
+# ------------------------------------------ 6. the compose backlog line
+
+class _Store:
+    """Explicit stub of the compose.StrategyStore protocol seam."""
+
+    def __init__(self, lead=None, cell_count=None):
+        self.lead = lead
+        self.cell_count_value = cell_count
+
+    def method_lead(self, state_fingerprint: str):
+        return self.lead
+
+    def decayed_weight(self, row_id: str) -> float:
+        return 1.0
+
+    def cell_count(self, state_fingerprint: str):
+        return self.cell_count_value
+
+
+def _seam_sections(ws: Path) -> list[dict]:
+    from rlvr import compose  # noqa: PLC0415
+    obj = compose.compose(ws, tick=0, store=_Store())
+    compose.write_seam(ws, obj)
+    doc = json.loads((ws / "runs" / "round-strategy.json").read_text(
+        encoding="utf-8"))
+    return doc.get("sections") or []
+
+
+def test_compose_seam_renders_open_predictions_when_backlog_nonempty(
+        tmp_path):
+    ws = _ws(tmp_path)
+    pl.register(ws, "C-1", "blob decrypts under scheme X",
+                "decrypted header starts with the magic bytes")
+    sections = _seam_sections(ws)
+    titles = [s["title"] for s in sections]
+    assert "open-predictions" in titles
+    body = next(s["body"] for s in sections if s["title"] == "open-predictions")
+    assert "P-1" in body
+    assert "decrypted header starts with the magic bytes" in body
+
+
+def test_compose_seam_silent_when_backlog_empty(tmp_path):
+    ws = _ws(tmp_path)
+    assert "open-predictions" not in [s["title"] for s in _seam_sections(ws)]
+
+
+# ------------------------------------- 7. the settled-backlog invariant
 
 def test_settled_predictions_leave_the_backlog(tmp_path):
     ws = _ws(tmp_path)
