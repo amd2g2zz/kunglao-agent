@@ -554,6 +554,8 @@ files:
     r1: 10
   tests/test_blind_redo_772.py:
     r1: 6
+  tests/test_bp_matrix_faces_546.py:
+    r1: 1
   tests/test_budget_channel_862.py:
     r1: 5
   tests/test_builtin_skills_flag_25.py:

@@ -31,12 +31,25 @@ stdlib only.
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+# The corpus root: repo-local eval/ by default; KUNGLAO_EVAL_ROOT
+# redirects to an operator-local corpus (owner ruling: eval
+# data is intermediate-process material; blocked-path measurements run
+# against experiments/bp-corpus without touching the repo tree).
+# Read at CALL time (an import-time constant would freeze the env for
+# every test/runner that imports the module first).
 EVAL_ROOT = ROOT / "eval"
+
+
+def eval_root() -> Path:
+    """THE corpus-root face: KUNGLAO_EVAL_ROOT wins, else repo eval/."""
+    override = os.environ.get("KUNGLAO_EVAL_ROOT", "")
+    return Path(override) if override else EVAL_ROOT
 
 # ---- versioning ----------------------------------------------------------
 EVAL_VERSION = "eval-v1"
@@ -119,7 +132,7 @@ EVIDENCE_SCHEMA = "kunglao-eval-evidence/1"
 # ---- corpus access -------------------------------------------------------
 def iter_task_dirs(tier: str = "smoke", version: str = "v1") -> list[Path]:
     """All task-unit directories under eval/<version>/tasks/<tier>/, sorted."""
-    base = EVAL_ROOT / version / "tasks" / tier
+    base = eval_root() / version / "tasks" / tier
     if not base.is_dir():
         return []
     return sorted(d for d in base.iterdir() if d.is_dir() and (d / "task.yaml").is_file())
