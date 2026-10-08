@@ -685,6 +685,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     """#432: the method-family vocabulary gate — the single validation
     chokepoint for the dispatch's method_family declaration (v1 envelope
     field or v0 prose marker; ONE contract, two declaration faces).
+    This workspace carries an admitted discovery arm's overlay row AND
+    its expansion receipt => that token validates; the repo registry
+    bytes are never touched and a missing/corrupt receipt chain stays
+    REJECT.
 
     Fail-closed on missing/unregistered tokens and on a registry the
     validator cannot read (2026-09-28 owner ruling posture); the
@@ -712,7 +716,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
         # the v0 prose marker below still declares the field.
         mf_meta = None
     mf_value = _mf432.declared_value(mf_meta, prompt)
-    mf_ok, mf_msg = _mf432.validate_method_family(mf_value)
+    # the ws threads the overlay admission path: a discovered arm
+    # validates only when THIS workspace carries its expansion receipt
+    mf_ok, mf_msg = _mf432.validate_method_family(
+        mf_value, ws=paths.get('workspace'))
     if not mf_ok:
         return (_reject('methodfamily', mf_msg, paths), None)
     _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
