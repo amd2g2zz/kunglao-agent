@@ -134,14 +134,16 @@ def append_transition(ws, claim: str, outcome: str, *,
                       r_settle: float | None = None,
                       done: bool = False,
                       action_type: str = "dispatch",
-                      variant: str = "") -> dict | None:
+                      variant: str = "",
+                      lift: float | None = None) -> dict | None:
     """Close one transition: read the launch stash, compute Φ(s′) and
     r_t, append the row. Returns the row (None when no launch stash —
     a settle without a recorded launch logs nothing rather than
     inventing a before-state). Fail-open telemetry. #550: the stash is
     action-type-scoped (verify acts close against their own stash) and
     the row carries the additive action_type column plus the o.variant
-    provenance marker when set."""
+    provenance marker when set. The optional lift argument rides the
+    row as an additive weight column (absent when not supplied)."""
     try:
         ws = Path(ws)
         launch_p = _launch_path(ws, claim, action_type)
@@ -170,6 +172,8 @@ def append_transition(ws, claim: str, outcome: str, *,
             "r_settle": (round(float(r_settle), 6)
                          if r_settle is not None else None),
             "done": bool(done),
+            **({"lift": round(float(lift), 6)}
+               if lift is not None else {}),
             **({"propensity": launch["propensity"]}
                if launch.get("propensity") is not None else {}),
         }
