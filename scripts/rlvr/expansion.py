@@ -45,7 +45,6 @@ from __future__ import annotations
 
 import json
 import math
-import time
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -56,6 +55,7 @@ if __package__ in (None, ""):
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _common import utc_now_z
 from rlvr.feature_prior import feature_tokens, jaccard
 
 SCHEMA = "expansion/1"
@@ -163,7 +163,7 @@ def record_receipt(ws, trigger_doc: dict, hypotheses: list[dict],
         index += 1
     doc = {
         "schema": SCHEMA,
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": utc_now_z(),
         "trigger": trigger_doc,
         "hypotheses": hypotheses,
         "admitted": [str(h) for h in admitted],
