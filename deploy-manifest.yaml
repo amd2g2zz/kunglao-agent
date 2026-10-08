@@ -2099,7 +2099,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 2972a951c3f23890f20944ac2c7578ab5a34868e7c6d508a0c882f5e24238353
+    sha256: 6cc34325b57a646f6bbc72f819f73f6607884dd8f3872d62bdeb50e1e2e080e6
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset

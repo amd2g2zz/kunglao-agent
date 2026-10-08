@@ -640,7 +640,9 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     # query string, then the grammar takes over — quoted phrases are
     # atomic, AND/OR/NOT + parens express logic, bare terms default to
     # the forgiving OR group (--match all flips the default to AND)
-    flat = " ".join(str(x) for x in (args.find or []))
+    # repeated --find flags OR-join (one query per flag is the natural
+    # shape; a single quoted query carries the full grammar)
+    flat = " OR ".join(str(x) for x in (args.find or []))
     if not flat.strip():
         print("error: --find needs at least one keyword", file=sys.stderr)
         return 2
@@ -685,8 +687,8 @@ def main(argv: list[str] | None = None) -> int:
                          "T3 VM-dynamic)")
     ap.add_argument("--cost-max", choices=COST_ORDER, default=None,
                     help="cost budget filter, inclusive: probe < cheap < deep")
-    ap.add_argument("--find", default=None, nargs="+", action="extend",
-                    metavar="KEYWORD",
+    ap.add_argument("--find", default=None, action="append",
+                    metavar="QUERY",
                     help="discovery mode (#162): case-insensitive keyword "
                          "search over ALL FOUR data sources (internal "
                          "registry, typed ext catalog, references index, "

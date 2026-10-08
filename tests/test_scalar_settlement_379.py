@@ -144,7 +144,11 @@ class TestRulesFileV2:
                  "numpy",
                  # issue 420 Phase 2: the engine's own package (the
                  # rlvr.ledger face + intra-package imports). Same wall.
-                 "rlvr"}
+                 "rlvr",
+                 # the shared leaf-utility home (numpy+stdlib only, zero
+                 # repo imports — seq_sum/utc_now_z). Not a model-call
+                 # path; the U3 wall is unchanged.
+                 "_common"}
         tree = ast.parse(
             (SCRIPTS / "rlvr" / "scalar.py").read_text(encoding="utf-8"))
         imported: list[str] = []
