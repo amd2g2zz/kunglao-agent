@@ -133,8 +133,10 @@ def test_resume_still_writes_nothing_with_hypotheses(tmp_path: Path) -> None:
 
     issue-282 amendment: resume renders the derived progress.txt timeline view
     before reading (render-then-read), so progress.txt may appear/refresh
-    plus its runs/progress-narrative.jsonl narrative mirror — nothing else
-    may ever be added or changed."""
+    plus its runs/progress-narrative.jsonl narrative mirror. The
+    timeline-face amendment adds the structured projection
+    (runs/timeline.jsonl) and the plan view rendered from it
+    (global_plan.txt) — nothing else may ever be added or changed."""
     ws = _armed_ws(tmp_path)
     _seed_hyps(ws)
     before = sorted(str(p.relative_to(ws)) for p in ws.rglob("*"))
@@ -142,5 +144,7 @@ def test_resume_still_writes_nothing_with_hypotheses(tmp_path: Path) -> None:
     after = sorted(str(p.relative_to(ws)) for p in ws.rglob("*"))
     allowed = set(before) | {"progress.txt",
                              "runs/progress-narrative.jsonl",
-                             "runs/.progress-render.lock"}
+                             "runs/.progress-render.lock",
+                             "runs/timeline.jsonl",
+                             "global_plan.txt"}
     assert set(after) <= allowed

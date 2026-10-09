@@ -44,7 +44,7 @@ from kunglao_log import warn as _canonical_warn
 
 __all__ = ["make_warn", "register_path", "claims_of", "load_register",
            "load_register_doc", "read_register_claims", "claims_from_text",
-           "find_claim", "ensure_dep_edge"]
+           "find_claim", "ensure_dep_edge", "sync_dep_edges"]
 
 
 # ---------------------------------------------------------------------------
@@ -175,3 +175,29 @@ def ensure_dep_edge(ws: Path, parent_id: str, child_id: str) -> None:
     deps_path.write_text(
         yaml.safe_dump(deps, allow_unicode=True, sort_keys=False),
         encoding="utf-8")
+
+
+def sync_dep_edges(ws: Path, claims: list) -> list[str]:
+    """Mirror every newly-created claim's per-claim ``depends_on`` into the
+    authoritative DAG store (claim_deps.yaml), so the two debt readers (the
+    priority ranker and the verification-debt face) read one graph — the
+    DAG file wins at both, and the per-claim fields stay the declared
+    fallback. Claim-creation faces call this once after appending claims;
+    both writes (register field + edge) carry the same declaration, so the
+    readers can never disagree about the graph. Returns the child ids that
+    gained at least one edge. Tolerant: non-dict rows are skipped."""
+    touched: list[str] = []
+    for claim in claims or []:
+        if not isinstance(claim, dict):
+            continue
+        child = str(claim.get("id") or "").strip()
+        parents = claim.get("depends_on")
+        if not child or not isinstance(parents, list) or not parents:
+            continue
+        for parent in parents:
+            parent_id = str(parent).strip()
+            if parent_id:
+                ensure_dep_edge(Path(ws), parent_id, child)
+        if child not in touched:
+            touched.append(child)
+    return touched

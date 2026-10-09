@@ -25,6 +25,14 @@ repaired byte-exactly by the next render (self-healing by construction).
 issue-530 disposition holds: progress.txt stays a human-scannable VIEW, never
 machine-ingested state (state_anchor / external_kicker still never read it).
 
+Channel disposition (the structured progress face): runs/timeline.jsonl —
+projected by scripts/timeline_face.py from the SAME event ledger — is the
+structured progress face; this sidecar is retired AS a progress face and
+keeps only its preservation role (the worker-echo mirror that makes
+progress.txt self-healing). Its rows stay worker echo (lossy ts when a
+line carries no stamp is inherent to the echo, never fabricated); the
+structured face carries the machine-graded record.
+
 Render faces (fail-open — a render failure never blocks the caller):
   1. checkpoint cadence: convergence_check.main(), right after the snapshot
      append (the tick writer) — the timeline stays in lockstep with the axis;

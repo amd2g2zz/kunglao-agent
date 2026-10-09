@@ -546,6 +546,24 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             dispose_waiting_pool(ws, cid, to)
         except Exception as exc:  # noqa: BLE001 — disposal never blocks settle
             warn("dispose_waiting_pool", f"{type(exc).__name__}: {exc}")
+        # the promotion write-back: a PROVEN settlement syncs the citing
+        # facts' frontmatter with the register IN THE SAME SETTLE (register
+        # PROVEN while facts read INFERRED recomputed the completion
+        # transaction dirty and starved the completion gate). One
+        # mechanical write, fail-open, fully named skips — never moves a
+        # falsified or judgment-sourced fact.
+        if to == "PROVEN":
+            try:
+                from fact_status_sync import promote_citing_facts
+                sync = promote_citing_facts(ws, cid)
+                if sync.get("synced") or sync.get("skipped"):
+                    from kunglao_log import emit
+                    emit(ws, "hook:write_guard", "fact_status_synced",
+                         claim=cid,
+                         detail=_json.dumps(sync, ensure_ascii=False,
+                                            sort_keys=True))
+            except Exception as exc:  # noqa: BLE001 — sync never blocks settle
+                warn("promote_citing_facts", f"{type(exc).__name__}: {exc}")
     # issue 304 (satellite D4): guard liveness at the settlement beat —
     # a guarded fix whose check has zero fire records across the window
     # is flagged guard_dormant (WARN-level finding, ledger-deduped,

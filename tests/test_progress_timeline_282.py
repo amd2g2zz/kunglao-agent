@@ -311,7 +311,10 @@ def _resumable_ws(tmp_path: Path) -> Path:
 def test_resume_renders_then_reads_and_stays_scoped(tmp_path):
     """The issue-282 resume amendment: resume repairs ONLY progress.txt when
     stale; the ledger and every other file stay byte/mtime identical; a
-    second resume (steady state) touches nothing at all."""
+    second resume (steady state) touches nothing at all. The timeline-face
+    amendment adds the two derived views (the structured projection + the
+    plan rendered from it) to the sanctioned write set — write-on-diff, so
+    the steady-state no-op holds for them too."""
     import kunglao_resume
     ws = _resumable_ws(tmp_path)
     (ws / pt.PROGRESS_NAME).write_text("stale legacy content\n",
@@ -327,7 +330,9 @@ def test_resume_renders_then_reads_and_stays_scoped(tmp_path):
     rc = kunglao_resume.main([str(ws), "--json"])
     assert rc == kunglao_resume.RC_RESUMABLE
     after = tree()
-    assert set(after) == set(before) | {str(pt.SIDECAR), str(pt.LOCK_REL)}
+    assert set(after) == set(before) | {str(pt.SIDECAR), str(pt.LOCK_REL),
+                                        "runs/timeline.jsonl",
+                                        "global_plan.txt"}
     for name, sig in after.items():
         if name != str(pt.PROGRESS_NAME) and name in before:
             assert sig == before[name], f"resume touched {name}"

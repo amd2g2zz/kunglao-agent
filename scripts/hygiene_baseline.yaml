@@ -1429,6 +1429,8 @@ files:
     r1: 2
   tests/test_tier_rules.py:
     r1: 1
+  tests/test_timeline_v2_586.py:
+    r1: 1
   tests/test_tool_first_243.py:
     r1: 4
     r2: 1
