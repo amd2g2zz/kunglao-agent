@@ -1087,6 +1087,8 @@ files:
     r1: 6
   tests/test_migrate_facts_809.py:
     r1: 1
+  tests/test_milestone_readouts_585.py:
+    r1: 1
   tests/test_mission_ledger_823.py:
     r1: 1
   tests/test_mission_repin_868.py:
