@@ -158,7 +158,10 @@ class TestG1bUpgradeEventLine:
 def _prev_version() -> str:
     # Post-release safe (issue 258): "0.1.5.post1" derives its base before
     # the int-split (a naive split crashes on the PEP 440 .postN suffix).
-    base = CUR_VERSION.split(".post")[0]   # 0.1.5.post1 -> base 0.1.5
+    # Prerelease-safe (v0.1.6-rc1): the -rcN suffix strips the same way —
+    # "0.1.6-rc1" -> base 0.1.6, so "one version behind" stays the prior
+    # release line (0.1.5).
+    base = CUR_VERSION.split(".post")[0].split("-rc")[0]   # 0.1.6-rc1 -> 0.1.6
     maj, mi, pa = (int(x) for x in base.split("."))
     return ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
 
