@@ -198,4 +198,5 @@ def test_norm_dist_is_pep503_and_alias_aware():
     assert dsg.norm_dist("z3_solver") == "z3-solver"
     assert dsg.dist_for("yaml") == "pyyaml"
     assert dsg.dist_for("z3") == "z3-solver"
+    assert dsg.dist_for("PIL") == "pillow"
     assert dsg.dist_for("numpy") == "numpy"
