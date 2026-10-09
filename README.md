@@ -95,89 +95,81 @@ verification discipline, and cross-task compounding.
 
 ---
 
-## 🎛️ How the RL works
+## 🎛️ Online RL: the loop gets better while it works
 
+The first task of a new kind pays full price: the loop tries a method,
+watches it fail, tries another. But every attempt is written down — and
+the next task of the same kind opens from those notes, not from zero.
+
+![One task pays full price; the loop remembers; the second runs cheaper](docs/assets/rl-loop.gif)
+
+That is the whole idea of online reinforcement learning here: **the loop
+updates itself between acts, on the job** — no training dataset, no model
+retraining, no offline phase. Each task's experience is banked before the
+next decision is made.
+
+### What the loop actually learns
+
+**1. The right first move, per kind of target.** A plain script and a
+hardened app should not open the same way. The loop keeps separate notes
+per kind of target — what the target looks like decides which playbook
+applies.
+
+![Two targets route to two different playbooks](docs/assets/rl-features.gif)
+
+**2. Which methods are dead.** A method that keeps failing gets benched —
+it stops eating budget (but is never deleted; if the target changes, it
+can come back). And when *nothing* works, the loop tries to invent a way
+in: a discovery act proposes a genuinely new approach, checked against the
+failed tries — the same idea renamed is refused.
+
+![Dead ends get benched; a genuinely new idea gets admitted](docs/assets/rl-death-discovery.gif)
+
+**3. Where to double-check.** States where verifiers keep getting refuted
+learn to schedule verification more tightly there — and relax when the
+streak turns honest.
+
+### How the learning works
+
+```mermaid
+flowchart LR
+    A["target state<br>(what it looks like)"] --> B["pick a method<br>(sample from the notes)"]
+    B --> C["act<br>(a worker runs it)"]
+    C --> D["checker verdict<br>(proof or no proof)"]
+    D --> E["one ledger row<br>(what happened, what it cost)"]
+    E --> F["update the notes<br>for this kind of target"]
+    F --> B
 ```
- state ──► Thompson draw ──► dispatch act ──► oracle verdict
-    ▲                                            │
-    │    posterior update ◄── r = ΔΦ·α − λ·cost ─┘
-```
 
-- **The draw.** Each method family carries a Beta posterior; every decision
-  *samples* all posteriors and dispatches the highest draw — exploration is
-  built into sampling, decaying as fast as the evidence justifies.
+The notes are simple success/failure tallies per method per state, with a
+bias toward trying anything not yet ruled out — exploration fades exactly
+as fast as evidence accumulates. Reward is `progress x weight - cost`, so
+an expensive habit that barely moves the needle loses money on simple
+targets, and every number traces to an append-only ledger row.
 
-![The learning loop: draw, dispatch, oracle, ledger, posterior update](docs/assets/rl-loop.gif)
+### What this buys - and what it deliberately does not
 
-- **The state key.** Feature-keyed buckets — structural identity + probe
-  evidence (entropy band, constant density, packer verdict) + that state's
-  refutation history. A plain JS bundle and a hardened APK open with
-  different bets; neither pollutes the other.
+- **Cost drops on familiar work.** The second task of a kind is cheaper
+  than the first; the notes persist across tasks in the deployment.
+- **Budget stops bleeding.** Dead methods are benched before they drain
+  the clock; the discovery layer replaces vocabulary nobody wrote.
+- **The model is frozen.** Capability does not grow - scheduling does:
+  the right method, in the right order, at the right moment.
+- **Honesty is not learned - it is enforced.** The checker pays only for
+  results it can re-verify; a worker's own words never count as proof.
+  RL optimizes efficiency on top of that honest currency; it can never
+  mint credit by fiction.
 
-![Feature-keyed states: two targets, two buckets, different top arms](docs/assets/rl-features.gif)
-
-- **Arm death and discovery.** Repeated zero-fact failures PARK a family
-  (down-weighted, never deleted). When obstacles stack and progress stalls,
-  one discovery act admits a genuinely novel arm — feature-keyed novelty;
-  renaming a dead arm buys nothing.
-
-![Arm death: p_dead climbs, the arm parks, a novel arm is admitted](docs/assets/rl-death-discovery.gif)
-
-- **Pricing.** Φ moves on oracle verdicts only. Honest work earns; a
-  fabricated "done" moves nothing and still pays the cost.
-
-![Oracle pricing: honest act earns, fabricated claim pays only cost](docs/assets/rl-pricing.gif)
+![The checker pays only for verifiable results](docs/assets/rl-pricing.gif)
 
 ### How this differs from the common approaches
 
 Knowledge routing (a manual the LLM improvises against), bounded pipelines
-(fixed stages, fixed rounds), single-verdict triage — all decide with fixed
-logic: last task's experience never changes next task's plan. kunglao's
+(fixed stages, fixed rounds), single-verdict triage - all decide with fixed
+logic: last task's experience never changes next task's plan. The loop's
 control law is learned from its own measured history:
 
 ![Principle comparison: three open/static loops versus kunglao's closing loop](docs/assets/approach-comparison.svg)
-
-### Why RL
-
-- The model improves monthly; learned method policy survives every upgrade.
-- Cost sits in reward's negative term — over-reasoning loses money on
-  simple targets (measured per tier against a uniform control).
-- Vocabularies collapse; the discovery layer grows arms their author never
-  wrote.
-- Reward hacking has nothing to collect: Φ moves on oracle verdicts only.
-
-The loop, animated — every asset below is rendered by
-`scripts/render_rl_visuals.py` (the generator is committed alongside the
-assets it produces; re-run it to regenerate):
-
-**The act-level loop** — a Thompson draw over the method arms, the budgeted
-dispatch, the oracle verdict, and the ledger row that sharpens the winner's
-posterior:
-
-![the act-level learning loop: thompson draw, dispatch, oracle verdict, ledger row](docs/assets/rl-loop.gif)
-
-**Feature-keyed states** — the same action vocabulary ranks differently
-once probe tokens split a plain bundle and a hardened APK into separate
-q-cells:
-
-![feature-keyed states: one action vocabulary, two rankings](docs/assets/rl-features.gif)
-
-**Arm death and discovery** — a dead arm parks (revivable, never deleted);
-the discovery layer admits only genuinely novel arms:
-
-![arm death, park, and the discovery layer admitting a novel arm](docs/assets/rl-death-discovery.gif)
-
-**Oracle pricing** — an honest act moves Φ; a fabricated act pays cost for
-nothing:
-
-![the oracle pricing an honest act against a fabricated one](docs/assets/rl-pricing.gif)
-
-**Where this sits** — three fixed-logic shapes next to an act-level RL
-controller that updates its policy from its own measured history:
-
-![four approaches compared: three fixed-logic chains, one learned control law](docs/assets/approach-comparison.svg)
-
----
 
 ## 📋 Requirements
 
