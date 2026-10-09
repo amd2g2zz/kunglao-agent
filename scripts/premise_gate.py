@@ -58,9 +58,9 @@ from pathlib import Path
 
 import kunglao_log
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 import blocker_lint  # noqa: E402  (frontmatter parse + pattern set)
 
