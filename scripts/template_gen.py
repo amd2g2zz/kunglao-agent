@@ -57,9 +57,9 @@ from pathlib import Path
 # #362: rendering primitives live in the shared template_render module
 # (single engine for scripts templates AND kunglao-init CLAUDE.md). This
 # file keeps the CLI/catalog/exit codes; only the primitives moved.
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 from template_render import leftover_placeholders, render  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]

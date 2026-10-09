@@ -91,9 +91,9 @@ from typing import Callable
 
 import yaml  # noqa: E402  (#755 A5: env-ledger YAML round trip)
 
-_SCRIPTS = Path(__file__).resolve().parent
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPTS = scripts_bootstrap()
 
 import claudemd_frame  # noqa: E402
 from _common import atomic_write_bytes, atomic_write_text  # noqa: E402  (#755 G3 pure split/assemble)

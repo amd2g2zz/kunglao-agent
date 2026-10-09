@@ -72,9 +72,9 @@ from pathlib import Path
 
 import yaml
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+from _common import scripts_bootstrap
+
+SCRIPT_DIR = scripts_bootstrap()
 
 import eval_targets as tg  # the repo RNG + mod-crypto core (sibling convention)
 import eval_tf_shadow as sh

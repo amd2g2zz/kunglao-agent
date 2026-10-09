@@ -41,10 +41,9 @@ import eval_chain_render as rd
 import eval_chain_targets as tt
 import eval_dataset as ds
 
-_SCRIPTS = Path(__file__).resolve().parent
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+from _common import scripts_bootstrap
 
+_SCRIPTS = scripts_bootstrap()
 ROOT = _SCRIPTS.parent
 TIER = ch.TIER
 

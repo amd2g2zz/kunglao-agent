@@ -24,9 +24,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_DIR = ROOT / "scripts"
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+from _common import scripts_bootstrap
+
+SCRIPT_DIR = scripts_bootstrap()
 
 import priority_ratio as pr
 from _common import sha256_file, sha256_hex

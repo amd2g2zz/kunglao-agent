@@ -38,9 +38,9 @@ import os
 import sys
 from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 import decision_pending  # noqa: E402  (#455 pending-decision schema)
 import toolchain  # noqa: E402  (report types + check re-probe)

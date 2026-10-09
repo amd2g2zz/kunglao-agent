@@ -18,7 +18,7 @@ if str(sys_path) not in __import__("sys").path:
     __import__("sys").path.insert(0, str(sys_path))
 
 from _common import (atomic_write_bytes, atomic_write_text,  # noqa: E402
-                     read_yaml, sha256_file, sha256_hex)
+                     read_yaml, scripts_bootstrap, sha256_file, sha256_hex)
 
 ABC_SHA = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
@@ -266,6 +266,49 @@ def test_failed_replace_cleans_the_tmp(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         atomic_write_text(p, "x")
     assert not any(q.name.endswith(".tmp") for q in tmp_path.iterdir())
+
+
+# ---------- scripts_bootstrap ----------
+
+def test_scripts_bootstrap_guard_inserts_scripts_dir_at_front(monkeypatch):
+    """Absent from sys.path -> inserted at [0]; the (dir) Path is returned
+    so migrated prologues keep their SCRIPT_DIR-style locals."""
+    import sys as _sys
+    import _common as _c
+    scripts_dir = str(Path(_c.__file__).resolve().parent)
+    monkeypatch.setattr(_sys, "path",
+                        [p for p in _sys.path if p != scripts_dir])
+    returned = scripts_bootstrap()
+    assert _sys.path[0] == scripts_dir
+    assert Path(returned) == Path(scripts_dir)
+
+
+def test_scripts_bootstrap_is_idempotent_no_reorder(monkeypatch):
+    """Already present -> strict no-op: no duplicate, no front-move. The
+    guarded prologue every migrated call-site relied on (an unconditional
+    insert would silently reorder twin resolution — the exact hazard the
+    conftest session guard enforces)."""
+    import sys as _sys
+    import _common as _c
+    scripts_dir = str(Path(_c.__file__).resolve().parent)
+    fake = ["/aaa", scripts_dir, "/bbb"]
+    monkeypatch.setattr(_sys, "path", list(fake))
+    scripts_bootstrap()
+    assert _sys.path == fake
+
+
+def test_scripts_bootstrap_never_guesses_caller_depth(monkeypatch, tmp_path):
+    """Anchored at _common's own directory — never the caller's parents.
+    Called from a different cwd (tests/, a tool, anywhere) it still
+    bootstraps exactly the scripts/ directory _common lives in."""
+    import sys as _sys
+    import _common as _c
+    scripts_dir = str(Path(_c.__file__).resolve().parent)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_sys, "path",
+                        [p for p in _sys.path if p != scripts_dir])
+    scripts_bootstrap()
+    assert Path(_sys.path[0]) == Path(scripts_dir)
 
 
 # ---------- leaf invariant: no repo imports ----------

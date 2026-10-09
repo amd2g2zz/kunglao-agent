@@ -17,11 +17,10 @@ usage error).
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 from _boot import force_utf8  # noqa: E402
 import toolchain_install  # noqa: E402  (the registry — single registration point)

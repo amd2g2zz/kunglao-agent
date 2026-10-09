@@ -64,7 +64,6 @@ import json
 import os
 import sys
 
-from _common import utc_now_z
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -73,6 +72,7 @@ if __package__ in (None, ""):
     # imports (the q_cells direct-execution pattern)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _common import utc_now_z
 from kunglao_log import warn
 
 SCHEMA = "censored-review/1"

@@ -74,13 +74,12 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+from _common import scripts_bootstrap
+
+SCRIPT_DIR = scripts_bootstrap()
 
 import eval_dataset as ds
 import eval_targets as tg

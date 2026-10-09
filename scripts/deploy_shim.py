@@ -58,9 +58,9 @@ import sys
 from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 import env_manifest  # noqa: E402  (#450 facts file — installed ledger)
 import toolchain  # noqa: E402  (ports + the adb-forward probe, single source)
