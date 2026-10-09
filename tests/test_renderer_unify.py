@@ -74,6 +74,9 @@ sys.path.insert(0, str(SCRIPTS))
 # convergence_check line prescribes "$PWD" instead of "." and states the
 # fail-closed identity rule (missing claim-register.yaml/task_spec.yaml ->
 # hard error, never a verdict) — no other byte changed per fixture.
+# 2026-10-09 regen (issue 584 hypothesis fields): the Facts carrier paragraph
+# gained one sentence (uncertainty / next_probe optional open-hypothesis
+# fields, absent is the common case) — no other byte changed per fixture.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 
