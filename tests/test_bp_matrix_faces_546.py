@@ -7,7 +7,6 @@ and the two blocked-path family contract rows.
 """
 from __future__ import annotations
 
-import importlib
 import sys
 from pathlib import Path
 
@@ -44,7 +43,8 @@ def test_expansion_off_switch_is_pinned():
 
 
 def test_blocked_path_families_have_contract_rows():
-    for fam in ("tf-novelvm", "tf-novelcipher"):
+    for fam in ("tf-novelvm", "tf-novelcipher",
+                "tf-hardwall-ledger", "tf-hardwall-beacon"):
         row = eval_contract.require_family(fam)
         assert row["suffix"] == ".txt"
         assert row["target_surface"] == "text"

@@ -184,3 +184,13 @@ units:
   - id: tf-novelcipher-c-v1
     corpus: operator
     tier: toolflex
+  # hard-wall constructions (#546 item 4, owner ruling): units where the
+  # registered method vocabulary STRUCTURALLY fails — static surface
+  # yields decoys only, no dynamic channel, byte-exact verification over
+  # a hidden cover-channel construction. Same operator corpus.
+  - id: tf-hardwall-ledger-py-v1
+    corpus: operator
+    tier: toolflex
+  - id: tf-hardwall-beacon-py-v1
+    corpus: operator
+    tier: toolflex

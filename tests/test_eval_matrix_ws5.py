@@ -170,11 +170,14 @@ def test_real_registry_units_match_the_split_firewall_readonly():
     assert repo_units == holdout
     assert all(u["tier"] == "release" for u in units
                if u["corpus"] == "repo")
-    # the extrapolation face: the two blocked-path constructions ride
-    # the operator corpus (permanent local-only material)
+    # the extrapolation face: the blocked-path constructions ride
+    # the operator corpus (permanent local-only material); the
+    # hard-wall units join the same corpus
     op = [u for u in units if u["corpus"] == "operator"]
     assert [u["id"] for u in op] == ["tf-novelvm-rust-v1",
-                                     "tf-novelcipher-c-v1"]
+                                     "tf-novelcipher-c-v1",
+                                     "tf-hardwall-ledger-py-v1",
+                                     "tf-hardwall-beacon-py-v1"]
     assert all(u["tier"] == "toolflex" for u in op)
 
 

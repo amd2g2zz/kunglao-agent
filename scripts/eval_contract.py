@@ -113,6 +113,14 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                    "target_surface": "text"},
     "tf-novelcipher": {"suffix": ".txt", "response_language": "Text answer document",
                        "target_surface": "text"},
+    # hard-wall constructions (owner ruling): the registered method
+    # vocabulary structurally fails — decoys-only static surface, no
+    # dynamic channel, byte-exact replay over a hidden cover-channel
+    # construction. Same operator-local corpus and answer.txt contract.
+    "tf-hardwall-ledger": {"suffix": ".txt", "response_language": "Text answer document",
+                           "target_surface": "text"},
+    "tf-hardwall-beacon": {"suffix": ".txt", "response_language": "Text answer document",
+                           "target_surface": "text"},
     # ---- chain tier (eval_chain registry, issue 370) ---------------------
     # multi-layer decryption-chain units: the analysis subject is the
     # committed obfuscated bundle (text surface); the graded candidate is
