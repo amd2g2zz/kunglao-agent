@@ -8,9 +8,16 @@ the review_gate canonical-stamp shape (HMAC frontmatter digest over
 cid+ts, documented per-run constant, no new deps). An unstamped waiver
 reads as ABSENT: loud warn, verify/red-team legs stay enforced.
 
+Fix 3 (audit 1-F10): the register's truncate-then-write can tear it to
+empty, and promote_claims then wrote back `claims: []` — silent
+convergence on nothing. The promote path now refuses when the register
+reads zero or unparsable claims while the transition ledger carries a
+prior claim set (the register-wipe wall), and the gate itself walls the
+old->new zero-claims drop on every adjudicated write.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -48,6 +55,14 @@ def _mk_ws(tmp_path):
 
 def _waiver_text(cid: str, justify: str) -> str:
     return f"---\nclaim_id: {cid}\n---\n\njustify: {justify}\n"
+
+
+def _seed_ledger(ws, cids=("C-001", "C-002")) -> None:
+    """Prior sanctioned state: the transition ledger's dispatch_id column."""
+    lines = "".join(
+        json.dumps({"ts": "2026-10-09T00:00:00Z", "dispatch_id": c,
+                    "action_type": "verify"}) + "\n" for c in cids)
+    (ws / "runs" / "transitions.jsonl").write_text(lines, encoding="utf-8")
 
 
 # ---------- Fix 1 (5-F6): the waiver skip needs the orchestrator stamp ------
@@ -120,3 +135,65 @@ def test_mint_face_refuses_empty_justify(tmp_path):
     (ws / "runs" / "proven-waiver-C-001.md").write_text(
         _waiver_text("C-001", ""), encoding="utf-8")
     assert stamp_waiver(ws, "C-001")["ok"] is False
+
+
+# ---------- Fix 3 (1-F10): the register-wipe wall ---------------------------
+
+def test_gate_walls_old_to_zero_claims_drop(tmp_path):
+    ws = _mk_ws(tmp_path)
+    res = check_register_transitions(ws, "claims: []\n", _reg())
+    assert res["ok"] is False
+    assert any("register-wipe wall" in v for v in res["violations"])
+
+
+def test_gate_walls_claims_key_removal(tmp_path):
+    """A rewrite that drops the claims key entirely is the same zero face."""
+    ws = _mk_ws(tmp_path)
+    res = check_register_transitions(ws, "meta: emptied\n", _reg())
+    assert res["ok"] is False
+    assert any("register-wipe wall" in v for v in res["violations"])
+
+
+def test_gate_allows_in_place_claim_rewrites(tmp_path):
+    """Monotonicity walls counts, not content: status flips stay legal."""
+    ws = _mk_ws(tmp_path)
+    res = check_register_transitions(ws, _reg("RETRACTED", "OPEN"), _reg())
+    assert res["ok"] is True, res["violations"]
+
+
+def test_empty_torn_register_refuses_promotion(tmp_path):
+    from e2e.runtime import promote_claims
+    ws = _mk_ws(tmp_path)
+    _seed_ledger(ws)
+    (ws / "claim-register.yaml").write_text("", encoding="utf-8")  # torn
+    out = promote_claims(ROOT, ws, ["C-001"])
+    assert out["ok"] is False
+    assert out["written"] is False
+    assert out["promoted"] == []
+    assert any("register-wipe wall" in v for v in out["violations"])
+
+
+def test_unparsable_torn_register_refuses_promotion(tmp_path):
+    """The partial-tear face: truncate mid-write leaves broken YAML. A
+    post-image built over a broken pre-image launders the tear — refuse."""
+    from e2e.runtime import promote_claims
+    ws = _mk_ws(tmp_path)
+    _seed_ledger(ws)
+    (ws / "claim-register.yaml").write_text(
+        "claims:\n  - id: C-001\n  status: [unclosed", encoding="utf-8")
+    out = promote_claims(ROOT, ws, ["C-001"])
+    assert out["ok"] is False
+    assert out["written"] is False
+    assert any("register-wipe wall" in v for v in out["violations"])
+
+
+def test_absent_register_without_prior_state_stays_clean_noop(tmp_path):
+    """Fresh-workspace face preserved: no register, no ledger — the no-op
+    promotion still proceeds (the wall fires only against prior state)."""
+    from e2e.runtime import promote_claims
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    out = promote_claims(ROOT, ws, ["C-001"])
+    assert out["ok"] is True
+    assert out["written"] is True
+    assert out["promoted"] == []

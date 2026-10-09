@@ -372,6 +372,19 @@ def check_register_transitions(ws: Path, new_text: str,
     violations: list = []
     waivers: list = []
     if not new:
+        if old:
+            # 1-F10: claims-count monotonicity wall — no sanctioned
+            # writer deletes claim rows (retract/supersede flip statuses in
+            # place). A nonempty register adjudicating to a zero-claims
+            # post-image is the truncate-then-write wipe class; refuse loud
+            # on every adjudicated face (write_guard Edit + promote path).
+            return {"ok": False,
+                    "violations": [
+                        f"register-wipe wall: the post-image drops all "
+                        f"{len(old)} prior claim(s) — claims-count "
+                        f"monotonicity (#601 1-F10); flip statuses in place "
+                        f"(retract/supersede), never delete the claim set"],
+                    "waivers": []}
         return {"ok": True, "violations": violations, "waivers": []}
     facts: dict | None = None
     for cid, st in new.items():
