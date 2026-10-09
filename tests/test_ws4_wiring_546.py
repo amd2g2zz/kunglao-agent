@@ -138,6 +138,40 @@ def test_no_obstacles_no_move(tmp_path):
     assert face.requests == []
 
 
+def test_slow_grind_wiring_fires_via_the_loop_stall_arm(tmp_path):
+    """The recalibrated trigger, end to end through the wiring: two
+    attributed walls on DIFFERENT kinds keep every death cell under
+    the line while the registry stacks to the bar; the flat settlement
+    tail (the transition ledger's potential column) then spends the
+    move through the loop-stall arm, and the receipt names it."""
+    obs = cp._load_repo_module(ROOT, "rlvr.obstacles")
+    ws = tmp_path / "ws"
+    face = _FakeFace(_FakeAct())
+    ctx = _ctx(tmp_path, face, ws)
+    ev = ws / "runs" / "ev.md"
+    ev.parent.mkdir(parents=True, exist_ok=True)
+    ev.write_text("cmd: uname\nrc=0\n-> Linux\n", encoding="utf-8")
+    for kind, tag in (("tool_limit", "wall-a"), ("other", "wall-b")):
+        obs.record(str(ws), kind=kind, cause=tag,
+                   evidence_path="runs/ev.md",
+                   method_family="static-decompile", claim=f"C-{tag}")
+    # the settlement stream's potential column, flat at the grind scale
+    rows = [{"s_prime_phi": v} for v in (0.10, 0.102, 0.104, 0.105)]
+    (ws / "runs" / "transitions.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    (ws / "runs" / "expansion-hypotheses.json").write_text(
+        json.dumps({"hypotheses": [
+            {"id": "h-1", "family": "unicorn-emu", "p_llm": 0.3,
+             "features": {"lane": "dynamic", "project_type": "wasm"}}]}),
+        encoding="utf-8")
+    cp._maybe_expand(ctx, {"DISTILL"}, {"acts": []})
+    assert face.requests and face.requests[0].claim == "EXPANSION"
+    receipts = ex.read_receipts(ws)
+    assert receipts
+    assert receipts[0]["trigger"]["arm"] == "loop-stall"
+    assert receipts[0]["admitted"] == ["h-1"]
+
+
 def test_zero_novelty_hypothesis_never_spends_the_move(tmp_path):
     # hypothesis with the workspace's own feature shape = renamed retry
     ctx, face, ws = _fire(tmp_path, obstacles=4, hypotheses=[
