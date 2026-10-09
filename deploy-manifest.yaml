@@ -267,7 +267,7 @@ files:
   - src: scripts/comment_hygiene_lint.py
     dest: .claude/scripts/comment_hygiene_lint.py
     kind: scaffold
-    sha256: 2c301f5c7650d9baf3101e61320003d3fe63e8abd187bdc4dace208cffebbd30
+    sha256: 685da4d69157b19d24740ca6a5987908fca650f571ed07cc252c741ad63a7dff
   - src: scripts/completion_gate.py
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
-    sha256: 026c273209a07810616f850325472aafae6c44d1e2c0173f9cd31489b8aaa2a2
+    sha256: fdf4988c749d9cce218a6aed8857c08a70b6edc2b0123e0d701bec1f758bdb0b
   - src: scripts/eval_native_sources.py
     dest: .claude/scripts/eval_native_sources.py
     kind: scaffold
@@ -463,7 +463,7 @@ files:
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
-    sha256: f768c8d4d7c63d0ce42bdb1249d5b384c47e2f5a9903226d49b7a32f11e80f1f
+    sha256: 23081e624a31f0130b988faba88e6c07d7a7821571b1cfea2ab7cfcd2d55b0d1
   - src: scripts/eval_tf_graders.py
     dest: .claude/scripts/eval_tf_graders.py
     kind: scaffold
@@ -519,7 +519,7 @@ files:
   - src: scripts/formal_code_lint.py
     dest: .claude/scripts/formal_code_lint.py
     kind: scaffold
-    sha256: 3ab49ce8d5a6f997ee5fe1497f1f40b3083fc319f62b08c76b34f83924026920
+    sha256: 3ecb46663b06e1a0faea6163e1e63b810ffafa0853b64d426d151e7fe4b64832
   - src: scripts/gap_notes.py
     dest: .claude/scripts/gap_notes.py
     kind: scaffold
@@ -712,6 +712,10 @@ files:
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
     sha256: 65884cb60f295c86c7f1db0a424d37e8843fc25a7b91396f2097b0c89978c73c
+  - src: scripts/lint_protocol.py
+    dest: .claude/scripts/lint_protocol.py
+    kind: scaffold
+    sha256: b43682149413ce3a9a1c060bf76156c93774fa61fcd0a808fc5d86368e87dff4
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -1007,7 +1011,7 @@ files:
   - src: scripts/silent_except_lint.py
     dest: .claude/scripts/silent_except_lint.py
     kind: scaffold
-    sha256: 078a6b34d4b3894ac440a9b506ff35daadfa616f6a18ccabe946486fcf21f2db
+    sha256: bdf8488a4b9bb8e550ab397c1ebadb86015b1eee73634e4c1a63de9cb8ac66e9
   - src: scripts/stale_blocker_prune.py
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
