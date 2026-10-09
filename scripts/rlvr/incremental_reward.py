@@ -135,7 +135,8 @@ def append_transition(ws, claim: str, outcome: str, *,
                       done: bool = False,
                       action_type: str = "dispatch",
                       variant: str = "",
-                      lift: float | None = None) -> dict | None:
+                      lift: float | None = None,
+                      absorbed_from_disk: bool = False) -> dict | None:
     """Close one transition: read the launch stash, compute Φ(s′) and
     r_t, append the row. Returns the row (None when no launch stash —
     a settle without a recorded launch logs nothing rather than
@@ -143,7 +144,11 @@ def append_transition(ws, claim: str, outcome: str, *,
     action-type-scoped (verify acts close against their own stash) and
     the row carries the additive action_type column plus the o.variant
     provenance marker when set. The optional lift argument rides the
-    row as an additive weight column (absent when not supplied)."""
+    row as an additive weight column (absent when not supplied).
+    absorbed_from_disk rides the o face as an additive audit marker
+    (the settle was read from the act's own on-disk verdict face after
+    a hard kill — the outcome status still shows the kill; absent when
+    False, keeping every legacy row byte-identical)."""
     try:
         ws = Path(ws)
         launch_p = _launch_path(ws, claim, action_type)
@@ -165,7 +170,9 @@ def append_transition(ws, claim: str, outcome: str, *,
                   "facts": int(facts),
                   **({"variant": str(variant
                                      or launch.get("variant") or "")}
-                     if variant or launch.get("variant") else {})},
+                     if variant or launch.get("variant") else {}),
+                  **({"absorbed_from_disk": True}
+                     if absorbed_from_disk else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
             "r_incr": r_incr,
