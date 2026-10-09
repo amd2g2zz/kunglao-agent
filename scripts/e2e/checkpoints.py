@@ -962,21 +962,30 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
     """#518 PR-2 (RC6, W2+W3): bank the act's outcome credit into the
     q cell its dispatch opened, and feed a TIMEOUT act to the obstacles
     registry (the termination floor's input — repeat-offender families
-    decay with zero sampler changes). Credit is the per-act ladder's
-    v1 shape: DISPATCHED=1.0, every failure class=0.0 (the #433 ladder
-    refinement rides the promotion path, not here). Telemetry posture:
-    fail-open, never an exception into the landing path."""
+    decay with zero sampler changes). Credit shape: DISPATCHED=1.0,
+    observed failures keep the #524 continuous credit (floor + facts),
+    TIMEOUT banks the failure floor (#601 4-L1 — no success mass from a
+    censored outcome; the #433 ladder refinement rides the promotion
+    path, not here). Telemetry posture: fail-open, never an exception
+    into the landing path."""
     try:
         qc = _load_repo_module(ctx.repo, "rlvr.q_cells")
         # #524 item 2: continuous credit — binary floor + fact-production
         # signal (hindsight: a failed act that produced retained facts
         # banks partial credit; a success with zero facts banks only
-        # half). Cost (duration_ms) is already in the dispatch_result
-        # audit row — normalization happens at analysis time, the banked
-        # value stays in [0,1].
+        # half). #601 4-L1: the continuous credit is outcome-aware at
+        # the censored class — a TIMEOUT's end was never observed, so it
+        # banks no success mass (the failure floor the settle comment
+        # below and censored_review.py both already assert); its facts
+        # keep their progress credit through Φ (phi_delta / r_incr on
+        # the row this value lands in). Cost (duration_ms) is already in
+        # the dispatch_result audit row — normalization happens at
+        # analysis time, the banked value stays in [0,1].
         _n_facts = _facts_citing(ctx.ws, claim)
         _bin = 1.0 if act.outcome == "DISPATCHED" else 0.0
         credit = min(1.0, _bin * 0.5 + 0.5 * min(1.0, _n_facts / 2.0))
+        if act.outcome == "TIMEOUT":
+            credit = 0.0
         # #539 PR-1: the transition row — s from the launch stash, Φ(s′)
         # computed now, r_incr = ALPHA·ΔΦ − LAMBDA·cost, r_settle = the
         # ladder credit above. The cost face: duration_ms rides the act's

@@ -11,6 +11,12 @@ orchestrator mints a fresh token per verify dispatch and injects it into
 the act's contract). A stale verdict from a previous attempt and a
 foreign-written unstamped file keep the bare kill (byte-identical); a
 stamped current-attempt verdict still absorbs (the #597 contract holds).
+
+Fix 4 (audit 4-L1) — censored-timeout credit: a TIMEOUT act's settlement
+banks the failure floor (0.0) into the arm posterior, the transition row,
+and the store row — no success mass from an unobserved outcome; fact
+progress keeps its credit face through Φ (phi_delta / r_incr on the same
+row). Observed outcomes keep the #524 continuous credit unchanged.
 """
 from __future__ import annotations
 
@@ -28,6 +34,7 @@ for p in (str(ROOT), str(SCRIPTS)):
         sys.path.insert(0, p)
 
 from e2e import checkpoints, llm_faces, model  # noqa: E402
+from rlvr import q_cells  # noqa: E402
 from test_e2e_runner import (ANCHORS, DERIVE_PY, FakeClock,  # noqa: E402
                              ScriptedRunner, TASK_YAML)
 
@@ -207,5 +214,127 @@ def test_stale_verdict_from_previous_attempt_never_absorbs(stub_repo,
     assert second["o"]["status"] == "TIMEOUT"
     assert second["r_settle"] == 0.0
     assert "absorbed_from_disk" not in second["o"]
+
+
+# ================================================================ Fix 4
+# ======================================== censored-timeout credit =====
+
+def _credit_ctx(stub_repo, tmp_path):
+    """Workspace + ctx shaped for _launch_dispatch/_land_dispatch (the
+    test_rlvr_p0_524 fixture shape)."""
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "facts").mkdir()
+    (ws / "claim-register.yaml").write_text(
+        "claims:\n- id: C-004\n  status: OPEN\n"
+        "- id: C-005\n  status: OPEN\n", encoding="utf-8")
+    state = model.RunState(
+        run_id="r", unit="u", family="release", repo=str(stub_repo),
+        task_dir=str(stub_repo), ws=str(ws),
+        evidence_dir=str(tmp_path / "ev"), budget_seconds=10,
+        llm_mode="dry", started_ts="t", started_monotonic=0.0,
+        anchors={"goal_verbatim": "g", "success_criterion": "s",
+                 "verification_method": "reproduction"},
+        method_family="static-decompile")
+
+    class _Face:
+        def launch_dispatch(self, request):
+            return "h"
+
+    return checkpoints.RunContext(state=state, runner=object(),
+                                  face=_Face(), clock=object(),
+                                  sleep_fn=lambda _s: None)
+
+
+def _two_verified_facts(ws: Path, claim: str, start: int = 1) -> None:
+    """Two fact files that both cite the claim AND carry terminal
+    status — they move the Φ fact face (the progress credit face)."""
+    for i in (start, start + 1):
+        (ws / "facts" / f"F{i:03d}.md").write_text(
+            f"---\nclaim_id: {claim}\nstatus: VERIFIED\n---\nbody\n",
+            encoding="utf-8")
+
+
+def test_timeout_with_facts_banks_failure_floor_only(stub_repo, tmp_path):
+    """4-L1: a TIMEOUT with 2 cited facts banks 0.0 — no success mass
+    from an unobserved outcome — into the posterior row, the transition
+    row, and the store row; the audit keeps the censored marker."""
+    ctx = _credit_ctx(stub_repo, tmp_path)
+    d2 = set()
+    checkpoints._launch_dispatch(ctx, "C-005", d2)
+    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    checkpoints._land_dispatch(ctx, "C-005",
+                               llm_faces.ActRecord(
+                                   claim="C-005", mode="auto",
+                                   outcome="TIMEOUT", detail={}),
+                               d2, {"acts": []})
+    # arm posterior: the failure floor — success mass stays out
+    settled = [r for r in q_cells.JSONLQStore(str(ctx.ws)).observations()
+               if r.get("credit") is not None and r.get("claim") == "C-005"]
+    assert settled and settled[-1]["credit"] == 0.0
+    # transition row: the settlement value is the floor; facts stay
+    # recorded and the row keeps the TIMEOUT status
+    trow = [r for r in _rows(Path(str(ctx.ws)))
+            if r.get("dispatch_id") == "C-005"]
+    assert trow and trow[-1]["r_settle"] == 0.0
+    assert trow[-1]["o"]["facts"] == 2
+    assert trow[-1]["o"]["status"] == "TIMEOUT"
+    # the audit event keeps the censoring visible
+    aud = []
+    for p2 in sorted((ctx.ws / "runs" / "logs").glob("*.jsonl")):
+        for l in p2.read_text().splitlines():
+            if "posterior_updated" not in l:
+                continue
+            e = json.loads(l)
+            d = e.get("detail")
+            if isinstance(d, str):
+                try:
+                    d = json.loads(d)
+                except ValueError:
+                    d = {}
+            e["detail"] = d
+            aud.append(e)
+    assert aud and aud[-1]["detail"]["counts"].get("censored") is True
+    assert aud[-1]["detail"]["counts"].get("credit") == 0.0
+
+
+def test_timeout_with_facts_still_moves_the_progress_face(stub_repo,
+                                                          tmp_path):
+    """4-L1's credit split: the timed-out act's facts keep their
+    progress credit through Φ — the row's Φ moved and r_incr is
+    positive — the facts never ride the settlement value again."""
+    ctx = _credit_ctx(stub_repo, tmp_path)
+    d2 = set()
+    checkpoints._launch_dispatch(ctx, "C-005", d2)
+    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    checkpoints._land_dispatch(ctx, "C-005",
+                               llm_faces.ActRecord(
+                                   claim="C-005", mode="auto",
+                                   outcome="TIMEOUT", detail={}),
+                               d2, {"acts": []})
+    trow = [r for r in _rows(Path(str(ctx.ws)))
+            if r.get("dispatch_id") == "C-005"][-1]
+    assert trow["s_prime_phi"] > trow["phi_before"], \
+        "facts bank progress through Φ"
+    assert trow["r_incr"] > 0, "the Φ movement survives the cost term"
+
+
+def test_observed_error_with_facts_keeps_continuous_credit(stub_repo,
+                                                           tmp_path):
+    """Scope guard: only the censored class changes. An OBSERVED
+    failure (ERROR) with 2 cited facts keeps the #524 hindsight
+    partial credit (0.5)."""
+    ctx = _credit_ctx(stub_repo, tmp_path)
+    d2 = set()
+    checkpoints._launch_dispatch(ctx, "C-005", d2)
+    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    checkpoints._land_dispatch(ctx, "C-005",
+                               llm_faces.ActRecord(
+                                   claim="C-005", mode="auto",
+                                   outcome="ERROR", detail={}),
+                               d2, {"acts": []})
+    settled = [r for r in q_cells.JSONLQStore(str(ctx.ws)).observations()
+               if r.get("credit") is not None and r.get("claim") == "C-005"]
+    assert settled and settled[-1]["credit"] == 0.5
 
 

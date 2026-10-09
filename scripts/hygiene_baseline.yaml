@@ -94,7 +94,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 76
+    r1: 77
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -1218,7 +1218,7 @@ files:
   tests/test_query_formulation_487.py:
     r1: 5
   tests/test_rc1_checkpoints_hardening_601.py:
-    r1: 3
+    r1: 4
   tests/test_recall_inject.py:
     r1: 5
   tests/test_recall_quality_814.py:
@@ -1291,7 +1291,7 @@ files:
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_p0_524.py:
-    r1: 1
+    r1: 3
   tests/test_rlvr_termination_461.py:
     r1: 1
   tests/test_roi_settlement_49.py:
