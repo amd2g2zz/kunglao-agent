@@ -140,7 +140,10 @@ def _repo_python_files():
         rel = p.relative_to(ROOT).as_posix()
         if rel.startswith("tests/"):        # fixtures may rebuild shapes freely
             continue
-        if rel.startswith((".git", ".review", "openspec/", ".worktrees")):
+        # deps/virtualenvs, agent bookkeeping, sibling agent worktrees
+        # (copies of this repo) and deployed scaffolds under runs/
+        if rel.startswith((".git", ".review", "openspec/", ".worktrees",
+                           ".claude/worktrees/", "runs/")):
             continue
         if rel == CANONICAL_REL.as_posix():
             continue

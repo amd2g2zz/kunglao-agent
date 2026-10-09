@@ -149,15 +149,28 @@ STYLE_DEF_RE = re.compile(
     r"^def (?:utc_now|_utc_now|now_utc)(?:_iso|_dt)?\(", re.MULTILINE)
 
 
+# out-of-scope faces: deps/virtualenvs, agent bookkeeping, sibling
+# agent worktrees (copies of this repo) and deployed workspace scaffolds
+# under runs/ (the product's shipped runtime face, not repo source)
+EXCLUDED_PREFIXES = (".git", ".review", "openspec/", ".worktrees",
+                     ".venv/", "venv/", "actions-runner/",
+                     ".claude/worktrees/", "runs/")
+
+
+def _is_scan_target(rel: str) -> bool:
+    if rel.startswith("tests/"):        # test files may pin/rebuild freely
+        return False
+    if rel.startswith(EXCLUDED_PREFIXES):
+        return False
+    return True
+
+
 def _repo_python_files():
     for p in sorted(ROOT.rglob("*.py")):
         rel = p.relative_to(ROOT).as_posix()
-        if rel.startswith("tests/"):        # test files may pin/rebuild freely
+        if not _is_scan_target(rel):
             continue
         if rel == UTIL_REL:                 # the definition point itself
-            continue
-        if rel.startswith((".git", ".review", "openspec/", ".worktrees",
-                           ".venv/", "venv/", "actions-runner/")):
             continue
         yield p, rel
 
@@ -167,6 +180,28 @@ def _repo_python_files():
 # `datetime.now(timezone.utc)` stamping logic must never reappear as a def
 # in a consumer.
 # --------------------------------------------------------------------------
+
+# ---------- the walker's exclusion face (pinned) ----------
+
+def test_scan_target_excludes_sibling_worktrees_and_deployed_scaffolds():
+    """The repo-walk invariants guard the REPO's own source. Sibling
+    agent worktrees (copies of this very repo) and deployed workspace
+    scaffolds under runs/ are out of scope — flagging them is the
+    phantom-failure mode that bites every local multi-worktree run."""
+    for rel in (".claude/worktrees/agent-x/scripts/harness_common.py",
+                "runs/exp-rl/smoke/workspaces/ws-1/.claude/scripts/harness_common.py"):
+        assert _is_scan_target(rel) is False, rel
+
+
+def test_scan_target_keeps_repo_source():
+    assert _is_scan_target("scripts/harness_common.py") is True
+    assert _is_scan_target("hooks/lib_kunglao.py") is True
+
+
+def test_scan_target_still_excludes_tests_and_venvs():
+    assert _is_scan_target("tests/test_anything.py") is False
+    assert _is_scan_target(".venv/lib/site.py") is False
+
 
 def test_utc_now_defs_confined_to_util():
     offenders = {}
