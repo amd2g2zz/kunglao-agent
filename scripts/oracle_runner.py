@@ -154,12 +154,11 @@ retiring emits the coverage-drop WARN event
 armed-case count shrank.
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace (kunglao_log.warn)
+from kunglao_log import warn  # ONE implementation (dedupe + ledger face)
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 import tempfile
@@ -168,6 +167,7 @@ from typing import Callable
 
 import yaml
 
+from _common import atomic_write_text
 from harness_common import utc_now_iso  # #863 Family F: single source
 
 SCHEMA_ID = "oracle-status/1"
@@ -993,11 +993,8 @@ def write_status(ws, report: dict) -> Path:
             (report.get("mutation") or {}).get("low_discriminativity") or []),
         "counts": report["counts"],
     }
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
-                   encoding="utf-8")
-    os.replace(tmp, path)
-    return path
+    return atomic_write_text(
+        path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
 
 
 # -------------------------- #157 algorithm event log -----------------------
@@ -1447,11 +1444,8 @@ def retire_case(ws, case_id: str, *, attribution_class: str,
         "replacement": replacement,
         "retired_at": utc_now_iso(),
     }
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(
-        yaml.safe_dump(doc, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
-    os.replace(tmp, target)
+    atomic_write_text(
+        target, yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
     armed_after = _armed_case_count(cases_dir)
     if armed_after < armed_before:
         _emit_coverage_decreased(ws, wanted, armed_before, armed_after)

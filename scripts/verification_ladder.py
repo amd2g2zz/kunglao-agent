@@ -67,12 +67,12 @@ import argparse
 import json
 import os
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _common import atomic_write_text  # noqa: E402
 from harness_common import utc_now_z as _utc_now  # noqa: E402
 from kunglao_log import warn  # noqa: E402
 
@@ -427,27 +427,13 @@ def _persist_queue(ws: Path, doc: dict) -> bool:
     race, demonstrated in review); the unique name makes each rename
     atomic AND writer-isolated."""
     p = ws / T2_QUEUE_REL
-    tmp: Path | None = None
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        fd, name = tempfile.mkstemp(dir=p.parent, prefix=".t2-queue.",
-                                    suffix=".tmp")
-        tmp = Path(name)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(doc, ensure_ascii=False, indent=2))
-        os.replace(tmp, p)
+        atomic_write_text(p, json.dumps(doc, ensure_ascii=False, indent=2),
+                          unique=True)
         return True
     except OSError as exc:
         warn("t2_persist", f"{type(exc).__name__}: {exc}")
         return False
-    finally:
-        if tmp is not None and tmp.exists():
-            try:
-                tmp.unlink()
-            except OSError as exc:  # non-silent: the #275 house rule
-                warn("atomic_cleanup",
-                     f"t2-queue.json: tmp {tmp.name} left behind: "
-                     f"{type(exc).__name__}: {exc}")
 
 
 def drain_t2_queue(ws, *, budget: int | None = None,
