@@ -61,6 +61,34 @@ delta with a seeded bootstrap CI over unit resamples, and carries the
 honest-stats note. An arm with no data is named missing — a one-sided
 matrix renders NO number rather than a fabricated delta.
 
+The milestone readouts (report["milestones"]): the audit trail
+projected onto the kunglao-shaped stage lattice — intake → dispatch →
+facts → verification → settlement → convergence — per arm x unit:
+coverage (which stages the cell's evidence marks), progress depth (the
+longest UNBROKEN prefix over the lattice), and the stall point, then
+aggregated across arms/units into the stall funnel (per-stage reach
+and its marginal drop — where runs stop progressing). Evidence is read
+off what the runs already wrote: the e2e-audit stream (dispatch /
+checkpoint / oracle / convergence rows), the transition ledger (action
+types + rewarded settlements), the fact bank, the dispatch-launch
+stashes, and the intake anchors. Nothing enters the loop and no
+agent-side stage schema exists — the lattice is evaluation-shaped,
+this face only reads.
+
+Contamination probe note (Reveree's probes vs our corpus, mapping
+only — no new work): the flag-recall probe (solve by recalling a known
+public artifact) is structurally covered by the constructed corpus +
+the held-out contract — scripts/eval_dataset.py validates every task
+unit's contamination block (held_out + distiller_excluded + provenance
+"constructed") and EVAL_CORPUS_PREFIXES / filter_distiller_sources
+keep eval paths out of any distiller corpus, so there is no public
+flag to recall. The surface-mutation probe (did the agent solve the
+mutated surface or the memorized template?) maps onto the seeded
+constructed units (generator-stamped mutation families) plus the
+verdict-face failure codes (WRONG_CORRECT_PATH, ROTATION_UNPROVEN,
+REHOOK_LOOP, MISATTRIBUTED) — the discriminators that fail a template
+replay. The mapping is recorded here, documentation only.
+
 Reads the progress spine (progress.json from the launcher) when present
 and falls back to scanning run dirs — a partially-run matrix reports
 what exists and names what does not (missing is a measurement state,
@@ -492,6 +520,215 @@ def _tier_slice(arm_a: dict, arm_b: dict, deltas: dict) -> dict:
     return out
 
 
+# ---- milestone readouts: the audit trail projected onto the
+# kunglao stage lattice — stage coverage, progress depth, and the stall
+# funnel. Read-only aggregation: nothing enters the loop, no agent-side
+# stage schema exists — the lattice is evaluation-shaped. ---------------
+
+MILESTONE_STAGES = ("intake", "dispatch", "facts", "verification",
+                    "settlement", "convergence")
+MILESTONE_AUDIT_REL = Path("runs") / "logs" / "e2e-audit.jsonl"
+#: transition action types that mark the verification stage (the
+#: verify / red-team act faces)
+MILESTONE_VERIFY_TYPES = frozenset({"verify", "redteam"})
+
+
+def _audit_stage(action: str) -> str | None:
+    """Audit-stream action -> lattice stage (None = not stage-facing).
+    Mirrors e2e.audit's category buckets onto the lattice: dispatch rows
+    are the dispatch stage, checkpoint + oracle rows the verification
+    face, the convergence decision the convergence face; kernel, distill,
+    and harvest rows are loop internals no stage consumes. Pinned
+    against the controlled vocabulary by test_milestone_readouts_585."""
+    if action.startswith("dispatch_"):
+        return "dispatch"
+    if action.startswith("checkpoint_") or action == "oracle_verdict":
+        return "verification"
+    if action == "convergence_decision":
+        return "convergence"
+    return None
+
+
+def _milestone_audit_rows(ws) -> list[dict]:
+    """The workspace's e2e-audit rows, oldest first; an absent stream is
+    [] and a dirty line is skipped, never invented (the ledgers' own
+    posture, same as read_transitions)."""
+    p = Path(ws) / MILESTONE_AUDIT_REL
+    if not p.is_file():
+        return []
+    rows = []
+    for line in p.read_text(encoding="utf-8",
+                            errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _ws_stage_evidence(ws) -> dict[str, bool]:
+    """One workspace's per-stage evidence, read off the ledgers it
+    already has: the intake anchors (task_spec), the audit stream's
+    stage-facing rows, the transition ledger's action types + rewarded
+    settlements, the fact bank, and the dispatch-launch stashes."""
+    ws = Path(ws)
+    audit_stages = {_audit_stage(str(r.get("action")))
+                    for r in _milestone_audit_rows(ws)}
+    audit_stages.discard(None)
+    trans = read_transitions(ws)
+    trans_types = {str(r.get("action_type") or "") for r in trans}
+    has_spec = (ws / "task_spec.yaml").is_file()
+    runs_dir = ws / "runs"
+    has_stash = runs_dir.is_dir() and any(
+        runs_dir.glob("dispatch-launch-*.json"))
+    return {
+        "intake": has_spec or bool(audit_stages) or bool(trans),
+        "dispatch": ("dispatch" in audit_stages
+                     or "dispatch" in trans_types or has_stash),
+        "facts": _facts_count(ws) > 0,
+        "verification": ("verification" in audit_stages
+                         or bool(trans_types & MILESTONE_VERIFY_TYPES)),
+        "settlement": any(r.get("r_incr") is not None for r in trans),
+        "convergence": "convergence" in audit_stages,
+    }
+
+
+def _milestone_reached(ws_list: list, has_verdict: bool) -> list[str]:
+    """The coverage set, pooled over the cell's workspaces (a
+    multi-sample cell pools its samples — the same primitives-pooling
+    discipline as the B2 aggregation); a rendered mechanical verdict
+    evidences intake and closes the convergence stage — the outcome
+    itself stays the matrix's axis, never a stage."""
+    flags = {stage: False for stage in MILESTONE_STAGES}
+    for ws in ws_list:
+        if not ws:
+            continue
+        for stage, hit in _ws_stage_evidence(ws).items():
+            flags[stage] = flags[stage] or hit
+    if has_verdict:
+        flags["intake"] = True
+        flags["convergence"] = True
+    return [s for s in MILESTONE_STAGES if flags[s]]
+
+
+def _prefix_depth(reached: list[str]) -> int:
+    """The longest unbroken prefix over the lattice: evidence past a gap
+    never inflates depth (the Reveree progress-depth reading)."""
+    depth = 0
+    for stage in MILESTONE_STAGES:
+        if depth < len(reached) and reached[depth] == stage:
+            depth += 1
+        else:
+            break
+    return depth
+
+
+def _stalled_at(reached: list[str]) -> str | None:
+    """The first lattice stage the prefix did not reach (None = the run
+    walked the whole lattice — a stall point is named, never guessed)."""
+    depth = _prefix_depth(reached)
+    return (MILESTONE_STAGES[depth]
+            if depth < len(MILESTONE_STAGES) else None)
+
+
+def _milestone_input(out: Path, by_cell: dict):
+    """(arm, unit, workspace paths, has_verdict) per cell — the same
+    discovery walk _collect_matrix uses (run dirs first, spine-only
+    cells after), reusing the newest-results and sample-dir faces;
+    read-only, nothing here mutates the matrix cells."""
+    seen: set[tuple[str, str]] = set()
+    arm_dirs = sorted(d for d in out.iterdir() if d.is_dir()) \
+        if out.is_dir() else []
+    for arm_dir in arm_dirs:
+        for unit_dir in sorted(d for d in arm_dir.iterdir()
+                               if d.is_dir()):
+            arm, unit = arm_dir.name, unit_dir.name
+            seen.add((arm, unit))
+            spine_rows = by_cell.get((arm, unit)) or []
+            spine = spine_rows[0] if spine_rows else {}
+            samples = _sample_dirs(unit_dir)
+            ws_list: list = []
+            has_verdict = False
+            if samples:
+                spine_by_sample = {}
+                for row in spine_rows:
+                    try:
+                        spine_by_sample[int(row.get("sample") or 0)] = row
+                    except (TypeError, ValueError):
+                        continue
+                for i, sample_dir in enumerate(samples):
+                    doc = newest_results_doc(sample_dir)
+                    if doc and doc.get("rows"):
+                        child = doc["rows"][0]
+                        ws_list.append(
+                            (child.get("loop") or {}).get("workspace"))
+                        has_verdict = has_verdict or bool(
+                            child.get("verdict"))
+                    else:
+                        ws_list.append((spine_by_sample.get(i) or {})
+                                       .get("workspace"))
+            else:
+                doc = newest_results_doc(unit_dir)
+                if doc and doc.get("rows"):
+                    child = doc["rows"][0]
+                    ws_list.append(
+                        (child.get("loop") or {}).get("workspace"))
+                    has_verdict = bool(child.get("verdict"))
+                else:
+                    ws_list.append(spine.get("workspace"))
+            yield (arm, unit, [w for w in ws_list if w], has_verdict)
+    for (arm, unit), rows in sorted(by_cell.items()):
+        if (arm, unit) in seen:
+            continue
+        ws = rows[0].get("workspace") if rows else None
+        yield (arm, unit, [ws] if ws else [], False)
+
+
+def _stall_funnel(cells: list[dict]) -> dict:
+    """Per-stage marginal reach over the milestone cells: how many
+    cells' evidence marks the stage, and how many reached it without
+    ever reaching the next one — the funnel's drop IS the stall."""
+    funnel: dict[str, dict] = {}
+    for i, stage in enumerate(MILESTONE_STAGES):
+        reached = sum(1 for c in cells if stage in c["reached"])
+        if i + 1 < len(MILESTONE_STAGES):
+            nxt = MILESTONE_STAGES[i + 1]
+            stalled = sum(1 for c in cells if stage in c["reached"]
+                          and nxt not in c["reached"])
+        else:
+            stalled = 0  # the lattice's last stage: nothing beyond it
+        funnel[stage] = {"reached": reached, "stalled_here": stalled}
+    return funnel
+
+
+def milestones(out: Path, by_cell: dict) -> dict:
+    """The milestone section: stage coverage / progress depth / stall
+    point per arm x unit over the audit trail, aggregated into the
+    cross-cell stall funnel. Cells render in (arm, unit) order, stages
+    in lattice order — the same matrix in, the same readout out
+    (determinism)."""
+    cells = []
+    for arm, unit, ws_list, has_verdict in _milestone_input(
+            Path(out), by_cell):
+        reached = _milestone_reached(ws_list, has_verdict)
+        cells.append({"arm": arm, "unit": unit, "reached": reached,
+                      "depth": _prefix_depth(reached),
+                      "stalled_at": _stalled_at(reached)})
+    cells.sort(key=lambda c: (c["arm"], c["unit"]))
+    return {"stages": list(MILESTONE_STAGES), "cells": cells,
+            "funnel": _stall_funnel(cells),
+            "note": ("read-only projection of the audit trail (e2e-audit "
+                     "stream, transition ledger, fact bank, dispatch "
+                     "stashes, intake anchors) onto the evaluation-"
+                     "shaped lattice — nothing enters the loop, no "
+                     "agent-side stage schema exists")}
+
+
 def build_report(out: Path, progress: dict | None = None) -> dict:
     """The readout doc: per arm x unit matrix plus arm aggregates, with
     the regret face applied. ``progress`` is the launcher's spine doc;
@@ -536,7 +773,8 @@ def build_report(out: Path, progress: dict | None = None) -> dict:
                        "owner's call."),
               "matrix": matrix,
               "arms": dict(sorted(_aggregate_arms(matrix).items())),
-              "decompositions": _decompositions(matrix)}
+              "decompositions": _decompositions(matrix),
+              "milestones": milestones(out, by_cell)}
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n",
                                      encoding="utf-8")
     return report
@@ -594,6 +832,24 @@ def print_report(report: dict) -> None:
                     face = row["tiers"][tier]
                     print(f"  tier {tier}: mean_delta={face['mean_delta']} "
                           f"ci95={face['ci95']} n={len(face['units'])}")
+    # the milestone readout: stage coverage / depth per cell plus
+    # the stall funnel — additive to the faces above, never a rewrite
+    mil = report.get("milestones") or {}
+    if mil:
+        print("=" * len(header))
+        print("milestones (#585): " + " -> ".join(mil["stages"]))
+        for cell in mil["cells"]:
+            cov = ">".join(cell["reached"]) if cell["reached"] \
+                else "(no stage evidence)"
+            print(f"  {cell['arm']:22} {cell['unit']:26} "
+                  f"depth={cell['depth']}/{len(mil['stages'])} "
+                  f"stalled_at={cell['stalled_at'] or '-'} {cov}")
+        faces = "  ".join(
+            f"{s}={mil['funnel'][s]['reached']}"
+            + (f"(-{mil['funnel'][s]['stalled_here']})"
+               if mil["funnel"][s]["stalled_here"] else "")
+            for s in mil["stages"])
+        print(f"  funnel: {faces}")
 
 
 def main(argv: list[str] | None = None) -> int:
