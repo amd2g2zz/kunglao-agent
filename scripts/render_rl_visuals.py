@@ -257,7 +257,7 @@ def loop_arms(d, counts, pre, post, t_blend, winner, show_draw, samples):
         y = 104 + i * 100
         glow = show_draw and i == winner
         text(d, (40, y), name, GLOW if glow else CYAN, 13)
-        text(d, (340, y), f"mean {mean:.2f}", TEXT_DIM, 12, anchor="ra")
+        text(d, (340, y), f"mean {mean:.2f}", TEXT_FAINT, 12, anchor="ra")
         d.rounded_rectangle([40, y + 12, 340, y + 30], radius=4, fill=TRACK,
                             outline=PANEL_EDGE)
         bw = mean * 292
@@ -285,7 +285,7 @@ def loop_spine(d, phase):
         edge = SPINE_COLORS[i] if active else PANEL_EDGE
         d.rounded_rectangle(box, radius=6, fill=ACTIVE_BOX if active else PANEL,
                             outline=edge, width=2)
-        text(d, (500, y + 23), label, TEXT if active else TEXT_DIM, 13,
+        text(d, (500, y + 23), label, TEXT if active else TEXT_FAINT, 13,
              anchor="mm")
         if i < 4:
             arrow_down(d, 500, y + 46, y + 68,
@@ -299,7 +299,7 @@ def loop_center_card(d, f, act_name, verdict, rows):
                             outline=SPINE_COLORS[2], width=2)
         text(d, (500, 478), f"act → {act_name}", TEXT, 12, anchor="mm")
         text(d, (500, 498), "probe replay-pair · budget bucket B",
-             TEXT_DIM, 11, anchor="mm")
+             TEXT_FAINT, 11, anchor="mm")
     elif 8 <= f <= 12:
         stamp(d, (500, 489), f"ORACLE: {verdict}", v_color, 14)
     elif 13 <= f <= 16:
@@ -307,7 +307,7 @@ def loop_center_card(d, f, act_name, verdict, rows):
                             outline=SPINE_COLORS[4], width=2)
         text(d, (500, 478), f"ledger row {rows}", SPINE_COLORS[4], 12,
              anchor="mm")
-        text(d, (500, 498), f"settle {act_name} → posterior", TEXT_DIM,
+        text(d, (500, 498), f"settle {act_name} → posterior", TEXT_FAINT,
              11, anchor="mm")
 
 
@@ -318,10 +318,10 @@ def loop_reward(d, spec, reveal_t):
     dphi = spec["dphi"] * reveal_t
     r = dphi * ALPHA_W - LAM * COST
     text(d, (644, 156), f"ΔΦ  {dphi:.2f}", GREEN, 13)
-    text(d, (644, 180), f"α  {ALPHA_W:.2f}", TEXT_DIM, 13)
+    text(d, (644, 180), f"α  {ALPHA_W:.2f}", TEXT_FAINT, 13)
     text(d, (644, 204),
          f"λ  {LAM:.2f} × cost {COST:.2f} = {LAM * COST:.2f}",
-         TEXT_DIM, 13)
+         TEXT_FAINT, 13)
     r_color = GREEN if r >= 0 else RED
     text(d, (644, 254), f"r = {r:+.2f}", r_color, 24)
     mid = 782
@@ -338,308 +338,230 @@ def loop_reward(d, spec, reveal_t):
     text(d, (644, 472), "whiskers narrow (±2σ)", TEXT_FAINT, 11)
 
 
+
+# ---------------------------------------------------------------------------
+# The four GIF scenes: story-first, jargon-free. A viewer who has never
+# heard of reinforcement learning should get each point from one frame.
+# ---------------------------------------------------------------------------
+
+
+
+def _card(d, box, title, lines_, edge=PANEL_EDGE, title_color=TEXT):
+    d.rounded_rectangle(box, radius=10, fill=PANEL, outline=edge, width=2)
+    text(d, (box[0] + 20, box[1] + 30), title, title_color, 18, anchor="lm")
+    yy = box[1] + 66
+    for ln in lines_:
+        text(d, (box[0] + 20, yy), ln, TEXT_FAINT, 14, anchor="lm")
+        yy += 26
+
+
+def _method_chip(d, cx, cy, label, state, sub=None):
+    state_styles = {
+        "idle": (PANEL_EDGE, TEXT), "pick": (GREEN, GREEN),
+        "done": (GREEN, GREEN), "dead": (TEXT_FAINT, TEXT_FAINT), "new": (PURPLE, PURPLE),
+    }
+    edge, fg = state_styles[state]
+    font = load_font(17)
+    tw = d.textlength(label, font=font)
+    box = [cx - tw / 2 - 14, cy - 17, cx + tw / 2 + 14, cy + 17]
+    d.rounded_rectangle(box, radius=8, fill=PANEL, outline=edge, width=2)
+    text(d, (cx, cy), label, fg, 17, anchor="mm")
+    if sub:
+        text(d, (cx, cy + 28), sub, AMBER if state == "pick" else TEXT_FAINT, 14,
+             anchor="mm")
+
+
+def _cost_meter(d, x, y, units, label):
+    text(d, (x, y), label, TEXT_FAINT, 15, anchor="lm")
+    for i in range(4):
+        on = i < units
+        d.rounded_rectangle([x + 160 + i * 36, y - 10, x + 186 + i * 36,
+                             y + 10], radius=4,
+                            fill=(AMBER if on else PANEL),
+                            outline=PANEL_EDGE)
+    text(d, (x + 330, y), f"{units} steps", TEXT, 15, anchor="lm")
+
+
 def render_rl_loop():
+    """Story: task 1 pays full price; the loop remembers; task 2 of the
+    same kind runs cheaper."""
     frames = []
-    counts = [tuple(row) for row in ARMS]
-    rows = 41
-    for cyc in range(3):
-        pre = list(counts)
-        post = cycle_post(counts, cyc)
-        spec = CYCLES[cyc]
-        act_name = counts[spec["winner"]][0]
-        samples = draw_samples(cyc)
-        for f in range(20):
-            img, d = new_canvas(
-                "the learning loop — draw, dispatch, verdict, ledger")
-            panel(d, (24, 56, 372, 516), "method arms · beta posterior")
-            panel(d, (388, 56, 612, 448), "loop spine")
-            phase = (1 if f <= 3 else 2 if f <= 7 else 3 if f <= 12 else 4)
-            if f >= 17:
-                phase = 0
-            verdict = spec["verdict"] if f >= 8 else ""
-            rows_now = rows + (1 if f >= 13 else 0)
-            t_blend = 0.0 if f < 17 else (f - 16) / 3.0
-            loop_arms(d, post, pre, post, t_blend, spec["winner"], f <= 3,
-                      samples)
-            loop_spine(d, phase)
-            loop_center_card(d, f, act_name, verdict, rows_now)
-            loop_reward(d, spec, 1.0 if f >= 8 else f / 12.0)
-            if f >= 17:
-                text(d, (500, 482), "posterior update → next state",
-                     SPINE_COLORS[0], 12, anchor="mm")
-            text(d, (W // 2, 528),
-                 "frozen model, external policy — every number traces to "
-                 "a ledger row", TEXT_FAINT, 11, anchor="mm")
-            frames.append(img)
-        counts = post
-        rows += 1
+    for i in range(14):                    # beat 1: first task, has to explore
+        img, d = new_canvas("the loop learns - one task at a time")
+        _card(d, [40, 60, 420, 190], "TASK 1: hidden sign algorithm",
+              ["obfuscated js bundle", "no notes yet - has to explore"])
+        text(d, (230, 226), "which method first? the loop picks:",
+             TEXT_FAINT, 14, anchor="mm")
+        _method_chip(d, 230, 280, "read the code",
+                     "pick" if i >= 7 else "idle")
+        _method_chip(d, 230, 350, "run it and watch", "idle")
+        _method_chip(d, 230, 420, "guess constants", "idle")
+        _card(d, [560, 60, 920, 190], "THE CHECKER", ["re-runs everything,",
+              "accepts only proof"])
+        if i >= 11:
+            text(d, (740, 240), "working...", AMBER, 16, anchor="mm")
+        frames.append(img)
+    for i in range(14):                    # beat 2: verified, note taken
+        img, d = new_canvas("the loop learns - one task at a time")
+        _card(d, [40, 60, 420, 190], "TASK 1: hidden sign algorithm",
+              ["solved"], edge=GREEN, title_color=GREEN)
+        _method_chip(d, 230, 280, "read the code", "done")
+        _method_chip(d, 230, 350, "run it and watch", "idle")
+        _method_chip(d, 230, 420, "guess constants", "idle")
+        d.rounded_rectangle([560, 60, 920, 190], radius=10, fill=PANEL,
+                            outline=GREEN, width=2)
+        stamp(d, (740, 118), "VERIFIED", GREEN)
+        text(d, (740, 158), "the answer replays byte-exact", TEXT_FAINT, 13,
+             anchor="mm")
+        mem_y = 300 + min(i * 8, 60)
+        d.rounded_rectangle([560, mem_y, 920, mem_y + 96], radius=10,
+                            fill=PANEL, outline=BLUE, width=2)
+        text(d, (580, mem_y + 30), "NOTES for targets like this", BLUE, 14,
+             anchor="lm")
+        text(d, (580, mem_y + 62), "reading the code worked", TEXT, 16,
+             anchor="lm")
+        frames.append(img)
+    for i in range(14):                    # beat 3: same kind, cheaper
+        img, d = new_canvas("the loop learns - one task at a time")
+        _card(d, [40, 60, 420, 190], "TASK 2: the same kind of target",
+              ["a new sample, same family",
+               "the loop opens from its notes"], edge=BLUE)
+        _method_chip(d, 230, 280, "read the code", "pick",
+                     sub="notes: start here")
+        _method_chip(d, 230, 350, "run it and watch", "idle")
+        _method_chip(d, 230, 420, "guess constants", "idle")
+        d.rounded_rectangle([560, 60, 920, 190], radius=10, fill=PANEL,
+                            outline=GREEN, width=2)
+        stamp(d, (740, 118), "VERIFIED", GREEN)
+        _cost_meter(d, 560, 240, 3, "task 1")
+        _cost_meter(d, 560, 285, 1, "task 2")
+        text(d, (740, 350), "the second one ran cheaper -", GREEN, 15,
+             anchor="mm")
+        text(d, (740, 376), "the loop remembered.", GREEN, 15, anchor="mm")
+        frames.append(img)
     return frames
-
-
-# ---------------------------------------------------------------------------
-# rl-features — feature-keyed states
-# ---------------------------------------------------------------------------
-TARGETS = (
-    ("plain-js-bundle", ("ent:low", "fc:sparse", "die:none"), BLUE),
-    ("hardened-apk", ("ent:saturated", "fc:dense", "die:packer-x"), AMBER),
-)
-RANKINGS = (
-    (("static-decompile", 0.81), ("kdf-chain", 0.72), ("dynamic-trace", 0.63)),
-    (("obfuscation-peeling", 0.81), ("dynamic-trace", 0.72),
-     ("static-decompile", 0.63)),
-)
-RANK_NOTES = (("one cheap act → STOP", GREEN),
-              ("multi-method opening", AMBER))
-
-
-def feature_targets(d, reveal):
-    for col, (name, tokens, color) in enumerate(TARGETS):
-        x0 = 24 + col * 480
-        panel(d, (x0, 56, x0 + 432, 190), f"target {name}", color)
-        for i, tok in enumerate(tokens):
-            if reveal > col * 8 + i * 2:
-                chip(d, (x0 + 90 + i * 130, 146), tok, color)
-
-
-def feature_token_flow(d, f):
-    """Feature tokens travel from each target toward its own q-cell bucket."""
-    for col in range(2):
-        x0 = 24 + col * 480
-        tokens, color = TARGETS[col][1], TARGETS[col][2]
-        for i in range(3):
-            start = 4 + col * 8 + i * 2
-            if f < start or f > start + 11:
-                continue
-            t = (f - start) / 11.0
-            x = int(lerp(x0 + 90 + i * 130, x0 + 216, t))
-            y = int(lerp(170, 306, t))
-            chip(d, (x, y), tokens[i], color)
-
-
-def feature_bucket(d, col, label, done):
-    x0 = 24 + col * 480
-    box = (x0, 318, x0 + 432, 500)
-    color = TARGETS[col][2]
-    if done:
-        panel(d, box, f"{label} · q-cell", color)
-    else:
-        d.rounded_rectangle(box, radius=8, outline=PANEL_EDGE, width=1)
-    return box
-
-
-def feature_docked(d, box, col):
-    _, tokens, color = TARGETS[col]
-    for i, tok in enumerate(tokens):
-        chip(d, (box[0] + 90 + i * 130, box[1] + 46), tok, color, size=11)
-
-
-def feature_ranking(d, box, col, reveal_rows):
-    x0, y0, x1, _ = box
-    for i, (name, mean) in enumerate(RANKINGS[col]):
-        if i >= reveal_rows:
-            break
-        y = y0 + 88 + i * 30
-        first = i == 0
-        if first:
-            d.rounded_rectangle([x0 + 12, y - 14, x1 - 12, y + 14], radius=5,
-                                fill=ACTIVE_BOX, outline=GLOW, width=2)
-        text(d, (x0 + 24, y), f"{i + 1}. {name}",
-             GLOW if first else TEXT_DIM, 13)
-        text(d, (x1 - 24, y), f"mean {mean:.2f}",
-             GLOW if first else TEXT_FAINT, 12, anchor="ra")
-    if reveal_rows >= 3:
-        note, note_color = RANK_NOTES[col]
-        text(d, (x0 + 24, y0 + 168), note, note_color, 12)
 
 
 def render_rl_features():
+    """Story: two targets that look alike open differently - the notes
+    are kept per kind of target."""
     frames = []
-    for f in range(40):
-        img, d = new_canvas(
-            "feature-keyed states — one vocabulary, two rankings")
-        feature_targets(d, f)
-        feature_token_flow(d, f)
-        done_a = f >= 16
-        done_b = f >= 18
-        box_a = feature_bucket(d, 0, "state A", done_a)
-        box_b = feature_bucket(d, 1, "state B", done_b)
-        if done_a:
-            feature_docked(d, box_a, 0)
-        if done_b:
-            feature_docked(d, box_b, 1)
-        rows_a = 0 if f < 22 else min(3, (f - 22) // 2 + 1)
-        rows_b = 0 if f < 29 else min(3, (f - 29) // 2 + 1)
-        if rows_a:
-            feature_ranking(d, box_a, 0, rows_a)
-        if rows_b:
-            feature_ranking(d, box_b, 1, rows_b)
-        text(d, (W // 2, 528),
-             "probe tokens key the state — the same actions rank "
-             "differently per state", TEXT_FAINT, 11, anchor="mm")
+    for i in range(30):
+        img, d = new_canvas("different targets - different first moves")
+        rev = min(1.0, i / 12.0)
+        _card(d, [40, 60, 460, 200], "TARGET A: plain script",
+              ["code reads normally", "no packing", "no traps"])
+        _card(d, [500, 60, 920, 200], "TARGET B: hardened app",
+              ["code is scrambled", "packed", "full of traps"])
+        ay = lerp(216, 296, rev)
+        by = lerp(216, 296, rev)
+        d.line([250, 206, 250, ay], fill=BLUE, width=2)
+        d.line([710, 206, 710, by], fill=PURPLE, width=2)
+        text(d, (250, ay + 18), "what it looks like", TEXT_FAINT, 12, anchor="mm")
+        text(d, (710, by + 18), "what it looks like", TEXT_FAINT, 12, anchor="mm")
+        if rev >= 1.0:
+            d.rounded_rectangle([60, 336, 440, 446], radius=10, fill=PANEL,
+                                outline=BLUE, width=2)
+            text(d, (80, 362), "NOTES for kind A", BLUE, 15, anchor="lm")
+            text(d, (80, 394), "first move: read the code", TEXT, 16,
+                 anchor="lm")
+            text(d, (80, 422), "one cheap pass, done", TEXT_FAINT, 13, anchor="lm")
+            d.rounded_rectangle([520, 336, 900, 446], radius=10, fill=PANEL,
+                                outline=PURPLE, width=2)
+            text(d, (540, 362), "NOTES for kind B", PURPLE, 15, anchor="lm")
+            text(d, (540, 394), "first move: unpack, then watch it run",
+                 TEXT, 16, anchor="lm")
+            text(d, (540, 422), "reading it raw misleads", TEXT_FAINT, 13,
+                 anchor="lm")
+            text(d, (480, 486), "what works on one kind would mislead on "
+                 "the other.", GREEN, 15, anchor="mm")
         frames.append(img)
     return frames
-
-
-# ---------------------------------------------------------------------------
-# rl-death-discovery — arm death, park, discovery
-# ---------------------------------------------------------------------------
-DOT_COLORS = (GREEN, RED, GREEN, RED, RED, GREEN, RED, RED, RED, RED)
-P_DEAD_TRAIL = (0.42, 0.42, 0.47, 0.47, 0.52, 0.56, 0.56, 0.61, 0.66,
-                0.71, 0.78)
-NOVELTY = 0.83
-
-
-def death_timeline(d, dots, park, new_dot):
-    panel(d, (24, 56, 936, 268), "arm kdf-chain · dispatch timeline",
-          RED if park else CYAN)
-    d.line([70, 176, 890, 176], fill=PANEL_EDGE, width=2)
-    for i in range(dots):
-        x = 70 + i * (820 / 9.0)
-        color = TEXT_FAINT if park else DOT_COLORS[i]
-        d.ellipse([x - 7, 169, x + 7, 183], fill=color)
-    if new_dot:
-        d.ellipse([880, 159, 900, 179], outline=GLOW, width=2)
-        d.ellipse([884, 169, 896, 181], fill=PURPLE)
-    text(d, (56, 216), "green = fact-bearing", GREEN, 11)
-    text(d, (230, 216), "red = zero-fact", RED, 11)
-    text(d, (920, 216), f"p_dead {P_DEAD_TRAIL[min(dots, 10)]:.2f}",
-         RED if dots else TEXT_FAINT, 13, anchor="ra")
-
-
-def death_arm_card(d, park):
-    edge = TEXT_FAINT if park else GREEN
-    d.rounded_rectangle([40, 236 - 22, 460, 236 + 22], radius=6, fill=PANEL,
-                        outline=edge, width=2)
-    text(d, (56, 236), "kdf-chain", TEXT if not park else TEXT_FAINT, 14)
-    if park:
-        chip(d, (200, 236), "PARK", RED)
-        text(d, (280, 236), "revivable — never deleted", TEXT_FAINT, 11)
-    else:
-        text(d, (200, 236), "ACTIVE", GREEN, 12)
-
-
-def death_discovery(d, f):
-    panel(d, (24, 284, 936, 516), "discovery layer", PURPLE)
-    if f >= 29:
-        pulse = (f % 4) < 2
-        edge = AMBER if pulse else PANEL_EDGE
-        d.rounded_rectangle([40, 320, 480, 356], radius=6, fill=PANEL,
-                            outline=edge, width=2)
-        text(d, (56, 338), "DISCOVERY: obstacles ≥ K + stalled", AMBER, 13)
-    if 33 <= f <= 37:
-        d.rounded_rectangle([500, 320, 920, 356], radius=6, fill=PANEL,
-                            outline=RED, width=1)
-        text(d, (516, 338), "renamed retry → novelty 0.00 → rejected",
-             RED, 12)
-    if f >= 38:
-        t = min(1.0, (f - 38) / 6.0)
-        x_off = int(lerp(380, 0, t))
-        box = [500 + x_off, 380, 920 + x_off, 470]
-        edge = GREEN if f >= 45 else PURPLE
-        d.rounded_rectangle(box, radius=8, fill=PANEL, outline=edge, width=2)
-        text(d, (box[0] + 16, box[1] + 22), "expand:unicorn-emu", PURPLE, 13)
-        text(d, (box[0] + 16, box[1] + 48), f"novelty {NOVELTY:.2f}", GLOW, 12)
-        for i, tok in enumerate(("fc:dense", "die:packer-x")):
-            chip(d, (box[0] + 250 + i * 100, box[1] + 22), tok, AMBER, 11)
-        text(d, (box[0] + 16, box[1] + 72),
-             "feature-keyed: new tokens, not a renamed dead arm",
-             TEXT_FAINT, 11)
-    if f >= 45:
-        stamp(d, (770, 492), "ADMITTED", GREEN, 13)
 
 
 def render_rl_death_discovery():
+    """Story: a method keeps failing, gets benched; when nothing works,
+    a genuinely new idea gets a chance."""
     frames = []
-    for f in range(50):
-        img, d = new_canvas("arm death → park → discovery")
-        dots = 0 if f < 4 else min(10, (f - 4) // 2 + 1)
-        park = f >= 24
-        death_timeline(d, dots, park, f >= 48)
-        death_arm_card(d, park)
-        death_discovery(d, f)
-        text(d, (W // 2, 528),
-             "a dead arm parks — it is never deleted; novelty admits a "
-             "genuinely new arm", TEXT_FAINT, 11, anchor="mm")
+    for i in range(40):
+        img, d = new_canvas("dead ends get benched - new ideas get a chance")
+        n_fail = 0
+        for k, at in enumerate((5, 10, 15)):
+            if i >= at:
+                n_fail = k + 1
+        state = "pick" if i < 5 else "dead"
+        _method_chip(d, 250, 120, "guess the keys", state,
+                     sub="benched - can come back" if i >= 5 else None)
+        for k in range(n_fail):
+            text(d, (370 + k * 44, 120), "X", RED, 24, anchor="mm")
+        if 5 <= i < 22:
+            text(d, (250, 192), "the loop stops spending on it", TEXT_FAINT, 14,
+                 anchor="mm")
+        if i >= 22:
+            d.rounded_rectangle([40, 236, 920, 286], radius=10, fill=PANEL,
+                                outline=AMBER, width=2)
+            text(d, (60, 261), "nothing works - the loop tries to invent "
+                 "a way in", AMBER, 15, anchor="lm")
+            ny = lerp(336, 406, min(1.0, (i - 22) / 8.0))
+            _method_chip(d, 250, ny, "follow the key setup", "new")
+            if i >= 26:
+                text(d, (520, ny), "really different from the failed "
+                     "tries? YES", GREEN, 15, anchor="lm")
+            if i >= 31:
+                text(d, (520, ny + 28), "gets a chance", PURPLE, 15,
+                     anchor="lm")
+            if i >= 35:
+                text(d, (520, ny + 56), "same thing renamed? refused.",
+                     TEXT_FAINT, 13, anchor="lm")
         frames.append(img)
     return frames
-
-
-# ---------------------------------------------------------------------------
-# rl-pricing — the oracle prices honest vs fabricated
-# ---------------------------------------------------------------------------
-def pricing_panel(d, col, title, act_line, title_color):
-    x0 = 24 + col * 468
-    panel(d, (x0, 56, x0 + 444, 430), title, title_color)
-    text(d, (x0 + 16, 106), act_line, TEXT_DIM, 12)
-    d.line([x0 + 16, 124, x0 + 428, 124], fill=PANEL_EDGE, width=1)
-
-
-def pricing_meter(d, col, phi, claims_done):
-    x0 = 24 + col * 468
-    text(d, (x0 + 16, 148), "Φ · goal condition met", TEXT_DIM, 12)
-    d.rounded_rectangle([x0 + 16, 162, x0 + 428, 186], radius=4, fill=TRACK,
-                        outline=PANEL_EDGE)
-    fill_w = int(phi * 412)
-    if fill_w > 4:
-        d.rounded_rectangle([x0 + 16, 162, x0 + 16 + fill_w, 186], radius=4,
-                            fill=GREEN)
-    text(d, (x0 + 428, 204), f"{phi:.2f}", GREEN, 14, anchor="ra")
-    if claims_done:
-        chip(d, (x0 + 90, 232), "claims: done", RED)
-
-
-def pricing_reward(d, col, value, caption, color):
-    x0 = 24 + col * 468
-    mid = x0 + 222
-    text(d, (x0 + 16, 356), f"r = {caption}", TEXT_DIM, 12)
-    d.line([x0 + 16, 396, x0 + 428, 396], fill=PANEL_EDGE, width=2)
-    bar_len = abs(value) / 0.7 * 200
-    if abs(value) > 0.01 and bar_len > 1:
-        bx0 = mid if value >= 0 else mid - bar_len
-        bx1 = mid + bar_len if value >= 0 else mid
-        d.rounded_rectangle([bx0, 386, bx1, 406], radius=3, fill=color)
-    label_x, anchor = (x0 + 428, "ra") if value >= 0 else (x0 + 16, "la")
-    text(d, (label_x, 370), f"{value:+.2f}", color, 14, anchor=anchor)
 
 
 def render_rl_pricing():
+    """Story: two workers - one honest, one bluffing. The checker pays
+    only for proof. Lying earns nothing."""
     frames = []
-    for f in range(40):
-        img, d = new_canvas("the oracle prices the act — honest vs "
-                            "fabricated")
-        pricing_panel(d, 0, "honest act", "run held-out replay — bytes "
-                      "match", GREEN)
-        pricing_panel(d, 1, "fabricated act", "write facts — skip the "
-                      "run", RED)
-        t_rise = 0.0 if f < 5 else min(1.0, (f - 5) / 11.0)
-        pricing_meter(d, 0, lerp(0.34, 0.41, t_rise), False)
-        pricing_meter(d, 1, 0.34, f >= 8)
-        if f >= 17:
-            stamp(d, (246, 296), "ORACLE: PASS", CYAN, 14)
-            stamp(d, (714, 296), "STAMP — not PROVEN", RED, 13)
-        if f >= 22:
-            t_bar = min(1.0, (f - 22) / 8.0)
-            pricing_reward(d, 0, 0.61 * t_bar,
-                           "ΔΦ·α − λ·cost"
-                           f" = {0.61 * t_bar:+.2f}", GREEN)
-            pricing_reward(d, 1, -0.18 * t_bar,
-                           "0 − λ·cost"
-                           f" = {0.18 * t_bar:+.2f}", RED)
-        if f >= 33:
-            d.rounded_rectangle([240, 456, 720, 496], radius=8,
-                                fill=ACTIVE_BOX, outline=GLOW, width=2)
-            text(d, (480, 476), "Φ moves on oracle verdicts only.",
-                 TEXT, 15, anchor="mm")
-        text(d, (W // 2, 528),
-             "the maker cannot grade itself — the mechanical oracle "
-             "prices every act", TEXT_FAINT, 11, anchor="mm")
+    for i in range(34):
+        img, d = new_canvas("honesty is enforced - not asked for")
+        ph = i / 33.0
+        d.rounded_rectangle([40, 60, 460, 440], radius=10, fill=PANEL,
+                            outline=PANEL_EDGE, width=2)
+        text(d, (60, 92), "WORKER A", TEXT, 16, anchor="lm")
+        text(d, (60, 126), "does the work, shows the receipts", TEXT_FAINT, 13,
+             anchor="lm")
+        text(d, (60, 174), "the checker re-runs everything", TEXT_FAINT, 13,
+             anchor="lm")
+        if ph > 0.35:
+            stamp(d, (250, 226), "PASS", GREEN)
+        if ph > 0.6:
+            text(d, (60, 288), "real progress", TEXT, 15, anchor="lm")
+            bw = int(200 * min(1.0, (ph - 0.6) / 0.4))
+            d.rounded_rectangle([60, 308, 260, 330], radius=4, fill=PANEL,
+                                outline=PANEL_EDGE)
+            d.rounded_rectangle([60, 308, 60 + bw, 330], radius=4, fill=GREEN)
+            text(d, (60, 360), "+ earns credit", GREEN, 15, anchor="lm")
+        d.rounded_rectangle([500, 60, 920, 440], radius=10, fill=PANEL,
+                            outline=PANEL_EDGE, width=2)
+        text(d, (520, 92), "WORKER B", TEXT, 16, anchor="lm")
+        text(d, (520, 126), "claims done - nothing to re-run", TEXT_FAINT, 13,
+             anchor="lm")
+        text(d, (520, 174), "the checker re-runs everything", TEXT_FAINT, 13,
+             anchor="lm")
+        if ph > 0.35:
+            stamp(d, (710, 226), "FAIL", RED)
+        if ph > 0.6:
+            text(d, (520, 288), "no progress", TEXT_FAINT, 15, anchor="lm")
+            text(d, (520, 360), "- gets nothing, pays the cost", RED, 15,
+                 anchor="lm")
+            text(d, (520, 386), "(its own words never count as proof)", TEXT_FAINT,
+                 13, anchor="lm")
+        if ph >= 1.0:
+            text(d, (480, 486), "credit is paid only for results the "
+                 "checker can verify.", GREEN, 15, anchor="mm")
         frames.append(img)
     return frames
 
 
-# ---------------------------------------------------------------------------
-# approach-comparison.svg — static, no third-party project names
-# ---------------------------------------------------------------------------
 SVG_FONT = ("font-family=\"'SF Mono','Menlo','Cascadia Code',monospace\"")
 
 
@@ -696,7 +618,7 @@ def render_comparison_svg():
         f'text-anchor="middle">how four approaches decide</text>',
     ]
     y = 52
-    parts.append(svg_lane(y, "Static knowledge routing", TEXT_DIM,
+    parts.append(svg_lane(y, "Static knowledge routing", TEXT_FAINT,
                           "open chain, no feedback", TEXT_FAINT))
     parts.append(svg_box(48, y + 48, 170, 40, "methodology manual"))
     parts.append(svg_arrow(222, 264, y + 68))
@@ -704,7 +626,7 @@ def render_comparison_svg():
     parts.append(svg_arrow(442, 484, y + 68))
     parts.append(svg_box(488, y + 48, 130, 40, "output"))
     y2 = y + 148
-    parts.append(svg_lane(y2, "Bounded pipeline", TEXT_DIM,
+    parts.append(svg_lane(y2, "Bounded pipeline", TEXT_FAINT,
                           "rounds capped by design", TEXT_FAINT))
     parts.append(svg_box(48, y2 + 48, 140, 40, "fixed stages"))
     parts.append(svg_arrow(192, 230, y2 + 68))
@@ -716,7 +638,7 @@ def render_comparison_svg():
     parts.append(svg_loop_back(490, 686, y2 + 68, TEXT_FAINT,
                                "loop is fixed, learns nothing"))
     y3 = y2 + 148
-    parts.append(svg_lane(y3, "Single-verdict triage", TEXT_DIM,
+    parts.append(svg_lane(y3, "Single-verdict triage", TEXT_FAINT,
                           "narrow domain, one pass", TEXT_FAINT))
     parts.append(svg_box(48, y3 + 48, 130, 40, "target"))
     parts.append(svg_arrow(182, 216, y3 + 68))
