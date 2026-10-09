@@ -31,20 +31,21 @@ def _lib_kunglao():
 
 def test_trigger_needs_both_obstacles_and_a_dead_arm():
     dead = {"static-decompile": {"dead": True}}
-    snap3 = {"obstacles": {"count": 3}}
-    assert ex.trigger(snap3, dead) == {
-        "obstacle_count": 3, "collapsed_arms": ["static-decompile"]}
+    snap2 = {"obstacles": {"count": 2}}
+    assert ex.trigger(snap2, dead) == {
+        "obstacle_count": 2, "collapsed_arms": ["static-decompile"],
+        "arm": "family-death"}
     # below K: no fire
-    assert ex.trigger({"obstacles": {"count": 2}}, dead) is None
+    assert ex.trigger({"obstacles": {"count": 1}}, dead) is None
     # obstacles present but nothing collapsed: no fire
-    assert ex.trigger(snap3, {"static-decompile": {"dead": False}}) is None
+    assert ex.trigger(snap2, {"static-decompile": {"dead": False}}) is None
     # no obstacles at all: no fire (the empty-registry rule)
     assert ex.trigger({"obstacles": {"count": 0}}, dead) is None
     assert ex.trigger({}, dead) is None
     # malformed inputs degrade to no-fire, never raise
     assert ex.trigger(None, dead) is None
-    assert ex.trigger(snap3, None) is None
-    assert ex.trigger(snap3, {"weird": 7}) is None
+    assert ex.trigger(snap2, None) is None
+    assert ex.trigger(snap2, {"weird": 7}) is None
 
 
 def test_trigger_collapsed_arms_sorted_deterministically():

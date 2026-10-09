@@ -1495,23 +1495,29 @@ EXPANSION_DISABLE_ENV = "KUNGLAO_EXPANSION"
 def _maybe_expand(ctx: RunContext, dispatched: set[str],
                   detail: dict) -> None:
     """#546 WS4 wiring: the discovery-layer move. When the workspace's
-    obstacle evidence reaches EXPAND_OBSTACLE_K and a tried family is
-    termination-dead (BOTH sanctioned faces — the state snapshot's
-    obstacle digest + the termination verdicts; rlvr.obstacles is
-    never imported, the 396 freeze wall holds), spend ONE act per run
-    generating novel attack hypotheses OUTSIDE the failed set. The
-    frozen model generates (runs/expansion-hypotheses.json, schema
-    expansion-hypotheses/1); rlvr.expansion.admit adjudicates
-    (feature-keyed novelty — a renamed dead arm never spends the move);
-    the receipt lands runs/expansion/E-<n>.json; the admitted family
-    tokens then register into the workspace overlay
-    (runs/discovered-families.yaml) so the vocabulary gate can
-    enumerate — and, receipt-gated, validate — dispatches declaring
-    them. That registry-admission step never touches the repo registry
-    bytes; without the workspace's own receipt chain the gate stays
-    closed. The capability face: fail-open, never breaks the loop.
-    The ablation face: KUNGLAO_EXPANSION=0 disables the move entirely
-    (the L3 off-arm of the blocked-path 2x2 delta)."""
+    obstacle evidence reaches EXPAND_OBSTACLE_K and at least one
+    collapse arm holds — a tried family is termination-dead, or the
+    loop is stalled over the sanctioned faces (the state snapshot's
+    obstacle digest + the termination verdicts; the stall face is a
+    mechanical read over the transition ledger's potential column, and
+    a failure to read it degrades to the family-death-only predicate;
+    rlvr.obstacles is never imported, the 396 freeze wall holds), spend
+    ONE act per run generating novel attack hypotheses OUTSIDE the
+    failed set. The stall arm only SPENDS the move — it never kills,
+    parks, downweights, or writes anything; the option-death estimator
+    keeps sole authority over parking. The frozen model generates
+    (runs/expansion-hypotheses.json, schema expansion-hypotheses/1);
+    rlvr.expansion.admit adjudicates (feature-keyed novelty — a
+    renamed dead arm never spends the move); the receipt lands
+    runs/expansion/E-<n>.json; the admitted family tokens then
+    register into the workspace overlay (runs/discovered-families.yaml)
+    so the vocabulary gate can enumerate — and, receipt-gated,
+    validate — dispatches declaring them. That registry-admission step
+    never touches the repo registry bytes; without the workspace's own
+    receipt chain the gate stays closed. The capability face:
+    fail-open, never breaks the loop. The ablation face:
+    KUNGLAO_EXPANSION=0 disables the move entirely (the L3 off-arm of
+    the blocked-path 2x2 delta)."""
     import os as _os
     if _os.environ.get("KUNGLAO_EXPANSION", "") == "0":
         return
@@ -1524,7 +1530,18 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
         snap = st.snapshot(str(ctx.ws))
         fams = sorted(method_families.registered_tokens())
         death = term.verdicts(str(ctx.ws), fams) if fams else {}
-        trig = ex.trigger(snap, death)
+        # the loop-stall face: a mechanical read over the transition
+        # ledger's potential column (the sanctioned settlement stream);
+        # any read failure degrades to family-death-only — fail-closed
+        try:
+            inc = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
+            phis = [r.get("s_prime_phi")
+                    for r in inc.read_transitions(str(ctx.ws))
+                    if isinstance(r, dict)]
+            stall = ex.loop_stalled(phis)
+        except Exception:  # noqa: BLE001 — stall absence is fail-closed
+            stall = None
+        trig = ex.trigger(snap, death, stall)
         if trig is None:
             return
         if "EXPAND" in dispatched:
@@ -2153,8 +2170,9 @@ def _loop_one_tick(ctx: RunContext, dispatched: set[str], detail: dict,
     # online distillation tick step: one bounded act per tick when a
     # miss signal fires with budget (a capability, never the loop)
     _maybe_distill(ctx, detail)
-    # #546 WS4: the discovery move — obstacles stacked + arms collapsed
-    # => one expand act per run (a capability, never the loop)
+    # the discovery move: the trigger's collapse evidence (stacked
+    # obstacles + a dead arm or a stalled loop) => one expand act per
+    # run (a capability, never the loop)
     _maybe_expand(ctx, dispatched, detail)
     # #518 PR-2 (W4): the frozen-posterior alarm rides every tick tail
     _posterior_drift_check(ctx)

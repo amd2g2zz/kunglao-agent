@@ -74,7 +74,7 @@ files:
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 101
+  scripts/e2e/checkpoints.py: 96
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 17
   scripts/e2e/model.py: 4
