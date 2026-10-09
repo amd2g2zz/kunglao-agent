@@ -790,6 +790,12 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     claim is already in flight from an earlier tick."""
     if claim in dispatched:
         return None, None
+    # the reconciliation: a lane under the quota hold skips its next
+    # launch attempt — the loop ticks back, the claim stays dispatchable,
+    # and the lane re-probes the moment the bounded delay elapses (never
+    # a wall-clock cliff: no deadline, no give-up, just a cheaper probe).
+    if _quota_hold_active(ctx, claim):
+        return None, None
     dispatched.add(claim)
     # K1 wiring (matrix4): the per-key attempt ladder — every launch
     # of this claim-key climbs one rung of the Luby sequence, so a
@@ -922,6 +928,10 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     # the V: forms both release; re-dispatch remains possible, the pin is
     # gone.
     _settle_dispatch_outcome(ctx, claim, act)
+    # the reconciliation: quota-class failure memory rides the settle
+    # path — the lane's hold and its observable retreat rows are decided
+    # HERE (the same face that banks the act's outcome), never at launch.
+    _settle_quota_backoff(ctx, claim, act)
     if act.outcome == "DISPATCHED":
         dispatched.discard(claim)
         dispatched.discard("V:" + claim)
@@ -1533,6 +1543,93 @@ def _luby_units(n: int) -> int:
 def _luby_timeout_s(retry_count: int) -> int:
     """The act timeout for a claim's nth attempt: Luby(n) * base."""
     return _luby_units(max(0, retry_count)) * LUBY_BASE_S
+
+
+# ---------------------------------------------------------------------------
+# the reconciliation: quota-class failure memory for the dispatch lane
+# ---------------------------------------------------------------------------
+
+#: the exponent CAP on the backoff curve — delay = the luby base *
+#: 2^min(streak-1, cap). The base IS the existing luby base (no parallel
+#: wall-clock scale); the cap is dimensionless and documented here, and
+#: the curve stays monotone + bounded: the lane re-probes forever, just
+#: cheaper — a hold, never a wall-clock cliff.
+QUOTA_BACKOFF_MAX_EXP = 4
+
+#: the fail-fast stderr shapes of the model-API quota faults (the
+#: insufficient-balance / usage-cap storm the audit measured): classified
+#: by substring + word-bounded code; anything unclassifiable fails open
+#: to no-backoff (a real worker failure is not an outage).
+_QUOTA_STDERR_MARKERS = (
+    "credit balance", "insufficient", "usage limit", "usage cap",
+    "rate limit", "rate_limit", "quota",
+)
+_QUOTA_STDERR_CODES = ("429", "403")
+
+
+def _is_quota_class_stderr(text: str | None) -> bool:
+    """True iff the dispatch stderr matches a quota-fault shape
+    (fail-open: empty/unclassifiable -> False = no backoff)."""
+    lowered = (text or "").lower()
+    if not lowered:
+        return False
+    if any(marker in lowered for marker in _QUOTA_STDERR_MARKERS):
+        return True
+    return any(re.search(rf"\b{code}\b", lowered)
+               for code in _QUOTA_STDERR_CODES)
+
+
+def _quota_backoff_delay_s(consecutive: int) -> int:
+    """The lane's next-attempt hold for n consecutive quota failures:
+    luby_base * 2^min(n-1, cap) — monotone growth, bounded by the cap."""
+    exp = min(max(0, consecutive - 1), QUOTA_BACKOFF_MAX_EXP)
+    return LUBY_BASE_S * (2 ** exp)
+
+
+def _quota_hold_active(ctx: RunContext, claim: str) -> bool:
+    """True while the lane's reconciliation hold is still on the clock.
+    Fail-open: a context without a clock or state face (older test
+    doubles, bare seams) carries no hold, never breaks the launch."""
+    try:
+        return ctx.clock.monotonic() < ctx.quota_hold_until.get(claim, 0.0)
+    except (AttributeError, TypeError):
+        return False
+
+
+def _settle_quota_backoff(ctx: RunContext, claim: str, act: object) -> None:
+    """The settle-path reconciliation: consecutive quota-class rc=1
+    dispatch failures grow the lane's bounded backoff (ONE audit row per
+    retreat step); ANY successful act resets it; a non-quota settle
+    breaks the consecutive run. Fail-open: a classification, state, or
+    telemetry failure leaves no hold, never breaks the landing path."""
+    streaks = getattr(ctx, "quota_streak", None)
+    holds = getattr(ctx, "quota_hold_until", None)
+    if not isinstance(streaks, dict) or not isinstance(holds, dict):
+        return  # no memory face on this context: no backoff, no noise
+    try:
+        if act.outcome == "DISPATCHED":
+            ctx.quota_streak.pop(claim, None)
+            ctx.quota_hold_until.pop(claim, None)
+            return
+        detail = act.detail if isinstance(act.detail, dict) else {}
+        quota_hit = (act.outcome == "ERROR" and detail.get("rc") == 1
+                     and _is_quota_class_stderr(
+                         detail.get("stderr_tail") or ""))
+        if not quota_hit:
+            # a real worker failure (or any other settle) is not an
+            # outage — it breaks the consecutive quota run
+            ctx.quota_streak.pop(claim, None)
+            ctx.quota_hold_until.pop(claim, None)
+            return
+        streak = ctx.quota_streak.get(claim, 0) + 1
+        ctx.quota_streak[claim] = streak
+        delay = _quota_backoff_delay_s(streak)
+        ctx.quota_hold_until[claim] = ctx.clock.monotonic() + delay
+        audit.emit_dispatch_backoff(str(ctx.ws), claim, consecutive=streak,
+                                    delay_s=delay,
+                                    capped=streak - 1 >= QUOTA_BACKOFF_MAX_EXP)
+    except Exception as exc:  # noqa: BLE001 — no hold ever breaks landing
+        kunglao_log.warn("e2e.quota_backoff", f"{type(exc).__name__}: {exc}")
 
 
 # The discovery-move ablation switch (the five-arm capability matrix):

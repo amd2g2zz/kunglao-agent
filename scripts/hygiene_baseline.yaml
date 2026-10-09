@@ -532,6 +532,8 @@ files:
     r1: 6
   tests/test_baksmali_index.py:
     r1: 1
+  tests/test_belief_reconcile_600.py:
+    r2: 1
   tests/test_bash_fact_guard_809.py:
     r1: 1
   tests/test_bench_analyze.py:
