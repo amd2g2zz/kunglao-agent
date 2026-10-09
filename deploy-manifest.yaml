@@ -415,7 +415,7 @@ files:
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
-    sha256: f47e1d3dd73c13f61fefaf892e4756f42031d158bc0218ac4a957e4474133250
+    sha256: bf946b7d7ae900c542f519996c4fc3d00b087c9d97493e68aa06dc574273c790
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
