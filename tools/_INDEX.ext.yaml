@@ -583,7 +583,7 @@ ext:
     consume: "invoke"
     source: "scripts/eval_matrix_report.py"
     usage: "python scripts/eval_matrix_report.py"
-    description: "eval_matrix_report.py — the capability-matrix readout face (pass@k aggregation + the B-ladder decompositions)."
+    description: "eval_matrix_report.py — the capability-matrix readout face"
   - name: "eval_matrix_runner"
     capability: "unknown"
     type: "tool"

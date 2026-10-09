@@ -435,7 +435,7 @@ files:
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: 17c1290397a9f247dfcaa4d92bee8b9db8e5b34cbdbf03834dfa384cf1466959
+    sha256: b48af6223c27da86b4298b149d2c9c3b281b7c6a3c230cb593a69840aaac98e6
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
@@ -503,7 +503,7 @@ files:
   - src: scripts/feature_mining.py
     dest: .claude/scripts/feature_mining.py
     kind: scaffold
-    sha256: dd40f6306543828c6774c9659079584e26cb650e481d8cc100c59c2c4136b544
+    sha256: f8e8c654c0839984d233b51c380ef537b94fee9c2d4238b39a7dc381a90aae13
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -1191,7 +1191,7 @@ files:
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
-    sha256: d07c0ef5f96f1cb8fd0865eb5fc3687d0bacf3aace6e868ae6405e33ccd7aa27
+    sha256: 23887f05635995e1e317007d6b903a8154ec66e2c65399ee49abcb694c419f53
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
@@ -1247,7 +1247,7 @@ files:
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: 510e2b34f06aa9835219821c8c93f93512d7636e0ed85472c34c8b280c6ee40f
+    sha256: 65587c0d00260005eaf06dba6c6a8b28165781fcc35d6ccbe25fb4a732089d11
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
@@ -1867,7 +1867,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 77d8ccc5c5c05c17defc0422b075fba8ce540fcb82ce8cf8f10471fc394ec945
+    sha256: fd7aa28644c8997338f820b4dcd1621fc48f13975f7de2ca60141aa8e5b0b9eb
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

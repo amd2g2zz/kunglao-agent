@@ -25,6 +25,18 @@ similarity, never to fabricated distance (absence never scored); the
 empty union scores 0.0 (no borrowing on no evidence). Token identity
 is string equality: deterministic, order-independent, float-free.
 
+## The epistemic token faces
+
+Beyond the structural identity tokens, three EPISTEMIC categories ride
+the cheap probe outputs the loop already produces: the die face's
+byte/token entropy (``ent:<band>`` — fixed edges, float-free) and
+packer verdict (``die:verdict=packed|clean``), and the floss
+survivor-set's embedded-constant density (``fc:<band>``). They are
+first-class tokens (they enter Jaccard, the pools, and the discovery
+layer's novelty), and ``probe_feature_tokens`` projects exactly this
+subset for the state-signature probe dim — evidence only, never a
+difficulty label.
+
 ## The pool — a second anchor source under the one SHRINK_CAP
 
 ``pool_for(table, features, family, exclude_run=None)`` accumulates,
@@ -200,6 +212,11 @@ def _probe_tokens(features: Mapping) -> set[str]:
         tok = _token("die:packer=", die.get("detected_packer"))
         if tok:
             out.add(tok)
+        # the die face's verdict — the probe's own packing call, carried
+        # as evidence (never as a difficulty label)
+        if die.get("usable") is True:
+            out.add("die:verdict="
+                    + ("packed" if die.get("detected_packer") else "clean"))
     apkid = po.get("apkid")
     if isinstance(apkid, Mapping) and apkid.get("usable") is True:
         out.add("apkid:usable")
@@ -217,6 +234,82 @@ def _refutation_tokens(features: Mapping) -> set[str]:
     return {tok} if tok else set()
 
 
+# the epistemic token prefixes: byte/token entropy of the entry
+# material, embedded-constant density over the floss survivor set, and
+# the die face's verdict. These are the tokens the state-signature
+# probe dim reads; everything else in the vocabulary is structural
+# instance identity.
+PROBE_TOKEN_PREFIXES = ("ent:", "fc:", "die:")
+
+# fixed entropy bands over the die face's max section entropy
+# (bits/byte): repetitive/padding material stays low, plain code/text
+# sits mid, encoded/obfuscated sections read high, packed/encrypted
+# saturates near 8. Edge semantics follow state.budget_bucket: strictly
+# below the edge keeps the lower band.
+ENTROPY_BANDS = ((3.0, "low"), (5.5, "mid"), (7.0, "high"))
+ENTROPY_BAND_TOP = "saturated"
+
+# fixed embedded-constant density bands over the floss survivor set:
+# constants = base64 candidates + high-entropy blobs; density = that
+# count over the survivor total. A constant-heavy survivor set is the
+# obfuscated-bundle shape; near-absent constants is the plain shape.
+CONST_DENSITY_BANDS = ((0.02, "sparse"), (0.10, "moderate"))
+CONST_DENSITY_BAND_TOP = "dense"
+
+
+def _int_or_none(value) -> int | None:
+    """Non-negative true-int or None (bools/floats/negatives are data
+    noise, never evidence — the validator's int-or-null contract)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def _entropy_tokens(features: Mapping) -> set[str]:
+    po = features.get("probe_outputs")
+    if not isinstance(po, Mapping):
+        return set()
+    die = po.get("die")
+    if not isinstance(die, Mapping):
+        return set()
+    value = die.get("entropy_max")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return set()
+    if value != value or value in (float("inf"), float("-inf")):
+        return set()
+    for edge, name in ENTROPY_BANDS:
+        if value < edge:
+            return {f"ent:{name}"}
+    return {f"ent:{ENTROPY_BAND_TOP}"}
+
+
+def _floss_tokens(features: Mapping) -> set[str]:
+    po = features.get("probe_outputs")
+    if not isinstance(po, Mapping):
+        return set()
+    floss = po.get("floss")
+    if not isinstance(floss, Mapping):
+        return set()
+    survivors = _int_or_none(floss.get("survivors"))
+    constants = _int_or_none(floss.get("constants"))
+    if not survivors or constants is None:
+        return set()  # no survivor base or no constant count: no reading
+    density = constants / survivors
+    for edge, name in CONST_DENSITY_BANDS:
+        if density < edge:
+            return {f"fc:{name}"}
+    return {f"fc:{CONST_DENSITY_BAND_TOP}"}
+
+
+def probe_feature_tokens(features) -> frozenset[str]:
+    """The EPISTEMIC subset of the canonical tokens (the probe-evidence
+    faces only) — the state-signature probe dim's vocabulary. Structural
+    identity (lane/ptype/language/entry) and mined calibration labels
+    never ride it: the discriminator is evidence, never a label."""
+    return frozenset(t for t in feature_tokens(features)
+                     if t.startswith(PROBE_TOKEN_PREFIXES))
+
+
 def feature_tokens(features: Mapping) -> frozenset[str]:
     """The canonical token set of one feature-table/1 features object.
 
@@ -231,7 +324,9 @@ def feature_tokens(features: Mapping) -> frozenset[str]:
                      | _packer_tokens(features)
                      | _difficulty_tokens(features)
                      | _probe_tokens(features)
-                     | _refutation_tokens(features))
+                     | _refutation_tokens(features)
+                     | _entropy_tokens(features)
+                     | _floss_tokens(features))
 
 
 def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
