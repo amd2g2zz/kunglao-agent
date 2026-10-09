@@ -212,11 +212,12 @@ uv run python scripts/winrate_curve.py <workspace> [--window 5] [--html curve.ht
 
 ## 📚 实战案例
 
-脱敏的一页战斗报告 —— 防御面、走过的路径、机械判决：
+从真实且完全收敛的运行工件重写的证据优先案例（EN + 简体中文）—— 转录、
+死路、两个具名验证方法、机械判决：
 
-- [加固 Android native crackme](docs/cases/hardened-android-crackme.md) —— 14 层保护；无人值守运行，3/3 常量，18/18 byte-exact 回放。
-- [Web 请求签名还原](docs/cases/web-request-signing.md) —— 在混淆与反爬防御下 byte-exact 复现生产签名方案。
-- [桌面代理许可证协议](docs/cases/desktop-agent-license.md) —— challenge/response 握手完整刻画并 byte-exact 回放。
+- [kvm8-isa：从参考解释器解码私有 VM](docs/cases/kvm8-isa.md) —— 还原 KVM-8 ISA（容器、十操作码半字节映射、guard 字节、`mix()` 摘要机）；44/44 指令字解码，四个摘要与参考解释器的 rustc 构建逐字节一致；诱饵 `fold8` 对照被坐实对四个载荷输出同一个错误常量。
+- [web-token-v1：签名 SDK 还原成一行 HMAC](docs/cases/web-token-v1.md) —— 密钥由乱序 base64 表部件重组、填充位置用证伪裁决，`client.py` 为 4/4 新鲜会话铸出令牌；被截获的令牌跨服务器实例重放即死。
+- [apk-webview-attest-v2：两层证明绑定](docs/cases/apk-webview-attest-v2.md) —— JS PoW/mix 挑战把种子送进原生 `sha256(seed‖nonce)[:8] ^ NATIVE_MASK` 检查；8 字节掩码从原始 ELF 字节重推，4/4 会话穿越两层，阴性对照被 403 拒绝。
 
 每篇案例在中英双语版本并存于 `docs/cases/`。
 

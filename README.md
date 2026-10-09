@@ -258,12 +258,13 @@ check the obstacle registry before adding budget.
 
 ## 📚 Case studies
 
-Sanitized one-page battle reports — the defense surface, the route walked,
-and the mechanical verdict:
+Evidence-first case studies rewritten from real, fully converged run artifacts
+(EN + 简体中文) — the transcript, the dead ends, the two named verification
+methods, and the mechanical verdict:
 
-- [Hardened Android native crackme](docs/cases/hardened-android-crackme.md) — 14 protection layers; unattended run, 3/3 constants, 18/18 byte-exact replays.
-- [Web request-signing recovery](docs/cases/web-request-signing.md) — a production signing scheme reproduced byte-exact under obfuscation and anti-bot defenses.
-- [Desktop agent license protocol](docs/cases/desktop-agent-license.md) — a challenge/response handshake characterized and replayed byte-exact.
+- [kvm8-isa: a private VM decoded from its reference interpreter](docs/cases/kvm8-isa.md) — KVM-8 ISA recovered (container, 10-op nibble map, guard bytes, `mix()` machine); 44/44 words decoded, four digests byte-exact against a rustc build of the reference interpreter; decoy `fold8` control caught emitting one constant wrong line for all four payloads.
+- [web-token-v1: a signing SDK reversed to a one-line HMAC](docs/cases/web-token-v1.md) — key reassembled from scrambled base64 table parts, pad placement settled by falsification, `client.py` mints tokens for 4/4 fresh sessions; a captured token dies on replay across server instances.
+- [apk-webview-attest-v2: two attestation layers bound](docs/cases/apk-webview-attest-v2.md) — JS PoW/mix challenge feeds the seed into a native `sha256(seed‖nonce)[:8] ^ NATIVE_MASK` check; 8-byte mask re-derived from raw ELF bytes, 4/4 sessions through both layers, negative control rejected with 403.
 
 Each case has a Chinese version alongside the English one under `docs/cases/`.
 
