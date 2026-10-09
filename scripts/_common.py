@@ -45,6 +45,31 @@ def utc_now_z() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def scripts_bootstrap() -> Path:
+    """THE canonical import prologue: guard-insert this module's own
+    directory (scripts/) at ``sys.path[0]`` so sibling imports resolve
+    for every invocation style (direct, by path, ``python -m``, pytest).
+
+    Anchored at _common's location — it NEVER guesses the caller's
+    parent depth (``scripts/`` vs ``scripts/rlvr/`` differ), so a call
+    from any file, cwd or tool bootstraps exactly scripts/. Idempotent
+    by contract: an existing entry is left exactly where it is (no
+    duplicate, no front-move — an unconditional insert would silently
+    reorder shared-name twin resolution, the #770 hazard). Returns the
+    directory as a ``Path`` so migrated prologues keep their
+    ``SCRIPT_DIR``-style locals.
+
+    Sub-package modules (``scripts/rlvr/*``, ``scripts/e2e/*``) cannot
+    use this face: their direct execution cannot import _common before
+    the very insert it performs — those keep their raw
+    ``__package__``-guarded prologue by necessity, not by choice.
+    """
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    return Path(here)
+
+
 def sha256_hex(data: bytes) -> str:
     """THE canonical bytes→digest face: lowercase hex sha256, one line
     everywhere a hash of some bytes is written."""
