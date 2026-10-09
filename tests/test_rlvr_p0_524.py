@@ -98,7 +98,8 @@ def test_continuous_credit_and_censoring(tmp_path):
     (ws / "claim-register.yaml").write_text(
         "claims:\n- id: C-004\n  status: OPEN\n", encoding="utf-8")
     # two facts cite the claim -> a DISPATCHED act banks 1.0; a TIMEOUT
-    # (with the same facts) banks 0.5 — hindsight partial credit
+    # (with the same facts) banks 0.0 — a censored outcome takes the
+    # failure floor (#601 4-L1: no success mass from an unobserved act)
     for fid in ("F001", "F002"):
         (ws / "facts" / f"{fid}.md").write_text(
             f"---\nclaim_id: C-004\n---\nbody\n", encoding="utf-8")
@@ -130,8 +131,9 @@ def test_continuous_credit_and_censoring(tmp_path):
     assert settled and settled[-1]["credit"] == 1.0
     assert settled[-1].get("fingerprint"), "fp rides the settlement row"
 
-    # TIMEOUT path: censored flag on the posterior row, hindsight credit
-    for fid in ("F003", "F004"):  # facts citing C-005 -> partial credit
+    # TIMEOUT path: censored flag on the posterior row, failure-floor
+    # credit (#601 4-L1) — facts keep their progress face through Φ
+    for fid in ("F003", "F004"):  # facts citing C-005
         (ws / "facts" / f"{fid}.md").write_text(
             f"---\nclaim_id: C-005\n---\nbody\n", encoding="utf-8")
     d2 = set()
@@ -158,8 +160,8 @@ def test_continuous_credit_and_censoring(tmp_path):
     assert aud and aud[-1]["detail"]["counts"].get("censored") is True
     settled2 = [r for r in q_cells.JSONLQStore(str(ws)).observations()
                 if r.get("credit") is not None and r.get("claim") == "C-005"]
-    assert settled2 and 0.0 < settled2[-1]["credit"] < 1.0, \
-        "timeout with facts cites banks partial (hindsight), not bare 0"
+    assert settled2 and settled2[-1]["credit"] == 0.0, \
+        "timeout banks the failure floor — no success mass when censored"
 
 
 def test_canonical_ad3_c6pre(tmp_path, monkeypatch):
