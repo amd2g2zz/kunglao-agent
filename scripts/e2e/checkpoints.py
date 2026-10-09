@@ -1214,11 +1214,50 @@ def _record_verify_launch(ctx: RunContext, claim: str,
                          f"{type(exc).__name__}: {exc}")
 
 
+# The verdict words a hard-killed verify act can be settled from: the
+# set the credit mapping can bank (verified/confirmed pass; refuted
+# banks zero — an absorbed refutation is still a refutation, no
+# charity). Anything else on disk is unparseable-for-settle and keeps
+# the bare kill.
+_ABSORBABLE_VERDICTS = frozenset({"verified", "confirmed", "refuted"})
+
+
+def _on_disk_verdict_word(verdict: str) -> str:
+    """Normalize a verdict word for the absorb-at-kill settle: return
+    the canonical lowercase word only when it is one the credit mapping
+    can bank; anything else (empty, unknown, hedged) returns "" so the
+    caller keeps the bare kill."""
+    word = str(verdict or "").strip().lower()
+    return word if word in _ABSORBABLE_VERDICTS else ""
+
+
+def _on_disk_verify_verdict(ctx: RunContext, claim: str) -> str:
+    """Read the verify act's own on-disk verdict face —
+    runs/verification-<claim>.md, written by the verifier act itself
+    (oracle-priced output, not a self-declared claim) — and return its
+    verdict word when settleable. Fail-open: any read/parse miss
+    returns "" (the bare kill), never a raise into the kill path."""
+    try:
+        note = (Path(ctx.ws) / "runs"
+                / f"verification-{claim}.md").read_text(
+                    encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    m = re.search(r"^verdict:\s*(\S+)", note, re.M)
+    if m is None:
+        return ""
+    return _on_disk_verdict_word(m.group(1))
+
+
 def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
-                          verdict: str = "") -> None:
+                          verdict: str = "",
+                          absorbed_from_disk: bool = False) -> None:
     """#550: close the verify/red-team transition — r_settle banks the
     verdict's credit (verified/CONFIRMED => 1.0, else 0.0); the Φ move
-    from newly verified facts rides r_incr unchanged. Fail-open."""
+    from newly verified facts rides r_incr unchanged. Fail-open.
+    absorbed_from_disk is the additive audit marker for the
+    absorb-at-kill settle: the row keeps the kill outcome AND records
+    that the verdict was read back from the act's on-disk face."""
     try:
         ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
         _dur_ms = (act.detail or {}).get("duration_ms") \
@@ -1228,7 +1267,8 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
             facts=_facts_citing(ctx.ws, claim),
             seconds=float(_dur_ms or 0) / 1000.0,
             r_settle=ir.verify_credit(verdict),
-            action_type="verify", variant=variant)
+            action_type="verify", variant=variant,
+            absorbed_from_disk=absorbed_from_disk)
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
         kunglao_log.warn("e2e.verify_settle",
                          f"{type(exc).__name__}: {exc}")
@@ -1314,7 +1354,17 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
-        _record_verify_settle(ctx, claim, act, "verify", verdict="")
+        _absorbed = ""
+        if act.outcome == "TIMEOUT":
+            # the absorb-at-kill settle: the cap cuts the act's wrap-up,
+            # not its work — a verdict the verifier already wrote to its
+            # own on-disk face settles the transition (credit via the
+            # existing mapping) instead of a bare timeout-kill. The row
+            # keeps BOTH markers: o.status stays the kill, the absorb
+            # flag rides for audit. Absent/unparseable => bare kill.
+            _absorbed = _on_disk_verify_verdict(ctx, claim)
+        _record_verify_settle(ctx, claim, act, "verify", verdict=_absorbed,
+                              absorbed_from_disk=bool(_absorbed))
         dispatched.discard(vkey)
         return None
     # verification landed → land the gate-conformant verify-note (#501:
