@@ -83,6 +83,8 @@ act、验证、预算、经验去向。
 | 时程 | 单会话，人盯着 | 数小时无人值守，断点恢复 |
 | 经验 | 会话结束即蒸发 | 账本 → 后验 → 更准的开局 |
 
+![控制器选每个 act，Claude Code 执行，账本记住](docs/assets/rl-drive.gif)
+
 诚实边界：单会话简单任务裸 Claude Code 更划算（评估表就这么写）。
 kunglao 的回报在长时程、验证纪律、跨任务复利。
 
@@ -152,7 +154,7 @@ append-only 账本行。
 判定——决策逻辑全是写死的：上一个任务的经验永远不改变下一个任务的
 计划。这个循环的控制律从自己测得的历史里学出来：
 
-![原理对比：三个开环/静态环 对比 kunglao 的闭合环](docs/assets/approach-comparison.svg)
+![并排对比：三个系统第二个任务原价重复；kunglao 第二个任务更便宜](docs/assets/rl-comparison.gif)
 
 ## 📋 环境要求
 
