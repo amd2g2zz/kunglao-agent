@@ -74,7 +74,7 @@ files:
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 96
+  scripts/e2e/checkpoints.py: 100
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 17
   scripts/e2e/model.py: 4
@@ -270,7 +270,7 @@ files:
   scripts/update_index.py: 6
   scripts/user_signal.py: 3
   scripts/value_replay.py: 5
-  scripts/verification_ladder.py: 6
+  scripts/verification_ladder.py: 5
   scripts/verifier_identity.py: 4
   scripts/verify_backlog_face.py: 5
   scripts/verify_status_watch.py: 4

@@ -7,24 +7,37 @@ median 1182s before the 1800s-cap hard kill — the kill cuts the WRAP-UP,
 not the work — yet the settle face dropped a bare 0.0 as if the act had
 decided nothing (the go-arx round-2 BLOCKED loss was exactly this).
 
+#601 hardening (4-L4/5-F5): the absorb gained a writer binding — the
+orchestrator mints a fresh `verify-stamp:` per dispatch, the act's
+contract requires it in the note, and the settle face trusts only a
+note bound to the CURRENT dispatch. The honest absorb shape below is
+therefore contract-compliant: the act copies the dispatch's stamp into
+its note mid-run (the kill then cuts the wrap-up, not the work).
+
 Pinned:
-  1. kill WITH a parseable verdict on disk => settled from it: credit
-     per the existing verify_credit mapping, o.absorbed_from_disk=true,
-     the kill marker (o.status=TIMEOUT) retained.
+  1. kill WITH a parseable, CURRENTLY-STAMPED verdict on disk =>
+     settled from it: credit per the existing verify_credit mapping,
+     o.absorbed_from_disk=true, the kill marker (o.status=TIMEOUT)
+     retained.
   2. kill WITHOUT a verdict on disk => the bare kill, byte-identical
      row shape to today.
-  3. refuted-on-disk => refuted credit (an absorbed refutation is still
-     a refutation — no charity), absorb marker present for audit.
+  3. stamped refuted-on-disk => refuted credit (an absorbed refutation
+     is still a refutation — no charity), absorb marker present for
+     audit.
   4. unparseable / unknown verdict word => bare kill unchanged.
   5. the absorb is scoped to the act-timeout kill: BLOCKED acts keep
      today's bare settle.
   6. the ledger face owns the marker: default-off keeps every existing
      row byte-identical; the absorbable-word set is exactly
      {verified, confirmed, refuted}.
+  (The binding's negative faces — unstamped pre-writes, stale
+  attempts, mismatched tokens — are pinned in
+  test_rc1_checkpoints_hardening_601.py.)
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -77,16 +90,42 @@ def ctx(stub_repo, tmp_path):
 
 class _KilledAtCapRunner(ScriptedRunner):
     """The verify act is hard-killed at the act budget cap (rc -1,
-    timed_out) — the 1799-1801s kill shape from the field measurement."""
+    timed_out) — the 1799-1801s kill shape from the field measurement.
+    With land_note=True the act also lands a contract-compliant note:
+    it copies the dispatch's verify-stamp binding (and, when note_body
+    is set, a full note body with a `__STAMP__` slot) into
+    runs/verification-<claim>.md mid-run."""
+
+    verdict = "verified"
+    land_note = False
+    note_body: str | None = None
 
     def run(self, cmd, cwd=None, timeout=None):
         argv = " ".join(str(c) for c in cmd)
-        if "-p" in argv and "claim: " in argv:
+        if "-p" in argv and "VERIFIER contract" in argv:
             self.calls.append(argv)
+            if self.land_note:
+                self._land_note(argv, cwd)
             return model.CmdOutcome(rc=-1, stdout="",
                                     stderr="TIMEOUT after 1800s",
                                     timed_out=True)
         return super().run(cmd, cwd=cwd, timeout=timeout)
+
+    def _land_note(self, argv, cwd) -> None:
+        m_stamp = re.search(r"verify-stamp:\s*(\S+)", argv)
+        m_claim = re.search(r"^claim:\s*(\S+)", argv, re.M)
+        if not (m_stamp and m_claim):
+            return
+        token = m_stamp.group(1).strip("`\"'")
+        claim = m_claim.group(1)
+        if self.note_body is not None:
+            text = self.note_body.replace("__STAMP__", token)
+        else:
+            text = (f"---\nclaim: {claim}\nverdict: {self.verdict}\n"
+                    f"verify-stamp: {token}\n"
+                    "verification_mode: replay_probe\n---\n\nreplay face\n")
+        (Path(cwd) / "runs" / f"verification-{claim}.md").write_text(
+            text, encoding="utf-8")
 
 
 def _rows(ws: Path) -> list[dict]:
@@ -107,7 +146,7 @@ def _write_verdict(ws: Path, claim: str, verdict: str) -> None:
 # ------------------------------------------ 1. kill with verdict on disk
 
 def test_kill_with_verified_on_disk_settles_the_verdict(ctx):
-    _write_verdict(ctx.ws, "C-002", "verified")
+    ctx.runner.land_note = True
     checkpoints._run_verifier_act(ctx, "C-002", set(), {"acts": []})
     rows = _rows(ctx.ws)
     assert len(rows) == 1
@@ -119,7 +158,8 @@ def test_kill_with_verified_on_disk_settles_the_verdict(ctx):
 
 
 def test_kill_with_confirmed_on_disk_settles_confirmed(ctx):
-    _write_verdict(ctx.ws, "C-002", "confirmed")
+    ctx.runner.land_note = True
+    ctx.runner.verdict = "confirmed"
     checkpoints._run_verifier_act(ctx, "C-002", set(), {"acts": []})
     row = _rows(ctx.ws)[0]
     assert row["r_settle"] == 1.0
@@ -164,7 +204,8 @@ def test_unknown_verdict_word_keeps_the_bare_kill(ctx):
 # --------------------------------------- 3. refuted absorbs as refuted --
 
 def test_refuted_on_disk_absorbs_as_refutation(ctx):
-    _write_verdict(ctx.ws, "C-005", "refuted")
+    ctx.runner.land_note = True
+    ctx.runner.verdict = "refuted"
     checkpoints._run_verifier_act(ctx, "C-005", set(), {"acts": []})
     row = _rows(ctx.ws)[0]
     assert row["r_settle"] == 0.0        # absorbed refutation: no charity
@@ -201,9 +242,10 @@ def test_blocked_outcome_keeps_the_bare_settle(ctx, stub_repo, tmp_path):
 def test_go_arx_round2_shape_settles_the_claim(ctx):
     """The measured loss, reconstructed: the verifier wrote its verdict
     (verified) well before the cap, then the kill cut the wrap-up — the
-    claim settles from the face the act itself wrote, never as a bare
-    kill."""
-    (Path(ctx.ws) / "runs" / "verification-C-002.md").write_text(
+    claim settles from the face the act itself wrote (bound to this
+    dispatch's stamp), never as a bare kill."""
+    ctx.runner.land_note = True
+    ctx.runner.note_body = (
         "---\n"
         "verdict: verified\n"
         "claim: C-002\n"
@@ -213,10 +255,10 @@ def test_go_arx_round2_shape_settles_the_claim(ctx):
         "matched_pairs: 15\n"
         "total_pairs: 15\n"
         "min_pair_ratio: 1.0\n"
+        "verify-stamp: __STAMP__\n"
         "---\n\n"
         "# C-002 verification — independent replay probe\n\n"
-        "Fresh-mint controlled comparison: PASS 15/15 byte-exact.\n",
-        encoding="utf-8")
+        "Fresh-mint controlled comparison: PASS 15/15 byte-exact.\n")
     checkpoints._run_verifier_act(ctx, "C-002", set(), {"acts": []})
     row = _rows(ctx.ws)[0]
     assert row["dispatch_id"] == "C-002"
