@@ -6,6 +6,60 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.6-rc1] - 2026-10-10
+
+Release candidate: feature-complete for v0.1.6. The known-issues list
+ships in the GitHub Release notes.
+
+### Added
+
+- **The learning substrate completes (#581, #582, #597, #601, #609, #610)**:
+  epistemic probe features (entropy band, constant density, packer
+  verdict) join the state signature so opening bets are per-instance;
+  the refutation fold raises verify density where red-team refutations
+  cluster, with monotone decay; verify-act absorb-at-kill settlement
+  with writer binding; the discovery trigger recalibrates to the
+  measured budget shape (K=2 plus a loop-stall arm) with a hard-wall
+  corpus to match; four audit-driven hardening fixes (proven-waiver
+  authority, the register wipe wall, censored-timeout credit aligned
+  to the failure floor, environment-belief reconciliation with
+  quota-storm backoff).
+- **The decision state faces (#584, #585, #586)**: per-fact uncertainty
+  and next-probe fields with a hypothesis view; timeline v2 (the
+  structured progress face), global_plan rendered from it, the ICD-203
+  note conventions, the evidence and result DAGs, promotion write-back
+  (register and facts stay consistent), and milestone-progress
+  readouts (stage coverage, progress depth, the stall funnel).
+- **Operator experience (#606, #611, #612, #613)**: the README states
+  the positioning (an act-level RL controller around Claude Code, how
+  the online RL works, tool-routing learning, self-improvement
+  evidence) with broadcast-grade animated visuals (posterior curves,
+  progress curves, q-cell heatmaps, training curves, ReAct triplet
+  traces) and bilingual success case studies from real run artifacts.
+
+### Changed
+
+- **Consolidation (#561, #578, #590, #591, #580)**: the atomic-write
+  family, the lint scan/emit protocol, registry maps for the eval
+  drivers, scripts_bootstrap; the repo-walk test invariants exclude
+  sibling worktrees and deployed scaffolds.
+- **CI (#605, #607)**: docs-only PRs take a fast path (the heavy legs
+  noop, the required-check chain untouched); a bounded connectivity
+  gate absorbs runner egress blips before checkout.
+- **Version identity**: this cycle ships as 0.1.6-rc1; v0.1.6 is the
+  last Claude Code-native release line - v0.2 migrates the runtime to
+  the PI Agent base.
+
+### Fixed
+
+- **Adversarial memory (#582) and the prediction ledger (#575)** land
+  with their decay and log-lift guards.
+- **#275 batch-3 endgame** holds across the consolidation (zero silent
+  handlers, the empty ledger endgame, the marker inventory).
+- **kunglao_upgrade version parsing** handles PEP 440 rc suffixes
+  (0.1.6-rc1 orders before 0.1.6, after 0.1.5.postN) - the upgrade
+  ladder previously crashed on the suffix.
+
 ## [0.1.6] - 2026-09-27
 
 ### Added
