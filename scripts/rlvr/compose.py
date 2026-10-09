@@ -641,6 +641,26 @@ def _validate_debt(obj: dict, errors: list[str]) -> None:
         errors.append("debt.top: null or non-empty id required")
 
 
+def _validate_refutation(obj: dict, errors: list[str]) -> None:
+    """The refutation-fold state-feature face: OPTIONAL (older tick
+    objects never carry it), and when present rate is a number in
+    [0, 1] with the multiplier at its healed baseline or above."""
+    refu = obj.get("refutation")
+    if refu is None:
+        return
+    if not isinstance(refu, dict):
+        errors.append("refutation: mapping required when present")
+        return
+    rate = refu.get("rate")
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)) \
+            or not (0.0 <= rate <= 1.0):
+        errors.append("refutation.rate: number in [0, 1] required")
+    mult = refu.get("multiplier")
+    if isinstance(mult, bool) or not isinstance(mult, (int, float)) \
+            or mult < 1.0:
+        errors.append("refutation.multiplier: number >= 1 required")
+
+
 def validate_strategy(obj) -> list[str]:
     """Schema linter for round-strategy/1 ([] = clean). Enforces the
     exact section set — any constitution-side key fails here, which is
@@ -649,8 +669,8 @@ def validate_strategy(obj) -> list[str]:
         return ["strategy: not a mapping"]
     errors: list[str] = []
     allowed_top = {"schema", "tick", "ts", "state_fingerprint",
-                   "composed_from", "content_hash", "debt", "dispatch",
-                   "loop", "hooks", "amendments"}
+                   "composed_from", "content_hash", "debt", "refutation",
+                   "dispatch", "loop", "hooks", "amendments"}
     unknown = sorted(set(obj) - allowed_top)
     if unknown:
         errors.append("unknown top-level keys: " + ",".join(unknown))
@@ -660,6 +680,7 @@ def validate_strategy(obj) -> list[str]:
     _validate_hooks(obj, errors)
     _validate_amendments(obj, errors)
     _validate_debt(obj, errors)
+    _validate_refutation(obj, errors)
     return errors
 
 
@@ -727,6 +748,23 @@ def _debt_face(ws: Path) -> dict:
                 "verifiable_open": []}
 
 
+def _refutation_face(ws: Path) -> dict:
+    """The refutation fold's state feature, read through the rlvr leaf
+    (lazy import). Fail-open to the zero face (multiplier 1.0): compose
+    never breaks on a broken ledger/store, and the degrade is loud
+    inside the leaf itself."""
+    try:
+        from rlvr import refutation_fold
+        return refutation_fold.fold(ws)
+    except Exception as exc:  # noqa: BLE001 — the face never breaks compose
+        warn("compose.refutation_face",
+             f"{type(exc).__name__}: {exc} (fail-open: zero fold)")
+        return {"buckets": {}, "rates": {},
+                "mine": {"signature": "none", "refuted": 0.0,
+                         "honest": 0.0, "rate": 0.0},
+                "multiplier": 1.0}
+
+
 def compose(ws, tick: int, *, store: StrategyStore | None = None,
             n_min: int = DEFAULT_N_MIN,
             top_k: int = DEFAULT_TOP_K) -> dict:
@@ -755,6 +793,7 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
     cell = store.cell_count(fp)
     evidence_count = len(rows) if cell is None else int(cell)
     _debt = _debt_face(ws)
+    _refu = _refutation_face(ws)
     if evidence_count < n_min:
         sections = _cold_sections(ws, snap)
     else:
@@ -787,6 +826,11 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
     # a debt-only change re-emits the seam, it never re-keys a tick)
     obj["debt"] = {"D": _debt["D"], "slope": _debt["slope"],
                    "top": _debt["top"]}
+    # the refutation fold rides the same way: an additive state feature
+    # OUTSIDE the content hash (a fold-only change re-emits the seam, it
+    # never re-keys a tick)
+    obj["refutation"] = {"rate": _refu["mine"]["rate"],
+                         "multiplier": _refu["multiplier"]}
     obj["content_hash"] = strategy_content_hash(
         {name: obj[name] for name in
          ("dispatch", "loop", "hooks", "amendments")})
@@ -925,6 +969,17 @@ def _seam_sections(ws: Path, obj: dict) -> list[dict]:
             "body": (f"verification debt D={d} (slope {slope_text}): "
                      f"verify {debt.get('top')} first - "
                      f"do not build further analysis on unverified debt"),
+        })
+    refu = obj.get("refutation") or {}
+    m = refu.get("multiplier")
+    if isinstance(m, (int, float)) and not isinstance(m, bool) and m > 1.0:
+        rate = refu.get("rate")
+        sections.append({
+            "title": "refutation-defense",
+            "body": (f"refutation-heavy state (rate {rate:.2f}): "
+                     f"verification density x{m:.2f} for matching "
+                     f"signatures - verify earlier, honest verification "
+                     f"restores baseline cadence"),
         })
     return sections
 
