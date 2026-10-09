@@ -271,36 +271,81 @@ def _payload_hex(seed: int, k: int) -> str:
             | _u32(seed ^ 0x5EED, 80 + k)).to_bytes(16, "big").hex()
 
 
+def _pair_env_misattr(family: str, seed: int, k: int) -> dict:
+    payload = _payload_hex(0, k)
+    return {"i": k, "payload": payload,
+            "out": direct_out(derive_cfg(family, seed), payload)}
+
+
+def _pair_key_rotation(family: str, seed: int, k: int) -> dict:
+    r = k % MD2_ROTATION_INDEXES
+    payload = _payload_hex(0, k)
+    return {"i": k, "rotation_index": r, "payload": payload,
+            "out": rotated_out(derive_cfg(family, seed), r, payload)}
+
+
+def _pair_decoy_marker_js(family: str, seed: int, k: int) -> dict:
+    raw = _u32(0, 90 + k).to_bytes(4, "big") + _u32(0, 100 + k) \
+        .to_bytes(4, "big")
+    cfg = derive_cfg(family, seed)
+    return {"i": k, "input": list(raw),
+            "out": tg.mod_hmac(cfg, _unhex(cfg["key_hex"]), raw).hex()}
+
+
+def _pair_decoy_marker_go(family: str, seed: int, k: int) -> dict:
+    x = _u32(0, 90 + k)
+    out = go_arx_out(derive_cfg(family, seed), k, x)
+    return {"i": k, "input": [x], "out": int(out)}
+
+
+# family -> published-pair row builder (family, seed, k); the go face is
+# the fallthrough, one builder per deception group
+_MISDIRECTION_PUBLISHED = {
+    "env-misattr-js": _pair_env_misattr,
+    "env-misattr-net": _pair_env_misattr,
+    "key-rotation-js": _pair_key_rotation,
+    "key-rotation-net": _pair_key_rotation,
+    "decoy-marker-js": _pair_decoy_marker_js,
+}
+
+
 def published_pairs(unit: dict) -> list[dict]:
     """The fixed published face (stable lane, seed 0 offsets) — the same
     published/minted split the rest of the ladder uses."""
     seed = unit["seed"]
     family = unit["family"]
-    pairs: list[dict] = []
-    for k in range(PUBLISHED_COUNT):
-        if family in ("env-misattr-js", "env-misattr-net"):
-            payload = _payload_hex(0, k)
-            pairs.append({"i": k, "payload": payload,
-                          "out": direct_out(derive_cfg(family, seed),
-                                            payload)})
-        elif family in ("key-rotation-js", "key-rotation-net"):
-            r = k % MD2_ROTATION_INDEXES
-            payload = _payload_hex(0, k)
-            pairs.append({"i": k, "rotation_index": r, "payload": payload,
-                          "out": rotated_out(derive_cfg(family, seed), r,
-                                             payload)})
-        elif family == "decoy-marker-js":
-            raw = _u32(0, 90 + k).to_bytes(4, "big") + _u32(0, 100 + k) \
-                .to_bytes(4, "big")
-            cfg = derive_cfg(family, seed)
-            pairs.append({"i": k, "input": list(raw),
-                          "out": tg.mod_hmac(cfg, _unhex(cfg["key_hex"]),
-                                             raw).hex()})
-        else:  # decoy-marker-go
-            x = _u32(0, 90 + k)
-            out = go_arx_out(derive_cfg(family, seed), k, x)
-            pairs.append({"i": k, "input": [x], "out": int(out)})
-    return pairs
+    row = _MISDIRECTION_PUBLISHED.get(family, _pair_decoy_marker_go)
+    return [row(family, seed, k) for k in range(PUBLISHED_COUNT)]
+
+
+def _probe_env_misattr(family: str, seed: int, k: int) -> dict:
+    return {"i": 100 + k, "payload": _payload_hex(seed, k)}
+
+
+def _probe_key_rotation(family: str, seed: int, k: int) -> dict:
+    return {"i": 100 + k, "rotation_index": (k + 1) % MD2_ROTATION_INDEXES,
+            "payload": _payload_hex(seed, k)}
+
+
+def _probe_decoy_marker_js(family: str, seed: int, k: int) -> dict:
+    raw = _u32(seed, 90 + k).to_bytes(4, "big") \
+        + _u32(seed ^ 0xF00D, 100 + k).to_bytes(4, "big")
+    return {"i": 100 + k, "input": list(raw)}
+
+
+def _probe_decoy_marker_go(family: str, seed: int, k: int) -> dict:
+    return {"i": 100 + k, "input": [_u32(seed, 90 + k)]}
+
+
+# family -> checker-minted probe row builder (family, seed, k); the go
+# face is the fallthrough
+_MISDIRECTION_MINTED = {
+    "env-misattr-js": _probe_env_misattr,
+    "env-misattr-net": _probe_env_misattr,
+    "key-rotation-js": _probe_key_rotation,
+    "key-rotation-net": _probe_key_rotation,
+    "decoy-marker-js": _probe_decoy_marker_js,
+}
 
 
 def probes_for(gt: dict) -> list[dict]:
@@ -316,38 +361,44 @@ def probes_for(gt: dict) -> list[dict]:
                 row[key] = p[key]
         probes.append(row)
     seed = gt["seed"] ^ 0x5EED
-    for k in range(MINTED_COUNT):
-        if family in ("env-misattr-js", "env-misattr-net"):
-            probes.append({"i": 100 + k, "payload": _payload_hex(seed, k)})
-        elif family in ("key-rotation-js", "key-rotation-net"):
-            probes.append({"i": 100 + k, "rotation_index": (k + 1)
-                           % MD2_ROTATION_INDEXES,
-                           "payload": _payload_hex(seed, k)})
-        elif family == "decoy-marker-js":
-            raw = _u32(seed, 90 + k).to_bytes(4, "big") \
-                + _u32(seed ^ 0xF00D, 100 + k).to_bytes(4, "big")
-            probes.append({"i": 100 + k, "input": list(raw)})
-        else:
-            probes.append({"i": 100 + k,
-                           "input": [_u32(seed, 90 + k)]})
+    row = _MISDIRECTION_MINTED.get(family, _probe_decoy_marker_go)
+    probes.extend(row(family, seed, k) for k in range(MINTED_COUNT))
     return probes
+
+
+def _expected_env_misattr(cfg: dict, p: dict) -> str:
+    return direct_out(cfg, p["payload"])
+
+
+def _expected_key_rotation(cfg: dict, p: dict) -> str:
+    return rotated_out(cfg, p["rotation_index"], p["payload"])
+
+
+def _expected_decoy_marker_js(cfg: dict, p: dict) -> str:
+    return tg.mod_hmac(cfg, _unhex(cfg["key_hex"]),
+                       bytes(p["input"])).hex()
+
+
+def _expected_decoy_marker_go(cfg: dict, p: dict) -> str:
+    return go_arx_out(cfg, p["i"], p["input"][0])
+
+
+# family -> expected-output face (cfg, probe row); the go face is the
+# fallthrough
+_MISDIRECTION_EXPECTED = {
+    "env-misattr-js": _expected_env_misattr,
+    "env-misattr-net": _expected_env_misattr,
+    "key-rotation-js": _expected_key_rotation,
+    "key-rotation-net": _expected_key_rotation,
+    "decoy-marker-js": _expected_decoy_marker_js,
+}
 
 
 def expected_for(gt: dict, probes: list[dict]) -> dict[int, str]:
     cfg = gt["core"]
     family = UNIT_BY_ID[gt["task_id"]]["family"]
-    out = {}
-    for p in probes:
-        if family in ("env-misattr-js", "env-misattr-net"):
-            out[p["i"]] = direct_out(cfg, p["payload"])
-        elif family in ("key-rotation-js", "key-rotation-net"):
-            out[p["i"]] = rotated_out(cfg, p["rotation_index"], p["payload"])
-        elif family == "decoy-marker-js":
-            out[p["i"]] = tg.mod_hmac(cfg, _unhex(cfg["key_hex"]),
-                                      bytes(p["input"])).hex()
-        else:
-            out[p["i"]] = go_arx_out(cfg, p["i"], p["input"][0])
-    return out
+    face = _MISDIRECTION_EXPECTED.get(family, _expected_decoy_marker_go)
+    return {p["i"]: face(cfg, p) for p in probes}
 
 
 def static_key_answers(task_id: str) -> list[dict]:

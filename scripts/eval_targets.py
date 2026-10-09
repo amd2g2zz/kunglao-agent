@@ -211,6 +211,32 @@ def _u64(seed: int, lane: int) -> int:
 
 
 # ------------------------------------------------------------------ configs
+def _cfg_go_arx(seed: int, rung: str) -> dict:
+    k0, z, rot_base = _u32(seed, 1), _u32(seed, 2), _u32(seed, 3)
+    # refuse the canonical SHA-1-family members: memorizing the stock
+    # constants must score zero, so the variant must not be one
+    while k0 == CANONICAL_K0:
+        k0 = _u32(k0, 1)
+    while z == CANONICAL_GOLDEN:
+        z = _u32(z, 2)
+    return {"k0": k0, "z": z, "rot_base": rot_base}
+
+
+def _cfg_js_sign(seed: int, rung: str) -> dict:
+    c1, c2 = _u32(seed, 1), _u32(seed, 2)
+    d1, d2 = _u32(seed, 3), _u32(seed, 4)
+    while d1 in (c1, c2):
+        d1 = _u32(d1, 3)
+    while d2 in (c1, c2, d1):
+        d2 = _u32(d2, 4)
+    return {"c1": c1, "c2": c2, "decoys": [d1, d2]}
+
+
+def _cfg_py_derive(seed: int, rung: str) -> dict:
+    return {"offset": _u64(seed, 1), "prime": _u64(seed, 2),
+            "fold": _u64(seed, 3)}
+
+
 def derive_cfg(family: str, seed: int, rung: str = "l1") -> dict:
     """The per-variant constant set (the ground truth by construction).
 
@@ -218,43 +244,10 @@ def derive_cfg(family: str, seed: int, rung: str = "l1") -> dict:
     the CANONICALIZATION (req-sign sorts header names at l2+) — the
     derivation core (mod-SHA + key) is invariant per seed across rungs.
     """
-    if family == "go-arx":
-        k0, z, rot_base = _u32(seed, 1), _u32(seed, 2), _u32(seed, 3)
-        # refuse the canonical SHA-1-family members: memorizing the stock
-        # constants must score zero, so the variant must not be one
-        while k0 == CANONICAL_K0:
-            k0 = _u32(k0, 1)
-        while z == CANONICAL_GOLDEN:
-            z = _u32(z, 2)
-        return {"k0": k0, "z": z, "rot_base": rot_base}
-    if family == "js-sign":
-        c1, c2 = _u32(seed, 1), _u32(seed, 2)
-        d1, d2 = _u32(seed, 3), _u32(seed, 4)
-        while d1 in (c1, c2):
-            d1 = _u32(d1, 3)
-        while d2 in (c1, c2, d1):
-            d2 = _u32(d2, 4)
-        return {"c1": c1, "c2": c2, "decoys": [d1, d2]}
-    if family == "py-derive":
-        return {"offset": _u64(seed, 1), "prime": _u64(seed, 2),
-                "fold": _u64(seed, 3)}
-    if family == "web-pack-sign":
-        cfg = _mod_key_cfg(seed)
-        cfg["sort_headers"] = False
-        return cfg
-    if family == "req-sign":
-        cfg = _mod_key_cfg(seed)
-        cfg["sort_headers"] = rung in ("l2", "l3")
-        return cfg
-    if family == "net-verify-license":
-        cfg = _mod_key_cfg(seed)
-        cfg["device"] = f"{_u32(seed, 61):06x}{_u32(seed, 62):06x}"[:12]
-        cfg["rounds"] = 2 + (seed % 2)
-        return cfg
-    if family == "mod-crypto-js":
-        cfg = _mod_key_cfg(seed)
-        return cfg
-    raise ValueError(f"unknown family: {family}; valid: {sorted(FAMILIES)}")
+    builder = _CFG_BUILDERS.get(family)
+    if builder is None:
+        raise ValueError(f"unknown family: {family}; valid: {sorted(FAMILIES)}")
+    return builder(seed, rung)
 
 
 # ------------------------------------------------------------- mod-crypto core
@@ -361,6 +354,42 @@ def _mod_key_cfg(seed: int) -> dict:
     return cfg
 
 
+def _cfg_web_pack_sign(seed: int, rung: str) -> dict:
+    cfg = _mod_key_cfg(seed)
+    cfg["sort_headers"] = False
+    return cfg
+
+
+def _cfg_req_sign(seed: int, rung: str) -> dict:
+    cfg = _mod_key_cfg(seed)
+    cfg["sort_headers"] = rung in ("l2", "l3")
+    return cfg
+
+
+def _cfg_net_verify_license(seed: int, rung: str) -> dict:
+    cfg = _mod_key_cfg(seed)
+    cfg["device"] = f"{_u32(seed, 61):06x}{_u32(seed, 62):06x}"[:12]
+    cfg["rounds"] = 2 + (seed % 2)
+    return cfg
+
+
+def _cfg_mod_crypto_js(seed: int, rung: str) -> dict:
+    return _mod_key_cfg(seed)
+
+
+# family -> per-variant constant builder (seed, rung); the registry face
+# of derive_cfg
+_CFG_BUILDERS = {
+    "go-arx": _cfg_go_arx,
+    "js-sign": _cfg_js_sign,
+    "py-derive": _cfg_py_derive,
+    "web-pack-sign": _cfg_web_pack_sign,
+    "req-sign": _cfg_req_sign,
+    "net-verify-license": _cfg_net_verify_license,
+    "mod-crypto-js": _cfg_mod_crypto_js,
+}
+
+
 def license_session_key(cfg: dict, challenge_hex: str) -> bytes:
     """KDF(challenge, secret): mod-SHA chained over (secret || challenge),
     ``rounds`` folds — the KDF is built on the mod-crypto generator, never
@@ -446,23 +475,51 @@ def _req_canonical(cfg: dict, request: dict) -> str:
     return sep.join([str(request["method"]), hh, body_sha, str(request["path"])])
 
 
+def _out_go_arx(cfg: dict, i: int, x) -> int:
+    xin = x[0] if isinstance(x, list) else x  # pairs store input as [x]
+    return go_model(cfg, i, xin)
+
+
+def _out_js_sign(cfg: dict, i: int, x) -> str:
+    return js_model(cfg, bytes(x))
+
+
+def _out_py_derive(cfg: dict, i: int, x) -> int:
+    return py_model(cfg, bytes(x))
+
+
+def _out_web_pack_sign(cfg: dict, i: int, x) -> str:
+    return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]),
+                    _web_canonical(cfg, x).encode("latin1")).hex()
+
+
+def _out_req_sign(cfg: dict, i: int, x) -> str:
+    return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]),
+                    _req_canonical(cfg, x).encode("latin1")).hex()
+
+
+def _out_mod_crypto_js(cfg: dict, i: int, x) -> str:
+    return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]), bytes(x)).hex()
+
+
+# family -> reference model face (cfg, i, x) -> expected output; the
+# license family is deliberately absent (the checker hosts its server
+# side instead)
+_MODEL_OUTPUTS = {
+    "go-arx": _out_go_arx,
+    "js-sign": _out_js_sign,
+    "py-derive": _out_py_derive,
+    "web-pack-sign": _out_web_pack_sign,
+    "req-sign": _out_req_sign,
+    "mod-crypto-js": _out_mod_crypto_js,
+}
+
+
 def model_output(family: str, cfg: dict, i: int, x):
-    if family == "go-arx":
-        xin = x[0] if isinstance(x, list) else x  # pairs store input as [x]
-        return go_model(cfg, i, xin)
-    if family == "js-sign":
-        return js_model(cfg, bytes(x))
-    if family == "py-derive":
-        return py_model(cfg, bytes(x))
-    if family == "web-pack-sign":
-        return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]),
-                        _web_canonical(cfg, x).encode("latin1")).hex()
-    if family == "req-sign":
-        return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]),
-                        _req_canonical(cfg, x).encode("latin1")).hex()
-    if family == "mod-crypto-js":
-        return mod_hmac(cfg, bytes.fromhex(cfg["key_hex"]), bytes(x)).hex()
-    raise ValueError(f"unknown family: {family}")
+    fn = _MODEL_OUTPUTS.get(family)
+    if fn is None:
+        raise ValueError(f"unknown family: {family}")
+    return fn(cfg, i, x)
 
 
 # model-side cfg for the checker: ground truth carries the PUBLIC constants
@@ -508,63 +565,114 @@ def _license_probe(seed: int, k: int) -> dict:
     return {"challenge": ch, "client_nonce": nonce}
 
 
+def _probe_row_go_arx(family: str, seed: int, k: int) -> dict:
+    return {"i": 100 + k,
+            "input": [_u32(seed ^ 0x5EED, k + 1)]}  # one uint32 per probe
+
+
+def _probe_row_request(family: str, seed: int, k: int) -> dict:
+    return {"i": 100 + k,
+            "request": _request_probe(family, seed ^ 0x5EED, 100 + k)}
+
+
+def _probe_row_license(family: str, seed: int, k: int) -> dict:
+    p = _license_probe(seed ^ 0x5EED, 100 + k)
+    return {"i": 100 + k, "challenge": p["challenge"],
+            "client_nonce": p["client_nonce"]}
+
+
+def _probe_row_bytes(family: str, seed: int, k: int) -> dict:
+    raw = _u64(seed ^ 0x5EED, k + 1).to_bytes(8, "big")
+    if family == "js-sign":
+        return {"i": 100 + k,
+                "input": list(raw[:6])}  # 6-byte inputs (byte-level sign)
+    return {"i": 100 + k, "input": list(raw)}  # py face: the full 8 bytes
+
+
+# family -> checker-minted probe row (family, seed, k); the byte face is
+# the fallthrough (the probe faces never refused an unknown family)
+_MINTED_PROBE_ROWS = {
+    "go-arx": _probe_row_go_arx,
+    "web-pack-sign": _probe_row_request,
+    "req-sign": _probe_row_request,
+    "net-verify-license": _probe_row_license,
+    "js-sign": _probe_row_bytes,
+}
+
+
 def minted_probes(family: str, seed: int, count: int) -> list[dict]:
     """Checker-minted probes: fresh inputs derived from the variant seed —
     the anti-digest-table face (a candidate hardcoding the PUBLISHED
     pairs passes those and fails these, by construction). Inputs are
     stored nowhere; the checker recomputes them (and the expected
     outputs) from the seed model at run time."""
-    probes = []
+    row = _MINTED_PROBE_ROWS.get(family, _probe_row_bytes)
+    return [row(family, seed, k) for k in range(count)]
+
+
+def _published_go_arx(family: str, cfg: dict, count: int) -> list[dict]:
+    return [{"i": i, "input": [x], "out": go_model(cfg, i, x)}
+            for i, x in enumerate(go_inputs(count))]
+
+
+def _published_request(family: str, cfg: dict, count: int) -> list[dict]:
+    return [{"i": k, "request": _request_probe(family, 0, k),
+             "out": model_output(family, cfg, k,
+                                 _request_probe(family, 0, k))}
+            for k in range(count)]
+
+
+def _published_license(family: str, cfg: dict, count: int) -> list[dict]:
+    pairs = []
     for k in range(count):
-        if family == "go-arx":
-            data = [_u32(seed ^ 0x5EED, k + 1)]  # one uint32 per probe
-        elif family in ("web-pack-sign", "req-sign"):
-            probes.append({"i": 100 + k, "request": _request_probe(
-                family, seed ^ 0x5EED, 100 + k)})
-            continue
-        elif family == "net-verify-license":
-            p = _license_probe(seed ^ 0x5EED, 100 + k)
-            probes.append({"i": 100 + k, "challenge": p["challenge"],
-                           "client_nonce": p["client_nonce"]})
-            continue
-        else:
-            raw = _u64(seed ^ 0x5EED, k + 1).to_bytes(8, "big")
-            if family == "js-sign":
-                data = list(raw[:6])  # 6-byte inputs (byte-level sign)
-            else:
-                data = list(raw)  # py face: the full 8 bytes
-        probes.append({"i": 100 + k, "input": data})
-    return probes
+        p = _license_probe(0, k)
+        out = license_response(cfg, p["challenge"], p["client_nonce"],
+                               cfg["device"], k)
+        pairs.append({"i": k, "challenge": p["challenge"],
+                      "client_nonce": p["client_nonce"], "out": out})
+    return pairs
 
 
-def published_pairs(family: str, cfg: dict, count: int) -> list[dict]:
-    if family == "go-arx":
-        return [{"i": i, "input": [x], "out": go_model(cfg, i, x)}
-                for i, x in enumerate(go_inputs(count))]
-    if family in ("web-pack-sign", "req-sign"):
-        return [{"i": k, "request": _request_probe(family, 0, k),
-                 "out": model_output(family, cfg, k,
-                                     _request_probe(family, 0, k))}
-                for k in range(count)]
-    if family == "net-verify-license":
-        pairs = []
-        for k in range(count):
-            p = _license_probe(0, k)
-            out = license_response(cfg, p["challenge"], p["client_nonce"],
-                                   cfg["device"], k)
-            pairs.append({"i": k, "challenge": p["challenge"],
-                          "client_nonce": p["client_nonce"], "out": out})
-        return pairs
-    fn = js_model if family == "js-sign" else py_model
+def _published_fixed(family: str, cfg: dict, count: int,
+                     fn) -> list[dict]:
     fixed = minted_probes(family, 0, count)  # published face: stable inputs
     # published pairs take i = 0..N-1; checker-minted probes take i >= 100
     # (disjoint keys — the keyed comparison never aliases the two faces)
-    if family == "mod-crypto-js":
-        return [{"i": k, "input": p["input"],
-                 "out": model_output(family, cfg, k, p["input"])}
-                for k, p in enumerate(fixed)]
     return [{"i": k, "input": p["input"], "out": fn(cfg, bytes(p["input"]))}
             for k, p in enumerate(fixed)]
+
+
+def _published_js_sign(family: str, cfg: dict, count: int) -> list[dict]:
+    return _published_fixed(family, cfg, count, js_model)
+
+
+def _published_py_derive(family: str, cfg: dict, count: int) -> list[dict]:
+    return _published_fixed(family, cfg, count, py_model)
+
+
+def _published_mod_crypto_js(family: str, cfg: dict,
+                             count: int) -> list[dict]:
+    fixed = minted_probes(family, 0, count)  # published face: stable inputs
+    return [{"i": k, "input": p["input"],
+             "out": model_output(family, cfg, k, p["input"])}
+            for k, p in enumerate(fixed)]
+
+
+# family -> published-pair builder (family, cfg, count); the py face is
+# the fallthrough (the probe faces never refused an unknown family)
+_PUBLISHED_BUILDERS = {
+    "go-arx": _published_go_arx,
+    "web-pack-sign": _published_request,
+    "req-sign": _published_request,
+    "net-verify-license": _published_license,
+    "mod-crypto-js": _published_mod_crypto_js,
+    "js-sign": _published_js_sign,
+}
+
+
+def published_pairs(family: str, cfg: dict, count: int) -> list[dict]:
+    return _PUBLISHED_BUILDERS.get(family, _published_py_derive)(
+        family, cfg, count)
 
 
 # ------------------------------------------------------------------ renderers
@@ -1085,37 +1193,8 @@ def _js_wrong_out(seed: int) -> str:
         "}\n")
 
 
-def _render_release_js(family: str, seed: int, cfg: dict, rung: str) -> str:
-    """Readable l0 artifact for the release families (the input to the l1
-    minify transform AND the l2 obfuscator run); l3 swaps the digest core
-    for the VM rung; l1 post-processes with _minify_l1."""
-    ad_seed = _u32(seed, 92)
-    head = (
-        f"// CONSTRUCTED eval target (family {family}, rung {rung}, "
-        "eval-v1.1, #332).\n"
-        "// NOT malware; no real workspace data: every constant below is\n"
-        "// minted by scripts/eval_targets.py from the unit seed. The\n"
-        "// derivation core is the generator's mod-crypto cipher (mutated\n"
-        "// SHA-256 + HMAC) — stock crypto is wrong by construction.\n")
-    parts = [head, _JS_ANTIDEBUG_TMPL.replace(
-                 "__AD_SEED__", f"0x{ad_seed:08x}"),
-             _js_constants_block(cfg)]
-    if rung == "l1":
-        d1, d2 = _u32(seed, 93), _u32(seed, 94)
-        parts.append(_JS_DECOYS_TMPL.replace(
-            "__DECOY_D1__", f"0x{d1:08x}").replace(
-            "__DECOY_D2__", f"0x{d2:08x}"))
-    parts.append(_JS_HELPERS_TMPL)
-    if rung == "l3":
-        _vm_self_test(cfg, seed)
-        parts.append(_render_vm_js(cfg, seed))
-    else:
-        parts.append(_JS_DIGEST_READABLE_TMPL)
-    parts.append(_JS_HMAC_TMPL)
-    parts.append(_js_wrong_out(seed))
-    key_bytes = "_0x51(KX)" if rung == "l1" else "_unhex(KX)"
-    if family == "mod-crypto-js":
-        parts.append(f"""function sign(input) {{
+def _seam_mod_crypto_js(cfg: dict, rung: str, key_bytes: str) -> str:
+    return f"""function sign(input) {{
   if (!AD.ok()) return _wrongOut(input);
   return _hmacHex({key_bytes}, _bytesOf(String(input)));
 }}
@@ -1125,9 +1204,11 @@ module.exports = {{ sign: sign }};
 if (typeof require !== 'undefined' && require.main === module) {{
   console.log(JSON.stringify({{ in: 'alpha', out: sign('alpha') }}));
 }}
-""")
-    elif family == "web-pack-sign":
-        parts.append(f"""function sign(request) {{
+"""
+
+
+def _seam_web_pack_sign(cfg: dict, rung: str, key_bytes: str) -> str:
+    return f"""function sign(request) {{
   if (!AD.ok()) return _wrongOut(request && request.body);
   var bodySha = _hexWords(_digest(_bytesOf(String(request.body))));
   var canon = [String(request.method), String(request.path), bodySha,
@@ -1136,10 +1217,12 @@ if (typeof require !== 'undefined' && require.main === module) {{
 }}
 
 module.exports = {{ sign: sign }};
-""")
-    elif family == "req-sign":
-        sorted_flag = "true" if cfg.get("sort_headers") else "false"
-        parts.append(f"""function signRequest(request) {{
+"""
+
+
+def _seam_req_sign(cfg: dict, rung: str, key_bytes: str) -> str:
+    sorted_flag = "true" if cfg.get("sort_headers") else "false"
+    return f"""function signRequest(request) {{
   if (!AD.ok()) return _wrongOut(request && request.body);
   var pairs = (request.headers || []).map(function (p) {{
     return [String(p[0]), String(p[1])];
@@ -1159,10 +1242,12 @@ module.exports = {{ sign: sign }};
 }}
 
 module.exports = {{ signRequest: signRequest }};
-""")
-    elif family == "net-verify-license":
-        rounds = int(cfg.get("rounds", 2))
-        parts.append(f"""function _kdfHex(challengeHex) {{
+"""
+
+
+def _seam_net_verify_license(cfg: dict, rung: str, key_bytes: str) -> str:
+    rounds = int(cfg.get("rounds", 2))
+    return f"""function _kdfHex(challengeHex) {{
   var secret = {key_bytes};
   var k = _digest(secret.concat(_unhex(challengeHex)));
   for (var r = 1; r < {rounds}; r++) k = _digest(_wordsToBytes(k));
@@ -1200,9 +1285,51 @@ async function handshake(opts) {{
 }}
 
 module.exports = {{ handshake: handshake }};
-""")
-    else:  # pragma: no cover
+"""
+
+
+# family -> the contract-seam face appended to every release artifact
+_RELEASE_SEAM_FACES = {
+    "mod-crypto-js": _seam_mod_crypto_js,
+    "web-pack-sign": _seam_web_pack_sign,
+    "req-sign": _seam_req_sign,
+    "net-verify-license": _seam_net_verify_license,
+}
+
+
+def _render_release_js(family: str, seed: int, cfg: dict, rung: str) -> str:
+    """Readable l0 artifact for the release families (the input to the l1
+    minify transform AND the l2 obfuscator run); l3 swaps the digest core
+    for the VM rung; l1 post-processes with _minify_l1."""
+    ad_seed = _u32(seed, 92)
+    head = (
+        f"// CONSTRUCTED eval target (family {family}, rung {rung}, "
+        "eval-v1.1, #332).\n"
+        "// NOT malware; no real workspace data: every constant below is\n"
+        "// minted by scripts/eval_targets.py from the unit seed. The\n"
+        "// derivation core is the generator's mod-crypto cipher (mutated\n"
+        "// SHA-256 + HMAC) — stock crypto is wrong by construction.\n")
+    parts = [head, _JS_ANTIDEBUG_TMPL.replace(
+                 "__AD_SEED__", f"0x{ad_seed:08x}"),
+             _js_constants_block(cfg)]
+    if rung == "l1":
+        d1, d2 = _u32(seed, 93), _u32(seed, 94)
+        parts.append(_JS_DECOYS_TMPL.replace(
+            "__DECOY_D1__", f"0x{d1:08x}").replace(
+            "__DECOY_D2__", f"0x{d2:08x}"))
+    parts.append(_JS_HELPERS_TMPL)
+    if rung == "l3":
+        _vm_self_test(cfg, seed)
+        parts.append(_render_vm_js(cfg, seed))
+    else:
+        parts.append(_JS_DIGEST_READABLE_TMPL)
+    parts.append(_JS_HMAC_TMPL)
+    parts.append(_js_wrong_out(seed))
+    key_bytes = "_0x51(KX)" if rung == "l1" else "_unhex(KX)"
+    seam = _RELEASE_SEAM_FACES.get(family)
+    if seam is None:  # pragma: no cover
         raise ValueError(f"unknown release family: {family}")
+    parts.append(seam(cfg, rung, key_bytes))
     src = "".join(parts)
     return _minify_l1(src, seed) if rung == "l1" else src
 
@@ -1460,16 +1587,41 @@ def _minted_count(family: str) -> int:
             "mod-crypto-js": 10}[family]
 
 
+def _public_go_arx(cfg: dict) -> dict:
+    return {"k0": cfg["k0"], "z": cfg["z"], "rot_base": cfg["rot_base"]}
+
+
+def _public_js_sign(cfg: dict) -> dict:
+    return {"c1": cfg["c1"], "c2": cfg["c2"]}
+
+
+def _public_key(cfg: dict) -> dict:
+    return {"key_hex": cfg["key_hex"], "sep_code": cfg["sep_code"]}
+
+
+def _public_license(cfg: dict) -> dict:
+    return {"key_hex": cfg["key_hex"], "device": cfg["device"]}
+
+
+def _public_py_derive(cfg: dict) -> dict:
+    return {"offset": cfg["offset"], "prime": cfg["prime"],
+            "fold": cfg["fold"]}
+
+
+# family -> the PUBLIC constants face (the static oracle); the py face is
+# the fallthrough, exactly as the old chain's missing else
+_PUBLIC_CONSTANTS = {
+    "go-arx": _public_go_arx,
+    "js-sign": _public_js_sign,
+    "web-pack-sign": _public_key,
+    "req-sign": _public_key,
+    "mod-crypto-js": _public_key,
+    "net-verify-license": _public_license,
+}
+
+
 def _constants_public(family: str, cfg: dict) -> dict:
-    if family == "go-arx":
-        return {"k0": cfg["k0"], "z": cfg["z"], "rot_base": cfg["rot_base"]}
-    if family == "js-sign":
-        return {"c1": cfg["c1"], "c2": cfg["c2"]}
-    if family in ("web-pack-sign", "req-sign", "mod-crypto-js"):
-        return {"key_hex": cfg["key_hex"], "sep_code": cfg["sep_code"]}
-    if family == "net-verify-license":
-        return {"key_hex": cfg["key_hex"], "device": cfg["device"]}
-    return {"offset": cfg["offset"], "prime": cfg["prime"], "fold": cfg["fold"]}
+    return _PUBLIC_CONSTANTS.get(family, _public_py_derive)(cfg)
 
 
 def build_task_unit(family: str, seed: int, task_id: str,

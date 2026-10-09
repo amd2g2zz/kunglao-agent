@@ -42,6 +42,8 @@ import sys
 import time
 from pathlib import Path
 
+import lint_protocol  # the shared scan/emit skeleton (repo sibling)
+
 ROOT = Path(__file__).resolve().parents[1]
 SCAN_ROOTS = ("scripts", "tools", "hooks")
 BASELINE_REL = ROOT / "scripts" / "formal_code_baseline.yaml"
@@ -87,33 +89,26 @@ def _comment_text(source: str) -> str:
 def scan_counts(root: Path = ROOT) -> dict[str, int]:
     """Per-file formal-marker counts over the production trees."""
     counts: dict[str, int] = {}
-    for rel in SCAN_ROOTS:
-        base = root / rel
-        if not base.is_dir():
+    for rel, path in lint_protocol.iter_py_files(root, SCAN_ROOTS):
+        try:
+            source = path.read_text(encoding="utf-8",
+                                    errors="replace")
+        except OSError:
             continue
-        for path in sorted(base.rglob("*.py")):
-            try:
-                source = path.read_text(encoding="utf-8",
-                                        errors="replace")
-            except OSError:
-                continue
-            text = "\n".join(_docstrings(source)) + "\n" \
-                + _comment_text(source)
-            n = (len(RE_ISSUE.findall(text))
-                 + len(RE_VERSION.findall(text))
-                 + len(RE_DATE.findall(text)))
-            if n:
-                counts[str(path.relative_to(root))] = n
+        text = "\n".join(_docstrings(source)) + "\n" \
+            + _comment_text(source)
+        n = (len(RE_ISSUE.findall(text))
+             + len(RE_VERSION.findall(text))
+             + len(RE_DATE.findall(text)))
+        if n:
+            counts[rel] = n
     return counts
 
 
 def load_baseline(path: Path = BASELINE_REL) -> dict[str, int]:
-    import yaml
-
     if not path.is_file():
         return {}
-    doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return {str(k): int(v) for k, v in (doc.get("files") or {}).items()}
+    return lint_protocol.load_int_baseline(path)
 
 
 def emit_baseline(counts: dict[str, int], path: Path = BASELINE_REL) -> None:
