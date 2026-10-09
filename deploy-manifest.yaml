@@ -291,7 +291,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: ca2acc458174be027369bc9d0f49e982cc0a3ca2183710e69b7cd13278d198c5
+    sha256: 95b2898c4d25155c400a0b16d5a50f57f5e758c1bb6334ab219e10fb98d853ec
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1171,7 +1171,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 24577cc5f60c46f77c014fdd952e206e0a333ea6a30eafcf0ef483a779757fd0
+    sha256: 8d38a7652601c72d34dd0b1cb1ec2901319f4801efcefe8996c6a8667d24ef54
   - src: scripts/rlvr/censored_review.py
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
@@ -1179,7 +1179,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: cc73b4fe176b53f75a770b9f72b024f93c196c93eb156fe75582685a6345b37e
+    sha256: 499a0c19aca8245f56e6ff399d0d2ad4f8ba201c0972ec47b8800c5e74ed77a3
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1187,7 +1187,7 @@ files:
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
-    sha256: 2f2f2711b4ca1561c01f3940c07572436281aacf607552d35d9859bdd264ac54
+    sha256: d07c0ef5f96f1cb8fd0865eb5fc3687d0bacf3aace6e868ae6405e33ccd7aa27
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
@@ -1228,6 +1228,10 @@ files:
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
     sha256: 59d1060d4be7e8afba22c4cf4b13206132e81a953efaff0cddad752dcf3b1d2b
+  - src: scripts/rlvr/refutation_fold.py
+    dest: .claude/scripts/rlvr/refutation_fold.py
+    kind: scaffold
+    sha256: 0e75bf4ae7d8eaf1009b87896f19d30482b7526af190a92bb6043fc6a9a1a163
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
