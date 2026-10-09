@@ -89,6 +89,8 @@ computer — next act, verification, budget, and where experience goes.
 | Duration | one session, human watching | hours unattended, resume from disk |
 | Experience | evaporates at session end | ledger → posteriors → sharper opening bet |
 
+![The controller picks each act, Claude Code executes it, the ledger remembers](docs/assets/rl-drive.gif)
+
 Honest boundary: for a simple single-session task, bare Claude Code wins —
 the evaluation table says so. kunglao pays off on long horizons,
 verification discipline, and cross-task compounding.
@@ -169,7 +171,7 @@ Knowledge routing (a manual the LLM improvises against), bounded pipelines
 logic: last task's experience never changes next task's plan. The loop's
 control law is learned from its own measured history:
 
-![Principle comparison: three open/static loops versus kunglao's closing loop](docs/assets/approach-comparison.svg)
+![Side by side: three systems repeat their price on the second task; kunglao's second task opens cheaper](docs/assets/rl-comparison.gif)
 
 ## 📋 Requirements
 

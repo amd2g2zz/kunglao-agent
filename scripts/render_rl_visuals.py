@@ -383,62 +383,94 @@ def _cost_meter(d, x, y, units, label):
 
 
 def render_rl_loop():
-    """Story: task 1 pays full price; the loop remembers; task 2 of the
-    same kind runs cheaper."""
+    """Decision + exploration/exploitation in one story: the odds are
+    the strategy. Beat 1 is exploration (a contender gets drawn and
+    fails - the odds dip); beat 2 is exploitation (the favorite earns);
+    beat 3 is the payoff (same-kind task opens at the favorite,
+    cheaper). Every odds shift gets held frames."""
     frames = []
-    for i in range(14):                    # beat 1: first task, has to explore
-        img, d = new_canvas("the loop learns - one task at a time")
-        _card(d, [40, 60, 420, 190], "TASK 1: hidden sign algorithm",
-              ["obfuscated js bundle", "no notes yet - has to explore"])
-        text(d, (230, 226), "which method first? the loop picks:",
-             TEXT_FAINT, 14, anchor="mm")
-        _method_chip(d, 230, 280, "read the code",
-                     "pick" if i >= 7 else "idle")
-        _method_chip(d, 230, 350, "run it and watch", "idle")
-        _method_chip(d, 230, 420, "guess constants", "idle")
-        _card(d, [560, 60, 920, 190], "THE CHECKER", ["re-runs everything,",
-              "accepts only proof"])
-        if i >= 11:
-            text(d, (740, 240), "working...", AMBER, 16, anchor="mm")
-        frames.append(img)
-    for i in range(14):                    # beat 2: verified, note taken
-        img, d = new_canvas("the loop learns - one task at a time")
-        _card(d, [40, 60, 420, 190], "TASK 1: hidden sign algorithm",
-              ["solved"], edge=GREEN, title_color=GREEN)
-        _method_chip(d, 230, 280, "read the code", "done")
-        _method_chip(d, 230, 350, "run it and watch", "idle")
-        _method_chip(d, 230, 420, "guess constants", "idle")
-        d.rounded_rectangle([560, 60, 920, 190], radius=10, fill=PANEL,
-                            outline=GREEN, width=2)
-        stamp(d, (740, 118), "VERIFIED", GREEN)
-        text(d, (740, 158), "the answer replays byte-exact", TEXT_FAINT, 13,
-             anchor="mm")
-        mem_y = 300 + min(i * 8, 60)
-        d.rounded_rectangle([560, mem_y, 920, mem_y + 96], radius=10,
-                            fill=PANEL, outline=BLUE, width=2)
-        text(d, (580, mem_y + 30), "NOTES for targets like this", BLUE, 14,
+    names = ("read the code", "run and watch", "guess constants")
+
+    def scene(i, pick, pick_sub, tallies, odds, note, caption):
+        img, d = new_canvas("deciding = exploring + exploiting")
+        text(d, (60, 62), "task 1: a new kind of target", TEXT, 17,
              anchor="lm")
-        text(d, (580, mem_y + 62), "reading the code worked", TEXT, 16,
-             anchor="lm")
-        frames.append(img)
-    for i in range(14):                    # beat 3: same kind, cheaper
-        img, d = new_canvas("the loop learns - one task at a time")
-        _card(d, [40, 60, 420, 190], "TASK 2: the same kind of target",
-              ["a new sample, same family",
-               "the loop opens from its notes"], edge=BLUE)
-        _method_chip(d, 230, 280, "read the code", "pick",
-                     sub="notes: start here")
-        _method_chip(d, 230, 350, "run it and watch", "idle")
-        _method_chip(d, 230, 420, "guess constants", "idle")
-        d.rounded_rectangle([560, 60, 920, 190], radius=10, fill=PANEL,
-                            outline=GREEN, width=2)
-        stamp(d, (740, 118), "VERIFIED", GREEN)
-        _cost_meter(d, 560, 240, 3, "task 1")
-        _cost_meter(d, 560, 285, 1, "task 2")
-        text(d, (740, 350), "the second one ran cheaper -", GREEN, 15,
+        for k, name in enumerate(names):
+            y = 108 + k * 94
+            state = "pick" if (k == pick and i >= 4) else "idle"
+            _method_chip(d, 200, y, name, state,
+                         sub=(pick_sub if k == pick and i >= 4 else None))
+            s, f_ = tallies[k]
+            for j in range(s):
+                text(d, (410 + j * 26, y - 16), "+", GREEN, 19, anchor="mm")
+            for j in range(f_):
+                text(d, (410 + (s + j) * 26, y - 16), "x", RED, 19,
+                     anchor="mm")
+            text(d, (410, y + 12), "track record", TEXT_FAINT, 11,
+                 anchor="lm")
+            frac = odds[k]
+            d.rounded_rectangle([570, y - 14, 840, y + 10], radius=6,
+                                fill=PANEL, outline=PANEL_EDGE)
+            d.rounded_rectangle([570, y - 14, 570 + int(270 * frac), y + 10],
+                                radius=6,
+                                fill=(GREEN if k == pick else BLUE))
+            text(d, (570, y + 24), f"odds {int(frac * 100)}%",
+                 TEXT_FAINT, 11, anchor="lm")
+        text(d, (480, 420), note, AMBER, 14, anchor="mm")
+        text(d, (480, 452), caption, TEXT_FAINT, 13, anchor="mm")
+        return img
+
+    odds_a, odds_b = (0.70, 0.50, 0.40), (0.70, 0.38, 0.28)
+    odds_c = (0.74, 0.62, 0.24)
+    # beat 1: exploration - the draw lands on a contender, and it fails
+    for i in range(18):
+        drop = min(1.0, max(0.0, (i - 10) / 5.0))
+        odds = [odds_a[0], lerp(odds_a[1], odds_b[1], drop),
+                lerp(odds_a[2], odds_b[2], drop)]
+        tallies = [(3, 1), (1, 1 + (1 if i >= 10 else 0)), (0, 2)]
+        frames.append(scene(
+            i, 1,
+            "the draw lands on a contender - exploration" if i >= 4
+            else "the loop samples every method's odds",
+            tallies, odds,
+            "exploration costs a little - it is how a better method is "
+            "found" if i >= 10 else "mostly ride the best known; "
+            "sometimes try the rest",
+            "the draw, not the ranking, picks - favorites can still lose "
+            "their seat"))
+    frames += [frames[-1]] * 4
+    # beat 2: exploitation - the favorite earns, its odds recover
+    for i in range(16):
+        rise = min(1.0, i / 8.0)
+        odds = [lerp(odds_b[0], odds_c[0], rise),
+                lerp(odds_b[1], odds_c[1], rise),
+                lerp(odds_b[2], odds_c[2], rise)]
+        tallies = [(3 + (1 if i >= 8 else 0), 1), (1, 2), (0, 2)]
+        frames.append(scene(
+            i, 0, "working - and it verifies", tallies, odds,
+            "exploitation: the favorite earns its odds back" if i < 8
+            else "a success raises the odds - the strategy updated itself",
+            "reward = progress gained - cost spent"))
+    frames += [frames[-1]] * 4
+    # beat 3: payoff - same-kind task opens at the favorite, cheaper
+    for i in range(16):
+        img, d = new_canvas("deciding = exploring + exploiting")
+        _card(d, [40, 60, 420, 200], "task 2: same kind, new sample",
+              ["opens straight from the notes",
+               "no exploration tax this time"], edge=BLUE)
+        _method_chip(d, 230, 290, "read the code", "pick",
+                     sub="highest odds - first pick")
+        _method_chip(d, 230, 360, "run and watch", "idle")
+        _method_chip(d, 230, 430, "guess constants", "idle",
+                     sub="benched soon at this rate")
+        _cost_meter(d, 500, 120, 3, "task 1")
+        _cost_meter(d, 500, 165, 1, "task 2")
+        text(d, (700, 230), "the odds are the strategy -", GREEN, 15,
              anchor="mm")
-        text(d, (740, 376), "the loop remembered.", GREEN, 15, anchor="mm")
+        text(d, (700, 256), "they fade toward whatever actually works.",
+             GREEN, 15, anchor="mm")
         frames.append(img)
+    frames += [frames[-1]] * 6
     return frames
 
 
@@ -518,24 +550,25 @@ def render_rl_death_discovery():
 
 
 def render_rl_pricing():
-    """Story: two workers - one honest, one bluffing. The checker pays
-    only for proof. Lying earns nothing."""
+    """Two workers - one honest, one bluffing. The stamp landing gets
+    held; the cost contrast shows bluffing is also expensive."""
     frames = []
-    for i in range(34):
+    for i in range(40):
         img, d = new_canvas("honesty is enforced - not asked for")
         ph = i / 33.0
         d.rounded_rectangle([40, 60, 460, 440], radius=10, fill=PANEL,
                             outline=PANEL_EDGE, width=2)
         text(d, (60, 92), "WORKER A", TEXT, 16, anchor="lm")
-        text(d, (60, 126), "does the work, shows the receipts", TEXT_FAINT, 13,
-             anchor="lm")
+        text(d, (60, 126), "does the work, shows the receipts", TEXT_FAINT,
+             13, anchor="lm")
         text(d, (60, 174), "the checker re-runs everything", TEXT_FAINT, 13,
              anchor="lm")
-        if ph > 0.35:
+        if ph > 0.3:
             stamp(d, (250, 226), "PASS", GREEN)
-        if ph > 0.6:
-            text(d, (60, 288), "real progress", TEXT, 15, anchor="lm")
-            bw = int(200 * min(1.0, (ph - 0.6) / 0.4))
+        if ph > 0.55:
+            text(d, (60, 288), "2 steps of real progress", TEXT, 15,
+                 anchor="lm")
+            bw = int(200 * min(1.0, (ph - 0.55) / 0.45))
             d.rounded_rectangle([60, 308, 260, 330], radius=4, fill=PANEL,
                                 outline=PANEL_EDGE)
             d.rounded_rectangle([60, 308, 60 + bw, 330], radius=4, fill=GREEN)
@@ -543,23 +576,119 @@ def render_rl_pricing():
         d.rounded_rectangle([500, 60, 920, 440], radius=10, fill=PANEL,
                             outline=PANEL_EDGE, width=2)
         text(d, (520, 92), "WORKER B", TEXT, 16, anchor="lm")
-        text(d, (520, 126), "claims done - nothing to re-run", TEXT_FAINT, 13,
-             anchor="lm")
-        text(d, (520, 174), "the checker re-runs everything", TEXT_FAINT, 13,
-             anchor="lm")
-        if ph > 0.35:
+        text(d, (520, 126), "claims done - nothing to re-run", TEXT_FAINT,
+             13, anchor="lm")
+        text(d, (520, 174), "the checker re-runs everything", TEXT_FAINT,
+             13, anchor="lm")
+        if ph > 0.3:
             stamp(d, (710, 226), "FAIL", RED)
-        if ph > 0.6:
-            text(d, (520, 288), "no progress", TEXT_FAINT, 15, anchor="lm")
-            text(d, (520, 360), "- gets nothing, pays the cost", RED, 15,
+        if ph > 0.55:
+            text(d, (520, 288), "5 steps, all wasted", TEXT_FAINT, 15,
                  anchor="lm")
-            text(d, (520, 386), "(its own words never count as proof)", TEXT_FAINT,
-                 13, anchor="lm")
+            d.rounded_rectangle([520, 308, 720, 330], radius=4, fill=PANEL,
+                                outline=PANEL_EDGE)
+            text(d, (520, 360), "- gets nothing, pays all 5 steps' cost",
+                 RED, 15, anchor="lm")
+            text(d, (520, 386), "(its own words never count as proof)",
+                 TEXT_FAINT, 13, anchor="lm")
         if ph >= 1.0:
             text(d, (480, 486), "credit is paid only for results the "
                  "checker can verify.", GREEN, 15, anchor="mm")
         frames.append(img)
+    frames += [frames[-1]] * 6
     return frames
+
+
+def render_rl_drive():
+    """How the controller drives Claude Code: Claude Code executes each
+    act; the controller picks the act, prices it, and writes what it
+    learned - so the next act is chosen better."""
+    frames = []
+    plan = ("read the header", "watch it run", "verify the replay")
+    for a in range(3):
+        for i in range(12):
+            img, d = new_canvas("the controller drives - Claude Code "
+                                "executes")
+            d.rounded_rectangle([40, 60, 400, 200], radius=10, fill=PANEL,
+                                outline=BLUE, width=2)
+            text(d, (60, 90), "CONTROLLER", BLUE, 15, anchor="lm")
+            text(d, (60, 124), f"act {a + 1} of this task:", TEXT_FAINT, 13,
+                 anchor="lm")
+            text(d, (60, 152), plan[a], TEXT, 15, anchor="lm")
+            text(d, (60, 180), "chosen from the notes so far", TEXT_FAINT,
+                 12, anchor="lm")
+            d.rounded_rectangle([440, 60, 800, 200], radius=10, fill=PANEL,
+                                outline=PANEL_EDGE, width=2)
+            text(d, (460, 90), "CLAUDE CODE", TEXT, 15, anchor="lm")
+            if i >= 3:
+                text(d, (460, 124), "executing the act...", TEXT_FAINT, 13,
+                     anchor="lm")
+            if i >= 7:
+                text(d, (460, 152), "evidence lands on disk", TEXT, 13,
+                     anchor="lm")
+            d.line([404, 130, 430, 130], fill=BLUE, width=2)
+            d.polygon([(430, 126), (430, 134), (438, 130)], fill=BLUE)
+            d.rounded_rectangle([600, 240, 920, 380], radius=10, fill=PANEL,
+                                outline=PANEL_EDGE, width=2)
+            text(d, (620, 268), "LEDGER", TEXT_FAINT, 14, anchor="lm")
+            for k in range(a + (1 if i >= 9 else 0)):
+                text(d, (620, 300 + k * 24), f"act {k + 1}: done, priced",
+                     TEXT, 13, anchor="lm")
+            for k, label in enumerate(plan):
+                state = "done" if k < a else ("pick" if k == a else "idle")
+                _method_chip(d, 160, 268 + k * 62, label, state)
+                if k < a:
+                    text(d, (160, 268 + k * 62 + 30), "verified", GREEN, 12,
+                         anchor="mm")
+            if a == 2 and i >= 8:
+                text(d, (480, 440), "Claude Code does the work; the "
+                     "controller makes each next act smarter.", GREEN, 15,
+                     anchor="mm")
+            frames.append(img)
+        if a == 2:
+            frames += [frames[-1]] * 8
+    return frames
+
+
+def render_rl_comparison():
+    """Animated comparison: the same two tasks, four shapes of system.
+    The first three repeat their price; the closing loop compounds."""
+    lanes = (
+        ("knowledge routing", "improvises from a manual",
+         "task 2 pays full price again", None),
+        ("bounded pipeline", "fixed rounds, fixed gates",
+         "same rounds whether it learned or not", None),
+        ("single-verdict triage", "one verdict, nothing banks",
+         "no memory between tasks", None),
+        ("kunglao (this loop)", "notes update after every act",
+         "task 2 opens cheaper", GREEN),
+    )
+    frames = []
+    for i in range(48):
+        img, d = new_canvas("two tasks later - who got cheaper?")
+        phase = min(1.0, i / 24.0)
+        for li, (name, note, verdict, accent) in enumerate(lanes):
+            y = 70 + li * 108
+            d.rounded_rectangle([30, y, 930, y + 92], radius=8, fill=PANEL,
+                                outline=(accent or PANEL_EDGE),
+                                width=2 if accent else 1)
+            text(d, (50, y + 24), name, accent or TEXT, 15, anchor="lm")
+            text(d, (50, y + 50), note, TEXT_FAINT, 12, anchor="lm")
+            t2 = (max(1, 3 - int(phase * 2.5)) if accent
+                  else 3 if phase >= 1.0 else 3)
+            _cost_meter(d, 430, y + 34, 3, "task 1")
+            _cost_meter(d, 430, y + 66, t2, "task 2")
+            vcol = accent if accent else TEXT_FAINT
+            text(d, (50, y + 74), verdict, vcol, 12, anchor="lm")
+        text(d, (480, 520), "the first three repeat their price; the "
+             "closing loop compounds.", GREEN if phase >= 1.0 else DIMC,
+             15, anchor="mm")
+        frames.append(img)
+    frames += [frames[-1]] * 10
+    return frames
+
+
+DIMC = TEXT_FAINT
 
 
 SVG_FONT = ("font-family=\"'SF Mono','Menlo','Cascadia Code',monospace\"")
@@ -680,6 +809,8 @@ RENDERERS = {
     "rl-death-discovery": ("rl-death-discovery.gif",
                            render_rl_death_discovery),
     "rl-pricing": ("rl-pricing.gif", render_rl_pricing),
+    "rl-drive": ("rl-drive.gif", render_rl_drive),
+    "rl-comparison": ("rl-comparison.gif", render_rl_comparison),
     "comparison": ("approach-comparison.svg", None),
 }
 
