@@ -305,6 +305,20 @@ class TestSettleBackoff:
 
 
 class TestLaneHold:
+    def test_bare_context_fails_open(self):
+        """Older test doubles and contexts carry neither a clock nor the
+        reconciliation state — the hold face must fail open (no hold,
+        silent no-op), never break the launch/settle paths."""
+        class _Bare:
+            quota_streak = None
+            quota_hold_until = None
+        bare = _Bare()
+        assert checkpoints._quota_hold_active(bare, "C-1") is False
+        checkpoints._settle_quota_backoff(
+            bare, "C-1", _act("C-1", "ERROR", 1, QUOTA_403))
+        checkpoints._settle_quota_backoff(
+            bare, "C-1", _act("C-1", "DISPATCHED", 0))
+
     def test_hold_gates_the_next_attempt(self, tmp_path):
         clock = _FakeClock()
         ctx = _make_ctx(tmp_path, clock)

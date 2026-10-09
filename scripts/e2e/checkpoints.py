@@ -1587,16 +1587,25 @@ def _quota_backoff_delay_s(consecutive: int) -> int:
 
 
 def _quota_hold_active(ctx: RunContext, claim: str) -> bool:
-    """True while the lane's reconciliation hold is still on the clock."""
-    return ctx.clock.monotonic() < ctx.quota_hold_until.get(claim, 0.0)
+    """True while the lane's reconciliation hold is still on the clock.
+    Fail-open: a context without a clock or state face (older test
+    doubles, bare seams) carries no hold, never breaks the launch."""
+    try:
+        return ctx.clock.monotonic() < ctx.quota_hold_until.get(claim, 0.0)
+    except (AttributeError, TypeError):
+        return False
 
 
 def _settle_quota_backoff(ctx: RunContext, claim: str, act: object) -> None:
     """The settle-path reconciliation: consecutive quota-class rc=1
     dispatch failures grow the lane's bounded backoff (ONE audit row per
     retreat step); ANY successful act resets it; a non-quota settle
-    breaks the consecutive run. Fail-open: a classification or telemetry
-    failure leaves no hold, never breaks the landing path."""
+    breaks the consecutive run. Fail-open: a classification, state, or
+    telemetry failure leaves no hold, never breaks the landing path."""
+    streaks = getattr(ctx, "quota_streak", None)
+    holds = getattr(ctx, "quota_hold_until", None)
+    if not isinstance(streaks, dict) or not isinstance(holds, dict):
+        return  # no memory face on this context: no backoff, no noise
     try:
         if act.outcome == "DISPATCHED":
             ctx.quota_streak.pop(claim, None)
