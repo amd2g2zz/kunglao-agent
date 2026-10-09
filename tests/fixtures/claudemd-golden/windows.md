@@ -63,7 +63,7 @@ Capability discovery (tool recall) goes through the ONE search face —
 | `blockers/` | Active blocker files |
 | `runs/` | Worker status files + `.heartbeat.json` |
 
-**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence. Every fact file carries mandatory frontmatter — `id: F<NNN>`, `type: fact`, `title`, `status` — the write guard's lint refuses a file missing them. `claim-register.yaml` is single-writer (#516): mutate it ONLY via `python3 scripts/ws_yaml.py set|del claim-register.yaml <dotted.path> <value>` — direct Bash/Edits are refused.
+**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence. Every fact file carries mandatory frontmatter — `id: F<NNN>`, `type: fact`, `title`, `status` — the write guard's lint refuses a file missing them. When a fact genuinely carries an open counter-hypothesis or a next experiment, add `uncertainty:` (what would refute or weaken it) and/or `next_probe:` (the runnable experiment, dispatchable verbatim as a sub-goal — the EXPERIMENT testing `promotion_gate`, the CONDITION); both optional, absent is the common case, never filler. `claim-register.yaml` is single-writer (#516): mutate it ONLY via `python3 scripts/ws_yaml.py set|del claim-register.yaml <dotted.path> <value>` — direct Bash/Edits are refused.
 
 ## Roles & responsibilities
 

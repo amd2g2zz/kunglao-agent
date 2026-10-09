@@ -476,6 +476,21 @@ fact. Same slot + distinct fingerprints is the rotation input
 `rotation_induction` joins mechanically; fingerprints are the only
 value material that leaves your session.
 
+**Open-hypothesis fields** — only when your fact genuinely carries an
+open counter-hypothesis or a next experiment, add ONE line each to the
+frontmatter:
+
+```yaml
+uncertainty: "<what would refute or weaken this fact — the not-yet-confirmed note>"
+next_probe: "<the next runnable experiment, phrased so the orchestrator can dispatch it verbatim as a sub-goal>"
+```
+
+`next_probe` is the EXPERIMENT testing `promotion_gate`, which is the
+CONDITION. Both are optional — absent is the common case; never invent
+filler uncertainty or a probe you would not run yourself. Non-empty
+string required when present (`BAD_UNCERTAINTY` / `BAD_NEXT_PROBE`
+lint errors otherwise).
+
 lint check (when the external malware-veri-notes skill is installed — it is
 user-level, not shipped by this repo or CI): `cd <workspace> && python
 <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR
