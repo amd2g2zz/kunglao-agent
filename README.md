@@ -81,6 +81,37 @@ hypotheses when the tried vocabulary collapses (feature-keyed novelty — a
 renamed retry never counts). An offline comparator (SNIPS) keeps the policy
 honest against uniform and ε-greedy controls.
 
+The loop, animated — every asset below is rendered by
+`scripts/render_rl_visuals.py` (the generator is committed alongside the
+assets it produces; re-run it to regenerate):
+
+**The act-level loop** — a Thompson draw over the method arms, the budgeted
+dispatch, the oracle verdict, and the ledger row that sharpens the winner's
+posterior:
+
+![the act-level learning loop: thompson draw, dispatch, oracle verdict, ledger row](docs/assets/rl-loop.gif)
+
+**Feature-keyed states** — the same action vocabulary ranks differently
+once probe tokens split a plain bundle and a hardened APK into separate
+q-cells:
+
+![feature-keyed states: one action vocabulary, two rankings](docs/assets/rl-features.gif)
+
+**Arm death and discovery** — a dead arm parks (revivable, never deleted);
+the discovery layer admits only genuinely novel arms:
+
+![arm death, park, and the discovery layer admitting a novel arm](docs/assets/rl-death-discovery.gif)
+
+**Oracle pricing** — an honest act moves Φ; a fabricated act pays cost for
+nothing:
+
+![the oracle pricing an honest act against a fabricated one](docs/assets/rl-pricing.gif)
+
+**Where this sits** — three fixed-logic shapes next to an act-level RL
+controller that updates its policy from its own measured history:
+
+![four approaches compared: three fixed-logic chains, one learned control law](docs/assets/approach-comparison.svg)
+
 ---
 
 ## 📋 Requirements

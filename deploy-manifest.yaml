@@ -315,7 +315,7 @@ files:
   - src: scripts/dep_surface_gate.py
     dest: .claude/scripts/dep_surface_gate.py
     kind: scaffold
-    sha256: 7a6a0a16f59fb1f6597e3fc08e2183003fcec8c3d35540f94adb4fe4629bd9a8
+    sha256: 9e8d967bbfd7ce16ea10f00f4ebc8f928a85e46d8ca1bdbb0a29192bb6b17af6
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
@@ -936,6 +936,10 @@ files:
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
     sha256: 3af9f7bfcdea0001d193035252eebffea4ffadd0f3e3ed1079930cbdad9e9278
+  - src: scripts/render_rl_visuals.py
+    dest: .claude/scripts/render_rl_visuals.py
+    kind: scaffold
+    sha256: 5f474c3aa7ccc23e8ea8a1163ede318e27524d0388d4258064a729f221d77db2
   - src: scripts/replay_equivalence.py
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
@@ -1883,7 +1887,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 2f5e3658274c301621c62fb466e00fed6d825bf3546515d4a03814839519bd77
+    sha256: b903280d7c0b259178568e292511abebde878eb943813f25e14d7e6e26366ff1
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
