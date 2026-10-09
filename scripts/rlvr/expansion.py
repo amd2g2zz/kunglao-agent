@@ -10,13 +10,18 @@ vocabulary plus bookkeeping — the DLL that needs "write a custom
 Themida-stub emulator" can never be proposed. This module is that
 operator's mechanical face:
 
-  - ``trigger``: the move fires when (a) the workspace's obstacle
-    evidence reaches EXPAND_OBSTACLE_K rows and (b) at least one tried
-    family is termination-dead. It reads ONLY sanctioned faces — the
-    state snapshot's obstacle digest (rlvr.state, the 396 freeze wall:
-    this module NEVER imports rlvr.obstacles) and the termination
-    verdicts (the registry's one sanctioned consumer precedent;
-    expansion is sanctioned consumer #2 per the #546 charter note).
+  - ``trigger``: the move fires when the workspace's obstacle
+    evidence reaches EXPAND_OBSTACLE_K rows AND at least one of two
+    collapse arms holds — a tried family is termination-dead, or the
+    loop is stalled (the settlement stream's potential tail flat
+    within STALL_EPSILON over STALL_WINDOW_TICKS consecutive
+    transitions; the stall arm only SPENDS the move — it never kills,
+    parks, downweights, or writes anything). It reads ONLY sanctioned
+    faces — the state snapshot's obstacle digest (rlvr.state, the 396
+    freeze wall: this module NEVER imports rlvr.obstacles) and the
+    termination verdicts (the registry's one sanctioned consumer
+    precedent; expansion is sanctioned consumer #2 per the #546
+    charter note).
   - ``score``: admission = ``log P_LLM + policy + NOVELTY_WEIGHT x
     novelty`` where novelty is FEATURE-KEYED — 1 minus the max Jaccard
     of the hypothesis's canonical feature tokens against every
@@ -43,8 +48,8 @@ operator's mechanical face:
 
 New arms admitted here seed cold with the WS3 model prior at the
 wiring face (priors.seed_intake_prior families=) — not this module's
-job. Constants (3, the WS4 budget): EXPAND_OBSTACLE_K,
-EXPAND_HYPOTHESES_N, NOVELTY_WEIGHT.
+job. Constants (5, the WS4 budget): EXPAND_OBSTACLE_K, STALL_EPSILON,
+STALL_WINDOW_TICKS, EXPAND_HYPOTHESES_N, NOVELTY_WEIGHT.
 
 Usage:
     python scripts/rlvr/expansion.py <workspace> --check   # trigger probe
@@ -77,24 +82,73 @@ RECEIPT_DIR = "runs/expansion"
 OVERLAY_SCHEMA = "discovered-families/1"
 OVERLAY_REL = "runs/discovered-families.yaml"
 
-#: obstacle rows (state digest count) required before a move may fire
-EXPAND_OBSTACLE_K = 3
+#: obstacle rows (state digest count) required before a move may fire.
+#: Budget-calibration, not tuned-to-fire: hard-kill evidence lands at
+#: roughly one row per hour of grinding, so a two-hour budget stacks
+#: about two rows — the fixed count is the canonical fixed-m stopping
+#: shape, and a taller bar is structurally unreachable inside the
+#: budget it calibrates.
+EXPAND_OBSTACLE_K = 2
 #: hypotheses one move may admit (the budget the move spends)
 EXPAND_HYPOTHESES_N = 3
 #: novelty term weight in the admission score
 NOVELTY_WEIGHT = 1.0
+#: a transition's potential move below which the loop reads as flat —
+#: set at the measured grind scale (settled arms move the potential
+#: well under this per tick while grinding; a real gain of a few
+#: percent clears it and breaks the stall)
+STALL_EPSILON = 0.02
+#: consecutive flat transitions that read the loop as stalled — half
+#: the transitions a two-hour budget settles (four to six observed),
+#: so a stall only reads in the run's back half
+STALL_WINDOW_TICKS = 3
 
 _LOG_FLOOR = 1e-12  # log(0) guard — a zero P_LLM floors, never crashes
 
 
+def loop_stalled(phi_series, window: int = STALL_WINDOW_TICKS,
+                 epsilon: float = STALL_EPSILON) -> dict | None:
+    """The loop-stall face: a mechanical read over the transition
+    ledger's settlement stream (each row carries the potential it
+    landed at). ``phi_series`` is that potential column, oldest first.
+    The face reads stalled when the LAST ``window`` consecutive
+    transitions each moved the potential by less than ``epsilon`` — a
+    backward move counts toward the stall (it is not progress).
+    Malformed input returns None (the wiring then degrades to the
+    family-death-only predicate); a series too short to fill the
+    window honestly reads as not stalled yet. Pure: nothing is
+    written, nothing parked, nothing killed — the option-death
+    estimator keeps sole authority over parking."""
+    if not isinstance(phi_series, (list, tuple)):
+        return None
+    if not isinstance(window, int) or window < 1:
+        return None
+    phis = [float(v) for v in phi_series if isinstance(v, (int, float))]
+    moves = [phis[i + 1] - phis[i] for i in range(len(phis) - 1)]
+    tail = moves[-window:]
+    stalled = len(tail) == window and all(m < epsilon for m in tail)
+    return {"stalled": bool(stalled),
+            "moves": [round(m, 6) for m in tail],
+            "window": window, "epsilon": epsilon}
+
+
 def trigger(snap: dict, death: dict | None,
+            stall: dict | None = None,
             obstacle_k: int = EXPAND_OBSTACLE_K) -> dict | None:
     """The move's predicate over SANCTIONED faces only: the state
     snapshot's obstacle digest ({"obstacles": {"count": n}} — rlvr.state
-    owns the read; this module never touches the registry) plus the
-    termination verdicts ({family: {"dead": bool}}). Returns the trigger
-    receipt ({"obstacle_count", "collapsed_arms"}) or None — never an
-    exception, never a partial fire."""
+    owns the read; this module never touches the registry), the
+    termination verdicts ({family: {"dead": bool}}), and the optional
+    loop-stall face ({"stalled": bool} — loop_stalled's read of the
+    transition ledger). The stall arm ORs in: an absent or malformed
+    face degrades to the family-death-only predicate (fail-closed).
+    THE SPEND-ONLY INVARIANT: the stall arm only spends the discovery
+    move — it never kills, parks, downweights, or writes anything; the
+    option-death estimator keeps sole authority over parking. Returns
+    the trigger receipt ({"obstacle_count", "collapsed_arms", "arm"})
+    — ``arm`` names the evidence that fired ("family-death" takes
+    precedence when both arms hold) — or None: never an exception,
+    never a partial fire."""
     if not isinstance(snap, dict) or not isinstance(death, dict):
         return None
     count = int((snap.get("obstacles") or {}).get("count") or 0)
@@ -103,9 +157,11 @@ def trigger(snap: dict, death: dict | None,
     collapsed = sorted(
         str(fam) for fam, v in death.items()
         if isinstance(v, dict) and bool(v.get("dead")))
-    if not collapsed:
+    stalled = isinstance(stall, dict) and stall.get("stalled") is True
+    if not collapsed and not stalled:
         return None
-    return {"obstacle_count": count, "collapsed_arms": collapsed}
+    return {"obstacle_count": count, "collapsed_arms": collapsed,
+            "arm": "family-death" if collapsed else "loop-stall"}
 
 
 def novelty(hyp_features: dict,
@@ -287,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         import method_families
 
+        from rlvr import incremental_reward
         from rlvr import state as rlvr_state
         from rlvr import termination
 
@@ -294,9 +351,13 @@ def main(argv: list[str] | None = None) -> int:
         snap = rlvr_state.snapshot(ws)
         fams = sorted(method_families.registered_tokens())
         death = termination.verdicts(ws, fams) if fams else {}
-        doc = trigger(snap, death)
+        phis = [r.get("s_prime_phi")
+                for r in incremental_reward.read_transitions(ws)
+                if isinstance(r, dict)]
+        stall = loop_stalled(phis)
+        doc = trigger(snap, death, stall)
         print(json.dumps({"workspace": str(ws), "fires": doc is not None,
-                          "trigger": doc}, indent=2))
+                          "trigger": doc, "stall": stall}, indent=2))
         return 0
     ap.error("nothing to do — pass --check")
     return 2
