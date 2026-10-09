@@ -12,6 +12,11 @@
 #   Merge gate = all four jobs green; any red blocks (fail-loud, nothing
 #   dropped from the gate chain — the tier census pins the partition).
 #
+#   A bounded egress gate heads the run (runner-probe, #538): github.com
+#   connectivity is retried BEFORE any checkout, so transient self-hosted
+#   blips are absorbed instead of burning actions/checkout's 3-attempt
+#   budget and going red on infra.
+#
 # README test counts / "shipped" claims point at the receipt artifact.
 
 name: release-check
@@ -56,6 +61,41 @@ jobs:
       is_selfhosted: ${{ steps.probe.outputs.is_selfhosted }}
       docs_only: ${{ steps.docs.outputs.docs_only }}
     steps:
+      - name: Connectivity gate — absorb egress blips before any checkout (#538)
+        # actions/checkout exposes no retry knob; THIS step is the
+        # checkout-retry mechanism (the pinned checkout SHA stays
+        # byte-identical). The self-hosted slot has lost github.com egress
+        # in seconds-to-minutes windows (GnuTLS -110 / ~134s connect
+        # timeouts — three integration legs poisoned on 2026-10-06 and
+        # 2026-10-09, each needing a manual `gh run rerun --failed`);
+        # checkout's built-in 3 retries (~2.5 min apart) burn inside one
+        # window. Probe https://api.github.com and retry every 20s for up
+        # to 10 minutes, then proceed — a real outage still fails loudly
+        # at the ceiling instead of hanging the queue.
+        # Ordering: the integration leg (needs: runner-probe) reaches its
+        # checkout only AFTER this gate passes, so one gate at the run
+        # head covers the leg that actually rides the self-hosted egress.
+        # lint-hygiene / docs-contract / unit-fast check out in parallel
+        # on GitHub-hosted runners (a different egress path, not the
+        # observed failure class); duplicating the gate per job would
+        # only add queue time, so it stays single at the head.
+        timeout-minutes: 12
+        run: |
+          set -eu
+          # per-probe cap (-m 10) so a hung connect cannot stall the loop
+          # past the ceiling; 600s total ~= 20 retry cycles at 20s cadence
+          deadline=$((SECONDS + 600))
+          failed=0
+          until curl -fsS -m 10 -o /dev/null https://api.github.com; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::runner egress to github.com still down after 10 min of probes — failing loudly (issue #538); rerun when the runner's network heals"
+              exit 1
+            fi
+            failed=$((failed + 1))
+            echo "egress probe ${failed} failed — retrying in 20s"
+            sleep 20
+          done
+          echo "github.com egress OK (failed probes before success: ${failed})"
       - name: Docs-only detection (markdown-only PRs take the fast path)
         # A PR whose every changed file is documentation (docs/**, README*,
         # *.md) cannot touch the deployed surface or the test suites — the
