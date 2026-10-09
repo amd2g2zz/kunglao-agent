@@ -115,7 +115,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: c55b5548e4e02003586fa5f23b43a6ed212b1a19ed35e217739c9a86183e7c9a
+    sha256: 033c333f92a84b2509bd14c1a0b61fa469691084bd902573f48e5cba7ef63250
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -580,6 +580,10 @@ files:
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
     sha256: 88cd6758e87e0ec492f0d005678ba61a485f4bb0ab65bb2b6f1289996d3a9b5f
+  - src: scripts/hypothesis_view.py
+    dest: .claude/scripts/hypothesis_view.py
+    kind: scaffold
+    sha256: 6838fe9c0ba09753768ef3ccf445f50ed4f2f35e2b23fabc8703f132ff5c91ab
   - src: scripts/infeasible_proposal.py
     dest: .claude/scripts/infeasible_proposal.py
     kind: scaffold
@@ -707,7 +711,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 88f83a31af4c179b42730ff1d15aeab32643c813648c5a198e68182bbc289254
+    sha256: 65884cb60f295c86c7f1db0a424d37e8843fc25a7b91396f2097b0c89978c73c
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -1743,7 +1747,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: ff906ebbbc205bf72aacb4b4cb92d20641a0212d59b13f4ce750691f91106fd3
+    sha256: e041dc965aa6d1243b001c10342fd3f0ccfb67f5bb8b0a85348d0072ae13741c
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1751,7 +1755,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: a7a6abdd5a66b434699c33e2aaea7b13fbb315d5310a07c10d253b20b250e948
+    sha256: c2e0ad661c6c5c1c444b563813c9052e184b004b903fef2d91a87d19dac3d64a
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
@@ -1855,7 +1859,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 70e73c6d566d82fb43a8b62c3dcbc1226754fdc1c8593701c50c37ea56d31d15
+    sha256: 77d8ccc5c5c05c17defc0422b075fba8ce540fcb82ce8cf8f10471fc394ec945
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

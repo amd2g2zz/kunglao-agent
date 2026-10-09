@@ -5,10 +5,10 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 171 (`scripts/*.py` at #49 recon, 2026-09-05; the
+- **Total scripts**: 172 (`scripts/*.py` at #49 recon, 2026-09-05; the
   historical #318-era count lineage — 72 cataloged at #318 close; +15 by
   #236/#271/#287/#304/#309/#316; +4 by #310/#331/#336 merged after the
-  #320 snapshot; +1 by #409; +2 by #477 — is superseded by the live
+  #320 snapshot; +1 by #409; +2 by #477; +1 by #584 — is superseded by the live
   per-script provenance in the tables below).
 - **Orphans — test semantics**: 0 — every script has at least one live
   reference (tests/ count as references; a script referenced only by tests
@@ -80,6 +80,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `zero_output_fingerprint.py` | P3 same-type action thrash circuit (#823/#634): (tool,target) hash streaks N=3 zero belief change → break + failure_analysis inject (shadow) | lib, tests |
 | `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669) + #110 case-bank priors: seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates; `seed_case_candidates` 按冷启动 (project_type+保护特征) 检索 runs/case-bank.jsonl 命中行注入 provenance 先验 (failure-first, 零行/零命中/零上下文静默跳过) | lib(1: digest_build), CLI, tests |
 | `hypothesis_bridge.py` | #252 hypothesis↔claim-economy bridge — 家族臂作为 claim（competitor_group: hyp-<H-id> + hypothesis_ref 边字段, 幂等 marker），sweep 把 hypotheses/ 停放的 candidate 字符串兑付为 arm 并清空（单一表示），family ledger 从 claim settlement 同步（#528 转移不变：任一臂 PROVEN/VERIFIED → family confirmed + 同组竞争假设 superseded；全臂终态无正者 → refuted），no-orphan lint（E1 停放字符串 / E2 孤儿家族 claim） | lib(2: kunglao_record sync, target_ladder + plan_epistemics 家族 stamping, digest_build sweep), CLI, tests |
+| `hypothesis_view.py` | read-only hypothesis view over the fact base (#584): projects facts carrying an open `uncertainty` into the structured analysis object shape {identity, object, hypothesis, supporting, counter, status, next} for human sync — a VIEW, never a parallel truth (substrate stays fact+claim+evidence; renderer writes nothing, consumes only lint_facts-validated frontmatter via the shared parse face); `next_probe` feeds the `next` slot (the EXPERIMENT testing promotion_gate, the CONDITION); facts without uncertainty are invisible (absent is the common case); `--json` carries active_schema_rev for drift visibility | lib(1: lint_facts parse_frontmatter + ACTIVE_SCHEMA_REV), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51); also the single home of the strategy convergence four metrics (regret / cost-to-slope / P(faster|hit) / competence, `--strategy` CLI face) | lib(3), tests |
