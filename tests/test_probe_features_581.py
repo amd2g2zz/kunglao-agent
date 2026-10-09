@@ -20,6 +20,7 @@ through the state-signature build, and pin the tolerance faces:
   4. discovery novelty — probe tokens are first-class tokens.
   5. tolerant fold — the warm posterior store folds by family, never
      by feature key, so richer keys cold-start through pooling.
+  6. the seven-arm readout gains a tier-decomposed learning_value.
 
 No difficulty/tier flag exists anywhere in the dispatch faces — the
 discriminator is evidence; the readout tier slice is read-only.
@@ -43,6 +44,7 @@ from rlvr import meta_arms  # noqa: E402
 from rlvr import q_cells  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
 from rlvr import state as rlvr_state  # noqa: E402
+import eval_matrix_report as mr  # noqa: E402
 import feature_mining  # noqa: E402
 
 
@@ -531,3 +533,110 @@ class TestTolerantFold:
         # tempered meta evidence on top of its own
         for fam in out:
             assert 0.05 <= out[fam] <= 1.0
+        assert out["static-decompile"] > 0.5
+        assert out["structural-anchoring"] < 0.5
+
+
+# ---------------------------------------------------------------------------
+# 6. the seven-arm readout — tier-decomposed learning_value
+# ---------------------------------------------------------------------------
+
+def _plain_cell(tmp_path: Path, arm: str, unit: str, verdict: str,
+                mean_rows: list[dict]) -> None:
+    run_dir = tmp_path / arm / unit
+    run_dir.mkdir(parents=True)
+    ws = tmp_path / "ws" / f"{arm}-{unit}"
+    ws.mkdir(parents=True)
+    (run_dir / "eval-results-20260101T000000Z-1.json").write_text(
+        json.dumps({"schema": "kunglao-eval-results/1", "rows": [{
+            "task_id": unit, "verdict": verdict,
+            "loop": {"status": "completed",
+                     "session": {"session_cost": {"total_cost_usd": 1.0},
+                                 "wall_s": 90.0},
+                     "workspace": str(ws)}}]}), encoding="utf-8")
+    p = ws / "runs" / "transitions.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("".join(json.dumps(r) + "\n" for r in mean_rows),
+                 encoding="utf-8")
+
+
+def _spine(tmp_path: Path, tiers: dict[str, str],
+           arms: tuple[str, ...] = ("kunglao-warm", "kunglao-uniform")) -> None:
+    """A progress spine carrying the unit tiers (the launcher writes
+    them; the report only reads)."""
+    runs = [{"arm": arm, "unit": unit, "tier": tier}
+            for unit, tier in tiers.items() for arm in arms]
+    (tmp_path / "progress.json").write_text(
+        json.dumps({"runs": runs}), encoding="utf-8")
+
+
+class TestTierDecomposedLearningValue:
+    def _fixture(self, tmp_path: Path, spine: bool = True) -> None:
+        _plain_cell(tmp_path, "kunglao-warm", "simple-1", "PASS",
+                    [{"r_incr": 0.4, "propensity": 0.5}])
+        _plain_cell(tmp_path, "kunglao-warm", "hard-1", "PASS",
+                    [{"r_incr": 0.2, "propensity": 0.5}])
+        _plain_cell(tmp_path, "kunglao-uniform", "simple-1", "FAIL",
+                    [{"r_incr": 0.1, "propensity": 0.25}])
+        _plain_cell(tmp_path, "kunglao-uniform", "hard-1", "FAIL",
+                    [{"r_incr": 0.1, "propensity": 0.25}])
+        if spine:
+            _spine(tmp_path, {"simple-1": "release", "hard-1": "canary"})
+
+    def test_learning_value_slices_by_unit_tier(self, tmp_path):
+        self._fixture(tmp_path)
+        lv = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+        assert lv["formula"] == "B4 - B3"
+        tiers = lv["tiers"]
+        assert set(tiers) == {"canary", "release"}
+        assert tiers["release"]["per_unit"] == {"simple-1": 0.3}
+        assert tiers["release"]["mean_delta"] == pytest.approx(0.3)
+        assert tiers["canary"]["per_unit"] == {"hard-1": 0.1}
+        assert tiers["canary"]["mean_delta"] == pytest.approx(0.1)
+        for row in tiers.values():
+            assert row["ci95"][0] <= row["mean_delta"] <= row["ci95"][1]
+            assert row["units"] == sorted(row["per_unit"])
+
+    def test_tiers_are_sorted_and_deterministic(self, tmp_path):
+        self._fixture(tmp_path)
+        a = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+        b = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+        assert a["tiers"] == b["tiers"]
+        assert list(a["tiers"]) == sorted(a["tiers"])
+
+    def test_only_learning_value_slices(self, tmp_path):
+        """The tier slice is the learning_value readout face — the other
+        decompositions stay whole-matrix rows."""
+        self._fixture(tmp_path)
+        dec = mr.build_report(tmp_path)["decompositions"]
+        assert "tiers" not in dec["architecture_value"]
+        assert "tiers" not in dec["sampling_check"]
+
+    def test_no_tier_knowledge_no_slice(self, tmp_path):
+        self._fixture(tmp_path, spine=False)
+        lv = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+        assert "tiers" not in lv
+        assert lv["mean_delta"] == pytest.approx(0.2)
+
+    def test_missing_arm_renders_no_tiers(self, tmp_path):
+        _plain_cell(tmp_path, "kunglao-warm", "simple-1", "PASS",
+                    [{"r_incr": 0.4}])
+        _spine(tmp_path, {"simple-1": "release"},
+               arms=("kunglao-warm",))
+        lv = mr.build_report(tmp_path)["decompositions"]["learning_value"]
+        assert lv["missing_arms"] == ["kunglao-uniform"]
+        assert "tiers" not in lv
+
+    def test_tier_rides_the_matrix_cells(self, tmp_path):
+        self._fixture(tmp_path)
+        report = mr.build_report(tmp_path)
+        by_cell = {(c["arm"], c["unit"]): c for c in report["matrix"]}
+        assert by_cell[("kunglao-warm", "simple-1")]["tier"] == "release"
+        assert by_cell[("kunglao-uniform", "hard-1")]["tier"] == "canary"
+
+    def test_print_renders_the_tier_faces(self, tmp_path, capsys):
+        self._fixture(tmp_path)
+        report = mr.build_report(tmp_path)
+        mr.print_report(report)
+        out = capsys.readouterr().out
+        assert "release" in out and "canary" in out

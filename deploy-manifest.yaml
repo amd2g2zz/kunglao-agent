@@ -435,7 +435,7 @@ files:
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: 17c1290397a9f247dfcaa4d92bee8b9db8e5b34cbdbf03834dfa384cf1466959
+    sha256: b48af6223c27da86b4298b149d2c9c3b281b7c6a3c230cb593a69840aaac98e6
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold

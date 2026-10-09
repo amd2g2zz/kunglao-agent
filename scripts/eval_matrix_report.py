@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_report.py — the capability-matrix readout face (pass@k aggregation + the B-ladder decompositions).
+"""eval_matrix_report.py — the capability-matrix readout face
+(pass@k aggregation + the B-ladder decompositions).
 
 The read side of scripts/eval_matrix_runner.py: per arm x unit matrix
 over COMPLETED runs, the honest 80/20 gate primitives, the B2
@@ -89,7 +90,11 @@ DECOMPOSITION_ARMS = {
                   "frozen uniform one on the same harness"),
         "formula": "B4 - B3",
         "arm_a": "kunglao-warm",
-        "arm_b": "kunglao-uniform"},
+        "arm_b": "kunglao-uniform",
+        # readout-only tier slice: the B4-B3 delta decomposed by unit
+        # tier (the over-reasoning alarm reads the simple-unit slice —
+        # evidence sliced for reading, never a dispatch flag)
+        "tier_slice": True},
     "architecture_value": {
         "label": ("architecture value — the static harness vs bare CC "
                   "with learning frozen"),
@@ -264,6 +269,17 @@ def _aggregate_samples(unit_dir: Path, samples: list[Path],
     return cell
 
 
+def _attach_tier(cell: dict, spine_row: dict) -> dict:
+    """A cell's unit tier, when the spine row knows it (the launcher
+    declares tiers; the report only reads them — the readout-only tier
+    slice's raw material). Cells without tier knowledge carry no tier
+    field at all (absence is a state, never an invented label)."""
+    tier = spine_row.get("tier")
+    if isinstance(tier, str) and tier:
+        cell["tier"] = tier
+    return cell
+
+
 def _collect_matrix(out: Path, by_cell: dict[tuple[str, str],
                                              list[dict]]) -> list[dict]:
     """Per arm x unit cells over the run dirs on disk, enriched from the
@@ -299,7 +315,7 @@ def _collect_matrix(out: Path, by_cell: dict[tuple[str, str],
                 cost = (session.get("session_cost") or {}).get(
                     "total_cost_usd")
                 ws = loop.get("workspace") or ws
-                matrix.append({
+                matrix.append(_attach_tier({
                     "arm": arm, "unit": unit,
                     "final_status": child_row.get("verdict"),
                     "loop_status": loop.get("status"),
@@ -307,14 +323,15 @@ def _collect_matrix(out: Path, by_cell: dict[tuple[str, str],
                     "wall_s": session.get("wall_s"),
                     "transitions": _transitions_count(ws),
                     "facts": _facts_count(ws),
-                    **_decision_primitives(ws)})
+                    **_decision_primitives(ws)}, spine))
             else:
                 status = spine.get("status") or "missing"
-                matrix.append({"arm": arm, "unit": unit,
-                               "final_status": status,
-                               "transitions": _transitions_count(ws),
-                               "facts": _facts_count(ws),
-                               **_decision_primitives(ws)})
+                matrix.append(_attach_tier(
+                    {"arm": arm, "unit": unit,
+                     "final_status": status,
+                     "transitions": _transitions_count(ws),
+                     "facts": _facts_count(ws),
+                     **_decision_primitives(ws)}, spine))
     # spine-only cells: the launcher refused/planned them before any run
     # dir existed — reported states, never silent absences
     for (arm, unit), rows in sorted(by_cell.items()):
@@ -323,10 +340,12 @@ def _collect_matrix(out: Path, by_cell: dict[tuple[str, str],
         sample_count = max(
             [int(r["sample_count"]) for r in rows
              if isinstance(r.get("sample_count"), int)] or [1])
-        cell = {"arm": arm, "unit": unit,
-                "final_status": rows[0].get("status") or "missing",
-                "transitions": 0, "facts": 0,
-                "decisions": 0, "learned_decisions": 0, "mean_r": None}
+        cell = _attach_tier({"arm": arm, "unit": unit,
+                             "final_status": rows[0].get("status")
+                             or "missing",
+                             "transitions": 0, "facts": 0,
+                             "decisions": 0, "learned_decisions": 0,
+                             "mean_r": None}, rows[0])
         if sample_count > 1:
             cell["samples"] = sample_count
         if rows[0].get("detail"):
@@ -395,7 +414,11 @@ def _decompositions(matrix: list[dict]) -> dict:
     """The three named B-ladder rows. Each pairs its arms per unit on
     mean_r, reports the mean delta with the seeded bootstrap CI and the
     pass-rate face, and names any arm with no data — a one-sided matrix
-    renders NO number rather than a fabricated delta."""
+    renders NO number rather than a fabricated delta. The learning_value
+    row additionally slices its paired deltas by unit tier (when the
+    spine knows the unit's tier) — read-only aggregation; units without
+    tier knowledge are excluded from the slice (never an invented
+    label)."""
     cells_by_arm: dict[str, dict[str, dict]] = {}
     for cell in matrix:
         cells_by_arm.setdefault(cell["arm"], {})[cell["unit"]] = cell
@@ -424,10 +447,48 @@ def _decompositions(matrix: list[dict]) -> dict:
             row["per_unit"] = deltas
             row["mean_delta"] = round(sum(vals) / len(vals), 6)
             row["ci95"] = _bootstrap_ci(vals)
+            if spec.get("tier_slice"):
+                tiers = _tier_slice(arm_a, arm_b, deltas)
+                if tiers:
+                    row["tiers"] = tiers
         row["note"] = (HONEST_STATS_NOTE if deltas else
                        "no paired units with measurable reward yet — "
                        "the decomposition waits for data")
         out[name] = row
+    return out
+
+
+def _tier_or_none(cell_a: dict, cell_b: dict):
+    """A paired unit's tier: the spine's declaration when either cell
+    knows it; None when no face knows — never an invented label."""
+    for cell in (cell_a, cell_b):
+        tier = cell.get("tier")
+        if isinstance(tier, str) and tier:
+            return tier
+    return None
+
+
+def _tier_slice(arm_a: dict, arm_b: dict, deltas: dict) -> dict:
+    """The learning_value delta sliced by unit tier: per-tier paired
+    units, mean delta, and the same seeded bootstrap CI discipline as
+    the whole-matrix row. Tiers render in sorted order (determinism);
+    the slice is readout-only — no dispatch face consumes it."""
+    by_tier: dict[str, list] = {}
+    for u in sorted(deltas):
+        tier = _tier_or_none(arm_a.get(u) or {}, arm_b.get(u) or {})
+        if tier is None:
+            continue
+        acc = by_tier.setdefault(tier, [[], {}])
+        acc[0].append(u)
+        acc[1][u] = deltas[u]
+    out: dict[str, dict] = {}
+    for tier in sorted(by_tier):
+        units, per_unit = by_tier[tier]
+        vals = [per_unit[u] for u in units]
+        out[tier] = {"units": units,
+                     "per_unit": per_unit,
+                     "mean_delta": round(sum(vals) / len(vals), 6),
+                     "ci95": _bootstrap_ci(vals)}
     return out
 
 
@@ -529,6 +590,10 @@ def print_report(report: dict) -> None:
                       f"ci95={row['ci95']} "
                       f"(pass {row['pass_rate_a']} vs "
                       f"{row['pass_rate_b']})")
+                for tier in sorted(row.get("tiers") or {}):
+                    face = row["tiers"][tier]
+                    print(f"  tier {tier}: mean_delta={face['mean_delta']} "
+                          f"ci95={face['ci95']} n={len(face['units'])}")
 
 
 def main(argv: list[str] | None = None) -> int:
