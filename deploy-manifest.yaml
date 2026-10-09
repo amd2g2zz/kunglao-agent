@@ -1211,7 +1211,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: 582f91e835589bfe81eb2c42d8ee37c37ba06539b22f9797d1a950cd920afca7
+    sha256: 3b18459464d2ec5ede3fe7ed7790c232631a1def3aacbff74dae166a3fe46b0c
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1295,7 +1295,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 9909b8889659e5086d968ee60c09d2bbf6af809ef1f69085272a669906d182f8
+    sha256: 9448594b5127cdcb7e89af387e28fd6a606cc89a51b7006c786e4b7720d4e9c7
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
