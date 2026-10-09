@@ -22,12 +22,13 @@ dependencies = [
     "jsonschema>=4.0",
     "z3-solver>=4.12",  # opaque-pred (issue #306): guarded import, degrade path exit 2
     "jinja2>=3.1",  # #156 --html face template (guarded import: the JSON
-                    # face — the primary artifact — renders without it)
+    # face — the primary artifact — renders without it)
     "numpy>=2.2",  # issue #420: RLVR statistical math (Normal-Gamma pooling,
-                   # winrate aggregation). Order-preserving sums only — the
-                   # settlement determinism axiom pins float sums in input
-                   # order; >=2.2 keeps the 3.10 floor resolvable (2.3+/2.4+
-                   # need 3.11+).
+    # winrate aggregation). Order-preserving sums only — the
+    # settlement determinism axiom pins float sums in input
+    # order; >=2.2 keeps the 3.10 floor resolvable (2.3+/2.4+
+    # need 3.11+).
+    "pillow>=10",
 ]
 
 # Console scripts (issue #416): the `kunglao` CLI family was previously only

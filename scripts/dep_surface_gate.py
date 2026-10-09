@@ -67,7 +67,8 @@ def norm_dist(name: str) -> str:
 
 def dist_for(module: str) -> str:
     """The distribution that serves an imported top-level module."""
-    return IMPORT_DIST_ALIASES.get(module, norm_dist(module))
+    # aliases are keyed lowercase; imports arrive in source case (PIL)
+    return IMPORT_DIST_ALIASES.get(module.lower(), norm_dist(module))
 
 
 def _local_modules(surface_root: Path) -> set[str]:

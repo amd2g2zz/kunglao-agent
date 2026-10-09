@@ -284,6 +284,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
+| `render_rl_visuals.py` | README learning-loop visual generator — renders the four animated GIFs (act-level loop, feature-keyed states, arm death/discovery, oracle pricing) plus the static approach-comparison SVG embedded in both READMEs; Pillow-only, seeded RNG, `--out`/`--only` CLI; regenerate-and-commit contract over docs/assets | docs/assets provenance, docs |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
 | `context_budget.py` | #300 WS1 context-budget metric — fixed standing bytes (constitution + workspace template) vs the 130% v0.1 baseline cap; per-section audit table (rule-12: consumer + behavior delta), owner-exception path, WS1 high-water ratchet; CLI `--json` for CI; over-cap exits 2 | tests, CLI |

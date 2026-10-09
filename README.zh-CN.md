@@ -73,6 +73,33 @@ Thompson 后验层按"什么方法在相似状态上真的有效"重排方法族
 永远不算新）。离线对照器（SNIPS）让策略对 uniform 和 ε-greedy 对照
 保持诚实。
 
+循环动图 —— 下列素材全部由 `scripts/render_rl_visuals.py` 渲染
+（生成器与其产物一同入库；重跑即可再生）：
+
+**act 级学习循环** —— 方法臂上的 Thompson 抽样、预算化派遣、oracle
+判决、以及把胜者后验磨尖的账本行：
+
+![act 级学习循环：Thompson 抽样、派遣、oracle 判决、账本行](docs/assets/rl-loop.gif)
+
+**特征键控状态** —— 一旦探针 token 把普通 bundle 与加固 APK 分进不同
+q-cell，同一套动作词汇就排出不同的序：
+
+![特征键控状态：一套词汇，两种排序](docs/assets/rl-features.gif)
+
+**臂死亡与发现** —— 死臂停车（可复活，永不删除）；发现层只认真新颖
+的臂：
+
+![臂死亡、停车与发现层接纳新臂](docs/assets/rl-death-discovery.gif)
+
+**oracle 定价** —— 诚实 act 推动 Φ；伪造 act 白付成本：
+
+![oracle 给诚实 act 与伪造 act 定价](docs/assets/rl-pricing.gif)
+
+**定位** —— 三种固定逻辑形态，对照一个用自身实测历史更新策略的
+act 级 RL 控制器：
+
+![四种路线对比：三条固定逻辑链，一个学出来的控制律](docs/assets/approach-comparison.svg)
+
 ---
 
 ## 📋 环境要求
