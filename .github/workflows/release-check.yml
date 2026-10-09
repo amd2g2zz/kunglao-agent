@@ -54,7 +54,31 @@ jobs:
     outputs:
       runner_long: ${{ steps.probe.outputs.runner_long }}
       is_selfhosted: ${{ steps.probe.outputs.is_selfhosted }}
+      docs_only: ${{ steps.docs.outputs.docs_only }}
     steps:
+      - name: Docs-only detection (markdown-only PRs take the fast path)
+        # A PR whose every changed file is documentation (docs/**, README*,
+        # *.md) cannot touch the deployed surface or the test suites — the
+        # heavy legs noop for it. API failure reads as NOT docs-only (the
+        # conservative full run).
+        id: docs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          if [ -z "$PR" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          non_doc=$(gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" \
+            --jq '[.[] | select(.filename | test("^(docs/|README)|\\.md$") | not)] | length' \
+            || echo 1)
+          if [ "$non_doc" -eq 0 ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Probe the self-hosted slot (free => integration claims it)
         id: probe
         env:
@@ -66,7 +90,10 @@ jobs:
               and .status != "completed"
               and .id != ${{ github.run_id }})] | length' \
             || echo "")
-          if [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
+          if [ "${{ steps.docs.outputs.docs_only }}" = "true" ]; then
+            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+            echo 'is_selfhosted="false"' >> "$GITHUB_OUTPUT"
+          elif [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
             echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
             echo 'is_selfhosted="false"' >> "$GITHUB_OUTPUT"
           else
@@ -193,6 +220,7 @@ jobs:
       run: uv run python -m pytest -m docs -n auto --dist loadgroup -q --junitxml=.pytest-docs.xml
 
   unit-fast:
+    needs: runner-probe
     # always the free tier, always parallel (owner routing 2026-10-07):
     # these three legs are pure Python + uv — verified portable.
     # The integration leg is NOT (cross toolchains + eval fixtures)
@@ -222,14 +250,17 @@ jobs:
         uv run python --version
 
     - name: Install dependencies (locked)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       run: uv sync --locked
 
     - name: Fast unit tier (xdist parallel)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       # loadgroup keeps the machine-lock family + lock-probe module on one
       # worker; the fast tier is their complement on this leg.
       run: uv run python -m pytest -m "fast and not docs" -n auto --dist loadgroup -q --junitxml=.pytest-fast.xml
 
     - name: Upload fast-tier junit (observation artifact)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
@@ -271,9 +302,11 @@ jobs:
         uv run python --version
 
     - name: Install dependencies (locked)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       run: uv sync --locked
 
     - name: Integration + slow tier (xdist parallel)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       # #463 quality-gate framework: coverage is OBSERVATION only.
       # pytest.ini MUST NOT carry --cov-fail-under; we pass --cov here just
       # so the report lands in CI artifacts. Coverage % is NOT a gate.
@@ -293,6 +326,7 @@ jobs:
           --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
 
     - name: Upload coverage report (observation only, #463)
+      if: needs.runner-probe.outputs.docs_only != 'true'
       continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
