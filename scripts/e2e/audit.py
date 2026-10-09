@@ -62,6 +62,11 @@ tests/test_e2e_runner.py::TestUnifiedAuditTrail)
         After the act (detail: rc, timed_out, duration_ms, stdout_tail,
         stderr_tail; on failure ALSO stderr FULL — diagnosis beats tail
         thrift at the exact moment you need it).
+    dispatch_backoff
+        One per quota-class dispatch failure the settle face classifies
+        (detail: claim, consecutive, delay_s, capped) — the observable
+        retreat step; the lane re-probes when the delay elapses, never
+        silently.
     convergence_decision
         One per decision parse (C6-pre, every loop tick, C7; detail:
         decision, tick, rc) — the progress.txt decision_snapshot face,
@@ -121,6 +126,7 @@ DISTILL_ACTIONS = frozenset({
 AUDIT_ACTIONS = (CHECKPOINT_ACTIONS | KERNEL_ACTIONS | DISTILL_ACTIONS
                  | frozenset({
                      "dispatch_attempt", "dispatch_result",
+                     "dispatch_backoff",
                      "convergence_decision", "oracle_verdict",
                      "harvest_landed", "harvest_scan",
                      "script_harvested",
@@ -319,6 +325,18 @@ def emit_dispatch_result(ws, claim: str, *, mode: str, rc: int | None,
                         "stderr_tail": stderr_tail,
                         "stderr": stderr_full,
                         "artifacts": [str(a) for a in (artifacts or [])]})
+
+
+def emit_dispatch_backoff(ws, claim: str, *, consecutive: int,
+                          delay_s: int, capped: bool) -> bool:
+    """RETREAT row — one per quota-class dispatch failure the settle face
+    classifies. The lane's next launch attempt holds for delay_s (base *
+    2^min(consecutive-1, cap)); the hold is a delay, never a cliff: the
+    lane re-probes when it elapses, and any successful act releases it."""
+    return emit(ws, "orchestrator", "dispatch_backoff", claim=claim,
+                exit=1,
+                detail={"claim": claim, "consecutive": int(consecutive),
+                        "delay_s": int(delay_s), "capped": bool(capped)})
 
 
 def emit_convergence_decision(ws, decision: str | None, *, tick=None,
