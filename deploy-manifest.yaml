@@ -875,7 +875,7 @@ files:
   - src: scripts/provider_health.py
     dest: .claude/scripts/provider_health.py
     kind: scaffold
-    sha256: c4eae8039836094cdc6775a032287f99301c59cca1882bcd33037fc3258d87ab
+    sha256: 8583bfaa83e9d8547d34c5dee953c6c29f364b2062dcb01c57978bd702ef8a58
   - src: scripts/query_formulation.py
     dest: .claude/scripts/query_formulation.py
     kind: scaffold
@@ -1299,7 +1299,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 9448594b5127cdcb7e89af387e28fd6a606cc89a51b7006c786e4b7720d4e9c7
+    sha256: 651a9be31e19517f29eebe965c31eeb77b9fcf8a370b96bf820c11287ab6d67e
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
