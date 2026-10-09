@@ -286,7 +286,8 @@ def test_scripts_bootstrap_guard_inserts_scripts_dir_at_front(monkeypatch):
 def test_scripts_bootstrap_is_idempotent_no_reorder(monkeypatch):
     """Already present -> strict no-op: no duplicate, no front-move. The
     guarded prologue every migrated call-site relied on (an unconditional
-    insert would silently reorder twin resolution — #770's exact hazard)."""
+    insert would silently reorder twin resolution — the exact hazard the
+    conftest session guard enforces)."""
     import sys as _sys
     import _common as _c
     scripts_dir = str(Path(_c.__file__).resolve().parent)

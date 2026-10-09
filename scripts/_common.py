@@ -55,7 +55,8 @@ def scripts_bootstrap() -> Path:
     from any file, cwd or tool bootstraps exactly scripts/. Idempotent
     by contract: an existing entry is left exactly where it is (no
     duplicate, no front-move — an unconditional insert would silently
-    reorder shared-name twin resolution, the #770 hazard). Returns the
+    reorder shared-name twin resolution, the import-order hazard the
+    pytest session guard enforces). Returns the
     directory as a ``Path`` so migrated prologues keep their
     ``SCRIPT_DIR``-style locals.
 
