@@ -10,7 +10,7 @@
 
 **🧠 plans its own route** · **🔬 every claim machine-checked** · **⚖️ blind verification on everything** · **📈 the loop measures itself**
 
-🚀 Quick Start · ✨ How It Works · 🖥️ Showcase · 📖 Case Studies · 🧪 Evaluation · 🏗️ Architecture · 🗓️ Roadmap
+🚀 Quick Start · ✨ Core Tech · 🧠 kunglao × Claude Code · 🎛️ How RL Works · 🖥️ Showcase · 📖 Case Studies · 🧪 Evaluation · 🏗️ Architecture · 🗓️ Roadmap
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -56,30 +56,95 @@ retry), and the win-rate curve:
 
 ---
 
-## ✨ How it works
+## ✨ Core technology
 
-Three ideas do the work; the deep design lives in
-[`docs/design/`](docs/design/), not here.
+kunglao-agent is an **act-level RL controller around Claude Code**: Claude
+Code reasons inside each act; kunglao decides the next act, verifies it,
+prices it, learns from it. Deep design: [`docs/design/`](docs/design/).
 
-**1. The mechanical oracle settles everything.** The completion criterion is
-derived from the task you state: quantified contracts with runnable checks
-(byte-exact replays, held-out probe pairs, canary round-trips). A vague task
-yields a vague oracle — so stating the task well is part of using the tool.
-No human ever grades the output; the oracle verdict is the only currency.
+- **Mechanical oracle.** The completion criterion derives from your task
+  statement as runnable checks (byte-exact replay, held-out probes). Reward
+  is priced in oracle verdicts — lying about progress earns nothing.
+- **Blind verification.** An independent verifier re-derives every claim
+  without seeing the maker's reasoning; worker self-sign-off caps at
+  `STAMP`, never `PROVEN`. Facts cite artifacts (sha256) and carry
+  `reproduce:` commands.
+- **The loop learns, the model stays frozen.** Every act lands on an
+  append-only ledger; a Thompson-sampling policy reorders method families
+  by measured cost-adjusted success per feature-keyed state.
+- **Unattended, resumable.** Hours-long runs, dead workers replaced, full
+  state on disk, every reported number traces to a ledger row.
 
-**2. Nothing is `PROVEN` on its author's word.** Specialist workers gather
-byte-anchored facts; an independent verifier re-derives every claim blind
-(the maker's reasoning is never visible to the checker); mechanical gates
-bank the settlement. Facts cite raw artifacts (path + sha256) and carry a
-`reproduce:` command.
+---
 
-**3. The loop learns without touching the model.** Frozen model, external
-policy: every dispatch/settlement lands on append-only ledgers; a
-discounted-Thompson posterior layer reorders method families by what
-actually worked on similar states; a discovery layer generates novel attack
-hypotheses when the tried vocabulary collapses (feature-keyed novelty — a
-renamed retry never counts). An offline comparator (SNIPS) keeps the policy
-honest against uniform and ε-greedy controls.
+## 🧠 kunglao × Claude Code
+
+Claude Code is the engine; kunglao is the gearbox, dashboard, and flight
+computer — next act, verification, budget, and where experience goes.
+
+| | bare Claude Code | + kunglao |
+|---|---|---|
+| Next step | improvised in-session | learned act-level policy, posteriors persist across tasks |
+| Verification | self-report | mechanical oracle + blind red-team |
+| Duration | one session, human watching | hours unattended, resume from disk |
+| Experience | evaporates at session end | ledger → posteriors → sharper opening bet |
+
+Honest boundary: for a simple single-session task, bare Claude Code wins —
+the evaluation table says so. kunglao pays off on long horizons,
+verification discipline, and cross-task compounding.
+
+---
+
+## 🎛️ How the RL works
+
+```
+ state ──► Thompson draw ──► dispatch act ──► oracle verdict
+    ▲                                            │
+    │    posterior update ◄── r = ΔΦ·α − λ·cost ─┘
+```
+
+- **The draw.** Each method family carries a Beta posterior; every decision
+  *samples* all posteriors and dispatches the highest draw — exploration is
+  built into sampling, decaying as fast as the evidence justifies.
+
+![The learning loop: draw, dispatch, oracle, ledger, posterior update](docs/assets/rl-loop.gif)
+
+- **The state key.** Feature-keyed buckets — structural identity + probe
+  evidence (entropy band, constant density, packer verdict) + that state's
+  refutation history. A plain JS bundle and a hardened APK open with
+  different bets; neither pollutes the other.
+
+![Feature-keyed states: two targets, two buckets, different top arms](docs/assets/rl-features.gif)
+
+- **Arm death and discovery.** Repeated zero-fact failures PARK a family
+  (down-weighted, never deleted). When obstacles stack and progress stalls,
+  one discovery act admits a genuinely novel arm — feature-keyed novelty;
+  renaming a dead arm buys nothing.
+
+![Arm death: p_dead climbs, the arm parks, a novel arm is admitted](docs/assets/rl-death-discovery.gif)
+
+- **Pricing.** Φ moves on oracle verdicts only. Honest work earns; a
+  fabricated "done" moves nothing and still pays the cost.
+
+![Oracle pricing: honest act earns, fabricated claim pays only cost](docs/assets/rl-pricing.gif)
+
+### How this differs from the common approaches
+
+Knowledge routing (a manual the LLM improvises against), bounded pipelines
+(fixed stages, fixed rounds), single-verdict triage — all decide with fixed
+logic: last task's experience never changes next task's plan. kunglao's
+control law is learned from its own measured history:
+
+![Principle comparison: three open/static loops versus kunglao's closing loop](docs/assets/approach-comparison.svg)
+
+### Why RL
+
+- The model improves monthly; learned method policy survives every upgrade.
+- Cost sits in reward's negative term — over-reasoning loses money on
+  simple targets (measured per tier against a uniform control).
+- Vocabularies collapse; the discovery layer grows arms their author never
+  wrote.
+- Reward hacking has nothing to collect: Φ moves on oracle verdicts only.
 
 The loop, animated — every asset below is rendered by
 `scripts/render_rl_visuals.py` (the generator is committed alongside the
