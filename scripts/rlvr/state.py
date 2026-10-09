@@ -51,6 +51,16 @@ derives that encoding from EXISTING files only:
                     drift as attribution accumulates (the fold joins
                     each row's RECORDED hash). No V term — attribution
                     is evidence, not progress
+  probe             the epistemic probe tokens (feature_prior.
+                    probe_feature_tokens over the workspace's mined
+                    features): the die face's byte/token entropy + packer
+                    verdict, the floss survivor set's embedded-constant
+                    density. Sorted, comma-joined in the signature (``-``
+                    when absent); no V term — probe evidence
+                    discriminates the opening cell, it never scores
+                    progress. No mtime/ordering input: content reads
+                    only, so the same target re-probes to the same
+                    signature
   sides             RESERVED: always {} — the side-trajectory tree is
                     v0.2 (owner design pin 2026-09-26); the field exists
                     so signatures never re-key when sides land
@@ -59,14 +69,17 @@ derives that encoding from EXISTING files only:
 Canonical forms (pure, order-stable):
 
   signature_str  ``state-sig/2|fc=<bucket>|fv=<verified>|cp=<pattern|->|
-                 bg=<bucket>|ch=<k/n|->|ph=<phase|->|ob=<kinds|->|sd=-``
+                 bg=<bucket>|ch=<k/n|->|ph=<phase|->|ob=<kinds|->|
+                 pf=<tokens|->|sd=-``
   signature_hash sha256(signature_str)[:12] — the short table key
 
-state-sig/2 is the eight-segment form: the ob= segment (issue 461
-Phase 1 attribution face) inserts BEFORE the reserved sides tail, so
-sides never re-keys and future dims need no further version bump;
-historical seven-segment rows keep their own tag in the append-only
-streams.
+state-sig/2 is the nine-segment form: the ob= segment (issue 461
+Phase 1 attribution face) and the pf= segment (the epistemic probe
+tokens) insert BEFORE the reserved sides tail, so sides never re-keys
+and future dims need no further version bump; historical rows keep
+their own tag in the append-only streams (a recorded row re-signs to
+its recorded string — a legacy state doc without the probe key reads
+pf=-).
 
 ## V(s) anchor (deterministic, lookup-only)
 
@@ -348,6 +361,22 @@ def obstacle_face(ws) -> dict:
         return {"present": False, "count": 0, "kinds": ""}
 
 
+def probe_face(ws) -> list[str]:
+    """The epistemic probe tokens (feature_prior.probe_feature_tokens
+    over the live workspace's mined features — the die face's entropy
+    + packer verdict, the floss survivor set's embedded-constant
+    density). Lazy import, fail-open to empty: a broken or absent probe
+    face is honest absence (pf=-), never a raise — the same posture as
+    obstacle_face. Content reads only (no mtime/ordering input), so the
+    same target re-probes to the same tokens."""
+    try:
+        from rlvr import feature_prior as _fp
+        return sorted(_fp.probe_feature_tokens(
+            _fp.features_from_workspace(ws)))
+    except Exception:  # noqa: BLE001 — face absence is honest emptiness
+        return []
+
+
 # ---------- canonical snapshot + signature -------------------------------
 
 def snapshot(ws) -> dict:
@@ -371,6 +400,7 @@ def snapshot(ws) -> dict:
         "chain": None if chain is None else {"k": chain[0], "n": chain[1]},
         "phase": phase(ws),
         "obstacles": obstacle_face(ws),
+        "probe": {"tokens": probe_face(ws)},
         "sides": {},  # RESERVED: v0.2 side-trajectory tree (owner pin)
     }
 
@@ -378,7 +408,8 @@ def snapshot(ws) -> dict:
 def signature_str(snap: dict) -> str:
     """The canonical signature string — the issue-386 Q-table key form.
     Order-stable; '-' marks an absent dim; ob= is the attributed
-    dead-end inventory (issue 461); sides stays '-' until v0.2."""
+    dead-end inventory (issue 461); the pf= dim carries the epistemic
+    probe tokens (sorted, comma-joined); sides stays '-' until v0.2."""
     pattern = (snap.get("claims") or {}).get("pattern") or "-"
     chain = snap.get("chain")
     chain_part = "-" if not chain else f"{chain['k']}/{chain['n']}"
@@ -386,6 +417,8 @@ def signature_str(snap: dict) -> str:
     budget = snap.get("budget") or {}
     facts = snap.get("facts") or {}
     kinds = (snap.get("obstacles") or {}).get("kinds") or "-"
+    tokens = (snap.get("probe") or {}).get("tokens") or []
+    probe_part = ",".join(str(t) for t in sorted(tokens)) or "-"
     return (f"{SCHEMA}|fc={facts.get('bucket', 0)}"
             f"|fv={facts.get('verified', 0)}"
             f"|cp={pattern}"
@@ -393,6 +426,7 @@ def signature_str(snap: dict) -> str:
             f"|ch={chain_part}"
             f"|ph={phase_part}"
             f"|ob={kinds}"
+            f"|pf={probe_part}"
             f"|sd=-")
 
 

@@ -83,11 +83,16 @@ def test_signature_moves_at_every_failing_step(tmp_path):
 def test_signature_evolution_cause_bearing(tmp_path):
     """Each failure's ob segment accumulates the attributed kind —
     the state never loses a dead-end attribution (snapshots are taken
-    AFTER each step's action; the segment is delimited by the sd
-    tail because the kind-count pattern carries internal pipes)."""
+    AFTER each step's action; the segment is delimited by the pf dim
+    and the sd tail because the kind-count pattern carries internal
+    pipes)."""
     doc = replay(tmp_path)
-    obs = [s["signature"].split("|ob=")[1].split("|sd=")[0]
-           for s in doc["steps"]]
+
+    def ob(sig: str) -> str:
+        tail = sig.split("|ob=")[1]
+        return tail.split("|pf=")[0].split("|sd=")[0]
+
+    obs = [ob(s["signature"]) for s in doc["steps"]]
     assert obs[0] == "detection_trigger=1"
     assert obs[1] == "detection_trigger=1|missing_env_entry=1"
     assert obs[2] == ("detection_trigger=1|missing_env_entry=1"

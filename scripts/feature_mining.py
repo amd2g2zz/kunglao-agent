@@ -166,14 +166,29 @@ def _check_difficulty(feats: dict) -> list[str]:
 
 def _check_probe_outputs(feats: dict) -> list[str]:
     po = feats.get("probe_outputs")
-    if not isinstance(po, dict) or set(po) != {"die", "apkid"}:
-        return ["features.probe_outputs: {die, apkid} required"]
+    # additive vocabulary: the floss face is optional — legacy two-face
+    # rows stay valid, rows with floss evidence carry exactly three
+    if not isinstance(po, dict) or not (
+            {"die", "apkid"} <= set(po) <= {"die", "apkid", "floss"}):
+        return ["features.probe_outputs: {die, apkid[, floss]} required"]
     die_fields = {"prescan_state", "usable", "detected_packer", "entropy_max"}
     apkid_fields = {"prescan_state", "usable", "packers", "obfuscators"}
     if not isinstance(po["die"], dict) or set(po["die"]) != die_fields:
         return ["features.probe_outputs.die: enumerated fields"]
     if not isinstance(po["apkid"], dict) or set(po["apkid"]) != apkid_fields:
         return ["features.probe_outputs.apkid: enumerated fields"]
+    if "floss" in po:
+        floss_fields = {"survivors", "constants"}
+        fl = po["floss"]
+        if not isinstance(fl, dict) or set(fl) != floss_fields:
+            return ["features.probe_outputs.floss: enumerated fields"]
+        for k in sorted(floss_fields):
+            v = fl[k]
+            if v is None:
+                continue
+            if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+                return [f"features.probe_outputs.floss.{k}: "
+                        "non-negative int or null"]
     return []
 
 
@@ -322,6 +337,41 @@ def _apkid_salients(doc: object) -> dict:
             "obfuscators": _str_list("obfuscator")}
 
 
+def _int_or_none(value: object) -> int | None:
+    """Non-negative true-int or None (bools/floats/negatives never
+    count — the same data-noise rule the token face applies)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def _floss_salients(path: Path) -> dict:
+    """The floss-filtered face's salients: the survivor-set size and
+    the embedded-constant count (base64 candidates + high-entropy
+    blobs — the constant-heavy shape of an obfuscated bundle). Only
+    content counts are read (never timestamps/provenance), so the same
+    artifact mines to the same salients. Degradations are honest
+    Nones: a missing/corrupt artifact, an error-class doc, or missing
+    category counts — absence never scores."""
+    doc = _read_json(path)
+    doc = doc if isinstance(doc, dict) else {}
+    stats = doc.get("input_stats")
+    stats = stats if isinstance(stats, dict) else {}
+    inventory = doc.get("string_inventory")
+    inventory = inventory if isinstance(inventory, dict) else {}
+    counts = inventory.get("per_category_counts")
+    counts = counts if isinstance(counts, dict) else {}
+    survivors = _int_or_none(stats.get("total_after_denoise"))
+    if survivors is None:
+        return {"survivors": None, "constants": None}
+    bases = [counts.get("base64_candidates"),
+             counts.get("high_entropy_blobs")]
+    if any(_int_or_none(b) is None for b in bases):
+        return {"survivors": survivors, "constants": None}
+    return {"survivors": survivors,
+            "constants": sum(_int_or_none(b) for b in bases)}
+
+
 def _probe_outputs(spec: dict | None, ev_dir: Path) -> dict:
     prescan = ((spec or {}).get("promise") or {}).get("prescan") or {}
     die_state = ((prescan.get("die") or {}).get("state")) \
@@ -332,7 +382,7 @@ def _probe_outputs(spec: dict | None, ev_dir: Path) -> dict:
     apkid_doc = _read_json(ev_dir / "apkid.json")
     die = _die_salients(die_doc)
     apkid = _apkid_salients(apkid_doc)
-    return {
+    probes = {
         "die": {"prescan_state": die_state if isinstance(die_state, str)
                 else None,
                 "usable": die["usable"],
@@ -344,6 +394,13 @@ def _probe_outputs(spec: dict | None, ev_dir: Path) -> dict:
                   "packers": apkid["packers"],
                   "obfuscators": apkid["obfuscators"]},
     }
+    # the floss face is opt-in evidence: it rides only when the artifact
+    # yielded a survivor count, so floss-less workspaces mine the legacy
+    # two-face shape byte-identically (the additive-vocabulary contract)
+    floss = _floss_salients(ev_dir / "floss-filtered.json")
+    if floss["survivors"] is not None:
+        probes["floss"] = floss
+    return probes
 
 
 def _features(state: dict, ws: Path, task_dir: Path) -> dict:
