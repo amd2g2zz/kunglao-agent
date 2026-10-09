@@ -206,6 +206,17 @@ def _probe_tokens(features: Mapping) -> set[str]:
     return out
 
 
+#: the reserved key the refutation fold's tier rides (a features object
+#: gains it ONLY through with_refutation_token — the mined fields never
+#: carry it, so the digests keyed over mined tokens stay fold-blind).
+REFUTATION_TIER_KEY = "refutation_tier"
+
+
+def _refutation_tokens(features: Mapping) -> set[str]:
+    tok = _token("refute:", features.get(REFUTATION_TIER_KEY))
+    return {tok} if tok else set()
+
+
 def feature_tokens(features: Mapping) -> frozenset[str]:
     """The canonical token set of one feature-table/1 features object.
 
@@ -219,7 +230,8 @@ def feature_tokens(features: Mapping) -> frozenset[str]:
                      | _target_kind_tokens(features)
                      | _packer_tokens(features)
                      | _difficulty_tokens(features)
-                     | _probe_tokens(features))
+                     | _probe_tokens(features)
+                     | _refutation_tokens(features))
 
 
 def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
@@ -320,6 +332,33 @@ def pools_for_candidates(feature_table, features: Mapping,
         return {}
     return {family: pool_for(rows, features, family, exclude_run)
             for family in sorted(set(families))}
+
+
+# ---------------------------------------------------------------------------
+# the refutation-fold token seam (additive — the mined fields never change)
+# ---------------------------------------------------------------------------
+
+def with_refutation_token(ws, features: Mapping):
+    """One features object with the refutation fold's tier folded in as
+    a reserved key (the token projector above turns a present tier into
+    the ``refute:hot`` / ``refute:warm`` literal, so the policy's
+    similarity faces condition on refutation-heavy state).
+
+    Additive by construction: a features object without evidence keeps
+    its exact key set (the token vocabulary and every digest keyed over
+    mined tokens stay byte-stable), the INPUT mapping is never mutated
+    (a new mapping is returned), and any fold-face failure returns the
+    input unchanged (the pre-change seam — fail-open, silent by design:
+    the fold's own face warns loudly enough)."""
+    try:
+        from rlvr import refutation_fold  # noqa: PLC0415 — lazy (import cost)
+        face = refutation_fold.fold(ws)
+        tok = refutation_fold.tier(face.get("mine", {}).get("rate", 0.0))
+    except Exception:  # noqa: BLE001 — the seam is fail-open by design
+        return features
+    if not tok or not isinstance(features, Mapping):
+        return features
+    return {**features, REFUTATION_TIER_KEY: tok}
 
 
 # ---------------------------------------------------------------------------

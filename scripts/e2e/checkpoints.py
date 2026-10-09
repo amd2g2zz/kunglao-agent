@@ -578,6 +578,7 @@ def _sampler_extras(ws, prior: dict) -> dict:
         from rlvr import feature_prior as _fp
         if _fp.enabled():
             features = _fp.features_from_workspace(ws)
+            features = _fp.with_refutation_token(ws, features)
             if features:
                 kwargs = {"features": features,
                           "feature_table": _fp.default_table_path(ws)}
@@ -1215,6 +1216,18 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
             action_type="verify", variant=variant)
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
         kunglao_log.warn("e2e.verify_settle",
+                         f"{type(exc).__name__}: {exc}")
+    # the refutation fold's cross-engagement substrate: the same outcome
+    # banks one keyed-store row (the credit mapping rides inside the
+    # leaf) so a second workspace with the same feature signature
+    # inherits the raised verification density. Fail-open telemetry, the
+    # transition above is the authoritative local record.
+    try:
+        _rf = _load_repo_module(ctx.repo, "rlvr.refutation_fold")
+        _rf.record_verify_outcome(str(ctx.ws), verdict=str(verdict or ""),
+                                  boundary=str(variant or ""))
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud
+        kunglao_log.warn("e2e.refutation_store",
                          f"{type(exc).__name__}: {exc}")
 
 

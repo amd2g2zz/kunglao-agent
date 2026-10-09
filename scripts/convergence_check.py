@@ -374,6 +374,25 @@ def _verify_stale_ticks() -> float:
         return float(_VERIFY_STALE_TICKS_DEFAULT)
 
 
+def _effective_stale_ticks(workspace: Path) -> float:
+    """The policy threshold under the refutation fold's cadence
+    multiplier: the leaf's rate-derived multiplier (bounded [1, MULT_MAX]
+    by construction) DIVIDES the threshold, so a refutation-heavy
+    signature goes stale sooner — data-driven density, never a new gate
+    and never a clamp. A read outside the multiplier's producible domain
+    (or any leaf failure) fails open to the exact policy threshold."""
+    base = _verify_stale_ticks()
+    try:
+        from rlvr import refutation_fold
+        mult = float(refutation_fold.cadence_multiplier(workspace))
+    except _GATE_INPUT_EXC:
+        return base
+    if mult < 1.0 or mult > refutation_fold.MULT_MAX \
+            or mult != mult or mult == float("inf"):
+        return base  # not a producible multiplier: refuse, don't clamp
+    return base / mult
+
+
 def _parse_fact_anchor(raw: str) -> datetime | None:
     """Parse one frontmatter date into a naive-UTC datetime (None if not).
 
@@ -432,7 +451,12 @@ def partial_fact_ages(workspace: Path, partials: list | None = None,
     """
     if partials is None:
         partials = _partial_facts(workspace)
-    threshold = ticks if ticks is not None else _verify_stale_ticks()
+    # the cadence read point: an explicit ticks argument bypasses the
+    # fold entirely (the determinism wall for existing pins and callers
+    # that own their threshold); the default path reads the effective
+    # (multiplied) threshold so every consumer shares one density.
+    threshold = ticks if ticks is not None \
+        else _effective_stale_ticks(workspace)
     if now is None:
         now = datetime.now(timezone.utc)
     if now.tzinfo is not None:
@@ -1803,9 +1827,9 @@ def _act_verify_stale(s: _DecideInputs) -> str:
     age = worst.get("age_ticks")
     age_text = f"{age:g}" if isinstance(age, (int, float)) else "unknown"
     return (f"Verification backlog: partial fact {worst['fact']} unverified "
-            f"for {age_text} ticks (> {_verify_stale_ticks():g}). Dispatch a "
-            f"verifier for the stalest partial - do NOT declare PROVEN "
-            f"without sign-off.")
+            f"for {age_text} ticks (> {_effective_stale_ticks(s.workspace):g}"
+            f"). Dispatch a verifier for the stalest partial - do NOT "
+            f"declare PROVEN without sign-off.")
 
 
 def _act_debt(s: _DecideInputs) -> str:

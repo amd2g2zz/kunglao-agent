@@ -82,6 +82,14 @@ map):
   the claim dependency DAG (direct dependents only, fail-open to zero
   on broken reads). Consumed by the scheduling gate, the strategy
   compose face, and the statusline debt chip.
+
+- ``rlvr.refutation_fold`` — the adversarial-memory fold: refuted
+  verify transitions aggregate per (feature signature, claim boundary)
+  through a discounted recurrence into a refutation rate; the rate
+  feeds a feature token and a verify-cadence multiplier (bounded,
+  data-driven) and decays under honest verification streaks. Reads the
+  transition ledger plus the keyed posterior store, so a second
+  workspace with the same signature inherits the raised density.
 """
 from __future__ import annotations
 
@@ -93,6 +101,7 @@ from . import obstacles
 from . import posteriors
 from . import priors
 from . import q_cells
+from . import refutation_fold
 from . import reward
 from . import scalar
 from . import state
@@ -291,6 +300,7 @@ __all__ = [
     "termination",
     "triples",
     "verification_debt",
+    "refutation_fold",
     "winrate",
     # ledger faces (issue 420 Phase 2)
     "KIND_TASK",
