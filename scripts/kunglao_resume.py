@@ -26,6 +26,13 @@ nothing). The ledger, state files, and every other artifact stay untouched;
 build_brief remains pure-read; a render failure leaves the file as-is and
 never blocks the brief.
 
+timeline-face AMENDMENT (same render-then-read posture): resume also
+refreshes the structured progress projection (runs/timeline.jsonl) and the
+plan view rendered FROM it (global_plan.txt) — both are derived views,
+write-on-diff, fail-open, and never block the brief. The narrative sidecar
+keeps its preservation role (it is no longer a progress face; the
+projection is).
+
 Decision source: convergence_check.decide() — the #443 state machine. The
 next-step text is a LOOKUP keyed by the decision name (mirrors the
 convergence-loop rule §3 table); resume never recomputes a decision.
@@ -63,6 +70,7 @@ import external_kicker as kicker
 import hook_activation
 import kunglao_log
 import progress_timeline  # issue-282: render-then-read (main) + render_note (brief)
+import timeline_face  # the structured progress face: render-then-read (main)
 # #536: workspace template version cross-check (status + resume both print it)
 import template_version
 from status_defs import ACTIVE_STATUSES, PARTIAL_STATUSES
@@ -700,6 +708,18 @@ def main(argv: list[str] | None = None) -> int:
             # render-face crash leaves the brief intact, observed on stderr.
             print(f'[kunglao-agent] progress timeline render skipped: {exc!r}',
                   file=sys.stderr)
+        # the structured progress face renders here too (render-then-read):
+        # the projection (runs/timeline.jsonl) and the plan view rendered
+        # FROM it (global_plan.txt) refresh before the brief reads them —
+        # the loop owns a mechanical writer, the init stub dissolves.
+        try:
+            tstate = timeline_face.render_and_write(ws_path)
+            if tstate.get("status") == "skipped":
+                print(f"[kunglao-agent] timeline projection not refreshed: "
+                      f"{tstate.get('reason')}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 — fail-open, never silent
+            print(f'[kunglao-agent] timeline projection render skipped: '
+                  f'{exc!r}', file=sys.stderr)
     # Review F4 boundary: a resume tool failure is NOT a workspace verdict.
     # Catch, label on stderr, exit RC_ERROR (== 1: the 0/1/2 triage surface
     # stays stable) — never let an internal crash wear RC_MANUAL's meaning

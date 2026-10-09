@@ -281,13 +281,14 @@ def test_decision_counters_are_ints_not_collections(tmp_path) -> None:
 
 
 def test_resume_is_read_only(tmp_path) -> None:
-    """The load-bearing contract (issue-466, as amended by issue-282): resume writes
-    NOTHING except the derived progress.txt timeline view — not the ledger
-    (cc.main appends; decide() must be called directly), not state files,
-    not even new artifacts like runs/digest.md. The one permitted write is
-    the issue-282 render-then-read repair (write-on-diff, narrative sidecar
-    mirror allowed); in the steady state (content already current) resume
-    touches nothing at all."""
+    """The load-bearing contract (issue-466, as amended by issue-282 and by
+    the timeline-face amendment): resume writes NOTHING except the derived
+    views — the progress.txt timeline repair, the structured projection
+    (runs/timeline.jsonl), and the plan view rendered FROM it
+    (global_plan.txt; write-on-diff, narrative sidecar mirror allowed) —
+    not the ledger (cc.main appends; decide() must be called directly),
+    not state files, not even new artifacts like runs/digest.md. In the
+    steady state (content already current) resume touches nothing at all."""
     import kunglao_resume as kr
     ws = _armed_ws(tmp_path)
     before_tree, before_ledger = _snapshot_tree(ws), _ledger_lines(ws)
@@ -298,10 +299,12 @@ def test_resume_is_read_only(tmp_path) -> None:
     added = set(after_tree) - set(before_tree)
     # issue-282: progress.txt may be repaired; runs/progress-narrative.jsonl
     # (the narrative mirror it ingests) and the advisory render lock may
-    # appear; NOTHING else may move.
-    assert changed <= {"progress.txt"}, f"resume modified: {changed}"
+    # appear; the timeline-face amendment adds the projection + the plan
+    # view. NOTHING else may move.
+    derived_views = {"progress.txt", "global_plan.txt", "runs/timeline.jsonl"}
+    assert changed <= derived_views, f"resume modified: {changed}"
     assert added <= {"runs/progress-narrative.jsonl",
-                     "runs/.progress-render.lock"}, \
+                     "runs/.progress-render.lock", *derived_views}, \
         f"resume created: {added}"
     assert _ledger_lines(ws) == before_ledger, "resume appended to the ledger"
     # steady state: with the view already current, a second resume is a

@@ -209,6 +209,7 @@ EMIT_ACTIONS = [
     "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
+    "fact_status_synced",  # the promotion write-back row: a PROVEN settlement synced the citing facts' frontmatter (synced + fully named skips ride the detail)
     "failure_blocked",
     "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
     "family_confirmed",    # issue 252 family ledger sync: family confirmed by a positive arm

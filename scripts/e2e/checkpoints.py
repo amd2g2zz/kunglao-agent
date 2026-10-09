@@ -87,6 +87,7 @@ _DEFAULT_CLAIMS = (
      "statement": "A re-implementation of derive() reproduces every "
                   "published and checker-minted probe output exactly.",
      "answers_question": "pq-2", "boundary_type": "confirmed",
+     "depends_on": ["C-004"],
      "status": "OPEN", "source": "synthesis"},
 )
 
@@ -156,6 +157,7 @@ def _resolve_claims(task_spec: Path) -> None:
              "statement": f"A re-implementation for {task_id} satisfies "
                           f"the success criterion.",
              "answers_question": "pq-2", "boundary_type": "confirmed",
+             "depends_on": ["C-004"],
              "status": "OPEN", "source": "synthesis"},
         )
     except Exception as exc:  # never-raise resolver: ANY failure restores defaults
@@ -466,11 +468,24 @@ def checkpoint_c6_pre(ctx: RunContext) -> model.CheckpointResult:
                if register.is_file() else None) or {}
     reg_ids = {str(c.get("id")) for c in reg_doc.get("claims") or []}
     reg_doc.setdefault("claims", [])
+    appended = False
     for claim in CLAIM_APPENDS:
         if claim["id"] not in reg_ids:
             reg_doc["claims"].append(dict(claim))
+            appended = True
     register.write_text(
         _canonical_dump(reg_doc), encoding="utf-8")
+    # the result DAG populates at claim creation: each declared per-claim
+    # depends_on mirrors into the authoritative DAG store, so the priority
+    # ranker and the verification-debt face read one graph and the debt
+    # formula is live at smoke scale (an empty DAG reads D=0 forever)
+    if appended:
+        try:
+            from _scriptlib import sync_dep_edges
+            sync_dep_edges(ctx.ws, reg_doc["claims"])
+        except Exception as exc:  # noqa: BLE001 — the DAG never blocks prep
+            kunglao_log.warn("e2e.dep_edges",
+                             f"{type(exc).__name__}: {exc}")
     # C6-pre-4 mechanical: env_check → OVERALL=PASS; decide → DISPATCH
     out_e, ms_e = ctx.py("env_check.py", str(ctx.ws))
     total_ms += ms_e
