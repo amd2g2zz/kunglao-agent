@@ -71,9 +71,9 @@ from pathlib import Path
 
 import yaml
 
-_SCRIPTS = Path(__file__).resolve().parent
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+from _common import scripts_bootstrap
+
+_SCRIPTS = scripts_bootstrap()
 
 import eval_dataset as ds  # noqa: E402
 import eval_targets as tg  # noqa: E402
