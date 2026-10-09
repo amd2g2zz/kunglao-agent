@@ -13,7 +13,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from register_proven_gate import check_register_transitions  # noqa: E402
+from register_proven_gate import (  # noqa: E402
+    check_register_transitions,
+    stamp_waiver,
+    waiver_stamp,
+)
 
 REG = (
     "claims:\n"
@@ -51,9 +55,13 @@ def _redteam(ws, claim, verdict):
 
 
 def _waiver(ws, claim, justify):
+    """Issue 601 (5-F6): a bare justify: file is not a waiver — the helper writes
+    AND stamps through the orchestrator mint face."""
     d = ws / "runs"
     (d / f"proven-waiver-{claim}.md").write_text(
         f"---\nclaim_id: {claim}\n---\n\njustify: {justify}\n", encoding="utf-8")
+    if justify:
+        assert stamp_waiver(ws, claim)["ok"] is True
 
 
 OLD = _reg("OPEN")
@@ -120,10 +128,31 @@ def test_waiver_with_justify_allows(tmp_path):
 
 
 def test_waiver_empty_justify_blocks(tmp_path):
+    """Issue 601 (5-F6): the stamp is authority, not a reason — a hand-stamped
+    waiver with no non-empty justify: line is still a violation."""
     ws = _mk_ws(tmp_path)
-    _waiver(ws, "C-001", "")
+    ts = 1760000000
+    (ws / "runs" / "proven-waiver-C-001.md").write_text(
+        f"---\nclaim_id: C-001\nts: {ts}\n"
+        f"stamp: {waiver_stamp('C-001', ts)}\n---\n\njustify:\n",
+        encoding="utf-8")
     res = check_register_transitions(ws, NEW, OLD)
     assert res["ok"] is False
+    assert any("justify is empty" in v for v in res["violations"])
+
+
+def test_unstamped_waiver_is_not_a_waiver(tmp_path):
+    """Issue 601 (5-F6): a justify: file alone reads as ABSENT — legs enforced."""
+    ws = _mk_ws(tmp_path)
+    d = ws / "runs"
+    (d / "proven-waiver-C-001.md").write_text(
+        "---\nclaim_id: C-001\n---\n\njustify: self-serve override\n",
+        encoding="utf-8")
+    res = check_register_transitions(ws, NEW, OLD)
+    assert res["ok"] is False
+    assert res["waivers"] == []
+    assert any("verify-note" in v or "red-team" in v
+               for v in res["violations"])
 
 
 def test_no_transition_is_noop(tmp_path):

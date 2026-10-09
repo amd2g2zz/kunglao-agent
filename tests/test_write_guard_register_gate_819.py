@@ -20,6 +20,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from register_proven_gate import stamp_waiver  # noqa: E402
 from ws_yaml import canonical_dump  # noqa: E402
 
 WRITE_GUARD = ROOT / "hooks" / "write_guard.py"
@@ -94,9 +95,12 @@ def _redteam(ws, claim, verdict):
 
 
 def _waiver(ws, claim, justify):
+    """Issue 601 (5-F6): the helper stamps the waiver through the orchestrator
+    mint face — a bare justify: file is not a waiver anymore."""
     d = ws / "runs"
     (d / f"proven-waiver-{claim}.md").write_text(
         f"---\nclaim_id: {claim}\n---\n\njustify: {justify}\n", encoding="utf-8")
+    assert stamp_waiver(ws, claim)["ok"] is True
 
 
 def _reg_path(ws):

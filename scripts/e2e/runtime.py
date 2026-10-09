@@ -7,7 +7,9 @@ checkpoints.py) need that is NOT a checkpoint itself:
   RunContext    state + runner + LLM face + injected clock/sleep (the
                 test injection point at the subprocess boundary)
   promote_claims  the C7 promotion seam through the repo's own
-                register_proven_gate (#819) + #880 emit_settlements
+                register_proven_gate (#819) + #880 emit_settlements,
+                behind the register-wipe wall (1-F10: a torn/emptied
+                register never launders into a claims: [] write-back)
   resolve_task_dir / family_of / new_run_id / resume_plan
   record_result / parse_decision / top_claim / budget_ok / tail
 
@@ -15,6 +17,7 @@ Pure plumbing; the runbook semantics live in checkpoints.py.
 """
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,6 +124,44 @@ def resume_plan(evidence_dir: Path) -> dict[str, str]:
     return plan
 
 
+def _prior_claim_ids(ws: Path) -> set:
+    """Prior sanctioned claim set from the transition ledger
+    (runs/transitions.jsonl, the dispatch_id column — incremental_reward's
+    append-only row contract). 1-F10 prior state. loop-state.json is
+    deliberately NOT consulted: the same audit's 1-F6 shows it is
+    machine-global, not a workspace-sanctioned claim set."""
+    p = Path(ws) / "runs" / "transitions.jsonl"
+    if not p.is_file():
+        return set()
+    out: set = set()
+    for line in p.read_text(encoding="utf-8",
+                            errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # a torn ledger line is not wipe evidence
+        cid = str((row or {}).get("dispatch_id") or "").strip()
+        if cid:
+            out.add(cid)
+    return out
+
+
+def _wipe_refusal(ws: Path, why: str) -> dict:
+    """The 1-F10 register-wipe wall refusal: loud (canonical warn row
+    + structured violations the caller must record), never a silent
+    write-back of the empty register."""
+    from kunglao_log import warn  # noqa: PLC0415
+    msg = (f"register-wipe wall: {why} (#601 1-F10) — refusing "
+           f"promotion; the loop must not converge on the empty "
+           f"register face")
+    warn("promote_claims", msg)
+    return {"ok": False, "violations": [msg], "waivers": [],
+            "promoted": [], "settlements": 0, "written": False}
+
+
 def promote_claims(repo: Path, ws: Path, claim_ids: list[str]) -> dict:
     """C7 promotion through the repo's own gate (#819 fail-closed).
 
@@ -129,13 +170,35 @@ def promote_claims(repo: Path, ws: Path, claim_ids: list[str]) -> dict:
     means the register is NOT written and the caller must record FAIL
     with the violations (review F3 — the gate is never ceremonial).
     Settlements (#880 emit_settlements) fire only after an allowed write.
-    Unit tests monkeypatch this seam or the gate module's internals."""
+    1-F10 register-wipe wall: the register's truncate-then-write can
+    tear it to empty/partial; a promotion that read the tear would write
+    back claims: [] and converge on nothing. An unparsable register, or a
+    zero-claims register while the transition ledger carries a prior claim
+    set, refuses promotion loud. Unit tests monkeypatch this seam or the
+    gate module's internals."""
     rpg = _load_repo_module(repo, "register_proven_gate")
     import yaml  # noqa: PLC0415
 
-    reg = Path(ws) / "claim-register.yaml"
+    ws = Path(ws)
+    reg = ws / "claim-register.yaml"
     old_text = reg.read_text(encoding="utf-8") if reg.is_file() else ""
-    doc = yaml.safe_load(old_text) if old_text.strip() else {}
+    try:
+        doc = yaml.safe_load(old_text) if old_text.strip() else {}
+    except yaml.YAMLError:
+        doc = None
+    if doc is None:
+        return _wipe_refusal(
+            ws, "claim-register.yaml is unparsable — the torn "
+                "truncate-then-write face; a post-image built over a "
+                "broken pre-image launders the tear; repair the register "
+                "first")
+    if not (doc.get("claims") or []):
+        prior = _prior_claim_ids(ws)
+        if prior:
+            return _wipe_refusal(
+                ws, f"the register reads zero claims while the transition "
+                    f"ledger carries {len(prior)} prior claim id(s); "
+                    f"repair the register, never write back claims: []")
     claims = (doc or {}).get("claims") or []
     wanted = set(claim_ids)
     promoted: list[str] = []

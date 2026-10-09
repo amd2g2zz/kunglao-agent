@@ -923,7 +923,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 1ddd839f4b630a7bb34ee8b896b3d6fe55d829d82bca97c6b504e8e8dac95492
+    sha256: cf999d8aa7e8b4f258a55c570d1d3d4dada58403e36af04b5cf5d523a1e02d95
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -1887,7 +1887,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: b903280d7c0b259178568e292511abebde878eb943813f25e14d7e6e26366ff1
+    sha256: e090075d03862e2411b3bed3cb759c3ba508314ab342a08fa51333fb22b3daf6
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
