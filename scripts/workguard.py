@@ -42,7 +42,7 @@ live workspace also warns once.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from kunglao_log import warn  # canonical warn: ONE implementation
@@ -210,7 +210,26 @@ def actionable_set(ws: Path, *, now: datetime | None = None) -> dict:
     claims, _ok = _load_claims(ws)
     walls = [w for w in (_budget_wall(ws), _deadline_wall(ws, now)) if w]
     active, _stuck = _worker_faces(ws)
-    free_slots = max(0, WORKER_CAP - active)
+    # local-fix (owner ruling 2026-10-10): a FRESH waiting worker is ALIVE —
+    # it parked per the WAIT contract precisely to await verification, and
+    # the pre-fix count (in-progress only) misread that verify-wait window as
+    # "returned unsettled", demanding settlement before the red-team verdict
+    # existed (the exact order the contract forbids). FRESHNESS filters
+    # zombie waiters: a killed worker leaves a waiting tail whose mtime ages
+    # out of the window and must not absorb the guard forever.
+    waiting_live = 0
+    try:
+        from _hooks_path import load_hooks_lib as _lhl
+        _mod = _lhl()
+        _cut = now - timedelta(minutes=10)
+        waiting_live = sum(
+            1 for s in _mod.iter_worker_states(ws)
+            if s.get("status") == "waiting"
+            and s.get("mtime") is not None and s["mtime"] >= _cut)
+    except Exception:  # noqa: BLE001 — counting must not block the guard
+        waiting_live = 0
+    live = active + waiting_live
+    free_slots = max(0, WORKER_CAP - live)
     depends_on = _deps_map(ws, claims)
     terminal = {str(c["id"]) for c in claims
                 if c.get("id") and str(c.get("status")) in TERMINAL}
@@ -222,7 +241,7 @@ def actionable_set(ws: Path, *, now: datetime | None = None) -> dict:
         # returned-worker faces first: an IN_PROGRESS claim with zero
         # live workers is a dispatch that came back unsettled — settling
         # it outranks new dispatches (the settle-then-dispatch order).
-        if active == 0:
+        if live == 0:
             actionable.extend(
                 {"id": str(c["id"]), "why": WHY_RETURNED}
                 for c in claims
