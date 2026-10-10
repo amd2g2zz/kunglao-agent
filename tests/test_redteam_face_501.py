@@ -72,7 +72,11 @@ def _register_with_partial(ctx, claim="C-005"):
 
 
 VERIFICATION_RECORD = (
-    "---\nclaim: C-005\nverdict: verified\n---\n\nreplay 72/72 byte-exact\n")
+    "---\nclaim: C-005\nverdict: verified\n---\n\n"
+    "re-run: uv run python eval/v1/tasks/smoke/py-derive-v1/target/derive.py\n"
+    "rc: 0\n"
+    "out-sha: " + ("7" * 64) + "\n\n"
+    "replay 72/72 byte-exact\n")
 
 
 # ---------- (a) the verifier act lands a gate-conformant note ----------
