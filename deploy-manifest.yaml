@@ -947,7 +947,7 @@ files:
   - src: scripts/release_receipt.py
     dest: .claude/scripts/release_receipt.py
     kind: scaffold
-    sha256: 9a9565e646e10d4d4882581e830e2da42f3a5d7ab8c42deaae8e66933ea72bb0
+    sha256: b471b528fbbbbb1ab22d19aedd634dcd3f1cafff92a34dde55c9fcf4710544f1
   - src: scripts/relib_audit.py
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
