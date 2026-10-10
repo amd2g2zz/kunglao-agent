@@ -13,6 +13,10 @@ the representation-integrity bridge (owner research-note):
     NORMAL mint path (claim-register append, single ID grammar). The claim
     IS the representation: a minted candidate never also lives as a store
     candidate string (the issue 446 no-second-representation red line).
+    A PQ-bound family's arms ALSO carry `answers_question: <qid>` (derived
+    from the hypothesis binding via `bound_question_qid`) — the arm row is
+    the register-side half of the hypothesis -> PQ -> arm path the
+    admission, drift and economy faces rebuild mechanically.
   - The store demotes to the FAMILY LEDGER. `sync_family_ledger` derives
     family state FROM claim settlements with the issue 528 transitions
     unchanged: any arm PROVEN/VERIFIED -> the family hypothesis confirmed
@@ -48,7 +52,9 @@ from hypothesis_store import (Hypothesis, HypothesisStore, InvalidTransition,
 from status_defs import TERMINAL as TERMINAL_STATUSES
 from kunglao_log import warn  # canonical warn: ONE impl (dedupe + ledger face)
 from tool_value import NEGATIVE_SETTLEMENTS, POSITIVE_SETTLEMENTS
-from _scriptlib import claims_of, load_register_doc
+from _scriptlib import claims_of, load_register_doc, read_register_claims
+from arms_policy import (  # noqa: E402 — #649: the arm-set policy, single source
+    LIBRARY_MAX_COMPARISON_ARMS, MAX_COMPARISON_ARMS)
 
 FAMILY_GROUP_FMT = "hyp-{hyp_id}"
 ARM_ORIGIN = "hypothesis-arm"
@@ -116,6 +122,54 @@ def family_hypothesis_id(group) -> str | None:
         return None
     suffix = g[len(prefix):]
     return suffix if _HYP_ID_RE.fullmatch(suffix) else None
+
+
+# The PQ-binding reverse parse: the three admission binding shapes
+# (hypothesis_store owns the forward formats) read back to the qid they
+# name. A marker/group token with whitespace is prose, never a binding —
+# only a bare `<qid>` token on the marker line qualifies.
+_PQ_MARKER_PREFIX = PQ_BODY_MARKER_FMT.split("{")[0]          # "pq:"
+_PQ_GROUP_PREFIXES = tuple(f.split("{")[0] for f in PQ_GROUP_FMTS)  # pq-, pq:
+
+
+def _bare_token(text: str) -> str:
+    """`text` when it is non-empty and whitespace-free, else ""."""
+    token = str(text or "").strip()
+    return token if token and not any(ch.isspace() for ch in token) else ""
+
+
+def bound_question_qid(hyp, claims: list[dict] | None = None) -> str | None:
+    """The primary-question id a family hypothesis is bound to, or None.
+
+    Marker first, then the group shapes, then the claim_id ->
+    answers_question register link — the same precedence the store's
+    binding faces document. Used by the mint to carry the hypothesis ->
+    PQ -> arm path into the register rows mechanically.
+    """
+    body = str(getattr(hyp, "body", "") or "")
+    for line in body.splitlines():
+        line = line.strip()
+        if line.startswith(_PQ_MARKER_PREFIX):
+            qid = _bare_token(line[len(_PQ_MARKER_PREFIX):])
+            if qid:
+                return qid
+    group = str(getattr(hyp, "competitor_group", "") or "")
+    for prefix in _PQ_GROUP_PREFIXES:
+        if group.startswith(prefix):
+            qid = _bare_token(group[len(prefix):])
+            if qid:
+                return qid
+    claim_id = str(getattr(hyp, "claim_id", "") or "").strip()
+    if claim_id:
+        for c in claims or []:
+            if not isinstance(c, dict):  # tolerant read: junk rows skipped
+                continue
+            if str(c.get("id") or "").strip() != claim_id:
+                continue
+            qid = str(c.get("answers_question") or "").strip()
+            if qid:
+                return qid
+    return None
 
 
 def arm_key_of(candidate: str) -> str:
@@ -264,12 +318,29 @@ def _candidate_key_map(hyp_id: str, candidates: list[str],
     return key_map, None
 
 
+def family_live_arms(ws: Path, hyp_id: str) -> int:
+    """#649: the family's LIVE (non-terminal) arm claims — the
+    candidate-library size read (arms_policy: library cap 16, active set
+    <= 8; promotion-by-novelty/rotation is the growth path). Tolerant:
+    unreadable register -> 0."""
+    group = family_group(hyp_id)
+    return sum(1 for c in read_register_claims(ws) or []
+               if str(c.get("competitor_group") or "") == group
+               and str(c.get("status") or "").upper()
+               not in TERMINAL_STATUSES)
+
+
 def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
                      answers_question: str | None = None) -> dict:
     """Mint one OPEN arm claim per candidate into claim-register.yaml.
 
     Linkage: `competitor_group: hyp-<H-id>`, `hypothesis_ref: <H-id>`,
-    `origin: hypothesis-arm`, `arm_key` = the normalized candidate slug.
+    `origin: hypothesis-arm`, `arm_key` = the normalized candidate slug,
+    plus the PQ link `answers_question: <qid>` when the family hypothesis
+    is bound to a primary question (see bound_question_qid) — the arm
+    carries the same question link the economy/drift faces read, so the
+    hypothesis -> PQ -> arm path rebuilds from the register alone. An
+    explicit `answers_question` argument wins over the derivation.
     Idempotent on (origin, hypothesis_ref, arm_key). The candidate string
     is NEVER written to the hypothesis file — the claim is the one
     representation. Returns {"minted": [rows], "refused": None} or an
@@ -279,7 +350,7 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
     ws = Path(ws)
     store = HypothesisStore(ws / "hypotheses")
     try:
-        store.get(hyp_id)
+        hyp = store.get(hyp_id)
     except KeyError:
         # issue 293: the refusal is a decision record — tagged + persisted
         _emit_arc_event(ws, "mint_refused", hyp_id,
@@ -305,6 +376,7 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
         return {"minted": [], "refused": collision}
     from failure_analysis_gate import _next_claim_id  # single ID grammar
     group = family_group(hyp_id)
+    qid = answers_question or bound_question_qid(hyp, claims)
     minted: list[dict] = []
     for key, cand in key_map.items():
         if key in existing:
@@ -322,8 +394,8 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
             "evidence_tier_attempted": 0,
             "source": "synthesis",
         }
-        if answers_question:
-            row["answers_question"] = answers_question
+        if qid:
+            row["answers_question"] = qid
         claims.append(row)
         minted.append(row)
     if minted:
@@ -335,17 +407,30 @@ def mint_family_arms(ws: Path, hyp_id: str, candidates: list[str], *,
         _emit(ws, "family_arms_minted",
               f"{hyp_id} +{len(minted)} "
               f"({', '.join(m['id'] for m in minted)})")
+        # #649 (max-ROI split): the library may grow wide (no run budget
+        # consumed) but past the ceiling the extras are correlated
+        # repeats — warn once, prefer promotion-by-novelty / rotation.
+        live_n = family_live_arms(ws, hyp_id)
+        if live_n > LIBRARY_MAX_COMPARISON_ARMS:
+            warn("hypothesis_bridge.library_cap",
+                 f"family {hyp_id}: {live_n} live arms exceed the library "
+                 f"cap {LIBRARY_MAX_COMPARISON_ARMS} (arms_policy #649) — "
+                 f"promote-by-novelty/rotate instead of stacking; the "
+                 f"ACTIVE set stays <= {MAX_COMPARISON_ARMS}")
         if not existing:
             # issue 293: the family's FIRST arms — the investment arc opens.
             # Top-up mints ride the per-attempt face only (exactly one
             # arc-open per family, at first mint).
-            _emit_arc_event(ws, "investment_arc_open", hyp_id, {
+            payload = {
                 "arc": family_group(hyp_id),
                 "budget": ARC_BUDGET,
                 "max_runs": len(minted),
                 "stop_condition": ARC_STOP_CONDITION,
                 "arms": [str(m["id"]) for m in minted],
-            })
+            }
+            if qid:
+                payload["qid"] = qid  # the arc's PQ binding, on the ledger
+            _emit_arc_event(ws, "investment_arc_open", hyp_id, payload)
     return {"minted": minted, "refused": None}
 
 
@@ -758,7 +843,9 @@ def _cmd_mint(a: argparse.Namespace, ws: Path) -> int:
         return 1
     else:
         for m in r["minted"]:
-            print(f"MINTED {m['id']} <- {hyp_id} [{m[ARM_KEY]}]")
+            pq = (f" answers_question={m['answers_question']}"
+                  if m.get("answers_question") else "")
+            print(f"MINTED {m['id']} <- {hyp_id} [{m[ARM_KEY]}]{pq}")
         if not r["minted"]:
             print("no new arms (every candidate already minted)")
     return 0

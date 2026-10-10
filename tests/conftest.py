@@ -51,6 +51,27 @@ def _isolated_posterior_store(tmp_path, monkeypatch):
     yield
 
 
+# ---------- failure-analysis defaults isolation (issue 647 item 6) ----------
+# The rollup's terminal path seeds analyses/failure-*.yaml skeletons, so
+# aggregate_lessons now runs in EVERY rollup-firing test — and its default
+# destinations (the global lessons library + ~/.claude/learnings-queue.json)
+# are real-home paths no test may append to. Tests that exercise the
+# aggregation override these explicitly; the defaults are redirected here.
+@pytest.fixture(autouse=True)
+def _isolated_failure_analysis_defaults(tmp_path, monkeypatch):
+    try:
+        import failure_analysis_gate as _fag
+    except ImportError:  # pragma: no cover — collection never depends on it
+        yield
+        return
+    monkeypatch.setattr(_fag, "LESSONS_DIR_DEFAULT",
+                        tmp_path / "lessons-isolated", raising=False)
+    monkeypatch.setattr(_fag, "REFLECT_QUEUE_DEFAULT",
+                        tmp_path / "reflect-queue-isolated.json",
+                        raising=False)
+    yield
+
+
 # ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture

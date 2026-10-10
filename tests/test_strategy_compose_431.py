@@ -736,3 +736,84 @@ def test_injection_changes_with_evidence_across_two_runs(tmp_path):
     assert "task/r2-dead" in rendered2
     assert "task/r2-dead" in obj2["composed_from"]
     assert obj2["hooks"]["cards"] != obj1["hooks"]["cards"]
+
+
+# ------------------------------- the live store seam (candidate fallback)
+
+def _store_root(tmp_path, monkeypatch, rows) -> Path:
+    """An isolated posterior store holding the given rows (the conftest
+    autouse fixture already isolates the env; this points it at rows)."""
+    from rlvr import strategy_store
+    root = tmp_path / "posterior-store"
+    root.mkdir()
+    (root / strategy_store.STORE_REL).write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    monkeypatch.setenv(strategy_store.STORE_ENV, str(root))
+    return root
+
+
+def _store_row(ws_id, family, arm_key=None, credit=0.9):
+    return {"schema": "posterior-store/1", "ts": "2026-10-01T00:00:00Z",
+            "workspace_id": ws_id,
+            "arm_key": arm_key or f"{family}|facts_snapshot|none|1",
+            "method_family": family, "feature_key": "none",
+            "fingerprint": "fp000011112222", "status": "ROUND_CREDIT",
+            "credit": credit, "censored": False, "facts_citing": 2,
+            "propensity": None, "phi_delta": None,
+            "provenance": {"dispatch_id": f"C-{family}"}}
+
+
+def test_method_lead_falls_back_to_the_cross_task_store(tmp_path,
+                                                        monkeypatch):
+    """A workspace with no proposal of its own still draws: the cross-task
+    store's families carry the candidate set, so the live store write is
+    read back through the one sampler instead of dead-ending on empty
+    material."""
+    ws = _ws(tmp_path)  # no q-cell rows, no settled rows: no proposals
+    _store_root(tmp_path, monkeypatch,
+                [_store_row("other-ws", "static-decompile")])
+    store = compose.load_store(ws)
+    assert store._proposal_prior() == {}, "no local proposal channel"
+    assert store.method_lead("abcdabcdabcd") == "static-decompile"
+
+
+def test_store_fallback_filters_unregistered_and_refutation_rows(
+        tmp_path, monkeypatch):
+    """The fallback candidate channel holds the same two walls as the
+    local prior: a retired/unknown token never rides it, and the
+    refutation fold's own rows (its arm key) are never proposals."""
+    ws = _ws(tmp_path)
+    _store_root(tmp_path, monkeypatch, [
+        _store_row("other-ws", "zz-retired-token"),
+        _store_row("other-ws", "verify", arm_key="refutation"),
+    ])
+    store = compose.load_store(ws)
+    assert store.method_lead("abcdabcdabcd") is None, \
+        "no registered method-arm candidate exists in the store"
+
+
+def test_store_arm_constant_matches_the_refutation_fold():
+    """Drift pin: the fallback channel's exclusion key mirrors the
+    refutation fold's store arm — a rename on either side fails here."""
+    from rlvr import refutation_fold
+    from rlvr import strategy_store
+    assert strategy_store._REFUTATION_ARM == refutation_fold.STORE_ARM
+
+
+def test_evidence_gate_reads_the_live_ledger_when_the_cell_is_empty(
+        tmp_path):
+    """The live starvation shape: q-cell rows exist at OTHER signatures
+    (the state moved) while settled rows fill the ledger — the gate must
+    fall back to the ledger evidence base and let the lead sample, not
+    read 0-at-this-signature as total silence."""
+    from rlvr import q_cells
+    ws = _ws(tmp_path)
+    _ok_row(ws, "task/ok-1", "static-decompile")
+    _ok_row(ws, "task/ok-2", "static-decompile")
+    q_cells.append_observation(ws, "deadbeef0000", "static-decompile", 1.0,
+                               source="settlement", claim="C-9")
+    store = compose.load_store(ws)
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    assert store.cell_count(fp) == 0, "no cell at the current signature"
+    obj = compose.compose(ws, tick=1, store=store)
+    assert obj["dispatch"]["method_lead"] == "static-decompile"

@@ -4,7 +4,7 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 207
+  hooks/dispatch_gate.py: 209
   hooks/env_check_gate.py: 30
   hooks/heartbeat_touch.py: 22
   hooks/lib_kunglao.py: 57
@@ -33,6 +33,7 @@ files:
   scripts/anomaly_detector.py: 8
   scripts/apkid_scanner.py: 7
   scripts/approach_demotion.py: 3
+  scripts/arms_policy.py: 7
   scripts/ask_for_direction_gate.py: 57
   scripts/backtrack_gate.py: 6
   scripts/backtrack_loop.py: 24
@@ -129,7 +130,7 @@ files:
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
   scripts/hooks_selfcheck.py: 59
-  scripts/hypothesis_bridge.py: 31
+  scripts/hypothesis_bridge.py: 34
   scripts/hypothesis_seeder.py: 21
   scripts/hypothesis_store.py: 11
   scripts/infeasible_proposal.py: 2
@@ -157,7 +158,7 @@ files:
   scripts/kunglao_wait.py: 10
   scripts/lane_spec.py: 2
   scripts/lessons_telemetry.py: 4
-  scripts/lint_facts.py: 41
+  scripts/lint_facts.py: 44
   scripts/liveness_policy.py: 23
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
@@ -218,7 +219,7 @@ files:
   scripts/rlvr/__init__.py: 30
   scripts/rlvr/censored_review.py: 2
   scripts/rlvr/compose.py: 17
-  scripts/rlvr/expansion.py: 3
+  scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 13
   scripts/rlvr/ledger.py: 3
@@ -238,7 +239,7 @@ files:
   scripts/rlvr/winrate.py: 14
   scripts/roi_settlement.py: 4
   scripts/rollout_ledger.py: 2
-  scripts/rollup.py: 33
+  scripts/rollup.py: 40
   scripts/rotation_induction.py: 6
   scripts/route_capability.py: 19
   scripts/runtime_facts.py: 3

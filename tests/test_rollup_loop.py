@@ -255,6 +255,135 @@ def test_checkpoint_commit_hook_called(tmp_path):
     assert args[2] == "PROVEN"
 
 
+# ---------- Issue 647 item 6: failure-analysis skeleton producer ----------
+# The self-distill input face (failure_analysis_gate.aggregate_lessons) reads
+# analyses/failure-*.yaml — NOTHING wrote them live, so lessons stayed at 0.
+# The rollup terminal path now seeds a machine-known-fields skeleton when no
+# authored analysis exists: claim + outcome (terminal status), what_happened
+# (OUTCOME rows), method_assumption (dispatch method_family) + EMPTY
+# trigger_precision/next_method → aggregate_lessons routes it to the /reflect
+# queue under reason=missing-precision (the observable activation).
+
+def _skeleton_path(ws: Path, cid: str) -> Path:
+    return ws / "analyses" / f"failure-{cid}.yaml"
+
+
+def _queue_items(path: Path) -> list:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+
+
+def test_terminal_rollup_seeds_failure_skeleton(tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cid = "C-10"
+    _write_register(ws, [{"id": cid, "status": "PROVEN", "statement": "seed"}])
+    lib = tmp_path / "lib"
+    lib.mkdir()
+
+    res = rag.run_rollup(ws, cid, terminal_status="PROVEN",
+                         lessons_library=lib, reflect_queue=tmp_path / "q.json")
+
+    assert res["fired"] is True
+    assert res["failure_analysis_seeded"] is True
+    entry = yaml.safe_load(_skeleton_path(ws, cid).read_text(encoding="utf-8"))
+    assert entry["claim"] == cid
+    assert entry["outcome"] == "PROVEN"
+    assert entry["trigger_precision"] == {}
+    assert entry["next_method"] == ""
+    assert entry["what_happened"] == ""       # no outcome rows readable
+    assert entry["method_assumption"] == ""   # no dispatch rows readable
+
+
+def test_skeleton_routes_to_reflect_missing_precision(tmp_path):
+    """The observable activation: the SAME rollup pass aggregates the
+    skeleton and queues it (reason=missing-precision, the nursery
+    gate) instead of writing a lesson with invented precision."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cid = "C-11"
+    _write_register(ws, [{"id": cid, "status": "PROVEN", "statement": "route"}])
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    q = tmp_path / "q.json"
+
+    res = rag.run_rollup(ws, cid, terminal_status="PROVEN",
+                         lessons_library=lib, reflect_queue=q)
+
+    assert res["lessons_aggregate"] == 0
+    mine = [i for i in _queue_items(q) if i.get("claim_id") == cid]
+    assert mine and mine[0]["reason"] == "missing-precision", mine
+    assert mine[0]["outcome"] == "PROVEN"  # outcome rides the queue item
+    assert not list(lib.glob("lesson-*.md")), (
+        "precision-less skeletons must never reach the lessons library")
+
+
+def test_skeleton_carries_machine_known_context(tmp_path):
+    """what_happened summarises the claim's OUTCOME ledger rows;
+    method_assumption names the declared dispatch method_family from the
+    q-cell observation log (runs/q-cell-log.jsonl)."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cid = "C-12"
+    _write_register(ws, [{"id": cid, "status": "PROVEN", "statement": "ctx"}])
+    _write_ledger_outcome(ws, cid, result="passes", checker="verify-note")
+    runs = ws / "runs"
+    runs.mkdir(exist_ok=True)
+    (runs / "q-cell-log.jsonl").write_text(
+        json.dumps({"schema": "q-cell-obs/1", "source": "dispatch",
+                    "claim": cid, "method_family": "static-decompile",
+                    "credit": None}) + "\n", encoding="utf-8")
+    lib = tmp_path / "lib"
+    lib.mkdir()
+
+    rag.run_rollup(ws, cid, terminal_status="PROVEN",
+                   lessons_library=lib, reflect_queue=tmp_path / "q.json")
+
+    entry = yaml.safe_load(_skeleton_path(ws, cid).read_text(encoding="utf-8"))
+    assert entry["what_happened"] == "verify-note: passes"
+    assert "static-decompile" in entry["method_assumption"]
+
+
+def test_skeleton_never_overwrites_authored_analysis(tmp_path):
+    """An existing analyses/failure-<claim>.yaml is authored material — the
+    seeder must leave it byte-identical and let it aggregate normally."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cid = "C-13"
+    _write_register(ws, [{"id": cid, "status": "PROVEN", "statement": "keep"}])
+    _write_analysis(ws, cid, outcome="PROVEN", what_happened="closed-loop")
+    before = _skeleton_path(ws, cid).read_bytes()
+    lib = tmp_path / "lib"
+    lib.mkdir()
+
+    res = rag.run_rollup(ws, cid, terminal_status="PROVEN",
+                         lessons_library=lib, reflect_queue=tmp_path / "q.json")
+
+    assert res["failure_analysis_seeded"] is False
+    assert _skeleton_path(ws, cid).read_bytes() == before, (
+        "an authored failure analysis must NEVER be rewritten by the seeder")
+    assert res["lessons_aggregate"] == 1, (
+        "the authored (complete-precision) entry still closes the loop")
+    assert res["queue_added"] == 0
+
+
+def test_skeleton_only_for_outcome_bearing_terminal_statuses(tmp_path):
+    """DEFERRED is terminal but invisible to aggregate_lessons — a file no
+    consumer can classify is not seeded (no dead artifacts)."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cid = "C-14"
+    _write_register(ws, [{"id": cid, "status": "DEFERRED", "statement": "x"}])
+    lib = tmp_path / "lib"
+    lib.mkdir()
+
+    res = rag.run_rollup(ws, cid, terminal_status="DEFERRED",
+                         lessons_library=lib, reflect_queue=tmp_path / "q.json")
+
+    assert res["fired"] is True
+    assert res["failure_analysis_seeded"] is False
+    assert not _skeleton_path(ws, cid).exists()
+
+
 # ---------- CLI wiring ----------
 
 def test_cli_invokes_run_rollup(tmp_path):
@@ -270,7 +399,10 @@ def test_cli_invokes_run_rollup(tmp_path):
 
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "rollup.py"), str(ws), cid,
-         "--status", "PROVEN", "--library", str(lib)],
+         "--status", "PROVEN", "--library", str(lib),
+         # Issue 647 item 6: the skeleton seed feeds aggregate_lessons — keep the
+         # reflect queue off the real home path in the subprocess too.
+         "--reflect-queue", str(tmp_path / "q.json")],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr

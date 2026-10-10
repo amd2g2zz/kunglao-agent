@@ -1411,9 +1411,16 @@ def _lane_gate(payload: dict, prompt_text: str, ws: Path) -> int | None:
 # they answer "was this PQ neighborhood already dispatched once?" —
 # claim-keyed rows joined to claim-register answers_question.
 ROI_INTENTS_LOG = Path("runs/roi-intents.jsonl")
-# #109 admission bar: fewer competing candidates than this in the hypothesis
-# layer for a PQ means nothing can contradict the one story being chased.
-MIN_ADMITTED_CANDIDATES = 2
+# #109 admission bar — single source: scripts/arms_policy (#649 owner
+# rulings 2026-10-10: floor 3 / default 5 / ceiling 8). The guarded import
+# keeps the hook import-clean on partial deploys; the fallback mirrors the
+# policy floor.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp_arms649
+    _esp_arms649()
+    from arms_policy import MIN_COMPARISON_ARMS as MIN_ADMITTED_CANDIDATES
+except Exception:  # noqa: BLE001 - partial deploy keeps the frozen floor
+    MIN_ADMITTED_CANDIDATES = 3
 
 
 def _claim_question_map(ws: Path) -> dict[str, str]:
@@ -1506,7 +1513,7 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
     Trigger: the target claim's answers_question names a task_spec
     primary_question AND that PQ is being dispatched for the FIRST time
     (no claim-keyed dispatch-history row answers it yet). The check: the
-    hypothesis layer must hold >= 2 competing explanations for the PQ —
+    hypothesis layer must hold >= 3 competing explanations for the PQ —
     counted across BOTH faces since the issue 252 bridge: minted family
     arm claims (competitor_group hyp-<H-id> bound to the PQ scaffold) and
     parked store candidate strings (transitional; the cold-start sweep
@@ -1578,11 +1585,12 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
         f"competing explanations (anchoring risk is highest exactly when "
         f"the system knows least; a single-hypothesis entry is how edge "
         f"findings get chased as major ones).",
-        f"mint >=2 competing family arms for {qid} via "
+        f"mint >={MIN_ADMITTED_CANDIDATES} competing family arms for {qid} via "
         f"`python scripts/hypothesis_bridge.py {ws} --mint <H-ID> "
         f"'<candidate 1>,<candidate 2>'` (the sanctioned representation — "
         f"each arm enters claim-register.yaml as a TS-samplable claim "
-        f"with the family linkage), or file one OPEN hypothesis per "
+        f"with the family linkage; comparison band 3-8 arms, default 5 "
+        f"per arms_policy), or file one OPEN hypothesis per "
         f"competitor via hypothesis_store, then re-dispatch. (Filling "
         f"`candidates:` on the `pq:{qid}` scaffold also counts, "
         f"transitionally — the cold-start sweep converts strings into "

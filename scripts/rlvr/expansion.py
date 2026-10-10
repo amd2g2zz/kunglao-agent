@@ -218,7 +218,11 @@ def admit(hypotheses: list[dict], existing_features: list[dict],
         }
         ranked.append(row)
     ranked.sort(key=lambda r: (-r["score"]["total"], r["id"]))
-    return ranked[:max(0, int(n))]
+    # #649: the comparison-pool ceiling — a single move never admits past
+    # MAX_COMPARISON_ARMS (see arms_policy; binds only when a caller asks
+    # for more than the ceiling).
+    from arms_policy import MAX_COMPARISON_ARMS
+    return ranked[:max(0, min(int(n), MAX_COMPARISON_ARMS))]
 
 
 def record_receipt(ws, trigger_doc: dict, hypotheses: list[dict],

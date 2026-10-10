@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ws_yaml.py — YAML-safe get/set/del for worker-writable workspace state
-(#482: hand-edited YAML with unquoted colons corrupted the claim register
-and crashed the convergence face for three consecutive runs).
+"""ws_yaml.py — YAML-safe get/set/del/append for worker-writable workspace
+state (#482: hand-edited YAML with unquoted colons corrupted the claim
+register and crashed the convergence face for three consecutive runs).
 
 Workers edit registers/ledgers through THIS tool instead of hand-editing:
 every write goes safe_load -> mutate -> safe_dump -> re-load validate
 (a write that does not round-trip is refused, exit 4). Dotted paths
 address nesting; numeric segments index lists (claims.3.evidence).
+`append` adds one scalar to the list at <dotted.path>. The parent path
+must already exist; an ABSENT final key under a mapping materializes as
+an empty list (the first item), while an EXISTING non-list target is
+refused (exit 3) — a scalar is never silently coerced into a list. No
+nested structure is invented: the value is one scalar, list-valued
+fields grow one sanctioned item at a time instead of by replacing the
+whole list through a container literal.
 
 Usage:
   python3 ws_yaml.py get  <file> <dotted.path>
   python3 ws_yaml.py set  <file> <dotted.path> <value>
   python3 ws_yaml.py del  <file> <dotted.path>
+  python3 ws_yaml.py append <file> <dotted.path> <value>
 Exit codes: 0 ok / 2 usage / 3 unreadable-or-invalid target / 4 refused
-(non-round-tripping write) / 5 path-not-found (get/del).
+(non-round-tripping write) / 5 path-not-found (get/del/append).
 """
 from __future__ import annotations
 
@@ -129,7 +137,7 @@ def _stamp_prefix(old_text: str, path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) < 3 or argv[0] not in ("get", "set", "del"):
+    if len(argv) < 3 or argv[0] not in ("get", "set", "del", "append"):
         print(__doc__.split("Usage:")[0], file=sys.stderr)
         return 2
     cmd, path, dotted = argv[0], argv[1], argv[2]
@@ -154,6 +162,18 @@ def main(argv: list[str] | None = None) -> int:
         if cmd == "del":
             node, key = _walk(doc, segments)
             del node[key]
+        elif cmd == "append":
+            if len(argv) < 4:
+                return 2
+            node, key = _walk(doc, segments)  # parent path must exist
+            if isinstance(node, dict) and key not in node:
+                node[key] = []  # first item materializes the list
+            cur = node[key]
+            if not isinstance(cur, list):
+                print(f"ws_yaml: append target is not a list: {dotted} "
+                      f"({type(cur).__name__})", file=sys.stderr)
+                return 3
+            node[key] = [*cur, _coerce(argv[3])]
         else:  # set
             if len(argv) < 4:
                 return 2

@@ -11,6 +11,10 @@ land on durable storage and the workspace git checkpoint catches the transition:
         .convergence_ledger.jsonl (#35). MUST run first so a verify-redteam
         run sitting in the workspace gets captured BEFORE aggregate_lessons
         reads the ledger for the NEGATIVE red-team CONFIRMED gate.
+  1.7 _seed_failure_analysis(workspace, claim_id, terminal_status)  (issue 647 item 6)
+        analyses/failure-<claim>.yaml machine-known-fields skeleton when
+        absent, so aggregate_lessons' /reflect routing has live input;
+        the existing authored file is NEVER overwritten. Fail-open.
   2. failure_analysis_gate.aggregate_lessons(workspace, library, queue)
         analyses/failure-*.yaml with a closed-loop outcome -> global lessons
         library; everything else -> /reflect queue (#41).
@@ -272,6 +276,118 @@ def _checkpoint_commit(workspace: Path, claim_id: str, terminal_status: str) -> 
         return "no-op"
 
 
+# ---------------------------------------------------------------------------
+# Issue 647 item 6: failure-analysis skeleton producer (claim-terminal host)
+#
+# The self-distill input face (`failure_analysis_gate.aggregate_lessons`)
+# reads analyses/failure-<claim>.yaml — but NOTHING wrote them live, so the
+# lessons library stayed at 0 and the self_distill kinds never emitted. This
+# producer seeds a MACHINE-KNOWN-ONLY skeleton at claim terminal: claim +
+# outcome (the terminal status), what_happened (the claim's OUTCOME ledger
+# rows when readable), method_assumption (the claim's declared dispatch
+# method_family when readable), and EMPTY trigger_precision / next_method.
+# The empty pair is deliberate: the nursery gate (issue 525) routes the entry to
+# the /reflect queue under reason=missing-precision — the observable
+# activation — where the precision fields are AUTHORED, never invented here.
+#
+# Idempotent and non-destructive: an existing analyses/failure-<claim>.yaml
+# is authored material (the record face, issue 495, owns its content) and is NEVER
+# rewritten. Fail-open: any error is one warn, never a broken rollup.
+# ---------------------------------------------------------------------------
+
+FAILURE_SKELETON_COMMENT = (
+    "# machine-seeded skeleton (#647 item 6) — machine-known fields only.\n"
+    "# trigger_precision / next_method are OWED by the /reflect pass (#525);\n"
+    "# until authored, aggregate_lessons routes this entry to the reflect\n"
+    "# queue (reason=missing-precision) instead of the lessons library.\n")
+
+
+def _outcome_rows_summary(workspace: Path, claim_id: str) -> str:
+    """Compact 'checker: result' summary of the claim's OUTCOME rows.
+
+    The machine-known what_happened face; '' when no row is readable."""
+    try:
+        rows = [r for r in _oc.read_outcome_rows(workspace)
+                if str(r.get("claim_id") or "") == claim_id]
+    except Exception as exc:  # noqa: BLE001 — an unreadable ledger is not analysis
+        warn("failure_skeleton_outcomes", f"{type(exc).__name__}: {exc}")
+        return ""
+    return "; ".join(
+        f"{r.get('checker')}: {r.get('result')}"
+        for r in rows if r.get("checker") or r.get("result"))
+
+
+def _dispatch_method_family(workspace: Path, claim_id: str) -> str:
+    """The claim's latest declared dispatch method_family.
+
+    Source: the dispatch observation rows (source=dispatch) in
+    runs/q-cell-log.jsonl — q_cells writes one per approval ALLOW tail;
+    '' when none is readable. Tolerant read, latest row wins."""
+    log = workspace / "runs" / "q-cell-log.jsonl"
+    if not log.is_file():
+        return ""
+    try:
+        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    family = ""
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("source") != "dispatch":
+            continue
+        if str(row.get("claim") or "") != claim_id:
+            continue
+        fam = str(row.get("method_family") or "").strip()
+        if fam:
+            family = fam
+    return family
+
+
+def _seed_failure_analysis(workspace: Path, claim_id: str,
+                           terminal_status: str) -> bool:
+    """Seed the skeleton per the block comment above; returns True when it
+    landed (caller may report it), False on skip OR any error (fail-open)."""
+    try:
+        status = (terminal_status or "").upper()
+        # Only outcome-bearing statuses seed. The other terminal words
+        # (DEFERRED/STALE/SUPERSEDED/DEAD/RETRACTED) are invisible to
+        # aggregate_lessons — a file no consumer can classify is noise, and
+        # other scanners (plan_drift, ask_for_direction) read this face too.
+        if status not in _fag.OUTCOME_VALUES:
+            return False
+        path = workspace / "analyses" / f"failure-{claim_id}.yaml"
+        if path.exists():
+            return False  # authored material — NEVER overwritten
+        what_happened = _outcome_rows_summary(workspace, claim_id)
+        family = _dispatch_method_family(workspace, claim_id)
+        entry = {
+            "claim": claim_id,
+            "outcome": status,
+            "what_happened": what_happened,
+            "method_assumption": (
+                f"dispatched method_family={family} "
+                f"(declared at dispatch; assumption not authored)"
+                if family else ""),
+            "trigger_precision": {},
+            "next_method": "",
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            FAILURE_SKELETON_COMMENT
+            + yaml.safe_dump(entry, allow_unicode=True, sort_keys=False),
+            encoding="utf-8")
+        return True
+    except Exception as exc:  # noqa: BLE001 — seeding never breaks the rollup
+        warn("failure_skeleton_seed", f"{type(exc).__name__}: {exc}")
+        return False
+
+
 def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
                lessons_library: Path | None = None,
                reflect_queue: Path | None = None) -> dict:
@@ -317,6 +433,13 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # negative-reward penalty input (the v0.2 controller applies the
     # penalty; the DATA lands now). Fail-open.
     _capture_confirmed_with_diff(workspace, claim_id)
+
+    # Step 1.7 (issue 647 item 6): seed the failure-analysis skeleton for absent
+    # authored analyses — BEFORE aggregate_lessons so the SAME rollup pass
+    # routes it to /reflect (reason=missing-precision). Never overwrites an
+    # authored file; fail-open (see _seed_failure_analysis).
+    seeded_failure_analysis = _seed_failure_analysis(
+        workspace, claim_id, status_upper)
 
     # unified-reward face: snapshot the lessons library BEFORE
     # aggregation so the self_distill emission adapter can diff-exactly the
@@ -401,6 +524,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "lessons_written": agg_res.get("lessons_written", 0),
         "lessons_skipped": agg_res.get("lessons_skipped", 0),
         "queue_added": agg_res.get("queue_added", 0),
+        "failure_analysis_seeded": seeded_failure_analysis,
         "checkpoint_commit": ck,
         "mission_settlement": mission_settlement,
         "unified_settled": (
@@ -420,6 +544,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "lessons_aggregate": agg_res.get("lessons_written", 0),
         "lessons_skipped": agg_res.get("lessons_skipped", 0),
         "queue_added": agg_res.get("queue_added", 0),
+        "failure_analysis_seeded": seeded_failure_analysis,
         "checkpoint_commit_called": True,
         "mission_settlement": mission_settlement,
         "unified_reward": unified_reward,

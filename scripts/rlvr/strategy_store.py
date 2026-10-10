@@ -85,6 +85,13 @@ STORE_SCHEMA = "posterior-store/1"
 STORE_REL = "posterior-store.jsonl"
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 
+#: the refutation fold's store arm (its rows ride the same keyed store —
+#: the cross-workspace verify stream — and are never method proposals).
+#: The fallback candidate channel excludes them by arm key; the
+#: registered-vocabulary intersect is the second wall. The literal
+#: mirrors rlvr.refutation_fold.STORE_ARM (pinned equal by test).
+_REFUTATION_ARM = "refutation"
+
 
 def store_root() -> Path:
     """The store root: env KUNGLAO_POSTERIOR_STORE override, else the
@@ -261,6 +268,33 @@ def warm_pools(ws, families) -> dict:
             for fam, (s, f, n) in sorted(acc.items())}
 
 
+def _registered_only(counts: dict[str, int]) -> dict[str, int]:
+    """Intersect a family -> count face with the registered vocabulary —
+    a retired token must never ride a prior into the loop prompt (the
+    lead is advisory, but steering declarations the fail-closed
+    vocabulary gate rejects is the lockstep hazard in advisory form). An
+    unreadable registry degrades to the unfiltered face with one warn;
+    the gate stays the enforcement face."""
+    try:
+        import method_families  # noqa: PLC0415 — registry sibling
+        registered = method_families.registered_tokens()
+    except Exception as exc:  # noqa: BLE001 — registry best-effort
+        warn("strategy_store.prior",
+             f"registry unreadable ({type(exc).__name__}: {exc}) — "
+             f"prior unfiltered; the gate remains the enforcement face")
+        return dict(counts)
+    return {fam: n for fam, n in counts.items() if fam in registered}
+
+
+def _share(counts: dict[str, int]) -> dict[str, float]:
+    """Normalize a family -> count face into a proposal prior over the
+    retained mass ({} when nothing survives) — deterministic order."""
+    total = sum(counts.values())
+    if total <= 0:
+        return {}
+    return {fam: n / total for fam, n in sorted(counts.items())}
+
+
 class PosteriorStrategyStore:
     """THE StrategyStore implementation over the landed faces."""
 
@@ -272,9 +306,17 @@ class PosteriorStrategyStore:
     # ------------------------------------------------ StrategyStore seam
 
     def method_lead(self, state_fingerprint: str) -> str | None:
-        """One DTS draw over the measured proposal channel at this state
-        (None = no proposal ever recorded at this workspace)."""
+        """One DTS draw over the live material at this state (None = no
+        proposal ever recorded at this workspace AND no cross-task store
+        row to stand in). When the workspace's own proposal channel is
+        empty, the cross-task posterior store's families carry the
+        candidate set — the live store write (the settlement bank keys
+        its row with the dispatch's own arm key) is only half a wire
+        without this read face, and the warm pools need a candidate set
+        to ride or they never reach the draw."""
         prior = self._proposal_prior()
+        if not prior:
+            prior = self._store_prior()
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
@@ -285,6 +327,39 @@ class PosteriorStrategyStore:
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         return str(receipt["family"])
+
+    def _store_prior(self) -> dict[str, float]:
+        """The cross-task fallback candidate channel: families the keyed
+        store holds settled rows for (OTHER workspaces only — the
+        leave-one-out shape), weighted by their row share, intersected
+        with the registered vocabulary. Empty when the store is empty or
+        unreadable: the honest cold start stays silence, never a
+        fabricated lead — and every sampled candidate then carries the
+        additive posterior_store receipt block through the warm pools,
+        so the fallback draw stays traceable to its rows."""
+        try:
+            counts = self._store_family_counts()
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.store_prior",
+                 f"{type(exc).__name__}: {exc}")
+            return {}
+        return _share(_registered_only(counts))
+
+    def _store_family_counts(self) -> dict[str, int]:
+        """Row counts per method family over the cross-task store's
+        settled rows (the workspace's own rows excluded by the read
+        face). The refutation fold's rows ride the same store under
+        their own arm key — never proposals, excluded here."""
+        counts: dict[str, int] = {}
+        for row in load_rows(ws=self.ws):
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("arm_key") or "") == _REFUTATION_ARM:
+                continue
+            fam = str(row.get("method_family") or "").strip()
+            if fam:
+                counts[fam] = counts.get(fam, 0) + 1
+        return counts
 
     def _warm_pool_kwargs(self, families=None) -> dict:
         """#545 wiring (the cross-task warm start): thread the posterior
@@ -394,23 +469,7 @@ class PosteriorStrategyStore:
             fam = method_family_of_row(row)
             if fam and fam != "any":
                 counts[fam] = counts.get(fam, 0) + 1
-        try:
-            import method_families  # noqa: PLC0415 — registry sibling
-            registered = method_families.registered_tokens()
-        except Exception as exc:  # noqa: BLE001 — registry best-effort
-            warn("strategy_store.prior",
-                 f"registry unreadable ({type(exc).__name__}: {exc}) — "
-                 f"prior unfiltered; the #432 gate remains the "
-                 f"enforcement face")
-            registered = None
-        if registered is not None:
-            counts = {fam: n for fam, n in counts.items()
-                      if fam in registered}
-        total = sum(counts.values())
-        if total <= 0:
-            return {}
-        return {fam: count / total
-                for fam, count in sorted(counts.items())}
+        return _share(_registered_only(counts))
 
     def _decayed_weights(self) -> dict[str, float]:
         """The γ ladder over the settled stream, input order, shipped

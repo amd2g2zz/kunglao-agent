@@ -2060,7 +2060,7 @@ ext:
     consume: "invoke"
     source: "scripts/ws_yaml.py"
     usage: "python3 ws_yaml.py get  <file> <dotted.path>"
-    description: "ws_yaml.py — YAML-safe get/set/del for worker-writable workspace state"
+    description: "ws_yaml.py — YAML-safe get/set/del/append for worker-writable workspace"
   - name: "zero_output_fingerprint"
     capability: "unknown"
     type: "tool"

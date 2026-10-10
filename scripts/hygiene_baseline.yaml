@@ -18,6 +18,8 @@ files:
     r1: 5
   scripts/apkid_scanner.py:
     r1: 4
+  scripts/arms_policy.py:
+    r1: 1
   scripts/ask_for_direction_gate.py:
     r1: 38
   scripts/backtrack_gate.py:
@@ -196,6 +198,8 @@ files:
     r1: 6
   scripts/hooks_selfcheck.py:
     r1: 38
+  scripts/hypothesis_bridge.py:
+    r1: 3
   scripts/hypothesis_seeder.py:
     r1: 13
   scripts/hypothesis_store.py:
@@ -362,7 +366,7 @@ files:
   scripts/rlvr/compose.py:
     r1: 5
   scripts/rlvr/expansion.py:
-    r1: 1
+    r1: 2
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
@@ -524,6 +528,8 @@ files:
     r1: 1
   tests/test_apkid_scanner.py:
     r1: 1
+  tests/test_arms_policy_649.py:
+    r1: 3
   tests/test_ask_for_direction_charter.py:
     r1: 4
   tests/test_ask_for_direction_v2.py:
@@ -1260,7 +1266,7 @@ files:
   tests/test_register_proven_gate.py:
     r1: 2
   tests/test_register_writer_516.py:
-    r1: 1
+    r1: 2
   tests/test_registry_admission_546.py:
     r1: 3
   tests/test_reject_emit_624.py:

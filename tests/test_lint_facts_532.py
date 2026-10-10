@@ -319,3 +319,75 @@ def test_written_row_survives_its_own_linter(tmp_path):
            if "F002-x" in ln][0]
     assert lint_facts.lint_index_row(row, 3) == [], (
         f"the written row must survive its own linter: {row!r}")
+
+
+# ---------- Issue 648: creator provenance vs dispatch anchors ----------
+# RED contract (audit 2026-10-10, live workspace): every fact lacked the
+# `creator` frontmatter field → round-credit attribution untraced 7/7. The
+# lint's face is a WARNING (never an error — existing facts are write-guarded
+# carriers and the issue leaves backfill to the owner): a fact without
+# `creator` whose claim HAS dispatch anchors cannot be attributed to its
+# dispatch by the live settlement feed (issue 634).
+
+def _anchor(ws: Path, key: str = "C001", body: str | None = None) -> None:
+    runs = ws / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / f".dispatch-anchor-{key}.jsonl").write_text(
+        body if body is not None
+        else '{"ts": "2026-10-10T00:00:00Z", "claim": "C-001"}\n',
+        encoding="utf-8")
+
+
+def test_missing_creator_warns_when_claim_has_dispatch_anchors(tmp_path):
+    ws = _ws(tmp_path)
+    _anchor(ws)  # key C001 = C-001 without dashes (stamp_dispatch_anchor)
+    _fact(ws, "F010-x.md", _fact_fm("F010-x"))
+    errors, warnings = lint_facts.lint_workspace(ws)
+    assert "MISSING_CREATOR" in _codes(warnings), (
+        f"#648: a fact without creator on an anchored claim must WARN; "
+        f"got warnings={_codes(warnings)}")
+    assert "MISSING_CREATOR" not in _codes(errors), (
+        "#648: the creator check is a WARNING, never an error — no backfill "
+        "may be forced onto write-guarded carriers")
+
+
+def test_creator_field_silences_the_warning(tmp_path):
+    ws = _ws(tmp_path)
+    _anchor(ws)
+    _fact(ws, "F011-x.md", _fact_fm("F011-x", creator="C-001"))
+    _errors, warnings = lint_facts.lint_workspace(ws)
+    assert "MISSING_CREATOR" not in _codes(warnings)
+
+
+def test_no_dispatch_anchor_no_creator_warning(tmp_path):
+    """No anchors → the claim was never dispatched (or pre-anchor legacy):
+    the warning must not fire — it is credentialled by the anchor log."""
+    ws = _ws(tmp_path)
+    _fact(ws, "F012-x.md", _fact_fm("F012-x"))
+    _errors, warnings = lint_facts.lint_workspace(ws)
+    assert "MISSING_CREATOR" not in _codes(warnings)
+
+
+def test_empty_anchor_log_is_not_an_anchor(tmp_path):
+    """An empty anchor file records no dispatch — presence of CONTENT is the
+    trigger, not presence of the file."""
+    ws = _ws(tmp_path)
+    _anchor(ws, body="")
+    _fact(ws, "F013-x.md", _fact_fm("F013-x"))
+    _errors, warnings = lint_facts.lint_workspace(ws)
+    assert "MISSING_CREATOR" not in _codes(warnings)
+
+
+def test_other_claims_anchor_does_not_warn(tmp_path):
+    """The anchor key is claim-scoped: another claim's anchors never trigger
+    this fact's warning."""
+    ws = _ws(tmp_path)
+    (ws / "claim-register.yaml").write_text(
+        "claims:\n"
+        "  - id: C-001\n    status: OPEN\n    statement: x\n"
+        "  - id: C-002\n    status: OPEN\n    statement: y\n",
+        encoding="utf-8")
+    _anchor(ws, key="C002")
+    _fact(ws, "F014-x.md", _fact_fm("F014-x"))  # cites C-001
+    _errors, warnings = lint_facts.lint_workspace(ws)
+    assert "MISSING_CREATOR" not in _codes(warnings)

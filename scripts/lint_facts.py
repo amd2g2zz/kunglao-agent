@@ -432,6 +432,28 @@ def collect_claim_refs(fm: dict) -> list[str]:
     return [r for r in refs if r]
 
 
+# ---------- Issue 648: creator provenance vs dispatch anchors ----------
+
+def claim_has_dispatch_anchor(ws: Path, claim_id: str) -> bool:
+    """True when the claim's approval-point anchor log carries content.
+
+    The anchor log (`runs/.dispatch-anchor-<key>.jsonl`, key = claim id with
+    dashes stripped — the worker_budget_gates.stamp_dispatch_anchor
+    convention) is appended at the dispatch APPROVAL point, so a non-empty
+    log is proof that at least one dispatch ran for this claim. The question
+    here is presence-of-content ("was this claim ever dispatched?"), so any
+    non-blank line counts — unlike the anchor EVIDENCE reads, which skip
+    unparseable rows.
+    """
+    key = str(claim_id).replace("-", "")
+    log = Path(ws) / "runs" / f".dispatch-anchor-{key}.jsonl"
+    try:
+        return any(ln.strip() for ln in log.read_text(
+            encoding="utf-8", errors="replace").splitlines())
+    except OSError:
+        return False
+
+
 # ---------- L-2 / W-4: facts/_INDEX.md row linter (#532) ----------
 # #538 constraint: tools/_lib/index_schema.py is THE single _INDEX parser.
 # The row grammar derives from it (SEP=' | ', 4 columns, status in
@@ -863,6 +885,31 @@ def lint_workspace(ws: Path):
                 errors.append(("error", "GHOST_CLAIM",
                                f"{p.name}: cites claim {ref!r} which is absent "
                                f"from claim-register.yaml (L-1)"))
+    # Issue 648: creator provenance — WARN (never error) when a fact lacks
+    # `creator` while its claim carries dispatch anchors. The anchors prove
+    # dispatches happened, so the round-credit ladder (issue 379) has no per-dispatch
+    # link to this fact and degrades to the trace_id fallback (mission-level
+    # attribution). Facts are write-guarded carriers — the lint never
+    # backfills an existing fact; the warning is the creation-time contract's
+    # enforcement face (and CI visibility into a workspace-wide gap).
+    anchor_seen: dict[str, bool] = {}
+    for p, (fm, _body, _perr) in sorted(parsed.items()):
+        if str(fm.get("creator") or "").strip():
+            continue
+        for ref in collect_claim_refs(fm):
+            if not CLAIM_ID_RE.match(ref):
+                continue
+            if ref not in anchor_seen:
+                anchor_seen[ref] = claim_has_dispatch_anchor(ws, ref)
+            if anchor_seen[ref]:
+                warnings.append((
+                    "warn", "MISSING_CREATOR",
+                    f"{p.name}: fact lacks `creator` while claim {ref} has "
+                    f"dispatch anchors (runs/.dispatch-anchor-"
+                    f"{ref.replace('-', '')}.jsonl) — write "
+                    f"`creator: {ref}` at creation so round-credit can "
+                    f"attribute this fact to its dispatch (issue #648)"))
+                break
     # L-2/W-4 (#532): facts/_INDEX.md rows share one definition with the
     # writer (update_index → tools/_lib/index_schema.py).
     for sev, code, msg in lint_index(facts_dir / "_INDEX.md"):

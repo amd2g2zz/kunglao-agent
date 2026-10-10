@@ -791,7 +791,16 @@ def compose(ws, tick: int, *, store: StrategyStore | None = None,
     cards = load_cards(ws)
 
     cell = store.cell_count(fp)
-    evidence_count = len(rows) if cell is None else int(cell)
+    # The evidence base falls back to the settled-ledger total whenever
+    # the store reports no cell at THIS state (None or 0): the cell count
+    # is state-conditioned, and a live workspace's signature moves as
+    # facts and claims accumulate, so reading 0-at-this-signature as
+    # "no evidence at all" starves the learned lead forever (the live
+    # consumer seam kept rendering empty sections beside a populated
+    # store). The sampler stays state-conditioned where it matters —
+    # cell_posterior keys the draw at the signature — while this gate
+    # only decides whether there is live material to sample.
+    evidence_count = len(rows) if not cell else int(cell)
     _debt = _debt_face(ws)
     _refu = _refutation_face(ws)
     if evidence_count < n_min:
