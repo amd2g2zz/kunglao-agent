@@ -55,7 +55,9 @@
         "collected": { "type": ["integer", "null"] },
         "passed": { "type": ["integer", "null"] },
         "failed": { "type": ["integer", "null"] },
-        "skipped": { "type": ["integer", "null"] }
+        "skipped": { "type": ["integer", "null"] },
+        "not_run": { "type": "boolean" },
+        "reason": { "type": "string" }
       }
     }
   },
