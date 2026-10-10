@@ -50,13 +50,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+from _common import atomic_write_text
 
 SCHEMA = "kunglao.tool-value/1"
 TABLE_NAME = ".tool-value.json"
@@ -433,13 +434,9 @@ def write_table(ws: Path | str, table: dict | None = None) -> Path:
     """Atomic write (tmp + os.replace) — derived cache, whole-file recompute."""
     ws = Path(ws)
     table = table if table is not None else aggregate(ws)
-    path = table_path(ws)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(table, ensure_ascii=False, indent=1),
-                   encoding="utf-8")
-    os.replace(tmp, path)
-    return path
+    return atomic_write_text(
+        table_path(ws),
+        json.dumps(table, ensure_ascii=False, indent=1))
 
 
 def load_table(ws: Path | str) -> dict | None:

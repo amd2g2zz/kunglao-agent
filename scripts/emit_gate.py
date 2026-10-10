@@ -32,25 +32,9 @@ Exit codes: 0 = both directions hold; 1 = violations (orphans and/or
 unregistered literals); 64 = usage error.
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] emit_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn (one impl, dedupe + ledger face).
+from kunglao_log import warn  # noqa: E402 — module-header import posture
 import argparse
 import re
 import sys
@@ -88,18 +72,23 @@ _QUOTED_WORD = re.compile(r'["\']([a-z0-9_]{3,})["\']')
 
 
 def _production_files(root: Path) -> list[tuple[str, str]]:
-    """[(relpath, text)] for scripts/*.py + hooks/*.py (the production face)."""
+    """[(relpath, text)] for scripts/*.py + hooks/*.py (the production face).
+
+    issue 420 Phase 2: scripts/rlvr/*.py IS production face (the settlement
+    engines moved into the package — e.g. rlvr.reward's rollup_face emits
+    rollout_settled); the flat glob predates the package, same fix as the
+    deploy manifest's scaffold rows."""
     out: list[tuple[str, str]] = []
     for sub in ("scripts", "hooks"):
         sdir = Path(root) / sub
         if not sdir.is_dir():
             continue
-        for p in sorted(sdir.glob("*.py")):
+        for p in sorted(sdir.glob("*.py")) + sorted(sdir.glob("rlvr/*.py")):
             try:
                 text = p.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            out.append((f"{sub}/{p.name}", text))
+            out.append((f"{sub}/{p.relative_to(sdir).as_posix()}", text))
     return out
 
 

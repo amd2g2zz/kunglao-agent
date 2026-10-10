@@ -1,6 +1,6 @@
 ---
 name: go-symbols
-lane: malware  # issue 208: analysis material contract — malware binary lane only
+lane: malware  # analysis material contract — malware binary lane only
 description: Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip
   --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json
   + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries
@@ -147,7 +147,7 @@ WRITE the four evidence files yourself (`unstrip-info.json` /
 return the one-line summary (function count, garble verdict, #annotations)
 only after the files exist — a run without files has FAILED.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: append to
+**Liveness + artifacts (canonical log / W-15 rule)**: append to
 `runs/worker-status-go-symbols-<id>.md` as an append-only log parsed by the
 single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /

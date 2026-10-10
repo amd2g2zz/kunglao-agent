@@ -98,13 +98,18 @@ def test_skill_body_arguments_intent_contract() -> None:
 
 
 def test_repo_claude_plugin_is_metadata_only() -> None:
-    """D3 (#366 amendment): `.claude-plugin/plugin.json` ships metadata-only.
+    """D3 (#366 amendment, re-amended by #408): `.claude-plugin/plugin.json`
+    ships identity metadata + plugin-carried MCP, nothing else.
 
     Identity fields (name/description/version/author/homepage/license) are
-    required so v0.1 is visible to the plugin manager; any component
-    wiring (skills/hooks/commands paths) re-triggers the 7f5f179 breakage
+    required so v0.1 is visible to the plugin manager; component wiring
+    (skills/hooks/commands paths) re-triggers the 7f5f179 breakage
     (skills-directory plugin identity in the next session breaks bare
-    /kunglao-agent) and is deferred to #364.
+    /kunglao-agent) and stays deferred to #364. #408 (owner verdict
+    2026-09-27) amends the scope: `mcpServers` (plugin-carried MCP —
+    camoufox-reverse) is NOT component-path wiring and is now DECLARED —
+    the MCP supply face needs zero workspace registration (the root-owned
+    ~/.claude.json registration trap is unreachable by construction).
     """
     import json
     plugin_dir = ROOT / ".claude-plugin"
@@ -112,7 +117,7 @@ def test_repo_claude_plugin_is_metadata_only() -> None:
     manifest = json.loads((plugin_dir / "plugin.json").read_text(encoding="utf-8"))
     assert manifest["name"] == "kunglao-agent"
     assert manifest["version"], "plugin.json version missing"
-    forbidden = {"skills", "commands", "agents", "hooks", "mcpServers",
+    forbidden = {"skills", "commands", "agents", "hooks",
                  "lspServers", "outputStyles", "workflows"}
     wired = sorted(forbidden & set(manifest))
     assert not wired, (

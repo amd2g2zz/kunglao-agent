@@ -110,7 +110,9 @@ def _event_rows(ws: Path) -> list[dict]:
 
 
 _PROMPT_WITH_INTENT = (
-    "[T1 tools=Read,Write] claim C-1 background sweep\n"
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+    '"tier": 1, "tools": ["Read", "Write"]}}\n'
+    "background sweep\n"
     f"uncertainty: {_UNCERTAINTY}\n"
     "preconditions: vm, ghidra\n"
     "expected_artifact: recon-map"
@@ -191,7 +193,8 @@ class TestIntentUnparsedFailOpen:
             self, tmp_path) -> None:
         root = tmp_path
         ws = _mk_ws(root)
-        r = _run_gate(root, ws, "[T1 tools=Read,Write] claim C-1 sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
+        '"claim": "C-1", "tier": 1, "tools": ["Read", "Write"]}}\nsweep')
         assert r.returncode == 0, (
             f"a declaration-less dispatch must still ALLOW; stderr={r.stderr!r}")
         # the ruling-3 gate declined the row — nothing written

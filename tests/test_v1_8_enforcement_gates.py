@@ -174,8 +174,8 @@ def test_hook_activation_tier_defaults():
     with tempfile.TemporaryDirectory() as tmp:
         ws = Path(tmp)
         ha.update_state(ws, "HARD_PAUSE", "MONITOR")
-        assert ha.is_active(ws, "cost_gate") is True
-        assert ha.is_active(ws, "active_intervention") is False
+        assert ha.is_active_strict(ws, "cost_gate") is True
+        assert ha.is_active_strict(ws, "active_intervention") is False
     print("  [OK ] hook_activation HARD_PAUSE keeps cost_gate only")
 
 
@@ -184,8 +184,23 @@ def test_hook_activation_user_override_wins():
         ws = Path(tmp)
         ha.update_state(ws, "HARD_PAUSE", "MONITOR")
         ha.update_state(ws, "HARD_PAUSE", "MONITOR", user_override={"cost_gate": "off"})
-        assert ha.is_active(ws, "cost_gate") is False
+        assert ha.is_active_strict(ws, "cost_gate") is False
     print("  [OK ] hook_activation user_override beats tier default")
+
+
+def test_hook_activation_legacy_default_true_face_deleted():
+    """D1 cleanup (compat-rot sweep 2026-09-29): the legacy is_active()
+    (default-TRUE on an unconfigured workspace) is deleted — one activation
+    face remains, is_active_strict. An unconfigured workspace sleeps every
+    enforcement gate; the old face is structurally unreachable."""
+    assert not hasattr(ha, "is_active"), (
+        "the legacy default-True activation face is deleted — "
+        "is_active_strict is the single path")
+    with tempfile.TemporaryDirectory() as tmp:
+        ws = Path(tmp)
+        assert ha.is_active_strict(ws, "cost_gate") is False
+        assert ha.is_active_strict(ws, "backtrack_gate") is False
+        assert ha.is_active_strict(ws, "troubleshooting_gate") is False
 
 
 # ===== v1.8.5 gates =====

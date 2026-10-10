@@ -88,16 +88,44 @@ HEARTBEAT_STALE_MINUTES = 35
 # this value is NEW in #754, not a surveyed pre-existing constant.
 TICK_INTERVAL_DEFAULT_MIN = 5
 
+# scripts/hooks_selfcheck.py + scripts/statusline_snapshot.py (#412): the
+# component-truth staleness allowance, in TICKS. The self-check rewrites
+# runs/.hooks-selfcheck.json at tick step 0, and the statusline component
+# dots read that file — a source older than N ticks means the CHECKER itself
+# stopped, and its component verdicts must render STALE (red), never green.
+# Value 2 mirrors the continuity-gate adjudication above (one missed tick is
+# jitter; two is a dead cron) and the DEAD_WORKER_MINUTES = 2x pattern.
+SCHEDULER_STALE_TICKS = 2
+
 # scripts/heartbeat.py (#4): the continuity verdict reads a SLIDING WINDOW,
 # not the whole durable tick sidecar - a tick participates when it is among
 # the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;
 # older ticks stay on disk (append-only, nothing deleted) but stop voting.
 # Sized to the real cadence above (5m): 12 ticks ~= 1 hour of normal
-# operation, so ordinary jitter never trips it, while any historical stall
-# stops counting within ~a day (24h age bound) instead of re-rejecting the
-# workspace forever after one mid-life gap.
+# operation, so ordinary jitter never trips it. 0.1.6 sweep (#415, owner
+# ruling): the age bound drops 24h -> 2h — a historical stall stops
+# counting within 2 hours instead of re-rejecting the workspace for ~a
+# day after one mid-life gap (deploy-day quiet gaps must not poison the
+# verdict until tomorrow; the #415.3 gated baseline reset is the other
+# half of the recovery).
 CONTINUITY_WINDOW_TICKS = 12
-CONTINUITY_WINDOW_HOURS = 24
+CONTINUITY_WINDOW_HOURS = 2
+
+# ---------------------------------------------------------------------------
+# Partial-fact verification staleness (#342: the VERIFY_STALE threshold, 12)
+# ---------------------------------------------------------------------------
+
+# scripts/convergence_check.py VERIFY_STALE (#342): a PARTIAL fact whose
+# frontmatter age exceeds this many heartbeat ticks forces the verifier
+# dispatch even when dispatchable open claims exist (the anti-starvation
+# slot forcing, mirroring the #595 insert-before-saturation precedent).
+# Sized to the tick cadence above: 12 ticks x TICK_INTERVAL_DEFAULT_MIN(5)
+# = ~1h — the conservative default of the 2026-09-22 owner restraint
+# ruling (verification cadence only; zero distillation). Runtime override:
+# KUNGLAO_VERIFY_STALE_TICKS (the KUNGLAO_NOOP_BREAKER_N env pattern — the
+# env is read at decision time, not import time). Named _TICKS, outside the
+# #597 bare `_MINUTES` drift-guard family like CONTINUITY_WINDOW_TICKS.
+VERIFY_STALE_TICKS = 12
 
 # ---------------------------------------------------------------------------
 # Hook-activation TTL (the enforcement-liveness threshold, value 30)

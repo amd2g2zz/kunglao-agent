@@ -105,6 +105,15 @@ CASE_MAIN = {
         {"field": "nonce_len", "value": 2, "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    # #301: the quantified verification contract every admitted case
+    # carries (artifact, criterion, threshold, decision coupling).
+    "verification": {
+        "artifact": "auth_algo/nonce_len field layout pinned by facts/F001",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "q1",
+    },
 }
 
 # Distinct signature from CASE_MAIN (#126: channel x competitor_group).
@@ -122,6 +131,13 @@ CASE_STAGED = {
         {"field": "nonce_len", "value": 2, "evidence_refs": ["F002"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "change"}],
+    "verification": {
+        "artifact": "auth_algo/nonce_len layout pinned by facts/F002",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "q1",
+    },
 }
 
 

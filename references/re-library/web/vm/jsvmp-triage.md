@@ -32,14 +32,14 @@ Executable face: `tools/web/jsvmp_triage.py`, registered as `jsvmp-triage`
 | F2 | dispatch switch in an infinite loop | ≥ 8 distinct numeric cases (`MIN_CASE_COUNT`); `pc_indexing` = `ptr++` indexing into the table | `f2_dispatch_loop` |
 | F3 | semantic-free case bodies | ratio ≥ 0.9 **and** a case table exists (`case_bodies_found`) | `f3_semanticless_handlers` |
 
-Verdict semantics (#884): `votes = F1 + F2 + F3`; suspected ⇔ votes ≥ 2;
+Verdict semantics: `votes = F1 + F2 + F3`; suspected ⇔ votes ≥ 2;
 confidence high (3/3) / medium (2/3) / low. F3 is anchored on
 `case_bodies_found` — with no case table the ratio reads 1.0 by absence, and
 absence must not vote (the big-array-alone tripwire pins this).
 
 ## Why three-of-two, not F1∧F2
 
-The pre-#884 gate `confident = f1 and f2` silently missed two pairings with
+The earlier gate `confident = f1 and f2` silently missed two pairings with
 documented real-world shapes: bundles carrying the array + handler anatomy
 but a non-canonical loop head ({F1,F3}), and dispatch-table-heavy bundles
 whose string array was reclaimed or below threshold ({F2,F3}). Three-of-two
@@ -48,9 +48,9 @@ keeps the single-feature lanes (array-only, dispatch-only) at "low".
 ## Methodology outline (trace / OPCODE_MAP / replay)
 
 The triage verdict only opens the door. The instruction-trace methodology
-(#816, CP1→CP3) that follows it:
+that follows it:
 
-1. **Confirm at runtime (CP3)** — single-generation complete opcode/stack
+1. **Confirm at runtime** — single-generation complete opcode/stack
    trace: hook the dispatch loop's switch operand and the stack ops, dump
    one full generation, save the trace as the opcode semantic ground truth.
 2. **Build the OPCODE_MAP** — from the trace, map each opcode (case index)
@@ -65,14 +65,46 @@ The triage verdict only opens the door. The instruction-trace methodology
    (decompile handlers into pseudo-instructions, name by stack effect, and
    only then re-attach to the surrounding AST).
 
+```python
+# Trace -> OPCODE_MAP -> lifter skeleton (methodology skeleton: the capture
+# half is target-specific — hook the dispatch operand and the stack ops of
+# the interpreter you face; the map/lifter half below is the reusable shape).
+# Capture contract per row: (pc, opcode, stack_before, stack_after, note).
+
+OPCODE_MAP = {}   # opcode -> {"pops": int, "pushes": int, "peek": bool,
+                  #            "side_effects": [...], "native_calls": [...]}
+
+def build_opcode_map(trace_rows):
+    """Two case bodies sharing one handler are the SAME opcode: map it once.
+    Handlers calling native APIs become boundary entries of their own."""
+    for row in trace_rows:
+        net = len(row.stack_after) - len(row.stack_before)
+        sig = {"pops": max(0, -net), "pushes": max(0, net),
+               "peek": row.note == "peek",
+               "side_effects": [], "native_calls": []}
+        prior = OPCODE_MAP.setdefault(row.opcode, sig)
+        assert prior["pops"] == sig["pops"], f"opcode {row.opcode} unstable"
+
+def lift(trace_rows):
+    """Case bodies -> pseudo-instructions; the stack discipline from the map
+    gives each pseudo-instruction its operand signature. A trace ending at an
+    UNMAPPED opcode is the tamper exit (see sensor-VM anatomy below): keep
+    the rows captured so far, do not 'fix' the exit."""
+    return [(row.pc, row.opcode, OPCODE_MAP[row.opcode]) for row in trace_rows
+            if row.opcode in OPCODE_MAP]
+
+# Lifter -> CFG: key basic blocks on branch/exit opcodes, then read the target
+# computation as dataflow over the CFG — the form that replays offline.
+```
+
 Advisory posture: this card is methodology guidance, not a proof artifact —
-verdicts are evidence to verify, same discipline as every other kunglao
-output (maker-checker applies to your own triage reading too).
+verdicts are evidence to verify; the same verify-what-you-read discipline
+applies to your own triage reading.
 
 ## Vendor-verified instance: the sensor-VM anatomy
 
-**Family: instruction-trace methodology, vendor-verified face (queue
-cluster: web; verified against real shipped code, not docs)**
+**Family: instruction-trace methodology — verified against real shipped
+vendor code, not docs**
 
 The hardened anti-bot sensor VMs (request-sensor blob producers behind
 interstitial challenges) are the JSVMP shape at production hardness — this

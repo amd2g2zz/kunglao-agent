@@ -100,9 +100,12 @@ sample claim); the credibility letter/number rules above are unchanged.
 
 ## kunglao extension layer (above the schema)
 
-kunglao keeps five fields the schema does not define. They are an explicit
-extension layer — consumed by `scripts/kunglao_verify.py`, NOT part of
-the 12 mandatory fields, but REQUIRED on every kunglao fact:
+kunglao keeps six fields the schema does not define. They are an explicit
+extension layer — consumed by `scripts/kunglao_verify.py` and the #379
+round-credit settlement, NOT part of the 12 mandatory fields; all six are
+known to `lint_facts` (`creator` is optional, the rest are REQUIRED on
+every kunglao fact). Above them sit two OPTIONAL hypothesis fields —
+`uncertainty` and `next_probe`, the open-hypothesis pair documented below.
 
 | Field | Meaning |
 |-------|---------|
@@ -111,6 +114,7 @@ the 12 mandatory fields, but REQUIRED on every kunglao fact:
 | `expected` | L1 oracle: sha256 of reproduce stdout, or assignment-class `field=value` assertions |
 | `verified` | date of last L1 pass (`pending` when none yet) |
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
+| `creator` | #379 round-credit provenance: the dispatch id that wrote this fact (`tr-<mission>-d<N>` form; optional; falls back to `trace_id` attribution) |
 
 ### `evidence_class` — the evidence-grade class (claim gate input)
 
@@ -135,6 +139,28 @@ algorithm verify) whose facts are ALL triage-grade fails admission with
 graded `triage` (fail-closed — an undeclared class is not a claim of
 strength); `scripts/lint_facts.py` reports an unrecognized value as
 `BAD_EVIDENCE_CLASS`.
+
+### `uncertainty` + `next_probe` — the open-hypothesis pair (issue 584)
+
+Two optional string fields that complete the structured analysis object
+OVER the fact substrate — additive extension fields, never a new object
+type. Both are absent in the common case; write one only when the worker
+genuinely carries it:
+
+| Field | Meaning |
+|-------|---------|
+| `uncertainty` | the explicit counter-hypothesis / not-yet-confirmed note — "key source unconfirmed; call paths could also be compression". The refutation face at fact level, not only at settlement-failure gap-note time; a red-team pass MAY cite it |
+| `next_probe` | the next runnable experiment that would move this fact — phrased so the dispatch face can consume it verbatim as a sub-goal |
+
+Relationship to `promotion_gate`: the gate is the CONDITION (the evidence
+that reclassifies the fact), `next_probe` is the EXPERIMENT that tests
+that condition. A `next_probe` without an open gate condition is filler —
+prefer absent.
+
+`lint_facts` shape: each is a non-empty string when present
+(`BAD_UNCERTAINTY` / `BAD_NEXT_PROBE` otherwise). These are optional
+fields — per the schema pin discipline, adding them is NOT a
+`schema_rev` bump.
 
 Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`/`stale`
 (schema Layer-4 field). Two-layer mapping: `references/schemas/state-mapping.md`.

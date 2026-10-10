@@ -24,7 +24,7 @@ the situation it was built for.
 | `scripts/plan_drift_detector.py` | "I re-planned / decomposed / abandoned claims since the last plan-file edit" — **v1.9.29 (mechanical)**: `worker_budget.py` PreToolUse REJECTS any dispatch on detected drift (exit ≥1) |
 | `scripts/hook_activation.py` | "I want some of the gates to pause (HARD_PAUSE tier)" — selective activation |
 | `hooks/worker_pulse.py` | PostToolUse hook — auto-injects the convergence snapshot when a worker completes (so you can't forget the check) |
-| `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for asks-back (反问) patterns |
+| `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for asks-back (asks the user instead of deciding) patterns |
 | `mcp__context7-mcp__resolve-library-id` + `get-library-docs` | "I'm about to dispatch a worker for an API/struct I don't fully know" |
 | `mcp__sequential-thinking` | "This decision has 3+ steps with branching logic" |
 | `mcp__web_reader__webReader` | "I need clean markdown from an external URL" |
@@ -44,5 +44,3 @@ composing script pure functions; the rest are focused entry points / thin wrappe
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch → TickOutput |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → digest_build.py) |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → kunglao_eval.py) |
-
-recall_useful: pending

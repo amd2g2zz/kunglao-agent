@@ -64,16 +64,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] retract_claim WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -92,7 +83,7 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, LedgerLineType
+from status_defs import TERMINAL, LedgerLineType, LEDGER_FORMAT
 
 RETRACTED = "RETRACTED"
 RETRACT_REASONS = ("refuted", "superseded")
@@ -256,6 +247,9 @@ def retract_claim(workspace: Path, claim_id: str, reason: str = "refuted",
         _write_reg(reg_path, reg)
         _append_ledger(workspace, {
             "type": LedgerLineType.OPERATOR_ACTION,
+            # issue 137: self-describing format stamp on NEW rows (same
+            # single home as every ledger writer — absence = legacy).
+            "schema": LEDGER_FORMAT,
             "action": "retract",
             "actor": "orchestrator",
             "claim_id": claim_id,
@@ -380,8 +374,9 @@ def main(argv: list | None = None) -> int:
         # #879: a superseded withdrawal without a successor edge leaves the
         # "谁替代谁" question open — visible WARN, not a hard block (the
         # edge can land later via the register).
-        print("WARN: --reason superseded without --superseded-by — no "
-              "lineage edge will be recorded (#879)", file=sys.stderr)
+        warn("superseded_without_lineage",
+             "--reason superseded without --superseded-by — no "
+             "lineage edge will be recorded (#879)")
 
     r = retract_claim(ws, args.claim_id, reason=args.reason, by=args.by,
                       dry_run=args.dry_run,

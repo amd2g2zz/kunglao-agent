@@ -156,6 +156,14 @@ def reg(name: str) -> dict:
     return {"type": "stdio", "command": name, "args": []}
 
 
+def write_ws_mcp(ws: Path, servers: dict[str, dict]) -> None:
+    """#408: seed the WORKSPACE .mcp.json (the sanctioned project-scope
+    surface). The user-global ~/.claude.json surface is deleted — seeds
+    migrate here."""
+    (ws / ".mcp.json").write_text(
+        json.dumps({"mcpServers": servers}), encoding="utf-8")
+
+
 # ---------- manifest shape ----------
 
 import mcp_probe  # noqa: E402  (pythonpath includes scripts/)
@@ -198,15 +206,23 @@ def test_manifest_names_unique_lowercase_with_register_cmd():
     assert set(names) == ALL_MCP_NAMES
     for item in mcp_probe.MANIFEST:
         assert item.name == item.name.lower(), "canonical names are lowercase"
-        assert item.register.startswith("claude mcp add"), \
-            f"{item.name}: register field must carry a `claude mcp add` command"
         assert item.purpose and item.source
+        if item.name == "camoufox-reverse":
+            # #408: camoufox ships with the plugin — its remediation names
+            # the carriage, never a user-level `claude mcp add` command.
+            assert "plugin" in item.register
+            assert "claude mcp add" not in item.register
+        else:
+            assert item.register.startswith("claude mcp add"), \
+                f"{item.name}: register field must carry a `claude mcp add` command"
 
 
 # ---------- probe behavior ----------
 
 def test_probe_all_registered_exit0(fake_claude_json, ws):
-    write_claude_json(fake_claude_json, {n: reg(n) for n in ALL_MCP_NAMES})
+    # #408: camoufox-reverse needs no seed — it is plugin-carried.
+    write_ws_mcp(ws, {n: reg(n) for n in ALL_MCP_NAMES
+                      if n != "camoufox-reverse"})
     r = run_mcp_probe(ws, "--type", "windows")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "OVERALL: PASS" in r.stdout
@@ -222,7 +238,7 @@ def test_probe_missing_hard_exit1_with_guidance(fake_claude_json, ws):
 
 
 def test_probe_missing_warn_only_exit2(fake_claude_json, ws):
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("sequential-thinking"),
         "x64dbg": reg("x64dbg"),
@@ -257,25 +273,28 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
         "ssh-mcp"}  # #698 ssh-channel control plane (WARN, windows/linux)
 
 
-def test_probe_project_scoped_claude_json(fake_claude_json, ws):
-    """~/.claude.json projects.*.mcpServers (project scope) also count as registered."""
+def test_user_claude_json_surfaces_ignored(fake_claude_json, ws):
+    """#408 (no-backcompat): the user-global ~/.claude.json surfaces
+    (global mcpServers + projects.*.mcpServers) are DELETED — a registered
+    user-global server must NOT count as supply anymore; only workspace
+    .mcp.json + plugin-carried servers verify."""
     write_claude_json(
         fake_claude_json,
         servers={"ghidra": reg("ghidra"), "sequential-thinking": reg("st"),
                  "ida-pro-vm": reg("ida"), "virustotal": reg("vt"),
-                 "ssh-mcp": reg("sshm")},  # #698 windows channel plane
+                 "ssh-mcp": reg("sshm")},
         project_servers={"x64dbg": reg("x64dbg"), "volatility": reg("vol")},
     )
     r = run_mcp_probe(ws, "--type", "windows", "--json")
-    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.returncode == 1, "user-global registrations are no longer supply"
     out = json.loads(r.stdout)
     by_name = {c["name"]: c for c in out["checks"]}
-    assert by_name["x64dbg"]["status"] == "PASS"
-    assert "project" in by_name["x64dbg"]["detail"]
+    assert by_name["ghidra"]["status"] == "FAIL"
+    assert by_name["x64dbg"]["status"] == "FAIL"
 
 
 def test_probe_json_and_reproduce_contract(fake_claude_json, ws):
-    write_claude_json(fake_claude_json, {"ghidra": reg("ghidra")})
+    write_ws_mcp(ws, {"ghidra": reg("ghidra")})
     r = run_mcp_probe(ws, "--type", "windows", "--json")
     assert r.returncode == 1
     out = json.loads(r.stdout)
@@ -307,7 +326,8 @@ def test_probe_invalid_type_errors(ws):
 
 
 def test_probe_reads_type_from_analysis_state(fake_claude_json, ws):
-    write_claude_json(fake_claude_json, {n: reg(n) for n in ALL_MCP_NAMES})
+    write_ws_mcp(ws, {n: reg(n) for n in ALL_MCP_NAMES
+                      if n != "camoufox-reverse"})
     (ws / "analysis_state.txt").write_text("project_type=android\n", encoding="utf-8")
     r = run_mcp_probe(ws, "--json")
     assert r.returncode == 0, r.stdout + r.stderr
@@ -396,7 +416,7 @@ def test_scaffold_manifest_matches_source():
 # ---------- toolchain.py integration ----------
 
 def test_toolchain_integrates_mcp_items(fake_claude_json, ws):
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("sequential-thinking"),
     })
@@ -424,7 +444,7 @@ def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
     'capability unverified' via MCP (registered supply defuses the HARD FAIL;
     a registry read is not capability), and the mcp:ghidra supply item is
     satisfied by the ida-pro-vm provider."""
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "sequential-thinking": reg("st"),
         "ida-pro-vm": reg("ida"),
     })
@@ -443,7 +463,7 @@ def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
 def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
     """#407/#474: ghidra MCP registered -> decompiler WARN 'capability
     unverified' via MCP (registry evidence is not capability)."""
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("st"),
     })
@@ -461,7 +481,7 @@ def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
     """#407/#474: MCP registration is the PRIMARY signal; CLI (GHIDRA_HOME) is
     the fallback — an MCP registration wins even when GHIDRA_HOME is set
     (the decompiler item surfaces as WARN via MCP, not the CLI ghidra item)."""
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("st"),
     })
@@ -493,8 +513,8 @@ def test_toolchain_decompiler_fail_with_install_guidance(fake_claude_json, ws):
 def test_ida_pro_vm_tier_sole_decompiler_provider_hard(fake_claude_json, ws):
     """#407: ida-pro-vm is HARD when it is the sole decompiler provider
     (ghidra absent); the ghidra supply item is satisfied via ida-pro-vm."""
-    write_claude_json(fake_claude_json, {"ida-pro-vm": reg("ida")})
-    checks = mcp_probe.check_mcp(ws, "linux", claude_json=fake_claude_json)
+    write_ws_mcp(ws, {"ida-pro-vm": reg("ida")})
+    checks = mcp_probe.check_mcp(ws, "linux")
     by_name = {c.name: c for c in checks}
     assert by_name["ida-pro-vm"].tier == "HARD"
     assert by_name["ida-pro-vm"].status == "PASS"
@@ -504,10 +524,10 @@ def test_ida_pro_vm_tier_sole_decompiler_provider_hard(fake_claude_json, ws):
 
 def test_ida_pro_vm_tier_warn_when_ghidra_present(fake_claude_json, ws):
     """#407: ida-pro-vm keeps the WARN default when ghidra MCP is registered."""
-    write_claude_json(fake_claude_json, {
+    write_ws_mcp(ws, {
         "ida-pro-vm": reg("ida"), "ghidra": reg("ghidra"),
     })
-    checks = mcp_probe.check_mcp(ws, "linux", claude_json=fake_claude_json)
+    checks = mcp_probe.check_mcp(ws, "linux")
     by_name = {c.name: c for c in checks}
     assert by_name["ida-pro-vm"].tier == "WARN"
     assert by_name["ida-pro-vm"].status == "PASS"
@@ -564,44 +584,40 @@ def test_readme_mentions_probe_and_scaffold():
 # ---------- #515 acceptance 1: environment-side inventory (--mcp-inventory) ----------
 
 class TestMcpInventory:
-    """--mcp-inventory: enumerate REGISTERED servers across the three
-    registration surfaces with the mcp__<server>__* tool prefix and the
-    per-type required/optional annotation. Read-only / zero-network /
-    zero-spawn; secret hygiene (no command/args/env values)."""
+    """--mcp-inventory: enumerate REGISTERED servers across the #408
+    surfaces (workspace .mcp.json + plugin-carried) with the
+    mcp__<server>__* tool prefix and the per-type required/optional
+    annotation. Read-only / zero-network / zero-spawn; secret hygiene (no
+    command/args/env values)."""
 
-    def test_enumerates_all_three_registration_surfaces(
+    def test_enumerates_workspace_and_plugin_surfaces(
             self, tmp_path, fake_claude_json, ws):
         write_claude_json(
             fake_claude_json,
-            servers={"Camoufox": {"type": "stdio", "command": "uvx",
-                                  "args": ["camoufox-mcp"],
-                                  "env": {"CAMOUFOX_API_KEY": "sk-leak-me"}},
-                     "gitnexus": reg("gitnexus")},
-            project_servers={"playwright": reg("npx")})
-        (ws / ".mcp.json").write_text(
-            json.dumps({"mcpServers": {"volatility": reg("vol")}}),
-            encoding="utf-8")
-        r = run_mcp_probe(ws, "--mcp-inventory",
-                          "--claude-json", str(fake_claude_json))
+            servers={"global-ghost": reg("ghost")},
+            project_servers={"ghost-p": reg("ghost-p")})
+        write_ws_mcp(ws, {"Camoufox": {"type": "stdio", "command": "uvx",
+                                       "args": ["camoufox-mcp"],
+                                       "env": {"CAMOUFOX_API_KEY":
+                                               "sk-leak-me"}},
+                          "volatility": reg("vol")})
+        r = run_mcp_probe(ws, "--mcp-inventory")
         assert r.returncode == 0, r.stderr
         inv = json.loads(r.stdout)
         servers = {s["name"]: s for s in inv["servers"]}
-        assert set(servers) == {"camoufox", "gitnexus", "playwright",
-                                "volatility"}, (
-            "inventory must enumerate global + project-scoped + workspace "
-            "surfaces, canonical lowercase")
+        assert set(servers) == {"camoufox", "volatility", "camoufox-reverse"}, (
+            "inventory must enumerate workspace + plugin-carried surfaces, "
+            "canonical lowercase (user-global ghosts stay invisible)")
         assert servers["camoufox"]["prefix"] == "mcp__camoufox__*"
-        assert servers["camoufox"]["sources"] == ["user-global"]
-        assert servers["playwright"]["sources"] == [f"user-project:{_PROJECT_KEY}"]
+        assert servers["camoufox"]["sources"] == ["workspace"]
         assert servers["volatility"]["sources"] == ["workspace"]
+        assert servers["camoufox-reverse"]["sources"] == ["plugin-carried"]
 
     def test_manifest_annotation_tier_and_types(self, tmp_path, fake_claude_json,
                                                 ws):
-        write_claude_json(fake_claude_json,
-                          servers={"gitnexus": reg("gitnexus"),
-                                   "camoufox": reg("camoufox")})
-        r = run_mcp_probe(ws, "--mcp-inventory",
-                          "--claude-json", str(fake_claude_json))
+        write_ws_mcp(ws, {"gitnexus": reg("gitnexus"),
+                          "camoufox": reg("camoufox")})
+        r = run_mcp_probe(ws, "--mcp-inventory")
         assert r.returncode == 0, r.stderr
         servers = {s["name"]: s for s in json.loads(r.stdout)["servers"]}
         # manifest member: tier + types from the #316 supply manifest
@@ -617,12 +633,10 @@ class TestMcpInventory:
             self, tmp_path, fake_claude_json, ws):
         """MCP configs may carry API keys in `env` — the inventory must be
         pasteable: names/sources/tiers only, never command/args/env values."""
-        write_claude_json(fake_claude_json, servers={
-            "camoufox": {"type": "stdio", "command": "uvx",
-                         "args": ["--secret-arg"],
-                         "env": {"CAMOUFOX_API_KEY": "sk-do-not-leak"}}})
-        r = run_mcp_probe(ws, "--mcp-inventory",
-                          "--claude-json", str(fake_claude_json))
+        write_ws_mcp(ws, {"camoufox": {
+            "type": "stdio", "command": "uvx", "args": ["--secret-arg"],
+            "env": {"CAMOUFOX_API_KEY": "sk-do-not-leak"}}})
+        r = run_mcp_probe(ws, "--mcp-inventory")
         assert r.returncode == 0, r.stderr
         for secret in ("sk-do-not-leak", "--secret-arg", "uvx"):
             assert secret not in r.stdout, (
@@ -632,36 +646,35 @@ class TestMcpInventory:
             self, tmp_path, fake_claude_json, ws):
         """Enumeration face: no --type / analysis_state.txt needed (check
         mode would exit 1 on a missing type — inventory must not)."""
-        write_claude_json(fake_claude_json, servers={"camoufox": reg("x")})
-        r = run_mcp_probe(ws, "--mcp-inventory",
-                          "--claude-json", str(fake_claude_json))
+        write_ws_mcp(ws, {"camoufox": reg("x")})
+        r = run_mcp_probe(ws, "--mcp-inventory")
         assert r.returncode == 0, r.stderr
-        assert json.loads(r.stdout)["server_count"] == 1
+        assert json.loads(r.stdout)["server_count"] == 2  # camoufox + plugin
 
-    def test_inventory_missing_config_is_empty_not_error(
+    def test_inventory_missing_config_still_carries_plugin_servers(
             self, tmp_path, ws):
-        """Fail-open JSON read (same policy as check face): unreadable
-        config -> empty inventory, exit 0."""
-        r = run_mcp_probe(ws, "--mcp-inventory",
-                          "--claude-json", str(tmp_path / "nope.json"))
+        """Fail-open JSON read (same policy as check face): unreadable/absent
+        workspace config -> empty workspace inventory; the plugin-carried
+        servers still enumerate (#408 carriage), exit 0."""
+        r = run_mcp_probe(ws, "--mcp-inventory")
         assert r.returncode == 0, r.stderr
         inv = json.loads(r.stdout)
-        assert inv["server_count"] == 0 and inv["servers"] == []
+        names = {s["name"] for s in inv["servers"]}
+        assert names == {"camoufox-reverse"}
+        assert inv["server_count"] == 1
 
     def test_inventory_mutually_exclusive_with_check_modes(
             self, tmp_path, fake_claude_json, ws):
-        write_claude_json(fake_claude_json, servers={"camoufox": reg("x")})
+        write_ws_mcp(ws, {"camoufox": reg("x")})
         for flag in ("--json", "--reproduce"):
-            r = run_mcp_probe(ws, "--mcp-inventory", flag,
-                              "--claude-json", str(fake_claude_json))
+            r = run_mcp_probe(ws, "--mcp-inventory", flag)
             assert r.returncode == 2, (
                 f"--mcp-inventory + {flag} is a usage error (distinct faces)")
 
     def test_inventory_deterministic(self, tmp_path, fake_claude_json, ws):
-        write_claude_json(fake_claude_json,
-                          servers={"camoufox": reg("x"), "gitnexus": reg("y")})
+        write_ws_mcp(ws, {"camoufox": reg("x"), "gitnexus": reg("y")})
         argv = [sys.executable, str(SCRIPTS / "mcp_probe.py"), str(ws),
-                "--mcp-inventory", "--claude-json", str(fake_claude_json)]
+                "--mcp-inventory"]
         outs = [subprocess.run(argv, capture_output=True, text=True,
                                timeout=120).stdout for _ in range(2)]
         assert outs[0] == outs[1]

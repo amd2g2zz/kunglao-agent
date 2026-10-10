@@ -22,6 +22,35 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
 
+# ---------- fresh canonical warn state per test ----------
+# kunglao_log.warn dedupes process-wide (one dict per process, per
+# (op, last-reason)); without a per-test reset, two tests exercising the
+# same (op, reason) would suppress each other's expected WARN output.
+# Autouse + cheap (one monkeypatch op). Import guarded: collection must
+# never depend on scripts/ being importable.
+@pytest.fixture(autouse=True)
+def _fresh_canonical_warn_state(monkeypatch):
+    try:
+        import kunglao_log as _kl
+    except ImportError:  # pragma: no cover
+        yield
+        return
+    monkeypatch.setattr(_kl, "_WARN_LAST", {}, raising=False)
+    yield
+
+
+# ---------- posterior-store isolation (#545) ----------
+# The WS2 store (scripts/rlvr/patterns/posterior-store.jsonl) is RUNTIME
+# data — no test may ever append to the repo's guarded prior-store root.
+# Every test gets KUNGLAO_POSTERIOR_STORE pointed at a tmp path; tests
+# that exercise the store override it explicitly.
+@pytest.fixture(autouse=True)
+def _isolated_posterior_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
+                       str(tmp_path / "posterior-store-isolated"))
+    yield
+
+
 # ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture
@@ -106,7 +135,6 @@ def golden_master():
         manifest = yaml.safe_load((ROOT / "tests" / "fixtures" / "golden" / "manifest.yaml").read_text(encoding="utf-8"))
         case = next(c for c in manifest["cases"] if c["id"] == case_id)
         env = dict(os.environ)
-        env.pop("PRIORITY_WEIGHTS", None)
         r = subprocess.run(
             case["cmd"]["argv"], cwd=case["cmd"].get("cwd", str(ROOT)),
             env=env, capture_output=True, text=True,

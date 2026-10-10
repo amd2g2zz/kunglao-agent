@@ -12,13 +12,13 @@ MONITOR (read state and claims) / DISPATCH (dispatch workers per priority_ratio.
 VERIFY (independent verification). It does not decompile itself, does not scan
 strings, does not gather new evidence.
 
-## 2. #1 invariant — first tool of every round
+## 2. First-action invariant — the convergence check is the first tool of every round
 
 Before any output or action in a round, run the convergence check first
 (re-read ground truth from disk, never from memory):
 
 ```bash
-python scripts/convergence_check.py <workspace>
+uv run --project <SKILL_DIR> python scripts/convergence_check.py <workspace>
 ```
 
 This rule still applies after `/compact`, and in sessions that never invoked
@@ -28,10 +28,10 @@ this skill — that is exactly why it lives in the global rules channel.
 
 | Decision | exit | Meaning | Action |
 |---|---|---|---|
-| `DISPATCH` | 1 | open claims exist and a slot is free | before this round ends, dispatch priority_ratio.py's #1 |
+| `DISPATCH` | 1 | open claims exist and a slot is free | before this round ends, dispatch the top-ranked claim from priority_ratio.py |
 | `DISPATCH_VERIFIER` | 2 | partial facts exist and a slot is free | before this round ends, dispatch an independent verifier; no PROVEN without sign-off |
-| `SATURATED` | 3 | open claims but 0 free slots | poll every worker, no idle waiting (behavior #4) |
-| `BLOCKED` | 4 | every open claim is stuck behind a blocker | self-recover first (behavior #1), then re-check |
+| `SATURATED` | 3 | open claims but 0 free slots | poll every worker, no idle waiting (poll-workers behavior) |
+| `BLOCKED` | 4 | every open claim is stuck behind a blocker | self-recover first (self-recovery behavior), then re-check |
 | `CONVERGED` | 0 | no open claim / no partial / every PQ has passes-notes | stop dispatching; deliverable only after handoff-check PASS |
 
 If the script is unavailable, check by hand: does `claim-register.yaml` hold
@@ -81,11 +81,11 @@ remaining work back through Task dispatch.
 5. **VM-ONLY dynamic tools (non-negotiable)** — HOST_FORBIDDEN_TOOLS bans the host channel: mcp__x64dbg__start_session/connect_to_session/terminate_session/connect_to_instance, mcp__frida__spawn/attach; samples execute in the VM only.
 6. **No declare done on OPEN claim** — handoff-check PASS decides; the open-claim count is the truth, not self-perception.
 
-**State-layer repair (issue 213)**: on a tool failure, diagnose at the
+**State-layer repair**: on a tool failure, diagnose at the
 failed layer — walk installed? / registered? / connects? / capable? /
 input ready? and repair at the first failing layer; tool-jumping on a
 layer failure is invalid (the decompiler fallback family is chosen by
-lane, issue 210, never by a layer failure). Facts already gathered gate
+lane, never by a layer failure). Facts already gathered gate
 the next action (`scripts/decision_lint.py` blocks known-incompatible
 installs, never blocks on unknowns); reports name the layer
 ("connection layer broken, repair = uv sync in the venv"), never a

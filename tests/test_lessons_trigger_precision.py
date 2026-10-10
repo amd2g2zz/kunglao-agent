@@ -37,6 +37,11 @@ def _record(ws, cid, *, tp):
         outcome="PROVEN", what_happened="ok",
         validated_capability="x", identified_obstacle="y",
         source="lesson-hit",
+        # issue 304 fix-as-guard: this fixture settles a fix, so it
+        # carries resolving guard evidence (repo vocabulary anchor).
+        guard_type="marker-grep",
+        guard_location="scripts/event_taxonomy.py",
+        check_reference="EMIT_ACTIONS",
         trigger_precision=tp)
 
 

@@ -1,0 +1,211 @@
+/**
+ * android-bypass-phase1.js — flag-gated first-phase environment bypass
+ * (template: templates/frida/android-bypass-phase1.js.tmpl, issue 359).
+ *
+ * Requires: frida >= 17, Android (Java bridge).
+ *
+ * Capability: neutralize the standard client-integrity checks an app may
+ * perform before its real logic runs, so analysis can reach the code under
+ * test. Each domain is INDEPENDENT and gated by a 0/1 flag — arm only what
+ * the sample actually checks (read the app's smali/native checks first; do
+ * not blanket-arm).
+ *
+ *   ENABLE_ROOT      java.io.File.exists on su/Magisk paths + package
+ *                    manager probes + Runtime su invocations always fail
+ *   ENABLE_EMULATOR  Build fingerprint fields + telephony identifiers read
+ *                    as a physical device profile
+ *   ENABLE_PROXY     http.proxyHost/http.proxyPort and Settings.Secure
+ *                    HTTP_PROXY read as clean
+ *   ENABLE_SSL       permissive TrustManager + HostnameVerifier default
+ *                    context; OkHttp CertificatePinner patched
+ *   ENABLE_DEBUG     Debug.isDebuggerConnected etc. read as not-debugged
+ *
+ * VM-ONLY ARTIFACT (hard prohibition #5): run inside the analysis VM via
+ * the VM channel (<VM_IP>:1337) only. Never against host processes.
+ *
+ * Output: per-domain "[phase1-bypass] <domain> armed / failed: reason" log
+ * lines plus a final SUMMARY line listing armed domains — paste this into
+ * the case log as the bypass evidence inventory.
+ *
+ * WHAT THE ANALYST MUST FILL / VERIFY (all marked TODO in the body):
+ *   * FLAG VALUES — set each ENABLE_* to 1 only after confirming the
+ *     sample performs that check class (static sweep or dynamic trace)
+ *   * SSL pinning — TrustManagerImpl internal names shift across API
+ *     levels (26/28/34+); the OkHttp patch probes both okhttp3 internal
+ *     and the legacy name, but verify against the app's bundled stack
+ *   * emulator profile — the device profile below is a plain modern
+ *     physical-device baseline; align manufacturer/model with a real
+ *     device of the same Android version as the VM image
+ *
+ * Usage (inside the VM):
+ *   sed -e 's/{{ENABLE_ROOT}}/1/' ... android-bypass-phase1.js.tmpl > phase1.js
+ *   frida -U -f <package> -l phase1.js --no-pause
+ */
+'use strict';
+
+var ENABLE_ROOT = {{ENABLE_ROOT}};
+var ENABLE_EMULATOR = {{ENABLE_EMULATOR}};
+var ENABLE_PROXY = {{ENABLE_PROXY}};
+var ENABLE_SSL = {{ENABLE_SSL}};
+var ENABLE_DEBUG = {{ENABLE_DEBUG}};
+
+var armed = [];
+var failed = [];
+
+function log(msg) {
+  console.log('[phase1-bypass] ' + msg);
+}
+
+Java.perform(function () {
+  var JFile = Java.use('java.io.File');
+
+  // ---- root ------------------------------------------------------------
+  if (ENABLE_ROOT === 1) {
+    try {
+      var suPaths = [
+        '/system/bin/su', '/system/xbin/su', '/sbin/su', '/vendor/bin/su',
+        '/system/app/Superuser.apk', '/system/app/Magisk.apk',
+        '/data/local/xbin/su', '/data/local/bin/su', '/data/local/su'
+      ];
+      JFile.exists.implementation = function () {
+        var p = this.getAbsolutePath();
+        for (var i = 0; i < suPaths.length; i++) {
+          if (p === suPaths[i]) {
+            log('hide root path: ' + p);
+            return false;
+          }
+        }
+        return this.exists();
+      };
+      var Runtime = Java.use('java.lang.Runtime');
+      Runtime['exec'].overload('java.lang.String')
+        .implementation = function (cmd) {
+          if (cmd === 'su' || cmd.indexOf('which su') !== -1) {
+            log('blocked su invocation');
+            throw Java.use('java.io.IOException').$new('not found');
+          }
+          return this['exec'](cmd);
+        };
+      armed.push('root');
+    } catch (e) {
+      failed.push('root: ' + e);
+    }
+  }
+
+  // ---- emulator ----------------------------------------------------------
+  if (ENABLE_EMULATOR === 1) {
+    try {
+      // TODO(adapt): align this profile with a REAL device of the same
+      // Android version as the VM image before trusting any comparison.
+      var Build = Java.use('android.os.Build');
+      Build.FINGERPRINT.value = 'google/walleye/walleye:8.1.0/OPM1.' +
+        '171019.011/200102:user/release-keys';
+      Build.MODEL.value = 'Pixel 2';
+      Build.MANUFACTURER.value = 'Google';
+      Build.BRAND.value = 'google';
+      Build.PRODUCT.value = 'walleye';
+      Build.HARDWARE.value = 'walleye';
+      Build.BOARD.value = 'walleye';
+      var TM = Java.use('android.telephony.TelephonyManager');
+      TM.getDeviceId.overload().implementation = function () {
+        return '359672089145672';
+      };
+      TM.getSubscriberId.implementation = function () {
+        return '310260000000000';
+      };
+      TM.getNetworkOperator.implementation = function () {
+        return '310260';
+      };
+      armed.push('emulator');
+    } catch (e) {
+      failed.push('emulator: ' + e);
+    }
+  }
+
+  // ---- proxy -------------------------------------------------------------
+  if (ENABLE_PROXY === 1) {
+    try {
+      var System = Java.use('java.lang.System');
+      System.getProperty.overload('java.lang.String')
+        .implementation = function (key) {
+          if (key === 'http.proxyHost' || key === 'http.proxyPort' ||
+              key === 'https.proxyHost' || key === 'https.proxyPort') {
+            return null;
+          }
+          return this.getProperty(key);
+        };
+      var Settings = Java.use('android.provider.Settings$Secure');
+      Settings.getString.implementation = function (resolver, name) {
+        if (name === 'http_proxy') {
+          return null;
+        }
+        return this.getString(resolver, name);
+      };
+      armed.push('proxy');
+    } catch (e) {
+      failed.push('proxy: ' + e);
+    }
+  }
+
+  // ---- SSL ----------------------------------------------------------------
+  if (ENABLE_SSL === 1) {
+    try {
+      // permissive default SSLContext
+      var X509TM = Java.use('javax.net.ssl.X509TrustManager');
+      var TrustAll = Java.registerClass({
+        name: 'com.retools.trustall.TrustAllManager',
+        implements: [X509TM],
+        methods: {
+          checkClientTrusted: function () {},
+          checkServerTrusted: function () {},
+          getAcceptedIssuers: function () { return []; }
+        }
+      });
+      var SSLContext = Java.use('javax.net.ssl.SSLContext');
+      var ctx = SSLContext.getInstance('TLS');
+      ctx.init(null, [TrustAll.$new()], null);
+      SSLContext.setDefault(ctx);
+      // permissive default hostname verifier
+      var HV = Java.use('javax.net.ssl.HttpsURLConnection');
+      var Verifier = Java.registerClass({
+        name: 'com.retools.trustall.AllowAllVerifier',
+        implements: [Java.use('javax.net.ssl.HostnameVerifier')],
+        methods: {
+          verify: function () { return true; }
+        }
+      });
+      HV.setDefaultHostnameVerifier(Verifier.$new());
+      armed.push('ssl-context');
+    } catch (e) {
+      failed.push('ssl-context: ' + e);
+    }
+    try {
+      // TODO(adapt): internal names shift across OkHttp 3.x/4.x and API
+      // level; if the app bundles another stack (conscrypt, cronet),
+      // extend here.
+      var Pinner = Java.use('okhttp3.CertificatePinner');
+      Pinner.check.overload('java.lang.String', 'java.util.List')
+        .implementation = function () {
+          log('okhttp pin check bypassed');
+        };
+      armed.push('okhttp-pin');
+    } catch (e) {
+      log('okhttp pin patch skipped (' + e + ') — app may not use OkHttp');
+    }
+  }
+
+  // ---- debug ---------------------------------------------------------------
+  if (ENABLE_DEBUG === 1) {
+    try {
+      var Debug = Java.use('android.os.Debug');
+      Debug.isDebuggerConnected.implementation = function () { return false; };
+      Debug.waitingForDebugger.implementation = function () { return false; };
+      armed.push('debug');
+    } catch (e) {
+      failed.push('debug: ' + e);
+    }
+  }
+
+  log('SUMMARY armed=[' + armed.join(',') + '] failed=[' +
+      failed.join(';') + ']');
+});

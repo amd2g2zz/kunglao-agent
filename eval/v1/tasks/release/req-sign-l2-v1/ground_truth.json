@@ -1,0 +1,384 @@
+{
+  "schema": "kunglao-eval-ground-truth/1",
+  "task_id": "req-sign-l2-v1",
+  "family": "req-sign",
+  "seed": 33231,
+  "constants": {
+    "key_hex": "5d6eb45946a0c74960a6587b98e2032b139d0a63fd691ac7d1706a4fb6901317",
+    "sep_code": 34
+  },
+  "space_bits": 256,
+  "published_pairs": [
+    {
+      "i": 0,
+      "request": {
+        "method": "POST",
+        "path": "/v1/8fcf8cb5/0",
+        "body": "8e758cf7479ea12b09edbabf",
+        "seq": 0,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "86c18cbdabe99efd85f9382fbf3eec908166b781ae6fc0c9f4d4af1d33ad826b"
+    },
+    {
+      "i": 1,
+      "request": {
+        "method": "GET",
+        "path": "/v1/70893037/1",
+        "body": "629f245b9d73d8d34f76539d",
+        "seq": 1,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "84b6475ea65d1d2a6c5a9401c0264f7c02fd1e31a9b4571cade176f7b2fada55"
+    },
+    {
+      "i": 2,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/7673ada1/2",
+        "body": "974f282dac0d6f331235dcd9",
+        "seq": 2,
+        "headers": [
+          [
+            "accept",
+            "v1"
+          ],
+          [
+            "x-trace",
+            "v2"
+          ],
+          [
+            "content-digest",
+            "v3"
+          ]
+        ]
+      },
+      "out": "60551994d94b655a0afbbb73975eb10e90a6ece872a9195c2872cb7e0eae5b09"
+    },
+    {
+      "i": 3,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/f07ff41f/3",
+        "body": "2b0203d9c81479a1a92afcc7",
+        "seq": 3,
+        "headers": [
+          [
+            "accept",
+            "v1"
+          ],
+          [
+            "x-trace",
+            "v2"
+          ],
+          [
+            "content-digest",
+            "v3"
+          ]
+        ]
+      },
+      "out": "33fe9e9cb38d1c478851b4e14c94b35a432b4ba47f8e1adef568e8cd191bb2da"
+    },
+    {
+      "i": 4,
+      "request": {
+        "method": "POST",
+        "path": "/v1/1548c61b/4",
+        "body": "d4a65e130b767fb76c7adba7",
+        "seq": 4,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "5840569eb2f020a13b0168250150f188b8cefbb1095471796c8fd27e934463b6"
+    },
+    {
+      "i": 5,
+      "request": {
+        "method": "GET",
+        "path": "/v1/4322b1cd/5",
+        "body": "bcac06ad65a9dd8b09ebea9f",
+        "seq": 5,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "fe5f987eb2be5d9ec4e2b552bc84b74300e10487c38d0179b5e69d0f6e7ef6cc"
+    },
+    {
+      "i": 6,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/9ce496a3/6",
+        "body": "8664117baea14237aedca663",
+        "seq": 6,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "c131a0c912c55e6aa6ec5ad423a760cde9e750a30fc32bf52b504104f62d4f5a"
+    },
+    {
+      "i": 7,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/fbe78ca9/7",
+        "body": "79cb2c2fd17ae433be78e98d",
+        "seq": 7,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "d44df6b287cf068200a1c612d7b7d92766e9dc423a344412d7a6297133b39e07"
+    },
+    {
+      "i": 8,
+      "request": {
+        "method": "POST",
+        "path": "/v1/21fcb4d1/8",
+        "body": "8e758cf7479ea12b09edbabf",
+        "seq": 8,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "a52d6f6bc3761fc646b45852edf727ae3778ec675fd10ec8ec5d18b536277798"
+    },
+    {
+      "i": 9,
+      "request": {
+        "method": "GET",
+        "path": "/v1/51584ad7/9",
+        "body": "629f245b9d73d8d34f76539d",
+        "seq": 9,
+        "headers": [
+          [
+            "content-digest",
+            "v3"
+          ],
+          [
+            "x-canary",
+            "v4"
+          ],
+          [
+            "accept",
+            "v5"
+          ]
+        ]
+      },
+      "out": "1c182b6524103183210a2be6be2d5a2b4e1bc86129989ee1c9edf48808223a02"
+    },
+    {
+      "i": 10,
+      "request": {
+        "method": "PUT",
+        "path": "/v1/2d6f0049/10",
+        "body": "974f282dac0d6f331235dcd9",
+        "seq": 10,
+        "headers": [
+          [
+            "accept",
+            "v1"
+          ],
+          [
+            "x-trace",
+            "v2"
+          ],
+          [
+            "content-digest",
+            "v3"
+          ]
+        ]
+      },
+      "out": "05d5cc06b2aeb9c08743cf3bec846e49c0f3a42ad79ef1667d3811414e56d9ad"
+    },
+    {
+      "i": 11,
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/6b21ec3d/11",
+        "body": "2b0203d9c81479a1a92afcc7",
+        "seq": 11,
+        "headers": [
+          [
+            "accept",
+            "v1"
+          ],
+          [
+            "x-trace",
+            "v2"
+          ],
+          [
+            "content-digest",
+            "v3"
+          ]
+        ]
+      },
+      "out": "02833cf1e3126ab297396cd91a13ac6f1235cc4b0dfaa2dde3556d7df93cd5f3"
+    }
+  ],
+  "minted_probe_count": 8,
+  "note": "l1 canonicalizes headers in the GIVEN order; l2 sorts header names (permuted header order -> identical signature); replay face runs signRequest() over published + minted requests.",
+  "core": {
+    "h": [
+      2558386465,
+      3074013497,
+      2149641343,
+      3351411161,
+      1576288579,
+      2077158105,
+      714705109,
+      3614160369
+    ],
+    "k": [
+      2527029857,
+      3872218025,
+      3560281643,
+      382682571,
+      3077034923,
+      3899897203,
+      3429468339,
+      336780451,
+      4053603717,
+      305747569,
+      758254345,
+      2913098211,
+      1098460337,
+      2306492527,
+      338235917,
+      3045978261,
+      2431963303,
+      833875757,
+      2767696933,
+      3111005261,
+      1395749933,
+      3216735563,
+      152894881,
+      1143320493,
+      2850277967,
+      1071300027,
+      407628631,
+      2888975841,
+      3785756565,
+      42783903,
+      3273343397,
+      2155013221,
+      709974513,
+      4261916927,
+      2278430239,
+      4191086381,
+      416286955,
+      699252409,
+      3137239589,
+      3227490965,
+      2434074451,
+      2819918587,
+      462074835,
+      4195808053,
+      4003012685,
+      1208014675,
+      3668666041,
+      1931431317,
+      116521199,
+      2373801415,
+      2306952135,
+      1457684453,
+      2466484265,
+      3585032827,
+      3285344713,
+      3323991409,
+      1934180023,
+      4157883233,
+      4094721771,
+      3165279383,
+      633267431,
+      3242898591,
+      3442673327,
+      1600724203
+    ],
+    "key_hex": "5d6eb45946a0c74960a6587b98e2032b139d0a63fd691ac7d1706a4fb6901317",
+    "sep_code": 34,
+    "sort_headers": true
+  }
+}

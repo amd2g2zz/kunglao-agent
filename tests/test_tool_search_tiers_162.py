@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """tests/test_tool_search_tiers_162.py — issue #162 Unit 2: tool-search.py
-is the SINGLE search entry over all three data sources.
+is the SINGLE search entry over all four data sources.
 
   1. tools/_INDEX.yaml       (internal registry)  -> type=tool, consume=invoke
   2. tools/_INDEX.ext.yaml   (typed ext entries)  -> type/consume as generated
   3. references/_INDEX.yaml  (its own generator's file list) -> type/consume
      DERIVED at query time (type=reference, consume=read) — the references
      index itself is NOT touched (it has its own generator and schema).
+  4. <ws>/tools-local/*.manifest.json (run-local landed-tool shelf,
+     #478 PR2) -> kind=run-local, type=tool, consume=invoke; scanned at
+     query time via --ws or the cwd walk-up probe (the #478 toolchain
+     closing: a landed tool nothing surfaces is file-landing, not a
+     toolchain).
 
 A hit must let the agent decide what to do without opening the file:
 every find projection carries name + type + consume + source + usage +

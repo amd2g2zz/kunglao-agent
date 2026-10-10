@@ -156,12 +156,13 @@ from pathlib import Path
 # #276: reusable CLI manages shell environment default lines (no inline
 # execution). Per repo convention, inject scripts/ into sys.path before
 # importing sibling modules (compatible with `python -m` style invocations).
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
+import intake_battery  # noqa: E402  # #460: intake probe battery (die-probe + apkid-prescan instrument, features from run #1)
 import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
@@ -267,6 +268,9 @@ RC_HOOK_WIRING = 7   # #445: hook deployment self-check FAILED (written layer/co
 RC_PENDING_DECISIONS = 8  # #455: undecided intake item (workspace/target/
                           # target_object/type) — pending list on stdout,
                           # agent re-enters with --resolve; zero scaffold
+RC_VERSION_MISMATCH = 9  # 0.1.6 sweep: existing-workspace stamp != skill
+                         # version — the transactional upgrade is the only
+                         # path forward (older AND newer refuse)
 
 # #534: structured init report — same envelope shape as runs/.env-check.json
 # (ts / phases[] / overall / exit). Phases are the six face labels from the
@@ -569,6 +573,50 @@ CARRIER_READMES = {
         "  承重的脚本必须升格到 analyses/ 或 evidence/。\n"
     ),
 }
+# The subagent rules (dispatched-act discipline): rendered to
+# <ws>/.claude/rules/kunglao-subagent.md at scaffold. Deliberately free
+# of version markers and issue references — formal content stays clean.
+SUBAGENT_RULES = (
+    "# Subagent rules — dispatched workers, verifiers, red-team acts\n"
+    "\n"
+    "You were dispatched with a contract. These rules hold for every dispatch.\n"
+    "\n"
+    "## Scope\n"
+    "\n"
+    "- Work the dispatched claim ONLY. New needs belong to the orchestrator —\n"
+    "  report them, do not wander.\n"
+    "- The dispatch names your kill time (ACT BUDGET). Deliverables land before\n"
+    "  70% of the budget; end before the cap. A killed act banks its artifacts\n"
+    "  but the claim stays open.\n"
+    "\n"
+    "## Before you build\n"
+    "\n"
+    "- Search the tool catalog first — the recall face in the handbook\n"
+    "  (`tools/tool-search.py --find W1 W2 ...`). A registered tool, template,\n"
+    "  or reference may already do the job; writing a new script is the last\n"
+    "  resort, and a reusable script becomes one under `scripts/` with\n"
+    "  parameters, never inline one-offs.\n"
+    "\n"
+    "## Write contracts\n"
+    "\n"
+    "- Facts land in `facts/F<NNN>.md` with the frontmatter the handbook\n"
+    "  defines; every fact cites byte-anchored artifacts (path + sha256) and\n"
+    "  carries a `reproduce:` command. A conclusion without evidence is a\n"
+    "  note, not a fact.\n"
+    "- State files (`claim-register.yaml`, `task_spec.yaml`, ...) change ONLY\n"
+    "  through `python3 scripts/ws_yaml.py set|del` — single-writer contract;\n"
+    "  direct writes are refused by the write guard.\n"
+    "- Workers make; they never sign off. Verifier acts verify ONLY (never\n"
+    "  read the maker's reasoning). Red-team acts attack: refute by\n"
+    "  independent derivation from raw evidence.\n"
+    "\n"
+    "## Report shape\n"
+    "\n"
+    "- End with `STATUS: DONE` or `STATUS: BLOCKED`.\n"
+    "- Findings summary at most 10 lines; artifacts listed by path.\n"
+    "- A BLOCKED report names the exact blocker and what you tried.\n"
+)
+
 SCAFFOLD_FILES = {
     "analysis_state.txt": (
         "# analysis_state — kunglao-init scaffold (empty-structure stubs, DESIGN §7 0.4)\n"
@@ -801,17 +849,17 @@ def seed_claims(sample: str, project_type: str, sample_sha: str,
     evidence = "init-verified by construction (scaffold gate)"
     if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
         return [
-            {"id": "C-001", "status": "PROVEN",
+            {"id": "C-001", "status": "PROVEN", "claim_class": "scaffold",
              "boundary_type": "positive_observation",
              "evidence_tier_attempted": 0, "promotion_attempts": 0,
              "depends_on": [], "evidence": evidence,
              "title": f"Analysis lane — {lane} (scaffold decision)"},
-            {"id": "C-002", "status": "PROVEN",
+            {"id": "C-002", "status": "PROVEN", "claim_class": "scaffold",
              "boundary_type": "positive_observation",
              "evidence_tier_attempted": 0, "promotion_attempts": 0,
              "depends_on": [], "evidence": evidence,
              "title": f"Project type — {project_type} (scaffold decision)"},
-            {"id": "C-003", "status": "PROVEN",
+            {"id": "C-003", "status": "PROVEN", "claim_class": "scaffold",
              "boundary_type": "positive_observation",
              "evidence_tier_attempted": 0, "promotion_attempts": 0,
              "depends_on": [], "evidence": evidence,
@@ -819,15 +867,15 @@ def seed_claims(sample: str, project_type: str, sample_sha: str,
                       f"(scaffold decision)"},
         ]
     return [
-        {"id": "C-001", "status": "PROVEN", "boundary_type": "positive_observation",
+        {"id": "C-001", "status": "PROVEN", "claim_class": "scaffold", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
          "evidence": evidence,
          "title": f"Sample artifact identity — {sample} (filename; sha256 in C-003)"},
-        {"id": "C-002", "status": "PROVEN", "boundary_type": "positive_observation",
+        {"id": "C-002", "status": "PROVEN", "claim_class": "scaffold", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
          "evidence": evidence,
          "title": f"Project type — {project_type} (scaffold decision)"},
-        {"id": "C-003", "status": "PROVEN", "boundary_type": "positive_observation",
+        {"id": "C-003", "status": "PROVEN", "claim_class": "scaffold", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
          "evidence": evidence,
          "title": f"Sample sha256 — {sample_sha}"},
@@ -918,6 +966,41 @@ def _assert_workspace_boundary(ws: Path) -> None:
             f"internal error: workspace root resolved to a file {ws} — "
             "refusing to scaffold outside a workspace directory"
         )
+
+
+def refuse_version_mismatch(ws: Path, *, force: bool) -> int | None:
+    """0.1.6 sweep version-consistency gate (init intake face).
+
+    An existing initialized workspace whose format stamp != the executing
+    skill version — OLDER AND NEWER — refuses init re-entry (resume /
+    anchor repair / type repair): the transactional kunglao_upgrade is
+    the ONLY path forward for a mismatched workspace. A marker-carrying
+    register with NO stamp refuses the same way (same refusal family).
+    `--force` bypasses (explicit rebuild is the operator's own act).
+    Returns RC_VERSION_MISMATCH on refusal, None when init may proceed.
+    Nothing is written on the refusal path."""
+    reg = ws / "claim-register.yaml"
+    if force:
+        return None  # explicit rebuild is the operator's own act
+    if not reg.is_file():
+        return None  # fresh/creatable — scaffold owns stamping
+    text = reg.read_text(encoding="utf-8", errors="replace")
+    if MARKER not in text:
+        return None  # not initialized — fresh scaffold owns stamping
+    mismatch = template_version.version_mismatch(ws)
+    if mismatch is None:
+        return None
+    print(
+        f"kunglao-init: REFUSE — {mismatch}. An initialized workspace must "
+        "match the executing skill version; no best-effort analysis of "
+        "old-format workspaces. Run: python scripts/kunglao_upgrade.py "
+        f"{ws} — the transactional upgrade is the only path forward, then "
+        "re-run init if a repair re-entry is still needed.",
+        file=sys.stderr,
+    )
+    print("kunglao-init: NOT re-entered (no scaffold, no state write)",
+          file=sys.stderr)
+    return RC_VERSION_MISMATCH
 
 
 def refuse_path_shape(ws: Path, shape: str) -> int:
@@ -1651,8 +1734,10 @@ APK -> aapt/apktool unpack -> jadx DEX->Java
     "web": """## Hard constraints (web)
 
 - **Channel: docker** — `KUNGLAO_CHANNEL=docker` is the web default; set explicitly to override.
-- **camoufox-reverse MCP** — browser JS reverse engineering supply; register manually:
-  `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp`
+- **camoufox-reverse MCP** — browser JS reverse engineering supply; ships with
+  the kunglao-agent plugin (`.claude-plugin/plugin.json` mcpServers, #408) —
+  enable the plugin (workspace settings `enableAllProjectMcpServers: true`);
+  install dep: `pip install camoufox-reverse-mcp`
   (verify: `python -m camoufox_reverse_mcp --help`; optional flags: `--proxy`, `--geoip`, `--humanize`).
 - **No VM channel** — web dynamic analysis is the browser; VM channels (vmr-shell) do not apply.
 - **static-only analysis**: `KUNGLAO_CHANNEL` unset + no docker = local mode — no dynamic tooling, no dynamic RE. Read the CLAUDE.md quick-reference sections first.
@@ -1672,8 +1757,8 @@ Choose the delivery shape by evidence characteristics:
 ## camoufox operations card (core)
 
 ```bash
-# Register
-claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp
+# Supply (#408: plugin-carried, zero registration — never a user-level claude mcp add)
+# install dep: pip install camoufox-reverse-mcp  (plugin entry: python -m camoufox_reverse_mcp)
 
 # Launch + navigate
 camoufox.launch_browser()            # anti-detection Firefox
@@ -1765,10 +1850,11 @@ MCP_ROW_TEXT: dict[str, str] = {
         "(KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) "
         "| `claude mcp add ssh-mcp -- ssh-mcp` |\n",
     "camoufox-reverse":
-        "| `camoufox-reverse` | WARN | web (labs) | browser JS reverse "
-        "engineering (anti-detection Firefox) "
-        "| `claude mcp add camoufox-reverse -- python -m "
-        "camoufox_reverse_mcp` |\n",
+        "| `camoufox-reverse` | HARD | web | browser JS reverse engineering "
+        "(anti-detection Firefox) — REQUIRED on web "
+        "| ships with the kunglao-agent plugin (.claude-plugin/plugin.json "
+        "mcpServers) — enable the plugin; install dep: pip install "
+        "camoufox-reverse-mcp |\n",
 }
 
 # Presentation order (pre-#919 template row order — golden-anchored).
@@ -1998,6 +2084,18 @@ QUICK_START_SCAFFOLDS: dict[str, str] = {
 }
 
 
+# #432: the dispatch-envelope doc face — every scaffold (lane and type
+# alike) teaches the v1 envelope WITH the method_family field. One shared
+# line, never per-type drift; the registry (scripts/method_families.yaml)
+# is the closed vocabulary the field draws from.
+DISPATCH_ENVELOPE_LINE = (
+    "\nDispatch shape (protocol v1): {\"kunglao_dispatch\": "
+    "{\"version\": 1, \"claim\": \"C-NNN\", \"tier\": 1, \"tools\": [...], "
+    "\"agent\": \"...\", \"method_family\": \"<token>\"}} — method_family "
+    "names the APPROACH (registry: scripts/method_families.yaml; "
+    "other(<one-line>) when nothing fits).")
+
+
 def quick_start_scaffold(project_type: str | None,
                          target_name: str | None = None,
                          lane: str | None = None) -> str:
@@ -2011,7 +2109,11 @@ def quick_start_scaffold(project_type: str | None,
     Issue 208: a non-malware lane has no `bins/<sha>` target — its scaffold
     is the lane's material workflow (the per-type scaffolds above all open
     on a binary sample). The stub lanes get the same shape, with their
-    material line naming what they consume."""
+    material line naming what they consume.
+
+    #432: both faces append the dispatch-envelope line (the envelope
+    template doc face — method_family is a required, gate-validated
+    field)."""
     if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
         return (
             f"**Material**: {lane_spec.material(lane)}.\n"
@@ -2027,9 +2129,11 @@ def quick_start_scaffold(project_type: str | None,
             "claim-register.yaml; one worker per claim.\n"
             f"4. Close: verify each answer by the declared method "
             "(reproduction / replay-evidence against recorded pairs); "
-            "red-team before PROVEN.")
+            "red-team before PROVEN."
+            + DISPATCH_ENVELOPE_LINE)
     key = project_type if project_type in QUICK_START_SCAFFOLDS else "windows"
-    return QUICK_START_SCAFFOLDS[key].format(target=target_name or "sample")
+    return (QUICK_START_SCAFFOLDS[key].format(
+        target=target_name or "sample") + DISPATCH_ENVELOPE_LINE)
 
 
 def _setup_web_env(ws: Path) -> None:
@@ -2047,7 +2151,7 @@ def _setup_web_env(ws: Path) -> None:
         write_state_line(ws, "KUNGLAO_CHANNEL", "docker")
     print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
     print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
-    print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
+    print("  MCP: camoufox-reverse ships with the plugin (#408 mcpServers) — enable the plugin; install dep: pip install camoufox-reverse-mcp", file=sys.stderr)
     print("  docs: references/re-library/web/labs/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
@@ -2213,7 +2317,7 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         # material contract (no {{sample_*}} placeholder exists any more).
         "material_section": material_section(sample_name, sample_sha, lane),
         # as_posix(): the skill dir lands in CLAUDE.md BASH command lines
-        # (`python <skill>/scripts/convergence_check.py .`) where backslashes
+        # (`python <skill>/scripts/convergence_check.py "$PWD"`) where backslashes
         # are shell escapes — str(Path) breaks every rendered command on
         # win32 and drifts the portable golden contract (#457 triage #9-#11;
         # same rule as the #367 hook stamping).
@@ -2272,6 +2376,17 @@ def scaffold(ws: Path) -> list[Path]:
         p.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(p, text)
         created.append(p)
+    # the subagent rules file: every dispatched act (worker / verifier /
+    # red-team) runs as a Claude session cwd'd at the workspace, and the
+    # .claude/rules/ surface loads into those sessions — the dispatch
+    # contract's ambient half. Static content, no-clobber, registered for
+    # cleanup like every scaffold entry.
+    rules_path = ws / ".claude" / "rules" / "kunglao-subagent.md"
+    if not (rules_path.exists()
+            and rules_path.read_text(encoding="utf-8").strip()):
+        rules_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(rules_path, SUBAGENT_RULES)
+        created.append(rules_path)
     for name, stub in SCAFFOLD_FILES.items():
         p = ws / name
         if p.exists() and p.read_text(encoding="utf-8").strip():
@@ -2540,7 +2655,6 @@ def _record_mcp(ws: Path, project_type: str) -> list[dict]:
     the workspace-level .mcp.json lookup depend on process cwd (workspace
     registrations were missed whenever init ran from another directory).
     """
-    mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)  # registry read warms the single-source probe
     comps: list[dict] = []
     for check in mcp_probe.check_mcp(ws, project_type):
         if check.status == "PASS":
@@ -2826,7 +2940,7 @@ def emit_activation_handoff(ws) -> int:
     print(f"                   python heartbeat_loop_prompt.py {ws} --verify")
     print(f"  2. arm hooks   : python {ha} {ws} --tier advisory "
           "(or --set-active dispatch_gate,worker_pulse) — hooks stay "
-          "dormant until this Phase-0 arm (v1.9.7 default-inactive)")
+          "dormant until this Phase-0 arm (default-inactive)")
     print(f"  3. re-register : python {ls} {ws} (idempotent; also run at "
           "any analysis entry — or just re-run init) when the 7-day "
           "Claude Code durable-schedule cap expires")
@@ -2834,6 +2948,12 @@ def emit_activation_handoff(ws) -> int:
           "durable /loop schedule registered (.claude/scheduled_tasks.json) "
           "— loop_registered flips true on the schedule's FIRST real "
           "execution, then accept with two ticks + --verify")
+    print("kunglao-init: NOTE (#415) the durable cron takes effect from the "
+          "NEXT Claude Code session start — until then the session re-arm "
+          "chain (hook_activation --heartbeat-on / heartbeat_tick) is the "
+          "tick source; a quiet gap right after registration is deploy-day "
+          "shape, not a dead cron (heartbeat_tick.py --reset-continuity "
+          "re-arms a verified fresh deploy)")
     return RC_OK
 
 
@@ -3134,6 +3254,14 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # rather than polluting a sibling directory.
     _assert_workspace_boundary(ws)
 
+    # 0.1.6 version-consistency gate — BEFORE any write (statusline, hooks,
+    # scaffold): an initialized workspace stamped != the executing skill
+    # version refuses re-entry (resume / anchor repair / type repair);
+    # --force is the operator's explicit rebuild bypass.
+    gate_rc = refuse_version_mismatch(ws, force=force)
+    if gate_rc is not None:
+        return gate_rc
+
     # STATUSLINE DEPLOYMENT IS THE FIRST STEP of init (issue 212 owner priority
     # update). Before the toolchain probe, before the anchor interview, so
     # the operator's success/failure signal exists before anything else.
@@ -3380,6 +3508,10 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
 
+        mcp_rc = refuse_missing_required_mcp(ws, project_type)
+        if mcp_rc is not None:
+            return mcp_rc
+
         # apkid recommendation summary (issue 209): the gate probed
         # presence only; the first-claim run decision stays with the agent.
         for _rec in apkid_summary_lines(report):
@@ -3412,6 +3544,31 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             print(f"kunglao-init: WARNING uv env not materialized: "
                   f"{uv_env['detail']}", file=sys.stderr)
 
+    # #460 intake probe battery (the instrument face): die-probe +
+    # apkid-prescan run ONCE over the aligned sample BEFORE the promise
+    # block (probe, then record) — die/apkid features exist from run #1,
+    # feeding the feature-conditioned prior and the mined table instead
+    # of waiting for learned ordering. WARN-tier instrument: every probe
+    # failure records an absence fact in evidence/intake-battery.json and
+    # never blocks init; instruments degrade, they don't gate. An
+    # unexpected defect follows the promise block's pattern (ERROR line +
+    # env_incident — silent skipping is the pathology, #813).
+    if not skip_toolchain:
+        try:
+            _battery = intake_battery.run_battery(ws, target_name, lane)
+            _outcomes = ", ".join(
+                f"{_r['probe']}={_r['outcome']}" for _r in _battery["probes"])
+            print(f"kunglao-init: intake-battery written: "
+                  f"evidence/intake-battery.json ({_outcomes})")
+        except Exception as exc:  # noqa: BLE001 — instrument, never gates
+            print(f"kunglao-init: ERROR intake-battery failed: {exc}",
+                  file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"intake-battery: {exc}")
+            except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
+                warn("run_3", f"{type(exc).__name__}: {exc}")
+
     # #813: Phase 0 预扫描 promise — apkid/DIE 探测状态、混淆先验、java
     # 可达性显式落盘（消灭"跳过且不记录"）。WARN-tier：promise 写失败不卡
     # init，但必须 ERROR + env_incident 落账——静默跳过才是病理。
@@ -3419,6 +3576,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         try:
             _promise = intake_promise.build(report, task_spec, ws)
             _promise_path = intake_promise.apply(ws, _promise)
+            print(f"kunglao-init: intake-promise written: {_promise_path}")
         except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
             print(f"kunglao-init: ERROR intake-promise failed: {exc}",
                   file=sys.stderr)
@@ -3427,8 +3585,41 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                                  detail=f"intake-promise: {exc}")
             except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
                 warn("run", f"{type(exc).__name__}: {exc}")
-        else:
-            print(f"kunglao-init: intake-promise written: {_promise_path}")
+
+    # #407 (0.1.6 sweep): scaffold goal-operationalization.yaml — the first
+    # dispatch refuses an unaudited translation, and before this scaffold
+    # the operator had to hand-write the whole file. Init pre-fills the
+    # goal verbatim + the required structure in DRAFT form (generalization
+    # stays `required`, no --stamp-dispatch): the validator gate still
+    # refuses until the operator fills + verifies + stamps it. Written ONLY
+    # when absent (never clobbers an audited translation).
+    goal_op_path = ws / "goal-operationalization.yaml"
+    if not goal_op_path.exists():
+        try:
+            _spec = (yaml.safe_load((ws / "task_spec.yaml")
+                                    .read_text(encoding="utf-8"))
+                     if (ws / "task_spec.yaml").is_file() else {}) or {}
+            _goal = str((_spec or {}).get("goal_verbatim")
+                        or "(fill: the user's goal, verbatim)")
+            from harness_common import utc_now_z
+            goal_op_path.write_text(yaml.safe_dump({
+                "schema": "goal-operationalization/1",
+                "draft": True,
+                "goal_verbatim": _goal,
+                "deliverables": [],
+                "acceptance": [],
+                "not_done": [],
+                "diff_vs_verbatim": "",
+                "generalization": "required",
+                "declared_ts": utc_now_z(),
+            }, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            print(f"kunglao-init: goal-operationalization scaffold written "
+                  f"(DRAFT — fill deliverables/acceptance/not_done, then "
+                  f"goal_operationalization.py --stamp-dispatch before the "
+                  f"first dispatch): {goal_op_path}")
+        except OSError as exc:
+            print(f"kunglao-init: WARNING goal-operationalization scaffold "
+                  f"skipped: {exc}", file=sys.stderr)
 
     # #15: sample difficulty calibration — 证据面(扫描器输出) -> easy/medium/
     # hard/max 内在难度，落 evidence/difficulty.json + task_spec `difficulty:`
@@ -3600,6 +3791,47 @@ def apkid_summary_lines(report: "toolchain.ToolchainReport") -> list[str]:
                 "recommended for apk fingerprinting (packer / obfuscator "
                 "/ anti-*); agent to run on first claim")
     return lines
+
+
+# 0.1.6 sweep (owner ruling, 51job live run): MCP supply items that REFUSE
+# init when missing for their lane — camoufox-reverse on web ("web项目必须
+# 要装"). The pre-existing desktop HARD items (ghidra/x64dbg/...) KEEP
+# their historical record-not-refuse posture (#474) — this gate covers
+# only the lane-required web supply.
+REQUIRED_MCP_BY_TYPE = {"camoufox-reverse": {"web"}}
+
+
+def refuse_missing_required_mcp(ws: Path, project_type: str) -> int | None:
+    """0.1.6 sweep (owner ruling, 51job live run): REQUIRED MCP supply for
+    the lane — a missing camoufox-reverse on web refuses init with the
+    carriage remediation as the fix (enable the plugin / install the
+    camoufox-reverse-mcp dep). Remediation tier AGENT-DO: the agent /
+    init-worker can run the pip install itself; a genuine failure
+    escalates to a blocker with the error attached.
+    Returns RC_TOOLCHAIN_REFUSE on refusal, None when the supply is
+    satisfied. Writes nothing."""
+    mcp_hard_missing = [
+        c for c in mcp_probe.check_mcp(ws, project_type)
+        if c.name in REQUIRED_MCP_BY_TYPE
+        and project_type in REQUIRED_MCP_BY_TYPE[c.name]
+        and c.status == "FAIL" and c.fix
+    ]
+    if not mcp_hard_missing:
+        return None
+    print(
+        "kunglao-init: REFUSE — required MCP supply missing "
+        "(remediation tier AGENT-DO: the agent can run the "
+        "command itself; a genuine failure escalates to a "
+        "blocker):",
+        file=sys.stderr,
+    )
+    for c in mcp_hard_missing:
+        print(f"kunglao-init:   [FAIL] {c.name} — {c.detail}",
+              file=sys.stderr)
+        print(f"command: {c.fix}", file=sys.stderr)
+    print("kunglao-init: NOT initialized (no scaffold written, "
+          "no .claude/ created)", file=sys.stderr)
+    return RC_TOOLCHAIN_REFUSE
 
 
 def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:

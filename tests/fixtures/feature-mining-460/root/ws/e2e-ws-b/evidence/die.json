@@ -1,0 +1,21 @@
+{
+  "schema": "die-report/1",
+  "detects": [{"name": "UPX", "type": "packer", "version": "3.96"}],
+  "records": [],
+  "total_entropy": 6.9,
+  "resources": {"VERSION_INFO": null, "ICON": null},
+  "derived": {
+    "detected_packer": "UPX",
+    "language": "javascript",
+    "compiler_string": "closure",
+    "compiler_version": null,
+    "section_table": [
+      {"name": ".text", "entropy": 7.2},
+      {"name": ".rodata", "entropy": 6.1},
+      {"name": ".data", "entropy": 4.9}
+    ],
+    "high_entropy_sections": [
+      {"name": ".text", "entropy": 7.2}
+    ]
+  }
+}

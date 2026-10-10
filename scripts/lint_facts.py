@@ -26,25 +26,8 @@ Design notes
   never an error — the claim register is authoritative for workflow state.
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] lint_facts WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import datetime
 import json
@@ -159,8 +142,15 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "depends_on", "alternatives", "supersedes", "superseded_by", "iocs",
     "hypothesis",
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
+    "creator",  # issue-379 round-credit provenance: the dispatch id that created this fact
     "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
     "assumptions",  # issue 250: '<topic>=<polarity>' premises (semantic refutation)
+    "temporal_scope",  # issue 341: 'runtime' for volatile runtime-state facts
+    "subject_slot",  # issue 341: stable slot id (e.g. config-decrypt-key)
+    "value_fingerprint",  # issue 341: sha256 hex of the observed value only
+    "captured_at",  # issue 341: ISO-8601 capture timestamp
+    "uncertainty",  # optional per-fact counter-hypothesis / not-yet-confirmed note (non-empty string when present)
+    "next_probe",  # optional next runnable experiment, dispatch-consumable as a verbatim sub-goal (non-empty string when present)
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.
@@ -750,6 +740,20 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                                          "'<topic>=<polarity>' form — it can "
                                          "never be semantically invalidated "
                                          "(issue #250)"))
+    # per-fact hypothesis fields: the counter-hypothesis / not-yet-confirmed
+    # note and the next runnable experiment. Optional — absent is the common
+    # case. Present, each must be a non-empty string: an empty or non-string
+    # value can neither be cited by a red-team pass nor consumed verbatim by
+    # the dispatch face, so it is a broken shape, not a sparse one.
+    for probe_field, probe_code in (("uncertainty", "BAD_UNCERTAINTY"),
+                                    ("next_probe", "BAD_NEXT_PROBE")):
+        pv = fm.get(probe_field)
+        if pv is None:
+            continue
+        if not isinstance(pv, str) or not pv.strip():
+            issues.append(_issue("error", probe_code, fid,
+                                 f"{probe_field} must be a non-empty string "
+                                 f"when present (got {pv!r})"))
     # issue 250: observation-vs-world wording — an observational-source fact
     # whose title asserts a world-existential needs a tool-scope qualifier.
     title = str(fm.get("title") or "")

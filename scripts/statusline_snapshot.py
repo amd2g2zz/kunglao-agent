@@ -86,7 +86,8 @@ import yaml
 from ws_layout import resolve_strict as _resolve_ws
 
 # #597: staleness constants are single-sourced in liveness_policy.
-from liveness_policy import HEARTBEAT_STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN
+from liveness_policy import (HEARTBEAT_STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN,
+                             SCHEDULER_STALE_TICKS)
 
 # #142 follow-up: the entropy-honesty face is single-sourced in
 # entropy_face (display + decision faces share one computation).
@@ -102,24 +103,12 @@ from entropy_face import SNAPSHOT_REL
 # heartbeat tick report carries the same computed values).
 from rank_face import face as _rank_face
 
-# issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
-# rate-limited WARN): absent-source degradations are NORMAL in an idle
-# workspace, and this module's writes are hook-embedded (token-zero
-# contract — hook stderr must stay empty on a healthy write), so those ride
-# the SNAPSHOT ITSELF as a bounded sidecar (_note, keyed by op, drained
-# into the "degraded" field by build_snapshot — the kunglao_log
-# null_reasons precedent). Fault-class degradations (a real crash, not a
-# missing file) keep the rate-limited stderr WARN (warn — the _zof_warn
-# pattern of issue 276; one ws per process, so op is the key).
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] statusline_snapshot WARN (fail-open): "
-          f"{op}: {reason}", file=sys.stderr)
+# Issue 134: the rho/Platt calibration face is single-sourced in
+# calibration_face (reliability curve + ECE + current gap over the settled
+# (rho, z) ledger pairs, plus the #127 rho_sampler liveness status). The
+# snapshot ships it verbatim; PRODUCE only — no gate may consume it.
+from calibration_face import face as _calibration_face
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 _DEGRADED: dict[str, str] = {}
@@ -141,6 +130,7 @@ TOSS_WINDOW_S = 120                                # dispatch -> toss window
 STALL_TICKS_DEFAULT = 6                            # mirrors noop breaker (#634)
 ACTIVITY_WINDOW_S = 300                            # recent-events window (1 tick)
 AUDIT_STALE_MINUTES = 60                           # audit age WARN line
+WAITING_STALE_MIN = 20                             # #244 waiting heartbeat WARN (pulse STUCK_MIN)
 D_SLOPE_NOMINAL = 0.05                             # healthy settle rate / tick
 FLASH_EVERY_N_TICKS = 10                           # periodic flash cadence
 MILESTONES = (0.25, 0.50, 0.75)
@@ -242,6 +232,26 @@ PROBES: list[dict] = [
      "severity": "WARN", "short_code": "[mech]", "enabled": True,
      "detail": "#878 scheduler registry: any mechanism whose last run "
                "failed (last_rc not in {0, null}) — runs/.mechanisms-state.json"},
+    # ---- #412: component activation truth (single source:
+    #      runs/.hooks-selfcheck.json — the file the self-check writes) ----
+    {"id": "component_hooks", "dimension": "component",
+     "probe": "probe_component_hooks", "threshold": None,
+     "unit": "tick", "staleness_budget": f"{SCHEDULER_STALE_TICKS} ticks",
+     "severity": "WARN", "short_code": "[comp]", "enabled": True,
+     "detail": "#412 hooks wired AND armed (dormant = yellow; stale source "
+               "= STALE red)"},
+    {"id": "component_mcp", "dimension": "component",
+     "probe": "probe_component_mcp", "threshold": None,
+     "unit": "tick", "staleness_budget": f"{SCHEDULER_STALE_TICKS} ticks",
+     "severity": "WARN", "short_code": "[comp]", "enabled": True,
+     "detail": "#412 MCP registered + approved (#408 face; pending-forever "
+               "approval = red)"},
+    {"id": "component_scheduler", "dimension": "component",
+     "probe": "probe_component_scheduler", "threshold": None,
+     "unit": "tick", "staleness_budget": f"{SCHEDULER_STALE_TICKS} ticks",
+     "severity": "WARN", "short_code": "[comp]", "enabled": True,
+     "detail": "#412 scheduler last-tick freshness (stale/never = yellow, "
+               "never green)"},
 ]
 
 
@@ -450,6 +460,108 @@ def probe_mechanism_health(ws: Path, entry: dict) -> dict:
     return _detail(entry, True, "all scheduler mechanisms clean")
 
 
+# ---------------------------------------------------------------------------
+# #412 component-truth probes (single source: runs/.hooks-selfcheck.json —
+# the file scripts/hooks_selfcheck.py writes every tick; never a second,
+# divergent view). Contract: a component verdict older than
+# SCHEDULER_STALE_TICKS ticks renders STALE (HARD/red), a dormant component
+# renders suspect (yellow) — NOTHING renders green from broken/unknown/
+# stale data (no green while broken).
+# ---------------------------------------------------------------------------
+
+COMPONENT_SOURCE_REL = "runs" / Path(".hooks-selfcheck.json")
+# states that degrade to YELLOW (suspect) rather than RED: dormant-by-design
+# dormancy and "the checker has not run here yet". Everything else a failed
+# component can say (partial/unwired/pending_approval/missing/unregistered/
+# stale/never) is RED.
+_COMPONENT_SUSPECT_STATES = {"dormant", "unknown"}
+
+
+def _component_rows(ws: Path, now: datetime.datetime | None = None) -> dict:
+    """Read + freshness-grade the self-check component table (fail-open).
+
+    Returns {source_missing, stale, age_min, budget_min, rows} where rows
+    is the components dict (possibly None when the source is absent/
+    unreadable)."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    src = ws / COMPONENT_SOURCE_REL
+    rows = None
+    try:
+        data = json.loads(src.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            rows = data.get("components") or None
+    except (OSError, ValueError) as exc:  # noqa: BLE001 — absent source
+        # degrades to unknown (issue 275: every swallow leaves one trace)
+        rows = None
+        _note("component_source_read", f"{type(exc).__name__}: {exc}")
+    interval = TICK_INTERVAL_DEFAULT_MIN
+    try:
+        hb = json.loads((ws / "runs" / ".heartbeat.json")
+                        .read_text(encoding="utf-8"))
+        v = int(hb.get("interval_min") or 0)
+        if v > 0:
+            interval = v
+    except (OSError, ValueError, TypeError) as exc:  # noqa: BLE001 —
+        # default-cadence fallback keeps the probe fail-open (issue 275:
+        # every swallow leaves one trace)
+        _note("component_interval_read", f"{type(exc).__name__}: {exc}")
+    budget_min = SCHEDULER_STALE_TICKS * interval
+    try:
+        age_min = max(0.0, (now.timestamp() - src.stat().st_mtime) / 60.0)
+    except OSError:
+        age_min = None
+    stale = rows is not None and age_min is not None and age_min > budget_min
+    return {"rows": rows, "source_missing": rows is None, "stale": stale,
+            "age_min": age_min, "budget_min": budget_min}
+
+
+def _component_row(face: dict, key: str) -> dict:
+    """Project one component row; absent source -> unknown (never green)."""
+    rows = face.get("rows") or {}
+    row = rows.get(key)
+    if not isinstance(row, dict):
+        return {"ok": False, "state": "unknown"}
+    return row
+
+
+def _component_detail(entry: dict, face: dict, row: dict) -> dict:
+    if face.get("stale"):
+        return _detail(entry, False,
+                       f"component state STALE (source {face['age_min']:.0f}min "
+                       f"old > {face['budget_min']:.0f}min budget) — never "
+                       f"green from stale data", severity="HARD")
+    ok = bool(row.get("ok"))
+    state = str(row.get("state") or "unknown")
+    if ok:
+        return _detail(entry, True, f"component {entry['id']}: {state}")
+    if state in _COMPONENT_SUSPECT_STATES or face.get("source_missing"):
+        return _detail(entry, False,
+                       f"component {entry['id']}: {state} "
+                       f"({row.get('detail') or 'never green (#412)'})")
+    return _detail(entry, False,
+                   f"component {entry['id']}: {state} "
+                   f"({row.get('detail') or 'failed'})", severity="HARD")
+
+
+def probe_component_hooks(ws: Path, entry: dict) -> dict:
+    """#412 hooks component: wired AND armed — read from the self-check's
+    component table (single source), stale source renders STALE HARD."""
+    face = _component_rows(ws)
+    return _component_detail(entry, face, _component_row(face, "hooks"))
+
+
+def probe_component_mcp(ws: Path, entry: dict) -> dict:
+    """#412 MCP component (registered + approved per the #408 face)."""
+    face = _component_rows(ws)
+    return _component_detail(entry, face, _component_row(face, "mcp"))
+
+
+def probe_component_scheduler(ws: Path, entry: dict) -> dict:
+    """#412 scheduler component (last-tick freshness)."""
+    face = _component_rows(ws)
+    return _component_detail(entry, face, _component_row(face, "scheduler"))
+
+
 def _make_run_probe(registry: list[dict]):
     """Registry-driven executor factory: a newly DECLARED probe wires itself
     in with zero writer-code change (acceptance: 新探针声明即接入)."""
@@ -638,10 +750,74 @@ def _health_dormant(ws: Path) -> bool:
         return True
 
 
-def _health(ws: Path) -> dict:
-    """#142 三颗健康点：oracle 已注册 / retro 滞后 < 8 / 无 DORMANT。"""
+def _health_component_rows(ws: Path,
+                           now: datetime.datetime | None = None) -> dict:
+    """#412: project the component-truth rows the statusline ships.
+
+    Reads runs/.hooks-selfcheck.json via _component_rows (single source —
+    the file the self-check writes). Every row: {ok, state, suspect}.
+    Dormant/unknown = yellow (suspect); a STALE source forces ok=False,
+    suspect=False (the red STALE contract — never green, never soft-yellow
+    from dead data)."""
+    rows = _component_rows(ws, now=now)
+    out: dict = {}
+    for key in ("hooks", "mcp", "scheduler"):
+        row = _component_row(rows, key)
+        ok = bool(row.get("ok"))
+        state = str(row.get("state") or "unknown")
+        suspect = state in _COMPONENT_SUSPECT_STATES
+        if rows.get("stale"):
+            ok = False
+            suspect = False
+        out[key] = {"ok": ok, "state": state, "suspect": suspect}
+    return out
+
+
+def _health(ws: Path, component_face: dict | None = None) -> dict:
+    """#142 三颗健康点 + #412 component truth: oracle registered / retro
+    lag < 8 / no DORMANT + hooks armed / MCP ok / scheduler fresh (never
+    green when broken/dormant/stale — #412)."""
+    face = component_face if component_face is not None \
+        else _health_component_rows(ws)
     return {"oracle": _health_oracle(ws), "retro": _health_retro(ws),
-            "dormant": _health_dormant(ws)}
+            "dormant": _health_dormant(ws),
+            "hooks": face["hooks"]["ok"],
+            "mcp": face["mcp"]["ok"],
+            "scheduler": face["scheduler"]["ok"]}
+
+
+def _health_specs(face: dict, health: dict | None = None) -> list[dict]:
+    """#412: the renderer's health-dot specs, COMPUTED Python-side (kunglao
+    logic stays out of Node — the renderer stays a dumb view). suspect =
+    the yellow face (dormant-by-design); everything else broken = red.
+    The legacy trio derives from the REAL computed health values — a
+    hardcoded ok would reintroduce the 3-green-lights-while-broken bug
+    (#412) for the pre-existing dots."""
+    health = health or {}
+    return [{"key": "oracle", "ok": bool(health.get("oracle", True)),
+             "suspect": False},
+            {"key": "retro", "ok": bool(health.get("retro", True)),
+             "suspect": True},
+            {"key": "dormant", "ok": bool(health.get("dormant", True)),
+             "suspect": True},
+            {"key": "hooks", "ok": face["hooks"]["ok"],
+             "suspect": face["hooks"]["suspect"]},
+            {"key": "mcp", "ok": face["mcp"]["ok"],
+             "suspect": face["mcp"]["suspect"]},
+            {"key": "scheduler", "ok": face["scheduler"]["ok"],
+             "suspect": face["scheduler"]["suspect"]}]
+
+
+def _component_face_for_snapshot(ws: Path,
+                                 now: datetime.datetime | None = None) -> dict:
+    """The snapshot's `components` section: the self-check's component
+    table verbatim + source provenance + the staleness contract fields."""
+    rows = _component_rows(ws, now=now)
+    rows.setdefault("source", str(COMPONENT_SOURCE_REL))
+    rows.setdefault("stale_after_ticks", SCHEDULER_STALE_TICKS)
+    for key in ("hooks", "mcp", "scheduler"):
+        rows[key] = _component_row(rows, key)
+    return rows
 
 
 def _last_dispatch_claim(ws: Path) -> str | None:
@@ -773,6 +949,7 @@ def _perf_face(ws: Path) -> dict:
     read fail-open (missing source = the field stays None/0; the renderer
     hides absent segments, it never renders a placeholder)."""
     out: dict = {"claims": _perf_claims(ws), "win_rate": None,
+                 "hit_rate": None,
                  "heartbeat_age_min": None,
                  "workers": {"total": 0, "active": 0,
                              "last_activity_age_s": None}}
@@ -788,6 +965,22 @@ def _perf_face(ws: Path) -> dict:
     except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
         warn("winrate_face", f"{type(exc).__name__}: {exc}")
     try:
+        # issue-135 prediction hit-rate (PRODUCE-only display face; ranker
+        # and gate consumption stays v0.2 issue 129). Latest rolling window
+        # wins; 0.0 is a REAL zero (every committed prediction wrong —
+        # alarm state), so the None checks are explicit, never an `or` chain.
+        from prediction_hit_rate import face as _phr_face
+        f = _phr_face(ws) or {}
+        if int(f.get("n_scored") or 0) > 0:
+            windowed = f.get("windowed") or []
+            hr = windowed[-1].get("hit_rate") if windowed else None
+            if hr is None:
+                hr = (f.get("overall") or {}).get("hit_rate")
+            out["hit_rate"] = (round(float(hr), 4)
+                               if hr is not None else None)
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("hit_rate_face", f"{type(exc).__name__}: {exc}")
+    try:
         hb = ws / "runs" / ".heartbeat.json"
         out["heartbeat_age_min"] = round(max(
             0.0, (datetime.datetime.now(datetime.timezone.utc).timestamp()
@@ -802,9 +995,20 @@ def _perf_face(ws: Path) -> dict:
         active = [s for s in states
                   if s.get("status") not in lib.TERMINAL_WORKER_STATUSES
                   and s.get("status") != lib.WAITING_WORKER_STATUS]
+        # #244 floor: waiting workers are pulse-exempt by design, so the
+        # statusline carries their count + how many went heartbeat-quiet
+        # (a quiet waiting file = a worker the settle→dispose beat should
+        # have disposed — the 傻等 face).
+        waiting = [s for s in states
+                   if s.get("status") == lib.WAITING_WORKER_STATUS]
         now_dt = datetime.datetime.now(datetime.timezone.utc)
+        stale_waiting = [s for s in waiting
+                         if (now_dt - s.get("mtime")).total_seconds()
+                         > WAITING_STALE_MIN * 60]
         last = max((s.get("mtime") for s in states), default=None)
         out["workers"] = {"total": len(states), "active": len(active),
+                          "waiting": len(waiting),
+                          "stale_waiting": len(stale_waiting),
                           "last_activity_age_s": (round(
                               (now_dt - last).total_seconds(), 1)
                               if last is not None else None)}
@@ -960,7 +1164,10 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # #142 v2 producer-owned fields — each traced to its disk observation,
     # each fail-open (the snapshot never breaks the tick / the touch).
     h = _entropy_face(ws, prev)
-    health = _health(ws)
+    comp_face = _health_component_rows(ws, now=now)
+    component_face = _component_face_for_snapshot(ws, now=now)
+    health = _health(ws, component_face=comp_face)
+    health_specs = _health_specs(comp_face, health)
     now_chip = _now_chip(ws)
     pq_rows = _pq_detail(ws)
     difficulty = _difficulty(ws)
@@ -974,6 +1181,29 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # health bit. Producer-owned like every other face: the renderer never
     # reads the ledger. Additive fields — readers probe the field set.
     rank = _rank_face(ws, now=now)
+    # The verification-debt face (leaf-read, fail-open): D + slope + the
+    # highest-debt claim + the hot bit against the leaf's gate constant.
+    # Producer-owned display data; the renderer stays a dumb view.
+    try:
+        from rlvr import verification_debt as _vd_mod
+        vd_face = _vd_mod.debt(ws)
+        vd = {"D": vd_face["D"], "slope": vd_face["slope"],
+              "top": vd_face["top"],
+              "hot": vd_face["D"] > _vd_mod.DEBT_GATE}
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("verification_debt_face", f"{type(exc).__name__}: {exc}")
+        vd = {"D": 0.0, "slope": None, "top": None, "hot": False}
+    # Issue 134: the rho/Platt calibration face (curve + ECE + current gap
+    # + rho_sampler liveness status). Producer-owned like every other face;
+    # additive field — readers probe the field set. The face is fail-open
+    # by contract; the try keeps the snapshot's own never-breaks guarantee.
+    try:
+        calibration = _calibration_face(ws)
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("calibration_face", f"{type(exc).__name__}: {exc}")
+        calibration = {"schema": "rho-calibration/1", "status": "NO_DATA",
+                       "n_samples": 0, "n_pairs": 0, "n": 0, "bins": [],
+                       "ece": None, "current_gap": None, "platt": None}
 
     return {
         "schema": SCHEMA_VERSION,
@@ -1000,6 +1230,15 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "h_pq": h["h_pq"],
         "h_trend": h["h_trend"],
         "health": health,
+        # #412: renderer dot specs computed Python-side (kunglao logic stays
+        # out of Node); additive field — readers probe the field set.
+        "health_specs": health_specs,
+        # #412: component activation truth — the SAME runs/.hooks-selfcheck.
+        # json rows the self-check wrote (single source; stale source forces
+        # the red STALE contract; source_missing degrades to unknown/yellow,
+        # never green).
+        "components": component_face,
+        "stale_after_ticks": SCHEDULER_STALE_TICKS,
         "now": now_chip,
         "pq_rows": pq_rows,
         "difficulty": difficulty,
@@ -1014,6 +1253,13 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # while the ranking result itself stays untouched (fail-open).
         "rank": rank["rank"],
         "rank_log": rank["rank_log"],
+        # The verification-debt chip face (D/slope/top + the hot bit).
+        # Additive field — readers probe the field set, never a version
+        # ladder (no-backcompat policy).
+        "vd": vd,
+        # Issue 134: rho/Platt calibration face + rho_sampler liveness —
+        # PRODUCE only (no gating; consumption is v0.2 #129/#135).
+        "calibration": calibration,
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,

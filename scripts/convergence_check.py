@@ -30,28 +30,43 @@ registry constant block for #99):
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
   5 = PARK (#634: suspended on external gates — legal idle with wake_condition)
-  64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
+  64 = MISSING_WORKSPACE (#240: the resolved directory is NOT a kunglao
+     workspace — missing claim-register.yaml and/or task_spec.yaml; the
+     caller passed a wrong path or ran from a non-workspace cwd)
   65 = CRASHED (#99: the check itself crashed — stdout {"decision": "CRASHED"},
      traceback on stderr; never a decided state)
+  66 = EMPTY_WORKSPACE (#306: emptiness-grade identity — both markers EXIST
+     but carry an empty payload: task_spec with no live primary_questions
+     and no oracle-anchor stamp + a claim register with zero claims. Init's
+     anchor intake runs before every scaffold write, so a healthy workspace
+     can never look like this; hard error, never a verdict)
+  67 = VERSION_MISMATCH (0.1.6 sweep: the workspace format stamp is
+     absent or != the executing skill version — older AND newer refuse;
+     the transactional kunglao_upgrade is the only path forward)
 
 Usage:
-  python scripts/convergence_check.py [workspace]          # human-readable
-  python scripts/convergence_check.py [workspace] --json   # machine-readable
-Workspace defaults to $PWD/malware-analysis-workspace if it has claim-register.yaml, else $PWD.
+  python scripts/convergence_check.py <workspace>          # human-readable
+  python scripts/convergence_check.py <workspace> --json   # machine-readable
+#240: resolution is fail-closed — explicit arg wins, else the manifest
+workspace_dir sibling, else cwd; the resolved directory must contain
+claim-register.yaml AND task_spec.yaml, else the check hard-errors
+("not a kunglao workspace", exit 64) instead of ever emitting a verdict.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED, LEDGER_FORMAT
 from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 # RETRACTED lives in retract_claim.py (retraction domain owner, #331):
 # status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
@@ -64,6 +79,11 @@ from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 # STUCK_WORKERS_PRESENT path (no parallel detector, no second scan pass).
 import worker_death as _worker_death
 from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
+# #342: the VERIFY_STALE threshold (single source, liveness_policy #597) +
+# the tick interval that converts wall-clock age into the tick unit.
+from liveness_policy import (  # noqa: F401 — re-exported for the #342 face
+    TICK_INTERVAL_DEFAULT_MIN as _TICK_INTERVAL_MIN,
+    VERIFY_STALE_TICKS as _VERIFY_STALE_TICKS_DEFAULT)
 # #147: the Phase-0 goal operationalization validator (#128). Its declared
 # `generalization` bit is the coverage contract the DRAIN oracle face
 # enforces — convergence requires DECLARED oracle coverage.
@@ -79,6 +99,15 @@ from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
 
+# #240: workspace identity markers. A resolved directory is a kunglao
+# workspace only when BOTH exist — the register alone let a stray empty
+# register (skill dir, stale sibling) resolve via the else-$PWD fallback
+# and degenerate into a WRONG CONVERGED (missing task_spec face -> zero
+# primary_questions -> every DRAIN gate silent). task_spec.yaml is init's
+# first artifact (needs-first intake), so its absence means the directory
+# was never a workspace.
+WORKSPACE_MARKERS = ("claim-register.yaml", "task_spec.yaml")
+
 # Exit codes — CONSUMER CONTRACT (#99). The registry itself moved to
 # scripts/contracts.py (#102: producers and consumers kept re-stating the
 # same bytes in separate comments — the root cause of the #102 drift
@@ -89,26 +118,16 @@ WORKER_CAP = 3
 # EXIT_DISPATCH's byte — stdout {"decision": "CRASHED"}, stderr traceback)
 # lives with the definition.
 from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
-                       EXIT_DISPATCH, EXIT_MISSING_WORKSPACE, EXIT_PARK,
-                       EXIT_SATURATED, EXIT_VERIFY)
+                       EXIT_DISPATCH, EXIT_EMPTY_WORKSPACE,
+                       EXIT_MISSING_WORKSPACE, EXIT_PARK,
+                       EXIT_SATURATED, EXIT_VERIFY,
+                       EXIT_VERSION_MISMATCH)
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
-
-# issue 275 batch-2: fail-open handlers keep their liveness posture (never
-# raise, never change the verdict) but must leave ONE trace — a stderr WARN
-# naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] convergence_check WARN (fail-open): {op}: {reason}",
-          file=sys.stderr)
+import oracle_anchors  # noqa: E402  # #306: the intake stamp vocabulary (task_spec anchors)
+from kunglao_log import warn
+from ws_yaml import canonical_dump as _canonical_dump  # #524 AD2  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 
 # #103 exception tiering: the exception family a JUDGMENT-INPUT reader
@@ -186,23 +205,289 @@ def _open_claims(reg: dict):
     return out
 
 
+def _fact_verification_owed(workspace: Path, fact_id: str) -> bool:
+    """#500: read the fact file's own verification state (schema layer).
+
+    True when verification is owed; False only on an explicit NOT-owed
+    value: `passes`, or a date-shaped value (the migrated/verified-at
+    form). Everything else — pending/partial, `fails`/`stale` (note-layer
+    vocabulary workers demonstrably cross-copy), typos, a missing
+    `verified:` field, or an unreadable/missing file — is owed: an
+    unknown verification state never silently vanishes from the partial
+    count (fail-closed). The search is bounded to the frontmatter block
+    (the module's own discipline: never parse stray body text).
+    """
+    path = workspace / "facts" / f"{fact_id}.md"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return True
+    head = text.split("---", 2)[1] if text.startswith("---") else text[:2000]
+    m = _FACT_FM_VERIFIED_RE.search(head)
+    if m is None:
+        return True
+    value = str(m.group(1)).strip().lower()
+    if value in ("", "pending", "partial", "fails", "stale"):
+        return True
+    return not (value == "passes" or _DATE_VALUE_RE.match(value) is not None)
+
+
+# #505: digit-anchored form of index_schema.FACT_ID_RE (the schema
+# grammar ^F[0-9A-Za-z-]+$ is too loose for content-based recovery —
+# it also matches prose like "Facts"; the digit anchor keeps
+# F001 / F001-alpha / F002(...) findable without false positives)
+_FACT_ID_RE_505 = re.compile(r"^(F\d{3}[0-9A-Za-z-]*)(\s*\(.*\))?$")
+
+#: the closed status vocabulary both layers write into the column —
+#: the #500 bridge set plus the remaining schema statuses, so a row's
+#: status token is findable under either layer's vocabulary.
+_ALL_ROW_STATUSES = frozenset(PARTIAL_STATUSES) | {
+    "INFERRED", "OPEN", "PROVEN", "NEGATIVE", "REFUTED", "DEFERRED",
+    "VERIFIED", "STAMP",
+}
+
+
+def _row_fact_and_status(parts: list[str]) -> tuple[str | None, str | None]:
+    """#505: recover (fact_id, status) from an index row by CONTENT.
+
+    Workers hand-write rows in at least three shapes (canonical 4-col,
+    leading-pipe 5-col markdown, ids with parenthetical suffixes) — a
+    position-based read (parts[1]) mistook the fact-id column for the
+    status under the leading-pipe shape (round-8B field evidence). The
+    id token matches F<NNN> with an optional (...) suffix; the status
+    token is the first non-id token containing a known status word
+    (exact match preferred; a substring match covers annotated PARTIAL-
+    family cells — the downstream INFERRED comparison stays exact, so
+    an annotated INFERRED cell parses but does not enter the INFERRED
+    branch; the sanctioned single writer emits bare statuses).
+    """
+    fid = None
+    status = None
+    for tok in parts:
+        m = _FACT_ID_RE_505.match(tok)
+        if fid is None and m:
+            fid = m.group(1)
+            continue
+        if tok.upper() in _ALL_ROW_STATUSES:
+            status = tok
+            break
+    if status is None:
+        for tok in parts:
+            if _FACT_ID_RE_505.match(tok):
+                continue
+            up = tok.upper()
+            if any(s in up for s in _ALL_ROW_STATUSES):
+                status = tok
+                break
+    return fid, status
+
+
+#: #510: claim-terminal statuses — a fact of a terminal claim owes no
+#: independent verification (the register is authoritative, state-mapping
+#: §1; the claim-level gate already demanded note + red-team).
+_TERMINAL_CLAIM_STATUSES = frozenset({"PROVEN", "REFUTED", "NEGATIVE"})
+
+
+def _terminal_claims(workspace: Path) -> set:
+    """#510: ids of claims whose register status is terminal. Fail-open:
+    an unreadable register yields the empty set (the fact-level
+## partial signal stands unchanged)."""
+    try:
+        import yaml as _yaml
+        reg = workspace / "claim-register.yaml"
+        doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — fail-open at the seam
+        return set()
+    out = set()
+    for c in doc.get("claims") or []:
+        if str(c.get("status", "")).upper() in _TERMINAL_CLAIM_STATUSES:
+            cid = str(c.get("id") or "").strip()
+            if cid:
+                out.add(cid)
+    return out
+
+
 def _partial_facts(workspace: Path):
-    """Count facts needing verification from facts/_INDEX.md."""
+    """Count facts needing verification from facts/_INDEX.md.
+
+    #500 vocabulary bridge: the index status column is workflow-layer by
+    contract (state-mapping.md §2 — PARTIALLY-VERIFIED etc.), but workers
+    have been observed copying the schema-layer status (INFERRED) into it
+    (round-8A field evidence). Both shapes count: a row is partial when its
+    workflow status matches PARTIAL_STATUSES, OR when the row says INFERRED
+    and the fact file still owes verification. Verified facts (passes)
+    never count, under either vocabulary.
+
+    #505 row-shape bridge: the row is parsed by CONTENT (the id token and
+    the status token are found, not assumed by position), so the observed
+    leading-pipe/extra-column/parenthetical-id shapes read identically to
+    the canonical `F<id> | <status> | <claim> | <conclusion>` row.
+    """
     idx = workspace / "facts" / "_INDEX.md"
     if not idx.exists():
         return []
+    # #510: the register is authoritative — facts of terminal claims
+    # (PROVEN/REFUTED/NEGATIVE) owe no independent verification
+    terminal = _terminal_claims(workspace)
     partial = []
     for line in idx.read_text(encoding="utf-8", errors="replace").splitlines():
         # Format per SKILL.md: F<id> | <status> | <claim_id> | <conclusion>
         if "|" not in line:
             continue
         parts = [p.strip() for p in line.split("|")]
+        parts = [p for p in parts if p]
         if len(parts) < 2:
             continue
-        status = parts[1].upper()
+        fid, status_tok = _row_fact_and_status(parts)
+        if fid is None or status_tok is None:
+            continue
+        claim = next((q for q in parts
+                      if re.fullmatch(r"C-\d{1,4}[a-z]?", q)), None)
+        if claim is not None and claim in terminal:
+            continue
+        status = status_tok.upper()
         if any(s in status for s in PARTIAL_STATUSES):
-            partial.append({"fact": parts[0], "status": parts[1]})
+            partial.append({"fact": fid, "status": status_tok})
+        elif status == "INFERRED" and _fact_verification_owed(
+                workspace, fid):
+            partial.append({"fact": fid, "status": status_tok})
     return partial
+
+
+# ---- #342: partial-fact age (the VERIFY_STALE + verify_backlog source) ----
+
+_FACT_FM_CREATED_RE = re.compile(r"^created:\s*([^\n]+)", re.M)
+_FACT_FM_VERIFIED_RE = re.compile(r"^verified:\s*([^\n]+)", re.M)
+# a verified-at date value (migrated/verified-at form): not owed
+_DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
+def _verify_stale_ticks() -> float:
+    """#342 threshold: env override at decision time (the
+    KUNGLAO_NOOP_BREAKER_N pattern), default from liveness_policy."""
+    raw = os.environ.get("KUNGLAO_VERIFY_STALE_TICKS")
+    if raw is None:
+        return float(_VERIFY_STALE_TICKS_DEFAULT)
+    try:
+        return float(raw)
+    except ValueError:  # a malformed env value keeps the conservative default
+        return float(_VERIFY_STALE_TICKS_DEFAULT)
+
+
+def _effective_stale_ticks(workspace: Path) -> float:
+    """The policy threshold under the refutation fold's cadence
+    multiplier: the leaf's rate-derived multiplier (bounded [1, MULT_MAX]
+    by construction) DIVIDES the threshold, so a refutation-heavy
+    signature goes stale sooner — data-driven density, never a new gate
+    and never a clamp. A read outside the multiplier's producible domain
+    (or any leaf failure) fails open to the exact policy threshold."""
+    base = _verify_stale_ticks()
+    try:
+        from rlvr import refutation_fold
+        mult = float(refutation_fold.cadence_multiplier(workspace))
+    except _GATE_INPUT_EXC:
+        return base
+    if mult < 1.0 or mult > refutation_fold.MULT_MAX \
+            or mult != mult or mult == float("inf"):
+        return base  # not a producible multiplier: refuse, don't clamp
+    return base / mult
+
+
+def _parse_fact_anchor(raw: str) -> datetime | None:
+    """Parse one frontmatter date into a naive-UTC datetime (None if not).
+
+    The template contract is an ISO DATE (`created: 2026-08-13`, field 5 of
+    the 12 mandatory fields); a full ISO datetime is accepted too. Naive
+    values are read as UTC (the template carries no zone); a trailing Z is
+    normalized for the 3.10 floor. Date granularity reads CONSERVATIVELY
+    stale (a fact is at most ~one day older than its written date says)."""
+    text = raw.strip().strip("'\"")
+    if not text or text.lower() == "pending":
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _fact_file_for(workspace: Path, fact_id: str) -> Path | None:
+    """Locate the fact file behind an _INDEX row id. Rows carry either the
+    bare `F<NNN>` or the full `<FNNN>-<slug>` id; exact path first, then the
+    prefix glob (bounded: one directory, ids are unique per the schema)."""
+    fdir = workspace / "facts"
+    direct = fdir / f"{fact_id}.md"
+    if direct.is_file():
+        return direct
+    for p in sorted(fdir.glob(f"{fact_id}*.md")):
+        return p
+    return None
+
+
+def partial_fact_ages(workspace: Path, partials: list | None = None,
+                      ticks: float | None = None,
+                      now: datetime | None = None) -> list[dict]:
+    """#342: age (in heartbeat ticks) of every PARTIAL fact.
+
+    THE single age reader for both #342 consumers — the VERIFY_STALE event
+    (this module) and the verify_backlog tick face
+    (scripts/verify_backlog_face.py) — so the cadence cannot drift.
+
+    Age field choice (the issue's "frontmatter created, or last verify
+    attempt — pick the field that exists"): the anchor is
+    max(frontmatter `created`, frontmatter `verified`). `created` is one of
+    the 12 MANDATORY schema fields (guaranteed present); `verified` is the
+    kunglao extension "date of last L1 pass" (`pending` when none) — it
+    resets the staleness clock so a recently L1-verified partial is not
+    re-forced through the verifier.
+
+    Fail-open: a missing/unreadable/unparseable fact yields age_ticks=None
+    and stale=False (a fact whose age cannot be read never forces
+    verification); a future-dated frontmatter clamps to age 0 (clock-skew
+    tolerant). `ticks` defaults to liveness_policy.VERIFY_STALE_TICKS with
+    the KUNGLAO_VERIFY_STALE_TICKS env override; `exceeds N` is strict.
+    """
+    if partials is None:
+        partials = _partial_facts(workspace)
+    # the cadence read point: an explicit ticks argument bypasses the
+    # fold entirely (the determinism wall for existing pins and callers
+    # that own their threshold); the default path reads the effective
+    # (multiplied) threshold so every consumer shares one density.
+    threshold = ticks if ticks is not None \
+        else _effective_stale_ticks(workspace)
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+    tick_seconds = _TICK_INTERVAL_MIN * 60
+    rows: list[dict] = []
+    for entry in partials:
+        row = {"fact": entry["fact"], "status": entry["status"],
+               "age_ticks": None, "stale": False}
+        path = _fact_file_for(workspace, str(entry["fact"]))
+        head = ""
+        if path is not None:
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:  # narrowed, #103 posture
+                text = ""
+            # frontmatter only: a file without the --- block has no readable
+            # dates and stays fail-open (never parses stray body text)
+            if text.startswith("---") and text.count("---") >= 2:
+                head = text.split("---", 2)[1]
+            anchors = [d for d in (
+                _parse_fact_anchor(m.group(1))
+                for m in (_FACT_FM_CREATED_RE.search(head),
+                          _FACT_FM_VERIFIED_RE.search(head))
+                if m is not None) if d is not None]
+            if anchors:
+                age_seconds = max(0.0, (now - max(anchors)).total_seconds())
+                row["age_ticks"] = round(age_seconds / tick_seconds, 1)
+                row["stale"] = row["age_ticks"] > threshold
+        rows.append(row)
+    return rows
 
 
 def _active_blockers(workspace: Path):
@@ -270,6 +555,12 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
         if status not in TERMINAL or status == RETRACTED:
+            continue
+        # scaffold seeds (init's lane/type/material decisions) are
+        # question-less BY DESIGN — closed PROVEN at birth, before the
+        # operator's questions exist. matrix4b: they must not hold
+        # CONVERGED hostage on finished work.
+        if str(c.get("claim_class") or "").lower() == "scaffold":
             continue
         aq = c.get("answers_question")
         if not aq:
@@ -707,6 +998,11 @@ def _append_ledger(workspace: Path, d: dict) -> None:
             # tell "dispatched but flat" (stuck) from "never dispatched"
             # (frontier queue). Old-format readers ignore the extra field.
             "dispatched_ids": _dispatched_ids(workspace),
+            # issue 137: self-describing format stamp on NEW writes so
+            # historical-format readers (#294 replay) read by field, not
+            # by inference. Legacy rows (no `schema`) stay readable —
+            # absence = legacy; historical files are never rewritten.
+            "schema": LEDGER_FORMAT,
         }
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -723,7 +1019,7 @@ def record_operator_action(workspace, action: str, actor: str = "orchestrator",
     Records who changed what and why: defer/override_proven/weight_change/claim_edit.
     Writes directly to the ledger (not via _append_ledger which expects snapshot fields).
     """
-    from status_defs import LedgerLineType
+    from status_defs import LedgerLineType, LEDGER_FORMAT
     entry = {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": action,
@@ -733,6 +1029,9 @@ def record_operator_action(workspace, action: str, actor: str = "orchestrator",
         "before": before,
         "after": after,
         "ts": utc_now().isoformat(timespec="seconds"),
+        # issue 137: same self-describing stamp the snapshot writer carries
+        # (new writes only; legacy rows stay readable — absence = legacy).
+        "schema": LEDGER_FORMAT,
     }
     try:
         newline_char = chr(10)
@@ -831,6 +1130,23 @@ class Event(str, Enum):
     LADDER_REQUIRED_BLOCKER = "LADDER_REQUIRED_BLOCKER"    # #497 climb flavor
     LADDER_EXHAUSTED_BLOCKER = "LADDER_EXHAUSTED_BLOCKER"  # #497 exhaustion marker
     UNEXPECTED_STATE = "UNEXPECTED_STATE"                  # SCHEDULE catch-all
+    # #342: SCHEDULE, evaluated FIRST — a PARTIAL fact older than N ticks
+    # (liveness_policy.VERIFY_STALE_TICKS, default 12 ~ 1h) forces the
+    # verifier dispatch before any claim dispatch, so a healthy claim
+    # frontier can no longer starve the verify chain. The #595 shape (an
+    # event inserted before the saturation tail so one state can never be
+    # masked by dispatchable work), applied to verification timeliness.
+    # Fresh partials keep current priority: without a stale fact the probe
+    # list reads exactly as before (#342 restraint: verification cadence
+    # only — no distillation/note/recall trigger here or anywhere).
+    VERIFY_STALE = "VERIFY_STALE"
+    # Verification-debt gate: D above the policy threshold with
+    # verifiable debt on the books forces the verifier dispatch ahead of
+    # every scheduling flavor below — including the blocked tail, so a
+    # loop can never read BLOCKED while unverified work that others
+    # depend on waits (the debt exists, so verification IS the
+    # highest-priority action).
+    DEBT_GATE = "DEBT_GATE"
     # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
     # BEFORE convergence_check starts; the name exists for observability.
     JADX_INFEASIBLE = "JADX_INFEASIBLE"
@@ -877,10 +1193,13 @@ class _DecideInputs:
     _discovery_reason: str | None = field(default=None, repr=False)
     _contradiction_reason: str | None = field(default=None, repr=False)
     _ladder_ids: list | None = field(default=None, repr=False)
+    _stale_partials: list | None = field(default=None, repr=False)
     _anomalies: list | None = field(default=None, repr=False)
     _open_hyps: list | None = field(default=None, repr=False)
     _oracle: dict | None = field(default=None, repr=False)
     _goal_op: dict | None = field(default=None, repr=False)
+    _debt_face: dict | None = field(default=None, repr=False)
+    _debt_module: object | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -1070,6 +1389,43 @@ class _DecideInputs:
             self._contradiction_reason = reason
         return self._contradiction_reason
 
+    def stale_partials(self) -> list:
+        """#342 VERIFY_STALE gate input (lazy + cached, the ladder-scan
+        cost profile): per-PARTIAL age rows from partial_fact_ages — the
+        ONE age reader shared with the verify_backlog tick face.
+
+        Fail-open on layer errors only (unreadable facts face -> [] -> the
+        event never fires); per-fact unreadable dates already degrade to
+        stale=False inside the reader."""
+        if self._stale_partials is None:
+            try:
+                self._stale_partials = partial_fact_ages(
+                    self.workspace, self.partials)
+            except _GATE_INPUT_EXC:
+                self._stale_partials = []
+        return self._stale_partials
+
+    def debt_face(self) -> dict:
+        """Verification-debt face (lazy + cached): D over the unverified-
+        but-depended-on claims, read by the rlvr leaf module. Fail-open
+        to the ZERO face (D=0, the pre-feature behavior) on any IO/
+        parse/shape degradation — a broken registry must never
+        manufacture debt, and the reader degrades loudly (warn) inside
+        the leaf. The module handle rides along so the gate threshold
+        stays single-sourced with the leaf's policy constant."""
+        if self._debt_face is None:
+            face = {"D": 0.0, "per_claim": {}, "slope": None, "top": None,
+                    "verifiable_open": []}
+            try:
+                from rlvr import verification_debt as _vd
+                face = _vd.debt(self.workspace)
+                self._debt_module = _vd
+            except _GATE_INPUT_EXC as exc:
+                warn("debt_face",
+                     f"{type(exc).__name__}: {exc} (reading zero debt)")
+            self._debt_face = face
+        return self._debt_face
+
     def ladder_exhausted_ids(self) -> list:
         """#497 ladder-exhaustion marker (ask_for_direction_gate.
         find_ladder_exhaustion): promotion_attempts >= 3 with an empty
@@ -1194,6 +1550,35 @@ def _partials_and_free_slot(s: _DecideInputs) -> bool:
     return bool(s.partials) and s.free_slots > 0
 
 
+def _verify_stale(s: _DecideInputs) -> bool:
+    # #342: verification-slot forcing — ANY partial fact older than
+    # VERIFY_STALE_TICKS takes the free slot BEFORE claim dispatch, so a
+    # healthy claim frontier can never starve the verify chain (the
+    # #595 insert-before-saturation shape). Free-slot condition mirrors
+    # the sibling slot events: without a slot the machine reads SATURATED
+    # (poll) — never DISPATCH_VERIFIER it cannot act on.
+    return any(r.get("stale") for r in s.stale_partials()) \
+        and s.free_slots > 0
+
+
+def _debt_gate(s: _DecideInputs) -> bool:
+    # Verification debt above the policy threshold with verifiable
+    # claims on the books: verify is the highest-priority action. Unlike
+    # the fact-age gate this one carries no free-slot condition by
+    # design — the debt gate must stay able to preempt the BLOCKED tail
+    # (all-open-blocked with verifiable debt is the diagnosed failure
+    # shape), and a verifier dispatch queued over a busy cap still beats
+    # a blocked verdict that pays nothing down. D == gate does not fire
+    # (strict >).
+    face = s.debt_face()
+    if not face["verifiable_open"]:
+        return False
+    gate = getattr(s._debt_module, "DEBT_GATE", None)
+    if gate is None:
+        return False  # module absent: the zero face already said no
+    return float(face["D"]) > float(gate)
+
+
 def _stuck_workers_present(s: _DecideInputs) -> bool:
     # #595: silent-detect — collected stuck_workers were never consumed by the
     # machine. Firing here escalates to BLOCKED so orchestrator intervention
@@ -1268,6 +1653,8 @@ _EVENT_PREDICATES = {
     Event.DRAIN_CLEAN: _drain_clean,
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
+    Event.VERIFY_STALE: _verify_stale,
+    Event.DEBT_GATE: _debt_gate,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
     Event.ORACLE_CASE_RED: _oracle_case_red,
@@ -1323,8 +1710,14 @@ def _scan_proven_facts(workspace: Path) -> dict[str, str]:
         parts = [p.strip() for p in line.split("|")]
         if len(parts) < 4:
             continue
-        if parts[1].upper() == "PROVEN":
-            proven[parts[0]] = parts[3]
+        # #507: content-based (fact_id, status) via the #505 row parser —
+        # the positional parts[1] read skipped PROVEN rows in the
+        # leading-pipe 5-column shape workers actually hand-write, so the
+        # contradiction heuristic ran on a silently-shrunk PROVEN set.
+        fid, status = _row_fact_and_status(parts)
+        if fid is not None and status == "PROVEN":
+            tail = [p for p in parts if p and p != fid]
+            proven[fid] = tail[-1] if tail else ""
     return proven
 
 
@@ -1422,6 +1815,35 @@ def _act_dispatch_top(s: _DecideInputs) -> str:
 def _act_verify_partials(s: _DecideInputs) -> str:
     return (f"Dispatch a verifier for {len(s.partials)} partial fact(s). "
             f"Do NOT declare PROVEN without sign-off.")
+
+
+def _act_verify_stale(s: _DecideInputs) -> str:
+    # #342: the action NAMES the stalest partial — the orchestrator must
+    # know exactly what to verify without re-deriving the age scan.
+    stale = [r for r in s.stale_partials() if r.get("stale")]
+    if not stale:  # unreachable via the machine; keep the verdict decided
+        return _act_verify_partials(s)
+    worst = max(stale, key=lambda r: r.get("age_ticks") or 0.0)
+    age = worst.get("age_ticks")
+    age_text = f"{age:g}" if isinstance(age, (int, float)) else "unknown"
+    return (f"Verification backlog: partial fact {worst['fact']} unverified "
+            f"for {age_text} ticks (> {_effective_stale_ticks(s.workspace):g}"
+            f"). Dispatch a verifier for the stalest partial - do NOT "
+            f"declare PROVEN without sign-off.")
+
+
+def _act_debt(s: _DecideInputs) -> str:
+    # Names the highest-debt claim so the orchestrator can verify
+    # without re-deriving the scan; the threshold rides the leaf's
+    # policy constant (single source).
+    face = s.debt_face()
+    top = face.get("top")
+    gate = getattr(s._debt_module, "DEBT_GATE", 0.0)
+    n = len(face.get("verifiable_open") or [])
+    return (f"Verification debt D={face.get('D')} above gate {gate}: "
+            f"{n} unverified-but-depended-on claim(s). Dispatch a verifier "
+            f"for {top} first - do NOT dispatch new analysis onto "
+            f"unverified debt.")
 
 
 def _act_saturated_queue(s: _DecideInputs) -> str:
@@ -1623,7 +2045,7 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
     if reopened:
         data["_audit"] = (data.get("_audit") or []) + [
             f"#607 stuck-worker reopen: {', '.join(reopened)} @ {now}"]
-        reg.write_text(_yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+        reg.write_text(_canonical_dump(data), encoding="utf-8")
     return reopened
 
 
@@ -1676,7 +2098,15 @@ STAGE_PROBES = {
     # #595: STUCK_WORKERS_PRESENT at index 2 — silent-detect fires BEFORE
     # the saturation/failure/ladder tail so a stuck worker can never be
     # masked by an unblocked-open claim whose dispatch would collide.
-    State.SCHEDULE: [Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
+    # #342: VERIFY_STALE at index 0 — a PARTIAL fact older than
+    # VERIFY_STALE first (the verifier can never be starved), then
+    # PARTIALS_AND_FREE_SLOT BEFORE claim dispatch (#484 completion:
+    # maker-checker interleave — verify what exists before making more;
+    # the seven-round starved-verifier failure mode is this slot's old
+    # order). WORK_AND_FREE_SLOT follows; verification landing consumes
+    # the partials so the next tick returns to DISPATCH.
+    State.SCHEDULE: [Event.VERIFY_STALE, Event.DEBT_GATE,
+                     Event.PARTIALS_AND_FREE_SLOT, Event.WORK_AND_FREE_SLOT,
                      Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
                      Event.FAILURE_ARTIFACTS_DUE,
                      Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,
@@ -1704,6 +2134,8 @@ TRANSITIONS = {
     # runner), never a poll verdict.
     (State.DRAIN, Event.ORACLE_CASE_RED): (State.BLOCKED, _act_oracle_red),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
+    (State.SCHEDULE, Event.VERIFY_STALE): (State.DISPATCH_VERIFIER, _act_verify_stale),
+    (State.SCHEDULE, Event.DEBT_GATE): (State.DISPATCH_VERIFIER, _act_debt),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
     (State.SCHEDULE, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
@@ -1739,7 +2171,60 @@ def _run_machine(snap: _DecideInputs):
     return State.SATURATED, _act_unexpected(snap)
 
 
+def _degenerate_reason(workspace: Path) -> str | None:
+    """#306 emptiness-grade identity: the payload face of the #240 markers.
+
+    #240 made identity fail-closed on marker ABSENCE; an existing-but-empty
+    (or key-less) task_spec.yaml + an empty claim-register.yaml still
+    drained to a WRONG CONVERGED — key-absent/[] parses to "feature
+    unused", zero primary_questions leaves every DRAIN gate silent.
+
+    The intake stamp IS the discriminator (what init writes): kunglao-init's
+    oracle-anchor intake runs BEFORE every scaffold write (blank anchors
+    refuse the scaffold, RC_PENDING_DECISIONS), and claim-register.yaml is
+    born with the [initialized] header + structural seed claims. So a
+    healthy workspace always carries EITHER live primary questions OR the
+    three non-blank anchors in task_spec.yaml OR claims in the register;
+    only the BOTH-EMPTY payload pair means intake never really happened or
+    the contract files rotted — refused as a hard error (EXIT_EMPTY_
+    WORKSPACE), never a verdict. A pre-intake template scaffold stays
+    verdictable: the template ships a live placeholder primary question.
+
+    Fail-open to the existing byte space: unreadable bytes (yaml errors,
+    OSError) return None — the #99 CRASHED face owns corruption; this
+    probe only refuses DEMONSTRABLY empty payloads. (#275 split: silence
+    about data is #99's face; absence of data is ours.)
+
+    Lives inside decide() (not only _require_workspace) because kunglao.py
+    cmd_decide, kunglao-decide and kunglao_resume call cc.decide()
+    directly — the router face must never read a CONVERGED off a rotted
+    workspace either.
+    """
+    try:
+        reg = _load_yaml(workspace / "claim-register.yaml")
+        if isinstance(reg, dict) and reg.get("claims"):
+            return None  # live register — verdictable, whichever spec shape
+        spec = _load_task_spec(workspace)
+    except (yaml.YAMLError, OSError):
+        return None  # corruption is #99's face (CRASHED), not emptiness
+    questions, err = _parse_primary_questions(spec)
+    if err or questions:
+        return None  # parse error -> INVALID face; live questions -> verdictable
+    if len(oracle_anchors.missing(spec)) < len(oracle_anchors.FIELDS):
+        return None  # intake stamp present — the contract was answered
+    return ("task_spec.yaml carries no live primary_questions and no "
+            "oracle-anchor stamp (goal_verbatim / success_criterion / "
+            "verification_method) AND claim-register.yaml holds zero "
+            "claims — intake never really happened or the contract files "
+            "rotted after intake")
+
+
 def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
+    reason = _degenerate_reason(workspace)  # #306 emptiness-grade identity
+    if reason is not None:
+        print(f"ERROR: degenerate kunglao workspace: {workspace} ({reason})",
+              file=sys.stderr)
+        raise SystemExit(EXIT_EMPTY_WORKSPACE)
     snap = _decide_inputs(workspace)
     state, action = _run_machine(snap)
     decision, exit_code = VERDICTS[state]
@@ -1801,6 +2286,15 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             "status": ("declared" if op["present"] and op["valid"]
                        else "invalid" if op["present"] else "undeclared"),
             "blocks": cov,
+        }
+    # Verification-debt face, attached only when debt is on the books
+    # (conditional-key: zero-debt decisions stay byte-identical to the
+    # frozen anchor corpus). Names the highest-debt claim beside the
+    # measured total + slope.
+    if snap.debt_face()["D"] > 0:
+        face = snap.debt_face()
+        decision["verification_debt"] = {
+            "D": face["D"], "slope": face["slope"], "top": face["top"],
         }
     # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
     # (blocker external:true), no active workers, no partials pending.
@@ -1881,6 +2375,22 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             decision["decision"] = "DISPATCH"
             decision["exit_code"] = 1
             decision["carrier_drift"] = cv["violations"]
+    # issue-136 terminal credit assignment: a CONFIRMED master-green closure
+    # writes the task-terminal settlement row — the arc-close credit ledger
+    # (enabling chain + premise_corrections, the issue-130 graph read
+    # closure-side) into the EXISTING kunglao_log ledger (no new organ).
+    # Runs AFTER the carrier-drift gate so a drifted carrier never credits a
+    # closure. Fail-open (observability never gates the verdict);
+    # emit_snapshot=False (resume read-only contract) never writes; the
+    # decide() dict is untouched (byte-frozen anchors — the ledger row IS
+    # the artifact). Arc-deduped inside (repeated CONVERGED ticks = one
+    # row; settlements after the last row = new arc, fresh row).
+    if decision["decision"] == "CONVERGED" and emit_snapshot:
+        try:
+            from terminal_settlement import write_terminal_settlement
+            write_terminal_settlement(workspace)
+        except Exception as exc:  # noqa: BLE001 — fail-open per issue-275 WARN policy
+            warn("terminal_settlement", f"{type(exc).__name__}: {exc}")
     # #618: dead-window alarm off the durable heartbeat sidecar (#830
     # substrate). Annotation + event only — never mutates the verdict
     # (unattended dead-window must be VISIBLE, and P3's value ordering
@@ -1987,16 +2497,47 @@ def _human(d: dict) -> str:
     return "\n".join(lines)
 
 
+def _require_workspace(raw: str | None) -> Path:
+    """#240 fail-closed workspace resolution: resolve, then require identity.
+
+    A resolved directory without claim-register.yaml AND task_spec.yaml is
+    NOT a kunglao workspace — hard error (stderr + exit 64), never a
+    verdict. This kills the else-$PWD fallback's silent mis-resolution:
+    the empty register it used to accept drained to a WRONG CONVERGED from
+    any non-workspace cwd."""
+    workspace = _resolve_ws(raw).resolve()
+    missing = [name for name in WORKSPACE_MARKERS
+               if not (workspace / name).exists()]
+    if missing:
+        print(f"ERROR: not a kunglao workspace: {workspace} "
+              f"(missing: {', '.join(missing)})", file=sys.stderr)
+        raise SystemExit(EXIT_MISSING_WORKSPACE)
+    # 0.1.6 version-consistency gate (owner HARD requirement): the CLI
+    # analysis face refuses any workspace whose format stamp != the
+    # executing skill version — older AND newer — and any marked workspace
+    # with no stamp at all. Severity ladder: EMPTINESS-grade workspaces
+    # keep the 66 face (their remedy is re-init, not upgrade). Direct
+    # decide() callers are NOT gated here (the machine-level API stays
+    # verdict-shaped); their entry surfaces are gated upstream
+    # (cmd_resume runs the exact-match stale gate first).
+    import template_version as _tv
+    mismatch = _tv.version_mismatch(workspace)
+    if mismatch is not None and _degenerate_reason(workspace) is None:
+        print(f"ERROR: {mismatch}. Run: python scripts/kunglao_upgrade.py "
+              f"{workspace} — the transactional upgrade is the only path "
+              f"to a mismatched-workspace analysis entry.",
+              file=sys.stderr)
+        raise SystemExit(EXIT_VERSION_MISMATCH)
+    return workspace
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent convergence check - should I dispatch?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args(argv)
 
-    workspace = _resolve_ws(args.workspace)
-    if not (workspace / "claim-register.yaml").exists():
-        print(f"FAIL: no claim-register.yaml under {workspace}", file=sys.stderr)
-        return EXIT_MISSING_WORKSPACE
+    workspace = _require_workspace(args.workspace)
 
     # #99: decide() is untrusted input territory (claim-register.yaml is
     # hand- and hook-edited YAML). An unguarded crash exits rc=1 — the SAME

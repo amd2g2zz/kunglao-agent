@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from _factories import stamp_current
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -144,7 +146,10 @@ class TestEmitActionVocabulary:
             "stale_plan_on_new_evidence",
             "analysis_recorded", "analysis_blocked",
             # #569 FAIL_OPEN audit faces
-            "top1_fail_open", "decide_fail_open",
+            "decide_fail_open",
+            # owner ruling 2026-09-28 fail-closed faces (top1_fail_open
+            # retired: its only emitter now emits top1_gate_error)
+            "top1_gate_error", "capability_gate_error",
         }
         missing = expected - set(et.EMIT_ACTIONS)
         assert not missing, f"EMIT_ACTIONS missing words: {sorted(missing)}"
@@ -196,6 +201,7 @@ class TestAskForDirectionGateEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True, exist_ok=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         return ws
 
     def test_type_a_ask_back_emits_with_rc(self, tmp, events):
@@ -306,7 +312,8 @@ class TestDispatchGateRejectEmit:
         REJECT side was stderr-only."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
+       '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws) if e.get("action") == "top1_reject"]
         assert any(e.get("claim") == "C-3" for e in rows), (
@@ -319,7 +326,9 @@ class TestDispatchGateRejectEmit:
         root = tmp_path / "r2"
         ws = _capability_ws(root)
         r = _run_gate(root, ws,
-                      "[T2 tools=rev-xposed] claim C-1 hook the check via xposed")
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
+                      '"tier": 2, "tools": ["rev-xposed"]}}\n'
+                      "hook the check via xposed")
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "capability_reject"]
@@ -336,6 +345,7 @@ class TestPlanDriftWarnEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         plan = ws / "global_plan.txt"
         plan.write_text("# plan v1\nno claim ids here\n", encoding="utf-8")
         an = ws / "analyses" / "failure-C-1.yaml"
@@ -361,6 +371,7 @@ class TestPlanDriftWarnEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         (ws / "global_plan.txt").write_text("# plan v1\n", encoding="utf-8")
         assert pdd.check(ws, active_only=True) == 0
         assert not events, f"no warn, no event; got {events}"
@@ -476,6 +487,18 @@ class TestConvergenceDecisionEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
+        # #240: the convergence CLI hard-errors without the task_spec marker.
+        # #306: the payload face needs the oracle-anchor stamp too (a
+        # claimless register + question-less AND anchor-less task_spec is
+        # the degenerate pair) — the anchor stamp keeps this seed a
+        # legitimate feature-unused CONVERGED.
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions: []\n"
+            "goal_verbatim: retrieve the family config\n"
+            "success_criterion: family named with evidence\n"
+            "verification_method: static\n",
+            encoding="utf-8")
         rc = cc.main([str(ws), "--json"])
         rows = _actions(events, "converge")
         assert rows, f"every round's DECISION must emit; got {events}"
@@ -500,6 +523,9 @@ class TestConvergenceDecisionEmit:
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
             {"id": "C-1", "status": "OPEN"}]}, sort_keys=False),
             encoding="utf-8")
+        # #240: the convergence CLI hard-errors without the task_spec marker
+        (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+        stamp_current(ws)  # 0.1.6 gate: non-degenerate ws must carry the stamp
         rc_with_emit = cc.main([str(ws), "--json"])  # emit fires (captured)
         rows = _actions(events, "converge")
         assert rows, f"emit must fire on the healthy path; got {events}"
@@ -535,6 +561,7 @@ class TestFailOpenEmit:
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+        stamp_current(ws)
         assert afd.check(ws, "should I dispatch?") == 1
         assert afd.check(ws, "git push --force to publish") == 2
 
@@ -567,7 +594,8 @@ class TestFailOpenEmit:
         # cannot be created (the #107 re-pinned fixture keeps runs/posteriors
         # readable — the rank state must not change with the log sabotage)
         (ws / "runs" / "logs").write_text("", encoding="utf-8")
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
+       '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, (
             f"REJECT must not depend on the log write; rc={r.returncode}, "
             f"stderr={r.stderr!r}")
@@ -586,6 +614,9 @@ class TestFailOpenEmit:
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
             {"id": "C-1", "status": "OPEN"}]}, sort_keys=False),
             encoding="utf-8")
+        # #240: the convergence CLI hard-errors without the task_spec marker
+        (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+        stamp_current(ws)  # 0.1.6 gate: non-degenerate ws must carry the stamp
         healthy = cc.main([str(ws), "--json"])  # healthy baseline rc
         assert _actions(events, "converge"), "sanity: healthy path emits"
 

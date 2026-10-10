@@ -192,8 +192,10 @@ class TestMicroRetro:
         payload = json.dumps({
             "cwd": str(root), "workspace": str(ws),
             "tool_input": {"prompt":
-                           "[T1 tools=Read,Write,Grep] claim C-002 "
-                           "analyze hook tracing"},
+                           '{"kunglao_dispatch": {"version": 1, '
+                           '"claim": "C-002", "tier": 1, '
+                           '"tools": ["Read", "Write", "Grep"]}}\n'
+                           'analyze hook tracing'},
         })
         import os
         env = dict(os.environ, PYTHONUTF8="1")  # the harness pipes UTF-8

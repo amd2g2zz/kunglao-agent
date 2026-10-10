@@ -267,6 +267,15 @@ def _make_loop_ws(tmp_path: Path) -> Path:
                 {"field": "sign", "kind": "swap"},
                 {"field": "sign", "kind": "change"},
             ],
+            # #301: the quantified verification contract every admitted
+            # case carries (artifact, criterion, threshold, decision).
+            "verification": {
+                "artifact": f"sign/canonical derivation pinned by {fid}",
+                "artifact_kind": "pair-set",
+                "criterion": "pair-match",
+                "threshold": {"exact": True},
+                "feeds_decision": PQ_ID,
+            },
         }
         (ws / "oracle" / "cases" / f"case-s{i}.yaml").write_text(
             yaml.safe_dump(case, sort_keys=False), encoding="utf-8")

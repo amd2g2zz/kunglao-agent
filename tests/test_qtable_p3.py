@@ -43,11 +43,12 @@ def _claim(cid, **kw):
     return c
 
 
-# ---------- 1. PQ categorical -> dH term; mission ledger stays OUT ----------
+# ---------- 1. PQ categorical -> NO dH term (#295 removal); ledger stays OUT ----------
 
-def test_pq_categorical_lands_dh_feed(tmp_path, monkeypatch):
-    """posteriors 账本里的 PQ categorical 经 dH 进入排序面（#106/#107
-    接线）：命中该 PQ 的 claim 带非零 dH feed 与加分。"""
+def test_pq_categorical_emits_no_dh_feed(tmp_path, monkeypatch):
+    """posteriors 账本里的 PQ categorical 不再进入排序面（#295 governed
+    removal, ADR-001）：命中该 PQ 的 claim 无 dH feed、无 dH 加分；
+    排序只由 Thompson case face + downstream term 决定。"""
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     from posteriors import PQCategorical, PosteriorLedger
     claims = [
@@ -62,9 +63,11 @@ def test_pq_categorical_lands_dh_feed(tmp_path, monkeypatch):
     acts = pr.priority_ratio(claims, {}, ev)
     gap = next(a for a in acts if a.claim_id == "C-gap")
     junk = next(a for a in acts if a.claim_id == "C-junk")
-    assert "dH=0" not in gap.feeds["dh_pq"]
-    assert "dH=0" in junk.feeds["dh_pq"]
-    assert gap.score > junk.score - pr.LAMBDA_DH  # the dH lift is bounded
+    assert "dh_pq" not in gap.feeds
+    assert "dh_pq" not in junk.feeds
+    # tier/cost still separates them via the tier ordering face; the ΔH
+    # lift that used to bound this gap is gone entirely.
+    assert not hasattr(pr, "LAMBDA_DH")
 
 
 def test_with_and_without_empty_ledger_byte_identical(tmp_path, monkeypatch):

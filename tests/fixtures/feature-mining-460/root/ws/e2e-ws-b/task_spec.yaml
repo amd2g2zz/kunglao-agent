@@ -1,0 +1,82 @@
+lane: static
+goal_verbatim: Deobfuscate the signer bundle (target/modcrypto_bundle.js), recover
+  the mutated-cipher constants, and re-expose sign(input) reproducing the
+  captured pairs.
+success_criterion: A sign() re-implementation on the MUTATED core reproducing every
+  published and minted pair.
+verification_method: reproduction
+promise:
+  generated_at: '2026-09-29T14:15:04Z'
+  prescan:
+    apkid:
+      state: probed
+      tier: INFO
+      note: evidence/apkid.json written
+    die:
+      state: probed
+      tier: INFO
+      note: evidence/die.json written
+  obfuscation_prior:
+    source: evidence/apkid.json
+    obfuscators:
+    - dexguard
+  java_reachability:
+    verdict: unreachable
+    static_only: false
+    note: jadx=no baksmali=no apktool=no
+  prescan_obligation:
+    lane: static
+    required: []
+    note: 'fixture: probes present'
+difficulty:
+  schema: difficulty-calibration/1
+  tier: hard
+  score: 0.45
+  dominant_factor: packer_present
+  factors:
+    packer_present:
+      detail: die detected UPX; apkid summary packer UPX
+      score: 1.0
+      weight: 0.3
+      contribution: 0.3
+      source: die+apkid
+    entropy_max:
+      detail: max section entropy 7.2
+      score: 0.67
+      weight: 0.15
+      contribution: 0.1
+      source: die
+    obfuscator_count:
+      detail: 1 obfuscator
+      score: 0.5
+      weight: 0.1
+      contribution: 0.05
+      source: apkid
+  families:
+    anti_analysis:
+      active: true
+      score: 0.5
+    obfuscation:
+      active: true
+      score: 0.5
+    packing:
+      active: true
+      score: 1.0
+    surface_reduction:
+      active: false
+      score: 0.0
+  coverage:
+    die: true
+    apkid: true
+  thresholds:
+    medium: 0.15
+    hard: 0.4
+    max: 0.65
+  notes:
+  - die detected UPX
+  generated_at: '2026-09-29T14:15:04Z'
+primary_questions:
+- id: pq-1
+  question: 'What approach resolves the goal?'
+- id: pq-2
+  question: 'Does the result satisfy the success criterion?'

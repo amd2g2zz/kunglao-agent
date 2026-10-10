@@ -83,10 +83,16 @@ def test_hook_pulse_dedup_60s(tmp_path, monkeypatch):
     assert "activity_ts" in cache
 
 
-def test_stop_face_registered(tmp_path):
+def test_stop_face_registered(tmp_path, monkeypatch):
     """C: register_hooks_deployed 产物里 heartbeat_touch 同时有 Bash 面
     （legacy 键 = PreToolUse/Bash）与 Stop 两条注册——会话每轮结束必跳。"""
     import hook_activation
+    # hermetic env pin (issue 467 gate): the deployed writer runs the
+    # manifest-vs-imports gate against the resolved env root — pin it to
+    # the repo so the test stays machine-independent (a machine may carry
+    # an older production install than the repo surface).
+    monkeypatch.setattr(hook_activation, "_framework_project_root",
+                        lambda: ROOT)
     ws = _mk_ws(tmp_path)
     hook_activation.register_hooks_deployed(ws)
     settings_path = ws / ".claude" / "settings.json"
@@ -126,8 +132,14 @@ def test_decide_annotates_gap(tmp_path, capsys):
     import datetime as dt
     import convergence_check as cc
     ws = _mk_ws(tmp_path)
+    # #306: a key-less task_spec + the claimless register from _mk_ws is
+    # the degenerate pair — stamp the oracle anchors so the D3 face
+    # (heartbeat-gap annotation) stays on the decided-state path.
     (ws / "task_spec.yaml").write_text(
-        yaml.safe_dump({"depth": "standard", "time_budget_minutes": 60}),
+        yaml.safe_dump({"depth": "standard", "time_budget_minutes": 60,
+                        "goal_verbatim": "retrieve the family config",
+                        "success_criterion": "family named with evidence",
+                        "verification_method": "static"}),
         encoding="utf-8")
     old = (dt.datetime.now(dt.timezone.utc)
            - dt.timedelta(minutes=60)).isoformat(timespec="seconds").replace("+00:00", "Z")

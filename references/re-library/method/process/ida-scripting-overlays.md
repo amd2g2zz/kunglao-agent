@@ -10,10 +10,7 @@ family: process
 Consumer: the agent driving the IDA lane (`tools/_index-static.md`, the
 ida-decompile row) — through the lane's bridge-discovery and decompile
 calls, and through the lane's scripting-grade execution surface (arbitrary
-Python evaluated inside the IDA process). That surface is live now: the
-environment exposes one, so the earlier conditional ("when the environment
-exposes one") is resolved and the eval face is a first-class consumer of
-this card. The behavior change this card causes: the agent waits for
+Python evaluated inside the IDA process). The behavior change this card causes: the agent waits for
 autoanalysis before trusting any query result, and guards both Hex-Rays
 failure channels instead of one — so an empty list reads as a diagnosis
 (analysis not drained) rather than as absence of data, and a decompile
@@ -32,10 +29,13 @@ systematically fails.
 - A batch/headless scripting session is being driven end-to-end (wait,
   query, decompile, exit) and each stage's failure mode matters.
 
-when_not: Not when the dynamic lane (x64dbg/frida) owns the question; not for
-`ida_kernwin` UI/dialog scripting (no consumer in a headless/bridge loop); not
-for Ghidra-side scripting; not for IDA's debugger surface; not a compatibility
-layer for running old IDA versions.
+## When Not to Use
+
+- The dynamic lane (x64dbg/frida) owns the question.
+- `ida_kernwin` UI/dialog scripting — no consumer in a headless/bridge loop.
+- Ghidra-side scripting.
+- IDA's debugger surface.
+- Compatibility/porting work against older IDA versions.
 
 ## Overlay 1 — headless discipline: an empty result usually means analysis has not run
 

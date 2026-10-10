@@ -285,12 +285,18 @@ class TestToolSearchFind:
         assert r.returncode == 0
         assert json.loads(r.stdout) == {"count": 0, "tools": []}
 
-    def test_find_mutually_exclusive_with_filters(self) -> None:
-        r = run_py(TOOL_SEARCH, "--find", "x", "--tier", "T1")
-        assert r.returncode == 2, (
-            "--find composes with --tier/--cost-max/--capability only by "
-            "silently dropping ext entries (they carry no tier) — refuse "
-            "instead (design D8)")
+    def test_find_combines_with_internal_filters(self) -> None:
+        # 2026-10-08 re-pin (owner ergonomics ruling): --find COMBINES with
+        # --tier/--cost-max/--capability instead of refusing — the refusal
+        # was the rigidity that kept agents from using the search. The
+        # filters narrow the internal registry hits; ext/reference/run-local
+        # hits carry no tier and pass through with their source visible.
+        r = run_py(TOOL_SEARCH, "--find", "jadx", "--tier", "T1")
+        assert r.returncode == 0, (
+            "--find must combine with the internal filters (exit 0), not "
+            "refuse")
+        # the registry hit survives the tier filter
+        assert "jadx" in r.stdout
 
     def test_find_text_mode_carries_usage(self) -> None:
         r = run_py(TOOL_SEARCH, "--find", "converg")

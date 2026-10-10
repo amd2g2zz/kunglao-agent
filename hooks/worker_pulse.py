@@ -12,7 +12,8 @@ completes (PostToolUse on Agent), the orchestrator receives a compact
 
 SMART = narrow + alive-only (same philosophy as dispatch_gate):
   - fires ONLY when a worker/agent call completed AND the payload carries a
-    claim dispatch prefix `[T<N> tools=...] claim <C-NN>` — i.e. a kunglao-agent
+    v1 canonical dispatch envelope `{"kunglao_dispatch": {"version": 1,
+    "claim": "C-NN", ...}}` — i.e. a kunglao-agent
     worker just finished. Everything else → silent.
   - fires ONLY while kunglao-agent is ACTIVATED (30-min TTL, renewed by the
     orchestrator at Phase 0 / heartbeat). No activation / expired = hooks
@@ -45,25 +46,19 @@ worker_budget):
     "command": "uv run --project <skill_root> <skill_root>/hooks/worker_pulse.py"}]}
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] worker_pulse WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import subprocess
 import sys
@@ -107,10 +102,15 @@ def _check_stale_workers(ws: Path) -> str:
     """Soft mtime-stale detection for the non-dispatch PostToolUse path (#38).
 
     Scans `ws/runs/worker-status-*.md` for in-progress files whose mtime
-    exceeds STUCK_MIN. Returns a human-readable message naming each stale
-    worker + age, or '' if none. NEVER aborts — the hard REJECT is
-    worker_budget's job (check_backtrack_gate). Any OSError / missing runs/
-    dir / protocol import error -> '' (no crash, no false alarm)."""
+    exceeds STUCK_MIN, PLUS stale WAITING workers (#244 floor): the wait
+    loop renews the file mtime every poll, so a waiting file whose mtime
+    went quiet is a worker that DIED waiting — the exact 傻等 shape the
+    settle→dispose contract exists to prevent, and it used to be invisible
+    here (waiting was exempt from every zombie flag). Returns a
+    human-readable message naming each stale worker + age, or '' if none.
+    NEVER aborts — the hard REJECT is worker_budget's job
+    (check_backtrack_gate). Any OSError / missing runs/ dir / protocol
+    import error -> '' (no crash, no false alarm)."""
     runs = ws / "runs"
     if not runs.is_dir():
         return ''
@@ -120,6 +120,7 @@ def _check_stale_workers(ws: Path) -> str:
         return ''
     now = time.time()
     stale = []
+    stale_waiting = []
     try:
         for p in runs.glob("worker-status-*.md"):
             try:
@@ -129,21 +130,33 @@ def _check_stale_workers(ws: Path) -> str:
             if not tokens:
                 continue
             last = tokens[-1].replace("-", "_")
-            if last != "in_progress":
+            if last not in ("in_progress", "waiting"):
                 continue
             try:
                 age_min = (now - p.stat().st_mtime) / 60
             except OSError:
                 continue
             if age_min > STUCK_MIN:
-                stale.append(f"{p.name} (age {age_min:.0f}m)")
+                if last == "waiting":
+                    stale_waiting.append(f"{p.name} (age {age_min:.0f}m)")
+                else:
+                    stale.append(f"{p.name} (age {age_min:.0f}m)")
     except OSError:
         return ''
-    if not stale:
-        return ''
-    return (f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
+    parts = []
+    if stale:
+        parts.append(
+            f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
             f"(> {STUCK_MIN}m no status-file update): " + ", ".join(stale) +
             " - intervene or force a `## backtrack` block.")
+    if stale_waiting:
+        parts.append(
+            f"[worker_pulse] {len(stale_waiting)} stale WAITING worker(s) "
+            f"(> {STUCK_MIN}m no wait heartbeat): " + ", ".join(stale_waiting)
+            + " - a worker waiting past its claim's settlement is a contract "
+              "violation (傻等, #244 settle→dispose); "
+              "intervene or TaskStop it.")
+    return "\n".join(parts)
 
 
 def _resolve_workspace(payload: dict) -> Path | None:

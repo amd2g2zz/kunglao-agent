@@ -1,0 +1,5 @@
+## Why
+Five owner rulings (2026-09-30) defined the distillation product stack but the T/L machinery is still scattered: #474 landed the landing API + budget ledger; #477 rides it for harvested scripts; rollup produces lessons; #471 obstacles exist. What's missing is the ONE spine: four first-class product schemas, the fixed-order T-pass, source-trust gate, adaptive compression, analogy-transfer protocol — so every extractor (E) feeds one transformation and one landing.
+
+## What Changes
+New module scripts/distill_spine.py: product schemas (playbook/1, decision-entry/1, usage-card rides shelf entries, lesson reuses rollup), the T-pass (de-case → form-promotion → tagging → verify → dedup, fixed order), source trust ledger (falsified products → batch demote + blacklist), adaptive retention (four-signal compression), analogy-transfer (layer-wise distill + hypothesis-form usage). Landing through the EXISTING #474 API. Two PRs: (1) T-pass + schemas + trust; (2) product landing + analogy + compression wiring.

@@ -66,7 +66,9 @@ def _recall_ws(tmp_path: Path) -> Path:
 
 
 VM_CLAIM = (
-    "[T3 tools=mcp__x64dbg__*,mcp__frida__*] claim C-101 observe the sample's "
+    '{"kunglao_dispatch": {"version": 1, "claim": "C-101", '
+    '"tier": 3, "tools": ["mcp__x64dbg__*", "mcp__frida__*"]}}\n'
+    "observe the sample's "
     "dynamic behavior in the VM with x64dbg breakpoints and frida injection"
 )
 
@@ -253,7 +255,9 @@ def test_dispatch_gate_failure_blocked_guidance_wrapped(tmp_path):
     ws = _failure_blocked_ws(root)
     payload = json.dumps({
         "cwd": str(root), "workspace": str(ws),
-        "tool_input": {"prompt": "[T1 tools=grep] claim C-1 retry"}},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, '
+                       '"claim": "C-1", "tier": 1, '
+                       '"tools": ["grep"]}}\nretry'}},
     )
     r = subprocess.run(
         [sys.executable, str(REPO_ROOT / "hooks" / "dispatch_gate.py")],
@@ -395,7 +399,9 @@ def test_top1_reject_end_to_end_wrapped(tmp_path):
     ws = _top1_ws(root)
     payload = json.dumps({
         "cwd": str(root), "workspace": str(ws),
-        "tool_input": {"prompt": "[T2 tools=grep] claim C-3 background sweep"}},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, '
+                       '"claim": "C-3", "tier": 2, '
+                       '"tools": ["grep"]}}\nbackground sweep'}},
     )
     r = subprocess.run(
         [sys.executable, str(REPO_ROOT / "hooks" / "dispatch_gate.py")],

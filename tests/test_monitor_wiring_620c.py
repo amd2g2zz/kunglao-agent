@@ -40,6 +40,10 @@ def _tick(monkeypatch, ws, monitor_result):
 
     monkeypatch.setattr(ht, "run", fake_run)
     monkeypatch.setattr(ht, "_oracle_registered", lambda w: True)
+    # H1a: the monitor mechanism is event-gated (events_seen gate) — one
+    # settlement row opens the gate for the pass under test.
+    import kunglao_log
+    kunglao_log.emit(ws, "test", "claim_settled", detail="h1-monitor-wake")
     rc = ht.main([str(ws)])
     report = json.loads((ws / "runs" / ".heartbeat-tick.json").read_text(encoding="utf-8"))
     return rc, report, calls

@@ -1,44 +1,215 @@
 # kunglao-agent
 
-**kunglao-agent is an autonomous reverse-engineering system. You hand it a target and the questions you need answered; it works the problem for hours or days on its own — planning its own path, recovering from worker deaths, resuming after crashes — and converges only when every answer is derived from raw evidence and survives mechanical verification gates.**
+**An autonomous reverse-engineering agent that runs for hours unattended, verifies every conclusion independently, and converges only when every answer survives a mechanical oracle verdict.**
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amd2g2zz/kunglao-agent/pulls)
+[![release](https://img.shields.io/github/v/release/amd2g2zz/kunglao-agent?sort=semver)](https://github.com/amd2g2zz/kunglao-agent/releases)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![runtime](https://img.shields.io/badge/runtime-Claude%20Code%20plugin-7aa2f7)](https://claude.com/claude-code)
+[![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-**English** · [Simplified Chinese](README.zh-CN.md)
+**🧠 plans its own route** · **🔬 every claim machine-checked** · **⚖️ blind verification on everything** · **📈 the loop measures itself**
 
-It currently ships as a Claude Code plugin — Claude Code is the interface you talk to, not what the product is. The product is the loop: specialist workers analyse (static first), an independent verifier re-derives every fact blind from the raw evidence, and mechanical gates decide when the work is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
+🚀 Quick Start · ✨ Core Tech · 🧠 kunglao × Claude Code · 🎛️ How RL Works · 🖥️ Showcase · 📖 Case Studies · 🧪 Evaluation · 🏗️ Architecture · 🗓️ Roadmap
 
-## Why kunglao-agent
+**English** · [简体中文](README.zh-CN.md)
 
-- **Long-horizon by design.** Engagements run unattended across hours and days: a scheduled heartbeat keeps the loop alive, dead workers are reconciled and their claims re-queued, crashes resume from on-disk state, blocked claims self-recover. You read the verdict when it converges — you don't babysit each step. See [Long-horizon autonomy](#long-horizon-autonomy).
-- **Answers you can trust.** No fact is `PROVEN` until an independent verifier re-derives it blind from the raw artifact; every fact cites a sha256-indexed raw artifact through `evidence/_index.json`.
-- **The full reverse-engineering spectrum.** Windows/Linux native binaries, Android APKs, web/JS, protocol analysis, firmware emulation, risk-control countermeasures — one system, not a single-domain tool.
-- **Static-first economics.** A task that closes statically never touches dynamic tooling; every escalation is declared, gated, and audited.
-- **It reuses knowledge instead of re-deriving it.** A growing catalog of registered analysis tools (crypto decoders, disassembly pipelines, graph queries) means the system reaches for proven tooling before writing one-off scripts — and every run leaves behind reusable facts, not a chat transcript that evaporates.
-- **It recovers instead of dying.** Worker deaths, API disconnects, and crashes are first-class events: the loop detects them, snapshots what was already produced, and re-dispatches to continue from where things stopped — not from zero.
-- **Your environment, your rules.** VMware, ssh, docker, adb, or plain static-only — the system drives whichever execution channel you already have. Nothing is a degraded mode; a task that never needs execution never asks for a VM.
+> [!WARNING]
+> **v0.1.6 is the last Claude Code-native release line.** The next
+> milestone (v0.2) migrates the runtime wholesale to the PI Agent base —
+> same loop, same ledgers, new engine substrate. See the roadmap.
+
+---
+
+## 📖 Introduction
+
+You point kunglao-agent at a target and state the questions; it plans the
+route, dispatches specialist workers, verifies every conclusion independently,
+and stops only when each answer is settled by a mechanical check instead of a
+model's say-so.
+
+The target spectrum is the full one — Windows/Linux native binaries, Android
+APKs (including native `.so` layers), web/JS, protocol recovery, firmware —
+static-first by design, driving whichever execution channel your environment
+already has (VMware, ssh, docker, adb, or none at all for static-only work).
+
+It runs inside [Claude Code](https://claude.com/claude-code) as a plugin:
+Claude Code is the conversation surface; the product is the loop and the fact
+base it produces.
+
+> [!NOTE]
+> Every number the loop reports — win rates, posteriors, budgets — traces to a
+> row on an append-only ledger. Nothing is self-declared.
+
+---
+
+## 🖥️ Showcase
+
+**The orchestrator at work** — a convergence decision, a budgeted worker
+dispatch with live facts landing, and a blind red-team verdict promoting a
+claim to `PROVEN`; the statusline HUD keeps the whole engagement readable at
+a glance:
+
+![kunglao-agent orchestrator session: convergence check, worker dispatch, blind red-team verification, statusline HUD](docs/assets/showcase-orchestrator.svg)
+
+**The loop measuring itself** — the round strategy composed from settlements,
+the discounted-Thompson posterior store with censored-outcome tiebreaking,
+the discovery layer admitting a genuinely novel arm (and refusing a renamed
+retry), and the win-rate curve:
+
+![kunglao-agent learning faces: round strategy, posterior store, expansion receipt, win-rate curve](docs/assets/showcase-learning.svg)
+
+---
+
+## ✨ Core technology
+
+kunglao-agent is an **act-level RL controller around Claude Code**: Claude
+Code reasons inside each act; kunglao decides the next act, verifies it,
+prices it, learns from it. Deep design: [`docs/design/`](docs/design/).
+
+- **Mechanical oracle.** The completion criterion derives from your task
+  statement as runnable checks (byte-exact replay, held-out probes). Reward
+  is priced in oracle verdicts — lying about progress earns nothing.
+- **Blind verification.** An independent verifier re-derives every claim
+  without seeing the maker's reasoning; worker self-sign-off caps at
+  `STAMP`, never `PROVEN`. Facts cite artifacts (sha256) and carry
+  `reproduce:` commands.
+- **The loop learns, the model stays frozen.** Every act lands on an
+  append-only ledger; a Thompson-sampling policy reorders method families
+  by measured cost-adjusted success per feature-keyed state.
+- **Unattended, resumable.** Hours-long runs, dead workers replaced, full
+  state on disk, every reported number traces to a ledger row.
+
+---
+
+## 🧠 kunglao × Claude Code
+
+Claude Code is the engine; kunglao is the gearbox, dashboard, and flight
+computer — next act, verification, budget, and where experience goes.
+
+| | bare Claude Code | + kunglao |
+|---|---|---|
+| Next step | improvised in-session | learned act-level policy, posteriors persist across tasks |
+| Verification | self-report | mechanical oracle + blind red-team |
+| Duration | one session, human watching | hours unattended, resume from disk |
+| Experience | evaporates at session end | ledger → posteriors → sharper opening bet |
+
+![The controller picks each act, Claude Code executes it, the ledger remembers](docs/assets/rl-drive.gif)
+
+Honest boundary: for a simple single-session task, bare Claude Code wins —
+the evaluation table says so. kunglao pays off on long horizons,
+verification discipline, and cross-task compounding.
+
+---
+
+## 🎛️ Online RL: the loop gets better while it works
+
+The first task of a new kind pays full price: the loop tries a method,
+watches it fail, tries another. But every attempt is written down — and
+the next task of the same kind opens from those notes, not from zero.
+
+![One task pays full price; the loop remembers; the second runs cheaper](docs/assets/rl-loop.gif)
+
+That is the whole idea of online reinforcement learning here: **the loop
+updates itself between acts, on the job** — no training dataset, no model
+retraining, no offline phase. Each task's experience is banked before the
+next decision is made.
+
+### What the loop actually learns
+
+**1. The right first move, per kind of target.** A plain script and a
+hardened app should not open the same way. The loop keeps separate notes
+per kind of target — what the target looks like decides which playbook
+applies.
+
+![Two targets route to two different playbooks](docs/assets/rl-features.gif)
+
+**2. Which methods are dead.** A method that keeps failing gets benched —
+it stops eating budget (but is never deleted; if the target changes, it
+can come back). And when *nothing* works, the loop tries to invent a way
+in: a discovery act proposes a genuinely new approach, checked against the
+failed tries — the same idea renamed is refused.
+
+![Dead ends get benched; a genuinely new idea gets admitted](docs/assets/rl-death-discovery.gif)
+
+**3. Where to double-check.** States where verifiers keep getting refuted
+learn to schedule verification more tightly there — and relax when the
+streak turns honest.
+**4. Which tools to route.** Tool and provider choices are learned too: a tool that fails gets demoted for a while and is reinstated the moment it works again - routing follows the recorded outcomes, not the registry order.
+
+### How the learning works
+
+```mermaid
+flowchart LR
+    A["target state<br>(what it looks like)"] --> B["pick a method<br>(sample from the notes)"]
+    B --> C["act<br>(a worker runs it)"]
+    C --> D["checker verdict<br>(proof or no proof)"]
+    D --> E["one ledger row<br>(what happened, what it cost)"]
+    E --> F["update the notes<br>for this kind of target"]
+    F --> B
+```
+
+The notes are simple success/failure tallies per method per state, with a
+bias toward trying anything not yet ruled out — exploration fades exactly
+as fast as evidence accumulates. Reward is `progress x weight - cost`, so
+an expensive habit that barely moves the needle loses money on simple
+targets, and every number traces to an append-only ledger row.
+
+### What this buys - and what it deliberately does not
+
+- **Cost drops on familiar work.** The second task of a kind is cheaper
+  than the first; the notes persist across tasks in the deployment.
+- **Budget stops bleeding.** Dead methods are benched before they drain
+  the clock; the discovery layer replaces vocabulary nobody wrote.
+![Win rate rises, steps to solve falls - the loop's own ledger is the evidence](docs/assets/rl-curves.gif)
+
+- **The model is frozen.** Capability does not grow - scheduling does:
+  the right method, in the right order, at the right moment.
+- **Honesty is not learned - it is enforced.** The checker pays only for
+  results it can re-verify; a worker's own words never count as proof.
+  RL optimizes efficiency on top of that honest currency; it can never
+  mint credit by fiction.
+
+![The checker pays only for verifiable results](docs/assets/rl-pricing.gif)
+
+### How this differs from the common approaches
+
+Knowledge routing (a manual the LLM improvises against), bounded pipelines
+(fixed stages, fixed rounds), single-verdict triage - all decide with fixed
+logic: last task's experience never changes next task's plan. The loop's
+control law is learned from its own measured history:
+
+![Side by side: three systems repeat their price on the second task; kunglao's second task opens cheaper](docs/assets/rl-comparison.gif)
+
+## 📋 Requirements
+
+| Component | Requirement | Notes |
+|---|---|---|
+| Claude Code | current | the runtime — install as a plugin |
+| Python 3.10 | 3.10+ floor (Python 2 is not supported) | the plugin carries a pinned env via `uv` |
+| `uv` | any recent | `pip install uv` or [astral.sh/uv](https://astral.sh/uv) |
+| Ghidra or IDA | one of them | decompilation for native targets |
+| MCP servers | 2 required | `ghidra` + `sequential-thinking` — see [Toolchain](#-toolchain-by-target) |
+
+> [!WARNING]
+> Analysis acts run real tools and may execute target-derived inputs. Use
+> isolated VMs/devices for dynamic work and only analyze targets you are
+> authorized to.
+
+---
 
 ## Quick start
 
-kunglao-agent runs inside Claude Code. From a sample on disk to a verdict:
-
-| Tool | Why | Install |
-|---|---|---|
-| **Claude Code** | where kunglao-agent runs | per Anthropic docs |
-| **Python 3.10+** (Python 2 is not supported) | the plugin carries a pinned env via `uv`; you do not touch it | system or `uv`-managed |
-| **`uv`** | locked env resolver | `pip install uv` or [astral.sh/uv](https://astral.sh/uv) |
-| **Ghidra or IDA** | one static-analysis suite for decompilation | see [Toolchain by target](#toolchain-by-target) |
+From a sample on disk to a verdict:
 
 ### 1. Install the plugin
-
-From any directory, in Claude Code:
 
 ```
 /plugin marketplace add amd2g2zz/kunglao-agent
 /plugin install kunglao-agent@kunglao-agent
 ```
 
-(Alternative: `claude --plugin-dir /path/to/kunglao-agent` for development.)
+(Development alternative: `claude --plugin-dir /path/to/kunglao-agent`.)
 
 ### 2. Init a workspace
 
@@ -46,9 +217,11 @@ From any directory, in Claude Code:
 /kunglao-agent:init ~/cases/synth-dropper --type windows
 ```
 
-`kunglao-init` scaffolds the workspace, writes `CLAUDE.md`, probes the toolchain for your `--type`, and scaffolds `.mcp.json`. It **HARD-rejects** when a required tool for your type is missing — the fix guidance is in the error block.
+`kunglao-init` scaffolds the workspace, probes the toolchain for your
+`--type`, and HARD-rejects with fix guidance when a required tool is
+missing.
 
-### 3. State the task and start the analysis
+### 3. State the task and start
 
 ```
 /kunglao-agent:analysis ~/cases/synth-dropper
@@ -59,7 +232,11 @@ From any directory, in Claude Code:
 > Constraints: static-first; never execute the sample on the host.
 ```
 
-Write the brief so an independent reviewer could judge the result: **analysis goal** (what you need to know), **verification logic** (what makes an answer trustworthy — e.g. "the signature must be reproducible from the same inputs"), **constraints** (e.g. "no execution on the host"). Everything is recorded in `task_spec.yaml`; from there the loop drives itself. For how the common asks turn into well-formed statements, see [How to state the task](#how-to-state-the-task).
+Write the brief so an independent reviewer could judge the result: analysis
+goal, verification logic, constraints. Everything is recorded in
+`task_spec.yaml`; from there the loop drives itself — walk away, dead
+workers are replaced and their questions re-queued, and
+`/kunglao-agent:resume` rebuilds the picture after any interruption.
 
 ### 4. Read the deliverable
 
@@ -70,111 +247,28 @@ evidence/_index.json  # every fact → raw artifact (sha256 + path)
 runs/                 # session audit trail
 ```
 
-## How to state the task
-
-The loop derives its completion criterion — the **oracle** — mechanically from the end-state you state. A vague statement yields a vague oracle, and the analysis drifts toward whatever can be proven instead of what you needed. Four phrasings cover most of that drift. For each: what users say, what it usually means, a well-formed statement, and what the oracle anchors on.
-
-### "我要纯算" — "just the pure algorithm"
-
-**Usually means:** offline reproduction of the app's signing/crypto routine — a unidbg harness or a rewrite that runs with no device and no app at run time. Not "analyze the app"; the app is only where the algorithm lives.
-
-```
-> Sample: the v7.2 APK; behavior: the signer producing the `sign`
->   header on api.example.com/v2/* requests.
-> Criterion: a standalone reproduction (unidbg or rewrite) replays
->   every captured (input → sign) pair byte-exact — including the
->   withheld pairs — with no device or app at run time.
-> Attach: captures/sign-pairs.jsonl — 20 input/output pairs captured
->   from a live session; 10 of them withheld from the analysis.
-```
-
-**Oracle anchors on:** byte-exact replay on every pair, including the withheld ones — and the reproduction running standalone.
-
-### "我要解密" — "I want decryption"
-
-**Usually means one of two different targets — say which:**
-
-- **(a) decrypt one captured body** — a one-off answer about this data: "produce the plaintext of this captured cache file."
-- **(b) a decryption capability** — algorithm + key recovery, reusable on data you capture tomorrow.
-
-Well-formed (a):
-
-```
-> Sample: the v7.2 APK; behavior: the local config cache
->   files/.cfg/v2.dat is encrypted at rest.
-> Criterion: produce the plaintext of the captured v2.dat and validate
->   it against what the app renders (field names and values match the
->   screenshot captured alongside).
-```
-
-Well-formed (b):
-
-```
-> Sample: the v7.2 APK; behavior: request bodies on
->   api.example.com/v2/* are encrypted with a static key.
-> Criterion: identify the algorithm and the key, then run a canary
->   round-trip — encrypt a known plaintext with the recovered key and
->   match the ciphertext the device produced, byte for byte.
-> Attach: captures/request-bodies.jsonl — ciphertext bodies captured
->   from the device, with the requests that produced them.
-```
-
-**Oracle anchors on:** (a) the plaintext validating against what the app renders; (b) algorithm + key identified and the canary round-trip byte-identical to device-produced ciphertext. "It decrypted once" satisfies neither.
-
-### "帮我分析这个协议" — "analyze this protocol for me"
-
-**Usually means:** wire-format recovery — framing, field semantics, and a codec you can run.
-
-```
-> Sample: the Android chat app; behavior: the TCP protocol on
->   gateway.example.com:443, as captured in gateway-session.pcap.
-> Criterion: a codec that round-trips every captured frame byte-exact,
->   and decodes the held-out frame to fields matching the observed app
->   behavior.
-> Attach: captures/gateway-session.pcap — 40 frames, plus 1 held-out
->   frame kept out of the analysis.
-```
-
-**Oracle anchors on:** the codec round-tripping every captured frame byte-exact, and the held-out frame decoding to fields that match observed app behavior.
-
-### "这个 sign 在哪算的" — "where does this sign get computed?"
-
-**Usually means:** a location with proof. Naming a point in the code is cheap; the answer is only useful with evidence that this point is the point.
-
-```
-> Sample: the v7.2 APK; behavior: the `sign` header attached to every
->   request.
-> Criterion: name the class/method (or native function) where `sign`
->   is computed, and hook that point to reproduce the captured `sign`
->   values from the same inputs.
-> Attach: captures/sign-session.jsonl — captured `sign` values with
->   their request inputs.
-```
-
-**Oracle anchors on:** a named class/method/native function, plus a hook at that point reproducing the captured values.
-
-### What these have in common
-
-- **Name the sample and the behavior** — which parameter, entry, or flow — not the category. "我要纯算" is a category; "the signer producing the `sign` header on api.example.com/v2/*" is a target.
-- **Success must be data.** Attach captured input/output pairs; the withheld pairs are what make the check honest — a reproduction cannot overfit data it never saw.
-- **The oracle is derived from your stated end-state.** Vague statement, vague verification, drifting analysis.
-- **Constraints change the plan.** Static-only? A device available? Which channel? Say so up front — it decides the route before work starts (see [Bring your own environment](#bring-your-own-environment)).
-
 ## Subcommands
 
 | Command | Use when | What it does |
 |---|---|---|
-| `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
-| `/kunglao-agent:analysis <workspace>` (alias `analyze`) | after init — state the task and start | collects your goal / verification logic / constraints once, then runs the convergence loop: dispatch / verify cycles until the report |
-| `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers, crash timeline) plus the next action from the state machine |
-| `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |
+| `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | starting an engagement, first | scaffolds the workspace, probes the toolchain, writes `CLAUDE.md` and `.mcp.json` (`--no-mcp` skips); HARD-rejects with fix guidance when a required tool is missing |
+| `/kunglao-agent:analysis <workspace>` (alias `analyze`) | after init — state the task and start | collects goal / verification logic / constraints once, then runs the convergence loop |
+| `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers) plus the next action |
+| `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update | migrates the workspace scaffold; user data never touched — byte drift refuses |
 | `/kunglao-agent:help` | anything else | prints the usage list |
 
-Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` to pick the thread back up any time) → read the report at convergence → `upgrade` old workspaces after plugin updates.
+`uv sync` registers the router as the `kunglao` console script —
+`kunglao --help` lists all subcommands (`decide`, `tick`, `verify`,
+`record`, `health`, `resume`, `check-stale`, `upgrade`, `analysis`).
+Dedicated entries: `kunglao-init`, `kunglao-verify`, `kunglao-upgrade`,
+`heartbeat-tick`, `convergence-check`.
+
+---
 
 ## What a run looks like
 
-*The shape of an engagement — what you type, what comes back, where to look.* A synthetic example: a small Windows dropper lands in `~/cases/synth-dropper`:
+A synthetic example (representative, not a real measured engagement): a
+small Windows dropper lands in `~/cases/synth-dropper`:
 
 ```bash
 /kunglao-agent:init ~/cases/synth-dropper --type windows   # probes Ghidra, VM reachability
@@ -182,108 +276,150 @@ Typical order: `init` creates the workspace → `analysis` states the task and s
 > "What does this binary do, and where does it phone home?"
 ```
 
-From there the loop runs itself — the route adapts to what the sample turns out to be. You can walk away (see [Long-horizon autonomy](#long-horizon-autonomy)). When it converges, read the deliverable below.
+From there the loop runs itself — the route adapts to what the sample
+turns out to be. You can walk away; dead workers are replaced and their
+questions re-queued, and `/kunglao-agent:resume` rebuilds the picture
+from on-disk state after any interruption.
 
-## Scenarios
+---
 
-Two more end-to-end paths — pick the one matching your target (for a plain Windows PE / Linux ELF binary, the worked case above is the path).
+## 📖 Stating the task
 
-<details>
-<summary><strong>Android APK — what the user types, what lands where</strong></summary>
+The loop derives its oracle mechanically from the end-state you state. Four
+phrasings cover most of the drift:
+
+| You say | It usually means | The oracle anchors on |
+|---|---|---|
+| "I want the pure algorithm" | offline reproduction of the signing/crypto routine | byte-exact replay of every captured pair, including withheld ones |
+| "I want decryption" | one captured body, or a reusable capability? | plaintext validates / canary round-trips byte-identical |
+| "analyze this protocol" | wire-format recovery + a runnable codec | the codec round-trips every captured frame byte-exact |
+| "where is `sign` computed?" | a location with proof | a named function + a hook there reproducing captured values |
+
+Name the sample and the behavior (not the category), make success be data
+(captured pairs — the withheld ones keep it honest), and state constraints
+up front (static-only? a device? which channel?).
+
+---
+
+## 🧰 The run you watch
+
+Two live faces turn a run into something observable:
+
+**The statusline** — a one-line HUD while the agent runs: the semantic state
+glyph (`◈ analyzing` / `✖ DOWN`), claim progress `C 6/8`, current win rate,
+the sampler's top-ranked arm and its age, health dots, the active task chip,
+and a value sparkline. Stale-but-within-policy renders idle (truthful);
+beyond policy it renders DOWN.
+
+**The win-rate curve** — rolling pass rate over the settlement stream:
 
 ```bash
-/kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent:analysis ~/cases/sample.apk
-> "Does this APK load code dynamically or fight debugging? If so, where is
->   the hidden logic and what does it do?"
+uv run python scripts/winrate_curve.py <workspace> [--window 5] [--html curve.html]
 ```
 
-- **Lands in:** `bins/<sha256>` (the APK), `facts/` (class graph, native `.so` inventory), `evidence/` (captures, dumps).
-- **Done looks like:** every question backed by reproducible evidence.
-- **The route adapts.** Some APKs close with pure static DEX work; others need on-device debugging — the loop decides from what the sample actually is.
+A healthy run trends upward as the loop learns which methods pay; a flat
+zero line says the ranker is spending budget on arms that never settle —
+check the obstacle registry before adding budget.
+
+---
+
+## 📚 Case studies
+
+Evidence-first case studies rewritten from real, fully converged run artifacts
+(EN + 简体中文) — the transcript, the dead ends, the two named verification
+methods, and the mechanical verdict:
+
+- [kvm8-isa: a private VM decoded from its reference interpreter](docs/cases/kvm8-isa.md) — KVM-8 ISA recovered (container, 10-op nibble map, guard bytes, `mix()` machine); 44/44 words decoded, four digests byte-exact against a rustc build of the reference interpreter; decoy `fold8` control caught emitting one constant wrong line for all four payloads.
+- [web-token-v1: a signing SDK reversed to a one-line HMAC](docs/cases/web-token-v1.md) — key reassembled from scrambled base64 table parts, pad placement settled by falsification, `client.py` mints tokens for 4/4 fresh sessions; a captured token dies on replay across server instances.
+- [apk-webview-attest-v2: two attestation layers bound](docs/cases/apk-webview-attest-v2.md) — JS PoW/mix challenge feeds the seed into a native `sha256(seed‖nonce)[:8] ^ NATIVE_MASK` check; 8-byte mask re-derived from raw ELF bytes, 4/4 sessions through both layers, negative control rejected with 403.
+
+Each case has a Chinese version alongside the English one under `docs/cases/`.
+
+---
+
+## 🧪 Evaluation and measured results
+
+Constructed targets with mechanical oracles and ground truth known by
+construction; checkers mint held-out probes the candidate never saw. The
+built-in 12-unit L1 matrix (static RE targets across JS, x86/ARM64 ELF,
+Windows PE; byte-anchored deliverables only, no partial credit, pass@1,
+per-session caps):
+
+| Runtime | pass@1 | Session cost |
+|---|---|---|
+| kunglao v0.1.5.post2 | 5/12 | ~$135 total (13 sessions) |
+| kunglao v0.1.6 | **11/12** | ~$120 total (4 governed rounds) |
+| plain Claude Code | 12/12 | ~$11.4 total |
+
+Read honestly: these 12 units are single-session-tractable and a frontier
+model with default tools saturates them cheapest — kunglao's differentiation
+is **long-horizon layered work, verification discipline (oracle + blind
+red-team on every claim), and the dynamic lanes**, not single-session speed.
+The measured long-horizon matrices and the five-arm comparison (bare CC /
+CC+warm-context / kunglao cold / kunglao warm / no-recall ablation) land
+with the current release train.
+
+Control-arm A/B and the replay ruler (offline ranker-quality measurement)
+ship as commands: `scripts/eval_control_arm.py --ab`, `scripts/replay_ruler.py <ws>`.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    Task[task_spec.yaml — you state the goal] --> Oracle[mechanical oracle — quantified contracts]
+    Oracle --> Loop{convergence loop}
+    Loop -->|dispatch| Workers[workers — byte-anchored facts]
+    Loop -->|verify| Verifier[blind verifier / red-team]
+    Workers --> Facts[(facts + evidence index)]
+    Verifier --> Gates[mechanical gates — settlements]
+    Gates --> Ledger[(append-only ledgers)]
+    Ledger --> Policy[external policy: DTS posteriors + discovery]
+    Policy --> Loop
+    Ledger --> Report[claim register — every claim terminal]
+```
+
+One workspace per engagement — scaffolded by init; hooks are wired at workspace level and your global `~/.claude/settings.json` is never written:
+
+<details>
+<summary><strong>Workspace layout</strong></summary>
+
+```
+<workspace>/
+├── bins/<sha256>        # the sample (gitignored)
+├── task_spec.yaml       # goal / verification logic / constraints
+├── claim-register.yaml  # claims C-NN with status
+├── facts/               # byte-anchored facts F-NNN.md + _INDEX.md
+├── evidence/            # raw artifacts + _index.json (path + sha256)
+├── runs/                # ledgers, worker status, heartbeat
+├── blockers/            # failure-attribution records
+└── CLAUDE.md            # workspace rules (generated)
+```
 
 </details>
 
 <details>
-<summary><strong>Web / JS — unpack → deobfuscate → signed-parameter replay</strong></summary>
+<summary><strong>Toolchain by target</strong> — the `--type` you pick at init locks the HARD tier</summary>
 
-```bash
-/kunglao-agent:init ~/cases/example-site.com --type web
-/kunglao-agent:analysis ~/cases/example-site.com
-> "how is the XHR request signed, and where does the nonce come from?"
-```
-
-- **Lands in:** `evidence/` (captures, deobfuscated code), `facts/` (signing key, nonce derivation).
-- **Light-footprint toolchain.** Web targets probe only the essentials at init; anything heavier gets set up when the target actually needs it.
-
-</details>
-
-## What you get
-
-A claim register and fact base where trust is mechanical, not conventional:
-
-- **Verified convergence** — `PROVEN` requires an independent blind verifier's exact-match sign-off; `CONVERGED` requires every primary question answered with byte-proof, zero orphan claims, no spinning.
-- **Evidence integrity** — every fact traces through `evidence/_index.json` to a raw artifact (capture / trace / dump / binary). Derived summaries are excluded by design.
-- **Maker-checker** — the worker (maker) writes facts; the redteam verifier (checker) re-derives them blind. Different agents, always.
-
-No claim reaches `PROVEN` on its author's word: an independent verifier must re-derive it blind, and a set of mechanical gates must pass. The full gate design lives in [`docs/design/loop-engineering.md`](docs/design/loop-engineering.md).
-
-After the run, the files answer different questions:
-
-| Question | Where |
-|---|---|
-| Is it done? | the loop's exit code — `CONVERGED` (0) means every primary question has a verified answer; per-claim status in `claim-register.yaml` |
-| What did it find? | `facts/F<NNN>.md` — one byte-anchored fact per file, mapped to claims by `claim-register.yaml` |
-| How do I reproduce it? | `evidence/_index.json` — fact → raw artifact (path + sha256); each fact carries a `reproduce:` command |
-| What exactly happened? | `runs/` — the tick-by-tick ledger and worker status |
-
-Example fact:
-
-```yaml
-id: F061
-status: VERIFIED-BY-W01-static-byte-recheck
-claim_id: C-401
-provenance:
-  - {role: sample, path: bins/<sha>}
-  - {role: capture_log, path: runs/c329-inner-pe.bin}   # via evidence/_index.json
-reproduce: python -c "import struct; ..."               # runs against the cited artifact
-verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
-```
-
-## Long-horizon autonomy
-
-Real engagements are not a twenty-minute chat. kunglao-agent stays on the problem without a human shepherding every step:
-
-- **Runs for hours or days, unattended** — a scheduled heartbeat keeps the loop working between your visits, and a stalled loop is flagged instead of silently dying.
-- **Recovers from failure** — dead or stuck workers are replaced and their questions re-queued; blocked work self-recovers instead of idling.
-- **Survives crashes and reboots** — `/kunglao-agent:resume <workspace>` rebuilds where things stood from on-disk state and names the next action.
-- **Remembers on disk, not in chat** — claims, facts, evidence, and a full audit trail live in the workspace, so any session can pick the engagement back up.
-
-You give it a target and the questions; it works the problem for hours or days, recovers from failures, and you read the verdict when it converges.
-
-## Getting good results
-
-- **Static-first is the design.** The loop closes everything it can statically before touching dynamic tooling; protected or packed targets simply route to the dynamic leg — declare the channel and it drives it.
-- **Declare the dynamic leg before you need it.** If your primary questions will require execution, pick a channel up front (see [Bring your own environment](#bring-your-own-environment)) — init HARD-rejects a dynamic task on `local`, by design.
-- **The loop is always legible.** Every tick lands in `runs/`; `/kunglao-agent:resume <workspace>` reads the live state and names the next move.
-
-## Toolchain by target
-
-The `--type` you pick at init locks which HARD-tier tools must be installed. Guidance is collapsed — expand your target. **All types require two MCP servers:** `ghidra` (`claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe`) and `sequential-thinking` (`claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking`).
+**All types require the two HARD MCP servers** (`ghidra` +
+`sequential-thinking` — commands in the MCP section below). Expand your
+target:
 
 <details>
 <summary><strong>windows (PE32+ x86-64)</strong> — native Windows binaries</summary>
 
 | Tier | Tool | Install |
 |---|---|---|
-| HARD | `pefile` (Python) | `pip install pefile` |
+| HARD | `pefile` (Python) | `uv pip install pefile` |
 | HARD | `die` (Detect It Easy) | `KUNGLAO_DIE` env or on PATH — [ntinfo.com](https://ntinfo.com) |
 | HARD | `floss` (FLARE FLOSS) | per [flare-floss docs](https://github.com/mandiant/flare-floss) |
-| HARD | Ghidra or IDA | one of them; see [Internals](#internals) |
+| HARD | Ghidra or IDA | one of them; see the MCP section below |
 | HARD (T2/T3) | VMware + vmr-shell, or an ssh/docker channel | see [Bring your own environment](#bring-your-own-environment) |
 | HARD (T2/T3) | `frida-server` (renamed, custom port) | device/VM-side binary, default port 1337 |
 
-Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) and IDA-Pro MCP are optional — see the MCP manifest under [Internals](#internals).
+Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory
+forensics) and the IDA-Pro MCP are optional — see the MCP manifest below.
 
 </details>
 
@@ -315,7 +451,7 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 | HARD | `adb` + **a rooted device** with `ro.debuggable=1` | platform-tools + custom frida on device |
 | HARD | `frida-server` (renamed, custom port 1337) | device-side binary |
 | HARD | `android_server` (IDA remote debugging) | device-side binary, port 23946 |
-| WARN | `apkid` | `pip install apkid` |
+| WARN | `apkid` | `uv pip install apkid` |
 | WARN | `baksmali` | from [smali releases](https://github.com/baksmali/smali/releases) |
 
 </details>
@@ -325,74 +461,59 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 
 | Tier | Tool | Install |
 |---|---|---|
-| WARN | `camoufox-reverse` MCP (web) | anti-detect Firefox for hook / trace / network capture |
+| HARD | `camoufox-reverse` MCP (web) | anti-detect Firefox for hook / trace / network capture (REQUIRED on web) |
 | WARN | `docker` (web channel default) | Docker Desktop, or set `KUNGLAO_CHANNEL=ssh` explicitly |
 | WARN | `lipo`, `otool`, `nm`, `codesign`, `xattr` (macOS) | Xcode Command Line Tools |
-| WARN | `ghidra` MCP (macOS) | recommended — see the manifest under [Internals](#internals) |
-
-Init probes only the essentials for these types; heavier capabilities engage when the target calls for them. macOS dynamic work uses the `ssh` channel (to a Mac host); for the optional x64dbg browser-debug path, install the Windows toolchain above.
+| WARN | `ghidra` MCP (macOS) | recommended — see the manifest below |
 
 </details>
 
-Single manifest source for everything above — probe it any time: `python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` (exit 1 = HARD missing).
+Dynamic work needs one execution channel (`KUNGLAO_CHANNEL`): `vmr`
+(VMware — any guest OS, snapshot/revert is the irreplaceable value),
+`ssh` (any ssh-reachable box), `docker`, `adb` — or `local` for
+**static-only** work (the red line: never execute the sample on the host;
+a dynamic task HARD-rejects on `local`).
+
+</details>
+
+---
 
 ## Bring your own environment
 
-Dynamic debugging needs an execution control plane the agent can drive. `KUNGLAO_CHANNEL` selects one of five first-class channels — use what your environment already has; none is a degraded mode:
+Dynamic debugging needs an execution control plane the agent can drive.
+`KUNGLAO_CHANNEL` selects one of five first-class channels — use what your
+environment already has; none is a degraded mode:
 
 | Channel | What it drives | Prerequisites |
 |---|---|---|
-| `vmr` (default) | VMware VM, **any guest OS** — snapshot/revert workflows are its irreplaceable value | vmr-shell skill; `KUNGLAO_VM_HOST` + ports 9876/1337 |
+| `vmr` (default) | VMware VM, **any guest OS** — snapshot/revert workflows | vmr-shell skill; `KUNGLAO_VM_HOST` + ports 9876/1337 |
 | `ssh` | Any ssh-reachable box: bare metal, cloud VM, Mac, remote docker host | key auth — the probe runs a real BatchMode `ssh ... true` |
-| `docker` | Local or remote docker daemon — `docker exec` is equivalent to any control path | `docker version` green; optional `KUNGLAO_DOCKER_CONTAINER` |
+| `docker` | Local or remote docker daemon | `docker version` green; optional `KUNGLAO_DOCKER_CONTAINER` |
 | `adb` | Android emulator or real device | `adb devices` shows it; `adb forward tcp:1337 tcp:1337` for frida |
-| `local` | **Static-only analysis on the host** | none — see the red line |
+| `local` | **Static-only analysis on the host** | none — the red line below |
 
-> **`local` red line:** local is for **static** work only — never execute, debug, or inject the sample on the host. Any dynamic requirement switches `KUNGLAO_CHANNEL` to `vmr`/`ssh`/`docker`/`adb`; init HARD-rejects a dynamic task on `local`.
+> **`local` red line:** local is for **static** work only — never execute,
+> debug, or inject the sample on the host. Any dynamic requirement switches
+> to `vmr`/`ssh`/`docker`/`adb`; init HARD-rejects a dynamic task on
+> `local`.
 
-Channel probes run only for dynamic tasks (static-only tasks skip them). `ssh`-channel execution flows through the **ssh-mcp** control plane (`npm i -g ssh-mcp`); plain CLI ssh is the fallback. For remote docker over ssh, set `KUNGLAO_DOCKER_CONTAINER`.
+Channel probes run only for dynamic tasks; ssh-channel execution flows
+through the **ssh-mcp** control plane (`npm i -g ssh-mcp`), plain CLI ssh
+as fallback.
 
-## Configuration
+---
 
-Four variables cover most setups:
+## MCP servers
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | unset | must stay unset or `0` — truthy values route dispatches through the teammate channel and are rejected |
-| `KUNGLAO_CHANNEL` | `vmr` | dynamic execution control plane: `vmr` \| `ssh` \| `docker` \| `adb` \| `local` — see [Bring your own environment](#bring-your-own-environment) |
-| `KUNGLAO_VM_HOST` | unset | VM/host for dynamic analysis (vmr-shell :9876, Frida :1337) |
-| `GHIDRA_HOME` | unset | Ghidra install root (must contain `support/analyzeHeadless.bat`) |
-
-Rarely needed: `KUNGLAO_DOCKER_CONTAINER` (docker execution target for the `ssh`/`docker` channels), `KUNGLAO_FRIDA_PORT` (default 1337), `KUNGLAO_DIE` (DIE path, falls back to PATH), `KUNGLAO_CLAUDE_JSON` (test override for the user-level MCP registry).
-
-## Safety
-
-- Samples never execute on the host — the `block_malware_exec` hook enforces it; dynamic work runs VM/container/device-only and requires per-session authorization.
-- Ground truth hierarchy: raw artifact > local tool > sandbox > threat intel (CTI is a falsifiable hypothesis, never truth).
-- Maker-checker: a worker never self-verifies; a verifier never reads the maker's conclusion.
-- Bins, settings, and hooks are never committed; secrets are excluded from workspaces and the repo.
-
-## Development
-
-Contributions are welcome. Workflow: branch from `dev`, one branch per change, PR back to `dev`.
+Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a
+workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is
+never overwritten). Probe any time:
 
 ```bash
-git worktree add .worktrees/<name> -b <name> dev
-uv sync --locked
-uv run python -m pytest -q
-gh pr create --base dev
+uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 ```
 
-The authoritative full-suite entry is `python -m pytest -q` (see .github/workflows/release-check.yml).
-
-Design documentation lives in `docs/` and `specs/`. See [License](#license).
-
-## Internals
-
-<details>
-<summary><strong>MCP supply (the full manifest)</strong></summary>
-
-Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` — exit 1 = HARD missing, 2 = WARN missing only.
+(exit 1 = HARD missing, 2 = WARN-only missing.) The full manifest:
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -402,36 +523,135 @@ Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a works
 | `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
 | `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
-| `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web | browser JS reversing (hooks / trace / network capture) | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
+| `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `camoufox-reverse` | HARD | web | browser JS reversing (hooks / trace / network capture) — REQUIRED on web | ships with the plugin (`.claude-plugin/plugin.json mcpServers`) — enable the plugin; dep: `uv pip install camoufox-reverse-mcp` |
 
-</details>
-
-<details>
-<summary><strong>Workspace layout</strong></summary>
-
-One workspace per sample engagement:
-
-```
-<workspace>/
-├── bins/<sha256>              # the sample (gitignored)
-├── task_spec.yaml             # primary_questions / scope / constraints / success_criteria
-├── claim-register.yaml        # claims C-NN with status (OPEN/PROVEN/STAMP/...)
-├── claim_deps.yaml            # claim DAG
-├── facts/                     # byte-anchored facts F-NNN.md + _INDEX.md
-├── evidence/                  # raw artifacts + _index.json (eid → path + sha256)
-├── runs/                      # worker-status, plans, ledgers, .heartbeat.json
-├── blockers/                  # failure-attribution records per claim
-└── CLAUDE.md                  # workspace rules, generated by kunglao-init
-```
-
-kunglao hooks are wired at workspace level; your global `~/.claude/settings.json` is never written.
-
-</details>
+Workspace `.mcp.json` is generated by `kunglao-init` when missing; user
+registrations above are for machines deployed per the kunglao docs.
 
 ---
 
-## License
+## 🗓️ Roadmap
 
-Dual-licensed: **AGPL-3.0** for personal, academic, and internal use (free — see [LICENSE](LICENSE)); a **commercial license** is required for closed-source or SaaS commercial use — see [LICENSE-commercial.md](LICENSE-commercial.md).
+- Five-arm capability matrix (bare CC vs CC+warm-context vs kunglao cold/warm/no-recall) on the held-out corpus
+- Registry admission for discovered arms — making novel methods dispatchable
+- Cross-workspace memory: what works where, feature-keyed
+- The blocked-path measurement corpus — quantifying discovery beyond history
+
+---
+
+## ❓ FAQ
+
+**When does it stop?**
+`CONVERGED` (exit 0): every primary question in `task_spec.yaml` has an
+answer backed by a `PROVEN` fact, zero global contradictions, and the
+completion transaction recomputes clean. Budget and wall-clock caps bound
+the run; exhaustion counts as fail, never as silent success.
+
+**What do the claim statuses mean?**
+`OPEN` (not yet settled), `PARTIALLY-VERIFIED` (facts exist, no blind
+sign-off yet), `PROVEN` (an independent verifier re-derived it blind and
+the gates passed), `STAMP` (self-declared — never trusted as evidence). A
+worker's own sign-off can only ever produce `STAMP`.
+
+**What does the oracle verdict mean?**
+A machine-checked decision against a quantified verification contract — a
+named artifact, a mechanical criterion runnable with no LLM, and a
+threshold. It is the only trusted currency in the system; the settlement
+validator refuses to override it.
+
+**How do I read a FAIL settlement?**
+A FAIL emits a structured gap-note (decoy walls hit, evidence gaps, cost
+overrun — machine signals only) next to the settled row. The same-unit
+retry reads its predecessors' notes, so the next attempt attacks the named
+gap instead of repeating attempt 1.
+
+**What is PARK?**
+The option-death estimator learns, per (obstacle-kind, method-family),
+whether an investment arc is dead. A dead option is PARKed — down-weighted
+out of sampling — never deleted; it revives when the state changes.
+
+**The loop says BLOCKED — is it stuck?**
+`BLOCKED` (exit 4) means every open claim is blocked. The loop runs
+self-recovery on blockers; a SUSPECT/stale premise is auto-invalidated and
+re-derived. Persistent blockers land in `blockers/` with failure
+attribution — **read those records before adding budget**: the remedy for
+a tooling gap (register the missing server / install the missing binary)
+and for a dead method (the sampler already down-weights it) is cheaper
+than more wall-clock.
+
+**init HARD-rejected on a missing tool — what now?**
+The error block names each missing item with its install line. Install,
+then re-run the same init command (idempotent — it re-probes and
+scaffolds only on PASS). For MCP servers the registration commands are in
+the table above; verify with `mcp_probe.py` before re-running.
+
+**A worker keeps timing out (TIMEOUT rows on the ledger).**
+First read the act's artifacts: a TIMEOUT with facts banked is progress
+(credit carries them) — usually the act just needs to be split smaller;
+state the sub-goal so one claim ≈ one bounded attempt. A TIMEOUT with
+zero artifacts on the same family repeatedly means the obstacle registry
+should show the cause — fix the environment (VM reachability, frida
+port, MCP server) rather than retrying.
+
+**How do I see what the loop has learned?**
+`uv run python scripts/winrate_curve.py <ws>` for the trend;
+`runs/round-strategy.json` for the current strategy in force (method
+lead, anti-hints, budget); `runs/posterior-store.jsonl` for the raw
+posterior rows; `runs/q-cell-log.jsonl` for per-arm observations.
+
+**How do I resume after a crash?**
+`/kunglao-agent:resume <workspace>` (or `kunglao resume <workspace>`): a
+read-only breakpoint brief — health, open claims, in-flight workers, crash
+timeline — plus the next action. All state is on disk; no session context
+required.
+
+**Do I need a VM or MCP servers?**
+Static-only tasks need no execution plane at all (`KUNGLAO_CHANNEL=local`).
+Dynamic tasks require one of vmr/ssh/docker/adb. MCP-wise, all types
+require `ghidra` + `sequential-thinking`; web additionally requires
+`camoufox-reverse` (ships with the plugin). Probe:
+`uv run python scripts/mcp_probe.py <ws> --type <type>`.
+
+**My workspace predates a plugin update.**
+`/kunglao-agent:upgrade <workspace>` migrates the scaffold (hooks,
+templates, event vocab) forward; user data is never touched and byte
+drift refuses with RC=4. A version mismatch refuses analysis until
+upgraded.
+
+**Where do facts and evidence live — can I trust them?**
+`facts/F<NNN>.md` (byte-anchored, frontmatter contract) mapped to claims
+by `claim-register.yaml`; every fact cites raw artifacts through
+`evidence/_index.json` (path + sha256) and carries a `reproduce:`
+command. `verifier_sign_off` on the fact names the independent check.
+
+---
+
+## 🔐 Safety
+
+Authorized analysis only. You are responsible for defining and enforcing
+the allowed scope; sandbox boundaries reduce risk but never replace host
+isolation; the software is provided "AS IS".
+
+---
+
+## 🧪 Development
+
+```bash
+uv sync --locked        # locked env
+uv run pytest -n 4      # local face; CI's integration tier is the authoritative full-suite entry
+uv run ruff check .     # lint
+```
+
+CI gates every PR: hygiene ledgers (comment / silent-except / formal-code
+markers), deploy-manifest consistency, unit + integration tiers — the
+release-check workflow is the source of truth for every claim here.
+
+---
+
+## 📝 License
+
+Dual-licensed: **AGPL-3.0** for personal, academic, and internal use (see
+[LICENSE](LICENSE)); a commercial license is available for closed
+distribution — contact the maintainer.

@@ -45,6 +45,18 @@ def _fact(ws: Path, fact_id: str, status: str, claim_id: str, conclusion: str,
     text = index.read_text(encoding="utf-8") if index.exists() else ""
     text += f"{fact_id} | {status} | {claim_id} | {conclusion}\n"
     index.write_text(text, encoding="utf-8")
+    # #306 intake stamp: these drain-stage fixtures predate the
+    # emptiness-grade hard error — without the three oracle anchors the
+    # workspace reads as "intake never happened" and decide() exits 66
+    # before the anomaly gate can be observed. The stamp marks the
+    # workspace as intake-passed (verdictable), which is the state these
+    # tests have always meant to exercise.
+    spec = ws / "task_spec.yaml"
+    if not spec.exists():
+        spec.write_text(
+            "goal_verbatim: anomaly-gate fixture goal\n"
+            "success_criterion: family named with reproduction evidence\n"
+            "verification_method: static\n", encoding="utf-8")
     return f
 
 

@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
-from _factories import seed_bins, write_hook_state, seed_oracle_anchors
+from _factories import stamp_current, seed_bins, write_hook_state, seed_oracle_anchors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -132,6 +132,7 @@ def _trajectory1_ws(root: Path) -> Path:
         "assumption_validity": "justified-adequate",
         "next_method": "method was adequate",
         "analyzed_at": "2026-08-19T00:00:00+00:00"})
+    stamp_current(ws)  # 0.1.6 gate: the decide face refuses unstamped ws
     return ws
 
 
@@ -270,8 +271,7 @@ class TestTrajectory2PlanStall:
 
         payload = json.dumps({"cwd": str(root), "workspace": str(ws),
                               "tool_input": {"prompt":
-                              "[T2 tools=rev-xposed] claim C-1 "
-                              "hook the check via xposed"}})
+                              '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-xposed"]}}\nhook the check via xposed'}})
         _INVOKED.append([str(HOOKS / "dispatch_gate.py")])
         r = subprocess.run([sys.executable, str(HOOKS / "dispatch_gate.py")],
                            input=payload, capture_output=True, text=True,
@@ -434,9 +434,7 @@ class TestCapabilityCardDisproofVariant:
         `CAPABILITY (disproof recorded)` + a capability_switch event in the
         unified log. 看牌 is a gate on silent pivots, not a lock."""
         root, ws = _capability_root(tmp_path)
-        prompt = ("[T2 tools=rev-xposed] claim C-1 hook the check via xposed\n"
-                  "capability-disproof: frida (spawn path timed out twice — "
-                  "see analyses/failure-C-1.yaml)")
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-xposed"]}}\nhook the check via xposed\ncapability-disproof: frida (spawn path timed out twice — see analyses/failure-C-1.yaml)')
         r = _run_dispatch_gate(root, ws, prompt)
         assert r.returncode == 0, (
             f"disproof shown must pass; stderr={r.stderr!r}")
@@ -453,7 +451,7 @@ class TestCapabilityCardDisproofVariant:
         capability in hand, not a switch — no REJECT, no trace."""
         root, ws = _capability_root(tmp_path)
         r = _run_dispatch_gate(
-            root, ws, "[T1 tools=rev-frida] claim C-1 retry via listen mode")
+            root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["rev-frida"]}}\nretry via listen mode')
         assert r.returncode == 0, (
             f"staying on the validated family must pass; stderr={r.stderr!r}")
         assert "REJECT capability" not in r.stderr

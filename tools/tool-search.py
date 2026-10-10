@@ -16,8 +16,20 @@ Filters (combinable, AND semantics):
 
 Discovery mode (issue #476, #162: THE single search entry — no per-tier
 search tools exist):
-  --find <keyword>              case-insensitive substring search across
-                                ALL THREE data sources:
+  --find QUERY                 THE agent search face — a real query
+                                grammar: quoted phrases are atomic
+                                ("unicorn engine"), AND/OR/NOT (also
+                                && || !) with parentheses
+                                ((ghidra OR jadx) AND "dex" NOT windows),
+                                juxtaposition = AND; bare words / commas
+                                default to the forgiving OR group
+                                (--match all flips to AND). Combines
+                                with --capability/--tier/--cost-max
+                                (the filters narrow the internal registry
+                                hits; the other sources carry no tier and
+                                pass through, source visible per hit).
+                                Case-insensitive substring matching across
+                                ALL FOUR data sources:
                                   1. the internal registry
                                      (tools/_INDEX.yaml);
                                   2. the typed ext catalog
@@ -32,7 +44,13 @@ search tools exist):
                                      its own generator's schema is left
                                      untouched; type/consume are DERIVED
                                      at query time: type=reference,
-                                     consume=read).
+                                     consume=read);
+                                  4. the run-local shelf
+                                     (<ws>/tools-local/*.manifest.json —
+                                     #474/#477/#478 landed tools; the
+                                     manifests ARE the registry, scanned
+                                     at query time; workspace via --ws
+                                     or the cwd walk-up presence probe).
                                 Hits carry name + score + kind + type +
                                 consume + source + usage + one-line
                                 description — a hit decides without
@@ -74,6 +92,7 @@ from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -95,6 +114,18 @@ INTERNAL_SOURCE = "tools/_INDEX.yaml"  # resolution registry for internal hits
 REFERENCES_INDEX_REL = ("references", "_INDEX.yaml")
 REFERENCES_HEAD_LINES = 80   # haystack/description read depth per card
 REFERENCE_USAGE_TEMPLATE = "read {source} (capability reference)"
+
+# #478 PR2 fourth data source: the run-local shelf. The landed-tool
+# manifests under <ws>/tools-local/ ARE the registry (distill-manifest/1
+# from #474/#478 landings, harvest-manifest/1 from #477) — scanned at
+# query time, never rewritten, no third store. This closes the
+# owner-challenged gap: a landed tool that nothing surfaces is file-
+# landing, not a toolchain.
+RUN_LOCAL_DIRNAME = "tools-local"
+RUN_LOCAL_USAGE_TEMPLATE = "python {source} <sample-path>"
+# cwd walk-up presence probe (the kunglao_log workspace-marker idiom):
+# the first ancestor holding any of these is the workspace.
+WS_MARKERS = ("tools-local", "task_spec.yaml", "runs")
 
 
 def load_index(index_path: Path) -> list[dict]:
@@ -213,11 +244,11 @@ def _reference_description(head: str) -> str:
 
 
 def find_references(repo_root: Path, ref_paths: list[str],
-                    terms: list[str], mode: str = "any") -> list[dict]:
+                    query) -> list[dict]:
     hits: list[dict] = []
     for source in ref_paths:
         head = _reference_head(repo_root, source)
-        if not _haystack_hit(f"{source}\n{head}".lower(), terms, mode):
+        if not _haystack_hit(f"{source}\n{head}".lower(), query):
             continue
         hits.append({
             "name": Path(source).stem,
@@ -228,6 +259,82 @@ def find_references(repo_root: Path, ref_paths: list[str],
             "usage": REFERENCE_USAGE_TEMPLATE.format(source=source),
             "description": _reference_description(head),
         })
+    return hits
+
+
+# ---- #478 PR2 fourth data source: the run-local shelf ---------------------
+
+def resolve_workspace(start=None):
+    """The workspace whose run-local shelf --find scans: explicit path,
+    else the cwd walk-up presence probe (first ancestor holding a
+    workspace marker — tools-local / task_spec.yaml / runs). None
+    outside any workspace: the fourth source then stays silent (the
+    other three remain fully queryable)."""
+    try:
+        import os
+        cur = Path(start) if start else Path(os.getcwd())
+        for cand in (cur, *cur.parents):
+            if any((cand / m).exists() for m in WS_MARKERS):
+                return cand
+    except OSError:
+        pass
+    return None
+
+
+def _run_local_entry(doc: dict, manifest_path: Path) -> dict:
+    """One landed-tool hit projection from its manifest. Derives the
+    usage line and the verified-behavior annotation when the manifest
+    predates the usage block (old shelves stay discoverable)."""
+    name = str(doc.get("name")
+               or manifest_path.name.removesuffix(".manifest.json"))
+    source = f"{RUN_LOCAL_DIRNAME}/{name}.py"
+    usage = doc.get("usage") if isinstance(doc.get("usage"), dict) else {}
+    invoke = str(usage.get("invoke")
+                 or RUN_LOCAL_USAGE_TEMPLATE.format(source=source))
+    oracle = doc.get("oracle") if isinstance(doc.get("oracle"), dict) else {}
+    verified = str(usage.get("verified")
+                   or ("oracle satisfied (self-declared)"
+                       if oracle.get("satisfied") else "unverified"))
+    methods = [str(m) for m in (doc.get("methods") or []) if str(m)]
+    capability = str(doc.get("capability") or "unknown")
+    desc = (f"run-local landed tool (capability {capability}"
+            + (f"; methods: {', '.join(methods)}" if methods else "")
+            + f"); {verified}")
+    return {
+        "name": name,
+        "kind": "run-local",
+        "type": "tool",        # an executable landed in the run-local shelf
+        "consume": "invoke",
+        "capability": capability,
+        "source": source,
+        "usage": invoke,
+        "description": desc,
+    }
+
+
+def load_run_local(ws) -> list[dict]:
+    """Scan <ws>/tools-local/*.manifest.json — the run-local registry.
+    Absent shelf / unreadable or malformed manifests degrade to
+    silence, one bad manifest never bricks the query face."""
+    if ws is None:
+        return []
+    shelf = Path(ws) / RUN_LOCAL_DIRNAME
+    if not shelf.is_dir():
+        return []
+    out: list[dict] = []
+    for f in sorted(shelf.glob("*.manifest.json")):
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict):
+            out.append(_run_local_entry(doc, f))
+    return out
+
+
+def find_run_local(entries: list[dict], query) -> list[dict]:
+    hits = [e for e in entries
+            if _haystack_hit(_ext_haystack(e).lower(), query)]
     return hits
 
 
@@ -305,25 +412,170 @@ def _ext_haystack(entry: dict) -> str:
 
 # ---- #162 keyword matching: multi-term boolean over the haystacks ----------
 
-def _haystack_hit(haystack: str, terms: list[str], mode: str) -> bool:
-    """any = boolean OR (default), all = boolean AND over the terms."""
+# --------------------------------------------------------------------------
+# The query language (owner ruling: bare space-splitting is
+# ambiguous and there is no logic). Grammar — explicit, tiny, forgiving:
+#
+#   expr   := or_expr
+#   or     := and  (OR  and)*        OR  | ||
+#   and    := not  (AND not)*        AND | &&
+#   not    := NOT not | atom         NOT | !
+#   atom   := '(' expr ')' | "phrase" | term
+#
+# Quoted phrases are ATOMIC (no word-splitting); bare terms and commas
+# are SEPARATORS; an operator-free query collapses to one implicit OR
+# group (the forgiving default) — or AND under --match all. Juxtaposition
+# inside an explicit query is AND. Matching is case-insensitive substring
+# per atom.
+# --------------------------------------------------------------------------
+
+_TOK = re.compile(
+    r"[\s,]*(?:(?P<lpar>\()|(?P<rpar>\))|(?P<not>!|NOT\b)|(?P<and>&&|AND\b)"
+    r"|(?P<or>\|\||OR\b)|\"(?P<phrase>[^\"]*)\"?|(?P<term>[^\s()\"!,]+))",
+    re.VERBOSE | re.IGNORECASE)
+
+
+def _tokenize(query: str) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    pos = 0
+    while pos < len(query):
+        m = _TOK.match(query, pos)
+        if not m or m.end() == pos:
+            break
+        pos = m.end()
+        kind = m.lastgroup
+        if kind is None:
+            continue
+        out.append((kind, m.group(kind)))
+    return out
+
+
+class _Cursor:
+    """Parser position over the token list (module-level helpers keep
+    cyclomatic complexity out of any single function)."""
+
+    def __init__(self, tokens: list[tuple[str, str]]):
+        self.tokens = tokens
+        self.i = 0
+
+    def peek(self) -> str | None:
+        return self.tokens[self.i][0] if self.i < len(self.tokens) else None
+
+    def shift(self) -> None:
+        self.i += 1
+
+    def value(self) -> str:
+        return self.tokens[self.i][1]
+
+
+def _p_atom(cur: _Cursor) -> tuple:
+    kind = cur.peek() or ""
+    if kind == "lpar":
+        cur.shift()
+        node = _p_or(cur)
+        if cur.peek() == "rpar":
+            cur.shift()
+        return node
+    if kind in ("term", "phrase"):
+        val = cur.value().lower()
+        cur.shift()
+        return (kind, val)
+    # an operator where an atom belongs (e.g. trailing AND): consume it
+    # and degrade to a never-match leaf — a loud parse beats a guess
+    if kind:
+        cur.shift()
+    return ("term", "\x00impossible\x00")
+
+
+def _p_not(cur: _Cursor) -> tuple:
+    if cur.peek() == "not":
+        cur.shift()
+        return ("not", _p_not(cur))
+    return _p_atom(cur)
+
+
+def _p_and(cur: _Cursor) -> tuple:
+    # juxtaposition is AND (ghidra NOT windows == ghidra AND NOT windows);
+    # the forgiving bare-terms OR default lives in compile_query, which
+    # never routes operator-free queries into the explicit grammar
+    node = _p_not(cur)
+    while cur.peek() in ("and", "not", "term", "phrase", "lpar"):
+        explicit = cur.peek() == "and"
+        if explicit:
+            cur.shift()
+        node = ("and", node, _p_not(cur))
+    return node
+
+
+def _p_or(cur: _Cursor) -> tuple:
+    node = _p_and(cur)
+    while cur.peek() == "or":
+        cur.shift()
+        node = ("or", node, _p_and(cur))
+    return node
+
+
+def _parse(tokens: list[tuple[str, str]]) -> tuple:
+    """Recursive descent -> nested tuples:
+    ("term", s) | ("phrase", s) | ("and", a, b) | ("or", a, b) | ("not", a)
+    """
+    return _p_or(_Cursor(tokens))
+
+
+def compile_query(query: str, mode: str = "any") -> tuple:
+    """The single compile face: a query string (already flattened from any
+    CLI input shape) -> one AST. Operator-free bare terms collapse to an
+    implicit OR (default) / AND (--match all) group — full back-compat."""
+    tokens = _tokenize(query)
+    kinds = {k for k, _ in tokens}
+    if not (kinds & {"or", "and", "not", "lpar", "rpar", "phrase"}):
+        terms = [v.lower() for k, v in tokens if k == "term"]
+        if len(terms) <= 1:
+            return ("term", terms[0]) if terms else ("term", "\x00none\x00")
+        op = "and" if mode == "all" else "or"
+        node = ("term", terms[0])
+        for term in terms[1:]:
+            node = (op, node, ("term", term))
+        return node
+    return _parse(tokens)
+
+
+def _eval(node: tuple, hay: str) -> bool:
+    op = node[0]
+    if op in ("term", "phrase"):
+        return node[1] in hay
+    if op == "and":
+        return _eval(node[1], hay) and _eval(node[2], hay)
+    if op == "or":
+        return _eval(node[1], hay) or _eval(node[2], hay)
+    if op == "not":
+        return not _eval(node[1], hay)
+    return False
+
+
+def _ast_leaves(node: tuple) -> list[str]:
+    if node[0] in ("term", "phrase"):
+        return [node[1]]
+    if node[0] == "not":
+        return _ast_leaves(node[1])
+    return _ast_leaves(node[1]) + _ast_leaves(node[2])
+
+
+def _haystack_hit(haystack: str, query) -> bool:
+    """The one evaluation chokepoint — `query` is a compiled AST."""
     hay = haystack.lower()
-    if mode == "all":
-        return all(t in hay for t in terms)
-    return any(t in hay for t in terms)
+    return _eval(query, hay)
 
 
-def find_internal(tools: list[dict], terms: list[str],
-                  mode: str = "any") -> list[dict]:
+def find_internal(tools: list[dict], query) -> list[dict]:
     hits = [t for t in tools
-            if _haystack_hit(_internal_haystack(t).lower(), terms, mode)]
+            if _haystack_hit(_internal_haystack(t).lower(), query)]
     return [_find_projection_internal(t) for t in hits]
 
 
-def find_ext(ext: list[dict], terms: list[str],
-             mode: str = "any") -> list[dict]:
+def find_ext(ext: list[dict], query) -> list[dict]:
     hits = [e for e in ext
-            if _haystack_hit(_ext_haystack(e).lower(), terms, mode)]
+            if _haystack_hit(_ext_haystack(e).lower(), query)]
     return [_find_projection_ext(e) for e in hits]
 
 
@@ -382,21 +634,37 @@ def _emit(hits: list[dict], as_json: bool, text_formatter) -> None:
 
 
 def _find_mode(args, tools: list[dict], index_path: Path) -> int:
-    """--find: the #162 unified typed search face (all three sources)."""
-    terms = [t.strip().lower() for t in args.find.split(",") if t.strip()]
-    if not terms:
+    """--find: the #162 unified typed search face (all four sources)."""
+    # agent-ergonomic query face (owner rulings: no ambiguous
+    # space-splitting, full logic): every --find token flattens to ONE
+    # query string, then the grammar takes over — quoted phrases are
+    # atomic, AND/OR/NOT + parens express logic, bare terms default to
+    # the forgiving OR group (--match all flips the default to AND)
+    # repeated --find flags OR-join (one query per flag is the natural
+    # shape; a single quoted query carries the full grammar)
+    flat = " OR ".join(str(x) for x in (args.find or []))
+    if not flat.strip():
         print("error: --find needs at least one keyword", file=sys.stderr)
         return 2
     mode = args.match or "any"
+    query = compile_query(flat, mode)
+    terms = _ast_leaves(query)
     ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
     refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
     ref_paths = load_reference_paths(refs_index)
     repo_root = index_path.parent.parent
+    run_local = load_run_local(resolve_workspace(args.ws))
     # dedup by source path: a re-library card enumerated by both the ext
     # index and the references index surfaces once (typed ext entry wins)
-    hits = find_internal(tools, terms, mode) + find_ext(ext, terms, mode)
+    filtered = [e for e in tools
+                if matches(e, args.capability, args.tier, args.cost_max)]
+    hits = find_internal(filtered, query) \
+        + find_ext(ext, query)
     seen_sources = {str(h.get("source", "")) for h in hits}
-    for h in find_references(repo_root, ref_paths, terms, mode):
+    for h in find_references(repo_root, ref_paths, query):
+        if h["source"] not in seen_sources:
+            hits.append(h)
+    for h in find_run_local(run_local, query):
         if h["source"] not in seen_sources:
             hits.append(h)
     if args.type is not None:
@@ -419,15 +687,24 @@ def main(argv: list[str] | None = None) -> int:
                          "T3 VM-dynamic)")
     ap.add_argument("--cost-max", choices=COST_ORDER, default=None,
                     help="cost budget filter, inclusive: probe < cheap < deep")
-    ap.add_argument("--find", default=None, metavar="KEYWORD[,KEYWORD...]",
+    ap.add_argument("--find", default=None, action="append",
+                    metavar="QUERY",
                     help="discovery mode (#162): case-insensitive keyword "
-                         "search over ALL THREE data sources (internal "
-                         "registry, typed ext catalog, references index); "
+                         "search over ALL FOUR data sources (internal "
+                         "registry, typed ext catalog, references index, "
+                         "run-local landed-tool shelf); "
                          "comma-separated terms combine boolean-style via "
                          "--match (default any = OR); hits carry name + "
                          "score + type + consume + source + usage + "
                          "description; mutually exclusive with "
                          "--capability/--tier/--cost-max")
+    ap.add_argument("--ws", default=None, metavar="PATH",
+                    help="with --find: the workspace whose run-local "
+                         "shelf (tools-local/*.manifest.json) is scanned "
+                         "as the fourth source; default = the cwd walk-up "
+                         "presence probe (tools-local / task_spec.yaml / "
+                         "runs marker); no workspace found -> that source "
+                         "stays silent")
     ap.add_argument("--match", choices=("any", "all"), default=None,
                     help="multi-term boolean mode for --find: any = OR "
                          "(default), all = AND (every term must match)")
@@ -461,11 +738,11 @@ def main(argv: list[str] | None = None) -> int:
                          "this script)")
     args = ap.parse_args(argv)
 
-    if args.find is not None and (args.capability or args.tier
-                                  or args.cost_max):
-        ap.error("--find cannot combine with --capability/--tier/--cost-max "
-                 "(ext entries carry no tier/cost_tier; ANDing would "
-                 "silently drop them — run two queries instead)")
+    # --find now COMBINES with the internal filters instead of refusing
+    # (the 2026-10-08 ergonomics ruling): the filters apply to internal
+    # registry hits only; ext/reference/run-local hits carry no tier or
+    # cost_tier and pass through unfiltered — the output marks each hit's
+    # source so the combination is never silently lossy
     if args.match is not None and args.find is None:
         ap.error("--match requires --find (it has no meaning for the "
                  "internal filters)")

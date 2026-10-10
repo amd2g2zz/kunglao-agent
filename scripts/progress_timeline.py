@@ -25,6 +25,14 @@ repaired byte-exactly by the next render (self-healing by construction).
 issue-530 disposition holds: progress.txt stays a human-scannable VIEW, never
 machine-ingested state (state_anchor / external_kicker still never read it).
 
+Channel disposition (the structured progress face): runs/timeline.jsonl —
+projected by scripts/timeline_face.py from the SAME event ledger — is the
+structured progress face; this sidecar is retired AS a progress face and
+keeps only its preservation role (the worker-echo mirror that makes
+progress.txt self-healing). Its rows stay worker echo (lossy ts when a
+line carries no stamp is inherent to the echo, never fabricated); the
+structured face carries the machine-graded record.
+
 Render faces (fail-open — a render failure never blocks the caller):
   1. checkpoint cadence: convergence_check.main(), right after the snapshot
      append (the tick writer) — the timeline stays in lockstep with the axis;
@@ -36,7 +44,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from bisect import bisect_right
 from collections import Counter
 from contextlib import contextmanager
@@ -44,6 +51,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from kunglao_log import iter_jsonl  # (kunglao_log Family-K single source)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 
 try:  # advisory cross-process lock; POSIX faces only — on platforms without
     # fcntl the re-check-before-write loop below still guards no-append-lost.
@@ -114,8 +122,27 @@ def _parse_event_ts(value) -> datetime | None:
 
 def _warn(reason: str) -> None:
     """The one runtime trace a fail-open skip leaves (issue-275 policy:
-    never silent; mirror of the kunglao_log emit-warning style)."""
-    print(f"[progress_timeline] warning: {reason}", file=sys.stderr)
+    never silent; routed through the canonical warn — process-wide
+    dedupe + the ledger face)."""
+    warn("render_degraded", reason)
+
+
+def _emit_skip(ws, reason: str) -> None:
+    """issue 293: a render SKIP is a decision (the view write was declined) —
+    one tagged event with the reason, fail-open (kunglao_record posture).
+
+    Deliberately the SUCCESS face emits nothing: the rendered timeline is a
+    derived VIEW (issue 282/issue 530 — never machine-ingested state), and a
+    post-write event would break the zero-gap invariant (timeline_gaps)
+    while a pre-read event would change the rendered file bytes (the issue
+    292 pins). Skip faces carry no such loop — the declined write leaves the
+    file untouched, so the event is pure decision visibility."""
+    try:
+        from kunglao_log import emit
+        emit(Path(ws), actor="progress_timeline",
+             action="timeline_render_skipped", detail=reason)
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        _warn(f"render-skip telemetry unavailable ({exc})")
 
 
 def _cap(row: str) -> str:
@@ -241,8 +268,7 @@ def _append_sidecar(ws, entries: list[dict]) -> int:
             for e in entries:
                 f.write(json.dumps(e, sort_keys=True, ensure_ascii=False) + "\n")
     except OSError as exc:
-        print(f"[progress_timeline] warning: cannot write sidecar {p}: {exc}",
-              file=sys.stderr)
+        warn("sidecar_write", f"cannot write sidecar {p}: {exc}")
         return 0
     return len(entries)
 
@@ -370,6 +396,7 @@ def render_and_repair(ws) -> dict:
     if events is None:
         reason = "ledger unreadable — progress.txt left untouched"
         _warn(reason)
+        _emit_skip(ws, reason)  # issue 293: the declined write is a decision
         return {"status": "skipped", "wrote": False, "reason": reason,
                 "events": None, "narrative": 0}
     ingested_total = 0
@@ -387,6 +414,7 @@ def render_and_repair(ws) -> dict:
             reason = ("worker appends kept landing — write deferred, "
                       "file untouched (nothing lost; next render picks up)")
             _warn(reason)
+            _emit_skip(ws, reason)  # issue 293: the deferred write is a decision
             return {"status": "skipped", "wrote": False, "reason": reason,
                     "events": len(events), "narrative": ingested_total}
         reason = None if not ingested_total else \
@@ -399,6 +427,7 @@ def render_and_repair(ws) -> dict:
         except OSError as exc:
             reason = f"progress.txt unwritable: {exc}"
             _warn(reason)
+            _emit_skip(ws, reason)  # issue 293: the failed write is a decision
             return {"status": "skipped", "wrote": False, "reason": reason,
                     "events": len(events), "narrative": ingested_total}
         return {"status": "rendered", "wrote": True, "reason": reason,

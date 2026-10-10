@@ -83,9 +83,15 @@ def record(ws: Path | str, provider: str, outcome: str, reason: str = "",
 
 def recent_failures(ws: Path | str,
                     window_hours: int = DEFAULT_WINDOW_HOURS) -> dict:
-    """Providers with a FAIL entry newer than the window.
+    """Providers whose LATEST in-window entry is a fail (latest-entry-wins).
 
-    Returns {provider: {"reason", "ts"}} (latest failure). Fail-open:
+    Reconciliation: an ok entry newer than the provider's last fail
+    clears the demotion — evidence beats wall clock. With no ok in the
+    window the semantics are unchanged (the latest in-window fail fails
+    the provider; fails older than the window stay expired). Entries
+    with an unparseable ts cannot order themselves against newer
+    evidence and are skipped. Append order breaks ts ties (the last
+    appended wins). Returns {provider: {"reason", "ts"}}. Fail-open:
     missing/corrupt file -> {}.
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
@@ -93,15 +99,16 @@ def recent_failures(ws: Path | str,
     for provider, entries in _load(Path(ws) / "provider_health.json").items():
         latest = None
         for e in entries if isinstance(entries, list) else []:
-            if not isinstance(e, dict) or e.get("outcome") != "fail":
+            if not isinstance(e, dict):
                 continue
             when = _parse_ts(e.get("ts", ""))
-            if when and when >= cutoff:
-                if latest is None or when > latest[1]:
-                    latest = ({"reason": e.get("reason", ""),
-                               "ts": e.get("ts", "")}, when)
-        if latest:
-            out[provider] = latest[0]
+            if not when or when < cutoff:
+                continue
+            if latest is None or when >= latest[1]:
+                latest = (e, when)
+        if latest and latest[0].get("outcome") == "fail":
+            out[provider] = {"reason": latest[0].get("reason", ""),
+                             "ts": latest[0].get("ts", "")}
     return out
 
 

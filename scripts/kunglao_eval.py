@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import platform
 import sys
@@ -25,11 +24,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_DIR = ROOT / "scripts"
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+from _common import scripts_bootstrap
+
+SCRIPT_DIR = scripts_bootstrap()
 
 import priority_ratio as pr
+from _common import sha256_file, sha256_hex
 from status_defs import TERMINAL
 
 ARM_CONFIGS = {
@@ -166,7 +166,7 @@ FIXTURES_DIR = ROOT / "eval" / "fixtures"
 
 
 def _sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return sha256_hex(text.encode("utf-8"))
 
 
 def _canonical(obj) -> str:
@@ -174,7 +174,7 @@ def _canonical(obj) -> str:
 
 
 def _file_sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return sha256_file(path)
 
 
 def code_digest() -> str:
@@ -183,7 +183,7 @@ def code_digest() -> str:
     for name in ("kunglao_eval.py", "priority_ratio.py", "kunglao_verify.py"):
         p = SCRIPT_DIR / name
         parts.append(p.read_bytes() if p.exists() else b"")
-    return hashlib.sha256(b"|".join(parts)).hexdigest()
+    return sha256_hex(b"|".join(parts))
 
 
 def env_digest() -> str:

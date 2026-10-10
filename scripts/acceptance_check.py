@@ -22,25 +22,8 @@ cost 2x~301s = 60% of the 2026-08-25 suite runtime and grew O(n^2) with it).
 `--full` remains the explicit operator channel for a full-suite run.
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] acceptance_check WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import json
 import os
@@ -53,9 +36,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+SCRIPTS = scripts_bootstrap()
 
 EIGHT_CLIS = ["kunglao.py", "kunglao-decide.py", "kunglao-verify.py", "kunglao-record.py",
               "kunglao-monitor.py", "kunglao-init.py", "kunglao-eval.py", "kunglao-digest.py"]
@@ -85,11 +68,13 @@ def _check_cli_surface() -> dict:
 
 
 def _check_priority_voi() -> dict:
-    """#107: the ranker is the rebuilt Thompson composite — score =
-    (sampled case posterior + LAMBDA_DH*dH) * worth, deterministic under the
-    default seed, with the new feeds diagnostics and no weighted-era fields.
-    (The check token keeps its historical name; the formula it pins changed
-    by owner ruling — "之前的不要了".)"""
+    """#107+#294: the ranker is the rebuilt Thompson composite — score =
+    (sampled case posterior + W_DOWNSTREAM*downstream_term) * worth,
+    deterministic under the default seed, with the feeds diagnostics and
+    no weighted-era fields. (#295 removed the LAMBDA_DH*dH face —
+    docs/adr-001-strategy-parameter-governance.md. The check token keeps
+    its historical name; the formula it pins changed by owner ruling —
+    "之前的不要了".)"""
     try:
         import priority_ratio as pr
         claims = [{"id": "C1", "status": "OPEN", "evidence_tier_attempted": 0,
@@ -99,11 +84,13 @@ def _check_priority_voi() -> dict:
         again = pr.priority_ratio(claims, {}, pr.EvidenceView())[0]
         det = (a.to_dict() == again.to_dict())
         composite = (hasattr(a, "feeds")
-                     and {"thompson_sample", "case_flip_potential", "dh_pq"}
+                     and {"thompson_sample", "case_flip_potential", "downstream"}
                      <= set(a.feeds or {})
+                     and "dh_pq" not in (a.feeds or {})
                      and not hasattr(a, "leverage")
                      and not hasattr(a, "delta_disc"))
-        bounded = 0.0 < a.score < 1.0 + pr.LAMBDA_DH + 1e-9  # Beta sample + dH=0
+        max_dh_free_lift = pr.W_DOWNSTREAM * pr.DOWNSTREAM_CAP
+        bounded = 0.0 < a.score < 1.0 + max_dh_free_lift + 1e-9  # Beta sample + no deps
         return {"name": "priority_voi_formula",
                 "passed": det and composite and bounded,
                 "detail": f"score={a.score} det={det} composite={composite} "
@@ -233,7 +220,7 @@ def category_regression() -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     junit = out_dir / "junit.xml"
 
-    cmd = ["python", "-m", "pytest", "-q", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-q", "--junitxml", str(junit),
            "-m", "not replay", "--tb=short",
            "-p", "tests.v013_acceptance.conftest",
            "-n", "auto"]  # pytest-xdist parallel
@@ -269,7 +256,7 @@ def category_integration() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_integration_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and integration", str(target),
            "--tb=short"]
     try:
@@ -304,7 +291,7 @@ def category_fault() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_fault_injection_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and fault", str(target),
            "--tb=long"]
     try:
@@ -427,7 +414,7 @@ def category_smoke() -> dict:
     junit = out_dir / "junit.xml"
 
     target = KUNGLAO_ROOT / "tests" / "v013_acceptance" / "test_smoke_v013.py"
-    cmd = ["python", "-m", "pytest", "-v", "--junitxml", str(junit),
+    cmd = [sys.executable, "-m", "pytest", "-v", "--junitxml", str(junit),
            "-m", "v013 and smoke", str(target), "--tb=short"]
     try:
         import pytest_timeout  # noqa: F401

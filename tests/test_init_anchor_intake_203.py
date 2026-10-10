@@ -22,6 +22,7 @@ contracts).
 """
 from __future__ import annotations
 
+import subprocess
 import json
 import os
 import sys
@@ -52,7 +53,6 @@ ANSWERS = {
 def _run_init(ws: Path, extra: list[str]) -> "subprocess.CompletedProcess":
     """Hermetic init run: toolchain skipped, the host-exec ask answered
     explicitly (non-interactive), profile writes pinned to a temp root."""
-    import subprocess
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
             "--skip-toolchain", *extra,
             "--host-exec-protection", "enabled",

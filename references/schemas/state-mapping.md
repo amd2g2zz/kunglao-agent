@@ -11,13 +11,17 @@ both consumers must implement.
 | claim-register workflow state | fact `status` (claim strength) | `verify_status` (verifier gate) | `confidence` | `confidence_zh` |
 |---|---|---|---|---|
 | OPEN | OPEN | pending | (omit) | (omit) |
-| STAMP (claimed, unverified) | INFERRED | pending | medium | 倾向于 |
-| INFERRED (maker produced, no L1 yet) | INFERRED | pending | medium | 倾向于 |
-| PARTIALLY-VERIFIED (L1 passed, L2 pending) | INFERRED | partial | medium | 倾向于 |
-| PARTIALLY-VERIFIED + `boundary_type: pure_negative` | NEGATIVE | partial | high | 不支持 |
-| PROVEN (maker + independent checker passed) | PROVEN | passes | high | 可确认 |
+| STAMP (claimed, unverified) | INFERRED | pending | medium | 倾向于 (leans-toward) |
+| INFERRED (maker produced, no L1 yet) | INFERRED | pending | medium | 倾向于 (leans-toward) |
+| PARTIALLY-VERIFIED (L1 passed, L2 pending) | INFERRED | partial | medium | 倾向于 (leans-toward) |
+| PARTIALLY-VERIFIED + `boundary_type: pure_negative` | NEGATIVE | partial | high | 不支持 (does-not-support) |
+| PROVEN (maker + independent checker passed) | PROVEN | passes | high | 可确认 (confirms) |
 | DEFERRED | DEFERRED | pending | (omit) | (omit) |
-| REFUTED | REFUTED | passes | high | 可确认 |
+| REFUTED | REFUTED | passes | high | 可确认 (confirms) |
+
+Note: `confidence_zh` values are the schema's literal five-verb glosses, pinned by
+`scripts/lint_facts.py` (`VALID_CONFIDENCE_ZH` / `CONFIDENCE_ZH_RULES`) — they stay Chinese
+by contract; the parenthesized English is the semantic translation, not a legal value.
 
 Notes:
 - `PARTIALLY-VERIFIED` and `STAMP` are workflow states and MUST NOT appear in
@@ -34,18 +38,24 @@ Notes:
 
 | Consumer | Layer | Reads |
 |---|---|---|
-| `scripts/convergence_check.py` (#331) | workflow | `claim-register.yaml` statuses + `facts/_INDEX.md` status column (`PARTIAL_STATUSES` subset matching) |
+| `scripts/convergence_check.py` (#331, #500) | workflow + schema bridge | `claim-register.yaml` statuses + `facts/_INDEX.md` status column: a row counts as partial under the workflow vocabulary (`PARTIAL_STATUSES`) OR under the schema vocabulary (`INFERRED` + the fact file still owes verification — `verified:` pending/partial) |
 | `scripts/fact_contradiction_gate.py` | workflow | `facts/_INDEX.md` rows with status `PROVEN` |
 | `scripts/kunglao_verify.py` (#332) | schema + extension | `claim_id`/`reproduce`/`expected`/provenance `recompute_script` |
 | `scripts/lint_facts.py` (this change) | schema | all 12 mandatory + extension presence |
 | malware-veri-notes `lint-notes.py` | schema + extension | fact fields incl. kunglao extension keys |
 | malware-veri-notes `handoff-check.py` | schema | `verify_status` on cited notes |
 
-`facts/_INDEX.md` status column is the WORKFLOW layer (kept as
-`PROVEN`/`PARTIALLY-VERIFIED`/`NEGATIVE`/`DEFERRED` so convergence partial
-counting and the contradiction gate keep working); the frontmatter carries the
-schema layer. `migrate_facts.py` regenerates `_INDEX.md` from the migrated
-frontmatter via `_workflow_status()`.
+`facts/_INDEX.md` status column carries the schema-layer fact status
+(`PROVEN`/`INFERRED`/`NEGATIVE`/`REFUTED`/`OPEN`/`DEFERRED`/`VERIFIED` —
+the #538 single-schema write gate `tools/_lib/index_schema.py:
+FACT_STATUSES` refuses anything else, and `scripts/update_index.py`
+upserts through it). `migrate_facts.py` regenerates `facts/_INDEX.md`
+from the migrated frontmatter via `_workflow_status()`. Because both
+vocabularies have been observed in the column across workspaces, the
+convergence reader (#500) bridges them: workflow rows match
+`PARTIAL_STATUSES`; schema rows match on `INFERRED` + the fact file's
+own `verified:` field still owing (pending/partial). Verified facts
+never count under either vocabulary.
 
 ## 3. kunglao extension layer
 
@@ -74,8 +84,9 @@ required on every kunglao fact, validated for key presence by
 
 - `agents/kunglao-worker.md` (#310 domain): point the fact-writing section at
   `templates/fact-frontmatter.md` and the slugged id convention.
-- `scripts/convergence_check.py` / `scripts/priority.py` (#331 domain): consume
-  this mapping when reconciling register statuses with fact statuses.
+- `scripts/convergence_check.py` / `scripts/priority_ratio.py` (#331 domain;
+  `priority.py` renamed by #499): consume this mapping when reconciling
+  register statuses with fact statuses.
 - `handoff-check.py` (malware-veri-notes, live dir): integration hook is a
   one-liner — run `lint_facts.py <workspace>` before the notes gate; lint
   failure = non-conforming (wrapper is independent until then).
@@ -85,5 +96,3 @@ required on every kunglao fact, validated for key presence by
   slugged filename from the start.
 - `claim-register.yaml` `fact:` fields keep the old ids for now (kunglao_verify
   resolves `facts/<id>.md`); update together with the file rename.
-
-recall_useful: pending

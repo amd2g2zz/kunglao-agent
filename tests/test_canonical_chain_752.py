@@ -34,6 +34,7 @@ the real ~/.claude tree is NEVER touched.
 from __future__ import annotations
 
 import json
+import re
 import pathlib
 import sys
 from pathlib import Path
@@ -244,11 +245,12 @@ def test_selfcheck_fails_stale_canonical_commands(fake_home, monkeypatch):
                for m in result["mismatches"]), result["mismatches"]
 
 
-def test_selfcheck_ignores_a_lying_caller_hook_dir(fake_home, monkeypatch):
-    """The self-certifying loop of #752, killed outright: the caller hands
-    in the SAME wrong dir the bad file matches — the verdict must still be
-    FAIL because the expectation is recomputed from the executing install,
-    never taken from the parameter."""
+def test_selfcheck_has_no_hook_dir_parameter(fake_home, monkeypatch):
+    """The self-certifying loop of #752, killed STRUCTURALLY: the lying
+    hook_dir parameter is deleted (compat-rot sweep 2026-09-29, audit A1)
+    — the lie is no longer "accepted but ignored", it is untellable. The
+    shape expectation is recomputed from the executing install; there is
+    no caller variable left to certify itself."""
     skills = fake_home / ".claude" / "skills"
     prod = _install_at(skills, "kunglao-agent")
     dev = _install_at(skills, "kunglao-agent-dev")
@@ -256,13 +258,11 @@ def test_selfcheck_ignores_a_lying_caller_hook_dir(fake_home, monkeypatch):
     ws = fake_home.parent / "ws-liar"
     ws.mkdir(parents=True)
     target = _write_at(prod / "hooks", ws)
-    result = hook_activation.selfcheck_registration(
-        target, expected_files={"env_check_gate.py"},
-        hook_dir=prod / "hooks",  # the lie: matches the file, not reality
-        workspace=ws, layer="project")
-    assert result["ok"] is False, (
-        "a caller-supplied hook_dir must never certify itself: "
-        f"{result}")
+    with pytest.raises(TypeError, match="hook_dir"):
+        hook_activation.selfcheck_registration(
+            target, expected_files={"env_check_gate.py"},
+            hook_dir=prod / "hooks",  # the lie: no longer even accepted
+            workspace=ws, layer="project")
 
 
 def test_register_hooks_does_not_forward_hook_dir(fake_home, monkeypatch,
@@ -398,7 +398,10 @@ def test_v012_state_rewire_zero_stale_references(fake_home, monkeypatch):
     hook_activation.register_hooks(workspace=ws)
 
     blob = target.read_text(encoding="utf-8")
-    assert "python " not in blob.replace("python -", "") or \
+    # 0.1.6 invocation standard: bare `python ` is legal ONLY inside the
+    # canonical `uv run --project <framework> python <script>` form.
+    residue = re.sub(r"uv run --project \S+ python", "", blob)
+    assert "python " not in residue or \
         PROD_NAME not in blob, "legacy python entries must be replaced"
     assert f"/skills/{PROD_NAME}/" not in blob
     import install_reference  # noqa: E402

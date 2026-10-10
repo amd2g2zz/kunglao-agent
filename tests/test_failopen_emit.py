@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import subprocess
 import sys
 import types
@@ -67,13 +68,16 @@ def _kunglao_log_calls(monkeypatch):
 # =========================================================================
 
 class TestTop1FailOpenEmit:
-    """#569: the two FAIL_OPEN returns in _top1_enforcement must both leave
-    a top1_fail_open trace so the audit log shows when the gate was bypassed
-    instead of REJECTing."""
+    """#569 faces, FLIPPED fail-closed by the owner ruling 2026-09-28:
+    a scorer/audit ERROR in _top1_enforcement must REJECT (exit 2) with
+    a top1_gate_error trace + a durable gate-rejections ledger row — a
+    gate that cannot see must not wave the dispatch through. The legacy
+    top1_fail_open vocabulary stays registered (scripts/event_taxonomy.py)
+    but is no longer emitted by dispatch_gate."""
 
     def test_top1_scorer_unavailable_emits(self, tmp_path, monkeypatch):
         """Face (a): worker_budget cannot be imported (ImportError) — the
-        gate fails open (returns None) AND emits top1_fail_open."""
+        gate REJECTS (rc 2) AND emits top1_gate_error + a ledger row."""
         # Sabotage: hide worker_budget. The hook does
         #   `sys.path.insert(0, str(SKILL_DIR / "hooks"))` then
         #   `from worker_budget import check_priority`
@@ -93,25 +97,31 @@ class TestTop1FailOpenEmit:
         # fresh import in case the module already cached worker_budget
         importlib.reload(dg)
         try:
-            rc = dg._top1_enforcement(ws, "C-2", "[T1 tools=grep] claim C-2")
+            rc = dg._top1_enforcement(ws, "C-2", '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 1, "tools": ["grep"]}}\n')
         finally:
             # restore real worker_budget for subsequent tests in this process
             monkeypatch.delitem(sys.modules, "worker_budget", raising=False)
 
-        assert rc is None, (
-            f"FAIL_OPEN face must return None (no REJECT); got {rc!r}")
-        rows = [c for c in calls if c["action"] == "top1_fail_open"]
+        assert rc == 2, (
+            f"fail-closed face must REJECT with rc 2; got {rc!r}")
+        rows = [c for c in calls if c["action"] == "top1_gate_error"]
         assert rows, (
-            f"top1_fail_open must be emitted on scorer-unavailable; "
+            f"top1_gate_error must be emitted on scorer-unavailable; "
             f"got {calls}")
         assert rows[-1]["claim"] == "C-2", (
-            f"detail must name the bypassed claim; got {rows[-1]}")
+            f"detail must name the rejected claim; got {rows[-1]}")
         assert rows[-1]["actor"] == "hook:dispatch_gate", (
             f"actor must identify the source hook; got {rows[-1]}")
+        ledger = ws / "runs" / "gate-rejections.jsonl"
+        ledger_rows = [json.loads(line) for line in
+                       ledger.read_text(encoding="utf-8").splitlines()
+                       if line.strip()]
+        assert ledger_rows and ledger_rows[-1]["gate"] == "top1"
+        assert "ImportError" in ledger_rows[-1]["msg"]
 
     def test_top1_audit_crash_emits(self, tmp_path, monkeypatch):
         """Face (b): worker_budget imports fine but check_priority() raises —
-        gate fails open (returns None) AND emits top1_fail_open."""
+        gate REJECTS (rc 2) AND emits top1_gate_error."""
         import worker_budget as wb  # the real one
 
         def _boom(*a, **kw):
@@ -125,13 +135,13 @@ class TestTop1FailOpenEmit:
         import dispatch_gate as dg
         # ensure worker_budget is the live reference inside dg
         importlib.reload(dg)
-        rc = dg._top1_enforcement(ws, "C-3", "[T1 tools=grep] claim C-3")
+        rc = dg._top1_enforcement(ws, "C-3", '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 1, "tools": ["grep"]}}\n')
 
-        assert rc is None, (
-            f"audit-crash FAIL_OPEN must return None; got {rc!r}")
-        rows = [c for c in calls if c["action"] == "top1_fail_open"]
+        assert rc == 2, (
+            f"audit-crash face must REJECT with rc 2; got {rc!r}")
+        rows = [c for c in calls if c["action"] == "top1_gate_error"]
         assert rows, (
-            f"top1_fail_open must be emitted on audit crash; got {calls}")
+            f"top1_gate_error must be emitted on audit crash; got {calls}")
         assert rows[-1]["claim"] == "C-3"
         # detail must surface the exception class so the post-mortem can
         # distinguish audit_crash from scorer_unavailable without re-reading
@@ -143,8 +153,8 @@ class TestTop1FailOpenEmit:
     def test_top1_fail_open_via_subprocess(self, tmp_path):
         """Hook-side subprocess shape: sabotage worker_budget by replacing
         hooks/worker_budget.py with a stub that raises ImportError, run the
-        gate, and assert the jsonl carries top1_fail_open (the same shape
-        #459's TestDispatchGateRejectEmit uses for top1_reject)."""
+        gate, and assert the fail-closed REJECT (rc 2) — flipped from the
+        legacy FAIL_OPEN (None) by the owner ruling 2026-09-28."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
         # Sabotage the import by hiding worker_budget from sys.modules inside
@@ -167,18 +177,19 @@ class TestTop1FailOpenEmit:
             "import pathlib\n"
             f"ws = pathlib.Path({str(ws)!r})\n"
             "rc = dg._top1_enforcement(ws, 'C-2', 'test prompt')\n"
-            "sys.exit(0 if rc is None else 1)\n",
+            "sys.exit(0 if rc == 2 else 1)\n",
             encoding="utf-8")
         r = subprocess.run(
             [sys.executable, str(driver)],
             capture_output=True, text=True, timeout=60,
             cwd=str(REPO_ROOT), errors="replace")
         assert r.returncode == 0, (
-            f"driver must observe FAIL_OPEN return None; "
+            f"driver must observe the fail-closed REJECT (rc 2); "
             f"rc={r.returncode} stderr={r.stderr!r}")
-        rows = [e for e in _event_rows(ws) if e.get("action") == "top1_fail_open"]
+        rows = [e for e in _event_rows(ws)
+                if e.get("action") == "top1_gate_error"]
         assert rows, (
-            f"subprocess path must leave top1_fail_open in the jsonl; "
+            f"subprocess path must leave top1_gate_error in the jsonl; "
             f"rows={_event_rows(ws)}")
         assert any(e.get("claim") == "C-2" for e in rows)
 

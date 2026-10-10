@@ -39,7 +39,9 @@ def _payload(ws: Path) -> dict:
         "hookEventName": "PreToolUse",
         "tool_name": "Agent",
         "cwd": str(ws),
-        "tool_input": {"prompt": "[T1 tools=grep] claim C-001 strings"},
+        "tool_input": {"prompt": '{"kunglao_dispatch": {"version": 1, '
+                       '"claim": "C-001", "tier": 1, '
+                       '"tools": ["grep"]}}\nstrings'},
     }
 
 

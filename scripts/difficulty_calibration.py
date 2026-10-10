@@ -287,9 +287,23 @@ def calibrate(features: dict) -> dict:
                                      or _fscore("obfuscator_count") >= 0.5)
 
     if not factors_out:
-        tier = "easy"
-        notes.append("no scanner evidence reported — default tier easy; "
-                     "absence is never scored as difficulty (issue #15 gap rule)")
+        # matrix4c parity: the absence-gap rule's dark side — an
+        # UNCHARACTERIZED sample defaulted to easy. Difficulty is an
+        # open-loop INPUT: when the entry is a native binary but
+        # no scanner produced evidence, the honest tier is unknown —
+        # refusing to claim beats defaulting low. Non-native entries
+        # keep the historic easy default (string/web material).
+        native_entry = bool(features.get("native_entry"))
+        if native_entry:
+            tier = "unknown"
+            notes.append("native entry with NO scanner evidence — tier "
+                         "unknown (refusing to claim; the absence-gap "
+                         "rule dark side, matrix4c field finding)")
+        else:
+            tier = "easy"
+            notes.append("no scanner evidence reported — default tier easy; "
+                         "absence is never scored as difficulty (the "
+                         "historic gap rule)")
         dominant = "evidence_gap"
         factors_out["evidence_gap"] = {
             "detail": "; ".join(notes), "score": 0.0, "weight": 0.0,
@@ -355,7 +369,40 @@ def calibrate_workspace(ws: Path | str) -> dict:
     if ev_dir is not None:
         for name in EVIDENCE_FILES:
             evidence[name] = _load_json(ev_dir / f"{name}.json")
-    return calibrate(features_from_evidence(evidence))
+    features = features_from_evidence(evidence)
+    # parity: the entry itself is evidence — a native sample (ELF magic
+    # or an APK central directory listing lib/*.so) with NO scanner
+    # output calibrates as unknown, never easy
+    features["native_entry"] = _entry_looks_native(Path(ws))
+    return calibrate(features)
+
+
+def _entry_looks_native(ws: Path) -> bool:
+    """True when any sample under bins/ is an ELF or an APK carrying
+    native libs (the same central-directory read _probe_native_so
+    uses, kept local to avoid a toolchain import cycle)."""
+    import zipfile
+    bins = ws / "bins"
+    if not bins.is_dir():
+        return False
+    for p in sorted(bins.iterdir()):
+        if not p.is_file():
+            continue
+        try:
+            head = p.open("rb").read(4)
+        except OSError:
+            continue
+        if head == b"\x7fELF":
+            return True
+        if head[:2] == b"PK" and p.suffix.lower() in (".apk", ".zip", ""):
+            try:
+                with zipfile.ZipFile(p) as z:
+                    if any(n.startswith("lib/") and n.endswith(".so")
+                           for n in z.namelist()):
+                        return True
+            except (OSError, zipfile.BadZipFile):
+                continue
+    return False
 
 
 def mount(ws: Path | str, result: dict, *, mount_spec: bool = True) -> Path:

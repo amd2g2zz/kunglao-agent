@@ -45,25 +45,19 @@ only THIS shim does. Mirrors state_anchor's _resolve_workspace +
 _kunglao_active + FAIL_OPEN structure (#44).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] completion_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import hashlib
 import json
 import sys
@@ -74,14 +68,28 @@ from _path_hygiene import load_module_by_path, scripts_on_path  # #671 sys.path 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
-# #762 K1b: owed durable-result-note refusal code (shim-face only — judge()
-# stays workspace-pure; the scripts-side judge keeps its {0..4} table).
-EXIT_NOTES_DUE = 5
-# #834: notes structural-discrimination refusal (same shim-face-only rule).
-EXIT_NOTES_FAKE = 6
-# #826: summary structural-contract refusal (uncertainty must not evaporate
-# in the user-facing transcription).
-EXIT_SUMMARY_FAKE = 7
+# #472: the shim's refusal codes DERIVE from the registry (scripts/
+# hook_exit_codes.py — the single source of truth) in a SEPARATE
+# fail-open block placed after the _path_hygiene one: a registry import
+# failure must not drop the canonical kunglao_log.warn into its stderr
+# fallback arm. The per-constant literal fallbacks preserve the
+# partial-deploy lifeline AND the source-substring drift pin
+# (test_notes_closure_762); the registry-vs-shim VALUE pin lives in
+# tests/test_hook_exit_codes.py.
+# Semantics (shim-face only — judge() stays workspace-pure; the
+# scripts-side judge keeps its {0..4} table):
+#   5 = #762 K1b owed durable-result notes; 6 = #834 notes structural
+#   discrimination; 7 = #826 summary structural contract (uncertainty
+#   must not evaporate in the user-facing transcription).
+try:
+    from hook_exit_codes import ExitCode as _ExitCode
+    EXIT_NOTES_DUE = int(_ExitCode.NOTES_DUE)
+    EXIT_NOTES_FAKE = int(_ExitCode.NOTES_FAKE)
+    EXIT_SUMMARY_FAKE = int(_ExitCode.SUMMARY_FAKE)
+except Exception:  # noqa: BLE001 — fail-open literal fallback (partial deploy)
+    EXIT_NOTES_DUE = 5
+    EXIT_NOTES_FAKE = 6
+    EXIT_SUMMARY_FAKE = 7
 # #831: ledger-anchored second-stop sanction event type (ledger CONTRACT line
 # format identical to rollup._append_ledger: json.dumps ensure_ascii=False).
 SECOND_STOP_EVENT = "second_stop_pass"
@@ -307,8 +315,17 @@ def process_event(payload: dict) -> int:
     try:
         cg = _load_judge()
         code, reason = cg.judge(oracle)
-    except Exception:  # noqa: BLE001 — FAIL_OPEN on judge
-        return 0
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # was FAIL_OPEN (judge crash -> session end). A gate that cannot
+        # see must not wave the completion through: the judge error BLOCKS
+        # with the cause, the same #717 shape as an unreadable oracle.
+        warn("gate_error:completion_judge", f"{type(exc).__name__}: {exc}")
+        reason = (f"completion judge crashed ({type(exc).__name__}: {exc}) "
+                  f"— gate error is fail-closed; repair the judge before "
+                  "completion can be judged (owner ruling 2026-09-28)")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
     if code == 0:
         # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
         # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;

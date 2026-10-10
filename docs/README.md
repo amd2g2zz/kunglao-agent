@@ -9,6 +9,8 @@ reference value; one-shot fix logs and session-plan residue were removed
 
 | Directory | Contents | Audience |
 |-----------|----------|----------|
+| `assets/` | showcase renders (SVG) referenced by the root README |
+| `cases/` | Evidence-first case studies from real, converged run artifacts (EN + zh-CN) — transcripts, dead ends, named verification methods | Anyone evaluating what the agent can do |
 | `design/` | Live design research (`loop-engineering.md`) | Architects, implementers tracing design intent |
 | `design/archive/` | HISTORICAL design docs (`design-spec.md`, `module-design.md` — pre-rename `kong-agent` era) | Design archaeology only; not current contracts |
 

@@ -86,9 +86,12 @@ def leg_selfcheck_bundle(workdir: Path) -> dict:
         leg["detail"] = "node unavailable"
         return leg
     driver = workdir / "selfcheck.js"
+    # Concatenate the bundle as a program prefix (equivalent to eval at this
+    # scope, without eval): globals are set first, then the bundle's own
+    # statements run, then the signature assertion.
     driver.write_text(
         "global.window={};global.fetch=function(){return null};\n"
-        f"eval({json.dumps(BUNDLE.read_text(encoding='utf-8'))});\n"
+        + BUNDLE.read_text(encoding='utf-8') + "\n"
         "const s=window.__api.buildSignature({b:'2',a:'1'},'s3cr3t');\n"
         "if(!/^[0-9a-f]{8}$/.test(s)) throw new Error('bad sign '+s);\n",
         encoding="utf-8")

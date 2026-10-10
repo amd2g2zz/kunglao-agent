@@ -190,8 +190,8 @@ def test_android_aliases_in_gate_keyword_map():
 
 
 def test_gate_map_keeps_generic_words_out():
-    """_TOOLFIRST_STOPWORDS discipline: generic prose never joins the gate
-    trigger set — ambiguous terms are route-side lighting ONLY."""
+    """issue 380 P2 distinctive-trigger discipline: generic prose never joins the
+    gate trigger set — ambiguous terms are route-side lighting ONLY."""
     kw = wbg._load_tool_index_keywords(wbg._SKILL_ROOT)
     for generic in ("app", "apk", "java", "加密", "登录", "tls", "okhttp",
                     "frida", "xposed", "certificate", "network library",
@@ -233,7 +233,8 @@ def test_redline_android_dispatch_without_marker_still_passes():
     tool-catalog marker still PASSES silently (no_match), exactly as today.
     No new REJECT path may exist for android dispatches."""
     ok, reason = wbg.check_tool_first(
-        {}, f"[T1 tools=grep] claim C-001 {REPRO_ZH}", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"]}}\n' + REPRO_ZH, "")
     assert ok is True, f"ZERO new REJECT paths (#54): {reason}"
     ev = wbg._toolfirst_evaluate(REPRO_ZH.lower(), None)
     assert ev["mode"] == "no_match", ev
@@ -241,21 +242,25 @@ def test_redline_android_dispatch_without_marker_still_passes():
 
 def test_redline_english_variant_without_marker_still_passes():
     ok, reason = wbg.check_tool_first(
-        {}, f"[T1 tools=grep] claim C-001 {REPRO_EN}", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"]}}\n' + REPRO_EN, "")
     assert ok is True, f"ZERO new REJECT paths (#54): {reason}"
     ev = wbg._toolfirst_evaluate(REPRO_EN.lower(), None)
     assert ev["mode"] == "no_match", ev
 
 
 def test_redline_existing_reject_semantics_unchanged():
-    """The pre-#54 faces fire exactly as before: keyword hit without marker
-    still rejects (existing semantics — only WHICH keywords are visible
-    changed), stopword discipline intact."""
+    """The pre-#54 faces fire exactly as before — H1 AMENDED: the gate is
+    advisory-only, so a keyword hit without marker now PROCEEDS; the pin is
+    that the DETECTION and the demand text are unchanged (same keyword hit,
+    same tool named, same `tool-catalog` escape hatch) and stopword
+    discipline is intact."""
     ok, reason = wbg.check_tool_first({}, "decode the crypto layer", "")
-    assert ok is False
+    assert ok is True, "H1: advisory-only — the dispatch proceeds"
+    assert "crypto-tool" in reason
     assert "tool-catalog" in reason
     ok2, _msg = wbg.check_tool_first(
-        {}, "[T1 tools=grep] claim C-001 static overview of imports", "")
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstatic overview of imports', "")
     assert ok2, "stopword discipline must be unchanged"
 
 

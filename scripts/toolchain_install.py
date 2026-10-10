@@ -63,9 +63,9 @@ from pathlib import Path
 
 # Per repo convention, inject scripts/ into sys.path before importing sibling
 # modules (compatible with `python -m` style invocations).
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 import toolchain  # noqa: E402  (#304 toolchain probes — re-probe after install)
 import env_manifest  # noqa: E402  (#450 facts file — installed ledger, #477 ④)

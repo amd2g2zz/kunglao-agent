@@ -1,0 +1,29 @@
+{
+  "schema": "kunglao-eval-gt/1",
+  "task_id": "web-token-v1",
+  "constants": {
+    "signing_key": "w7f_xz9Ql2m8sK0eV",
+    "pad_hex": "6d1f0b9ac2"
+  },
+  "protocol": {
+    "message_layout": "pad_bytes || utf8('{ts}|{sid}')",
+    "mac": "HMAC-SHA256(key, message)",
+    "freshness_window_s": 60,
+    "session": "single-use sid cookie",
+    "ua_gate": "User-Agent must contain Mozilla/ and ("
+  },
+  "checker": {
+    "faces": [
+      "constant-hit",
+      "session-replay"
+    ],
+    "thresholds": {
+      "min_constant_hits": 2,
+      "min_pair_ratio": 1.0,
+      "sessions": 4
+    }
+  },
+  "family": "web-token",
+  "seed": 51101,
+  "space_bits": 137
+}

@@ -63,8 +63,8 @@ type-aware initialization + toolchain readiness.
    never sorts) -> target_object (MSI/APK/ZIP containers list their
    contents; the type is NEVER guessed) -> project type (a magic-byte hint
    MZ/`\x7fELF` rides in the pending context as a suggestion only) -> the
-   LANE (`lane: malware|algorithm|protocol|web|data|app`, issue 208: what
-   material the task analyzes — asked with NO default when the workspace
+   LANE (`lane: malware|algorithm|protocol|web|data|app` — what
+   material the task analyzes; asked with NO default when the workspace
    declares nothing, because the answer decides whether `bins/` is
    required at all).
    Collect the answers via AskUserQuestion, write `{decision_id: value}`
@@ -215,8 +215,8 @@ the HUMAN-ONLY boundary is rooting and physical actions.
   need su via Magisk etc. Non-root → HARD refuse: frida-server cannot
   attach. Rooting is a human decision (device ownership/warranty), never
   yours — this is the one device action that stays with the operator.
-- **GitNexus**: post-decompile graph building is a mandatory flow step
-  (design doc §4). Missing → HARD refuse with `npm i -g gitnexus` guidance.
+- **GitNexus**: post-decompile graph building is a mandatory flow step.
+  Missing → HARD refuse with `npm i -g gitnexus` guidance.
 - **unidbg** (T3 WARN): java + unidbg dir. Missing is a WARN — note it in
   the status file when the analysis is expected to need the fallback path
   (AND-gated: frida data sufficient + decompilation done + still stuck).
@@ -230,7 +230,7 @@ connection layer). Walk the ladder top-down and repair at the FIRST
 failing layer:
 
 ```
-installed?   -> no -> install (ownership tier; issue 202)
+installed?   -> no -> install (ownership tier)
 registered?  -> no -> register (`claude mcp add`, agent-do)
 connects?    -> no -> connection-layer diagnosis (port/token/env/deps;
                       broken venv -> `uv sync --locked` in the server repo)
@@ -240,8 +240,7 @@ input ready? -> no -> input completeness (path/permission/format)
 
 - **Repair AT the failed layer.** Jumping to a different tool on a layer
   failure is INVALID; the decompiler fallback belongs to the lane XOR
-  family (issue 210), chosen by the task lane — never triggered by a
-  layer failure.
+  family, chosen by the task lane — never triggered by a layer failure.
 - **Gathered facts gate the next action.** Before running an install,
   check it against facts already in hand via `scripts/decision_lint.py`
   (`echo '<facts-json>' | python <SKILL_DIR>/scripts/decision_lint.py
@@ -333,7 +332,7 @@ Write files or you FAILED: `runs/worker-status-<id>.md` first line
 `status: in-progress`, append per step; `blockers/B-<n>.md` for every HARD
 refusal with root cause + exact install command; report shape per the template.
 
-**Liveness + artifacts (canonical log / W-15 lesson)**: the
+**Liveness + artifacts (canonical log / W-15 rule)**: the
 status file is `runs/worker-status-kunglao-init-worker-<id>.md`, an
 append-only log parsed by the single canonical parse point
 (`hooks/lib_kunglao.py` — LAST `status:` token wins). Canonical

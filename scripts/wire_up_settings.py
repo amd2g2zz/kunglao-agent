@@ -70,6 +70,11 @@ WIRE_UP_HOOK_FILES = frozenset({
     "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
     "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
     "bash_fact_guard.py",      # PostToolUse/Bash — facts-write lint recorder (#809)
+    "workguard_gate.py",       # Stop — WORKGUARD: turn-exit actionable-set gate (issue 434)
+    "round_closure.py",        # SubagentStop — round-closure lifecycle feed (issue 434)
+    "session_start.py",        # SessionStart — arm + constitution injection (issue 434)
+    "compact_continuity.py",   # PreCompact — strategy continuity note (issue 434)
+    "user_signal_capture.py",  # UserPromptSubmit — operator observation + signal capture (issue 434)
 })
 
 # #675: hooks registered on MORE THAN ONE event slot by
@@ -83,8 +88,11 @@ WIRE_UP_HOOK_FILES = frozenset({
 # (#381); this export gives the tests-side the same single source.
 # #601: orchestrator_tool_guard joins — same FILE, second PreToolUse
 # matcher row (MCP host-channel face beside the Bash face).
+# #516: write_guard joins — same FILE, second PreToolUse matcher row (the
+# Bash register face beside the Edit|Write|MultiEdit face).
 DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py",
-                                     "orchestrator_tool_guard.py"})
+                                     "orchestrator_tool_guard.py",
+                                     "write_guard.py"})
 
 
 # #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The

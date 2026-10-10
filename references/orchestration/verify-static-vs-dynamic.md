@@ -1,6 +1,7 @@
 
-**Heuristic**: does your evidence come from a static artifact (file bytes) or a dynamic trace (frida / x64dbg / emulation)? Pick the matching verification: static = run reproduce + byte-exact; dynamic = re-run + normalized trace diff.
 # VERIFY: Static vs Dynamic (DESIGN §12, §10)
+
+> **Heuristic**: does your evidence come from a static artifact (file bytes) or a dynamic trace (frida / x64dbg / emulation)? Pick the matching verification: static = run reproduce + byte-exact; dynamic = re-run + normalized trace diff.
 
 ## Static claims (evidence from decompile / strings / bytes)
 
@@ -24,6 +25,4 @@ Re-running a worker-specified tool + inputs is VERIFICATION (orchestrator's job)
 
 ## Orchestrator-authored composite notes
 
-Orchestrator may write composite notes (synthesis) but they MUST pass `<malware-veri-notes>/scripts/verify-note.py` (independent verifier subagent). No self-stamping.
-
-recall_useful: pending
+Orchestrator may write composite notes (synthesis) but they MUST pass `<malware-veri-notes>/scripts/verify-note.py` (independent verifier subagent; only when the external malware-veri-notes skill is installed). No self-stamping.

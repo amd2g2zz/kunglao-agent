@@ -39,7 +39,7 @@ Usage:
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
-dispatches to them. The public API below (read_state, write_state, is_active,
+dispatches to them. The public API below (read_state, write_state,
 is_active_strict, update_state, renew) is unchanged — 7 gate scripts + hooks
 import this module as `ha`.
 
@@ -79,16 +79,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] hook_activation WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -126,6 +117,7 @@ ALL_HOOKS = {
     "state_anchor",
     "completion_gate",
     "user_signal_capture",   # #868 UserPromptSubmit: user-signal capture face
+    "workguard_gate",        # issue 434 Stop WORKGUARD: turn-exit actionable-set gate
 }
 
 TIER_DEFAULTS = {
@@ -159,49 +151,15 @@ def write_state(workspace: Path, state: dict) -> None:
     path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def is_active(workspace: Path, hook_name: str) -> bool:
-    """Check whether a hook should fire. Returns True if active, False if paused.
-
-    Expiry: if the state carries an expires_at in the past, the activation is
-    STALE and the hook is treated as inactive. A stale activation from a
-    5-day-old session must not keep firing hooks in a fresh session —
-    kunglao-agent renews at Phase 0 (`--renew`)."""
-    state = read_state(workspace)
-    if not state:
-        return True
-    expires = state.get("expires_at")
-    if expires:
-        try:
-            exp = datetime.fromisoformat(expires.replace("Z", "+00:00"))
-            if datetime.now(tz=timezone.utc) > exp:
-                return False  # expired — treated as paused
-        except (ValueError, TypeError) as exc:
-            warn("is_active", f"{type(exc).__name__}: {exc}")
-    override = state.get("user_override", {}).get(hook_name)
-    if override == "on":
-        return True
-    if override == "off":
-        return False
-    active = state.get("active_hooks", [])
-    paused = state.get("paused_hooks", [])
-    if hook_name in paused:
-        return False
-    if hook_name in active:
-        return True
-    return True
-
-
 def is_active_strict(workspace: Path, hook_name: str) -> bool:
-    """Hooks use THIS, not is_active().
+    """THE activation check — the single path (D1 cleanup, compat-rot sweep
+    2026-09-29: the legacy is_active() default-TRUE face is deleted; every
+    gate — enforcement family included — sleeps until explicitly activated).
 
-    is_active() defaults to True when no state file exists (legacy: an
-    unconfigured workspace must not silently disable enforcement). That is the
-    WRONG default for the new narrow hooks (dispatch_gate, worker_pulse):
-    semantics = default-INACTIVE — no activation → hooks sleep. A
+    Semantics = default-INACTIVE — no activation → hooks sleep. A
     non-kunglao-agent session must get zero noise from these hooks.
 
     Strict = explicit activation required AND not expired AND not paused.
-    is_active() keeps its legacy behavior for the old gate family.
 
     #613: expiry is no longer silent — the first refusal per expired window
     writes a one-shot runs/.hook-slept.json + one stderr WARNING (fail-open;
@@ -264,11 +222,11 @@ def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:
         }
         runs.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(
+        warn(
+            "activation_expired",
             f"WARNING: activation expired {gap_seconds // 60} min ago — hooks asleep "
-            f"({len(record['hooks_affected'])} hook(s)). Re-arm: hook_activation.py {workspace} --renew",
-            file=sys.stderr,
-        )
+            f"({len(record['hooks_affected'])} hook(s)). Re-arm: "
+            f"hook_activation.py {workspace} --renew")
     except (OSError, ValueError, TypeError) as exc:
         warn("_emit_hook_slept_once", f"{type(exc).__name__}: {exc}")
 
@@ -510,6 +468,24 @@ class HookWiringSelfcheckError(RuntimeError):
     (fail-closed); the CLI maps it to exit 1, init to RC_HOOK_WIRING."""
 
 
+def _framework_project_root() -> Path | None:
+    """The nearest directory owning pyproject.toml, probing the executing
+    install root first (#6): hooks must run in an env carrying the
+    framework dependency set — never in a workspace (which ships no
+    project) and never in an ephemeral uv env."""
+    candidates: list[Path] = []
+    try:
+        candidates.append(Path(canonical_install_root()))
+    except Exception as exc:  # noqa: BLE001 — resolver must never raise at wire time
+        print(f"hook_activation: WARN (fail-open) canonical install root "
+              f"probe failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    candidates.extend(reversed(Path(__file__).resolve().parents))
+    for c in candidates:
+        if (c / "pyproject.toml").is_file():
+            return c
+    return None
+
+
 def build_hook_entry(hook_dir: Path, hook_file: str,
                     matcher: str | None = None,
                     *, project: Path | None = None) -> dict:
@@ -524,10 +500,22 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     python can resolve to 2.x and kill every registered hook; uv uses the
     skill's own project venv (python 3.11+).
     """
-    # #783: deployed copies run under the WORKSPACE project root so an
-    # upgrade of the skill package never mutates existing workspaces;
-    # legacy (undeployed) callers fall back to the installing skill dir.
-    project_root = Path(project).resolve() if project else Path(hook_dir).parent
+    # 0.1.6 sweep (#6, 51job live run): the hooks' INTERPRETER ENV is the
+    # FRAMEWORK project — the executing install root (pyproject + uv.lock +
+    # .venv carrying the framework dependency set, PyYAML at minimum) —
+    # NEVER the workspace: a workspace ships no pyproject/uv.lock, so
+    # `uv run --project <workspace>` built an ephemeral empty env and any
+    # hook with a lazy third-party import (write_guard: `import yaml`)
+    # fail-closed-BLOCKED legitimate writes. The SCRIPT path stays the
+    # workspace deployed copy (upgrade isolation #783 unchanged); only the
+    # env project changed. The explicit `python` token is the invocation
+    # standard's canonical form.
+    project_root = _framework_project_root()
+    if project_root is None:
+        # no framework project found (never expected in-tree): fall back to
+        # the historical resolution rather than refusing to wire at all
+        project_root = (Path(project).resolve() if project
+                        else Path(hook_dir).parent)
     p = (Path(hook_dir) / hook_file).as_posix()
     # #811: hooks inherit the invoking shell's locale — a GBK console turns
     # every encoding-less IO in the hook into a decode bomb. PYTHONUTF8=1
@@ -535,7 +523,8 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # call sites before the #811 explicit-encoding sweep reaches them.
     hooks = [{"type": "command",
               "command": (f"PYTHONUTF8=1 "
-                          f"uv run --project {project_root.as_posix()} {p}")}]
+                          f"uv run --project {project_root.as_posix()} "
+                          f"python {p}")}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -599,7 +588,6 @@ _SELFCHECK_LAYERS = ("project", "user-opt-in", "operator-declared")
 
 
 def selfcheck_registration(target: Path, *, expected_files: Collection[str],
-                           hook_dir: Path | None = None,
                            workspace: Path | None = None,
                            layer: str = "project",
                            deployed_project: Path | None = None) -> dict:
@@ -621,10 +609,10 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                  "settings rewrite dropped the hooks segment" class.
       shape    — every expected command is uv-form pointing into the
                  EXECUTING install's hooks dir, derived independently here
-                 via _canonical_hooks_dir (#752 D4+: the legacy hook_dir
-                 parameter is accepted but ignored for the verdict) — the
-                 #269 worktree-bound-command silent-death class plus the
-                 #752 self-certifying-variable class.
+                 via _canonical_hooks_dir (the legacy hook_dir parameter is
+                 DELETED — the caller variable the #752 self-certifying
+                 class needed no longer exists) — the #269 worktree-bound-
+                 command silent-death class plus the #752 class.
                  Path existence is deliberately NOT asserted (a canonical
                  install under a test HOME is a legitimate shape).
 
@@ -691,22 +679,28 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
 
     # #752 D4+: the shape expectation is recomputed HERE from the executing
     # install (_canonical_hooks_dir) — never taken from a caller variable.
-    # The legacy hook_dir parameter stays ACCEPTED for API compatibility
-    # (#445 callers may still pass it) but feeds nothing: a checker handed
-    # the same wrong dir the writer wrote ("write whatever, verify
-    # whatever") must fail, not certify itself. Path existence is
-    # deliberately NOT asserted (a canonical install under a test HOME is a
-    # legitimate shape).
+    # The legacy hook_dir parameter is DELETED (compat-rot sweep): a checker
+    # handed the same wrong dir the writer wrote ("write whatever, verify
+    # whatever") must fail, not certify itself — with the parameter gone the
+    # lie is untellable, not merely ignored. Path existence is deliberately
+    # NOT asserted (a canonical install under a test HOME is a legitimate
+    # shape).
     # #783: in deploy mode the executing authority is the WORKSPACE copy —
     # the declared mode comes from the registration contract (deployed_project),
     # so a checker handed the same wrong mode still fails; bare-skill fallback
     # recomputes from the executing install as before.
+    # #6 (0.1.6 sweep): the ENV project in the canonical form is the
+    # FRAMEWORK root (same resolution the writer uses) — the SCRIPT path
+    # stays the deployed hooks dir. A workspace-project form is the
+    # ephemeral-env trap this sweep removed.
+    framework = _framework_project_root()
     if deployed_project is not None:
         d = deployed_project.resolve() / ".claude" / "hooks"
-        prefix = f"uv run --project {deployed_project.resolve().as_posix()} "
     else:
         d = _canonical_hooks_dir()
-        prefix = f"uv run --project {d.parent.as_posix()} "
+    prefix = (f"uv run --project {framework.as_posix()} python "
+              if framework is not None else
+              f"uv run --project {d.parent.as_posix()} python ")
     for c in cmds:
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
@@ -718,7 +712,8 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                 and body[len(prefix):].startswith(d.as_posix() + "/")):
             mismatches.append(
                 f"shape: command for {base} is not canonical (must be "
-                f"uv-form into the declared hooks dir {d}): {c}")
+                f"uv-form --project the FRAMEWORK root + python, into the "
+                f"declared hooks dir {d}): {c}")
 
     return {"ok": not mismatches, "layer": layer, "target": str(target),
             "mismatches": mismatches, "present": present, "missing": missing}
@@ -756,6 +751,9 @@ def deploy_workspace_copy(ws: Path) -> dict:
     identical-sha targets are skipped idempotently. Returns a report dict
     {copied, skipped, entries, touched, digest}. Fail-loud on unreadable
     manifest — a silently empty deployment would unregister the gates.
+    Also fail-loud when the resolved framework env root does not cover
+    the tree's hard third-party imports (issue 467 gate): the deployed
+    code would die per tick under that env's venv.
 
     #783 T5: the deployment leaves the digest CARRIER
     (<ws>/.claude/deployed-manifest.json) behind — the check-stale third
@@ -768,6 +766,35 @@ def deploy_workspace_copy(ws: Path) -> dict:
 
     if not _MF.is_file():
         raise RuntimeError(f"deployment manifest missing: {_MF}")
+    # issue 467 (manifest-vs-imports gate): refuse BEFORE any workspace
+    # mutation when the framework env project — the same root the hook
+    # commands resolve as their `uv run --project` target — does not
+    # declare the hard third-party imports of the tree being deployed.
+    # The mixed-drift shape (executing tree newer than the serving env)
+    # is exactly the stale-skill-package incident: code lands, manifest
+    # lags, every numpy-backed face dies per tick and fails open.
+    _env_root = _framework_project_root()
+    if _env_root is None:
+        warn("dep_surface_gate",
+             "framework env project unresolvable — import-coverage "
+             "unverified (proceeding; mirrors the hook-entry fallback)")
+    else:
+        import dep_surface_gate as _dsg
+        _report = _dsg.check(
+            surface_root=Path(__file__).resolve().parent.parent,
+            env_root=_env_root)
+        if not _report["ok"]:
+            _mods = ", ".join(
+                f"{m['module']} (dist {m['dist']}, needed by "
+                f"{m['needed_by'][0]})"
+                for m in _report["missing"])
+            raise RuntimeError(
+                f"deployment refused: the framework env project "
+                f"{_env_root} does not declare: {_mods}. The deployed "
+                f"code cannot run under that env (every affected face "
+                f"would fail open per tick). Update the skill package "
+                f"at that root (git pull / plugin update), then re-run "
+                f"init/upgrade.")
     import yaml as _yaml
     data = _yaml.safe_load(_MF.read_text(encoding="utf-8")) or {}
     ws = ws.resolve()
@@ -927,10 +954,11 @@ def _register_statusline_warn(ws: Path | None) -> None:
         if res.get("ok"):
             print(f"OK: statusline registered -> {res['command']}")
         else:
-            print(f"WARN: statusline registration self-check failed "
-                  f"({res.get('target')})", file=sys.stderr)
+            warn("statusline_register_selfcheck",
+                 f"statusline registration self-check failed "
+                 f"({res.get('target')})")
     except Exception as exc:  # noqa: BLE001 — cosmetic, never blocks wiring
-        print(f"WARN: statusline registration failed ({exc})", file=sys.stderr)
+        warn("statusline_register", f"statusline registration failed ({exc})")
 
 
 
@@ -944,6 +972,7 @@ _DEPLOYED_WIRING = (
     ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
     ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
     ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
+    ("PreToolUse", "Bash", "write_guard.py"),  # #516 register Bash face
     ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
     ("PostToolUse", "Agent", "worker_pulse.py"),
     ("PostToolUse", "Agent", "state_anchor.py"),
@@ -952,6 +981,11 @@ _DEPLOYED_WIRING = (
     ("PostToolUse", "Edit|Write|MultiEdit|Agent",
      "cost_input_capture.py"),  # #873 cost 输入捕获
     ("Stop", "", "completion_gate.py"),
+    ("Stop", "", "workguard_gate.py"),        # issue 434 WORKGUARD
+    ("SubagentStop", "", "round_closure.py"),      # issue 434 closure feed
+    ("SessionStart", "", "session_start.py"),      # issue 434 constitution
+    ("PreCompact", "", "compact_continuity.py"),   # issue 434 continuity
+    ("UserPromptSubmit", "", "user_signal_capture.py"),  # issue 434 observation
 )
 
 
@@ -1070,10 +1104,11 @@ def register_hooks(workspace: Path | None = None,
     """
     settings_path = _resolve_registration_target(workspace, global_opt_in)
     if global_opt_in:
-        print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
-              f"{settings_path} — hooks must live in the project-level "
-              f".claude/settings.json; global deployment is "
-              f"explicit opt-in ONLY.", file=sys.stderr)
+        warn("user_global_wiring",
+             f"wiring kunglao-agent hooks into the USER-GLOBAL "
+             f"{settings_path} — hooks must live in the project-level "
+             f".claude/settings.json; global deployment is "
+             f"explicit opt-in ONLY.")
 
     existing = {}
     if settings_path.exists():
@@ -1105,9 +1140,11 @@ def register_hooks(workspace: Path | None = None,
         return other + new, True
 
     def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
-        """Stop hooks carry no matcher (they fire on every Stop event). Dedupe
-        by command basename across all Stop entries so re-wiring replaces, not
-        stacks. Appends one entry with the single hook."""
+        """Matcher-less hook entries (Stop / SessionStart / PreCompact /
+        SubagentStop / UserPromptSubmit — every event that is not a
+        tool-use match). Dedupe by command basename across the bucket's
+        entries so re-wiring replaces, not stacks. Appends one entry with
+        the single hook."""
         kept = []
         for e in entries:
             hs = e.get("hooks", [])
@@ -1164,6 +1201,14 @@ def register_hooks(workspace: Path | None = None,
     # arming is target-based (path is a contract carrier), not TTL-based.
     pre, added = _ensure(pre, "Edit|Write|MultiEdit", "write_guard.py")
     count += added
+    # #516: write_guard's SECOND PreToolUse row — the Bash register face.
+    # Register writes via cat-heredoc / python open('w') / sed -i bypassed
+    # the Edit|Write matcher entirely (combat wt1: the fourth register
+    # corruption landed with zero write_blocked events). The in-hook fast
+    # path exits before workspace resolution for commands that never
+    # mention the register, so this row is cheap for every other Bash call.
+    pre, added = _ensure(pre, "Bash", "write_guard.py")
+    count += added
     # #675: this double registration (worker_budget Pre+Post) is pinned by
     # wire_up_settings.DOUBLE_REGISTERED_HOOKS — test count anchors derive
     # from it; changing the double-registration structure updates BOTH.
@@ -1195,6 +1240,21 @@ def register_hooks(workspace: Path | None = None,
     stop = hooks.get("Stop") or []
     stop, added = _ensure_stop(stop, "completion_gate.py")
     count += added
+
+    # issue 434 (event-wakeup topology): the WORKGUARD Stop entry + the four
+    # matcher-less event wirings. All no-matcher buckets (these events are
+    # not tool-use matches); dedupe by command basename like the Stop face.
+    stop, added = _ensure_stop(stop, "workguard_gate.py")
+    count += added
+    for event, hook_file in (
+            ("SubagentStop", "round_closure.py"),
+            ("SessionStart", "session_start.py"),
+            ("PreCompact", "compact_continuity.py"),
+            ("UserPromptSubmit", "user_signal_capture.py")):
+        bucket = hooks.get(event) or []
+        bucket, added = _ensure_stop(bucket, hook_file)
+        hooks[event] = bucket
+        count += added
 
     hooks["PreToolUse"] = pre
     hooks["PostToolUse"] = post
@@ -1364,7 +1424,7 @@ def main() -> int:
         return 0
 
     if args.is_active:
-        active = is_active(workspace, args.is_active)
+        active = is_active_strict(workspace, args.is_active)
         print(f"{args.is_active}: {'ACTIVE' if active else 'PAUSED'}")
         return 0 if active else 1
 

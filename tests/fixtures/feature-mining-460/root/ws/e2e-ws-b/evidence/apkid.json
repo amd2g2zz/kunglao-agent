@@ -1,0 +1,20 @@
+{
+  "tool": "apkid",
+  "version": "2.1.5",
+  "target": "target/modcrypto_bundle.js",
+  "scanned_at": "2026-09-29T14:14:02Z",
+  "findings": [
+    {"rule": "UPX", "category": "packer", "matched_files": ["target/modcrypto_bundle.js"]},
+    {"rule": "DexGuard", "category": "obfuscator", "matched_files": ["target/modcrypto_bundle.js"]}
+  ],
+  "summary": {
+    "packer": ["UPX"],
+    "obfuscator": ["DexGuard"],
+    "anti_debug": [],
+    "anti_vm": [],
+    "compiler": ["closure"],
+    "total": 3
+  },
+  "status": "ok",
+  "reason": ""
+}

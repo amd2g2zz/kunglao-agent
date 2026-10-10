@@ -32,9 +32,10 @@ hook_activation -> this module).
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
+
+from _common import atomic_write_text
 
 CARRIERS: tuple[str, ...] = (".claude/settings.json", "CLAUDE.md")
 
@@ -153,9 +154,7 @@ def rewire_workspace(workspace: Path,
         if rel.endswith(".json"):
             json.loads(text)      # pre-guard: carrier must parse as-is…
             json.loads(new_text)  # …and the post-image we are about to write
-        tmp = p.with_name(p.name + ".tmp752")
-        tmp.write_text(new_text, encoding="utf-8")
-        os.replace(tmp, p)
+        atomic_write_text(p, new_text)
         report[rel] = {"before": len(find_refs(text)),
                        "rewired": len(spans),
                        "after": ref_count(new_text, active_root.name)}

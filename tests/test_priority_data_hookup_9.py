@@ -92,29 +92,28 @@ def test_case_posterior_feeds_thompson_sample(tmp_path):
     assert "case-1" in red.feeds["thompson_sample"]
 
 
-def test_pq_categorical_feeds_dh(tmp_path):
-    """A PQ categorical in the ledger carries ΔH: the entropy the categorical
-    still carries (the updatable quantity) enters the score mechanically."""
+def test_pq_categorical_is_rank_inert(tmp_path):
+    """#295 removal pin (ADR-001): a PQ categorical in the ledger does NOT
+    enter the score — the ΔH face is gone, no dh feed is emitted, and the
+    score is byte-identical to the no-categorical case."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _mk_ws(tmp_path, claims=claims)
     _write_ledger(ws, pqs=[("q1", {"plain-md5": 1.0, "salted-composite": 1.0})])
     ev = pr.EvidenceView.from_workspace(ws)
     a = pr.priority_ratio(claims, {}, ev)[0]
-    cat = PosteriorLedger.load(ws).pqs["q1"]
-    assert a.feeds["dh_pq"] == f"PQ 'q1' categorical H={round(cat.entropy(), 6)} bit"
+    assert "dh_pq" not in a.feeds
     bare = pr.priority_ratio(claims, {}, pr.EvidenceView())[0]
-    assert a.score == round(bare.score + pr.LAMBDA_DH * cat.entropy(), 6)
+    assert a.score == bare.score
 
 
-def test_peaked_categorical_has_little_left_to_flip(tmp_path):
-    """A near-decided PQ (one candidate holds ~all mass) has ΔH≈0 — an
-    observation there buys almost nothing (the entropy admission quantity)."""
+def test_peaked_categorical_emits_no_dh_feed(tmp_path):
+    """A near-decided PQ (one candidate holds ~all mass) used to print a
+    tiny H; post-#295 there is no dh feed at all."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _mk_ws(tmp_path, claims=claims)
     _write_ledger(ws, pqs=[("q1", {"plain-md5": 99.0, "salted-composite": 1.0})])
     a = pr.priority_ratio(claims, {}, pr.EvidenceView.from_workspace(ws))[0]
-    assert "dH=0" not in a.feeds["dh_pq"]
-    assert "H=0.08" in a.feeds["dh_pq"]
+    assert "dh_pq" not in a.feeds
 
 
 # ---------- neutral fallbacks (fail-open discipline) ----------
@@ -129,7 +128,7 @@ def test_cold_start_neutral_no_posteriors(tmp_path):
     a = pr.priority_ratio(claims, {}, ev)[0]
     assert "Beta(1,1) prior" in a.feeds["thompson_sample"]
     assert f"{pr.FLIP_POTENTIAL_FALLBACK} fallback" in a.feeds["case_flip_potential"]
-    assert "no PQ categorical" in a.feeds["dh_pq"]
+    assert "dh_pq" not in a.feeds  # #295 removal: no ΔH feed exists
 
 
 def test_oracle_case_without_verdict_uses_prior(tmp_path):
@@ -144,10 +143,10 @@ def test_oracle_case_without_verdict_uses_prior(tmp_path):
 
 def test_bare_view_no_ws_still_ranks():
     """EvidenceView() with no ws (pure-function contract §1) ranks with
-    prior samples and zero ΔH — never a crash, never a fake feed."""
+    prior samples and no ΔH face — never a crash, never a fake feed."""
     a = pr.priority_ratio([_claim("C-1")], {}, pr.EvidenceView())[0]
     assert "Beta(1,1) prior" in a.feeds["thompson_sample"]
-    assert a.feeds["dh_pq"].endswith("-> dH=0")
+    assert "dh_pq" not in a.feeds
 
 
 def test_corrupt_ledger_fails_open(tmp_path):

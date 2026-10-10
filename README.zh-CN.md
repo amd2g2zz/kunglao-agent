@@ -1,46 +1,193 @@
 # kunglao-agent
 
-**kunglao-agent 是一套自主逆向工程系统：你给它目标和待解问题，它自己把问题做上几小时到几天 —— 自己规划路径，worker 死了能补位，崩溃了能续跑；只有当每个答案都从原始证据推导出来、并扛过机械校验门控之后，它才收敛交卷。**
+**一套自主逆向工程代理：无人值守连跑数小时，每条结论独立验证，只有当每个答案都扛过机械 oracle 判决后才收敛交卷。**
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amd2g2zz/kunglao-agent/pulls)
+[![release](https://img.shields.io/github/v/release/amd2g2zz/kunglao-agent?sort=semver)](https://github.com/amd2g2zz/kunglao-agent/releases)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![runtime](https://img.shields.io/badge/runtime-Claude%20Code%20plugin-7aa2f7)](https://claude.com/claude-code)
+[![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-**简体中文** · [English](README.md)
+**🧠 自主规划路径** · **🔬 每条 claim 机器校验** · **⚖️ 全程盲验证** · **📈 循环自己度量自己**
 
-它目前以 Claude Code 插件的形式分发 —— Claude Code 是你对话的界面，但不是产品的本体。产品是这套循环：专家 worker 先做静态分析，独立验证者从原始证据盲重推每一条事实，机械门控决定分析何时算完成。交付物是一个事实库：每条 claim 都有字节锚定、独立验证、证据索引 —— 信任靠机器执行，不靠口头约定。
+🚀 快速开始 · ✨ 核心技术 · 🧠 kunglao × Claude Code · 🎛️ RL 原理 · 🖥️ 运行实况 · 📖 实战案例 · 🧪 评估实测 · 🏗️ 架构
 
-> **术语约定**：`kunglao-agent`、`PROVEN`、`RED-CHECKER`（独立验证者）、`fact`、`claim`、`MCP`、`task_spec.yaml`、`claim-register.yaml`、`evidence/_index.json` 等已建立术语保留英文原文，其余均为中文。
+[English](README.md) · **简体中文**
 
-## 为什么是 kunglao-agent
+> [!WARNING]
+> **v0.1.6 是最后一条 Claude Code 原生版本线。** 下一个里程碑（v0.2）
+> 将运行时整体迁移到 PI Agent 基座——同一个循环、同一套账本、新的引擎
+> 底座。见路线图。
 
-- **长时程是设计目标。** 一次分析可以无人值守跑上几小时到几天：定时心跳让循环一直活着，死掉的 worker 会被补位、其问题重新排队，崩溃后从落盘状态续跑，卡住的任务能自愈。收敛了你再来读结论 —— 不用一步步盯着。见[长时程自主运行](#长时程自主运行)。
-- **答案值得信。** 任何 fact 在独立验证者从原始证据盲重推一致之前都不能叫 `PROVEN`；每条 fact 都通过 `evidence/_index.json` 锚定到带 sha256 的原始证据。
-- **覆盖完整的逆向光谱。** Windows/Linux 原生二进制、Android APK、Web/JS、协议分析、固件仿真、风控对抗 —— 一套系统，不是单领域工具。
-- **静态优先的成本观。** 能静态闭环的任务绝不碰动态工具；每一次升级都要显式声明、受门控约束、留下审计。
-- **复用知识，而不是重复推导。** 内置持续扩充的注册工具目录（crypto 解码、反汇编流水线、图查询），系统优先调用成熟工具而不是临时手搓脚本；每次运行沉淀下来的是可复用的事实库，而不是一段会蒸发掉的聊天记录。
-- **会恢复，而不是死掉。** worker 死亡、API 断连、进程崩溃都是一等公民事件：循环检测到它们、快照已完成的产物、从断点续派，而不是从零重来。
-- **你的环境你做主。** VMware、ssh、docker、adb、或者纯静态 —— 系统驱动你已有的执行通道，没有哪种是"降级模式"；不需要执行的任务绝不会向你要一台虚拟机。
+> **术语约定**：`kunglao-agent`、`PROVEN`、`oracle`、`RLVR`、`DTS`、`fact`、`claim`、`MCP`、`task_spec.yaml`、`claim-register.yaml`、`evidence/_index.json` 等术语保留英文原文。
 
-## 快速开始
+---
 
-kunglao-agent 跑在 Claude Code 里。从磁盘上的样本到 verdict：
+## 📖 它是什么
 
-| 工具 | 作用 | 安装 |
+你给 kunglao-agent 一个目标和待解问题；它自己规划路径、派遣专家
+worker、独立验证每条结论，只有当每个答案都被机械检查落定（而不是
+模型自说自话）时才停下。
+
+目标光谱完整：Windows/Linux 原生二进制、Android APK（含 native
+`.so` 层）、Web/JS、协议还原、固件 —— 静态优先设计，驱动你环境里
+已有的执行通道（VMware、ssh、docker、adb；纯静态任务一个都不需要）。
+
+它以 [Claude Code](https://claude.com/claude-code) 插件形式分发：
+Claude Code 是对话界面；产品本体是这套循环和它产出的 fact 库。
+
+> [!NOTE]
+> 循环上报的每个数字 —— 胜率、后验、预算 —— 都能追溯到一条 append-only
+> 账本行。没有任何数字是自声明的。
+
+---
+
+## 🖥️ 运行实况
+
+**编排者工作现场** —— 一次收敛判决、一次带预算的 worker 派遣（facts
+实时落盘）、一次盲红队判决把 claim 推进到 `PROVEN`；状态栏 HUD 让整
+个交战过程一目了然：
+
+![kunglao-agent 编排会话：收敛检查、worker 派遣、盲红队验证、状态栏 HUD](docs/assets/showcase-orchestrator.svg)
+
+**循环度量自己** —— 由 settlement 合成的回合策略、带删失结局仲裁的
+折扣 Thompson 后验库、发现层准入一个真正的新方法臂（并拒绝改名重
+试）、以及胜率曲线：
+
+![kunglao-agent 学习面：回合策略、后验库、扩展回执、胜率曲线](docs/assets/showcase-learning.svg)
+
+---
+
+## ✨ 核心技术
+
+kunglao-agent 是**包在 Claude Code 外面的 act 级 RL 控制器**：Claude
+Code 在 act 内推理，kunglao 决定下一个 act、验证它、给它定价、从中
+学习。深度设计见 [`docs/design/`](docs/design/)。
+
+- **机械 oracle。** 完成判据从任务陈述推导为可运行检查（byte-exact
+  回放、留出探针）。**奖励以 oracle 判决计价**——谎报进度一无所获。
+- **盲验证。** 独立验证者在不看 maker 推理的前提下重推每条 claim；
+  worker 自签最多 `STAMP`，永不 `PROVEN`。facts 引用原始产物
+  （sha256）并携带 `reproduce:` 命令。
+- **模型冻结，循环学习。** 每个 act 落 append-only 账本；Thompson
+  采样策略按「特征键控状态上实测的成本调整成功率」重排方法族。
+- **无人值守，可恢复。** 数小时连跑、死 worker 替换、全状态在盘，
+  每个上报数字都能追溯到一条账本行。
+
+---
+
+## 🧠 kunglao × Claude Code
+
+Claude Code 是发动机，kunglao 是变速箱 + 仪表盘 + 行车电脑——下一个
+act、验证、预算、经验去向。
+
+| | 裸 Claude Code | + kunglao |
 |---|---|---|
-| **Claude Code** | kunglao-agent 的运行环境 | 按 Anthropic 官方文档 |
-| **Python 3.10+** | 插件自带 `uv` 管理的锁定环境，你不用动 | 系统装或 `uv` 管 |
-| **`uv`** | 锁定环境解析器 | `pip install uv` 或 [astral.sh/uv](https://astral.sh/uv) |
-| **Ghidra 或 IDA** | 二选一，作为反编译器 | 见[按目标类型分工具链](#按目标类型分工具链) |
+| 下一步 | 会话内即兴 | act 级学习策略，后验跨任务存续 |
+| 验证 | 自报 | 机械 oracle + 盲红队 |
+| 时程 | 单会话，人盯着 | 数小时无人值守，断点恢复 |
+| 经验 | 会话结束即蒸发 | 账本 → 后验 → 更准的开局 |
 
-### 1. 装插件
+![控制器选每个 act，Claude Code 执行，账本记住](docs/assets/rl-drive.gif)
 
-在任意目录下，进入 Claude Code：
+诚实边界：单会话简单任务裸 Claude Code 更划算（评估表就这么写）。
+kunglao 的回报在长时程、验证纪律、跨任务复利。
+
+---
+
+## 🎛️ 在线 RL：循环边干活边变强
+
+同类任务的第一次都付全价：循环试一个方法、看着它失败、再试下一个。
+但每次尝试都被记下来——同类任务的第二次就从笔记开局，而不是从零开始。
+
+![第一个任务付全价；循环记住；第二个更便宜](docs/assets/rl-loop.gif)
+
+这就是在线强化学习在这里的全部含义：**循环在 act 之间自我更新，边干边学**
+——没有训练数据集、没有模型重训、没有离线阶段。每个任务的经验在下一次
+决策之前就已入账。
+
+### 循环到底在学什么
+
+**1. 每类目标的正确开局。** 普通脚本和加固应用不该用同一套开法。循环
+按目标种类分开记笔记——目标长什么样，决定用哪本打法手册。
+
+![两类目标路由到两本不同的打法](docs/assets/rl-features.gif)
+
+**2. 哪些方法是死路。** 反复失败的方法被雪藏——不再烧预算（但永不删除；
+目标变了可以回来）。当*所有方法*都没用时，循环会试着发明新路：一个
+发现 act 提出真正不同的新方案，对照失败集查新——换个名字的老路被拒收。
+
+![死路被雪藏；真正的新想法获得准入](docs/assets/rl-death-discovery.gif)
+
+**3. 哪里要多查一遍。** 验证者频繁被驳斥的状态，会学会在那里排更密的
+验证——连击转诚实后自动放松。
+**4. 工具怎么路由也是学的。** 工具与 provider 的选择同样进入学习：出过错的工具会被降权一段时间，一旦恢复立即复位——路由跟随记录在案的结果，而不是注册表顺序。
+
+### 学习是怎么发生的
+
+```mermaid
+flowchart LR
+    A["目标状态<br>（长什么样）"] --> B["选一个方法<br>（从笔记里采样）"]
+    B --> C["执行<br>（worker 去干）"]
+    C --> D["检查器判决<br>（有证明 / 没证明）"]
+    D --> E["记一行账<br>（发生了什么、花了多少）"]
+    E --> F["更新这类目标的笔记"]
+    F --> B
+```
+
+笔记就是「每个方法 × 每类目标」的成功/失败计数，外加一个偏向：还没被
+排除的路总值得试——探索随证据积累恰好衰减。奖励 = 进度 × 权重 − 成本，
+所以「贵得没 prose」的习惯在简单目标上亏钱；每个数字都能追溯到一条
+append-only 账本行。
+
+### 这买到什么——以及刻意不买什么
+
+- **熟悉的工作成本下降。** 同类第二个任务比第一个便宜；笔记在部署内
+  跨任务存续。
+- **预算不再流血。** 死方法在拖垮时钟前被雪藏；发现层长出没人写过的
+  新打法。
+![胜率上升、步数下降——循环自己的账本就是证据](docs/assets/rl-curves.gif)
+
+- **模型是冻结的。** 变强的不是能力，是调度：对的方法、对的顺序、对的
+  时机。
+- **诚实不是学出来的，是强制的。** 检查器只为能复验的结果付账；worker
+  自己的话永远不算证明。RL 在这份诚实通货之上优化效率——永远不能用
+  虚构铸币。
+
+![检查器只为可复验的结果付账](docs/assets/rl-pricing.gif)
+
+### 与常见做法的原理差异
+
+知识路由（LLM 对着手册即兴）、有界流水线（固定阶段固定轮次）、单点
+判定——决策逻辑全是写死的：上一个任务的经验永远不改变下一个任务的
+计划。这个循环的控制律从自己测得的历史里学出来：
+
+![并排对比：三个系统第二个任务原价重复；kunglao 第二个任务更便宜](docs/assets/rl-comparison.gif)
+
+## 📋 环境要求
+
+| 组件 | 要求 | 说明 |
+|---|---|---|
+| Claude Code | 当前版本 | 运行时 —— 以插件安装 |
+| Python | 3.10+ | 插件通过 `uv` 携带锁定环境 |
+| `uv` | 任意较新版本 | `pip install uv` 或 [astral.sh/uv](https://astral.sh/uv) |
+| Ghidra 或 IDA | 二选一 | 原生目标的反编译 |
+| MCP 服务器 | 必装 2 个 | `ghidra` + `sequential-thinking` —— 见[工具链](#️-按目标分工具链) |
+
+> [!WARNING]
+> 分析动作会运行真实工具，可能执行目标派生的输入。动态工作使用隔离
+> VM/设备；只分析你有授权的目标。
+
+---
+
+## 🚀 快速开始
+
+### 1. 安装插件
 
 ```
 /plugin marketplace add amd2g2zz/kunglao-agent
 /plugin install kunglao-agent@kunglao-agent
 ```
-
-（开发模式也可以：`claude --plugin-dir /path/to/kunglao-agent`。）
 
 ### 2. 初始化工作区
 
@@ -48,385 +195,385 @@ kunglao-agent 跑在 Claude Code 里。从磁盘上的样本到 verdict：
 /kunglao-agent:init ~/cases/synth-dropper --type windows
 ```
 
-`kunglao-init` 搭好工作区、写好 `CLAUDE.md`、按你选的 `--type` 探测工具链、生成 `.mcp.json`。你选的类型有 HARD 工具缺失时，init 会 **HARD-reject** —— 修复指引就写在错误块里。
+`kunglao-init` 搭建工作区、按 `--type` 探测工具链；缺必需工具时
+HARD 拒绝并给出修复指引。
 
-### 3. 提出任务，启动分析
+### 3. 陈述任务并开始
 
 ```
 /kunglao-agent:analysis ~/cases/synth-dropper
-> 分析目标：确认这个 dropper 的持久化手段和网络出口，
->   每条结论都要能从原始证据复现。
-> 验证逻辑：关键结论必须由独立验证者盲重推一致才算成立。
-> 约束：静态优先，样本不许在宿主机执行。
+> 目标：确认这个 dropper 的持久化机制和网络端点；每条结论必须可从
+>   原始证据复现。
+> 验证：关键结论只有在独立验证者盲推得到相同答案时才算数。
+> 约束：静态优先；绝不在宿主机上执行样本。
 ```
 
-把需求说清楚 —— **分析目标**（你要知道什么）、**验证逻辑**（凭什么信答案）、**约束**（不许做什么）。写得越具体，结果越可控：只写目标不写验证逻辑，结论就只是模型的口头担保；两者都给，每条结论才有机械背书。约束可选——不写就由系统按静态优先原则自行决定路径。需求记入 `task_spec.yaml`，之后循环自动推进，不需要你再指挥。常见的口头需求怎么写成合格的任务描述，见[怎么写任务描述](#怎么写任务描述)。
+把任务写得让独立评审者能判断结果：分析目标、验证逻辑、约束。一切
+记入 `task_spec.yaml`；之后循环自动驱动 —— 可以走开，死掉的 worker
+会被替换、问题重新入队，`/kunglao-agent:resume` 在任何中断后从盘上
+状态重建现场。
 
-### 4. 看交付物
+### 4. 读交付物
 
 ```
-claim-register.yaml   # 每条 claim 都 terminal，带验证者签核
-facts/F<NNN>.md       # 字节锚定、可复现、frontmatter 契约
-evidence/_index.json  # 每个 fact 对应一份原始证据（sha256 + 路径）
+claim-register.yaml   # 每条 claim 终态，带验证者签核
+facts/F<NNN>.md       # byte 锚定、可复现、frontmatter 契约
+evidence/_index.json  # 每条 fact → 原始产物（sha256 + 路径）
 runs/                 # 会话审计轨迹
 ```
 
-## 怎么写任务描述
+### 命令
 
-循环的完成判据 —— **oracle** —— 是从你写下的最终状态机械推导出来的。写得含糊，oracle 就含糊，分析就会漂向"能证明什么"，而不是"你要什么"。下面四种说法覆盖了大部分漂移场景：用户原话是什么、通常的真实含义是什么、一个合格的任务描述长什么样、oracle 据此锚定什么。
-
-### "我要纯算"
-
-**通常的真实含义：** 离线复现 App 的签名/加密算法 —— 一个 unidbg harness 或一份独立重写，运行时既不要设备也不要 App。不是"分析这个 App"；App 只是算法的宿主。
-
-```
-> 样本：v7.2 APK；行为：给 api.example.com/v2/* 请求生成 `sign`
->   头的那个签名函数。
-> 判据：独立复现（unidbg 或重写）对全部抓包 (input → sign) 对
->   逐字节重放一致 —— 含扣留对 —— 运行时不依赖设备和 App。
-> 附证据：captures/sign-pairs.jsonl —— 从真机会话抓到的 20 组
->   输入/输出对，其中 10 组扣留、不参与分析。
-```
-
-**oracle 锚定在：** 每一对都逐字节重放一致（包括扣留对），且复现可独立运行。
-
-### "我要解密"
-
-**这话说的是两个不同目标里的一个 —— 先说清是哪个：**
-
-- **(a) 解开一段抓到的数据** —— 一次性答案："把这个抓到的缓存文件解出明文"。
-- **(b) 要一个解密能力** —— 算法 + 密钥还原，明天抓到新数据也能用。
-
-合格的描述 (a)：
-
-```
-> 样本：v7.2 APK；行为：本地配置缓存 files/.cfg/v2.dat 落盘即加密。
-> 判据：给出抓到的 v2.dat 的明文，并与 App 实际渲染的内容对得上
->   （字段名和取值与随包截图一致）。
-```
-
-合格的描述 (b)：
-
-```
-> 样本：v7.2 APK；行为：api.example.com/v2/* 的请求体用静态密钥加密。
-> 判据：定位算法和密钥，然后做 canary 回环 —— 用还原出的密钥加密
->   已知明文，与设备产出的密文逐字节一致。
-> 附证据：captures/request-bodies.jsonl —— 从设备抓到的密文请求体，
->   连同产生它们的请求。
-```
-
-**oracle 锚定在：** (a) 明文与 App 实际渲染的内容对得上；(b) 算法 + 密钥定位成功，且 canary 回环与设备产出的密文逐字节一致。"解出来过一次"两条都不满足。
-
-### "帮我分析这个协议"
-
-**通常的真实含义：** 还原线上格式（wire format）—— 帧定界、字段语义，外加一个能跑的编解码器。
-
-```
-> 样本：某安卓聊天 App；行为：gateway.example.com:443 上的 TCP 协议，
->   抓包见 gateway-session.pcap。
-> 判据：编解码器对每一帧抓包逐字节回环一致，且对扣留帧解出的字段
->   与观察到的 App 行为吻合。
-> 附证据：captures/gateway-session.pcap —— 40 帧，另留 1 帧扣留、
->   不参与分析。
-```
-
-**oracle 锚定在：** 编解码器对每帧抓包逐字节回环一致；扣留帧解出的字段与观察到的 App 行为吻合。
-
-### "这个 sign 在哪算的"
-
-**通常的真实含义：** 要的是"位置 + 证明"。指认一个代码位置很便宜；答案只有在证明"就是这里"之后才有用。
-
-```
-> 样本：v7.2 APK；行为：每个请求附带的 `sign` 头。
-> 判据：指认计算 `sign` 的类/方法（或 native 函数），并在该点 hook，
->   用相同输入复现出抓包里的 `sign` 值。
-> 附证据：captures/sign-session.jsonl —— 抓到的 `sign` 值及其请求输入。
-```
-
-**oracle 锚定在：** 指名道姓的类/方法/native 函数，加上该点的 hook 能复现抓包值。
-
-### 这四个场景的共同点
-
-- **点名样本和行为** —— 哪个参数、哪个入口、哪条流程 —— 别只报类目。"我要纯算"是类目；"给 api.example.com/v2/* 生成 `sign` 头的签名函数"才是目标。
-- **成功必须是数据。** 附上抓到的输入/输出对；扣留对让检查诚实 —— 复现没法过拟合没见过的数据。
-- **oracle 从你写的最终状态推导。** 写得含糊，验证就含糊，分析就漂。
-- **约束改变路线。** 只能静态？有没有设备？走哪个 channel？提前说清楚，循环开工前就把路线定下来（见[自带分析环境](#自带分析环境)）。
-
-## 子命令
-
-| 命令 | 什么时候用 | 做什么 |
-|---|---|---|
-| `/kunglao-agent:init <路径> --type <windows\|linux\|android\|web\|macos>` | 开始一次分析，先建工作区 | 搭建工作区，按类型探测工具链，写 `CLAUDE.md` 和 `.mcp.json`；HARD 工具缺失时 HARD-reject，错误块里带修复指引 |
-| `/kunglao-agent:analysis <路径>`（别名 `analyze`） | init 之后，提出任务、开跑分析 | 一次性收集你的分析目标 / 验证逻辑 / 约束，进入收敛循环：派工 / 验证往复，收敛后出报告 |
-| `/kunglao-agent:resume <路径>` | 崩溃、重启之后，或任何"我刚才跑到哪了" | 只读的断点简报（健康状态、open claim、在跑 worker、崩溃时间线）加上状态机给出的下一步 |
-| `/kunglao-agent:upgrade <路径> [--dry-run]` | 插件升级后打开旧工作区，或升级时提示版本戳落后 | 把工作区脚手架（hooks、模板、事件词表）迁移到当前插件版，`--dry-run` 可预览；用户数据（claims、facts、evidence）绝不触碰，字节级漂移即拒绝（RC=4） |
-| `/kunglao-agent:help` | 忘了命令 | 打印用法列表 |
-
-典型顺序：`init` 建工作区 → `analysis` 提需求开跑 → （随时用 `resume` 接续进度）→ 收敛读报告 → 插件升级后对旧工作区跑一次 `upgrade`。
-
-## 一次分析长什么样
-
-*一次分析的"形状" —— 你敲什么、拿到什么、去哪看。* 一个小型 Windows dropper 落在 `~/cases/synth-dropper`：
-
-```bash
-/kunglao-agent:init ~/cases/synth-dropper --type windows   # 探测 Ghidra、VM 可达性
-/kunglao-agent:analysis ~/cases/synth-dropper
-> "这个二进制干了什么，回连到哪里？"
-```
-
-接下来循环自己跑 —— 路线随样本实际情况调整，不是固定剧本。你可以走开（见[长时程自主运行](#长时程自主运行)）。收敛之后读下面的交付物。
-
-## 场景演练
-
-再给两条端到端的路径 —— 挑一条匹配你的目标（普通 Windows PE / Linux ELF 二进制就走上面的示范案例）。
-
-<details>
-<summary><strong>Android APK —— 用户敲什么、产物落到哪</strong></summary>
-
-```bash
-/kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent:analysis ~/cases/sample.apk
-> "capability / persistence / network entry points"
-```
-
-```bash
-/kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent:analysis ~/cases/sample.apk
-> "这个 APK 有没有动态加载和反调试？如果有，代码藏在哪，做了什么？"
-```
-
-- **产物落在哪：** `bins/<sha256>`（APK 本身）、`facts/`（类图谱、native `.so` 清单）、`evidence/`（抓包、dump）。
-- **"完成"长什么样：** 每个问题都有可复现的证据支撑。
-- **路线由系统定。** 有的 APK 纯静态 DEX 分析就能闭环，有的必须上真机调试 —— 取决于样本实际是什么。
-
-</details>
-
-<details>
-<summary><strong>Web / JS —— 解包 → 去混淆 → 带签参数重放</strong></summary>
-
-```bash
-/kunglao-agent:init ~/cases/example-site.com --type web
-/kunglao-agent:analysis ~/cases/example-site.com
-> "XHR 签名是怎么算的，nonce 从哪来？"
-```
-
-- **产物落在哪：** `evidence/`（抓包、去混淆后的代码）、`facts/`（签名密钥、nonce 推导）。
-- **轻量工具链。** web 目标在 init 只探测必需项；缺什么，等目标真用到了再装。
-
-</details>
-
-## 你得到什么
-
-一个声明登记加事实库，信任靠机器执行，不靠口头约定：
-
-- **验证式收敛** —— `PROVEN` 要求独立盲验证者逐字节重推一致；`CONVERGED` 要求每个主问题都有字节级证据、零孤立 claim、不空转。
-- **证据完整性** —— 每条 fact 都能通过 `evidence/_index.json` 追到原始证据（capture / trace / dump / 二进制）。按设计排除派生摘要。
-- **Maker-checker** —— worker（maker）写事实，redteam 验证者（checker）盲重推。永远是不同的 agent。
-
-没有任何 claim 能靠作者自己说了算：必须由独立验证者盲重推一致，并通过一组机械门控。完整门控设计见 [`docs/design/loop-engineering.md`](docs/design/loop-engineering.md)。
-
-跑完之后，各文件回答不同的问题：
-
-| 问题 | 去哪看 |
+| 命令 | 何时用 |
 |---|---|
-| 做完了吗 | 循环的退出码 —— `CONVERGED`（0）表示每个主问题都有已验证的答案；逐条 claim 状态在 `claim-register.yaml` |
-| 找到了什么 | `facts/F<NNN>.md` —— 一条 fact 一个文件，由 `claim-register.yaml` 映射回 claim |
-| 怎么复现 | `evidence/_index.json` —— fact → 原始证据（路径 + sha256）；每条 fact 带 `reproduce:` 命令 |
-| 具体发生了什么 | `runs/` —— 逐 tick 的 ledger 和 worker 状态 |
+| `/kunglao-agent:init <ws> [--type …] [--lane …]` | 开始一次交战 |
+| `/kunglao-agent:analysis <ws>` | 陈述任务并运行循环 |
+| `/kunglao-agent:resume <ws>` | 任何中断之后 —— 只读断点简报 |
+| `/kunglao-agent:upgrade <ws> [--dry-run]` | 插件升级后（用户数据永不触碰） |
 
-fact 样例：
+`uv sync` 还会注册 `kunglao` 控制台脚本（`decide`、`tick`、`verify`、
+`health`、`resume`、`upgrade`……全部子命令上 PATH）。
 
-```yaml
-id: F061
-status: VERIFIED-BY-W01-static-byte-recheck
-claim_id: C-401
-provenance:
-  - {role: sample, path: bins/<sha>}
-  - {role: capture_log, path: runs/c329-inner-pe.bin}   # 经 evidence/_index.json 引用
-reproduce: python -c "import struct; ..."               # 对着引用的证据跑
-verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
-```
+---
 
-## 长时程自主运行
+## 📖 怎么写任务描述
 
-真实的分析不是二十分钟的聊天。kunglao-agent 能一直钉在问题上，不需要人一步步带着走：
+循环从你陈述的最终状态机械推导 oracle。四种说法覆盖大部分偏差：
 
-- **一跑几小时到几天，无人值守** —— 定时心跳让循环在你的两次到访之间持续干活；循环停摆会被标记出来，而不是无声烂掉。
-- **失败能自愈** —— 死掉或卡住的 worker 会被补位，其问题重新排队；被阻塞的任务走自愈流程，不会干等。
-- **崩溃和重启之后能续** —— `/kunglao-agent:resume <工作区>` 从落盘状态重建断点现场，并给出下一步动作。
-- **记忆在磁盘上，不在聊天里** —— claims、facts、证据索引、完整审计轨迹都落在工作区，任何会话都能把分析接回去。
-
-你给它目标和问题；它把问题做上几小时到几天，从故障里恢复，收敛了你来读结论。
-
-## 用好它
-
-- **静态优先是设计。** 循环会先关掉一切能静态关掉的问题，再碰动态工具；加壳保护的目标直接路由到动态腿 —— 声明 channel，它来驱动。
-- **提前声明动态那条腿。** 如果主问题注定要执行样本，先选好 channel（见[自带分析环境](#自带分析环境)）—— 动态任务配 `local` 会被 init HARD-reject，这是设计使然。
-- **循环始终可读。** 每个 tick 都落在 `runs/`；`/kunglao-agent:resume <工作区>` 读取实时状态并给出下一步。
-
-## 按目标类型分工具链
-
-init 时选的 `--type` 决定哪些 HARD 工具必须装。指引默认折叠 —— 展开你的目标。**所有类型都需要两个 MCP server：** `ghidra`（`claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe`）和 `sequential-thinking`（`claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking`）。
-
-<details>
-<summary><strong>windows（PE32+ x86-64）</strong> —— Windows 原生二进制</summary>
-
-| Tier | 工具 | 安装 |
+| 你说 | 通常意味着 | oracle 锚定在 |
 |---|---|---|
-| HARD | `pefile`（Python） | `pip install pefile` |
-| HARD | `die`（Detect It Easy） | `KUNGLAO_DIE` 环境变量或在 PATH —— [ntinfo.com](https://ntinfo.com) |
-| HARD | `floss`（FLARE FLOSS） | 按 [flare-floss 文档](https://github.com/mandiant/flare-floss) 装 |
-| HARD | Ghidra 或 IDA | 二选一；见[内部](#内部) |
-| HARD（T2/T3） | VMware + vmr-shell，或 ssh/docker channel | 见[自带分析环境](#自带分析环境) |
-| HARD（T2/T3） | `frida-server`（改名，自定义端口） | 设备/VM 侧二进制，默认端口 1337 |
+| "我要纯算" | 离线复现签名/加密例程 | 每对捕获样本（含留出对）byte-exact 回放 |
+| "我要解密" | 解一段密文，还是要可复用能力？ | 明文校验通过 / 金丝雀往返 byte 一致 |
+| "帮我分析这个协议" | 线格式还原 + 可运行编解码器 | 编解码器对每帧 byte-exact 往返 |
+| "这个 sign 在哪算的？" | 一个带证明的定位 | 具名函数 + 该点 hook 复现捕获值 |
 
-Windows 的 T3 动态还要用 `x64dbg` MCP；`volatility`（内存取证）和 IDA-Pro MCP 可选 —— 见[内部](#内部)的 MCP 清单。
+点名样本和行为（不是类别）；让成功标准是数据（捕获对 —— 留出对保
+证诚实）；约束前置说清（纯静态？有设备？走哪个通道？）。
 
-</details>
+---
 
-<details>
-<summary><strong>linux（ELF）</strong> —— Linux 原生二进制 / 固件 / 内存镜像</summary>
+## 🧰 你看的运行面
 
-| Tier | 工具 | 安装 |
-|---|---|---|
-| HARD | `file`、`readelf`、`objdump` | `binutils` 包 |
-| HARD | Ghidra 或 IDA | 二选一 |
-| HARD（T2/T3） | VMware + vmr-shell，或 ssh/docker 控制平面 | 见[自带分析环境](#自带分析环境) |
-| HARD（T2/T3） | `frida-server`（改名，自定义端口） | 设备端二进制，端口 1337 |
-| WARN | `gdbserver`（主机侧 PATH）、`strace`、`ltrace` | 可选补充 |
+两个实时面让运行可观察：
 
-`ssh-mcp` 给远程 / 云 / docker 主机开 ssh 控制平面。
+**状态栏** —— 运行中的一行 HUD：语义状态字形（`◈ analyzing` /
+`✖ DOWN`）、claim 进度 `C 6/8`、当前胜率、采样器榜首臂及其年龄、健
+康度圆点、活动任务片、价值火花线。过期但在策略内如实渲染 idle；超
+策略渲染 DOWN。
 
-</details>
-
-<details>
-<summary><strong>android（APK / DEX / native .so）</strong> —— 难度最高、HARD 项最多</summary>
-
-| Tier | 工具 | 安装 |
-|---|---|---|
-| HARD | `aapt` 或 `aapt2`（或 `unzip` 兜底） | Android SDK build-tools |
-| HARD | `jadx`（DEX → Java 反编译器） | [skylot/jadx](https://github.com/skylot/jadx) |
-| HARD | `apktool`（APK 资源解码 / 重打包） | [iBotPeaches/Apktool](https://github.com/iBotPeaches/Apktool) |
-| HARD | `gitnexus`（反编译后图谱） | `npm i -g gitnexus` |
-| HARD | Ghidra 或 IDA | 仅当 APK 含 native `.so` |
-| HARD | `adb` + **已 root 设备**，`ro.debuggable=1` | platform-tools + 设备端自定义 frida |
-| HARD | `frida-server`（改名，自定义端口 1337） | 设备端二进制 |
-| HARD | `android_server`（IDA 远程调试） | 设备端二进制，端口 23946 |
-| WARN | `apkid` | `pip install apkid` |
-| WARN | `baksmali` | 从 [smali releases](https://github.com/baksmali/smali/releases) 下载 |
-
-</details>
-
-<details>
-<summary><strong>web &amp; macos</strong> —— 按设计轻量的工具链</summary>
-
-| Tier | 工具 | 安装 |
-|---|---|---|
-| WARN | `camoufox-reverse` MCP（web） | 反检测 Firefox（hook / trace / 网络抓包） |
-| WARN | `docker`（web channel 默认） | Docker Desktop，或显式 `KUNGLAO_CHANNEL=ssh` |
-| WARN | `lipo`、`otool`、`nm`、`codesign`、`xattr`（macOS） | Xcode Command Line Tools |
-| WARN | `ghidra` MCP（macOS） | 推荐 —— 见[内部](#内部)的清单 |
-
-这两类目标在 init 只探测必需项；更重的能力在目标真正需要时启用。macOS 的动态分析走 `ssh` channel（连到 Mac 主机）；要用可选的 x64dbg 浏览器侧调试，就按上面的 Windows 工具链装。
-
-</details>
-
-以上所有内容的统一真源 —— 随时可探测：`python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>`（退出码 1 = HARD 缺失）。
-
-## 自带分析环境
-
-动态调试需要一个 agent 能驱动的执行控制平面。`KUNGLAO_CHANNEL` 在五个一等公民 channel 里选一个 —— 你环境里已有什么就用什么，没有降级模式：
-
-| Channel | 驱动什么 | 前置 |
-|---|---|---|
-| `vmr`（默认） | VMware 驱动的 VM，**任何客户机系统** —— snapshot/revert 工作流是它不可替代的价值 | vmr-shell 技能；`KUNGLAO_VM_HOST` + 端口 9876/1337 |
-| `ssh` | 任何 ssh 可达的机器：远程裸机、云 VM、Mac、远程 docker 主机 | 密钥认证 —— 探测会真的跑一次 BatchMode `ssh ... true` |
-| `docker` | 本机或远程 docker daemon —— `docker exec` 等价于任何控制路径 | `docker version` 绿；可选 `KUNGLAO_DOCKER_CONTAINER` |
-| `adb` | 安卓模拟器或真机 | `adb devices` 能看到设备；`adb forward tcp:1337 tcp:1337` 给 frida |
-| `local` | **仅主机侧静态分析** | 无 —— 见下面的红线 |
-
-> **`local` 红线：** local 只为**静态**工作准备 —— 绝不在主机上执行、调试、注入样本。任何动态需求都把 `KUNGLAO_CHANNEL` 切到 `vmr`/`ssh`/`docker`/`adb`；动态任务配 `local` 会被 init HARD-reject。
-
-channel 探测只对动态任务跑（纯静态任务直接跳过）。`ssh` channel 上的执行流过 **ssh-mcp** 控制平面（`npm i -g ssh-mcp`）；裸 CLI ssh 是兜底。远程 docker 走 ssh 时，设 `KUNGLAO_DOCKER_CONTAINER`。
-
-## 配置
-
-四个变量覆盖大多数场景：
-
-| 变量 | 默认 | 含义 |
-|---|---|---|
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | 未设 | 必须保持未设或 `0` —— 真值会让派工走 teammate channel，会被拒绝 |
-| `KUNGLAO_CHANNEL` | `vmr` | 动态分析执行控制平面：`vmr` \| `ssh` \| `docker` \| `adb` \| `local` —— 见[自带分析环境](#自带分析环境) |
-| `KUNGLAO_VM_HOST` | 未设 | 动态分析的 VM/主机（vmr-shell :9876，Frida :1337） |
-| `GHIDRA_HOME` | 未设 | Ghidra 安装根目录（要含 `support/analyzeHeadless.bat`） |
-
-很少用到：`KUNGLAO_DOCKER_CONTAINER`（`ssh`/`docker` channel 的 docker 执行目标）、`KUNGLAO_FRIDA_PORT`（默认 1337）、`KUNGLAO_DIE`（DIE 路径，兜底 PATH）、`KUNGLAO_CLAUDE_JSON`（用户级 MCP 注册表的测试覆盖）。
-
-## 安全
-
-- 样本绝不在主机上执行 —— `block_malware_exec` hook 强制；动态只跑在 VM/容器/设备里，且要求逐会话授权。
-- 真相等级：原始证据 > 本地工具 > 沙箱 > 威胁情报（CTI 是可证伪的假设，不是真相）。
-- Maker-checker：worker 永不自我验证；验证者永不读 maker 的结论。
-- bins、settings、hooks 永不入库；密钥与工作区、仓库隔离。
-
-## 开发
-
-欢迎贡献。流程：从 `dev` 切分支，一个改动一个分支，PR 回 `dev`。
+**胜率曲线** —— settlement 流上的滚动通过率：
 
 ```bash
-git worktree add .worktrees/<name> -b <name> dev
-uv sync --locked
-uv run python -m pytest -q
-gh pr create --base dev
+uv run python scripts/winrate_curve.py <workspace> [--window 5] [--html curve.html]
 ```
 
-设计文档在 `docs/` 与 `specs/`。见[许可证](#许可证)。
+健康运行的曲线随循环学会"哪些方法有效"而上升；贴零的平线说明排序
+器把预算花在了永不结算的臂上 —— 先查障碍注册表再加预算。
 
-## 内部
+---
 
-<details>
-<summary><strong>MCP 供应（完整清单）</strong></summary>
+## 📚 实战案例
 
-单一真源：`scripts/mcp_probe.py`；`kunglao-init` 在缺失时生成工作区 `.mcp.json`（`--no-mcp` 跳过；已有文件绝不覆盖）。探测：`python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` —— 退出码 1 = HARD 缺失，2 = 仅 WARN 缺失。
+从真实且完全收敛的运行工件重写的证据优先案例（EN + 简体中文）—— 转录、
+死路、两个具名验证方法、机械判决：
 
-| MCP server | Tier | Scope | 用途 | 注册 |
-|------------|------|-------|---------|--------------|
-| `ghidra` | HARD | 所有 type 必需 | 反编译 / 静态分析 | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
-| `sequential-thinking` | HARD | 所有 type 必需 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
-| `x64dbg` | HARD | Windows T3 动态 | 动态调试（VM 远程） | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
-| `volatility` | WARN | Windows T3 | 内存取证 | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
-| `gitnexus` | HARD | Android 图谱构建 | 反编译后知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
-| `virustotal` | WARN | CTI | 威胁情报（家族归属假设） | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
-| `ssh-mcp` | WARN | channel | ssh 执行控制平面 | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web | 浏览器 JS 逆向（hook / trace / 网络抓包） | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
+- [kvm8-isa：从参考解释器解码私有 VM](docs/cases/kvm8-isa.md) —— 还原 KVM-8 ISA（容器、十操作码半字节映射、guard 字节、`mix()` 摘要机）；44/44 指令字解码，四个摘要与参考解释器的 rustc 构建逐字节一致；诱饵 `fold8` 对照被坐实对四个载荷输出同一个错误常量。
+- [web-token-v1：签名 SDK 还原成一行 HMAC](docs/cases/web-token-v1.md) —— 密钥由乱序 base64 表部件重组、填充位置用证伪裁决，`client.py` 为 4/4 新鲜会话铸出令牌；被截获的令牌跨服务器实例重放即死。
+- [apk-webview-attest-v2：两层证明绑定](docs/cases/apk-webview-attest-v2.md) —— JS PoW/mix 挑战把种子送进原生 `sha256(seed‖nonce)[:8] ^ NATIVE_MASK` 检查；8 字节掩码从原始 ELF 字节重推，4/4 会话穿越两层，阴性对照被 403 拒绝。
 
-</details>
+每篇案例在中英双语版本并存于 `docs/cases/`。
+
+---
+
+## 🧪 评估与实测结果
+
+构造目标带机械 oracle 和构造已知的 ground truth；checker 铸造候选从
+未见过的留出探针。内置 12 单元 L1 矩阵（跨 JS / x86/ARM64 ELF /
+Windows PE 的静态 RE 目标；只认 byte 锚定交付物、无部分分、pass@1、
+按会话限额）：
+
+| 运行时 | pass@1 | 会话成本 |
+|---|---|---|
+| kunglao v0.1.5.post2 | 5/12 | ~$135 总计（13 会话） |
+| kunglao v0.1.6 | **11/12** | ~$120 总计（4 轮治理迭代） |
+| 裸 Claude Code | 12/12 | ~$11.4 总计 |
+
+诚实解读：这 12 个单元是单会话可解的，前沿模型 + 默认工具最便宜地
+刷满 —— kunglao 的差异化在**长时程多层工作、验证纪律（每条 claim 都
+有 oracle + 盲红队）、动态通道**，不在单会话速度。长时程矩阵与五臂
+对照（裸 CC / CC+热上下文 / kunglao 冷 / kunglao 热 / 去召回消融）
+随本发布列车落定。
+
+对照臂 A/B 与回放标尺（离线排序器质量测量）以命令随附：
+`scripts/eval_control_arm.py --ab`、`scripts/replay_ruler.py <ws>`。
+
+---
+
+## 🏗️ 架构
+
+```mermaid
+flowchart LR
+    Task[task_spec.yaml — 你陈述目标] --> Oracle[机械 oracle — 量化契约]
+    Oracle --> Loop{收敛循环}
+    Loop -->|派遣| Workers[workers — byte 锚定 facts]
+    Loop -->|验证| Verifier[盲验证者 / 红队]
+    Workers --> Facts[(facts + 证据索引)]
+    Verifier --> Gates[机械门 — settlements]
+    Gates --> Ledger[(append-only 账本)]
+    Ledger --> Policy[外部策略：DTS 后验 + 发现层]
+    Policy --> Loop
+    Ledger --> Report[claim 登记簿 — 每条 claim 终态]
+```
+
+每次交战一个工作区（init 搭建；钩子在工作区级接线 —— 你的全局
+`~/.claude/settings.json` 永不被写）：
 
 <details>
 <summary><strong>工作区布局</strong></summary>
 
-一个工作区对应一次样本分析：
-
 ```
 <workspace>/
-├── bins/<sha256>              # 样本（gitignore）
-├── task_spec.yaml             # primary_questions / scope / constraints / success_criteria
-├── claim-register.yaml        # claim C-NN（OPEN/PROVEN/STAMP/...）
-├── claim_deps.yaml            # claim DAG
-├── facts/                     # 字节锚定 fact F-NNN.md + _INDEX.md
-├── evidence/                  # 原始证据 + _index.json（eid → 路径 + sha256）
-├── runs/                      # worker-status、plan、ledger、.heartbeat.json
-├── blockers/                  # 每个 claim 的失败归因记录
-└── CLAUDE.md                  # 工作区规则，kunglao-init 生成
+├── bins/<sha256>        # 样本（gitignored）
+├── task_spec.yaml       # 目标 / 验证逻辑 / 约束
+├── claim-register.yaml  # claims C-NN 与状态
+├── facts/               # byte 锚定 facts F-NNN.md + _INDEX.md
+├── evidence/            # 原始产物 + _index.json（路径 + sha256）
+├── runs/                # 账本、worker 状态、心跳
+├── blockers/            # 失败归因记录
+└── CLAUDE.md            # 工作区规则（生成）
 ```
 
-kunglao hook 只落在工作区层级；你的全局 `~/.claude/settings.json` 永远不会被写入。
+</details>
+
+<details>
+<summary><strong>按目标分工具链</strong> —— init 时的 `--type` 锁定 HARD 档</summary>
+
+**所有类型必装两个 HARD MCP 服务器**（`ghidra` + `sequential-thinking`
+—— 注册命令见下方 MCP 章节）。展开你的目标：
+
+<details>
+<summary><strong>windows（PE32+ x86-64）</strong> —— 原生 Windows 二进制</summary>
+
+| 档位 | 工具 | 安装 |
+|---|---|---|
+| HARD | `pefile`（Python） | `uv pip install pefile` |
+| HARD | `die`（Detect It Easy） | `KUNGLAO_DIE` 环境变量或 PATH —— [ntinfo.com](https://ntinfo.com) |
+| HARD | `floss`（FLARE FLOSS） | 见 [flare-floss 文档](https://github.com/mandiant/flare-floss) |
+| HARD | Ghidra 或 IDA | 二选一；见下方 MCP 章节 |
+| HARD（T2/T3） | VMware + vmr-shell，或 ssh/docker 通道 | 见[自带分析环境](#自带分析环境) |
+| HARD（T2/T3） | `frida-server`（改名、自定义端口） | 设备/VM 侧二进制，默认端口 1337 |
+
+Windows T3 动态还会用到 `x64dbg` MCP；`volatility`（内存取证）与
+IDA-Pro MCP 可选 —— 见下方 MCP 清单。
+
+</details>
+
+<details>
+<summary><strong>linux（ELF）</strong> —— 原生 Linux 二进制 / 固件 / 内存镜像</summary>
+
+| 档位 | 工具 | 安装 |
+|---|---|---|
+| HARD | `file`、`readelf`、`objdump` | `binutils` 包 |
+| HARD | Ghidra 或 IDA | 二选一 |
+| HARD（T2/T3） | VMware + vmr-shell，或 ssh/docker 控制面 | 见[自带分析环境](#自带分析环境) |
+| HARD（T2/T3） | `frida-server`（改名、自定义端口） | 设备侧二进制，端口 1337 |
+| WARN | `gdbserver`（宿主 PATH）、`strace`、`ltrace` | 可选 |
+
+`ssh-mcp` 为远程/云/docker 宿主启用 ssh 控制面。
+
+</details>
+
+<details>
+<summary><strong>android（APK / DEX / native .so）</strong> —— 最难的目标类型，HARD 项最多</summary>
+
+| 档位 | 工具 | 安装 |
+|---|---|---|
+| HARD | `aapt` 或 `aapt2`（或 `unzip` 兜底） | Android SDK build-tools |
+| HARD | `jadx`（DEX → Java 反编译） | [skylot/jadx](https://github.com/skylot/jadx) |
+| HARD | `apktool`（APK 资源解码/重建） | [iBotPeaches/Apktool](https://github.com/iBotPeaches/Apktool) |
+| HARD | `gitnexus`（反编译后图谱） | `npm i -g gitnexus` |
+| HARD | Ghidra 或 IDA | 仅当 APK 含 native `.so` |
+| HARD | `adb` + **root 设备**（`ro.debuggable=1`） | platform-tools + 设备侧定制 frida |
+| HARD | `frida-server`（改名、端口 1337） | 设备侧二进制 |
+| HARD | `android_server`（IDA 远程调试） | 设备侧二进制，端口 23946 |
+| WARN | `apkid` | `uv pip install apkid` |
+| WARN | `baksmali` | [smali releases](https://github.com/baksmali/smali/releases) |
+
+</details>
+
+<details>
+<summary><strong>web &amp; macos</strong> —— 设计上轻量工具链</summary>
+
+| 档位 | 工具 | 安装 |
+|---|---|---|
+| HARD | `camoufox-reverse` MCP（web） | 反检测 Firefox：hook / trace / 网络捕获（web 必装） |
+| WARN | `docker`（web 默认通道） | Docker Desktop，或显式 `KUNGLAO_CHANNEL=ssh` |
+| WARN | `lipo`、`otool`、`nm`、`codesign`、`xattr`（macOS） | Xcode Command Line Tools |
+| WARN | `ghidra` MCP（macOS） | 推荐 —— 见下方清单 |
+
+</details>
+
+动态工作需要一个执行通道（`KUNGLAO_CHANNEL`）：`vmr`（VMware —— 任意
+客户机系统，快照/回滚价值无可替代）、`ssh`（任意 ssh 可达主机）、
+`docker`、`adb` —— 或 `local`（**纯静态**；红线：绝不在宿主机执行样
+本；动态任务在 `local` 上 HARD 拒绝）。
 
 </details>
 
 ---
 
-## 许可证
+## 自带分析环境
 
-双协议许可：**AGPL-3.0** 用于个人、学术、内部使用（免费 —— 见 [LICENSE](LICENSE)）；闭源或 SaaS 商业使用需要**商业许可** —— 见 [LICENSE-commercial.md](LICENSE-commercial.md)。
+动态调试需要一个代理可驱动的执行控制面。`KUNGLAO_CHANNEL` 五选一 ——
+用你环境已有的；没有谁是降级模式：
+
+| 通道 | 驱动什么 | 前置 |
+|---|---|---|
+| `vmr`（默认） | VMware VM，**任意客户机系统** —— 快照/回滚工作流 | vmr-shell 技能；`KUNGLAO_VM_HOST` + 端口 9876/1337 |
+| `ssh` | 任意 ssh 可达主机：裸机、云 VM、Mac、远程 docker 宿主 | 密钥认证 —— 探测跑真实 BatchMode `ssh ... true` |
+| `docker` | 本地或远程 docker 守护进程 | `docker version` 绿；可选 `KUNGLAO_DOCKER_CONTAINER` |
+| `adb` | Android 模拟器或真机 | `adb devices` 可见；frida 需 `adb forward tcp:1337 tcp:1337` |
+| `local` | **宿主机上的纯静态分析** | 无 —— 见下方红线 |
+
+> **`local` 红线**：local 只做**静态**工作 —— 绝不在宿主机上执行、
+> 调试或注入样本。任何动态需求切换到 `vmr`/`ssh`/`docker`/`adb`；
+> 动态任务在 `local` 上 init 直接 HARD 拒绝。
+
+通道探测仅对动态任务运行；ssh 通道执行走 **ssh-mcp** 控制面
+（`npm i -g ssh-mcp`），纯 CLI ssh 兜底。
+
+---
+
+## MCP 服务器
+
+单一事实来源：`scripts/mcp_probe.py`；`kunglao-init` 缺失时生成工作区
+`.mcp.json`（`--no-mcp` 跳过；已存在的文件永不覆盖）。随时探测：
+
+```bash
+uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
+```
+
+（退出码 1 = HARD 缺失，2 = 仅 WARN 缺失。）完整清单：
+
+| MCP 服务器 | 档位 | 范围 | 用途 | 注册 |
+|------------|------|------|------|------|
+| `ghidra` | HARD | 全类型必装 | 反编译 / 静态分析 | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | 全类型必装 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `x64dbg` | HARD | Windows T3 动态 | 动态调试（VM 远程） | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
+| `volatility` | WARN | Windows T3 | 内存取证 | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
+| `ida-pro-vm` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `gitnexus` | HARD | Android 图谱构建 | 反编译后知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
+| `ssh-mcp` | WARN | 通道 | ssh 执行控制面 | `claude mcp add ssh-mcp -- ssh-mcp` |
+| `virustotal` | WARN | CTI | 威胁情报（家族归因假设） | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `camoufox-reverse` | HARD | web | 浏览器 JS 逆向（hook / trace / 网络捕获）—— web 必装 | 随插件分发（`.claude-plugin/plugin.json mcpServers`）—— 启用插件；依赖：`uv pip install camoufox-reverse-mcp` |
+
+工作区 `.mcp.json` 由 `kunglao-init` 缺失时生成；上表用户级注册命令
+供按 kunglao 文档部署的机器使用。
+
+---
+
+## 🗓️ 路线图
+
+- 留出语料上的五臂能力矩阵（裸 CC vs CC+热上下文 vs kunglao 冷/热/去召回消融）
+- 已发现方法臂的注册表准入 —— 让新方法可被派遣
+- 跨工作区记忆：什么方法在哪类状态有效，特征键控
+- blocked-path 测量语料 —— 量化"超越历史的发现"
+
+---
+
+## ❓ 常见问题与处理方法
+
+**什么时候停？**
+`CONVERGED`（退出码 0）：`task_spec.yaml` 里每个主问题都有 `PROVEN`
+fact 背书的答案、零全局矛盾、完成事务重算干净。预算与墙钟上限兜
+底；耗尽计为失败，绝不静默算成功。
+
+**claim 状态是什么意思？**
+`OPEN`（未结算）、`PARTIALLY-VERIFIED`（有 facts、还没有盲签核）、
+`PROVEN`（独立验证者盲推 + 门全过）、`STAMP`（自声明 —— 永不作为
+证据信任）。worker 自己的签核最多产生 `STAMP`。
+
+**oracle 判决是什么？**
+对一个量化验证契约的机器检查 —— 具名产物、无需 LLM 即可运行的机
+械判据、阈值。系统里唯一可信的通货；结算验证器拒绝覆盖它。
+
+**FAIL 结算怎么读？**
+FAIL 会在结算行旁产生结构化 gap-note（命中的诱饵墙、证据缺口、成
+本超支 —— 仅机器信号）。同单元重试会读前人的笔记，所以第 N 次尝试
+攻击具名缺口而不是重复第一次。
+
+**PARK 是什么？**
+option-death 估计器按（障碍类型、方法族）学习一条投入弧是否已死。
+死掉的选项被 PARK —— 采样降权 —— 永不删除；状态变化时可复活。
+
+**循环报 BLOCKED —— 卡死了吗？**
+`BLOCKED`（退出码 4）= 每条开放 claim 都被阻塞。循环对 blocker 跑
+自恢复；SUSPECT/过期前提自动作废并重推。持续 blocker 落 `blockers/`
+带失败归因 —— **加预算前先读这些记录**：修工具缺口（注册缺失的服
+务器 / 装缺失的二进制）或换死方法（采样器已降权）都比加墙钟便宜。
+
+**init 因缺工具 HARD 拒绝 —— 怎么办？**
+错误块逐项列出缺失工具和安装行。装好后重跑同一条 init（幂等 —— 重
+探测、只在 PASS 时搭建）。MCP 服务器注册命令见上表；重跑前用
+`mcp_probe.py` 验证。
+
+**worker 反复超时（账本上 TIMEOUT 行多）。**
+先读该 act 的产物：带 facts 的 TIMEOUT 是进展（credit 带着它们）——
+通常只是该拆小：把子目标陈述到一个 claim ≈ 一次有界尝试。同族反复
+零产物超时说明障碍注册表该有原因 —— 修环境（VM 可达性、frida 端口、
+MCP 服务）而不是重试。
+
+**怎么看循环学到了什么？**
+`uv run python scripts/winrate_curve.py <ws>` 看趋势；
+`runs/round-strategy.json` 看当前生效策略（方法引导/反提示/预算）；
+`runs/posterior-store.jsonl` 看原始后验行；`runs/q-cell-log.jsonl`
+看逐臂观测。
+
+**崩溃后怎么恢复？**
+`/kunglao-agent:resume <workspace>`（或 `kunglao resume <workspace>`）：
+只读断点简报 —— 健康度、开放 claims、在飞 worker、崩溃时间线 ——
+加状态机的下一步。全部状态在盘上；不需要会话上下文。
+
+**需要 VM 或 MCP 服务器吗？**
+纯静态任务完全不需要执行面（`KUNGLAO_CHANNEL=local`）。动态任务需
+要 vmr/ssh/docker/adb 之一。MCP 方面全类型必装 `ghidra` +
+`sequential-thinking`；web 追加 `camoufox-reverse`（随插件分发）。
+探测：`uv run python scripts/mcp_probe.py <ws> --type <type>`。
+
+**工作区早于插件更新。**
+`/kunglao-agent:upgrade <workspace>` 前迁脚手架（钩子、模板、事件词
+表）；用户数据永不触碰，字节漂移以 RC=4 拒绝。版本不匹配在升级前
+拒绝运行分析。
+
+**facts 和证据放哪 —— 能信吗？**
+`facts/F<NNN>.md`（byte 锚定、frontmatter 契约）由
+`claim-register.yaml` 映射到 claim；每条 fact 经 `evidence/_index.json`
+（路径 + sha256）引用原始产物并携带 `reproduce:` 命令。fact 上的
+`verifier_sign_off` 记录独立检查者。
+
+---
+
+## 🔐 安全
+
+仅限授权分析。你负责定义和执行允许范围；沙箱边界降低风险但永远替代
+不了宿主隔离；软件按"现状"提供。
+
+---
+
+## 🧪 开发
+
+```bash
+uv sync                 # 锁定环境
+uv run pytest -n 4      # 测试套件（CI 跑全矩阵）
+uv run ruff check .     # lint
+```
+
+CI 门禁每个 PR：卫生账本（注释 / 静默异常 / 正式代码标记）、部署清单
+一致性、单元 + 集成两档。
+
+---
+
+## 📝 许可证
+
+双重许可：个人、学术与内部使用 **AGPL-3.0**（见 [LICENSE](LICENSE)）；
+闭源分发需商业许可 —— 联系维护者。

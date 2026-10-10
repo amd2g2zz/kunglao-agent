@@ -13,25 +13,41 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from register_proven_gate import stamp_waiver  # noqa: E402
+from ws_yaml import canonical_dump  # noqa: E402
+
 WRITE_GUARD = ROOT / "hooks" / "write_guard.py"
 
 RC_ALLOW = 0
 RC_BLOCK = 2
 
-REG = (
+# #516: the register is single-writer — the Edit face accepts only
+# canonical safe_dump post-images, so these fixtures are seeded/rendered
+# through ws_yaml.canonical_dump (safe_dump block style: list items at
+# column 0, keys at 2-space). The #819 transition semantics are unchanged;
+# they now adjudicate canonical rewrites, which is the only shape a
+# conforming register write can take.
+REG = canonical_dump(yaml.safe_load(
     "claims:\n"
     "  - id: C-001\n"
     "    status: OPEN\n"
     "    statement: synthetic claim for gate tests\n"
     "  - id: C-002\n"
     "    status: OPEN\n"
-    "    statement: second synthetic claim\n"
-)
+    "    statement: second synthetic claim\n"))
 
 EDIT_PROVEN = {
-    "old_string": "    status: OPEN\n    statement: synthetic claim for gate tests",
-    "new_string": "    status: PROVEN\n    statement: synthetic claim for gate tests",
+    "old_string": "  status: OPEN\n"
+                  "  statement: synthetic claim for gate tests",
+    "new_string": "  status: PROVEN\n"
+                  "  statement: synthetic claim for gate tests",
 }
 
 
@@ -79,9 +95,12 @@ def _redteam(ws, claim, verdict):
 
 
 def _waiver(ws, claim, justify):
+    """Issue 601 (5-F6): the helper stamps the waiver through the orchestrator
+    mint face — a bare justify: file is not a waiver anymore."""
     d = ws / "runs"
     (d / f"proven-waiver-{claim}.md").write_text(
         f"---\nclaim_id: {claim}\n---\n\njustify: {justify}\n", encoding="utf-8")
+    assert stamp_waiver(ws, claim)["ok"] is True
 
 
 def _reg_path(ws):
@@ -133,6 +152,6 @@ def test_unrelated_edit_allowed(tmp_path):
     ws = _mk_ws(tmp_path)
     fp = _reg_path(ws)
     r = _run_guard(ws, _payload(ws, fp,
-                                old_string="    statement: second synthetic claim",
-                                new_string="    statement: second claim amended"))
+                                old_string="  statement: second synthetic claim",
+                                new_string="  statement: second claim amended"))
     assert r.returncode == RC_ALLOW, r.stderr

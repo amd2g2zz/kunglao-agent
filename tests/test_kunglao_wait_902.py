@@ -13,7 +13,8 @@ pinned here (tiny env intervals keep every case well under 10 s wall):
     face (LAST status becomes ``in-progress``), print the consumed signal
     on stdout, exit 0;
   - WAIT_MAX_ROUNDS rounds with no signal -> append the self-kill terminal
-    line (``status: failed | note: self-killed after N wait rounds``) and
+    line (``status: unscheduled | note: self-killed after N wait rounds``,
+    #244: honest telemetry — 'failed' is reserved for real failures) and
     exit 3 (``--claim`` given) or 4 (no claim) — the agent TaskStops
     itself and frees its slot;
   - the slot is observably freed: after the self-kill the last status is
@@ -166,7 +167,8 @@ class TestSelfKill:
         r = _run_foreground(ws, claim="C-9")
         assert r.returncode == 3, f"self-kill with claim must exit 3, got {r.returncode}"
         body = _status_file(ws).read_text(encoding="utf-8")
-        assert _last_status(_status_file(ws)) == "failed"
+        assert _last_status(_status_file(ws)) == "unscheduled"  # #244
+        assert "status: failed" not in body  # #244: honest terminal
         assert "self-killed" in body
         assert f"note: self-killed after {MAX_ROUNDS} wait rounds" in body
 
@@ -174,7 +176,7 @@ class TestSelfKill:
         ws = _mk_ws(tmp_path)
         r = _run_foreground(ws)
         assert r.returncode == 4, f"self-kill without claim must exit 4, got {r.returncode}"
-        assert _last_status(_status_file(ws)) == "failed"
+        assert _last_status(_status_file(ws)) == "unscheduled"  # #244
 
     def test_slot_freed_after_self_kill(self, tmp_path):
         """Same 2.4s self-kill scenario as rc3, one spawn — merged here

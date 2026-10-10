@@ -37,9 +37,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 # platform-correct analyzeHeadless name (#409) — single source, imported
 # (leaf module, no cycle).

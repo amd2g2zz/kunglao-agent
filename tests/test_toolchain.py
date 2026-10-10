@@ -124,7 +124,9 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
     # Hermetic MCP probe: without this the probe reads the real ~/.claude.json
     # (present on dev machines, absent on CI) — HARD-tier MCP results would
     # depend on the runner. Pin to a fake registering the HARD servers, same
-    # pattern as tests/test_mcp_supply.py.
+    # pattern as tests/test_mcp_supply.py. #408: the seeds ride the WORKSPACE
+    # .mcp.json (the sanctioned surface) — the fake claude.json stays as a
+    # KUNGLAO_CLAUDE_JSON poison path the probe must never read.
     fake_claude = ws.parent / "fake-claude.json"
     if not fake_claude.exists():
         fake_claude.write_text(json.dumps({
@@ -132,6 +134,11 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
                 "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
         }), encoding="utf-8")
     base_env["KUNGLAO_CLAUDE_JSON"] = str(fake_claude)
+    if not (ws / ".mcp.json").exists():
+        (ws / ".mcp.json").write_text(json.dumps({
+            "mcpServers": {name: {} for name in (
+                "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
+        }), encoding="utf-8")
     # parallel-suite patience: stub probes stay ms-fast on a quiet machine,
     # but an xdist worker storm can starve a 10s probe budget into a false
     # "unavailable" verdict — raise the floor instead of the pass/fail bar
@@ -776,9 +783,14 @@ def test_vm_shell_port_env_configurable(monkeypatch):
 # ---------- #407: MCP-first decompiler check (dedup + CLI fallback) ----------
 
 def _only_st_claude_json(ws: Path) -> None:
-    """Overwrite the hermetic fake-claude.json to register NO decompiler MCP
-    (only sequential-thinking) so the CLI/decompiler probe is isolated."""
+    """Overwrite the hermetic registry seeds to register NO decompiler MCP
+    (only sequential-thinking) so the CLI/decompiler probe is isolated.
+    #408: the WORKSPACE .mcp.json is the surface the probe reads — keep the
+    fake claude.json in sync as a poison path."""
     (ws.parent / "fake-claude.json").write_text(json.dumps({
+        "mcpServers": {"sequential-thinking": {}},
+    }), encoding="utf-8")
+    (ws / ".mcp.json").write_text(json.dumps({
         "mcpServers": {"sequential-thinking": {}},
     }), encoding="utf-8")
 
@@ -851,7 +863,9 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
     FAIL; honest capability verdict is #474's --capability business, not the
     registry read)."""
     _only_st_claude_json(kunglao_ws)
-    (kunglao_ws.parent / "fake-claude.json").write_text(json.dumps({
+    # #408: MCP registrations ride the workspace .mcp.json — the legacy
+    # fake ~/.claude.json (KUNGLAO_CLAUDE_JSON poison) stays ignored.
+    (kunglao_ws / ".mcp.json").write_text(json.dumps({
         "mcpServers": {
             "sequential-thinking": {},
             "gitnexus": {},

@@ -1,0 +1,55 @@
+schema: kunglao-eval-task/1
+task_id: mod-crypto-js-l3-v1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: mod-crypto-js
+seed: 33241
+rung: l3
+anchors:
+  goal_verbatim: Deobfuscate the signer bundle (target/modcrypto_bundle.js), recover
+    the mutated-cipher constants, and re-expose sign(input) reproducing the captured
+    pairs.
+  success_criterion: A sign() re-implementation on the MUTATED core reproducing every
+    published and minted pair; a stock HMAC-SHA256 candidate fails every pair (the
+    named anti-standard regression).
+  verification_method: reproduction
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/modcrypto_bundle.js
+  entry: target/modcrypto_bundle.js
+  candidate_contract: A Node module exporting sign(inputString) -> 64-hex-char lowercase
+    string over the mutated core.
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps:
+  - debugger-loop
+  - timing
+  - console-getter
+  clean_env_guarantee: 'silent in a clean node env (no devtools): traps never fire
+    and outputs are deterministic; on a trip the response is SILENT WRONG OUTPUT,
+    never an exception or log line'
+  self_defending: generator-native
+tooling:
+  packaging: vm-bytecode
+  note: python transform compiles the compression to seed-mutated custom opcodes +
+    JS interpreter loop; mint-time verifier proves bytecode == model

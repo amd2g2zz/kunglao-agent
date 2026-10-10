@@ -96,8 +96,10 @@ def test_register_cannot_reset_history(tmp_path):
     assert len(lines) == 4
     state = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
     alive, detail = heartbeat.evaluate_tick_continuity(state, log_path=log)
-    assert alive is False
-    assert "gap" in detail.lower()
+    # #415: register rows are no longer ticks, so the verdict here degrades
+    # to STALE (the 3 real-history rows survive: register cannot reset
+    # history) — either rejection face proves the same contract.
+    assert alive is False, detail
 
 
 def test_no_log_legacy_compat(tmp_path):

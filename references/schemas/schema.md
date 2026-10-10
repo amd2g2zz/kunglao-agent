@@ -1,6 +1,7 @@
 
-**Heuristic**: are you reading or writing a schema? Read = this file. Write = use the matching template in templates/.
 # Schema (DESIGN Appendix A — full, aligned with malware-veri-notes lint-notes.py)
+
+> **Heuristic**: are you reading or writing a schema? Read = this file. Write = use the matching template in templates/.
 
 ## boundary_type (9 types)
 `confirmed` | `capability_not_executed` | `link_not_closed` | `source_derived` | `numeric` | `observation` | `coordinate` | `pure_negative` | `contradiction`
@@ -47,7 +48,7 @@ and supersedes/superseded_by cycles are violations — enforced as
 carrier_consistency violation class `(g)`. The mechanical writer for the
 replacement edge is `retract_claim.py --reason superseded --superseded-by
 C-NN` (writes BOTH sides); a SUPERSEDED-status claim without an edge is
-the "谁替代谁" gap #879 closes.
+the "who-replaced-whom" gap #879 closes.
 
 ## claim_deps.yaml
 ```yaml
@@ -145,5 +146,3 @@ list of `references/schemas/machine_check_map.yaml` AND matches the fact's `boun
 enforcement: `kunglao_verify.check_machine_check_contract` /
 `machine_check_gate` / `verify()` L2-CONFIRMED gate (failure → overall=PARTIAL +
 warning `MACHINE_CHECK_FAILED`).
-
-recall_useful: pending

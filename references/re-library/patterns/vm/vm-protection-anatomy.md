@@ -180,7 +180,7 @@ emit_evidence("evidence/stream-dump.json", meta=loader_trace, sha256=sha(stream)
 - Variant label comes first (VM-ized vs flattening-class):
   [vm-deobfuscation-routing.md](vm-deobfuscation-routing.md)
 - Trace → opcode map → replay methodology outline: [jsvmp-triage.md](../../web/vm/jsvmp-triage.md)
-- Runtime JNI registration mechanics: [languages-platforms.md](languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms)
+- Runtime JNI registration mechanics: [languages-platforms.md](../../languages/platforms/languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms)
 - Emulation half (stubbing loop, the two closure gates): [native-sign-recovery.md](../../android/signing/native-sign-recovery.md)
 - Observation channels the shell attacks (latch, windowing, JNI table):
   [dynamic-observation-ladders.md](../../method/process/dynamic-observation-ladders.md)

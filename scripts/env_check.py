@@ -67,16 +67,7 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] env_check WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -91,6 +82,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -346,38 +338,57 @@ def check_vm_channel(ctx: dict) -> tuple[str, str] | None:
 
 def _mcp_decompiler_supply(ws: Path) -> bool:
     """MCP-first decompiler supply face (#407 口径): ghidra OR ida-pro-vm in
-    any registration surface. Fail-open on config read errors."""
+    a #408 surface (workspace .mcp.json / plugin-carried). Fail-open on
+    config read errors."""
     try:
         import mcp_probe
-        registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+        registered = mcp_probe.registered_names(ws)
         return "ghidra" in registered or "ida-pro-vm" in registered
     except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
         return False
 
 
 def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
-    """MCP registration row (#757 T2 / issue F2) — mcp_probe 口径.
+    """MCP registration row (#757 T2 / issue F2) — mcp_probe 口径, #408 scope.
 
-    Three registration surfaces via mcp_probe.registered_names (user-level
-    ~/.claude.json global + project-scoped, workspace <ws>/.mcp.json;
-    KUNGLAO_CLAUDE_JSON injects the user surface for tests):
+    Registration surfaces: workspace <ws>/.mcp.json + plugin-carried servers
+    ONLY (#408 — the ~/.claude.json probe path is deleted; the probe never
+    reads it):
 
-    - web           : camoufox-reverse expected — the ONLY manifest member for
-                      labs (#728). Missing -> FAIL (+ register command; T3
-                      grades it degraded, never blocking).
+    - web           : camoufox-reverse expected — it SHIPS WITH THE PLUGIN
+                      (#408), so the row PASSes by plugin carriage; a
+                      workspace-scope entry without the workspace approval
+                      flag (`enableAllProjectMcpServers`) is the #408
+                      pending-forever trap -> FAIL naming the sudo-free fix.
     - android       : NO hard MCP expectation -> PASS with info (gitnexus is
                       verified by the toolchain face).
     - windows/linux : ghidra/ida-pro-vm either registered -> WARN "capability
                       unverified" (#474 same口径: a registry read cannot reach
                       into the MCP session; tools verify post-connect).
                       Neither -> FAIL naming Ghidra install / ida-pro-vm MCP.
+    Any workspace-scope registration without the approval flag FAILs on
+    every type — pending-forever approval is a direct blocker, not a nit.
     """
     ptype = project_type if project_type in init_state.VALID_TYPES else "windows"
     try:
         import mcp_probe
-        found = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+        found = mcp_probe.registered_names(ws)
     except Exception as exc:  # noqa: BLE001 — registry unreadable ≠ crash
         return ("FAIL", f"MCP registry probe failed ({exc}) — supply unverified")
+    # #408 CRITICAL: approval state rides EVERY verdict. Workspace-scope
+    # servers + no `enableAllProjectMcpServers` = they hang "pending
+    # approval" forever (the approval record lives in ~/.claude.json, which
+    # may be root-owned — unreadable by construction now).
+    ws_scoped = [n for n, srcs in found.items() if "workspace" in srcs]
+    if ws_scoped and not mcp_probe.project_mcp_approval(ws):
+        return ("FAIL",
+                f"workspace-scope MCP server(s) "
+                f"{', '.join(sorted(ws_scoped)[:4])} pending approval "
+                f"FOREVER — the approval record lives in ~/.claude.json "
+                f"(may be root-owned). Sudo-free fix: set "
+                f"\"enableAllProjectMcpServers\": true in "
+                f"{ws / '.claude' / 'settings.json'} (re-run "
+                f"scripts/hooks_selfcheck.py — it auto-repairs this)")
     if ptype == "web":
         if "camoufox-reverse" in found:
             return ("PASS",
@@ -422,7 +433,15 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
     if project_type in ("windows", "linux", "macos"):
         # macos (#760): Mach-O decompiler expectation rides the same legacy
         # GHIDRA_HOME semantics; a FAIL stays DEGRADED (non-blocking, T3).
+        # matrix4d: the 3-path OR contract holds on EVERY typed branch —
+        # a registered decompiler MCP (ghidra/ida-pro-vm in the
+        # workspace registry) satisfies the supply here too; the legacy
+        # face only knew GHIDRA_HOME and silently dropped the MCP path
+        # (native units died at the armed gate with the MCP registered).
         ok, msg = check_ghidra()
+        if not ok and _mcp_decompiler_supply(ws):
+            return ("PASS", "decompiler supply: MCP ghidra/ida-pro-vm "
+                            "(workspace registry)")
         return ("PASS" if ok else "FAIL"), msg
 
     jadx = shutil.which("jadx")
@@ -496,7 +515,12 @@ def check_hooks(ws: Path) -> tuple[str, str]:
             f"{sp}: {line}" for line in
             wire_up_settings.registration_shape_issues(s))
         cmds = []
-        for event in ("PreToolUse", "PostToolUse", "Stop"):
+        # issue 434: scan EVERY canonical event bucket (the registry now
+        # wires SubagentStop / SessionStart / PreCompact / UserPromptSubmit
+        # alongside the tool-use events) — a checker that reads only
+        # Pre/Post/Stop is blind to four of the registry's faces (the
+        # three-checkers-three-answers bug class).
+        for event in wire_up_settings.HOOK_EVENTS:
             for entry in s.get("hooks", {}).get(event, []) or []:
                 for h in entry.get("hooks", []) or []:
                     cmds.append(str(h.get("command", "")))
@@ -624,14 +648,30 @@ def check_init_complete(ws: Path) -> tuple[bool, str]:
     return init_state.init_complete(ws)
 
 
+# matrix3 P5: the ONLY genuine task_spec shape is a top-level
+# ``sample_sha256: <64-hex>`` key. A substring line-scan misfired on
+# anchor prose naming an algorithm ("sha256(seed||nonce)") and armed
+# the bins/ probe against workspaces that recorded no hash at all.
+_SAMPLE_SHA_KEY_RE = re.compile(
+    r"^\s*sample_sha256:\s*[\"\']?([0-9a-fA-F]{64})[\"\']?\s*$")
+
+
 def read_sample_sha256(ws: Path) -> str | None:
-    """Sample sha256 from task_spec.yaml (best-effort; not a hard requirement)."""
+    """Sample sha256 from task_spec.yaml (best-effort; not a hard
+    requirement).
+
+    Only a GENUINE recorded hash counts: the top-level
+    ``sample_sha256`` key carrying a full 64-hex value. Prose that
+    mentions sha256 (anchors quoting an algorithm name) is not a
+    record; a non-hex value is not a hash. Everything else degrades
+    to None — the bins/ verification simply does not fire."""
     tspec = ws / "task_spec.yaml"
     if not tspec.exists():
         return None
     for line in tspec.read_text(encoding="utf-8", errors="replace").splitlines():
-        if "sha256" in line.lower() and ":" in line:
-            return line.split(":", 1)[1].strip().strip('"').strip("'")
+        m = _SAMPLE_SHA_KEY_RE.match(line)
+        if m:
+            return m.group(1).lower()
     return None
 
 
@@ -826,6 +866,27 @@ BLOCKING_CHECKS = frozenset({
     "venv_sample", "template_version",
 })
 DEGRADED_CHECKS = frozenset({"vm_reachability", "ghidra", "mcp_registered"})
+#: matrix4c parity: a task that DECLARES the decompiler lane
+#: (task_spec tools.decompiler_lane=required) arms the supply rows —
+#: toolless analysis on native targets was the field finding (asl:
+#: probe correctly FAILed, the unconditional waiver let it pass).
+LANE_ARMED_CHECKS = frozenset({"ghidra", "mcp_registered"})
+
+
+def _decompiler_lane_required(ws: Path) -> bool:
+    """True when the workspace task_spec declares the decompiler lane.
+    Unreadable/absent spec = not declared (fail-open to the historic
+    degraded semantics; the declared contract is opt-in)."""
+    try:
+        import yaml as _y
+        spec = _y.safe_load((Path(ws) / "task_spec.yaml").read_text(
+            encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return False
+    tools = spec.get("tools") if isinstance(spec, dict) else None
+    if not isinstance(tools, dict):
+        return False
+    return str(tools.get("decompiler_lane", "")).lower() == "required"
 GATE_REPORT_TTL_SECONDS = 600  # mirrors hooks/env_check_gate.py third check
 
 
@@ -878,8 +939,10 @@ def run(ws: Path) -> tuple[int, dict]:
     # get the "T3-restricted:" detail prefix and never flip overall.
     graded: dict[str, dict] = {}
     degraded: list[str] = []
+    lane_required = _decompiler_lane_required(ws)
     for name, (status, detail) in checks.items():
-        blocking = name not in DEGRADED_CHECKS
+        blocking = (name not in DEGRADED_CHECKS
+                    or (lane_required and name in LANE_ARMED_CHECKS))
         if status == "FAIL" and not blocking:
             detail = f"T3-restricted: {detail}"
             degraded.append(name)
@@ -906,7 +969,7 @@ def run(ws: Path) -> tuple[int, dict]:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
-        print(f"WARN: cannot write {out}: {exc}", file=sys.stderr)
+        warn("snapshot_write", f"cannot write {out}: {exc}")
     for name, row in graded.items():
         print(f"[{row['status']}] {name}: {row['detail']}")
     if degraded:

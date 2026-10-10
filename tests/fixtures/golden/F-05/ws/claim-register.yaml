@@ -1,6 +1,6 @@
 claims:
 - id: C-1
-  status: PROVEN
+  status: PARTIALLY-VERIFIED
   boundary_type: positive_observation
   evidence_tier_attempted: 0
   promotion_attempts: 0

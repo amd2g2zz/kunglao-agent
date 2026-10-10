@@ -122,8 +122,6 @@ for start_val in range(0x10000):
 
 ---
 
----
-
 ## Morse Code from Keyboard LEDs via ioctl
 
 **Pattern:** Binary uses `ioctl(fd, KDSETLED, value)` to blink keyboard LEDs (Num/Caps/Scroll Lock). Timing patterns encode Morse code.
@@ -597,8 +595,6 @@ open('binary_patched','wb').write(data)
 **Key insight:** Fork+pipe creates a parent-child relationship where the parent provides data and exits. Dead branches (comparisons that always evaluate to false) hide the real validation logic. `strace` reveals the fork/pipe/read pattern; patching the comparison constant reaches the hidden code path.
 
 **Source:** RCTF 2017
-
----
 
 ---
 

@@ -50,25 +50,8 @@ Usage:
   python mechanism_scheduler.py --check [--registry PATH]   # schema gate
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] mechanism_scheduler WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import json
 import os
 import sys
@@ -362,6 +345,14 @@ def _gate_always(ws: Path, events: set) -> bool:
     return True
 
 
+def _gate_events_seen(ws: Path, events: set) -> bool:
+    """H1 (autoresearch thin-base): the event-bus gate — true iff this pass
+    consumed at least one ledger row mapping to a wake class (settlement /
+    stall / plan_review). The tick is still the ONLY host (the bus is read
+    by the same pass), but the mechanism fires on EVENTS, not cadence."""
+    return bool(events)
+
+
 def _gate_loop_unregistered(ws: Path, events: set) -> bool:
     """True while the /loop cron is not proven registered (#461 marker)."""
     try:
@@ -399,8 +390,23 @@ def _gate_policy_due(ws: Path, events: set) -> bool:
         return False
 
 
+def _gate_long_round(ws: Path, events: set) -> bool:
+    """The verification ladder's T1 trigger (issue 429 §1): the round is
+    LONG when the coalesced verified-write count crosses the round-turn
+    threshold and the debounce interval floor has elapsed. Reads the
+    debounce state (fail-open: any read problem is just "not due" — the
+    mechanism fires on the next pass)."""
+    try:
+        import verification_ladder as vlad
+        return bool(vlad.t1_due(Path(ws)).get("due"))
+    except Exception:  # noqa: BLE001 — a gate must never raise (fail-open)
+        return False
+
+
 GATES = {
     "always": _gate_always,
+    "events_seen": _gate_events_seen,
+    "long_round": _gate_long_round,
     "loop_unregistered": _gate_loop_unregistered,
     "session_dead": _gate_session_dead,
     "policy_due": _gate_policy_due,

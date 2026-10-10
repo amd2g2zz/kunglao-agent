@@ -64,6 +64,44 @@ mechanisms:
       traversal. The only in-session time host (#878).
 
   # ---- declaration-only channels (execution stays on their own rails) ----
+  - name: strategy_compose
+    entry: hooks/round_closure.py
+    channel: hooks
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/round-strategy/tick-*.yaml + runs/round-strategy.json (the loop-prompt seam face)"
+    owner: scripts/rlvr/compose.py
+    description: >
+      The compose single-point's production host (issue #462 W1): ONE
+      round-strategy object per decision event, composed + versioned at
+      the round-closure event (hooks/round_closure.py SubagentStop) and
+      broadcast through the four issue-429 outlets (dispatch envelope /
+      loop prompt / hook injection / schema amendments). Hooks channel is
+      host lifecycle — NOT migrated to the scheduler (issue #878 explicit
+      exclusion); declared here so the cockpit answer stays complete.
+
+  - name: t2_closure
+    entry: hooks/round_closure.py
+    channel: hooks
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/t2-queue.json (the drained unblocking-value queue, issue #462 W6)"
+    owner: scripts/verification_ladder.py
+    description: >
+      The verification ladder's T2 rung at the PRODUCTION round-closure
+      face (issue #462 W6): Stop(worker) IS the round-closure event
+      (#429 §6), so the unblocking-value priority queue builds AND
+      drains from hooks/round_closure.py SubagentStop — no longer
+      eval_loop_runner-only. Same hooks channel as strategy_compose
+      (host lifecycle, NOT scheduler-migrated per the #878 exclusion);
+      declared here so the cockpit answer stays complete.
+
   - name: heartbeat_register
     entry: scripts/heartbeat.py
     channel: cli
@@ -156,8 +194,9 @@ mechanisms:
     entry: scripts/kunglao-monitor.py
     channel: tick
     trigger:
-      type: tick
-      gate: always
+      type: event
+      gate: events_seen
+      events: [settlement, stall, plan_review]
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
@@ -166,6 +205,9 @@ mechanisms:
     description: >
       M5 MONITOR background advisory (#88 freeze, #620 runtime consumer):
       heartbeat/stuck/help/health watchers; next is a suggestion, not a gate.
+      H1 (autoresearch thin-base): default trigger flipped from tick to the
+      ledger event bus (settlement/stall/plan_review) — the tick-cadence
+      plan-drift face was forensics wall tax, not liveness.
 
   - name: stale_feedback
     entry: scripts/feedback.py
@@ -201,8 +243,9 @@ mechanisms:
     entry: scripts/rollup.py
     channel: tick
     trigger:
-      type: tick
-      gate: always
+      type: event
+      gate: events_seen
+      events: [settlement, stall, plan_review]
     cost_class: cheap
     depth: mission
     argv: ["--sweep-terminal"]
@@ -211,6 +254,9 @@ mechanisms:
     description: >
       Mechanical notes-closure sweep (#762 K1a): every terminal claim gets
       its outcomes -> lessons -> notes-due -> checkpoint write loop.
+      H1 (autoresearch thin-base): default trigger flipped from tick to the
+      ledger event bus (settlement/stall/plan_review) — a sweep at tick
+      cadence re-swept terminal claims with no new settlements (wall tax).
 
   - name: think_seat
     entry: scripts/think_seat.py
@@ -226,6 +272,26 @@ mechanisms:
       #759 H1 / #711 E1: the waiting period gets a cognitive action instead
       of an idle action_taken. The seat self-arbitrates waiting internally
       (no cheap external gate); idle != EMPTY.
+
+  - name: premise_expiry
+    entry: scripts/premise_gate.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "blockers/*.md INVALIDATED(stale) history lines + runs/.env-reprobe-pending.json + runs/.premise-expiry.json tick counter"
+    owner: scripts/premise_gate.py
+    description: >
+      #340 premise epistemics: env-class premises are clocks, not facts.
+      Each pass advances the tick counter, appends INVALIDATED(stale) to
+      env-class v2 blockers whose probe evidence did not refresh within
+      their expires window (default 12 ticks,
+      KUNGLAO_PREMISE_EXPIRY_TICKS), and consumes any one-shot pending
+      capability re-probe through the #474 on-demand channel
+      (toolchain.py --capability). Append-only; convergence
+      _active_blockers excludes the marked files, forcing re-derivation.
 
   - name: policy_retro
     entry: scripts/backtrack_loop.py
@@ -245,3 +311,50 @@ mechanisms:
       kunglao-decide land as agenda DATA + PROPOSAL lines — never auto-
       executed (constitutional isolation). Migrated from the hand-wired
       heartbeat_tick line to the scheduler (#878).
+
+  # ---- scheduler-dispatched mechanisms (channel: tick) --------------------
+  - name: rotation_induction
+    entry: scripts/rotation_induction.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "ledger action=runtime_value_rotation + runs/.rotation-induction.json (issue #341)"
+    owner: scripts/rotation_induction.py
+    description: >
+      Same-slot value-join induction (#341): groups runtime facts by
+      (claim_id, subject_slot); >=2 distinct value_fingerprints under one
+      slot fires `runtime_value_rotation` (EMIT_ACTIONS word), auto-files
+      the rotation hypothesis as the competitor of the implicit static
+      premise, and writes the pending synthesis note with the fingerprint
+      series. Idempotent on an unchanged fingerprint set; a grown set
+      refires with the fuller series (superseding note). The D wiring
+      feeds one operator_action row to the convergence ledger so
+      convergence_health renders the rotation face.
+
+  - name: oracle_probe_t1
+    entry: scripts/verification_ladder.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: long_round
+    cost_class: expensive
+    depth: workspace
+    argv: ["--t1"]
+    cockpit_signal: "ledger action=oracle_probe_t1 + runs/oracle-status.json verdict faces"
+    owner: scripts/verification_ladder.py
+    description: >
+      Verification ladder T1 rung (issue #429 §1): mid-round oracle probe
+      batches for LONG rounds. The verified-write evidence stream
+      (runs/signals.jsonl) debounces into one batch — due when the
+      coalesced write count crosses the round-turn threshold
+      (KUNGLAO_T1_MIN_WRITES) and the interval floor
+      (KUNGLAO_T1_MIN_INTERVAL_MIN) has elapsed since the previous batch.
+      The long_round gate reads the debounce state (fail-open). Firing
+      consumes the existing oracle cadence face (wired, not rebuilt) and
+      emits the registered `oracle_probe_t1` word. Settlement accepts T0/T1
+      immediately; the T2 rung upgrades settled rows via the ledger
+      amendment path.

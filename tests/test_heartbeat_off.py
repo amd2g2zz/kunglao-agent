@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _factories import write_claims_register
+from _factories import stamp_current, write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_ACTIVATION = ROOT / "scripts" / "hook_activation.py"
@@ -37,6 +37,9 @@ def _make_ws(ws: Path, claims: list[dict] | None = None,
     claims = [dict(c, boundary_type=c.get("boundary_type", "positive_observation"))
               for c in (claims or [])]
     write_claims_register(ws, claims)
+    # #240: the convergence gate now hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+    stamp_current(ws)  # 0.1.6 gate: off's converged probe runs the decide face
     if heartbeat:
         (ws / "runs" / ".heartbeat.json").write_text(
             json.dumps({"started_ts": "2026-08-13T00:00:00Z", "interval_min": 5}),
@@ -166,16 +169,25 @@ def test_tick_report_has_action_taken(tmp_path, monkeypatch, capsys):
 
 def test_prompt_is_imperative(tmp_path):
     """Cron prompt turned from 'suggestion' to 'command': every decision must
-    bind a convergence-advancing action; no action = idle fault."""
-    from scripts.heartbeat_loop_prompt import build_prompt
-    p = build_prompt(str(tmp_path / "ws"))
-    assert "MUST dispatch priority_ratio.py #1" in p, "DISPATCH must dispatch"
+    bind a convergence-advancing action; no action = idle fault.
+
+    Event-wakeup restructure (issue 434): the imperative decision semantics
+    moved from the per-tick cron body to the session constitution
+    (heartbeat_loop_prompt.constitution, injected once at SessionStart) —
+    the intent of this pin (semantics exist and bind actions) is unchanged,
+    the HOME moved."""
+    from scripts.heartbeat_loop_prompt import build_prompt, constitution
+    p = constitution(str(tmp_path / "ws"))
+    assert "dispatch priority_ratio.py" in p, "DISPATCH must dispatch"
+    assert "no idling" in p, "DISPATCH binds an action, no idling"
     assert "idle fault" in p, "no action = idle fault"
     assert "self-recover" in p, "BLOCKED must self-recover"
     assert "reactivat" in p, "DEFERRED must check reactivation"
-    assert "--heartbeat-off" in p, "after convergence, --heartbeat-off must stop the heartbeat first"
     assert "handoff-check" in p, "CONVERGED must handoff-check PASS before off"
-    assert "§6.3" in p
+    # the cron body stays the watchdog face: it must NOT re-inject the
+    # manual (the restructure's acceptance)
+    body = build_prompt(str(tmp_path / "ws"))
+    assert "idle fault" not in body and "self-recover" not in body
 
 
 def test_prompt_keeps_sendmessage_ping(tmp_path):

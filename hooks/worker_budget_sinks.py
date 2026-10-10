@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_B3_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _B3_WARN_LAST.get(op) == reason:
-        return
-    _B3_WARN_LAST[op] = reason
-    print(f"[kunglao-agent] worker_budget_sinks WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # worker_budget.py aggregator + tests consume these via module attrs
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
@@ -34,9 +28,14 @@ from worker_budget_core import (  # noqa: F401 — broad re-export surface:
 from worker_budget_core import check_claim_status_change  # noqa: E402,F401
 from worker_budget_gates import (
     check_workers_lt_3, check_promotion_attempts, check_tools_allowed,
+    check_max_retries,  # #427: the #604 breaker wired into live enforcement
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
+    check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
+    check_handroll_floor,  # issue 243: >50-line script vs available-CLI WARN floor
+    record_tool_search_citations,  # issue 243: cited --find results -> provenance rows
+    check_rotation_experiment,  # issue #341: rotation-flagged claim requires the experiment-template marker
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
@@ -50,6 +49,21 @@ import re
 import sys
 import time
 from pathlib import Path
+
+# #432: the method-family vocabulary owner (scripts/ sibling — importable
+# because the _esp406 bootstrap above already put scripts/ on sys.path; the
+# deploy manifest ships method_families.py + method_families.yaml with the
+# other scripts). THE single field-validation chokepoint lives in this
+# file's pre_check (the facts-snapshot/devreason field-validation zone);
+# dispatch_gate.py deliberately stays method_family-free so the envelope
+# contract has ONE owner (a second leg there would resurrect the
+# two-vocabularies drift the closed registry exists to prevent). A partial
+# deployment without the module degrades the gate to a fail-closed REJECT
+# (never a crash, never a silent open) — _method_family_gate checks None.
+try:
+    import method_families as _mf432
+except Exception:  # noqa: BLE001 — partial-deploy lifeline shape
+    _mf432 = None
 
 """worker_budget_sinks — Pre+Post ToolUse entry points (pre_check / post_check / main).
 
@@ -293,6 +307,21 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'root cause (re-lease the VM / re-attach the device) and re-init.'
         ),
     },
+    'methodfamily': {
+        'additionalContext': (
+            '#432 method-family vocabulary gate: the dispatch did not '
+            'declare a countable APPROACH. Fix: add "method_family": '
+            '"<token>" to the kunglao_dispatch v1 envelope (or a '
+            '`method-family: <token>` line on v0 prompts). The token names '
+            'the approach — the Q(state signature, method family) key — '
+            'NEVER the tool chain. Registered tokens live in '
+            '<skill>/scripts/method_families.yaml (mined vocabulary; see '
+            'method_families.derivation.md). No registered approach fits? '
+            'Declare other(<one-line what this actually is>) — the line is '
+            'quarantined, triaged via `python scripts/method_families.py '
+            '--triage <ws>`, and promoted only by a reviewed registry diff.'
+        ),
+    },
 }
 
 
@@ -476,6 +505,63 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     return True, ''
 
 
+def check_env_premise(paths: dict, tier: int = 0,
+                      tools: list[str] | None = None) -> tuple[bool, str]:
+    """#340 scope B: premise-probe reconciliation at the dispatch seam.
+
+    When this dispatch needs capability X (`_env_caps_needed` — the single
+    source of capability names), an ACTIVE env-attribution premise in
+    blockers/*.md claims X unavailable, and runs/env-state.json shows X
+    liveness PASS, two machine-readable records disagree and the probe
+    wins: the premise is marked SUSPECT (append-only history line), a
+    one-shot on-demand capability re-probe is scheduled (the #474 channel,
+    scripts/premise_gate.run_pending_reprobe), and
+    `env_premise_contradiction` is emitted to the event ledger. The
+    dispatch itself is NEVER rejected on the stale premise — routing, not
+    awareness (#340 design axiom).
+
+    Posture (owner ruling 2026-09-28): the DESIGNED no-op paths keep their
+    pass — missing workspace, no needed caps, missing/unreadable
+    env-state.json (pinned by test). An ERROR is fail-closed: a crashed
+    vocabulary lookup or reconciliation REJECTS the dispatch with the
+    cause (a gate that cannot see must not wave the action through; a
+    buggy gate blocking dispatches until fixed is the accepted
+    tradeoff). The (True, '') shape remains the contract for every
+    non-error path: this check is the channel that kills the false
+    premise, not another gate for the orchestrator to argue with."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    try:
+        needed = _env_caps_needed(tier, tools or [])
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn('gate_error:env_caps_vocab', f'{type(exc).__name__}: {exc}')
+        return (False, f'ENV-PREMISE GATE: capability vocabulary failed '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair _env_caps_needed before '
+                       'dispatching.')
+    if not needed:
+        return True, ''
+    p = Path(ws) / ENV_STATE_FILE
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        per = data.get('per_capability') if isinstance(data, dict) else None
+        if not isinstance(per, dict):
+            per = {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return True, ''  # missing/corrupt env-state: fail-open (unchanged)
+    try:
+        import premise_gate
+        premise_gate.reconcile_dispatch(Path(ws), needed, per)
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn("gate_error:env_premise_reconcile", f'{type(exc).__name__}: {exc}')
+        return (False, f'ENV-PREMISE GATE: reconciliation crashed '
+                       f'({type(exc).__name__}: {exc}) — gate error is '
+                       'fail-closed; repair premise_gate wiring before '
+                       'dispatching.')
+    return True, ''
+
+
 def _declared_trace_id(prompt: str) -> str | None:
     """#879: the v1 envelope's optional `trace_id` (meta passthrough), or
     None. Format-invalid declarations degrade to None (the dispatch row stays
@@ -494,9 +580,39 @@ def _declared_trace_id(prompt: str) -> str | None:
     return None
 
 
+
+def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
+                           agent_name: str) -> None:
+    """#429 §4: record the (signature_hash, method_family) observation
+    at the dispatch ALLOW tail — the Q-cell data spine for the TS
+    envelope sampler (scripts/rlvr/q_cells.py).
+
+    Fail-open telemetry ONLY: a failure here never turns an ALLOW into
+    anything else, and the #432 vocabulary gate stays the sole
+    ENFORCEMENT face. This hook imports rlvr.q_cells (never
+    state_signature directly — the #396 freeze pins the decision faces
+    import-clean); the signature is computed inside the module. An
+    undeclared family records nothing: the honest gap, never a
+    fabricated bucket, until the #432 gate makes declaration
+    mandatory."""
+    try:
+        from rlvr import q_cells as _qc429
+        meta = None
+        try:
+            meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
+        except Exception:  # noqa: BLE001 — envelope parse best-effort
+            meta = None
+        _qc429.record_dispatch_observation(
+            paths.get('workspace'), prompt, envelope_meta=meta,
+            claim=cid, agent=agent_name)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('qcell_record', f'{type(exc).__name__}: {exc}')
+
+
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
-                        prompt: str = '') -> None:
+                        prompt: str = '',
+                        method_family: str | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -506,11 +622,16 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     must not block an already-approved dispatch. The fail-CLOSED side is
     the TTL itself — if the linkage stops working, the activation expires
     within 30 min and the sleeping hooks reject further dispatches.
+
+    #432: method_family rides the detail as `method_family=<token>` so
+    the unified log is replay-re-indexable (scripts/method_families.reindex
+    scans this face; consumers parse by substring, appending is safe).
     """
     ws = paths.get('workspace')
     if not ws:
         return
     ws_path = Path(ws)
+    fam = f' method_family={method_family}' if method_family else ''
     try:
         if _ha_link is not None:
             _ha_link.dispatch_linkage(ws_path)
@@ -519,11 +640,16 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                 ws_path, 'hook:worker_budget', 'dispatch', claim=cid,
                 trace_id=_declared_trace_id(prompt),
                 detail=f'tier={tier} tools={",".join(tools)} '
-                       f'agent={agent_name or "?"} (#461 linkage: renew + '
+                       f'agent={agent_name or "?"}{fam} '
+                       f'(#461 linkage: renew + '
                        f'arm + phase=DISPATCH)')
     except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
         print(f'[kunglao-agent] dispatch linkage WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
+    # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
+    # method_family declared on the envelope) — the sampler's data spine.
+    # Fail-open inside; rejected dispatches above never reach this line.
+    _qcell_record_dispatch(paths, prompt, cid, agent_name)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -551,6 +677,58 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
             ws, claim_id, payload, prompt_text)
     except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
         return False
+
+
+def _method_family_gate(paths: dict, prompt: str, cid: str | None,
+                        row_agent: str, tier: int,
+                        tools: list) -> tuple[int | None, str | None]:
+    """#432: the method-family vocabulary gate — the single validation
+    chokepoint for the dispatch's method_family declaration (v1 envelope
+    field or v0 prose marker; ONE contract, two declaration faces).
+    This workspace carries an admitted discovery arm's overlay row AND
+    its expansion receipt => that token validates; the repo registry
+    bytes are never touched and a missing/corrupt receipt chain stays
+    REJECT.
+
+    Fail-closed on missing/unregistered tokens and on a registry the
+    validator cannot read (2026-09-28 owner ruling posture); the
+    other(<one-line>) escape passes and is quarantined for triage.
+    Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
+    turns an ALLOW into anything else. Returns (rc, token): rc=2 means
+    REJECT already emitted; token feeds the lifecycle row so the unified
+    log is replay-re-indexable. Callers pass cid=None to skip (the leg
+    fires only on a recognized dispatch shape — a plain Agent prompt is
+    not a kunglao dispatch and keeps the pre-#432 behavior)."""
+    if cid is None:
+        return (None, None)
+    if _mf432 is None:
+        # partial deployment without the registry module — the gate cannot
+        # see, so it must not wave the dispatch through (fail-closed)
+        return (_reject(
+            'methodfamily',
+            'method-family registry module unavailable (scripts/'
+            'method_families.py not importable) — fail-closed per the '
+            '2026-09-28 owner ruling; repair the deployment.', paths), None)
+    mf_meta = None
+    try:
+        mf_meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
+    except Exception:  # noqa: BLE001 — envelope meta is best-effort;
+        # the v0 prose marker below still declares the field.
+        mf_meta = None
+    mf_value = _mf432.declared_value(mf_meta, prompt)
+    # the ws threads the overlay admission path: a discovered arm
+    # validates only when THIS workspace carries its expansion receipt
+    mf_ok, mf_msg = _mf432.validate_method_family(
+        mf_value, ws=paths.get('workspace'))
+    if not mf_ok:
+        return (_reject('methodfamily', mf_msg, paths), None)
+    _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
+                            row_agent, tier, tools)
+    mf_other = _mf432.parse_other_detail(mf_value)
+    if mf_other is not None:
+        _mf432.append_quarantine_row(paths.get('workspace'), cid,
+                                     mf_other, row_agent)
+    return (None, mf_value)
 
 
 def pre_check(payload: dict, paths: dict) -> int:
@@ -589,6 +767,19 @@ def pre_check(payload: dict, paths: dict) -> int:
         paths.get('workspace'), cid, payload, prompt)
     checks = [
         ('workers', check_workers_lt_3(paths)),
+        # issue #427: the #604 silent-failure circuit breaker graduates
+        # from latent (built, never called by any enforcement path) to
+        # live battery enforcement — a dispatch whose (worker_id, claim_id)
+        # retry counter has hit MAX_RETRIES=3 is REJECTED with the
+        # escalation message (failure-analysis artifact REQUIRED). Worker-
+        # health slot, right after workers-lt-3. Worker identity = payload
+        # tool_input.name (agent_name) — the SAME identity the approval
+        # point registers via register_worker; an absent name stays the
+        # gate's own documented FAIL_OPEN skip (no fabricated id). The
+        # check's internal FAIL_OPEN-on-scan semantics (missing counter
+        # file / unreadable workspace) are unchanged by this wiring.
+        ('max_retries', check_max_retries(paths.get('workspace'),
+                                          agent_name, cid)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
@@ -617,6 +808,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # stale-beyond-2xTTL state follows the FAIL_OPEN/self-heal split
         # (see check_env_fresh). Pure file read (<5ms), no subprocess.
         ('envfresh', check_env_fresh(paths, tier, tools)),
+        # #340 scope B: premise-probe reconciliation — an env premise that
+        # contradicts a liveness PASS in env-state is marked SUSPECT + a
+        # one-shot re-probe is scheduled + env_premise_contradiction is
+        # emitted; the dispatch is NOT blocked on the stale premise (the
+        # probe wins). Fail-open always (see check_env_premise).
+        ('envpremise', check_env_premise(paths, tier, tools)),
         # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
@@ -653,11 +850,27 @@ def pre_check(payload: dict, paths: dict) -> int:
         # where a passing plan gate still let a worker hand-roll a script
         # instead of trying crypto-tool.py for a crypto-decode task.
         ('toolfirst', check_tool_first(paths, desc, prompt)),
+        # issue #243: the tool-search BEAT at the SAME plan-check point — a
+        # plan proposing to WRITE a new script must cite the --find result it
+        # compared against (`tool-search: <keywords> -> <hit|none>`); the
+        # standing make-vs-reuse value comparison the wbtest loop skipped.
+        ('toolsearch', check_tool_search_citation(paths, cid, prompt)),
+        # issue #243 WARN floor: a >50-line workspace script whose capability
+        # words match an available CLI/toolbox name ("readelf exists") —
+        # WARN, never REJECT; the same standing pass carries `promotion:`
+        # notes into the lesson/settlement channel (ladder completion).
+        ('handroll', check_handroll_floor(paths, cid, prompt)),
         # v1.9.33 (#310): agenttype gate — specialist-first as a mechanical
         # check. route_capability recommends the specialist for the claim
         # (task domain x sample features); a deviating dispatch REJECTS
         # without `agent-reasoning:` (same anti-spoof shape as devreason).
         ('agenttype', check_agent_type(paths, cid, prompt, agent_name)),
+        # issue #341: rotation-experiment gate — a dispatch on a claim the
+        # rotation induction has flagged (runtime_value_rotation fired,
+        # runs/.rotation-induction.json) REQUIRES the experiment-template
+        # marker `rotation-experiment:`; a re-hook-only retry is REJECTED
+        # with guidance pointing at the characterization reference card.
+        ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -676,7 +889,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
     # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
     # dispatching a different claim without recording why).
-    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid, paths.get('workspace'))
+    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
         if 'agent-reasoning:' not in prompt:
@@ -687,6 +900,14 @@ def pre_check(payload: dict, paths: dict) -> int:
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    # #432 method-family vocabulary gate — the single validation
+    # chokepoint (see _method_family_gate). Placed as the LAST validation
+    # leg before the ALLOW-tail side effects: dispatches REJECTED by any
+    # battery gate keep their pre-#432 faces byte-identical.
+    mf_rc, mf_value = _method_family_gate(paths, prompt, cid, row_agent,
+                                          tier, tools)
+    if mf_rc is not None:
+        return mf_rc
     worker_id = agent_name or f'w{int(time.time())}'
     # #880: the toolfirst PASS face fires here (approval point) with the
     # (keyword->tool) attribution payload, and a MATCHED evaluation persists
@@ -698,13 +919,18 @@ def pre_check(payload: dict, paths: dict) -> int:
     toolfirst_pass_record(paths, cid,
                           payload.get('tool_input', {}).get('description', ''),
                           prompt)
+    # issue #243: every cited tool-search --find result in the worker's plan
+    # is ONE toolfirst_search provenance row (keywords + result) — the
+    # make-vs-reuse value comparison lands in the ledger, not just in prose.
+    record_tool_search_citations(paths, cid, prompt)
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
     # #237 H1: the row carries the shared-resolver identity (row_agent), so
     # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
     # — the marker plan_drift_detector's D3 corroboration matches.
-    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt)
+    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
+                        method_family=mf_value)
     # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
     # approval point — it is what arms the plan-author gate on this claim's
     # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
@@ -764,8 +990,8 @@ def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:
             continue
         r = _tep.evaluate_streak(rec['consecutive_failures'], tool=tool)
         if r['action'] == 'warn':
-            print(f'[kunglao-agent] tool-error WARN: {r["message"]} — switch '
-                  f'approach or repair the environment', file=sys.stderr)
+            warn("tool_error", f'tool-error WARN: {r["message"]} — switch '
+                                f'approach or repair the environment')
         elif r['action'] == 'disable_escalate':
             print(f'[kunglao-agent] tool-error DISABLE: {r["message"]} '
                   f'({r.get("blocker_note", "")})', file=sys.stderr)
@@ -1007,10 +1233,11 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
             except Exception:  # noqa: BLE001 — unparseable prompt: not a claim dispatch
                 expected = None
             if expected:
-                print(f'[kunglao-agent] #234 dispatch-failure WARN: claim '
-                      f'{expected} was dispatched but worker {worker_id} has '
-                      f'no [active_workers] entry — strike not recorded '
-                      f'(reconcile runs/.kunglao-state)', file=sys.stderr)
+                warn("dispatch_failure",
+                     f'#234 dispatch-failure WARN: claim '
+                     f'{expected} was dispatched but worker {worker_id} has '
+                     f'no [active_workers] entry — strike not recorded '
+                     f'(reconcile runs/.kunglao-state)')
             return
         final = _worker_final_status(ws, worker_id, tool_result)
         if final not in DISPATCH_FAILURE_STATUSES:
@@ -1033,9 +1260,10 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
                     # review r2 LOW: the artifact write can fail — the
                     # strike counted, but the escalation surface did not
                     # land; say so instead of pointing at a missing file.
-                    print(f'[kunglao-agent] #234 must-ask escalation WARN '
-                          f'on {claim_id}: '
-                          f'{escalation.get("reason")}', file=sys.stderr)
+                    warn("must_ask_escalation",
+                         f'#234 must-ask escalation WARN '
+                         f'on {claim_id}: '
+                         f'{escalation.get("reason")}')
             else:
                 print(f'[kunglao-agent] #234: dispatch failure recorded on '
                       f'{claim_id} (promotion_attempts={r["attempts"]})',

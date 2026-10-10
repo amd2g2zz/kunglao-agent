@@ -19,18 +19,22 @@ from _factories import seed_bins, seed_oracle_anchors
 
 
 def test_skill_version_is_semver_and_matches_pyproject() -> None:
-    """Strict X.Y.Z, or the PEP 440 normalized post-release form
-    X.Y.Z.postN (the v0.1.5-patch1 line). Tag-style names
-    ("0.1.5-patch1") stay rejected. (Ported from the release lineage
-    for issue 258 — dev's strict-3-part form rejects the released
-    string.)"""
+    """Strict X.Y.Z, the PEP 440 normalized post-release form X.Y.Z.postN
+    (the v0.1.5-patch1 line), or the semver prerelease form X.Y.Z-rcN
+    (the v0.1.6-rc1 release identity — owner ruling: every face carries
+    the RC string). Tag-style names ("0.1.5-patch1") stay rejected.
+    (Ported from the release lineage for issue 258 — dev's
+    strict-3-part form rejects the released string.)"""
     v = tv.read_skill_version()
     base, sep, post = v.partition(".post")
+    base, rc_sep, rc = base.partition("-rc")
     parts = base.split(".")
     assert len(parts) == 3, f"{v!r} is not semver"
     assert all(p.isdigit() for p in parts), f"{v!r} is not numeric semver"
     assert (sep == "" and post == "") or (sep == ".post" and post.isdigit()), (
         f"{v!r} is not a normalized release version (X.Y.Z or X.Y.Z.postN)")
+    if rc_sep:
+        assert rc.isdigit(), f"{v!r} is not an -rcN prerelease"
     # single source: pyproject [project].version (release_receipt agreement)
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert f'version = "{v}"' in text

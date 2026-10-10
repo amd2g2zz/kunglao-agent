@@ -18,32 +18,15 @@ Usage:
   python outcome_capture.py <workspace> --json     # machine-readable
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] outcome_capture WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
 
-from status_defs import LedgerLineType, ledger_line_type
+from status_defs import LedgerLineType, ledger_line_type, LEDGER_FORMAT
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 import kunglao_log  # noqa: E402  (#104: #534 lifeline, moved off module scope)
 
@@ -129,14 +112,16 @@ def _parse_run(p: Path) -> dict | None:
             return None
         return {"type": "outcome", "ts": utc_now_iso(),
                 "claim_id": _claim_from_redteam(text, p.name),
-                "result": m.group(1).strip(), "checker": "red-team"}
+                "result": m.group(1).strip(), "checker": "red-team",
+                "schema": LEDGER_FORMAT}
     # verify-note path
     m = VERDICT_RE.search(text)
     if not m:
         return None
     return {"type": "outcome", "ts": utc_now_iso(),
             "claim_id": _claim_from_note(text, p.name),
-            "result": m.group(1).strip().lower(), "checker": "verify-note"}
+            "result": m.group(1).strip().lower(), "checker": "verify-note",
+            "schema": LEDGER_FORMAT}
 
 
 def _settle_new(workspace: Path, new_rows: list[dict]) -> None:

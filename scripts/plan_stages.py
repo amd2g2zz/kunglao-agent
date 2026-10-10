@@ -6,6 +6,9 @@
 
 规则（校验面 fail-closed，--check 非零退出）：
   BIG_BANG_PLAN: yaml 缺失 / 活跃 stage ≤1 / global_plan.txt 仍为 init stub。
+  合法的非-stub 面（两种，其一即可）：production session 手写的 plan，或
+  resume 面从 timeline 投影渲染出的 plan（渲染标记为首行）——stub 检测对
+  渲染面自动再武装（渲染标记 ≠ stub 标记）。
   盘点裁决: adjust/replan 必带 trigger reason；replan 必须携带替换 stages。
   裁决 = yaml reviews[] 追加 + runs/plan-review-<ts>.md + ledger plan_review
   事件（EMIT_ACTIONS 注册，字母序）。
@@ -14,25 +17,8 @@ PARK 前置重规划与 drift→replan 的 convergence 接线为后继 hook 点�
 Impact 节记录），本模块提供 should_review()/review() API。
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] plan_stages WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import json
 import sys
@@ -122,7 +108,10 @@ def check(ws) -> dict:
             "- cold-start plan covers all work in one stage (#822)")
     if not has_model and plan_txt.strip().startswith(PLAN_STUB_MARK):
         violations.append(
-            "BIG_BANG_PLAN: global_plan.txt is still the init stub (#822)")
+            "BIG_BANG_PLAN: global_plan.txt is still the init stub (#822)"
+            " - repair mechanically: the resume face renders it from the"
+            " timeline projection (runs/timeline.jsonl), or the session"
+            " plan writes real stages")
     return {"ok": not violations, "violations": violations}
 
 

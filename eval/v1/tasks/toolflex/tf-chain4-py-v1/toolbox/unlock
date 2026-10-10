@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+# toolbox/unlock — constructed TF pipeline tool (#356).
+# Synthetic; seeded by scripts/eval_toolflex.py. stage=extract variant=a
+import json
+import sys
+
+_K1 = "898772f7235f0ff586794e4fa2f9ad89a67509f9d0b6ad2b99c35c5533af4d31"
+HT = [0x3b68f7df, 0x50d7f275, 0xb354833d, 0xc083bd69, 0x70a79f5b, 0x2e285d37, 0x82368945, 0x047fcca7]
+KT = [0x71f97f89, 0x1d53daa1, 0x18588ba9, 0x34893425, 0x20f57247, 0x7461d8d5, 0x8836ff19, 0x317e434d, 0x207385cf, 0xaba9b9f9, 0x07e4f749, 0x9dc12c01, 0x22a75d03, 0xc67b6d0b, 0x4d790a81, 0x0c494105, 0x7962df37, 0x872bc755, 0xd2c2630b, 0xe8709d45, 0xee03512b, 0x65637db7, 0x2095c3eb, 0x9c13b7cd, 0x8139cd4f, 0x38d1b519, 0xc10c2b0f, 0xff1aec15, 0x2190a8f1, 0x93fc8cd1, 0x115d2fcb, 0xefad98cd, 0xa8fc1acb, 0x4071275b, 0xb6a48aa7, 0xdf756219, 0xf51dee6f, 0x336d596d, 0x60e6edc5, 0xdeec8055, 0xee11ef59, 0x20594fc5, 0xf7e9ad59, 0x33061cf1, 0xd51d0427, 0x11ebe7f1, 0x311f0577, 0xd8563f49, 0x16a8f143, 0x5342c775, 0x27942fb9, 0x1441e71f, 0x01907ed9, 0x452d52af, 0x03f6550d, 0x6754859f, 0xed84d955, 0xe5b49ebf, 0x17353419, 0xf1822661, 0x4d79f9a9, 0x48feef8f, 0xcc99d92d, 0x5a2b75db]
+
+def _rotr(x, n):
+    return ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF
+
+
+def _pad(data):
+    msg = bytearray(data)
+    ml = len(data) * 8
+    msg.append(0x80)
+    while len(msg) % 64 != 56:
+        msg.append(0)
+    msg += ml.to_bytes(8, "big")
+    return bytes(msg)
+
+
+def mod_sha256(data):
+    h = list(HT)
+    kt = KT
+    msg = _pad(data)
+    for off in range(0, len(msg), 64):
+        w = [int.from_bytes(msg[off + i * 4: off + i * 4 + 4], "big")
+             for i in range(16)]
+        for i in range(16, 64):
+            s0 = _rotr(w[i - 15], 7) ^ _rotr(w[i - 15], 18) ^ (w[i - 15] >> 3)
+            s1 = _rotr(w[i - 2], 17) ^ _rotr(w[i - 2], 19) ^ (w[i - 2] >> 10)
+            w.append((w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF)
+        a, b, c, d, e, f, g, hh = h
+        for i in range(64):
+            S1 = _rotr(e, 6) ^ _rotr(e, 11) ^ _rotr(e, 25)
+            ch = (e & f) ^ (~e & g)
+            t1 = (hh + S1 + ch + kt[i] + w[i]) & 0xFFFFFFFF
+            S0 = _rotr(a, 2) ^ _rotr(a, 13) ^ _rotr(a, 22)
+            mj = (a & b) ^ (a & c)
+            t2 = (S0 + mj) & 0xFFFFFFFF
+            hh, g, f = g, f, e
+            e = (d + t1) & 0xFFFFFFFF
+            d, c, b = c, b, a
+            a = (t1 + t2) & 0xFFFFFFFF
+        h = [(x + y) & 0xFFFFFFFF
+             for x, y in zip(h, (a, b, c, d, e, f, g, hh))]
+    return b"".join(x.to_bytes(4, "big") for x in h)
+
+M64 = 0xFFFFFFFFFFFFFFFF
+GOLD = 0x9E3779B97F4A7C15
+MIX_C = 0xBF58476D1CE4E5B9
+EXP_C = 0x94D049BB133111EB
+
+
+def stage_mix(p):
+    h = p[0] & M64
+    for x in p[1:]:
+        h = (((h ^ (x & M64)) * GOLD) + MIX_C) & M64
+    return h
+
+
+def stage_expand(key):
+    a = ((key ^ (key >> 30)) * MIX_C) & M64
+    a = ((a ^ (a >> 27)) * EXP_C) & M64
+    return (a ^ (a >> 31)) & M64, (a + GOLD) & M64
+
+
+def stage_final(w0, w1, data):
+    h = w0 & M64
+    mul = (w1 | 1) & M64
+    for b in data:
+        h = ((h ^ b) * mul) & M64
+    return (h ^ (h >> 31)) & M64
+
+
+def main(argv):
+    blob = argv[0] if not False else _flag_value(argv, "--blob")
+    try:
+        data = bytes.fromhex(open(blob, encoding="utf-8").read().strip())
+    except (OSError, ValueError) as exc:
+        sys.stderr.write("unlock: cannot read blob: %s\n" % exc)
+        return 2
+    key = bytes.fromhex(_K1)
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(data):
+        stream += mod_sha256(key + counter.to_bytes(4, "big"))
+        counter += 1
+    plain = bytes(a ^ b for a, b in zip(data, stream))
+    try:
+        params = json.loads(plain.decode("utf-8"))["p"]
+    except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as exc:
+        sys.stderr.write("unlock: blob did not decode: %s\n" % exc)
+        return 2
+    print(json.dumps({"p": params}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

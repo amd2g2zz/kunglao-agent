@@ -193,8 +193,8 @@ the parse command in the fact file, not just the label.
 ## Cross-references
 
 - Multi-sample capture + hypothesis-with-falsifier discipline behind
-  class 1: [native-sign-recovery.md](native-sign-recovery.md#closure-summary)
+  class 1: [native-sign-recovery.md](../../android/signing/native-sign-recovery.md#closure-summary)
 - Output-shape signature table (web face of the same idea):
-  [web-re-quickref.md](web-re-quickref.md#crypto-algorithm-signatures)
+  [web-re-quickref.md](../../web/labs/web-re-quickref.md#crypto-algorithm-signatures)
 - Protocol-layer challenge family (the defense side of fingerprinting):
   [web-risk-control.md](../../web/risk-control/web-risk-control.md)

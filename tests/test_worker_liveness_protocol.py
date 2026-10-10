@@ -37,6 +37,8 @@ for _p in (str(SCRIPTS), str(HOOKS)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from _factories import stamp_current  # noqa: E402
+
 # The canonical protocol module, loaded by explicit path under the SAME unique
 # name every scripts-side consumer uses ("lib_kunglao_hooks") — the
 # external_kicker.should_kick / state_anchor._load_drift_lib precedent.
@@ -62,13 +64,16 @@ def load_protocol():
 
 def _make_ws(tmp_path, claims=({"id": "C-1", "status": "OPEN"},)) -> Path:
     """Minimal kunglao workspace: claim-register + runs/. decide()/pulse both
-    need the register (convergence_check exits 64 without it)."""
+    need the register (the convergence CLI exits 64 without register +
+    task_spec, #240)."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     text = "claims:\n"
     for c in claims or ():
         text += f"- id: {c['id']}\n  status: {c.get('status', 'OPEN')}\n"
     (ws / "claim-register.yaml").write_text(text, encoding="utf-8")
+    # #240: the convergence CLI hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     return ws
 
 
@@ -135,7 +140,10 @@ def _repo_python_files():
         rel = p.relative_to(ROOT).as_posix()
         if rel.startswith("tests/"):        # fixtures may rebuild shapes freely
             continue
-        if rel.startswith((".git", ".review", "openspec/", ".worktrees")):
+        # deps/virtualenvs, agent bookkeeping, sibling agent worktrees
+        # (copies of this repo) and deployed scaffolds under runs/
+        if rel.startswith((".git", ".review", "openspec/", ".worktrees",
+                           ".claude/worktrees/", "runs/")):
             continue
         if rel == CANONICAL_REL.as_posix():
             continue
@@ -379,9 +387,12 @@ def test_worker_pulse_flags_w15(tmp_path):
     import worker_pulse as wp
     ws = tmp_path / "ws-pulse"
     ws.mkdir()
+    stamp_current(ws)  # 0.1.6 gate: the pulse shells out to convergence_check
     (ws / "runs").mkdir()
     (ws / "claim-register.yaml").write_text(
         "claims:\n- id: C-1\n  status: OPEN\n", encoding="utf-8")
+    # #240: the convergence pulse hard-errors without the task_spec marker
+    (ws / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     _write_status(ws, "w1", DONE_DECLARED)
     pulse, decision = wp._build_pulse(ws)
     assert "w15=" in pulse, (

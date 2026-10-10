@@ -1,6 +1,6 @@
 ---
 name: kunglao-agent-failure-modes-monitoring
-description: Monitoring (F7-F13): worker help / self-doubt / state discipline (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
+description: Monitoring (F7-F13): worker help / self-doubt / state discipline (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. dumb/stuck/mismatched — user shorthand describing the agent, not a literal matcher) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -15,7 +15,7 @@ Failure modes covering orchestrator discipline during in-flight work:
   - F10: all hooks on, noisy (no selective activation)
   - F11: cannot backtrack (stuck -> still trying)
   - F12: duplicate work (no reuse of existing facts)
-  - F13: asks back (反问 — orchestrator asks 'should I dispatch?')
+  - F13: asks back (asks the user instead of deciding — orchestrator asks 'should I dispatch?')
 
 
 ## Full F-row table (this domain only)
@@ -58,8 +58,8 @@ HandleCommand's 0-hits were singled out as "not on path" (self-contradictory
 under the same fault). Static xref later proved HandleCommand IS on the path
 (F049 superseded F040, PROVEN).
 
-**Rule.** Environmental negative evidence — BP 0 hits / 无调用捕获
-(no call captured) / no calls observed — under a self-reported environment
+**Rule.** Environmental negative evidence — BP 0 hits / no calls captured
+(`无调用捕获`) / no calls observed — under a self-reported environment
 fault (`stalled` / `never reconnected` / `reconnect` / `未触发` / `timeout`):
 
 1. **must NOT** establish a routing ("not on the inject path") OR existence
@@ -77,7 +77,7 @@ fault (`stalled` / `never reconnected` / `reconnect` / `未触发` / `timeout`):
 - `is_inferential_claim` flags routing/causal patterns (`routing`, `route`,
   `not on ... path`, `correction`, `corrects F<NN>`, `gate`, `0 hits`,
   `0 occurrences`) **and** NEGATIVE-existence conclusions (`does not exist`,
-  `absent`, `not present`, 不存在, 未发现) — so existence claims reach the
+  `absent`, `not present`, `不存在`, `未发现`) — so existence claims reach the
   diagnostic instead of short-circuiting as non-inferential.
 - the env-fault diagnostic rejects when `_has_env_negative_basis` (0 hits /
   0 occurrences / no call captured / no calls observed / 无调用捕获) **and**
@@ -93,5 +93,3 @@ fault (`stalled` / `never reconnected` / `reconnect` / `未触发` / `timeout`):
 drawn from a dynamic miss under a self-reported env fault? If yes — did I do
 static xref first, or am I inferring 'absent' from a stalled debuggee?
 (else `check_inference_blind_scope` downgrades PROVEN to STAMP.)"
-
-recall_useful: pending

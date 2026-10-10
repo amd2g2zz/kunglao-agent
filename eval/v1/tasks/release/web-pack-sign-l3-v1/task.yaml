@@ -1,0 +1,55 @@
+schema: kunglao-eval-task/1
+task_id: web-pack-sign-l3-v1
+eval_version: eval-v1.1
+tier: release
+source: constructed
+family: web-pack-sign
+seed: 33211
+rung: l3
+anchors:
+  goal_verbatim: Unpack the bundler-obfuscated signer (target/web_sign_bundle.js),
+    recover the embedded key and canonical form, and re-expose a sign(request) that
+    reproduces the captured signatures.
+  success_criterion: A sign(request) re-implementation reproducing every published
+    and checker-minted request signature byte-exact — the body digest comes from the
+    mutated mod-crypto core, so stock-crypto signers fail by construction.
+  verification_method: reproduction
+workspace_scaffold:
+  language: javascript
+  files:
+  - target/web_sign_bundle.js
+  entry: target/web_sign_bundle.js
+  candidate_contract: A Node module exporting sign(request) -> 64-hex-char lowercase
+    string, request = {method, path, body, seq}.
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - pass_at_k_contribution
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 256
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+anti_debug:
+  traps:
+  - debugger-loop
+  - timing
+  - console-getter
+  clean_env_guarantee: 'silent in a clean node env (no devtools): traps never fire
+    and outputs are deterministic; on a trip the response is SILENT WRONG OUTPUT,
+    never an exception or log line'
+  self_defending: generator-native
+tooling:
+  packaging: vm-bytecode
+  note: python transform compiles the compression to seed-mutated custom opcodes +
+    JS interpreter loop; mint-time verifier proves bytecode == model

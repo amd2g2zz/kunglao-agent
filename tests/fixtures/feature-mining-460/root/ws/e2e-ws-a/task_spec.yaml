@@ -1,0 +1,71 @@
+lane: algorithm
+goal_verbatim: Unpack the Android APK target/beacon.apk, extract the native library
+  lib/arm64-v8a/libcrackme.so, recover the three mutated parameters, and
+  re-implement crackme_verify and crackme_probe reproducing the captured
+  outputs byte-exact.
+success_criterion: A re-implementation carrying the recovered parameters that
+  reproduces every published and checker-minted probe.
+verification_method: reproduction
+promise:
+  generated_at: '2026-09-29T05:25:44Z'
+  prescan:
+    apkid:
+      state: available
+      tier: WARN
+      note: evidence/apkid.json present (probe artifact exists)
+    die:
+      state: available
+      tier: WARN
+      note: evidence/die.json present (probe artifact exists)
+  obfuscation_prior:
+    source: evidence/apkid.json
+    obfuscators: []
+  java_reachability:
+    verdict: unreachable
+    static_only: false
+    note: jadx=no baksmali=no apktool=no
+  prescan_obligation:
+    lane: algorithm
+    required: []
+    note: 'lane=algorithm: native binary-identification artifacts are NOT producible on this lane'
+difficulty:
+  schema: difficulty-calibration/1
+  tier: easy
+  score: 0.0
+  dominant_factor: evidence_gap
+  factors:
+    evidence_gap:
+      detail: evidence/die.json absent or unusable; evidence/apkid.json absent or unusable
+      score: 0.0
+      weight: 0.0
+      contribution: 0.0
+      source: none
+  families:
+    anti_analysis:
+      active: false
+      score: 0.0
+    obfuscation:
+      active: false
+      score: 0.0
+    packing:
+      active: false
+      score: 0.0
+    surface_reduction:
+      active: false
+      score: 0.0
+  coverage:
+    die: false
+    apkid: false
+  thresholds:
+    medium: 0.15
+    hard: 0.4
+    max: 0.65
+  notes:
+  - evidence/die.json absent or unusable
+  - evidence/apkid.json absent or unusable
+  generated_at: '2026-09-29T05:25:44Z'
+primary_questions:
+- id: pq-1
+  question: 'What approach resolves the goal?'
+- id: pq-2
+  question: 'Does the result satisfy the success criterion?'

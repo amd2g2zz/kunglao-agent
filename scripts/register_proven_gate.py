@@ -6,45 +6,91 @@ predicate — whoever edited claim-register.yaml to PROVEN "was" the settlement,
 verify results never participated. Fail-closed: a →PROVEN transition requires
   (a) latest verify-note outcome == passes, AND
   (b) red-team ran for the claim AND its latest result != REFUTED,
-or a waiver runs/proven-waiver-<claim>.md with non-empty justify.
+or a waiver runs/proven-waiver-<claim>.md with non-empty justify:
+that carries the orchestrator stamp (5-F6 — the bare justify:
+line was a one-file self-service PROVEN; an unstamped waiver reads
+as ABSENT and the verify/red-team legs stay enforced; mint via
+  python scripts/register_proven_gate.py stamp-waiver <ws> <claim-id>).
 
 Evidence source: runs/*.md under the outcome_capture conventions
 ("-verify-" / "verify-redteam" in name), parsed with outcome_capture's own
 regexes; latest = max mtime. Posture: fail-closed (structure gate).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] register_proven_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+import hashlib
+import hmac
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 import verifier_identity as vi  # noqa: F401  (#825)
+from review_gate import parse_frontmatter  # stdlib-only stamp dialect
 from outcome_capture import _parse_run
 from status_defs import TERMINAL  # single source (#34, #95)
 
 PROVEN = "PROVEN"
 WAIVER_PREFIX = "proven-waiver-"
 WAIVER_JUSTIFY_RE = re.compile(r"^\s*justify:\s*(\S.*)$", re.M)
+
+# ---------------- 5-F6: the waiver orchestrator stamp -------------------
+#
+# The waiver file lives in runs/ — act-writable — so its bare existence with
+# a non-empty justify: line was a one-file self-service PROVEN. A waiver now
+# counts only when its frontmatter carries the orchestrator stamp: the
+# review_gate canonical-stamp shape adapted to the minimal form (HMAC-SHA256
+# digest over domain\0<claim-id>\0<ts>, hex). The key derives from the
+# documented per-run constant below. Trust posture = review_gate's own
+# (stated in its header): this is a deliberate-marking mechanism that makes
+# honest-workflow compliance mechanical — the stamp material is documented,
+# so forging one requires deliberately computing the documented stamp, which
+# converts the accidental self-service waiver into explicit forgery. No
+# heavyweight crypto, no new deps.
+WAIVER_STAMP_DOMAIN = "kunglao/proven-waiver/1"
+WAIVER_STAMP_PHRASE = "rc1-hardening-601:proven-waiver-orchestrator-authority"
+
+
+def waiver_stamp(claim_id: str, ts) -> str:
+    """The canonical waiver stamp: HMAC-SHA256 over domain \0 cid \0 ts."""
+    payload = "\0".join([WAIVER_STAMP_DOMAIN, str(claim_id), str(ts)])
+    key = hashlib.sha256(WAIVER_STAMP_PHRASE.encode("utf-8")).digest()
+    return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def stamp_waiver(ws, claim_id: str, ts: int | None = None) -> dict:
+    """Orchestrator mint face: stamp runs/proven-waiver-<cid>.md in place
+    with the canonical (claim-id, ts) digest. Fail-closed: a missing file or
+    a missing non-empty justify: line refuses the stamp — an exemption
+    without a stated reason is not an exemption, and the gate enforces that
+    face even under a valid stamp."""
+    p = Path(ws) / "runs" / f"{WAIVER_PREFIX}{claim_id}.md"
+    if not p.is_file():
+        return {"ok": False, "error": f"no waiver file: {p}"}
+    text = p.read_text(encoding="utf-8", errors="replace")
+    m = WAIVER_JUSTIFY_RE.search(text)
+    if not m or not m.group(1).strip():
+        return {"ok": False,
+                "error": f"{p.name} has no non-empty justify: line — "
+                         f"refusing to stamp a reason-less exemption"}
+    ts = int(ts) if ts is not None else int(
+        datetime.now(timezone.utc).timestamp())
+    body = text
+    fm: dict = {}
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            fm = parse_frontmatter(text)
+            body = parts[2]
+    fm["claim_id"] = claim_id
+    fm["ts"] = str(ts)
+    fm["stamp"] = waiver_stamp(claim_id, ts)
+    fm_text = "---\n" + "".join(f"{k}: {v}\n" for k, v in fm.items())
+    p.write_text(fm_text + "---\n" + body.lstrip("\n"), encoding="utf-8")
+    return {"ok": True, "file": str(p), "ts": ts, "stamp": fm["stamp"]}
 
 # #880: negative-sample terminal statuses — the settlement face burns the
 # claim's lesson lineage here (see emit_settlements).
@@ -255,12 +301,30 @@ def evidence_refs(ws: Path, claim_id: str) -> dict:
 
 
 def _waiver(ws: Path, claim_id: str) -> dict | None:
+    """The stamped waiver for the claim; None when absent OR unstamped.
+
+    5-F6: the waiver is orchestrator authority — without a valid
+    frontmatter stamp (waiver_stamp over the file's own claim id, so a
+    stamp lifted onto another claim's file fails) the file reads as
+    ABSENT: loud warn, the verify/red-team legs stay enforced."""
     p = ws / "runs" / f"{WAIVER_PREFIX}{claim_id}.md"
     if not p.is_file():
         return None
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
     except OSError:
+        return None
+    fm = parse_frontmatter(text)
+    ts = str(fm.get("ts") or "").strip()
+    stamp = str(fm.get("stamp") or "").strip()
+    fm_cid = str(fm.get("claim_id") or "").strip()
+    expect = waiver_stamp(claim_id, ts) if ts else ""
+    if (not ts or not stamp
+            or not hmac.compare_digest(stamp, expect)
+            or (fm_cid and fm_cid != claim_id)):
+        warn("_waiver", f"runs/{p.name} carries no valid orchestrator "
+             f"stamp (#601 5-F6) — the waiver reads as absent; "
+             f"verify/red-team legs stay enforced")
         return None
     m = WAIVER_JUSTIFY_RE.search(text)
     return {"claim_id": claim_id,
@@ -285,12 +349,42 @@ def check_register_transitions(ws: Path, new_text: str,
 
     old_text=None means the register is new — every PROVEN claim counts as a
     transition (fresh registers cannot mint PROVEN without evidence either)."""
+    # #516: fail-closed on an unparseable NEW text — "cannot read" is not
+    # "no transitions". The wt1 combat corruption (ScannerError line 44,
+    # evidence prose carrying `): `) reached this gate as {} and sailed
+    # through the empty-map early return below. Only the NEW side is
+    # fail-closed: an unparseable OLD text is a repair case, and the
+    # canonical-writer leg in write_guard adjudicates what lands.
+    try:
+        new_doc = yaml.safe_load(new_text)
+    except yaml.YAMLError:
+        new_doc = None
+    if not isinstance(new_doc, dict):
+        return {"ok": False,
+                "violations": ["register-writer: the new register text "
+                               "does not parse as a YAML mapping "
+                               "(fail-closed, #516 — mutate via "
+                               "scripts/ws_yaml.py)"],
+                "waivers": []}
     old = _load_statuses(old_text or "")
     new = _load_statuses(new_text)
     claims = _load_claims(new_text)
     violations: list = []
     waivers: list = []
     if not new:
+        if old:
+            # 1-F10: claims-count monotonicity wall — no sanctioned
+            # writer deletes claim rows (retract/supersede flip statuses in
+            # place). A nonempty register adjudicating to a zero-claims
+            # post-image is the truncate-then-write wipe class; refuse loud
+            # on every adjudicated face (write_guard Edit + promote path).
+            return {"ok": False,
+                    "violations": [
+                        f"register-wipe wall: the post-image drops all "
+                        f"{len(old)} prior claim(s) — claims-count "
+                        f"monotonicity (#601 1-F10); flip statuses in place "
+                        f"(retract/supersede), never delete the claim set"],
+                    "waivers": []}
         return {"ok": True, "violations": violations, "waivers": []}
     facts: dict | None = None
     for cid, st in new.items():
@@ -536,4 +630,65 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             warn("emit_settlements_2", f"{type(exc).__name__}: {exc}")
         if to in NEGATIVE_SETTLEMENTS:
             _burn_lesson_lineage(ws, cid)
+        # #244 settle→dispose: a claim that settled TERMINAL must dispose
+        # its bound waiting pool in the SAME beat — REFUTED re-arms with the
+        # sanitized gap-only redo signal, every other terminal sends stop.
+        # 傻等 (a worker waiting past its claim's settlement) is a contract
+        # violation. Fire-and-forget: disposal never moves the settlement.
+        try:
+            from wait_dispose import dispose_waiting_pool
+            dispose_waiting_pool(ws, cid, to)
+        except Exception as exc:  # noqa: BLE001 — disposal never blocks settle
+            warn("dispose_waiting_pool", f"{type(exc).__name__}: {exc}")
+        # the promotion write-back: a PROVEN settlement syncs the citing
+        # facts' frontmatter with the register IN THE SAME SETTLE (register
+        # PROVEN while facts read INFERRED recomputed the completion
+        # transaction dirty and starved the completion gate). One
+        # mechanical write, fail-open, fully named skips — never moves a
+        # falsified or judgment-sourced fact.
+        if to == "PROVEN":
+            try:
+                from fact_status_sync import promote_citing_facts
+                sync = promote_citing_facts(ws, cid)
+                if sync.get("synced") or sync.get("skipped"):
+                    from kunglao_log import emit
+                    emit(ws, "hook:write_guard", "fact_status_synced",
+                         claim=cid,
+                         detail=_json.dumps(sync, ensure_ascii=False,
+                                            sort_keys=True))
+            except Exception as exc:  # noqa: BLE001 — sync never blocks settle
+                warn("promote_citing_facts", f"{type(exc).__name__}: {exc}")
+    # issue 304 (satellite D4): guard liveness at the settlement beat —
+    # a guarded fix whose check has zero fire records across the window
+    # is flagged guard_dormant (WARN-level finding, ledger-deduped,
+    # never a blocker; the acceptance that rejected the settlement lives
+    # in fix_guard.evaluate_guard via failure_analysis_gate).
+    try:
+        from fix_guard import flag_dormant_guards
+        flag_dormant_guards(ws)
+    except Exception as exc:  # noqa: BLE001 — liveness never blocks settlement
+        warn("emit_settlements_guard", f"{type(exc).__name__}: {exc}")
     return count
+
+
+# ---------------- orchestrator mint face (CLI) -------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    """stamp-waiver <ws> <claim-id> — stamp runs/proven-waiver-<cid>.md
+    with the canonical orchestrator digest (5-F6). Exit 0 minted /
+    2 refused."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) != 3 or argv[0] != "stamp-waiver":
+        print("usage: register_proven_gate.py stamp-waiver <ws> <claim-id>",
+              file=sys.stderr)
+        return 2
+    res = stamp_waiver(argv[1], argv[2])
+    if res.get("ok"):
+        print(f"stamp OK: {res['file']} (ts={res['ts']})")
+        return 0
+    print(f"stamp REFUSED: {res.get('error')}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

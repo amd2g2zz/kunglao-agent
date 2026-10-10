@@ -1,6 +1,7 @@
 
-**Heuristic**: are you cold-starting a fresh iteration? If yes, read 9 files in order. If not (mid-iteration), skip this file.
 # Cold-Start Contract (DESIGN §13)
+
+> **Heuristic**: are you cold-starting a fresh iteration? If yes, read 9 files in order. If not (mid-iteration), skip this file.
 
 ## Cold start vs mid-iteration
 
@@ -20,7 +21,7 @@
 2. **`analysis_state.txt`** — structured segments: current_task / VERIFIED-FACTS LEDGER / IOC REGISTER / GATE STATUS / active_workers / in_flight intents / deadline_ts
 3. **`global_plan.txt`** + **`claim_deps.yaml`** — current plan DAG + dependency/competitor graph
 4. **`progress.txt`** — human-scannable timeline VIEW: rendered from the kunglao_log ledger + worker narrative at checkpoints (issue 282, `scripts/progress_timeline.py`; appended worker lines are preserved via the narrative sidecar); the VERIFIED-FACTS LEDGER lives in `analysis_state.txt`, facts in `facts/` — machines never ingest `progress.txt` as state
-5. **`<malware-veri-notes>/scripts/lint-notes.py`** output — error check (C5). Status counts come from _INDEX.md, NOT lint.
+5. **`<malware-veri-notes>/scripts/lint-notes.py`** output — error check (C5), when the external malware-veri-notes skill is installed (user-level; not shipped by this repo or CI). Status counts come from _INDEX.md, NOT lint.
 6. **`blockers/`** — if non-empty, read each blocker-*.md
 7. **`facts/_INDEX.md`** — status count source. Format: `F<id> | <status> | <claim_id> | <conclusion>`. O(1) all-passes check via `scripts/update_index.py count_by_status`.
 8. **`runs/digest.md`** — mechanical digest (#528, the 9th file): `## sec_g` lists the OPEN hypotheses (hyp_id / claim_id / competitor_group / candidates) so a fresh session re-hydrates the same undecided claim motivations and competitor groups it had before the restart. Read via the `kunglao-resume` read-only face — the cold-start session READS the digest, it never writes it. Only `open` hypotheses appear: decided ones (refuted/superseded) stay in the notes/facts trail and are never duplicated. If the digest build failed, cold start degrades to the 8 files above — a broken hypotheses layer never blocks a restart.
@@ -82,8 +83,8 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
 - **Every heartbeat tick MUST run `--reconcile`** — ground-truth rebuild of
   `[active_workers]` from `.wt-*/` worker-status files (last status line ==
   in-progress). Self-heals accounting even when hooks are unwired. This is the
-  v1.9.18 fix for "槽位空出来没补充" (zombie count blocking dispatch) and
-  "心跳没生效" (worker_pulse never fired).
+  v1.9.18 fix for "free slots never backfilled" (zombie count blocking dispatch) and
+  "heartbeat not firing" (worker_pulse never fired).
 - Activation **expires after 30 minutes** — renew on every heartbeat tick:
   `hook_activation.py <ws> --renew`. Expired = hooks sleep (no enforcement).
 - **v1.9.28 mechanical gate (root-cause fix for recurring 'dispatch without
@@ -126,5 +127,3 @@ dynamic analysis — switch KUNGLAO_CHANNEL to vmr/ssh/docker/adb").
 Execution layer: vmr-shell skill (snapshots), ssh-mcp (`npm i -g ssh-mcp`;
 run-command / sftp-upload / sftp-download) with CLI ssh fallback; docker
 and adb flow through the existing skill layer.
-
-recall_useful: pending

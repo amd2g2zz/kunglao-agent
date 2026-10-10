@@ -252,23 +252,19 @@ def test_retry_idempotent_after_cleanup(gate_ws):
 
 # ---------- #407: MCP-first decompiler gate (ida-pro-vm provider) ----------
 
-def _write_ida_pro_vm_claude_json(path):
-    import json
-    path.write_text(json.dumps({
-        "mcpServers": {
-            "sequential-thinking": {"type": "stdio", "command": "st", "args": []},
-            "ida-pro-vm": {"type": "http", "url": "http://localhost:13337"},
-        },
-    }), encoding="utf-8")
-
-
 def test_init_decompiler_passes_via_ida_pro_vm_mcp(gate_ws, tmp_path):
     """#407: ida-pro-vm registered -> the decompiler + mcp:ghidra HARD checks
     PASS (MCP-first): the toolchain gate must NOT refuse on them, even in the
-    hostile env where every CLI tool is absent."""
-    claude_json = tmp_path / "claude.json"
-    _write_ida_pro_vm_claude_json(claude_json)
-    r = _run_init(gate_ws, ["--type", "windows"], claude_json=claude_json)
+    hostile env where every CLI tool is absent. #408: the registration rides
+    the workspace .mcp.json (the user-global surface is deleted)."""
+    (gate_ws / ".mcp.json").write_text(json.dumps({
+        "mcpServers": {
+            "sequential-thinking": {"type": "stdio", "command": "st",
+                                    "args": []},
+            "ida-pro-vm": {"type": "http", "url": "http://localhost:13337"},
+        },
+    }), encoding="utf-8")
+    r = _run_init(gate_ws, ["--type", "windows"])
     out = r.stdout + r.stderr
     assert "[FAIL] decompiler" not in out, \
         f"decompiler must PASS via ida-pro-vm MCP: {out}"
@@ -482,16 +478,10 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("GHIDRA_HOME", str(ghidra_home))
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
 
-    # #454: isolate the MCP registry — _check_decompiler is MCP-first and a
-    # machine with a user-global mcp:ghidra registration would short-circuit
-    # to `decompiler via MCP (ghidra)`, hiding the analyzeHeadless CLI
-    # supply this test pins. Inject an EMPTY user registry
-    # (KUNGLAO_CLAUDE_JSON is mcp_probe.claude_json_path's documented test
-    # override); the workspace surface is already isolated (fresh tmp ws, no
-    # .mcp.json).
-    isolated_registry = tmp_path / "isolated-claude.json"
-    isolated_registry.write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(isolated_registry))
+    # #454: isolate the MCP registry — _check_decompiler is MCP-first. The
+    # user-global ~/.claude.json surface is DELETED (no-backcompat), so the
+    # registry is workspace+plugin only: the fresh tmp ws carries no
+    # .mcp.json, which is already the isolation this test needs.
 
     # PATH with the host tools so binutils/pefile-style probes are satisfiable
     empty = tmp_path / "empty-bin"

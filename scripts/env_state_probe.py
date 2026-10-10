@@ -36,34 +36,17 @@ check_env_fresh), but must not crash the tick that hosts it.
 CLI: env_state_probe.py <workspace> [--json]
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] env_state_probe WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import json
 import os
 import shutil
 import sys
 from pathlib import Path
 
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; sibling imports below)
+
+_SCRIPT_DIR = scripts_bootstrap()
 
 # Reuse the #474 probe primitives — do not reimplement (single source).
 import toolchain as tc  # noqa: E402  (_tcp_connect, _run_cmd, ports)

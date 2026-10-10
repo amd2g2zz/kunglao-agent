@@ -39,28 +39,23 @@ Wiring (register_hooks / hook_activation --wire-up, PreToolUse):
     matcher "Edit|Write|MultiEdit" -> this file (uv run --project <skill_root>).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] write_guard WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import locale
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -118,12 +113,20 @@ def _is_worker_status_target(rel: Path) -> bool:
 
 
 def _ws_has_live_workers(ws: Path) -> bool:
-    """The #37 canonical worker-liveness source; failure -> not armed."""
+    """The #37 canonical worker-liveness source.
+
+    FAIL_CLOSED (owner ruling 2026-09-28): a liveness-scan ERROR treats
+    the workspace as ARMED (was: not armed) — a guard that cannot see
+    must not wave writes through; the status-first checks then run on
+    their own merits. The accepted tradeoff: a lib outage blocks the
+    affected writes until the wiring is fixed."""
     try:
         n, _stuck = load_hooks_lib().scan_active_workers(ws)
         return bool(n)
-    except Exception:  # noqa: BLE001 — liveness outage must not block writes
-        return False
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        warn("gate_error:worker_liveness_scan",
+             f"{type(exc).__name__}: {exc}")
+        return True
 
 
 def _load_status_first_state(ws: Path) -> dict:
@@ -202,11 +205,12 @@ CARRIER_FACT = "fact"
 CARRIER_NOTE = "note"
 CARRIER_REGISTER = "register"
 CARRIER_INDEX = "index"
+CARRIER_BLOCKER = "blocker"  # #340 scope A: blockers/*.md — the premise carrier
 
 # What the shadow workspace must carry for the checkers to reach their
 # evidence. Keep this list minimal and explicit: a shadow that copies runs/
 # wholesale would make every hook fire O(workspace size).
-_SHADOW_TREES = ("facts", "notes", "references")
+_SHADOW_TREES = ("facts", "notes", "blockers", "references")
 _SHADOW_FILES = ("claim-register.yaml", "analysis_state.txt")
 _SHADOW_RUNS_GLOBS = ("*-verify-*.md", "verify-*.json")
 
@@ -303,6 +307,10 @@ def carrier_of(ws: Path, target: Path) -> str | None:
         return CARRIER_FACT
     if parts and parts[0] == "notes" and rel.suffix == ".md":
         return CARRIER_NOTE
+    if parts and parts[0] == "blockers" and rel.suffix == ".md":
+        # #340 scope A: the premise carrier — schema v2 + probe-evidence
+        # gate (README.md included; the blocker lint skips the #538 stub).
+        return CARRIER_BLOCKER
     return None
 
 
@@ -312,7 +320,8 @@ def looks_like_carrier(target: Path) -> bool:
     every edit in every non-kunglao repo the user happens to open)."""
     parts = Path(target).parts
     name = Path(target).name
-    return "facts" in parts or "notes" in parts or name == "claim-register.yaml"
+    return ("facts" in parts or "notes" in parts or "blockers" in parts
+            or name == "claim-register.yaml")
 
 
 def post_image(payload: dict, target: Path) -> tuple[str | None, str]:
@@ -388,6 +397,10 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
     Leg 3 (notes_writer #528): supersedes-chain adjudication of the note
     post-image — a correction without `supersedes:`, a pointer at a
     nonexistent note, or an inherited verify_status stamp is blocked.
+    Leg 4 (#340 scope A): blocker schema v2 on the premise carrier — an
+    environment-capability attribution without non-empty probe_evidence
+    is rejected at write time (error text alone is never evidence), and
+    legacy-shape blockers are rejected per the no-backcompat ruling.
     """
     violations: list[str] = []
     from lint_facts import lint_index, lint_workspace
@@ -445,6 +458,56 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             violations.append(
                 f"supersedes[?] adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    if carrier == CARRIER_BLOCKER:
+        # #340 scope A: blocker v2 schema + env-attribution evidence gate.
+        # The #538 README stub is not a blocker record (the same explicit
+        # skip convergence_check._active_blockers applies). Fail-closed on
+        # a crashed checker, mirroring the supersedes leg.
+        if rel.name == "README.md":
+            _dbg("adjudicate[blocker] README.md stub — skipped")
+        else:
+            try:
+                from blocker_lint import lint_blocker_text
+                pending_text = (shadow / rel).read_text(
+                    encoding="utf-8", errors="replace")
+                msgs = list(lint_blocker_text(pending_text))
+                violations += [f"blocker[{i}] {msg}" for i, msg in
+                               enumerate(msgs, start=1)]
+                _dbg(f"adjudicate[{carrier}] blocker leg: {len(msgs)} "
+                     f"violation(s)")
+            except Exception as exc:  # noqa: BLE001 — crash = fail closed
+                violations.append(
+                    f"blocker[?] adjudication crashed "
+                    f"({type(exc).__name__}: {exc}); fail-closed.")
+    if carrier == CARRIER_REGISTER:
+        # #516: single-writer enforcement — the register post-image must be
+        # a canonical safe_dump round-trip (ws_yaml.py's own rendering,
+        # single-sourced). Hand-typed YAML — valid or not — is refused on
+        # the tool face; the sanctioned mutator is ws_yaml.py alone.
+        try:
+            import yaml as _y516
+            from ws_yaml import canonical_dump
+            pending_text = (shadow / rel).read_text(
+                encoding="utf-8", errors="replace")
+            try:
+                doc516 = _y516.safe_load(pending_text)
+            except _y516.YAMLError:
+                doc516 = None
+            if not isinstance(doc516, dict) or \
+                    pending_text.rstrip("\n") != \
+                    canonical_dump(doc516).rstrip("\n"):
+                violations.append(
+                    "register-writer: post-image is not a canonical "
+                    "safe_dump round-trip (single-writer #516). Mutate "
+                    "claim-register.yaml ONLY via scripts/ws_yaml.py "
+                    "(set/del/get dotted paths); hand-typed YAML — valid "
+                    "or not — is refused on the tool face.")
+                _dbg("adjudicate[register] register-writer leg: "
+                     "non-canonical post-image")
+        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
+            violations.append(
+                f"register-writer: adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
     if carrier == CARRIER_REGISTER:
         # #819: evidence-gated ->PROVEN. Evidence lives in runs/*.md of the
         # REAL workspace (not the shadow — this tool call does not write
@@ -477,6 +540,26 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         except Exception as exc:  # noqa: BLE001 — gate crash = fail closed
             violations.append(
                 f"proven-gate: adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
+    # #341: runtime-state fact gate — a dynamic-source fact about a volatile
+    # subject (key/token/session/nonce/cookie) must carry the four runtime
+    # fields (temporal_scope/subject_slot/value_fingerprint/captured_at).
+    # Appended AFTER the pre-existing legs (never reorders them); the leg is
+    # stamp-class: lint[] waivers never cover it, a volatile-subject runtime
+    # fact missing a field is REJECTED outright.
+    if carrier == CARRIER_FACT:
+        try:
+            from runtime_facts import check_fact_postimage
+            pending_text = (shadow / rel).read_text(
+                encoding="utf-8", errors="replace")
+            msgs = check_fact_postimage(pending_text)
+            violations += [f"runtime-fact[{i}] {msg}"
+                           for i, msg in enumerate(msgs, start=1)]
+            _dbg(f"adjudicate[{carrier}] runtime-fact leg: {len(msgs)} "
+                 f"violation(s)")
+        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
+            violations.append(
+                f"runtime-fact[?] adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
     # #820: an active per-file waiver (runs/write-guard-waivers.yaml, written
     # by scripts/write_guard_unlock.py unlock) exempts the TARGET's own lint
@@ -524,11 +607,79 @@ def _emit_block(ws: Path | None, payload: dict, artifact: str, detail: str) -> N
                          tool=str(payload.get("tool_name") or ""),
                          artifact=artifact, exit=RC_BLOCK, detail=detail[:2000])
     except Exception as exc:  # noqa: BLE001 — logging must never break the gate
-        print(f"write_guard: warning: cannot emit event: {exc}", file=sys.stderr)
+        warn("event_emit", f"cannot emit event: {exc}")
+
+
+# ---------- #516: the Bash register face ----------
+# The Edit|Write|MultiEdit matcher never saw cat-heredoc / python
+# open(...,'w') / sed -i writes — combat wt1 landed the fourth register
+# corruption with ZERO write_blocked events while the same guard was
+# actively blocking facts writes in the same acts. Each pattern below is
+# one observed worker freehand channel; read-only shapes (grep/cat/ls,
+# python reads, ws_yaml get) match none of them and stay allowed.
+_BASH_REGISTER_TOKEN = "claim-register.yaml"
+_BASH_SANCTIONED = re.compile(r"\bpython3?\s+\S*ws_yaml\.py\b")
+_BASH_REDIRECT = re.compile(r">{1,2}\s*\S*claim-register\.yaml")
+_BASH_INPLACE = re.compile(r"\b(?:sed|perl|awk)\b[^|;&]*\s-i\b")
+_BASH_TEE = re.compile(r"\btee\b[^|;&]*\s\S*claim-register\.yaml")
+_BASH_COPY_DEST = re.compile(
+    r"\b(?:cp|mv|install|rsync)\b[^|;&]*\s\S*claim-register\.yaml\s*$")
+_BASH_DESTRUCTIVE = re.compile(r"\brm\b[^|;&]*\s\S*claim-register\.yaml")
+_BASH_TRUNCATE = re.compile(r"\btruncate\b")
+_BASH_PYTHON = re.compile(r"\bpython3?\b")
+_BASH_PY_WRITE = re.compile(
+    r"open\([^)]*['\"][wa+]|write_text\(|safe_dump\(|\.write\(")
+
+
+def bash_register_block(payload: dict, ws: Path | None) -> str | None:
+    """#516 judgment for one Bash tool call. None = allow; str = the block
+    reason. The fast path (command never mentions the register) exits
+    before workspace resolution — this hook rides EVERY Bash call."""
+    cmd = (payload.get("tool_input") or {}).get("command")
+    if not isinstance(cmd, str) or _BASH_REGISTER_TOKEN not in cmd:
+        return None
+    if _BASH_SANCTIONED.search(cmd):
+        return None  # the sanctioned mutator itself
+    write_intent = bool(
+        _BASH_REDIRECT.search(cmd)
+        or _BASH_INPLACE.search(cmd)
+        or _BASH_TEE.search(cmd)
+        or _BASH_COPY_DEST.search(cmd)
+        or _BASH_DESTRUCTIVE.search(cmd)
+        or _BASH_TRUNCATE.search(cmd)
+        or (_BASH_PYTHON.search(cmd) and _BASH_PY_WRITE.search(cmd)))
+    if not write_intent:
+        return None
+    if ws is None:
+        # fail-closed: a register-shaped write we cannot place in a
+        # workspace is not adjudicable — same posture as the unresolvable
+        # carrier write on the file face.
+        return ("claim-register write in an unresolvable workspace "
+                "(no claim-register.yaml + facts/ ancestor)")
+    return (
+        "claim-register.yaml is single-writer (#516): direct Bash writes "
+        "are refused. Mutate it via `python3 scripts/ws_yaml.py "
+        "set|del <ws>/claim-register.yaml <dotted.path> <value>` "
+        "(canonical safe_dump); reads (grep/cat/ws_yaml get) stay "
+        "allowed. If this was a read-only python one-liner, use "
+        "ws_yaml get instead.")
 
 
 def main() -> int:
     payload = _read_payload()
+    if str(payload.get("tool_name") or "") == "Bash":
+        # #516: write_guard's second PreToolUse row — the Bash face.
+        ws_bash = resolve_workspace(payload)
+        reason = bash_register_block(payload, ws_bash)
+        if reason:
+            detail = f"write_guard: BLOCK — {reason}"
+            print(detail, file=sys.stderr)
+            _emit_block(ws_bash, payload,
+                        "claim-register.yaml (Bash face)", detail)
+            _dbg("exit BLOCK rc=2 — bash register face (#516)")
+            return RC_BLOCK
+        _dbg("exit ALLOW rc=0 — bash face, no register write intent")
+        return RC_ALLOW
     ti = payload.get("tool_input") or {}
     raw_target = ti.get("file_path")
     if not raw_target:

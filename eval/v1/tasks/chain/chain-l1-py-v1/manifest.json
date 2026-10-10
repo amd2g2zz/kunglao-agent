@@ -1,0 +1,102 @@
+{
+  "entry": "target/chain_bundle.py",
+  "family": "chain-py",
+  "gradient": "L1",
+  "language": "python",
+  "layers": [
+    {
+      "artifact": "layer_out/1-unpacked.py",
+      "checkpoint": "unpack (byte-exact peel)",
+      "id": "obfuscation",
+      "index": 1,
+      "mechanisms": [
+        "obfuscation",
+        "junk-code"
+      ]
+    },
+    {
+      "artifact": "layer_out/2-config.json",
+      "checkpoint": "config decrypted (byte-exact canonical plaintext)",
+      "id": "encrypted-config",
+      "index": 2,
+      "mechanisms": [
+        "encrypted-config"
+      ]
+    }
+  ],
+  "mechanisms": [
+    "encrypted-config",
+    "junk-code",
+    "obfuscation"
+  ],
+  "schema": "kunglao-eval-chain-manifest/1",
+  "seed": 37002,
+  "shortcut_audit": {
+    "constant_scan": {
+      "answer_constant_hits": [],
+      "decoy_constant_hits": [],
+      "naive_method": "constant-scan (hex/decimal) for the answer constants",
+      "note": "answer constants exist only inside the encrypted config; visible decoy constants are bait",
+      "verdict": "FAIL"
+    },
+    "decoy_baseline": {
+      "0": "72678d7f8577394e",
+      "1": "0a06217249555f4c",
+      "2": "f0b238bed5239316",
+      "3": "7cb431ea67cebb98",
+      "4": "f9ac4a295ba91b7d",
+      "5": "850d524424cd0cc6",
+      "6": "0615275029552279",
+      "7": "6f6ec9766c4e24b3"
+    },
+    "entry_scan": {
+      "answer_constant_hits": [],
+      "key_shaped_hits": [],
+      "naive_method": "strings/constant-scan of the committed artifact",
+      "verdict": "FAIL"
+    },
+    "junk_pollution": {
+      "markers": [
+        "_opq_j1bab",
+        "_w_j1bab_",
+        "0x2c9cdff1",
+        "0xa51318e5"
+      ],
+      "naive_decompile_baseline": "polluted",
+      "stripped_baseline": "clean",
+      "stripped_markers": []
+    },
+    "payload_scan": {
+      "baseline": [
+        "1292406d71c6e17f",
+        "1c5cc3ba95fc90f0",
+        "dfa42232b32a3a83",
+        "838f2701c9936765",
+        "2bda37ef0a00b7f1",
+        "02e78a6374e27308",
+        "f604c44ac4b5f747",
+        "622b68aa834e5423"
+      ],
+      "equals_truth": false,
+      "key_shaped_hits": [
+        "c12b3197a7d69bdf3b7ed77d79c8fb01aa26a35bda5bca5b27d070bfb45443ef"
+      ],
+      "naive_answer": "chain_mac keyed with the honeypot",
+      "naive_method": "post-peel strings scan -> first key-shaped literal",
+      "verdict": "FAIL"
+    },
+    "runtime_keys": {
+      "method": "ARX KDF over the fingerprint constants; verified absent as literals",
+      "runtime_key_hex_absent": true
+    },
+    "smoked_at_mint": true
+  },
+  "task_id": "chain-l1-py-v1",
+  "toolchain": "python3",
+  "workspace_contract": {
+    "answer": "reference_candidate.py",
+    "answer_seam": "A Python module exposing derive(payload_hex: str, lane: int = 0) -> 16-hex lowercase string over the fully-peeled derivation.",
+    "graded_by": "scripts/eval_chain_grader.py --task <id> --workspace <dir>",
+    "layer_dir": "layer_out"
+  }
+}

@@ -28,7 +28,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
-from _factories import seed_oracle_anchors  # noqa: E402
+from _factories import stamp_current, seed_oracle_anchors  # noqa: E402
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -438,7 +438,7 @@ KUNGLAO_PY = ROOT / "scripts" / "kunglao.py"
 def _stamped_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "aws"
     ws.mkdir(parents=True)
-    (ws / "CLAUDE.md").write_text("# kunglao_template_version: 9.9.9\n", encoding="utf-8")
+    stamp_current(ws)  # the stamp must match the agent version (gate)
     (ws / "runs").mkdir()
     seed_oracle_anchors(ws)
     return ws

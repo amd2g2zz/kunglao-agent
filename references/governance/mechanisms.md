@@ -16,7 +16,7 @@
 > 3. A RETIRED row's audit trail must show a prior DEPRECATED milestone
 >    (lifecycle cannot skip — DEPRECATED is the soft-warning window).
 > 4. New ACTIVE mechanisms must be added here as part of their landing
->    PR (companion to the doc_sync.py Gate 7 WARN front哨).
+>    PR (companion to the doc_sync.py Gate 7 WARN front-sentinel).
 
 ## Lifecycle vocabulary
 
@@ -57,5 +57,3 @@
    - the relevant `mechanisms-status.md` row (PENDING → implemented).
 4. Run `uv run pytest tests/test_mechanisms_retirement.py -q` — the
    ledger contract tests must remain green.
-
-recall_useful: pending

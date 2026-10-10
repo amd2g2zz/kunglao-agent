@@ -158,7 +158,9 @@ class TestMustStopTraceRow:
     def test_chmod_dispatch_hard_pauses_with_matched_rule(self, tmp_path):
         self._setup_ws(tmp_path)
         r = self._run_hook(
-            tmp_path, "[T2 tools=bash] claim C-409 cleanup: chmod -R 777 /srv/share")
+            tmp_path, '{"kunglao_dispatch": {"version": 1, "claim": "C-409", '
+            '"tier": 2, "tools": ["bash"]}}\n'
+            "cleanup: chmod -R 777 /srv/share")
         assert r.returncode == 2, (
             f"must-stop must HARD_PAUSE; rc={r.returncode} err={r.stderr!r}")
         assert "HARD_PAUSE" in r.stderr and "must-stop" in r.stderr
@@ -181,7 +183,9 @@ class TestMustStopTraceRow:
     def test_normal_dispatch_stays_silent_and_emits_nothing(self, tmp_path):
         self._setup_ws(tmp_path)
         r = self._run_hook(
-            tmp_path, "[T1 tools=grep] claim C-401 static string extraction")
+            tmp_path, '{"kunglao_dispatch": {"version": 1, "claim": "C-401", '
+            '"tier": 1, "tools": ["grep"]}}\n'
+            "static string extraction")
         assert r.returncode == 0
         assert "must-stop" not in r.stderr
         assert _event_rows(tmp_path, "must_stop") == []
@@ -364,7 +368,8 @@ class TestMcpFaceWiring:
     def test_double_registration_sentinel_updated(self):
         import wire_up_settings
         assert wire_up_settings.DOUBLE_REGISTERED_HOOKS == frozenset({
-            "worker_budget.py", "orchestrator_tool_guard.py"})
+            "worker_budget.py", "orchestrator_tool_guard.py",
+            "write_guard.py"})  # #516: the Bash register face
 
     def test_emit_action_words_registered(self):
         import event_taxonomy

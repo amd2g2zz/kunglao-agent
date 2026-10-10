@@ -1,4 +1,4 @@
-<!-- kunglao:frame:v0.1.5.post2 -->
+<!-- kunglao:frame:v0.1.6-rc1 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -33,16 +33,20 @@ The workspace is the source of truth; this file is the index. Drill into a point
 
 The convergence loop runs every round and is the only rule set that survives context compact. Each round:
 
-- Run `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/scripts/convergence_check.py .` and surface the verdict before claiming progress; its decision-table action is mandatory.
+- Run `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/scripts/convergence_check.py "$PWD"` and surface the verdict before claiming progress; its decision-table action is mandatory. The workspace argument is explicit and fail-validated — a resolved directory without `claim-register.yaml` and `task_spec.yaml` hard-errors ("not a kunglao workspace"), never a verdict.
 - Heartbeat TTL: if `runs/.heartbeat.json` is stale (older than 35 minutes), re-anchor from disk before deciding — never reason over a stale heartbeat.
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
+- Delivery contract: complete `goal-operationalization.yaml` (deliverables / not_done / diff_vs_verbatim / probe_cases) and pass `scripts/goal_operationalization.py` on it BEFORE the first dispatch — an unaudited draft keeps every decide BLOCKED (verification undeclared, #147); then arm the declared probe cases (`oracle/`) and run `scripts/oracle_runner.py` until green.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
 
 ## Skill & orchestrator
 
 Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key scripts under `/kunglao/skill-sentinel/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
-Capability discovery across the asset tiers goes through `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
+Capability discovery (tool recall) goes through the ONE search face —
+`uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/tools/tool-search.py --find QUERY`:
+
+**When** — before writing any script (a registered tool may exist), when stuck, at tier boundaries. **How** — a query grammar: quoted phrases are atomic (`"unicorn engine"`), `AND`/`OR`/`NOT` + parentheses (`--find "(ghidra OR jadx) AND dex NOT windows"`); bare words default to the forgiving OR group (`--match all` → AND); `--capability`/`--tier`/`--cost-max` combine in the same query. Each hit states `type`/`consume` and a keyword match score (lexical, not semantic): invoke a tool, fill or adapt a template, or read a reference — the score ranks for judgment, never gates surfacing; descriptions state expected outcomes rather than guaranteed facts.
 
 ## State files (read every turn, disk is truth)
 
@@ -54,11 +58,12 @@ Capability discovery across the asset tiers goes through `uv run --project /kung
 | `analysis_state.txt` | Cognition baseline (venv, sample hash, toolchain, worker list) |
 | `global_plan.txt` | High-level analysis plan |
 | `task-oracle.yaml` | Completion anchor (verbatim task, open items, deferrals) |
+| `goal-operationalization.yaml` | Goal→operationalization pre-registration; convergence refuses while `draft: true`/invalid (#147) |
 | `facts/_INDEX.md` | Fact index with PARTIAL/PROVEN markers |
 | `blockers/` | Active blocker files |
 | `runs/` | Worker status files + `.heartbeat.json` |
 
-**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
+**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence. Every fact file carries mandatory frontmatter — `id: F<NNN>`, `type: fact`, `title`, `status` — the write guard's lint refuses a file missing them. When a fact genuinely carries an open counter-hypothesis or a next experiment, add `uncertainty:` (what would refute or weaken it) and/or `next_probe:` (the runnable experiment, dispatchable verbatim as a sub-goal — the EXPERIMENT testing `promotion_gate`, the CONDITION); both optional, absent is the common case, never filler. `claim-register.yaml` is single-writer (#516): mutate it ONLY via `python3 scripts/ws_yaml.py set|del claim-register.yaml <dotted.path> <value>` — direct Bash/Edits are refused.
 
 ## Roles & responsibilities
 
@@ -71,7 +76,7 @@ tool means you have left the orchestrator role — hand the work to an agent.
 |-------|----------------|------------------|
 | `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
 | `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
-| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis | attack-test a claim before it is promoted to PROVEN |
+| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis (both the claim layer… | attack-test a claim before it is promoted to PROVEN |
 | `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
 | `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
@@ -110,6 +115,7 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
    (custom port) or android_server.
 4. Stuck fallback: frida hook + unidbg hybrid (AND gate: frida
    data sufficient + decompile done + still stuck).
+Dispatch shape (protocol v1): {"kunglao_dispatch": {"version": 1, "claim": "C-NNN", "tier": 1, "tools": [...], "agent": "...", "method_family": "<token>"}} — method_family names the APPROACH (registry: scripts/method_families.yaml; other(<one-line>) when nothing fits).
 
 ## Sample under analysis
 

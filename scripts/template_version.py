@@ -170,6 +170,25 @@ def upgrade_warning(ws: Path, *, skill_version: str | None = None) -> str | None
             f"(expected {STAMP_KEY}: {skill_v})")
 
 
+def version_mismatch(ws: Path, *, skill_version: str | None = None) -> str | None:
+    """Exact-match gate (0.1.6 sweep, owner HARD requirement): the reason
+    string when the workspace format stamp is absent or != the executing
+    skill version — OLDER AND NEWER both refuse; None only on exact match.
+
+    Single source for every analysis/decide entry gate (convergence_check,
+    init resume intake, /loop birth, check-stale): a mismatched workspace
+    has exactly one path forward — the transactional kunglao_upgrade. No
+    silent best-effort analysis of old-format workspaces."""
+    ws_v = read_workspace_version(ws)
+    skill_v = skill_version or read_skill_version()
+    if ws_v is None:
+        return (f"workspace carries no {STAMP_KEY} stamp — format "
+                f"currency cannot be verified")
+    if ws_v == skill_v:
+        return None
+    return f"workspace stamp {ws_v} != executing skill version {skill_v}"
+
+
 # --------------------------------------------------------------------------
 # #758 G4: frame-consistency signature (openspec .../issue-758-runtime-version,
 # design D3). The stamp must never outrun the body it stamps: an upgraded

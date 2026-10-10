@@ -28,6 +28,18 @@ if str(SCRIPTS) not in sys.path:
 def _ws(base: Path, name: str) -> Path:
     ws = base / name
     (ws / "runs").mkdir(parents=True, exist_ok=True)
+    # #306 intake stamp: these drain-stage fixtures predate the
+    # emptiness-grade hard error — without the three oracle anchors the
+    # workspace reads as "intake never happened" and decide() exits 66
+    # before the contradiction gate can be observed. The stamp marks the
+    # workspace as intake-passed (verdictable), which is the state these
+    # tests have always meant to exercise.
+    spec = ws / "task_spec.yaml"
+    if not spec.exists():
+        spec.write_text(
+            "goal_verbatim: contradiction-gate fixture goal\n"
+            "success_criterion: family named with reproduction evidence\n"
+            "verification_method: static\n", encoding="utf-8")
     return ws
 
 

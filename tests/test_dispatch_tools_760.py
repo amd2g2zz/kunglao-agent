@@ -89,7 +89,7 @@ class TestI1ToolsContract:
         incident shape: free-text narrowing zero-checked)."""
         root = tmp_path / "a"
         ws = _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=pefile-signature] claim C-1 sweep",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["pefile-signature"]}}\nsweep',
                       subagent_type="kunglao-worker")
         assert r.returncode == 2, (
             f"out-of-whitelist tool must REJECT; stderr={r.stderr!r}")
@@ -100,7 +100,7 @@ class TestI1ToolsContract:
         Write/Edit: the §1c file contract can never be fulfilled."""
         root = tmp_path / "b"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=Read,Grep] claim C-1 sweep",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Grep"]}}\nsweep',
                       subagent_type="kunglao-worker")
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         blob = r.stderr + r.stdout
@@ -110,7 +110,7 @@ class TestI1ToolsContract:
     def test_whitelisted_rack_with_write_passes(self, tmp_path) -> None:
         root = tmp_path / "c"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=Read,Write,Grep] claim C-1 sweep",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Write", "Grep"]}}\nsweep',
                       subagent_type="kunglao-worker")
         assert r.returncode == 0, f"stderr={r.stderr!r} stdout={r.stdout!r}"
         assert "REJECT" not in r.stderr
@@ -122,7 +122,7 @@ class TestI1ToolsContract:
         the §1c floor, proving aliasing ran before the floor check."""
         root = tmp_path / "d"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=grep] claim C-1 background work",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground work',
                       subagent_type="kunglao-worker")
         assert r.returncode == 2
         assert "missing write-capable tool" in (r.stderr + r.stdout)
@@ -131,7 +131,7 @@ class TestI1ToolsContract:
         """No agents/<name>.md -> 既不认识就不拦 (existing path untouched)."""
         root = tmp_path / "e"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=some-future-tool] claim C-1 work",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["some-future-tool"]}}\nwork',
                       subagent_type="brand-new-agent-nobody-knows")
         assert r.returncode == 0, f"stderr={r.stderr!r}"
 
@@ -141,7 +141,7 @@ class TestI1ToolsContract:
         dispatch-gate test depends on this."""
         root = tmp_path / "f"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=grep] claim C-1 background work")
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground work')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
 
     def test_v1_json_meta_agent_enforced(self, tmp_path) -> None:
@@ -164,7 +164,7 @@ class TestI1ToolsContract:
         root = tmp_path / "h"
         _minimal_ws(root)
         r = _run_gate(root,
-                      "[T1 tools=mcp__ghidra__decompile,Write] claim C-1 xref",
+                      '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["mcp__ghidra__decompile", "Write"]}}\nxref',
                       subagent_type="ghidra-light")
         assert r.returncode == 0, f"stderr={r.stderr!r} stdout={r.stdout!r}"
 
@@ -173,7 +173,7 @@ class TestI1ToolsContract:
         does not satisfy the floor."""
         root = tmp_path / "i"
         _minimal_ws(root)
-        r = _run_gate(root, "[T1 tools=Read,Bash] claim C-1 run script",
+        r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Bash"]}}\nrun script',
                       subagent_type="kunglao-worker")
         assert r.returncode == 2
         assert "missing write-capable tool" in (r.stderr + r.stdout)

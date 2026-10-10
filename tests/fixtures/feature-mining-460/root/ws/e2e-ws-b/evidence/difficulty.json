@@ -1,0 +1,21 @@
+{
+  "schema": "difficulty-calibration/1",
+  "tier": "hard",
+  "score": 0.45,
+  "dominant_factor": "packer_present",
+  "factors": {
+    "packer_present": {"detail": "die detected UPX; apkid summary packer UPX", "score": 1.0, "weight": 0.3, "contribution": 0.3, "source": "die+apkid"},
+    "entropy_max": {"detail": "max section entropy 7.2", "score": 0.67, "weight": 0.15, "contribution": 0.1, "source": "die"},
+    "obfuscator_count": {"detail": "1 obfuscator", "score": 0.5, "weight": 0.1, "contribution": 0.05, "source": "apkid"}
+  },
+  "families": {
+    "anti_analysis": {"active": true, "score": 0.5},
+    "obfuscation": {"active": true, "score": 0.5},
+    "packing": {"active": true, "score": 1.0},
+    "surface_reduction": {"active": false, "score": 0.0}
+  },
+  "coverage": {"die": true, "apkid": true},
+  "thresholds": {"medium": 0.15, "hard": 0.4, "max": 0.65},
+  "notes": ["die detected UPX"],
+  "generated_at": "2026-09-29T14:15:04Z"
+}

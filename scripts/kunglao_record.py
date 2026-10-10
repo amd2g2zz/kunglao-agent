@@ -12,25 +12,8 @@ Standalone CLI entry: scripts/kunglao-record.py (thin wrapper; this module holds
 Output contract: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53-72).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] kunglao_record WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import os
 import hashlib
@@ -224,6 +207,24 @@ def record_event(ws: Path, event: dict) -> int:
 
         # Atomic append via O_APPEND (no temp file, no read-modify-write)
         _append_single_line(p, json.dumps(rec, ensure_ascii=False) + "\n")
+        # Signal stream: the delivery path lands a structured row
+        # (runs/signals.jsonl) instead of only text annotations — the
+        # Δ-estimator's input face. record_event is idempotent (duplicates
+        # returned above), so the signal row is idempotent too. Fail-open:
+        # telemetry never breaks the RECORD write (issue 275 class).
+        _signal_kind = {"fact_written": "deliver",
+                        "fact_verified": "verify"}.get(et)
+        if _signal_kind:
+            try:
+                import signals_stream
+                signals_stream.append(
+                    ws, _signal_kind,
+                    claim=str(payload.get("claim_id")
+                              or payload.get("claim") or "") or None,
+                    fact_id=str(payload.get("fact_id") or "") or None,
+                    event_id=eid)
+            except Exception as exc:  # noqa: BLE001 — signal never breaks RECORD
+                warn("signal_stream_append", f"{type(exc).__name__}: {exc}")
         return seq
 
 
@@ -565,11 +566,11 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             print(f"kunglao-record: family_sync_failed emit also unavailable "
                   f"({type(emit_exc).__name__}: {emit_exc})",
                   file=sys.stderr, flush=True)
-        print(f"kunglao-record: WARN family-ledger sync failed after "
-              f"{claim_id} -> {effective_status} "
-              f"({type(exc).__name__}: {exc}); the ledger may be stale — "
-              f"run `python scripts/hypothesis_bridge.py {ws} --sync`",
-              file=sys.stderr, flush=True)
+        warn("family_ledger_sync",
+             f"family-ledger sync failed after "
+             f"{claim_id} -> {effective_status} "
+             f"({type(exc).__name__}: {exc}); the ledger may be stale — "
+             f"run `python scripts/hypothesis_bridge.py {ws} --sync`")
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)

@@ -7,6 +7,11 @@ __pycache__/
 # Virtualenv (created by the documented install command: uv sync --locked)
 .venv/
 
+# Local editable-install build artifacts (#416 made the project buildable)
+*.egg-info/
+build/
+dist/
+
 # Generated release artifact (issue #80) — CI stores it as a workflow artifact
 /release-receipt.json
 
@@ -30,6 +35,12 @@ __pycache__/
 **/bins/
 test_workspace/
 runs/
+# ...EXCEPT the #460 feature-mining pinned fixture tree (scoped: the
+# golden-fixture allowlist in tests/test_no_tracked_ignored_files.py
+# keeps its own contract untouched — #472 enforcement-not-rules held);
+# the fixture mirrors the live runs/ layout (run dirs + ws audit
+# streams) as sanitized copies, committed on purpose
+!tests/fixtures/feature-mining-460/**/runs/
 
 # Eval harness generated receipts (reproducible via scripts/kunglao-eval.py --all)
 eval/receipts/
@@ -87,3 +98,18 @@ docs/superpowers/
 
 # GC-harness lifecycle registries (identity/status/linkage only, local-only)
 .agent/
+
+# #358 distillation scratch (untracked; source clones never committed)
+.scratch-sources/
+
+# #364 campaign distillation scratch (untracked; D1 workspace material never committed)
+.scratch-d1/
+
+# local-only judgment-experiment artifacts (owner ruling 2026-10-03:
+# never synced to the remote)
+/experiments/
+
+# #545 WS2: the cross-task posterior store is RUNTIME data (learned
+# posteriors across this machine's workspaces) — never committed; the
+# guarded prior_store_root scan covers whatever exists locally.
+scripts/rlvr/patterns/posterior-store.jsonl

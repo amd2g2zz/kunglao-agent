@@ -1,0 +1,28 @@
+{
+  "schema": "kunglao-eval-gt/1",
+  "task_id": "web-pow-lite-v1",
+  "constants": {
+    "pow_hash": "sha256",
+    "challenge_path": "/challenge",
+    "verify_path": "/verify"
+  },
+  "protocol": {
+    "challenge": "GET /challenge -> {sid, prefix, difficulty, ts}",
+    "verify": "POST /verify {nonce, prefix, difficulty, ts}",
+    "session": "single-use sid cookie; 120s window"
+  },
+  "checker": {
+    "faces": [
+      "constant-hit",
+      "session-replay"
+    ],
+    "thresholds": {
+      "min_constant_hits": 2,
+      "min_pair_ratio": 1.0,
+      "sessions": 4
+    }
+  },
+  "family": "web-pow-lite",
+  "seed": 51102,
+  "space_bits": 128
+}

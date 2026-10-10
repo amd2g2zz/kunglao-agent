@@ -57,25 +57,19 @@ dispatches via the Agent tool):
     "command": "uv run --project <skill_root> <skill_root>/hooks/dispatch_gate.py"}]}
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] dispatch_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import re
 import sys
@@ -426,6 +420,52 @@ def _reject_with_guidance(name: str, msg: str, fix: str,
     return 2
 
 
+def _gate_error_reject(ws: Path | None, gate: str, claim_id: str | None,
+                       exc: BaseException, fix: str,
+                       trace_id: str | None = None) -> int:
+    """Owner ruling 2026-09-28: a gate that ERRORS must NOT pass the
+    action. Structured, loud, durable fail-closed face for gate-error
+    rejections — stderr WARN + `gate_error` trace + one durable row in
+    runs/gate-rejections.jsonl (#603 contract: a REJECT must never be
+    trace-only) + REJECT guidance carrying the exception class and
+    message, so the blocker is diagnosable in one read. `ws=None` skips
+    the trace/ledger side effects (helpers without a workspace scope
+    still reject loudly)."""
+    msg = f"gate error (fail-closed) - {type(exc).__name__}: {exc}"
+    warn(f"gate_error:{gate}", f"{type(exc).__name__}: {exc}")
+    if ws is not None:
+        # literal action strings: the #880 orphan scanner cannot see
+        # f-string emissions, and each face must stay registered
+        if gate == "top1":
+            _emit_trace(ws, "top1_gate_error", claim_id,
+                        f"reason=gate_error; exc={type(exc).__name__}: {exc}",
+                        trace_id=trace_id)
+        elif gate == "capability":
+            _emit_trace(ws, "capability_gate_error", claim_id,
+                        f"reason=gate_error; exc={type(exc).__name__}: {exc}",
+                        trace_id=trace_id)
+        try:
+            row = {
+                "ts": datetime.now(tz=timezone.utc).isoformat(
+                    timespec="seconds").replace("+00:00", "Z"),
+                "gate": gate,
+                "claim": claim_id,
+                "msg": msg,
+                "exit_code": 2,
+            }
+            ledger = ws / GATE_REJECTIONS_LOG
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            with open(ledger, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError as ledger_exc:
+            print(f"dispatch_gate: gate-rejections append failed "
+                  f"({ledger_exc!r})", file=sys.stderr, flush=True)
+    return _reject_with_guidance(
+        gate, msg,
+        f"{fix}\n(the gate error is fail-closed per the 2026-09-28 owner "
+        "ruling: a gate that cannot see must not wave the action through)")
+
+
 def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
                 exit_code: int | None = None,
                 matched_rule: str | None = None,
@@ -475,9 +515,9 @@ def _resolve_dispatch_trace(ws: Path, prompt_text: str) -> tuple[str | None, boo
             return declared, False
         tid, created = allocate_trace_id(ws)
         if declared is not None:
-            print(f"dispatch_gate: WARN trace_id {declared!r} invalid "
-                  f"(want tr-<mission>-<seq>, #879); allocated {tid}",
-                  file=sys.stderr, flush=True)
+            warn("trace_id_invalid",
+                 f"trace_id {declared!r} invalid "
+                 f"(want tr-<mission>-<seq>, #879); allocated {tid}")
         return tid, created
     except Exception:  # noqa: BLE001 — trace must never block dispatch
         return (declared if isinstance(declared, str) else None), False
@@ -508,32 +548,30 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
 
     deviated (rank >= 2) + no `agent-reasoning:` prefix -> REJECT (exit 2);
     with the prefix -> pass + stderr `TOP1 (deviation recorded)` +
-    priority_deviation trace. rank-None / audit unavailable -> no REJECT
-    (FAIL_OPEN — a broken gate must not block dispatch; the failure-blocked
-    slice keeps its own #495 injection path)."""
+    priority_deviation trace. rank-None on a healthy audit -> no REJECT.
+    Scorer/audit ERRORS -> REJECT (fail-closed, owner ruling 2026-09-28:
+    a gate that cannot see must not wave the dispatch through; the
+    failure-blocked slice keeps its own #495 injection path)."""
     try:
         with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
             from worker_budget import check_priority
-    except Exception as exc:  # noqa: BLE001 — scorer wiring unavailable -> fail open
-        # #569 AUDIT: the gate is being bypassed silently — leave a trace so
-        # post-mortem can see the FAIL_OPEN path was taken. detail carries
-        # the exception class so the post-mortem can distinguish scorer
-        # unavailable from audit crash without re-reading the source.
-        _emit_trace(ws, "top1_fail_open", claim_id,
-                    f"reason=scorer_unavailable; exc={type(exc).__name__}",
-                    trace_id=trace_id)
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # was #569 AUDIT fail-open-with-trace; flipped fail-closed.
+        return _gate_error_reject(
+            ws, "top1", claim_id, exc,
+            "repair the worker_budget.check_priority wiring (hooks lib) "
+            "so the ranking gate can see.", trace_id=trace_id)
     try:
         _ok, msg, deviated = check_priority(
             ws / "claim-register.yaml", ws / "claim_deps.yaml",
-            ws / "task_spec.yaml", claim_id, ws)
-    except Exception as exc:  # noqa: BLE001 — audit crash -> fail open
-        # #569 AUDIT: same as above — the audit itself crashed, the gate
-        # fails open, but the audit log must record the bypass.
-        _emit_trace(ws, "top1_fail_open", claim_id,
-                    f"reason=audit_crash; exc={type(exc).__name__}: {exc}",
-                    trace_id=trace_id)
-        return None
+            claim_id, ws)
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # was #569 AUDIT fail-open-with-trace; flipped fail-closed.
+        return _gate_error_reject(
+            ws, "top1", claim_id, exc,
+            "repair the priority audit (claim-register/claim-deps/"
+            "task_spec readers) so the ranking gate can see.",
+            trace_id=trace_id)
     if not deviated:
         if msg:
             print(f"PRIORITY: {msg}", file=sys.stderr, flush=True)
@@ -598,12 +636,20 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
         _libk = load_hooks_lib()
         check_mcp_prefix = _libk.check_mcp_prefix
         _shared_parse = _libk.parse_dispatch
-    except Exception:  # noqa: BLE001 — helper unavailable -> fail open
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        return _gate_error_reject(
+            None, "mcp_prefix", None, exc,
+            "repair the lib_kunglao.check_mcp_prefix wiring so the "
+            "security gate can see.")
     try:
         tier, tools, _claim_id = _shared_parse(prompt_text or "")
-    except Exception:  # noqa: BLE001 — unparseable tools -> open
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # an unparseable payload is a gate that cannot see — reject, not
+        # silently open
+        return _gate_error_reject(
+            None, "mcp_prefix", None, exc,
+            "the dispatch payload could not be parsed for tool "
+            "declaration; fix the payload or the parse_dispatch wiring.")
     if not tools:
         return None
     for tool in tools:
@@ -646,13 +692,13 @@ def _emit_capability_dormant(ws: Path, claim_id: str) -> None:
         return
     if (ws / DORMANT_SENTINEL).exists():
         return
-    print(
-        f"dispatch_gate: WARN capability-dormant (#600) — no claim in "
+    warn(
+        "capability_dormant",
+        f"capability-dormant (#600) — no claim in "
         f"claim-register.yaml carries `obstacle_for`, so the #496 "
         f"capability-switch tooth (②(a)) is a silent no-op. Capability "
         f"cards arm from the obstacle_for parent edge; promote obstacle "
         f"claims (#495 failure-analysis promotion) to arm the gate.",
-        file=sys.stderr, flush=True,
     )
     print(json.dumps({
         "hookSpecificOutput": {
@@ -692,8 +738,9 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
     prompt shows the disproof (`capability-disproof: <family>`); an excused
     switch passes and leaves a capability_switch trace. The card scope is
     the target claim PLUS its obstacle_for parent — the trajectory-1 pivot
-    onto the promoted obstacle claim stays covered. FAIL_OPEN when the
-    scorer, the register or the card is unavailable.
+    onto the promoted obstacle claim stays covered. Scorer/card ERRORS ->
+    REJECT (fail-closed, owner ruling 2026-09-28); an unreadable register
+    only narrows the card scope to the claim (best-effort scope, kept).
 
     #600: arming observability — the tooth above is conditional on the
     OPTIONAL obstacle_for field; with none anywhere in the register it
@@ -705,13 +752,22 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
     try:
         with scripts_on_path():  # #671 scoped membership
             import priority_ratio as pr
-    except Exception:  # noqa: BLE001 — scorer unavailable -> fail open
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        return _gate_error_reject(
+            ws, "capability", claim_id, exc,
+            "repair the priority_ratio wiring so the capability gate can "
+            "see.", trace_id=trace_id)
     tools: list[str] = []
     try:
         tools = load_hooks_lib().parse_dispatch(prompt_text or "")[1]
-    except Exception:  # noqa: BLE001 — unparseable tools -> no families -> open
-        tools = []
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # the gate cannot see the declared tool families — reject, not
+        # silently open
+        return _gate_error_reject(
+            ws, "capability", claim_id, exc,
+            "the dispatch payload could not be parsed for tool "
+            "declaration; fix the payload or the parse_dispatch wiring.",
+            trace_id=trace_id)
     claim_ids = {claim_id}
     try:
         reg = yaml.safe_load(
@@ -725,8 +781,12 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         warn("_capability_guard", f"{type(exc).__name__}: {exc}")
     try:
         evidence = pr.EvidenceView.from_workspace(ws)
-    except Exception:  # noqa: BLE001 — artifact scan failure -> fail open
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        return _gate_error_reject(
+            ws, "capability", claim_id, exc,
+            "repair the capability-card artifact scan "
+            "(priority_ratio.EvidenceView) so the gate can see.",
+            trace_id=trace_id)
     v = pr.capability_switch_violation(claim_ids, tools, prompt_text, evidence)
     if v is None:
         # trace the EXCUSED switch: a disproof marker naming a validated
@@ -850,9 +910,9 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
         return 2
     if rc == 3:
         # drift-warning -> SATURATED. Visible but not REJECT.
-        print(f"dispatch_gate: plan-drift auto SATURATED ({claim_id}): "
-              "WARN-only, observe-first",
-              file=sys.stderr, flush=True)
+        warn("plan_drift_saturated",
+             f"plan-drift auto SATURATED ({claim_id}): "
+             "WARN-only, observe-first")
         return 3
     if rc == 0:
         # no drift -> fall through
@@ -1064,10 +1124,20 @@ def _agent_frontmatter(agent_name: str | None) -> dict | None:
     """agents/<name>.md frontmatter -> dict (None if unknown/unparseable).
 
     Local twin of route_capability._parse_frontmatter: hooks must not depend
-    on scripts/ private API (#671 boundary); yaml is already imported here."""
+    on scripts/ private API (#671 boundary); yaml is already imported here.
+
+    #355: a plugin-qualified dispatch id ("kunglao-agent:ghidra-light")
+    resolves to its BARE segment — the same convention _waiting_target_id
+    already uses for the wait ledger ("a plugin-qualified dispatch id
+    matches on its bare segment"). Without this, a qualified id failed the
+    agents/<name>.md lookup and silently skipped every frontmatter-keyed
+    face (lane gate, #760 tools rack) — an identity-shaped dodge."""
     if not agent_name:
         return None
-    path = SKILL_DIR / "agents" / f"{agent_name}.md"
+    name = agent_name.strip().rsplit(":", 1)[-1]
+    if not name:
+        return None
+    path = SKILL_DIR / "agents" / f"{name}.md"
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -1163,8 +1233,12 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
     agent file is unknown; REJECTs (rc=2, fix guidance) otherwise."""
     try:
         _, declared_tools, _claim = load_hooks_lib().parse_dispatch(prompt_text or "")
-    except Exception:  # noqa: BLE001 — unparseable protocol -> pre-existing warn face
-        return None
+    except Exception as exc:  # noqa: BLE001 — FAIL_CLOSED (owner ruling 2026-09-28)
+        # the gate cannot see the declared rack — reject, not silently open
+        return _gate_error_reject(
+            None, "tools_rack", None, exc,
+            "the dispatch payload could not be parsed for the tools rack; "
+            "fix the payload or the parse_dispatch wiring.")
     agent_name = _resolve_dispatch_agent(payload, prompt_text)
     if agent_name is None or _agent_allowed_tools(agent_name) is None:
         return None
@@ -1184,13 +1258,31 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
 
 # ======================== issue 208 lane routing gate ======================
 # The malware-only agents (pefile-signature / floss-filter / go-symbols /
-# ghidra-light / kunglao-redteam) declare `lane: malware` in their
-# frontmatter. Agent markdown cannot refuse to load — the harness loads a
-# definition, no hook observes that — so the enforceable point is the
-# dispatch: the lane gate refuses to hand a malware-lane-only methodology to
-# a workspace whose task contract declares another lane, with a structured
-# message naming the agent, the lane and the routing fix. Absent/legacy lane
+# ghidra-light) declare `lane: malware` in their frontmatter. Agent
+# markdown cannot refuse to load — the harness loads a definition, no hook
+# observes that — so the enforceable point is the dispatch: the lane gate
+# refuses to hand a malware-lane-only methodology to a workspace whose
+# task contract declares another lane, with a structured message naming
+# the agent, the lane and the routing fix. Absent/legacy lane
 # (= today's workspaces) keeps current behavior; unknown/kept agents pass.
+#
+# #342: a checker may hold MORE than one lane — kunglao-redteam declares
+# `lane: malware|web` so the unified verifier is dispatchable on the web
+# lane (its web face: captured I/O pairs + unpack_out registries +
+# camoufox instrumentation) while the four maker specialists stay
+# malware-only. The declaration is the '|' multi-lane form; the gate
+# refuses when the workspace lane is OUTSIDE the declared set, so the
+# issue-208 refusals (algorithm/protocol/data/app) are preserved verbatim.
+#
+# #355 (supersedes the checker's lane LIST, not the maker contracts): the
+# owner ruled the checker is defined by its FUNCTION — adversarial
+# verification — not by any material domain, and ALL evidence gets
+# red-team checking. kunglao-redteam declares NO `lane:`; the gate treats
+# a lane-absent agent as permitted on every lane, so the four lanes #342
+# left refused (algorithm/protocol/data/app) are now admitted too. The
+# `lane:` axis remains exactly what it was for the four malware-lane
+# maker specialists (ghidra-light / go-symbols / pefile-signature /
+# floss-filter): an opt-in material contract, enforced verbatim.
 
 # The lane enum mirrors scripts/lane_spec.py (the single source). Hooks load
 # standalone and must not import scripts/, so the tuple is repeated here with
@@ -1200,15 +1292,28 @@ MALWARE_LANE = "malware"
 LANE_TASK_SPEC = "task_spec.yaml"
 
 
-def _agent_lane_declaration(agent_name: str | None) -> str | None:
-    """agents/<name>.md frontmatter `lane:` (None when absent/unknown)."""
+def _agent_lane_declaration(agent_name: str | None) -> tuple[str, ...]:
+    """agents/<name>.md frontmatter `lane:` as the declared lane set.
+
+    The issue-208 single-lane form (`lane: malware`) and the #342
+    multi-lane form (`lane: malware|web`) parse identically here; tokens
+    outside LANE_ENUM are dropped and duplicates collapse. An absent,
+    non-scalar or all-unknown value declares NOTHING (empty tuple) — and
+    since #355, nothing declared means lane-UNIVERSAL: the checker-role
+    agents (dispatched by protocol position, never by claim routing —
+    #310) declare no `lane:` at all and are admitted on every lane. The
+    `lane:` axis is a maker-side opt-in material contract; the exemption
+    is file truth, not a runtime identity grant, so the only way to change
+    an agent's lane extent is a reviewable diff to its agents/<name>.md —
+    the dispatch payload cannot influence it."""
     fm = _agent_frontmatter(agent_name)
     if not isinstance(fm, dict):
-        return None
+        return ()
     raw = fm.get("lane")
-    if isinstance(raw, str) and raw.strip().lower() in LANE_ENUM:
-        return raw.strip().lower()
-    return None
+    if not isinstance(raw, str):
+        return ()
+    return tuple(dict.fromkeys(t.strip().lower() for t in raw.split("|")
+                               if t.strip().lower() in LANE_ENUM))
 
 
 def _workspace_lane(ws: Path) -> str | None:
@@ -1232,30 +1337,40 @@ def _workspace_lane(ws: Path) -> str | None:
 
 
 def _lane_gate(payload: dict, prompt_text: str, ws: Path) -> int | None:
-    """Issue 208: refuse a malware-lane-only agent on a non-malware lane.
+    """Issue 208: refuse a lane-bound agent on a lane it does not declare.
+
+    #342: the declaration is a SET (malware-only agents declare one lane;
+    #355: a checker-role agent declares NONE — kunglao-redteam carries no
+    `lane:` at all, so the gate admits it on every lane (the owner ruling:
+    adversarial verification is a function, not a domain — ALL evidence
+    gets red-team checking). The lane contract binds maker-type agents
+    only; the refusal fires only when a NON-EMPTY declaration excludes the
+    workspace lane.
 
     Fires on the structural corridor (pre-activation), independent of the
     dispatch claim-id parse: the lane binding is a routing contract, not a
     session concern. No agent identity / no `lane:` binding / no declared
     workspace lane -> None (pass)."""
     agent_name = _resolve_dispatch_agent(payload, prompt_text)
-    if _agent_lane_declaration(agent_name) != MALWARE_LANE:
+    declared = _agent_lane_declaration(agent_name)
+    if not declared:
         return None
     lane = _workspace_lane(ws)
-    if lane is None or lane == MALWARE_LANE:
+    if lane is None or lane in declared:
         return None  # legacy / undeclared: current malware-lane behavior
     return _reject_with_guidance(
         "lane_routing",
-        f"{agent_name} is a malware-lane-only agent and this workspace "
-        f"declares lane: {lane} — its methodology (binary sample under "
-        f"bins/<sha>, PE/Go/Mach-O structure, packer and Authenticode "
-        f"faces) does not apply to this task's material.",
+        f"{agent_name} is a lane-bound agent "
+        f"({' | '.join(f'lane: {d}' for d in declared)}) and this workspace "
+        f"declares lane: {lane} — its declared methodology does not apply "
+        f"to this task's material.",
         f"dispatch an agent whose contract matches lane: {lane} "
         f"(kunglao-worker is the default executor; web-re-worker owns "
-        f"web/JS claims) — or, if this task really does analyze a binary "
-        f"sample, record `lane: malware` in task_spec.yaml and re-dispatch. "
-        f"The lane comes from the task contract, never from the dispatch: "
-        f"do not switch the workspace lane to unblock one worker.")
+        f"web/JS claims) — or, if this task really does match the agent's "
+        f"declared lanes, record the matching `lane:` in task_spec.yaml and "
+        f"re-dispatch. The lane comes from the task contract, never from "
+        f"the dispatch: do not switch the workspace lane to unblock one "
+        f"worker.")
 
 
 # ===================== #109 hypothesis admission gate =====================
@@ -1502,14 +1617,13 @@ def _redo_leak_check(ws: Path, prompt_text: str,
     if not overlaps:
         return
     sample = ", ".join(overlaps[:5])
-    print(
-        f"dispatch_gate: WARN redo-leak (#772) — redo-marked dispatch "
+    warn(
+        "redo_leak",
+        f"redo-leak (#772) — redo-marked dispatch "
         f"prompt overlaps the latest red-team DIFF on {len(overlaps)} "
         f"value string(s): [{sample}]. Redo prompts must be GAP-ONLY "
         f"(WHERE it diverged, never the verifier's derived answer). "
-        f"Re-check build_redo_context output before sending.",
-        file=sys.stderr, flush=True,
-    )
+        f"Re-check build_redo_context output before sending.")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -1572,6 +1686,9 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
         # collapse; new code wires the util).
         from harness_common import utc_now_z
         path.write_text(json.dumps({
+            # #244 taxonomy: the wait signal carries type dispatch | stop;
+            # the gate's wake is the dispatch arm of the vocabulary.
+            "type": "dispatch",
             "claim": claim_id,
             "ts": utc_now_z(),
         }, ensure_ascii=False), encoding="utf-8")
@@ -1750,6 +1867,17 @@ def main() -> int:
     # dispatch ALLOW tail (all teeth passed, worker not yet started).
     # Fail-open: intent_unparsed event only, never a blocked dispatch.
     _record_dispatch_intent(ws, claim_id, prompt_text, payload)
+    # #12 signal stream: the dispatch ALLOW tail is the one point every
+    # dispatch passes — land the structured dispatch row (runs/signals.jsonl)
+    # the Δ-estimator's events block counts. Fail-open: telemetry never
+    # turns an ALLOW into anything else.
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from signals_stream import append as _signal_append
+        _signal_append(ws, "dispatch", claim=claim_id)
+    except Exception as exc:  # noqa: BLE001 — a signal never blocks dispatch
+        print(f"dispatch_gate: signal-stream append failed ({exc!r})",
+              file=sys.stderr, flush=True)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

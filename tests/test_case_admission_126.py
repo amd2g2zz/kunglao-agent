@@ -125,6 +125,17 @@ BASE_CASE = {
          "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    # #301: the quantified verification contract every admitted case
+    # carries (artifact, artifact_kind, criterion, threshold,
+    # feeds_decision) — mechanical, thresholded, decision-coupled.
+    "verification": {
+        "artifact": "hmac-sha256 field layout pinned by facts/F001 "
+                    "({user, nonce} -> auth_algo)",
+        "artifact_kind": "hook-state",
+        "criterion": "byte-match",
+        "threshold": {"exact": True},
+        "feeds_decision": "C-1",
+    },
 }
 
 # The v0.1.4 user-bug specimen (issue #126 amendment): "HTTP 200 + response
@@ -287,6 +298,13 @@ def test_distinct_channel_or_group_admits_both(tmp_path: Path) -> None:
             {"field": "magic", "value": "MZ", "evidence_refs": ["F002"]},
         ],
         "mutations": [{"field": "magic", "kind": "change"}],
+        "verification": {
+            "artifact": "magic bytes 'MZ' pinned by facts/F002",
+            "artifact_kind": "constant",
+            "criterion": "byte-match",
+            "threshold": {"exact": True},
+            "feeds_decision": "C-1",
+        },
     }
     _write_case(ws, device, "case-00.yaml")
     _write_case(ws, emulator, "case-one.yaml")

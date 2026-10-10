@@ -134,7 +134,7 @@ class TestGateRejectionsLedger:
         authority msg — pre-#603 the file is never created on this path."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         rows = _rejection_rows(ws)
         assert len(rows) == 1, (
@@ -152,10 +152,11 @@ class TestGateRejectionsLedger:
         tooth, #496 parity)."""
         root = tmp_path / "r2"
         ws = _top1_ws(root)
-        r0 = _run_gate(root, ws, "[T1 tools=grep] claim C-1 background work")
+        r0 = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground work')
         assert r0.returncode == 0, f"stderr={r0.stderr!r}"
         r1 = _run_gate(root, ws,
-                       "[T1 tools=grep] claim C-2 background work\n"
+                       '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 1, "tools": ["grep"]}}\n'
+                       "background work\n"
                        "agent-reasoning: C-1 blocked on VM lease")
         assert r1.returncode == 0, f"stderr={r1.stderr!r}"
         assert _rejection_rows(ws) == [], (
@@ -168,7 +169,7 @@ class TestGateRejectionsLedger:
         root = tmp_path / "r3"
         ws = _top1_ws(root)
         for _ in range(2):
-            r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
+            r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
             assert r.returncode == 2
         rows = _rejection_rows(ws)
         assert len(rows) == 2, f"expected 2 rows, got {len(rows)}"
@@ -188,7 +189,7 @@ class TestRetryCounterFirewall:
         the counter file absent — not even created empty."""
         root = tmp_path / "r4"
         ws = _top1_ws(root)
-        r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep",
+        r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep',
                       agent_name="kunglao-worker-01")
         assert r.returncode == 2, f"stderr={r.stderr!r}"
         counter = ws / "runs" / ".retry-counter.yaml"
@@ -204,7 +205,7 @@ class TestRetryCounterFirewall:
         root = tmp_path / "r5"
         ws = _top1_ws(root)
         for _ in range(3):
-            r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep",
+            r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep',
                           agent_name="kunglao-worker-01")
             assert r.returncode == 2
         assert len(_rejection_rows(ws)) == 3, (
@@ -221,7 +222,8 @@ class TestRetryCounterFirewall:
         """Guard: no path of _top1_enforcement touches the counter."""
         root = tmp_path / "r6"
         ws = _top1_ws(root)
-        prompt = ("[T1 tools=grep] claim C-2 background work\n"
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 1, "tools": ["grep"]}}\n'
+                  "background work\n"
                   "agent-reasoning: C-1 needs the VM lease which is not up")
         r = _run_gate(root, ws, prompt)
         assert r.returncode == 0, f"stderr={r.stderr!r}"

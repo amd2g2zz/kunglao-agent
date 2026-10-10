@@ -1,23 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] worker_budget_core WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 """worker_budget_core — constants, IO, parsing, claim-register primitives.
 
 #568: extracted from worker_budget.py (was 1847L > 800L limit). This module
@@ -64,7 +59,10 @@ ensure_scripts_path()
 from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402,F401 — re-exported to gates
 # #861 单源化保留：无 claim 的 v0 裸前缀（非 claim 派发）是 budget 本地边缘
 # 合同——claim 派发的识别已单源到 lib_kunglao.parse_dispatch。
-_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
+# v0 retirement (compat-rot sweep 2026-09-29): the lookahead excludes the
+# claim FORM — "[T1 tools=x] claim C-NN" is a retired v0 claim envelope and
+# must parse to absent, not leak through the bare-prefix edge.
+_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\](?!\s*claim\b)')
 
 
 VM_TOOLS = {'vmr-shell', 'rev-frida'}
@@ -92,7 +90,9 @@ HOST_FORBIDDEN_TOOLS = (
 # ---------- best-first priority advisory (imports scripts/priority_ratio.py) ----------
 # #499: priority_ratio is THE sanctioned next-claim scorer (specs/phase-4/
 # contract.md §1 — the DECIDE ranker). #107 rebuilt it: ONE Thompson ranker
-# (sampled case posterior + LAMBDA_DH·ΔH); the explore/exploit dual path and
+# (sampled case posterior + W_DOWNSTREAM·downstream_term — the #295 governed
+# removal deleted the λ·ΔH face, docs/adr-001-strategy-parameter-governance.md);
+# the explore/exploit dual path and
 # its second ranking face are deleted — there is no other authority to
 # disagree with anymore (#100/#101 die at the root).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -320,11 +320,12 @@ def check_backtrack_gate(paths):
     return True, ''  # unknown rc -> fail open
 
 
-def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None):
+def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
     ranks by the authoritative scorer (priority_ratio.py — specs/phase-4/
     contract.md §1). #107 rebuilt that scorer as ONE Thompson ranker (sampled
-    case posterior + LAMBDA_DH·ΔH, seeded by posterior_rng(ws) — the same
+    case posterior + W_DOWNSTREAM·downstream_term, seeded by posterior_rng(ws)
+    — the same
     seed DECIDE ranks with), so the audit and DECIDE share a single ranking
     face and an authority_mismatch is structurally impossible (#100/#101 die
     at the root; the second face is deleted with the phase gate).
@@ -335,9 +336,10 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
     "pretend-priority" dispatches that skip the recorded-deviation discipline).
 
-    task_spec_path is kept for signature stability only — the ranking is
-    Thompson-seeded from the posterior state; the old priority_weights/
-    PRIORITY_WEIGHTS override does not apply to the authority scorer.
+    The ranking is Thompson-seeded from the posterior state — there is no
+    weights/override face (the old priority_weights/PRIORITY_WEIGHTS override
+    does not apply to the authority scorer; the inert task_spec_path
+    signature-stability parameter is deleted, compat-rot sweep 2026-09-29).
 
     Caller-side filtering is the caller's job (contract §1 — the pure function
     takes no ws): failure-blocked claims (failed attempt, no current
@@ -394,10 +396,11 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
 def parse_dispatch(description: str) -> tuple[int, list[str], str | None]:
     """Parse the dispatch shape -> (tier, tools, claim_id). #861 单源化。
 
-    Delegates to hooks/lib_kunglao.py:parse_dispatch — v1 canonical JSON
-    envelope takes precedence, v0 claim prefix retained as legacy-replay
-    fallback. Previously parsed the v0 prefix only, silently disarming the
-    budget cid gates on v1 dispatches (issue #861, B1).
+    Delegates to hooks/lib_kunglao.py:parse_dispatch — the v1 canonical
+    JSON envelope is the only recognized claim dispatch (the v0 claim
+    prefix is RETIRED, compat-rot sweep 2026-09-29; previously the face
+    parsed the v0 prefix only, silently disarming the budget cid gates on
+    v1 dispatches — issue #861, B1).
 
     边缘合同保留：无 claim 的 v0 裸前缀（非 claim 派发，如 init-worker 类）
     是 budget 本地合同——lib 单源只建模 claim 派发，故此回退留在本地。"""

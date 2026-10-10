@@ -1,0 +1,7 @@
+claims:
+- id: C-005
+  statement: A re-implementation for unknown satisfies the success criterion.
+  answers_question: pq-2
+  boundary_type: confirmed
+  status: OPEN
+  source: static_re

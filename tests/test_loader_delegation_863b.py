@@ -36,6 +36,12 @@ ALLOWED_SPEC_SITES = {
     "hooks/lib_kunglao.py":
         "#671 self-bootstrap: same bootstrap-of-the-loader exception as "
         "dispatch_gate",
+    "scripts/eval_checker.py":
+        "loads the ARM-SUPPLIED CANDIDATE artifact (an external "
+        "re-implementation produced by an eval arm) by path into a scratch "
+        "namespace — not a repo-internal module, so the hygiene-prologue "
+        "loader is the wrong instrument; the eval-dataset card sanctions "
+        "this site",
 }
 
 
@@ -131,7 +137,7 @@ def test_loader_wiring_is_delegated():
 # --------------------------------------------------------------------------
 
 def _load_util():
-    sys.path.insert(0, str(ROOT / "hooks"))  # noqa: noqa — test-only, restored below
+    sys.path.insert(0, str(ROOT / "hooks"))  # test-only, restored below
     try:
         import _path_hygiene
         return _path_hygiene

@@ -300,12 +300,17 @@ def test_decompiler_registered_mcp_only_is_warn_not_pass(
     but no capability evidence -> decompiler is WARN 'capability unverified',
     NEVER a fake PASS."""
     import toolchain as tc
-    # registry with ghidra registered (hermetic KUNGLAO_CLAUDE_JSON override)
+    # #408: the workspace .mcp.json carries the registrations (the
+    # user-global ~/.claude.json surface is deleted — KUNGLAO_CLAUDE_JSON
+    # stays pinned as a poison path the probe must never read).
     fake_claude = tmp_path / "fake-claude.json"
     fake_claude.write_text(json.dumps({
         "mcpServers": {"ghidra": {}, "sequential-thinking": {}},
     }), encoding="utf-8")
     monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(fake_claude))
+    (kunglao_ws / ".mcp.json").write_text(json.dumps({
+        "mcpServers": {"ghidra": {}, "sequential-thinking": {}},
+    }), encoding="utf-8")
     monkeypatch.delenv("GHIDRA_HOME", raising=False)
     empty = tmp_path / "empty-bin-474"
     empty.mkdir()

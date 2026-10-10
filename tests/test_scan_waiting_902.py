@@ -60,9 +60,13 @@ class TestWaitingVocabulary:
         assert "waiting" not in lib.TERMINAL_WORKER_STATUSES
 
     def test_terminal_vocab_unchanged(self):
+        # #244 added dismissed (settlement-confirmed dismissal) and
+        # unscheduled (wait self-kill) — both scheduling outcomes, not new
+        # work states; the rest of the vocabulary is unchanged.
         lib = load_protocol()
         assert lib.TERMINAL_WORKER_STATUSES == frozenset(
-            {"done", "failed", "blocked", "error"})
+            {"done", "failed", "blocked", "error", "dismissed",
+             "unscheduled"})
 
     def test_waiting_named_constant(self):
         lib = load_protocol()

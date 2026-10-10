@@ -4,7 +4,8 @@
 
 Consolidates duplicated implementations across hooks:
   - workspace resolution (dispatch_gate._resolve_workspace / worker_pulse._resolve_workspace / worker_budget._resolve_paths)
-  - DISPATCH_RE (dispatch_gate + worker_pulse)
+  - dispatch parsing (v1 canonical JSON envelope — the v0 regex is retired,
+    compat-rot sweep 2026-09-29)
   - activation check (dispatch_gate hand-written JSON+expiry vs worker_pulse is_active_strict)
 
 E2.4 criteria: lib singleton behavior-equivalent to each original
@@ -13,25 +14,19 @@ implementation — same fixture output, byte-identical diff.
 Design: single module imported by all hooks; pure functions, no state.
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] lib_kunglao WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# The canonical warn — ONE implementation (process-wide
+# dedupe per (op, reason) + the ledger face). The stderr-only fallback is
+# the partial-deploy lifeline (scripts/ not importable here); production
+# imports kunglao_log.
+try:
+    from _path_hygiene import ensure_scripts_path as _esp406
+    _esp406()
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+    from kunglao_log import warn
+except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
 import json
 import re
 import sys
@@ -58,10 +53,11 @@ except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the eight
     on_path = _hyg.on_path
 
 # ---- dispatch prefix regex (single source) ----
-# v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
-DISPATCH_RE = re.compile(
-    r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
-)
+# v0 protocol RETIRED (compat-rot sweep 2026-09-29, owner ruling D2):
+# the legacy "[T<N> tools=a,b] claim C-NN" regex is deleted — the parse
+# face accepts the v1 canonical JSON envelope ONLY. SKILL.md declares the
+# v0 text prefix replay-only; the sole live producer (blind_gate
+# remediation prose) emits v1.
 
 # v1 protocol marker — find the JSON object containing the
 # "kunglao_dispatch" key. We grab the surrounding braces by scanning
@@ -72,6 +68,38 @@ DISPATCH_JSON_START_RE = re.compile(
 )
 
 DISPATCH_PROTOCOL_VERSION = 1
+# v2 (issue #539 WS1): the external-SMDP action tuple rides the envelope —
+# action_type (the policy's chosen act, incl. distill/recall meta-actions),
+# context_recipe, verification_mode, branch_budget, control. v1 envelopes
+# stay first-class: every v2 field defaults on a v1 read (back-fill, never
+# reject). The 4-dim arm key (family|recipe|verif|tier) is DERIVED, not
+# carried — tier already rides the envelope.
+DISPATCH_PROTOCOL_VERSIONS = (1, 2)
+ACTION_TYPES = ("dispatch", "verify", "recall-history", "distill-online",
+                "distill-hybrid", "replan", "rollback", "stop",
+                # WS4 (#546): the discovery-layer move — obstacles reach
+                # K + tried arms collapsed => generate novel hypotheses
+                # outside the failed set (verifier-gated admission)
+                "expand")
+CONTEXT_RECIPES = ("minimal", "facts_snapshot", "facts_anti_hints",
+                   "full_recall")
+VERIFICATION_MODES = ("none", "replay_probe", "oracle_case", "red_team")
+
+
+def envelope_v2_defaults(payload: dict) -> dict:
+    """The v2 action fields with v1 back-fill defaults — the ONE face
+    every consumer reads the action tuple through (kwargs-drift guard)."""
+    return {
+        "action_type": str(payload.get("action_type") or "dispatch"),
+        "context_recipe": str(payload.get("context_recipe")
+                              or "facts_snapshot"),
+        "verification_mode": str(payload.get("verification_mode")
+                                 or "none"),
+        "branch_budget": (payload.get("branch_budget")
+                          if isinstance(payload.get("branch_budget"), dict)
+                          else {}),
+        "control": str(payload.get("control") or "continue"),
+    }
 
 
 # ---- #567 SECURITY: MCP tool prefix enforcement (single source) ----
@@ -143,7 +171,7 @@ def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | N
     """Parse v1 protocol JSON prefix.
 
     Returns (tier, tools, claim_id, raw_metadata). (0, [], None, None) on
-    failure — caller falls back to v0 regex.
+    failure — the only recognized protocol is v1.
     """
     m = DISPATCH_JSON_START_RE.search(text)
     if not m:
@@ -158,7 +186,7 @@ def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | N
     payload = payload_obj.get("kunglao_dispatch")
     if not isinstance(payload, dict):
         return (0, [], None, None)
-    if int(payload.get("version", 0)) != DISPATCH_PROTOCOL_VERSION:
+    if int(payload.get("version", 0)) not in DISPATCH_PROTOCOL_VERSIONS:
         return (0, [], None, None)
     claim_id = payload.get("claim")
     tier = int(payload.get("tier", 0))
@@ -176,18 +204,14 @@ def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | N
 
 
 def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
-    """Parse '[T<N> tools=a,b] claim C-NN' -> (tier, tools, claim_id).
+    """Parse a v1 dispatch envelope -> (tier, tools, claim_id).
 
-    (0, [], None) if absent. v1 (JSON) takes precedence over v0 (regex)."""
+    (0, [], None) if absent. The v0 text prefix is RETIRED (compat-rot
+    sweep 2026-09-29): only the v1 canonical JSON envelope is recognized;
+    historical v0 rows in runs/logs are workspace data (replay-read by
+    substring, never through this face)."""
     v1 = parse_dispatch_json(text)
-    if v1[2] is not None:
-        return (v1[0], v1[1], v1[2])
-    m = DISPATCH_RE.search(text)
-    if not m:
-        return (0, [], None)
-    tier = int(m.group(1))
-    tools = [t.strip() for t in m.group(2).split(",") if t.strip()]
-    return (tier, tools, m.group(3))
+    return (v1[0], v1[1], v1[2])
 
 
 # ---- #237 D2/H1: verifier-remediation dispatch identity (single source) ----
@@ -463,7 +487,11 @@ from liveness_policy import DEAD_WORKER_MINUTES, STUCK_MINUTES  # noqa: E402
 # #607: statuses that END a worker's liveness. Anything else — including
 # unknown tokens (planning/preflight) and None — counts as active: an
 # invisible worker is worse than an extra slot (claim black-hole, #607).
-TERMINAL_WORKER_STATUSES = frozenset({"done", "failed", "blocked", "error"})
+# #244: dismissed (settlement-confirmed dismissal via a `stop` wait signal)
+# and unscheduled (wait self-kill) end liveness like the other terminals —
+# both are scheduling outcomes, not work failures.
+TERMINAL_WORKER_STATUSES = frozenset(
+    {"done", "failed", "blocked", "error", "dismissed", "unscheduled"})
 
 # A worker that delivered its claim and is ALIVE awaiting the next dispatch:
 # a real sleep-poll wait state whose status file is re-appended every poll,

@@ -1,0 +1,31 @@
+schema: kunglao-eval-task/1
+task_id: chain-l2-py-v1
+eval_version: eval-v1.1
+tier: chain
+source: constructed
+family: chain-py
+seed: 51220
+rung: l2
+anchors:
+  goal_verbatim: Recover the four-layer python chain (string-table loader,
+    KDF, CTR config, lane core) and reproduce the recorded pairs.
+  success_criterion: A re-implementation of the full chain reproducing every
+    published pair byte-exact.
+  verification_method: reproduction
+workspace_scaffold:
+  language: python
+  files:
+  - target/chain_l2.py
+  entry: target/chain_l2.py
+  candidate_contract: A python module exposing run(input) -> hex string.
+checker:
+  kind: replay-roundtrip
+  oracles:
+  - replay-roundtrip
+  entrypoint: checker.py
+  metrics:
+  - ttc_seconds
+  - dispatch_count
+  - converged
+  thresholds:
+    min_pair_ratio: 1.0

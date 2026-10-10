@@ -97,7 +97,9 @@ def _write_status(ws: Path, name: str, last_status: str, prior=None):
 # ---------- parse_dispatch ----------
 
 def test_parse_dispatch_full():
-    desc = '[T2 tools=vmr-shell,mcp__ghidra__*] claim C-007 promotion'
+    desc = ('{"kunglao_dispatch": {"version": 1, "claim": "C-007", '
+            '"tier": 2, "tools": ["vmr-shell", "mcp__ghidra__*"]}} '
+            'promotion')
     tier, tools, cid = parse_dispatch(desc)
     assert tier == 2
     assert tools == ['vmr-shell', 'mcp__ghidra__*']
@@ -105,13 +107,26 @@ def test_parse_dispatch_full():
 
 
 def test_parse_dispatch_t1():
-    tier, tools, cid = parse_dispatch('[T1 tools=grep,xxd] claim C-001 strings')
+    tier, tools, cid = parse_dispatch(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+        '"tier": 1, "tools": ["grep", "xxd"]}} strings')
     assert tier == 1 and tools == ['grep', 'xxd'] and cid == 'C-001'
 
 
 def test_parse_dispatch_no_claim():
+    """The local bare-prefix edge (claim-LESS, init-worker class):
+    tier+tools extract, cid stays None. The claim FORM of the same prefix
+    is retired v0 and must parse to absent (next pin)."""
     tier, tools, cid = parse_dispatch('[T1 tools=grep] general triage')
     assert tier == 1 and tools == ['grep'] and cid is None
+
+
+def test_parse_dispatch_v0_claim_form_rejected():
+    """v0 retirement completed (compat-rot sweep 2026-09-29): the claim
+    form of the legacy prefix parses to absent — it must not leak through
+    the claim-LESS bare-prefix edge."""
+    tier, tools, cid = parse_dispatch('[T2 tools=vmr-shell] claim C-007 x')
+    assert (tier, tools, cid) == (0, [], None)
 
 
 def test_parse_dispatch_malformed():
@@ -448,17 +463,20 @@ def test_check_worker_plan_bom_template_rejects(tmp_path):
     assert 'empty-shell' in msg.lower()
 
 
-def test_check_worker_plan_unreadable_fails_open(tmp_path):
-    """Issue 294 (updated for the issue 239 v2 contract): on a RE-dispatch, an unreadable plan (a
-    directory shadowing the plan name) is a system error — fail OPEN with an
-    honest note instead of a misleading empty-shell reject blaming the
-    worker."""
+def test_check_worker_plan_unreadable_fails_closed(tmp_path):
+    """Issue 294 (updated for the issue 239 v2 contract), then re-pinned by
+    #427 (declared semantic change per the #406 ruling — gate error =
+    reject with recorded reason; this is the old fail-open pin UPDATED, not
+    silently weakened): on a RE-dispatch, an unreadable plan (a directory
+    shadowing the plan name) is a gate ERROR — REJECT with the OSError
+    cause, because the worker cannot demonstrate its execution basis."""
     ws = tmp_path / 'ws'
     _seed_prior_dispatch(ws)
     (ws / 'runs' / 'plan-C001.md').mkdir()  # directory, not a file
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
-    assert ok, msg
+    assert not ok, msg
     assert 'unreadable' in msg
+    assert 'IsADirectoryError' in msg  # the OSError cause is surfaced
 
 
 def test_check_worker_plan_exact_name_accepts(tmp_path):
@@ -523,7 +541,7 @@ def test_pre_check_accepts_first_dispatch_without_plan(tmp_path, capsys):
     plan file, no plan path in the prompt — passes the plan gate (dispatch
     carries intent, not a plan; the worker plans as its first act)."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
 
@@ -532,7 +550,7 @@ def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
     """Issue 239 v2 e2e: first dispatch approved (anchor stamped) -> a re-dispatch
     with no worker-authored plan in between is REJECTED by the plan gate."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts')
     paths = _min_paths(ws)
     assert pre_check(payload, paths) == 0, capsys.readouterr().err
     _seed_live_heartbeat(ws)
@@ -571,20 +589,20 @@ def test_pre_check_accepts_plan_path_in_prompt(tmp_path, capsys):
 def test_check_tool_first_no_keyword_match_accepts():
     """#294: dispatch text with no tools/_INDEX.yaml keyword hit passes silently
     (avoids false positives on unrelated claims)."""
-    ok, msg = check_tool_first({}, '[T1 tools=grep] claim C-001 strings',
+    ok, msg = check_tool_first({}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings',
                                'facts-snapshot: 1 facts')
     assert ok, msg
 
 
-def test_check_tool_first_keyword_match_without_marker_rejects():
-    """#294: dispatch text matching a registered tool's category/capability
-    keyword ('crypto' -> crypto-tool) with no `tool-catalog:` marker is
-    REJECTED — closes the Swiss-army-test gap (worker hand-rolled a script
-    instead of trying crypto-tool.py)."""
+def test_check_tool_first_keyword_match_without_marker_advisory():
+    """#294 / H1: dispatch text matching a registered tool's
+    category/capability keyword ('crypto' -> crypto-tool) with no
+    `tool-catalog:` marker PROCEEDS (advisory-only since H1) — the demand
+    text still names the tool + the marker escape hatch."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ndecode the crypto layer',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok, msg
     assert 'crypto-tool' in msg
     assert 'tool-catalog' in msg
 
@@ -593,7 +611,7 @@ def test_check_tool_first_marker_present_accepts():
     """#294: a `tool-catalog: <name>` marker satisfies the gate even when the
     text matches a registered tool's keyword."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ndecode the crypto layer',
         'facts-snapshot: 1 facts; tool-catalog: crypto-tool')
     assert ok, msg
 
@@ -602,7 +620,7 @@ def test_check_tool_first_opt_out_with_reasoning_accepts():
     """#294: an explicit `tool-catalog: none (reasoning: ...)` opt-out passes —
     the worker is not forced to use a tool that genuinely doesn't apply."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ndecode the crypto layer',
         'facts-snapshot: 1 facts; tool-catalog: none (reasoning: custom scheme, no algorithm match)')
     assert ok, msg
 
@@ -611,7 +629,7 @@ def test_check_tool_first_diagnostic_marker_exempts():
     """#294: a one-off diagnostic marker exempts the dispatch (not every crypto
     mention is a full decode task worth cataloging a tool for)."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 一次性诊断 crypto string layout',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\n一次性诊断 crypto string layout',
         'facts-snapshot: 1 facts')
     assert ok, msg
 
@@ -621,7 +639,7 @@ def test_check_tool_first_stopword_no_false_positive():
     trigger the gate — 'static overview of imports' is an adjective, not a
     disasm-constant-check dispatch."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 static overview of imports',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstatic overview of imports',
         'facts-snapshot: 1 facts')
     assert ok, msg
 
@@ -635,13 +653,11 @@ def test_check_tool_first_category_dir_paths_no_false_positive():
     Regression: reviewer-verified that the category rename (aux→auxiliary,
     pipeline→pipelines) injected the un-stopworded keywords 'pipelines'/
     'auxiliary' and these very doc paths started REJECTing."""
-    desc = ('[T1 tools=python] claim C-001 evidence registration via '
-            'python tools/pipelines/build_evidence_index.py <ws> --write')
+    desc = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["python"]}}\nevidence registration via python tools/pipelines/build_evidence_index.py <ws> --write')
     ok, msg = check_tool_first({}, desc, 'facts-snapshot: 1 facts')
     assert ok, f"tools/pipelines/ path mention must not reject: {msg}"
 
-    desc2 = ('[T1 tools=python] claim C-001 cold-start baseline via '
-             'python tools/auxiliary/measure_cold_start.py <ws> --json')
+    desc2 = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["python"]}}\ncold-start baseline via python tools/auxiliary/measure_cold_start.py <ws> --json')
     ok2, msg2 = check_tool_first({}, desc2, 'facts-snapshot: 1 facts')
     assert ok2, f"tools/auxiliary/ path mention must not reject: {msg2}"
 
@@ -649,19 +665,19 @@ def test_check_tool_first_category_dir_paths_no_false_positive():
 def test_check_tool_first_operation_stopword_no_false_positive():
     """#294 H2: the 'decode' capability op is also routine prose — stopworded."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 decode the string layout',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ndecode the string layout',
         'facts-snapshot: 1 facts')
     assert ok, msg
 
 
-def test_check_tool_first_cjk_adjacent_keyword_rejects():
+def test_check_tool_first_cjk_adjacent_keyword_still_matches():
     """#294: a keyword glued to CJK text (解码crypto层) must still match —
     ASCII-only boundaries, because Python's \b treats CJK chars as word chars
-    and would silently bypass the gate."""
+    and would silently bypass the gate. H1: match -> advisory, not reject."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 解码crypto层',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\n解码crypto层',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok
     assert 'crypto-tool' in msg
 
 
@@ -669,25 +685,26 @@ def test_check_tool_first_keyword_inside_longer_word_ignored():
     """#294: 'crypto' inside 'cryptography' must NOT match (ASCII boundary
     rejects the trailing ASCII letter)."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 uses cryptography library for hashing',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nuses cryptography library for hashing',
         'facts-snapshot: 1 facts')
     assert ok, msg
 
 
 def test_check_tool_first_negated_diagnostic_not_exempt():
     """#294: 'not a one-off diagnostic' must NOT count as an exemption — the
-    diagnostic marker is negation-aware."""
+    diagnostic marker is negation-aware. H1: non-exempt = advisory demand,
+    the dispatch still proceeds."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 not a one-off diagnostic — decode the crypto layer',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nnot a one-off diagnostic — decode the crypto layer',
         'facts-snapshot: 1 facts')
-    assert not ok
+    assert ok
     assert 'crypto-tool' in msg
 
 
 def test_check_tool_first_diagnostic_case_insensitive():
     """#294: 'One-off' (capitalised) is still an exemption."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 One-off diagnostic — inspect crypto section',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nOne-off diagnostic — inspect crypto section',
         'facts-snapshot: 1 facts')
     assert ok, msg
 
@@ -695,15 +712,16 @@ def test_check_tool_first_diagnostic_case_insensitive():
 def test_check_tool_first_marker_case_insensitive():
     """#294: the `tool-catalog:` marker is recognised case-insensitively."""
     ok, msg = check_tool_first(
-        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        {}, '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ndecode the crypto layer',
         'facts-snapshot: 1 facts; TOOL-CATALOG: crypto-tool')
     assert ok, msg
 
 
-def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsys):
-    """#294 e2e: a dispatch whose description matches a registered tool's
-    keyword ('crypto') with no `tool-catalog:` marker is REJECTED by the 13th
-    pre_check gate, even when the plan gate itself passes."""
+def test_pre_check_advisory_dispatch_matching_tool_without_marker(tmp_path, capsys):
+    """#294 e2e / H1: a dispatch whose description matches a registered
+    tool's keyword ('crypto') with no `tool-catalog:` marker PROCEEDS
+    through the pre_check battery (tool-first is advisory-only) and leaves a
+    toolfirst_advisory ledger row — the demotion is observable."""
     ws = tmp_path / 'ws'
     (ws / 'runs').mkdir(parents=True)
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
@@ -711,12 +729,16 @@ def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsy
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}\n'
+        '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\n'
         'facts-snapshot: 1 facts\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
-    assert rc == 2
-    assert 'REJECT toolfirst' in captured.err
+    assert rc == 0, captured.err  # H1: advisory-only — dispatch proceeds
+    ledger_rows = (ws / 'runs' / 'logs').glob('kunglao-*.jsonl')
+    actions = [json.loads(ln).get('action')
+               for p in ledger_rows
+               for ln in p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+    assert 'toolfirst_advisory' in actions
 
 
 def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
@@ -729,10 +751,27 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}\n'
+        '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\n'
         'facts-snapshot: 1 facts\ntool-catalog: crypto-tool\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
+
+
+def test_check_tool_first_bool_face_is_documented_constant():
+    """issue 380 P2 finding 3: post-H1 the bool face is a CONSTANT True for every
+    evaluation mode — the tuple shape is kept only so the sink battery stays
+    uniform with the enforcing gates; the demand payload lives in `reason`,
+    and the docstring contracts the invariant (readers must not branch on
+    ok)."""
+    for desc, prompt in (
+        ('decode the crypto layer', ''),
+        ('decode the crypto layer', 'tool-catalog: wrong-tool'),
+        ('plain unrelated prose', ''),
+    ):
+        ok, msg = check_tool_first({}, desc, prompt)
+        assert ok is True, (desc, prompt, msg)
+        assert msg
+    assert 'constant' in (check_tool_first.__doc__ or '').lower()
 
 
 # ---------- issue #270: every REJECT carries non-empty additionalContext ----------
@@ -747,6 +786,7 @@ REJECT_NAMES = [
     'plan',
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
     'granularity',  # issue 241: claim granularity discipline
+    'methodfamily',  # #432: method-family vocabulary gate
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -771,6 +811,7 @@ REJECT_FIX_KEYWORDS = {
     'devreason': 'agent-reasoning',
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
     'granularity': 'claim_granularity.py',  # issue 241: the mint entrypoint
+    'methodfamily': 'method_families.yaml',  # #432: the registry path
 }
 
 
@@ -844,7 +885,7 @@ def _paths_for(ws: Path) -> dict:
 
 def _budget_payload(prompt=None, desc=''):
     env = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-           '"tools": ["grep"], "agent": "w-test"}}')
+           '"tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}')
     if prompt is None:
         prompt = env + '\nfacts-snapshot: 1 facts'
     return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
@@ -950,7 +991,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('selfcap', 'time_budget_minutes',
                       lambda ws=ws: wb.pre_check(
                           _budget_payload(
-                              desc='[T1 tools=grep] claim C-001 cap it at 30 min'),
+                              desc='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\ncap it at 30 min'),
                           _paths_for(ws))))
 
     # 8 heartbeat — no live heartbeat registered
@@ -984,7 +1025,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
         {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 1},
     ])
-    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'
+    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts'
     scenarios.append(('devreason', 'agent-reasoning',
                       lambda ws=ws: wb.pre_check(_budget_payload(prompt=env_c002), _paths_for(ws))))
 
@@ -1048,7 +1089,7 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
         'cwd': str(ws),
         'tool_input': {'name': 'w-test',
                        'description': '',
-                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'},
+                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts'},
     }
     r = subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / 'hooks'
@@ -1188,8 +1229,7 @@ def test_pre_check_mcp_vm_channel_dispatch_passes(tmp_path, capsys):
          'evidence_tier_attempted': 2},
     ])
     payload = _budget_payload(
-        desc='[T3 tools=mcp__x64dbg__connect_remote,mcp__x64dbg__read_memory] '
-             'claim C-001 strings')
+        desc='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 3, "tools": ["mcp__x64dbg__connect_remote", "mcp__x64dbg__read_memory"]}}\nstrings')
     rc = pre_check(payload, _paths_for(ws))
     assert rc == 0, capsys.readouterr().err
 

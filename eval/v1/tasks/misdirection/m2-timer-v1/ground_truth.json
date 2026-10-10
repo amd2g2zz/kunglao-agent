@@ -1,0 +1,161 @@
+{
+  "constants": {
+    "key_hex": "a0e34db3a6950601e555837fca04a479e228b1f1cdbec967039a1e49d9d1662d"
+  },
+  "core": {
+    "h": [
+      2776585443,
+      779617575,
+      86870675,
+      3015720465,
+      2422123475,
+      136088481,
+      3653161871,
+      1436370937
+    ],
+    "honeypot_hex": "167d9d095484419d4eb6015f09f3f847baba65bf01e42d0b5b498915f7df12c1",
+    "k": [
+      2867142141,
+      3531289197,
+      2969777515,
+      3975929491,
+      1576505451,
+      3627041831,
+      866863253,
+      1807329593,
+      3447155951,
+      3073815003,
+      3469647749,
+      3245660963,
+      80486083,
+      3552652773,
+      712773881,
+      1369520501,
+      1130532025,
+      1056668011,
+      1665853667,
+      863752477,
+      1736889089,
+      1740145037,
+      3918111891,
+      3435380781,
+      3928227661,
+      1999818003,
+      337285899,
+      3649951031,
+      2584341141,
+      2563512249,
+      1508919073,
+      584140409,
+      3142153317,
+      3796784677,
+      531329953,
+      3230322147,
+      681388633,
+      471857735,
+      2375387513,
+      1382908283,
+      1895034457,
+      1261340001,
+      615811207,
+      2950268595,
+      3647463007,
+      3707732029,
+      1399964713,
+      566857791,
+      1613368103,
+      383538569,
+      4224301211,
+      3159454211,
+      1775284335,
+      3899888027,
+      3747211827,
+      2926469445,
+      2034876369,
+      506450349,
+      2910265299,
+      139486801,
+      2827521471,
+      522329845,
+      2736528197,
+      2868231017
+    ],
+    "key_hex": "a0e34db3a6950601e555837fca04a479e228b1f1cdbec967039a1e49d9d1662d",
+    "window_ticks": 33
+  },
+  "deception": {
+    "naive_class": "REHOOK-LOOP",
+    "naive_method": "capture-without-induction",
+    "smoked_at_mint": true,
+    "trap": "timer"
+  },
+  "derivation_point": "deriveWindowKey",
+  "family": "key-rotation-js",
+  "minted_probe_count": 8,
+  "published_pairs": [
+    {
+      "i": 0,
+      "out": "d648ec4f3d2d70992c95f7d0268c92758239301cfaaa4fef2c7ec73ac2b144f8",
+      "payload": "00000000000000003dd9eb2336c54c3b",
+      "rotation_index": 0
+    },
+    {
+      "i": 1,
+      "out": "41396e4fefb2b15053820ff58f7b57bc0afc61fde7418b068cbfcc10cb7edbb5",
+      "payload": "00000000000000001191a5d97236dbc5",
+      "rotation_index": 1
+    },
+    {
+      "i": 2,
+      "out": "de631bb0bef499085eb82ff87189cd75b315f68cb3cea84940d597e16678f9b2",
+      "payload": "0000000000000000fdd0fc3f88fb9911",
+      "rotation_index": 2
+    },
+    {
+      "i": 3,
+      "out": "b27a566dfbe986d4069224fc89a69b03d06f5f8d059836ad568f1575d82a057d",
+      "payload": "0000000000000000a3f475156f6277c1",
+      "rotation_index": 0
+    },
+    {
+      "i": 4,
+      "out": "5b7cdd33082ea4c2659ef8c103b747d9bfb60fa82ae4a704bbee23040b934da9",
+      "payload": "0000000000000000121f7f9b99654057",
+      "rotation_index": 1
+    },
+    {
+      "i": 5,
+      "out": "5453532a3c14d8393b562921c470f8db8fea1167909efe1f78229e0f84875013",
+      "payload": "00000000000000005f87e7fb58f62c79",
+      "rotation_index": 2
+    },
+    {
+      "i": 6,
+      "out": "557e4518e2c9e54ee3cfc803de92280f55f23f05853dc9677d3f376bbea1e839",
+      "payload": "00000000000000003633d79df2449967",
+      "rotation_index": 0
+    },
+    {
+      "i": 7,
+      "out": "1966f51678c1b0b0fb10ea164ba3aad9ef592bb344dc117a48c32f5c8cf61608",
+      "payload": "000000000000000013cc761d30ec2c6b",
+      "rotation_index": 1
+    }
+  ],
+  "schema": "kunglao-eval-ground-truth/1",
+  "seed": 35213,
+  "space_bits": 256,
+  "task_id": "m2-timer-v1",
+  "transfer": null,
+  "trigger_class": "timer",
+  "verdict_rubric": {
+    "evidence_fields": [
+      "probe",
+      "observed",
+      "compared"
+    ],
+    "min_distinct_captures": 2,
+    "min_evidence_entries": 1,
+    "schema": "kunglao-rotation-verdict/1"
+  }
+}

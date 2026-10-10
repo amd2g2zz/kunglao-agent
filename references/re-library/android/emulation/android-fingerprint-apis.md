@@ -1,17 +1,17 @@
 ---
 name: android-fingerprint-apis
-description: Device/sensor fingerprint API taint seed table - the capability doc driving dexdc `--taint-api`
-  seeds; hypotheses (risk-control vs tracking) and anomaly concentration. When a claim asks whether the
-  sample collects fingerprint identifiers and where they flow (#692).
+description: Device/sensor fingerprint API taint seed table — the capability doc driving dexdc `--taint-api`
+  seeds; risk-control vs tracking interpretation and anomaly concentration. When a task asks whether the
+  sample collects fingerprint identifiers and where they flow.
 domain: android
 family: emulation
 ---
-# Android Fingerprint APIs — taint seed reference (#692 WP5)
+# Android Fingerprint APIs — taint seed reference
 
 > Capability doc for the `android:data-flow` provider chain: the seed table
 > (`android-fingerprint-seeds.yaml`, same directory) drives
 > `tools/static/dexdc_scanner.py --mode taint` (upstream `--taint-api`
-> seeds + `--taint-solve`). Read this when a claim asks whether the sample
+> seeds + `--taint-solve`). Read this when a task asks whether the sample
 > COLLECTS fingerprint-grade identifiers and where they FLOW (source ->
 > sink chains, `evidence/dexdc_taint.json`).
 
@@ -20,7 +20,7 @@ family: emulation
 - **Data, not code**: entries are consumed by the dexdc wrapper as taint
   seeds; extending detection = add an entry (yara-rules lifecycle — no code
   change, no re-register).
-- **Categories** map findings to hypothesis-candidate labels
+- **Categories** map findings to candidate labels
   (`taint:<category>:<api>` via `hypothesis_seeder.seed_taint_candidates`)
   and to the anomaly concentration score
   (`anomaly_detector.observe_taint` — distinct high-risk families).
@@ -29,18 +29,18 @@ family: emulation
   `mid` = correlating/behavioral (SSID, sensors, advertising id,
   SIM operator).
 
-## The two competing explanations this table feeds (#662)
+## The two competing explanations this table feeds
 
 A taint finding is evidence FOR both:
 1. **Risk-control collection** — legitimate SDK/device-fingerprint
    behavior (anti-fraud, push attribution);
 2. **Malicious tracking** — spyware-grade identifier harvesting.
 
-The seeder appends the finding as a COMPETITOR CANDIDATE on the
-pq-family scaffold — adjudication stays the analyst's job (refute via
-refuting_fact_id / supersede per #528). The anomaly note
-(`notes/taint-observation.md`) is an OBSERVATION, never a verdict
-demotion (#663 D8 posture).
+Choosing between the two stays with the analyst: weigh the finding against
+the rest of the evidence base — including contrary evidence — before
+promoting either explanation. The anomaly note
+(`notes/taint-observation.md`) is an OBSERVATION to be explained, never by
+itself a verdict on the sample.
 
 ## api shape
 

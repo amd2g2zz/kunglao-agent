@@ -24,25 +24,8 @@ Self-stamp guard: verifier_id == claim's worker_id → NOT independent → STAMP
 (maker-checker §1b: the maker cannot self-certify).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] blind_gate WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import json
 import re
 from datetime import datetime, timezone
@@ -390,8 +373,11 @@ def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str
             f"no verifier dispatch evidence for {claim_id} (verifier-dispatch "
             f"gate, #57 gate 5: a claim cannot reach PROVEN-candidate without "
             f"a dispatched verifier). Fix: dispatch the verifier FIRST — e.g. "
-            f"`[T1 tools=Read,Grep,Write] claim {claim_id}` to agent "
-            f"kunglao-redteam (kunglao-redteam --target claim {claim_id}); "
+            f'prompt agent kunglao-redteam with the v1 dispatch envelope '
+            f'`{{"kunglao_dispatch": {{"version": 1, "claim": "{claim_id}", '
+            f'"tier": 1, "tools": ["Read", "Grep", "Write"], '
+            f'"agent": "kunglao-redteam"}}}}` '
+            f"(kunglao-redteam --target claim {claim_id}); "
             f"its DIFF lands at runs/verify-redteam-{claim_id}.md and the "
             f"dispatch row lands in runs/logs/ — then re-run the promotion.")
 

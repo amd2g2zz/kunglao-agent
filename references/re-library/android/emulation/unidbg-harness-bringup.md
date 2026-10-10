@@ -11,9 +11,8 @@ unidbg-env-filling answers what the library READS once it runs. This card
 owns the substrate decisions that decide what gets to run at all: which
 interception slot to place where, when it may install, and how the artifact
 itself enters the emulator when the on-disk form cannot. Split rationale:
-the aggregation target (unidbg-env-filling) was at budget, and these are
-DECISIONS BEFORE filling, not answers during it — a substrate mischoice
-invalidates every later fill, so it is read first.
+these are DECISIONS BEFORE filling, not answers during it — a substrate
+mischoice invalidates every later fill, so it is read first.
 
 ## When to Use
 
@@ -28,20 +27,19 @@ invalidates every later fill, so it is read first.
 
 ## The six-candidate selection shelf
 
-**Family: interception-substrate selection (tools-dynamic hook vocabulary;
-queue cluster: unidbg harness operations)**
+**Family: interception-substrate selection (tools-dynamic hook vocabulary)**
 
 Candidates do not interchange — the gap class picks the slot, not
 preference:
 
-| Candidate | When to choose it | Cost | Evidence | Variant inspiration |
+| Candidate | When to choose it | Cost | Evidence to capture | Variant inspiration |
 |---|---|---|---|---|
-| Java-layer bridge override (the emulator's JNI-provider switch) | The gap is a Java-side call the library makes — dispatch on the method signature inside the provider override | Small per signature; every unhandled case must fall through to super so the next gap still names itself | 2 queue sources | Per-signature dispatch owned by unidbg-env-filling's JNI section — this row is the CHOICE, that card owns the fill |
-| PLT/GOT-class import redirect (xHook-class) | The gap is an import the library calls through its import table — catch every call site at once without touching code | Small; registration binds to the import snapshot at install time (failure signature below) | 2 queue sources | Import-table interposition — one registration answers every caller |
-| Inline-hook engine (Dobby-class prologue patch) | The gap is a symbol whose callers bypass the import table (internal calls, direct branches) or a probe hook must survive import re-resolution | Medium: per-symbol patch + trampoline; survives import-table refresh by construction | 2 queue sources | Symbol-level interposition below the import layer |
-| Emulator-native instruction hooks (CodeHook-class callbacks) | The gap needs per-instruction visibility (trace, register snapshot, branch steering) | High line rates; changes with backend (row below) | 1 queue source | The emulator's own instruction channel — the same channel the trace move in unidbg-env-filling consumes |
-| Backend-level single-step / memory hooks | Register/memory-conditional observation (watchpoints, per-access traps) | Medium-high | 1 queue source | Watchpoint channel from tools-dynamic vocabulary |
-| Device-side Frida-class channel (outside the harness) | The question is what a REAL device does — the comparator/reference half, never the subject under emulation | Device + injection channel | 2 queue sources | Comparator-pair discipline per native-sign-recovery step 2 |
+| Java-layer bridge override (the emulator's JNI-provider switch) | The gap is a Java-side call the library makes — dispatch on the method signature inside the provider override | Small per signature; every unhandled case must fall through to super so the next gap still names itself | Signature list + answer log | Per-signature dispatch owned by unidbg-env-filling's JNI section — this row is the CHOICE, that card owns the fill |
+| PLT/GOT-class import redirect (xHook-class) | The gap is an import the library calls through its import table — catch every call site at once without touching code | Small; registration binds to the import snapshot at install time (failure signature below) | Hook fire log with call sites | Import-table interposition — one registration answers every caller |
+| Inline-hook engine (Dobby-class prologue patch) | The gap is a symbol whose callers bypass the import table (internal calls, direct branches) or a probe hook must survive import re-resolution | Medium: per-symbol patch + trampoline; survives import refresh by construction | Symbol + trampoline address | Symbol-level interposition below the import layer |
+| Emulator-native instruction hooks (CodeHook-class callbacks) | The gap needs per-instruction visibility (trace, register snapshot, branch steering) | High line rates; changes with backend (row below) | Instruction window + sample rows | The emulator's own instruction channel — the same channel the trace move in unidbg-env-filling consumes |
+| Backend-level single-step / memory hooks | Register/memory-conditional observation (watchpoints, per-access traps) | Medium-high | Access trap log | Watchpoint channel from tools-dynamic vocabulary |
+| Device-side Frida-class channel (outside the harness) | The question is what a REAL device does — the comparator/reference half, never the subject under emulation | Device + injection channel | Device-side capture pair | Comparator-pair discipline per native-sign-recovery step 2 |
 
 Selection rules that outrank the shelf: **never stack two frameworks** in
 one harness — registration orders interact and the same slot gets
@@ -53,23 +51,75 @@ comparator channel on the device side.
 
 **Family: install-timing discipline (loader/init-window vocabulary)**
 
-| Install window | What it can catch | Evidence | Variant inspiration |
+| Install window | What it can catch | Evidence to capture | Variant inspiration |
 |---|---|---|---|
-| Before load (registered ahead of module load) | Init-time import calls — PLT-class registration MUST precede first use; a late registration silently never fires | 1 queue source | Register-before-first-use: same lesson as the file resolver registered before library load (unidbg-env-filling) |
-| After load, before init-array/JNI_OnLoad runs | Init-time behavior with post-init noise excluded — the windowed-latch posture from dynamic-observation-ladders applied to the harness | 1 queue source | Windowed latch — observation windows, not global switches |
-| After init completes | Post-init business calls only; init-time gaps become invisible (they already ran unanswered) | 1 queue source | Late-attach blindness: what already ran cannot be observed retroactively |
+| Before load (registered ahead of module load) | Init-time import calls — PLT-class registration MUST precede first use; a late registration silently never fires | Registration timestamp vs first call | Register-before-first-use: same lesson as the file resolver registered before library load (unidbg-env-filling) |
+| After load, before init-array/JNI_OnLoad runs | Init-time behavior with post-init noise excluded — the windowed-latch posture from dynamic-observation-ladders applied to the harness | Windowed capture rows | Windowed latch — observation windows, not global switches |
+| After init completes | Post-init business calls only; init-time gaps become invisible (they already ran unanswered) | What the early window MISSED | Late-attach blindness: what already ran cannot be observed retroactively |
+
+## Registration snippets (skeletons — class/method names follow the
+emulator's public hook API; the callback bodies are per-target)
+
+```java
+// PLT/GOT-class import redirect (xHook-class): one registration answers
+// every call site of the import — but binds to the import snapshot, so
+// register BEFORE loadLibrary and refresh() after the imports settle.
+IxHook xHook = XHookImpl.getInstance(emulator);
+xHook.register("libtarget.so", "strlen", new ReplaceCallback() {
+    @Override
+    public HookStatus onCall(Emulator<?> emulator, HookContext ctx, long origin) {
+        UnidbgPointer arg = UnidbgPointer.pointer(emulator, ctx.getLongArg(0));
+        System.out.println("[xhook strlen] "
+            + (arg == null ? "?" : arg.getString(0)));     // evidence, not patch
+        return HookStatus.RET(emulator, origin);           // call the original
+    }
+});
+xHook.refresh();   // bind pending hooks to the import table snapshot
+```
+
+```java
+// Inline-hook engine (Dobby-class prologue patch): per-symbol, survives
+// import re-resolution by construction — the escape hatch when a PLT-class
+// hook goes quiet (import-refresh escape, below).
+Dobby dobby = Dobby.getInstance(emulator);
+Symbol sym = module.findSymbolByName("target_internal_check");
+dobby.instrument(sym, new InstrumentCallback<Arm64RegisterContext>() {
+    @Override
+    public void onInstruction(Emulator<?> emulator, long address,
+                              Arm64RegisterContext ctx) {
+        System.out.println("[dobby] x0=0x" + Long.toHexString(ctx.getXLong(0)));
+    }
+});
+// NOTE: callback class/method names drift across unidbg builds
+// (InstrumentCallback vs DobbyInstrument; getXLong vs getLongArg) — pin to
+// YOUR build's hook API; the registration face above is the stable shape.
+```
+
+```java
+// Emulator-native instruction hooks (CodeHook-class): per-instruction
+// visibility. High line rates — scope to a module window (template face:
+// emulator.traceCode(module.base, module.base + module.size)); a custom
+// callback rides the same channel with begin/end bounds.
+emulator.getBackend().hook_add_new(new CodeHook() {
+    @Override public void hook(Backend backend, long address, int size, Object user) {
+        // register snapshots, branch steering — the per-instruction primitive
+    }
+    @Override public void onAttach(UnHook unHook) { }
+    @Override public void detach() { }
+}, module.base, module.base + module.size, null);
+```
 
 ## Bring-up failure signatures
 
 **Family: substrate-failure decode (failure-signature vocabulary)**
 
-| Failure signature | Do this first | Evidence | Variant inspiration |
+| Failure signature | Do this first | Evidence to capture | Variant inspiration |
 |---|---|---|---|
-| PLT-class hook fires for the earliest calls, then goes permanently silent | Import-refresh escape: the library re-resolved or re-patched its import slots after registration (late-loaded dependency, self-refresh, anti-hook sweep), dropping the redirect. Move to symbol-level inline hook (survives refresh by construction) or re-register after the refresh point | 1 queue source (explicit signature) | A snapshot-bound mechanism escapes by invalidating the snapshot — interpose below the snapshot layer instead of re-arming it |
-| Instruction hook ignored or faults only on the fast backend | The JIT-class backend does not support per-instruction code hooks — instruction-level work requires the default backend; re-choose per the backend trade (run-fast vs analyze-deep) | 1 queue source | Capability is backend-bound, not tool-bound — same channel-descent logic as observation channels |
-| Harness hang right after a thread-dispatch call, no further log | The dispatcher waits on a queued thread body the single-thread backend never schedules — force the queued body inline (or cap dispatch depth) rather than chasing the wait chain | 1 queue source | Hang-on-dispatch: fix the scheduler assumption, not the waiter |
-| Packed SO: loader dies inside the unpacking stub, or unpacks and then fails its own self-check under emulation | Dump-then-load (below) instead of re-fighting the packer | 1 queue source | Skip the gate you cannot answer; carry the state past it |
-| Packed SO loads but exports resolve to nothing usable | Same move — the on-disk form is not the real code; get the loaded form | 1 queue source | The loaded image is the ground truth, not the file image |
+| PLT-class hook fires for the earliest calls, then goes permanently silent | Import-refresh escape: the library re-resolved or re-patched its import slots after registration (late-loaded dependency, self-refresh, anti-hook sweep), dropping the redirect. Move to symbol-level inline hook (survives refresh by construction) or re-register after the refresh point | Fire log cutoff address vs refresh point | A snapshot-bound mechanism escapes by invalidating the snapshot — interpose below the snapshot layer instead of re-arming it |
+| Instruction hook ignored or faults only on the fast backend | The JIT-class backend does not support per-instruction code hooks — instruction-level work requires the default backend; re-choose per the backend trade (run-fast vs analyze-deep) | Backend identity + hook error | Capability is backend-bound, not tool-bound — same channel-descent logic as observation channels |
+| Harness hang right after a thread-dispatch call, no further log | The dispatcher waits on a deferred thread body the single-thread backend never schedules — force the deferred body inline (or cap dispatch depth) rather than chasing the wait chain | Last log line + thread list | Hang-on-dispatch: fix the scheduler assumption, not the waiter |
+| Packed SO: loader dies inside the unpacking stub, or unpacks and then fails its own self-check under emulation | Dump-then-load (below) instead of re-fighting the packer | The loader failure line | Skip the gate you cannot answer; carry the state past it |
+| Packed SO loads but exports resolve to nothing usable | Same move — the on-disk form is not the real code; get the loaded form | Export table diff on-disk vs dumped | The loaded image is the ground truth, not the file image |
 
 ## Dump-then-load (artifact acquisition when the on-disk form cannot run)
 
@@ -96,7 +146,7 @@ and load THAT into the harness.
 ```python
 # early calls logged, then silence; the library still calls the symbol:
 run_once()               # hook fires
-run_more()               # hook silent — but the syscall IS happening
+run_more()               # hook silent — but the call IS happening
 # decode: registration bound to the import snapshot at install time;
 # a late-loaded dependency re-resolved the slot. Re-registering at the
 # same layer re-arms the same trap. Move DOWN one layer: inline-hook the

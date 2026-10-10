@@ -74,19 +74,40 @@ def test_event_stuck_workers_present_declared() -> None:
 # ---------- STAGE_PROBES position --------------------------------------------
 
 def test_stuck_workers_present_at_schedule_index_2() -> None:
-    """#595: the new Event must be at index 2 of STAGE_PROBES[State.SCHEDULE].
-
-    The MDP pins the position so the existing probes are pushed down by one
-    (preserving the original tail invariant), not replaced.
+    """#595: the new Event must sit BEFORE the saturation tail of
+    STAGE_PROBES[State.SCHEDULE] — a stuck worker can never be masked by
+    dispatchable work. Originally pinned at index 2; #342 prepended
+    VERIFY_STALE at index 0 (the stale-partial forcing point, evaluated
+    FIRST per the issue), pushing the #595 probe set down one to 1/2/3;
+    the verification-debt gate then inserted at index 1 (debt forcing
+    precedes every blocked flavor, so verifiable debt can never be read
+    as blocked), pushing it down one more to 2/3/4.
+    The pin's intent is unchanged: the earlier probe order is preserved
+    (pushed down, not replaced), STUCK still precedes the saturation tail.
     """
     probes = cc.STAGE_PROBES[cc.State.SCHEDULE]
-    assert probes[2] is cc.Event.STUCK_WORKERS_PRESENT, (
-        f"STUCK_WORKERS_PRESENT must sit at index 2 of STAGE_PROBES[SCHEDULE], "
-        f"got {probes[2]!r} at position 2")
-    # original entries preserved (not replaced): WORK_AND_FREE_SLOT,
-    # PARTIALS_AND_FREE_SLOT stay at 0/1; the remaining tail stays in order.
-    assert probes[0] is cc.Event.WORK_AND_FREE_SLOT
-    assert probes[1] is cc.Event.PARTIALS_AND_FREE_SLOT
+    assert probes[0] is cc.Event.VERIFY_STALE, (
+        f"VERIFY_STALE must sit at index 0 of STAGE_PROBES[SCHEDULE] (#342), "
+        f"got {probes[0]!r}")
+    assert probes[1] is cc.Event.DEBT_GATE, (
+        f"DEBT_GATE must sit at index 1 of STAGE_PROBES[SCHEDULE] "
+        f"(debt forcing precedes every blocked flavor), "
+        f"got {probes[1]!r} at position 1")
+    assert probes[4] is cc.Event.STUCK_WORKERS_PRESENT, (
+        f"STUCK_WORKERS_PRESENT must sit at index 4 of STAGE_PROBES[SCHEDULE] "
+        f"(#595 semantics, displaced by #342 VERIFY_STALE at 0, the debt "
+        f"gate at 1 and the #484 PARTIALS slot at 2), got {probes[4]!r} "
+        f"at position 4")
+    # #484 completion: PARTIALS_AND_FREE_SLOT precedes WORK_AND_FREE_SLOT
+    # (verify-first interleave; the seven-round starved-verifier mode).
+    assert probes[2] is cc.Event.PARTIALS_AND_FREE_SLOT
+    assert probes[3] is cc.Event.WORK_AND_FREE_SLOT
+    tail = probes[5:]
+    assert tail == [cc.Event.WORK_NO_FREE_SLOT,
+                    cc.Event.FAILURE_ARTIFACTS_DUE,
+                    cc.Event.LADDER_EXHAUSTED_BLOCKER,
+                    cc.Event.LADDER_REQUIRED_BLOCKER,
+                    cc.Event.UNEXPECTED_STATE]
 
 
 # ---------- TRANSITIONS wiring ----------------------------------------------

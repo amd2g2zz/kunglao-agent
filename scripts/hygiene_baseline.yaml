@@ -40,12 +40,14 @@ files:
     r1: 2
   scripts/blind_gate.py:
     r1: 23
+  scripts/calibration_face.py:
+    r1: 2
   scripts/calibration_gate.py:
     r1: 1
   scripts/carrier_consistency.py:
     r1: 3
   scripts/case_bank.py:
-    r1: 8
+    r1: 9
   scripts/check_global_rule_subset.py:
     r1: 2
   scripts/claim_expiry.py:
@@ -54,13 +56,15 @@ files:
     r1: 3
   scripts/completion_gate.py:
     r1: 21
+  scripts/compute_priors.py:
+    r1: 1
   scripts/contracts.py:
-    r1: 9
+    r1: 12
   scripts/convergence_check.py:
-    r1: 133
+    r1: 165
     r2: 2
   scripts/convergence_health.py:
-    r1: 15
+    r1: 18
   scripts/cost_gate.py:
     r1: 2
   scripts/dead_letter.py:
@@ -68,7 +72,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 13
+    r1: 18
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -82,9 +86,21 @@ files:
   scripts/digest_build.py:
     r1: 16
   scripts/dispatch_context.py:
-    r1: 14
+    r1: 17
+  scripts/distill_spine.py:
+    r1: 6
   scripts/dual_gate.py:
     r1: 3
+  scripts/e2e/audit.py:
+    r1: 9
+  scripts/e2e/checkpoints.py:
+    r1: 77
+  scripts/e2e/llm_faces.py:
+    r1: 14
+  scripts/e2e/model.py:
+    r1: 6
+  scripts/e2e/runtime.py:
+    r1: 6
   scripts/emit_gate.py:
     r1: 5
   scripts/encoding_lint.py:
@@ -92,7 +108,7 @@ files:
   scripts/entropy_face.py:
     r1: 1
   scripts/env_check.py:
-    r1: 56
+    r1: 57
   scripts/env_manifest.py:
     r1: 22
   scripts/env_repair_l1.py:
@@ -101,35 +117,83 @@ files:
     r1: 6
   scripts/error_response.py:
     r1: 8
+  scripts/eval_chain.py:
+    r1: 1
+  scripts/eval_chain_grader.py:
+    r1: 1
+  scripts/eval_chain_mint.py:
+    r1: 1
+  scripts/eval_chain_render.py:
+    r1: 1
+  scripts/eval_chain_targets.py:
+    r1: 1
+  scripts/eval_checker.py:
+    r1: 3
+  scripts/eval_contract.py:
+    r1: 1
+  scripts/eval_control_arm.py:
+    r1: 1
+  scripts/eval_crypto.py:
+    r1: 1
+  scripts/eval_dataset.py:
+    r1: 3
+  scripts/eval_loop_runner.py:
+    r1: 9
+  scripts/eval_native_sources.py:
+    r1: 1
+  scripts/eval_native_targets.py:
+    r1: 1
+  scripts/eval_smoke_runner.py:
+    r1: 2
+  scripts/eval_split_lint.py:
+    r1: 2
+  scripts/eval_targets.py:
+    r1: 4
+  scripts/eval_tf_graders.py:
+    r1: 1
+  scripts/eval_tf_shadow.py:
+    r1: 1
+  scripts/eval_toolflex.py:
+    r1: 1
   scripts/event_taxonomy.py:
-    r1: 114
+    r1: 118
     r2: 1
+  scripts/exogenous.py:
+    r1: 2
+  scripts/experience_triples.py:
+    r1: 1
   scripts/external_kicker.py:
     r1: 32
   scripts/fact_contradiction_gate.py:
     r1: 1
   scripts/failure_analysis_gate.py:
     r1: 43
+  scripts/feature_mining.py:
+    r1: 4
   scripts/feedback.py:
     r1: 2
   scripts/fixture_excerpt_lint.py:
     r1: 1
   scripts/goal_operationalization.py:
     r1: 1
+  scripts/guardian_kpi.py:
+    r1: 1
   scripts/harness_common.py:
     r1: 1
   scripts/heartbeat.py:
-    r1: 27
+    r1: 16
   scripts/heartbeat_loop_prompt.py:
-    r1: 4
+    r1: 3
   scripts/heartbeat_tick.py:
-    r1: 39
+    r1: 43
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 76
+    r1: 80
+  scripts/hook_exit_codes.py:
+    r1: 6
   scripts/hooks_selfcheck.py:
-    r1: 23
+    r1: 38
   scripts/hypothesis_seeder.py:
     r1: 13
   scripts/hypothesis_store.py:
@@ -144,26 +208,32 @@ files:
     r1: 8
   scripts/install_reference.py:
     r1: 2
+  scripts/instrument_menu.py:
+    r1: 6
+  scripts/intake_battery.py:
+    r1: 4
   scripts/intake_promise.py:
-    r1: 2
+    r1: 6
+  scripts/jadx_exec.py:
+    r1: 14
   scripts/kunglao-decide.py:
     r1: 4
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 196
+    r1: 204
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
     r1: 1
   scripts/kunglao.py:
-    r1: 19
+    r1: 20
   scripts/kunglao_eval.py:
     r1: 13
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 28
+    r1: 33
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -171,15 +241,17 @@ files:
   scripts/kunglao_status.py:
     r1: 7
   scripts/kunglao_upgrade.py:
-    r1: 85
+    r1: 89
   scripts/kunglao_verify.py:
     r1: 29
+  scripts/kunglao_wait.py:
+    r1: 6
   scripts/lessons_telemetry.py:
     r1: 3
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 15
+    r1: 22
   scripts/log_setup.py:
     r1: 1
   scripts/loop_scheduler.py:
@@ -187,9 +259,11 @@ files:
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
-    r1: 13
+    r1: 25
   scripts/mechanism_scheduler.py:
     r1: 16
+  scripts/method_families.py:
+    r1: 5
   scripts/migrate_facts.py:
     r1: 7
   scripts/mission_ledger.py:
@@ -203,17 +277,23 @@ files:
     r1: 6
   scripts/obligation_discovery.py:
     r1: 1
+  scripts/online_distill.py:
+    r1: 5
   scripts/oracle_cadence.py:
     r1: 9
     r2: 1
+  scripts/oracle_case_admission.py:
+    r1: 10
   scripts/oracle_runner.py:
-    r1: 44
+    r1: 51
   scripts/outcome_capture.py:
     r1: 13
   scripts/pkg_detect.py:
     r1: 8
   scripts/plan_drift_detector.py:
     r1: 15
+  scripts/plan_epistemics.py:
+    r1: 1
   scripts/plan_reviser.py:
     r1: 2
   scripts/plan_stages.py:
@@ -225,11 +305,13 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 43
+    r1: 56
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
     r1: 2
+  scripts/query_formulation.py:
+    r1: 3
   scripts/re_pin_references.py:
     r1: 1
     r2: 1
@@ -239,40 +321,96 @@ files:
     r1: 5
   scripts/recov_metrics.py:
     r1: 1
+  scripts/reference_index_build.py:
+    r1: 1
+  scripts/reference_link_walk.py:
+    r1: 1
   scripts/references_recall.py:
     r1: 18
   scripts/refutation_propagate.py:
     r1: 3
   scripts/register_proven_gate.py:
-    r1: 11
+    r1: 13
   scripts/release_check_selfcheck.py:
     r1: 3
   scripts/release_receipt.py:
     r1: 5
+  scripts/replay_ruler.py:
+    r1: 10
   scripts/report_consistency_check.py:
     r1: 1
   scripts/retirement_gate.py:
     r1: 1
   scripts/retract_claim.py:
     r1: 8
+  scripts/reward_settlement.py:
+    r1: 1
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
+    r1: 7
+  scripts/rlvr/__init__.py:
+    r1: 1
+  scripts/rlvr/censored_review.py:
+    r1: 1
+  scripts/rlvr/compose.py:
+    r1: 5
+  scripts/rlvr/expansion.py:
+    r1: 1
+  scripts/rlvr/feature_prior.py:
+    r1: 3
+  scripts/rlvr/incremental_reward.py:
+    r1: 8
+  scripts/rlvr/ledger.py:
+    r1: 1
+  scripts/rlvr/liveness.py:
+    r1: 14
+  scripts/rlvr/meta_arms.py:
     r1: 6
+  scripts/rlvr/policy_compare.py:
+    r1: 1
+  scripts/rlvr/priors.py:
+    r1: 4
+  scripts/rlvr/q_cells.py:
+    r1: 29
+  scripts/rlvr/reward.py:
+    r1: 3
+  scripts/rlvr/scalar.py:
+    r1: 1
+  scripts/rlvr/state.py:
+    r1: 1
+  scripts/rlvr/strategy_store.py:
+    r1: 9
+  scripts/rlvr/triples.py:
+    r1: 3
+  scripts/rlvr/winrate.py:
+    r1: 2
   scripts/roi_settlement.py:
     r1: 4
+  scripts/rollout_ledger.py:
+    r1: 1
   scripts/rollup.py:
     r1: 15
+  scripts/rotation_induction.py:
+    r1: 3
   scripts/route_capability.py:
     r1: 14
+  scripts/runtime_facts.py:
+    r1: 2
+  scripts/scalar_settlement.py:
+    r1: 1
+  scripts/script_harvest.py:
+    r1: 4
   scripts/shell_defaults.py:
     r1: 1
   scripts/stale_blocker_prune.py:
     r1: 1
-  scripts/status_defs.py:
+  scripts/state_signature.py:
     r1: 1
+  scripts/status_defs.py:
+    r1: 4
   scripts/statusline_snapshot.py:
-    r1: 34
+    r1: 47
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -310,14 +448,20 @@ files:
     r2: 1
   scripts/value_replay.py:
     r1: 3
+  scripts/verification_ladder.py:
+    r1: 1
   scripts/verifier_identity.py:
+    r1: 1
+  scripts/verify_backlog_face.py:
     r1: 1
   scripts/verify_status_watch.py:
     r1: 2
+  scripts/wait_dispose.py:
+    r1: 5
   scripts/winrate_curve.py:
-    r1: 4
+    r1: 3
   scripts/wire_up_settings.py:
-    r1: 26
+    r1: 27
   scripts/worker_death.py:
     r1: 9
   scripts/write_gate.py:
@@ -325,7 +469,9 @@ files:
   scripts/write_guard_unlock.py:
     r1: 1
   scripts/ws_layout.py:
-    r1: 3
+    r1: 4
+  scripts/ws_yaml.py:
+    r1: 4
   scripts/zero_output_fingerprint.py:
     r1: 1
   tests/_factories.py:
@@ -333,13 +479,23 @@ files:
   tests/_tiers.py:
     r1: 1
   tests/conftest.py:
-    r1: 1
+    r1: 2
   tests/experiment_difficulty_15.py:
+    r1: 1
+  tests/fixtures/experiments/ex3_bucket_calibration.py:
+    r1: 2
+  tests/fixtures/experiments/ex6_option_death.py:
+    r1: 2
+  tests/test_absorb_settle_597.py:
     r1: 1
   tests/test_acceptance.py:
     r1: 2
   tests/test_acceptance_689.py:
     r1: 4
+  tests/test_act_budget_523.py:
+    r1: 1
+  tests/test_action_space_539.py:
+    r1: 1
   tests/test_adversarial_gate_909.py:
     r1: 2
   tests/test_adversarial_loop_909.py:
@@ -353,7 +509,7 @@ files:
   tests/test_android_lighting_54.py:
     r1: 7
   tests/test_anomaly_detector.py:
-    r1: 1
+    r1: 2
   tests/test_apk_mem_gate.py:
     r1: 1
   tests/test_apkid_scanner.py:
@@ -378,6 +534,8 @@ files:
     r1: 1
   tests/test_bash_fact_guard_809.py:
     r1: 1
+  tests/test_belief_reconcile_600.py:
+    r2: 1
   tests/test_bench_analyze.py:
     r1: 1
   tests/test_bench_answer_key.py:
@@ -400,12 +558,16 @@ files:
     r1: 10
   tests/test_blind_redo_772.py:
     r1: 6
+  tests/test_bp_matrix_faces_546.py:
+    r1: 1
   tests/test_budget_channel_862.py:
     r1: 5
   tests/test_builtin_skills_flag_25.py:
     r1: 2
   tests/test_c_normalize.py:
     r1: 3
+  tests/test_calibration_face_134.py:
+    r1: 6
   tests/test_calibration_gate.py:
     r1: 1
   tests/test_canary_gates.py:
@@ -415,8 +577,10 @@ files:
   tests/test_carrier_consistency_829.py:
     r1: 1
   tests/test_case_admission_126.py:
-    r1: 7
+    r1: 8
     r2: 1
+  tests/test_case_admission_301.py:
+    r1: 10
   tests/test_case_bank_110.py:
     r1: 3
     r2: 1
@@ -463,10 +627,12 @@ files:
     r1: 1
     r2: 1
   tests/test_contracts_drift_102.py:
-    r1: 9
+    r1: 10
   tests/test_convergence_completeness.py:
     r1: 2
   tests/test_convergence_crash_exit_99.py:
+    r1: 2
+  tests/test_convergence_cwd_matrix_240.py:
     r1: 2
   tests/test_convergence_health_crash_3.py:
     r1: 4
@@ -477,6 +643,10 @@ files:
     r1: 3
   tests/test_convergence_rules_file.py:
     r1: 1
+  tests/test_convergence_ws_emptiness_306.py:
+    r1: 4
+  tests/test_convergence_ws_identity_240.py:
+    r1: 3
   tests/test_course_distill_165.py:
     r1: 2
     r2: 1
@@ -495,18 +665,18 @@ files:
   tests/test_debug_flag_task_spec_25.py:
     r1: 3
   tests/test_decide_regression_anchor.py:
-    r1: 56
-    r2: 35
+    r1: 64
+    r2: 39
   tests/test_decide_schema_routing.py:
-    r1: 4
+    r1: 6
   tests/test_decide_state_machine.py:
-    r1: 43
+    r1: 44
   tests/test_decision_pending.py:
     r1: 1
   tests/test_decision_surface_anchor.py:
-    r1: 1
+    r1: 2
   tests/test_decision_teeth.py:
-    r1: 18
+    r1: 19
     r2: 7
   tests/test_declaration_scan.py:
     r1: 2
@@ -525,17 +695,20 @@ files:
   tests/test_deploy_closure_810.py:
     r1: 4
   tests/test_deploy_inversion_783.py:
-    r1: 2
+    r1: 4
   tests/test_deploy_lifecycle_783.py:
-    r1: 10
+    r1: 11
   tests/test_deploy_local_783.py:
-    r1: 1
+    r1: 2
   tests/test_deploy_manifest_783.py:
     r1: 2
   tests/test_deploy_shim.py:
     r1: 5
   tests/test_deploy_surface_755.py:
     r1: 4
+  tests/test_deploy_truth_412.py:
+    r1: 4
+    r2: 1
   tests/test_detector_utilization_127.py:
     r1: 4
     r2: 1
@@ -569,8 +742,12 @@ files:
     r1: 7
   tests/test_dispatch_tools_760.py:
     r1: 7
-  tests/test_dlq_dead_letter.py:
+  tests/test_distill_spine_478.py:
     r1: 1
+  tests/test_distill_spine_478_pr2.py:
+    r1: 3
+  tests/test_dlq_dead_letter.py:
+    r1: 2
   tests/test_doc_pointer_lighting_24.py:
     r1: 2
   tests/test_doc_sync.py:
@@ -589,22 +766,27 @@ files:
     r1: 1
   tests/test_dynamic_channel_698.py:
     r1: 1
+  tests/test_e2e_runner.py:
+    r1: 31
+    r2: 5
   tests/test_emit_gate_880.py:
     r1: 4
   tests/test_encoding_declarations.py:
     r1: 1
   tests/test_encoding_lint_811.py:
     r1: 1
+  tests/test_entry_registration_416.py:
+    r1: 9
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 28
+    r1: 30
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
     r1: 1
   tests/test_env_drift_475.py:
-    r1: 4
+    r1: 5
   tests/test_env_manifest.py:
     r1: 24
   tests/test_env_negative_rule.py:
@@ -612,28 +794,63 @@ files:
   tests/test_env_ports_wiring.py:
     r1: 2
   tests/test_envcheck_modern_757.py:
-    r1: 16
+    r1: 18
+  tests/test_epistemic_pricing_250.py:
+    r1: 4
   tests/test_error_response.py:
     r1: 3
+  tests/test_eval_chain_370.py:
+    r1: 3
+  tests/test_eval_contract_352.py:
+    r1: 1
+  tests/test_eval_control_arm_236.py:
+    r1: 1
   tests/test_eval_harness.py:
     r1: 16
+  tests/test_eval_loop_closure_523.py:
+    r1: 1
+  tests/test_eval_loop_runner_334.py:
+    r1: 1
+  tests/test_eval_matrix_ws5.py:
+    r1: 1
+  tests/test_eval_native_332.py:
+    r1: 7
+  tests/test_eval_release_332.py:
+    r1: 1
+  tests/test_eval_split_lint_518.py:
+    r1: 1
+  tests/test_eval_tf_graders_356.py:
+    r1: 1
+  tests/test_eval_tf_shadow_356.py:
+    r1: 2
+  tests/test_eval_toolflex_356.py:
+    r1: 2
   tests/test_evals_fixture_530.py:
     r1: 1
   tests/test_evals_schema.py:
     r1: 1
   tests/test_event_stream_adoption.py:
-    r1: 20
+    r1: 24
     r2: 1
+  tests/test_event_wirings_434.py:
+    r1: 2
+  tests/test_ex3_bucket_calibration_429.py:
+    r1: 2
   tests/test_exit4_no_repair_e2e.py:
     r1: 10
+  tests/test_exogenous_421.py:
+    r1: 2
   tests/test_expected_hashlock_828.py:
     r1: 1
+  tests/test_experience_freeze_396.py:
+    r1: 2
   tests/test_ext_index.py:
     r1: 12
+    r2: 1
   tests/test_ext_index_tiers_162.py:
     r1: 1
   tests/test_external_kicker.py:
-    r1: 12
+    r1: 13
   tests/test_fact_contradiction_gate.py:
     r1: 6
   tests/test_fact_expected_binding.py:
@@ -643,7 +860,7 @@ files:
   tests/test_fail_closed_gates.py:
     r1: 13
   tests/test_failopen_emit.py:
-    r1: 5
+    r1: 4
   tests/test_failopen_tiering_103.py:
     r1: 1
   tests/test_failure_analysis_transducer.py:
@@ -655,11 +872,18 @@ files:
     r1: 1
   tests/test_falsifier_family18_164.py:
     r1: 3
+  tests/test_feature_mining_460.py:
+    r1: 2
+  tests/test_feature_prior_460b.py:
+    r1: 4
+    r2: 1
   tests/test_feedback.py:
     r1: 2
   tests/test_fix_98_deadlock.py:
     r1: 6
   tests/test_fixture_excerpt_lint.py:
+    r1: 3
+  tests/test_format_stamps_137.py:
     r1: 3
   tests/test_framework_rigidity_57.py:
     r1: 12
@@ -667,10 +891,14 @@ files:
     r1: 7
   tests/test_function_kg_530.py:
     r1: 1
+  tests/test_gate_failclosed.py:
+    r1: 4
   tests/test_gate_layers_717.py:
     r1: 4
   tests/test_gate_power_473.py:
     r1: 3
+  tests/test_gate_residuals_427.py:
+    r1: 8
   tests/test_gc_harness_720.py:
     r1: 1
   tests/test_ghidra_async.py:
@@ -693,6 +921,8 @@ files:
   tests/test_governance_docs_784.py:
     r1: 2
     r2: 1
+  tests/test_guardian_kpi_429.py:
+    r1: 3
   tests/test_hardcode_purge.py:
     r1: 2
   tests/test_harness_common_863g.py:
@@ -702,13 +932,13 @@ files:
   tests/test_heartbeat_bootstrap.py:
     r1: 14
   tests/test_heartbeat_durable_830.py:
-    r1: 1
+    r1: 2
   tests/test_heartbeat_gate.py:
     r1: 3
   tests/test_heartbeat_off.py:
-    r1: 5
+    r1: 6
   tests/test_heartbeat_pulse_618.py:
-    r1: 2
+    r1: 3
   tests/test_heartbeat_tick.py:
     r1: 10
   tests/test_heartbeat_tick_argv.py:
@@ -716,22 +946,24 @@ files:
   tests/test_heartbeat_window_4.py:
     r1: 2
   tests/test_hook_exit_codes.py:
-    r1: 1
+    r1: 4
   tests/test_hook_registration_entry.py:
     r1: 9
   tests/test_hook_registry_singlesource.py:
-    r1: 18
+    r1: 19
   tests/test_hooks_resolve_workspace_delegation_865.py:
     r1: 3
     r2: 1
+  tests/test_hygiene_rc_record_only.py:
+    r1: 2
   tests/test_hypothesis_admission_109.py:
     r1: 9
   tests/test_hypothesis_contradiction_gate.py:
-    r1: 1
+    r1: 2
   tests/test_hypothesis_loop_integration_111.py:
-    r1: 28
+    r1: 29
   tests/test_hypothesis_seeder.py:
-    r1: 1
+    r1: 3
   tests/test_hypothesis_store_528.py:
     r1: 3
   tests/test_icd203_alignment.py:
@@ -740,6 +972,8 @@ files:
     r1: 2
   tests/test_ida_scripting_card_163.py:
     r1: 3
+  tests/test_incremental_reward_539.py:
+    r1: 1
   tests/test_index_capability_annotations.py:
     r1: 3
   tests/test_index_docs_contract.py:
@@ -755,7 +989,7 @@ files:
   tests/test_init_completeness.py:
     r1: 2
   tests/test_init_deploy_env.py:
-    r1: 11
+    r1: 12
   tests/test_init_exit_codes.py:
     r1: 6
   tests/test_init_git_snapshot_739.py:
@@ -772,24 +1006,30 @@ files:
     r1: 14
   tests/test_install_unidbg_165.py:
     r1: 1
+  tests/test_intake_battery_460.py:
+    r1: 2
   tests/test_intake_promise_813.py:
-    r1: 4
+    r1: 7
   tests/test_intent_aware_completion.py:
     r1: 2
   tests/test_issue238_role_contracts.py:
     r1: 2
   tests/test_issue454_wiring_transparency.py:
     r1: 3
+  tests/test_jadx_exec_426.py:
+    r1: 3
   tests/test_jsvmp_triage.py:
     r1: 3
+  tests/test_kernel_c6_523.py:
+    r1: 1
   tests/test_kunglao_core_loop.py:
-    r1: 5
+    r1: 6
   tests/test_kunglao_decide.py:
     r1: 8
   tests/test_kunglao_init.py:
-    r1: 27
+    r1: 28
   tests/test_kunglao_log.py:
-    r1: 5
+    r1: 6
   tests/test_kunglao_log_channel_699.py:
     r1: 5
   tests/test_kunglao_redteam_verdict_layer.py:
@@ -802,7 +1042,7 @@ files:
   tests/test_kunglao_upgrade_726.py:
     r1: 13
   tests/test_kunglao_wait_902.py:
-    r1: 2
+    r1: 6
   tests/test_ledger_settlement_8.py:
     r1: 2
   tests/test_ledger_stdlib_584.py:
@@ -827,22 +1067,31 @@ files:
     r1: 8
   tests/test_logging_schema_818.py:
     r1: 1
+  tests/test_loop_completion_contract_523.py:
+    r1: 1
   tests/test_machine_check_contract.py:
     r1: 6
   tests/test_max_retries_604.py:
-    r1: 1
+    r1: 2
   tests/test_mcp_env_e2e.py:
-    r1: 3
+    r1: 4
   tests/test_mcp_prefix_enforcement.py:
     r1: 5
+  tests/test_mcp_scope_408.py:
+    r1: 6
+    r2: 1
   tests/test_mcp_supply.py:
-    r1: 23
+    r1: 28
     r2: 1
   tests/test_mechanism_scheduler_878.py:
     r1: 4
   tests/test_mechanisms_retirement.py:
     r1: 4
+  tests/test_method_families_432.py:
+    r1: 6
   tests/test_migrate_facts_809.py:
+    r1: 1
+  tests/test_milestone_readouts_585.py:
     r1: 1
   tests/test_mission_ledger_823.py:
     r1: 1
@@ -854,7 +1103,7 @@ files:
   tests/test_monitor_wiring_620c.py:
     r1: 2
   tests/test_must_stop_coverage_601.py:
-    r1: 5
+    r1: 6
   tests/test_no_absolute_paths.py:
     r1: 3
   tests/test_no_cti_agents.py:
@@ -882,11 +1131,13 @@ files:
     r1: 1
   tests/test_operator_action.py:
     r1: 1
+  tests/test_oracle301_go_fixture.py:
+    r1: 1
   tests/test_oracle_cadence_132.py:
-    r1: 11
+    r1: 12
     r2: 1
   tests/test_oracle_runner_108.py:
-    r1: 8
+    r1: 9
   tests/test_orchestration_eval_quality.py:
     r1: 1
   tests/test_orchestration_event_taxonomy.py:
@@ -900,8 +1151,10 @@ files:
   tests/test_outcome_capture.py:
     r1: 1
   tests/test_outcome_forensics_146.py:
-    r1: 4
+    r1: 5
     r2: 1
+  tests/test_partial_proven_510.py:
+    r1: 2
   tests/test_pdl_collapse_582.py:
     r1: 1
   tests/test_pkg_detect.py:
@@ -919,26 +1172,30 @@ files:
   tests/test_plan_stages_822.py:
     r1: 1
   tests/test_plugin_manifest.py:
-    r1: 11
+    r1: 13
     r2: 2
+  tests/test_policy_compare_539.py:
+    r1: 1
   tests/test_posteriors_106.py:
     r1: 1
   tests/test_pr_template_530.py:
+    r1: 1
+  tests/test_prediction_ledger_567.py:
     r1: 1
   tests/test_preflight_588_590.py:
     r1: 3
   tests/test_premature_termination_detect.py:
     r1: 3
   tests/test_priority_data_hookup_9.py:
-    r1: 4
+    r1: 7
   tests/test_priority_inputs_594_596.py:
     r1: 4
   tests/test_priority_ratio.py:
-    r1: 5
+    r1: 7
   tests/test_priority_value_terms.py:
     r1: 1
   tests/test_probe_tiers_474.py:
-    r1: 4
+    r1: 5
   tests/test_progress_granularity_14.py:
     r1: 8
   tests/test_progress_report_663.py:
@@ -953,7 +1210,14 @@ files:
     r1: 3
   tests/test_python_floor.py:
     r1: 1
+  tests/test_q_cells_429.py:
+    r1: 7
+    r2: 2
   tests/test_qtable_p3.py:
+    r1: 5
+  tests/test_query_formulation_487.py:
+    r1: 5
+  tests/test_rc1_checkpoints_hardening_601.py:
     r1: 4
   tests/test_recall_inject.py:
     r1: 5
@@ -965,14 +1229,24 @@ files:
     r1: 1
   tests/test_redteam_antitemplate_827.py:
     r1: 1
+  tests/test_redteam_face_501.py:
+    r1: 3
+  tests/test_reference_index_build.py:
+    r1: 2
+  tests/test_reference_link_walk.py:
+    r1: 1
   tests/test_references_recall.py:
-    r1: 5
+    r1: 6
   tests/test_refresh_deployed_783.py:
     r1: 1
   tests/test_refutation_propagate.py:
     r1: 1
   tests/test_register_proven_gate.py:
     r1: 2
+  tests/test_register_writer_516.py:
+    r1: 1
+  tests/test_registry_admission_546.py:
+    r1: 3
   tests/test_reject_emit_624.py:
     r1: 1
   tests/test_release_receipt.py:
@@ -987,6 +1261,8 @@ files:
     r1: 1
   tests/test_replay_gate.py:
     r1: 3
+  tests/test_replay_ruler_294.py:
+    r1: 10
   tests/test_report_consistency_check.py:
     r1: 3
   tests/test_reproduction_oracle_248.py:
@@ -1006,24 +1282,40 @@ files:
     r1: 1
   tests/test_review_hook_install.py:
     r1: 10
+  tests/test_reward_settlement_366.py:
+    r1: 1
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:
+    r1: 1
+  tests/test_rl_wiring_518.py:
+    r1: 4
+  tests/test_rlvr_p0_524.py:
+    r1: 3
+  tests/test_rlvr_termination_461.py:
     r1: 1
   tests/test_roi_settlement_49.py:
     r1: 2
     r2: 1
   tests/test_rollup_loop.py:
     r1: 4
+  tests/test_rotation_dispatch_gate_341.py:
+    r1: 1
+  tests/test_rotation_induction_341.py:
+    r1: 1
+  tests/test_round_credit_cited_cap_438.py:
+    r1: 1
   tests/test_route_capability.py:
     r1: 5
   tests/test_route_capability_providers.py:
     r1: 2
   tests/test_router_runtime.py:
-    r1: 2
+    r1: 3
   tests/test_rpc_skeleton_template.py:
     r1: 1
     r2: 1
+  tests/test_runtime_fact_gate_341.py:
+    r1: 1
   tests/test_runtime_version_758.py:
     r1: 4
   tests/test_rust_dep_strings.py:
@@ -1032,12 +1324,20 @@ files:
     r1: 5
   tests/test_sanitize.py:
     r1: 3
-  tests/test_scan_waiting_902.py:
+  tests/test_scalar_interval_390.py:
     r1: 1
+  tests/test_scalar_settlement_379.py:
+    r1: 1
+  tests/test_scan_proven_507.py:
+    r1: 1
+  tests/test_scan_waiting_902.py:
+    r1: 2
   tests/test_scorer_authority.py:
     r1: 6
   tests/test_script_discipline.py:
     r1: 5
+  tests/test_script_harvest_engine_477.py:
+    r1: 1
   tests/test_secondstop_anchor_831.py:
     r1: 2
   tests/test_self_cap_smoke.py:
@@ -1048,7 +1348,15 @@ files:
     r1: 1
   tests/test_settle_by_need.py:
     r1: 1
+  tests/test_settlement_pq_257.py:
+    r1: 1
+  tests/test_seven_arm_569.py:
+    r1: 1
   tests/test_shell_defaults.py:
+    r1: 1
+  tests/test_silent_except_traces_275.py:
+    r1: 1
+  tests/test_silent_except_traces_275_batch3.py:
     r1: 1
   tests/test_skill_contract.py:
     r1: 1
@@ -1069,6 +1377,10 @@ files:
     r1: 6
   tests/test_state_anchor_hyp_pointers_528.py:
     r1: 3
+  tests/test_state_layer_diagnosis_213.py:
+    r1: 1
+  tests/test_state_signature_396.py:
+    r1: 1
   tests/test_static_tools_1b.py:
     r1: 2
   tests/test_static_tools_1c.py:
@@ -1082,11 +1394,13 @@ files:
   tests/test_statusline_health_883.py:
     r1: 10
   tests/test_statusline_v2_142.py:
-    r1: 8
+    r1: 9
+  tests/test_strategy_compose_431.py:
+    r1: 4
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
-    r1: 6
+    r1: 7
   tests/test_stuck_gate.py:
     r1: 1
   tests/test_subagent_injection.py:
@@ -1123,6 +1437,11 @@ files:
     r1: 2
   tests/test_tier_rules.py:
     r1: 1
+  tests/test_timeline_v2_586.py:
+    r1: 1
+  tests/test_tool_first_243.py:
+    r1: 4
+    r2: 1
   tests/test_tool_first_proof_630.py:
     r1: 1
   tests/test_tool_search.py:
@@ -1134,7 +1453,7 @@ files:
   tests/test_tool_value_881.py:
     r1: 2
   tests/test_toolchain.py:
-    r1: 18
+    r1: 21
   tests/test_toolchain_bug_756.py:
     r1: 5
     r2: 1
@@ -1143,11 +1462,13 @@ files:
   tests/test_toolchain_metadata.py:
     r1: 4
   tests/test_toolchain_needs_first.py:
-    r1: 6
+    r1: 8
   tests/test_toolchain_negotiation.py:
     r1: 8
   tests/test_toolchain_next_action.py:
     r1: 6
+  tests/test_toolchain_ownership_202.py:
+    r1: 3
   tests/test_toolchain_stdio.py:
     r1: 2
   tests/test_tools_structure_340.py:
@@ -1166,8 +1487,10 @@ files:
     r1: 2
   tests/test_unidbg_harness_template.py:
     r1: 1
+  tests/test_upgrade_016_sweep.py:
+    r1: 10
   tests/test_upgrade_safety_753.py:
-    r1: 8
+    r1: 7
   tests/test_upgrade_slash_command_746.py:
     r1: 4
     r2: 1
@@ -1185,9 +1508,10 @@ files:
   tests/test_validate_index.py:
     r1: 14
   tests/test_value_flag_removed_51.py:
-    r1: 2
+    r1: 3
+    r2: 1
   tests/test_value_rebuild_107.py:
-    r1: 5
+    r1: 7
     r2: 1
   tests/test_value_reconciliation_133.py:
     r1: 5
@@ -1202,18 +1526,28 @@ files:
     r1: 2
   tests/test_verifier_identity_825.py:
     r1: 1
+  tests/test_verify_backlog_face_342.py:
+    r1: 1
+  tests/test_verify_stale_342.py:
+    r1: 8
+  tests/test_verify_transitions_550.py:
+    r1: 1
   tests/test_verify_truth_609.py:
     r1: 2
   tests/test_violation_capture_718.py:
     r1: 1
   tests/test_vm_normalization_10.py:
     r1: 2
+  tests/test_wait_dispose_244.py:
+    r1: 1
   tests/test_warn_delegation_863f.py:
     r1: 1
   tests/test_web_knowledge_761.py:
-    r1: 3
+    r1: 4
   tests/test_web_labs_type_728.py:
-    r1: 2
+    r1: 3
+  tests/test_web_lane_verifier_342.py:
+    r1: 3
   tests/test_windowed_stalker_template.py:
     r1: 2
   tests/test_windows_reserved_names.py:
@@ -1224,11 +1558,12 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 45
+    r1: 48
+    r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7
   tests/test_worker_liveness_protocol.py:
-    r1: 7
+    r1: 10
   tests/test_worker_lookup_constitution_145.py:
     r1: 2
   tests/test_workspace_carriers_538.py:
@@ -1239,6 +1574,8 @@ files:
     r1: 3
   tests/test_worktree_marker.py:
     r1: 1
+  tests/test_write_contract_visibility_523.py:
+    r1: 1
   tests/test_write_gate.py:
     r1: 1
   tests/test_write_guard_532.py:
@@ -1246,10 +1583,31 @@ files:
   tests/test_write_guard_686.py:
     r1: 3
   tests/test_write_guard_register_gate_819.py:
-    r1: 1
+    r1: 3
   tests/test_write_guard_supersedes_528.py:
     r1: 3
   tests/test_write_guard_unlock_820.py:
+    r1: 1
+  tests/test_ws2_ablation_545.py:
+    r1: 1
+  tests/test_ws2_declared_rides_545.py:
+    r1: 1
+  tests/test_ws2_holdout_firewall_545.py:
+    r1: 1
+  tests/test_ws2_tiebreaker_545.py:
+    r1: 2
+  tests/test_ws2_warm_start_545.py:
+    r1: 1
+    r2: 1
+  tests/test_ws3_compose_lead_544.py:
+    r1: 1
+    r2: 1
+  tests/test_ws3_intake_prior_544.py:
+    r1: 1
+    r2: 1
+  tests/test_ws4_expansion_546.py:
+    r1: 1
+  tests/test_ws4_wiring_546.py:
     r1: 1
   tests/test_ws_layout_delegation_863c.py:
     r1: 5

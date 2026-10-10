@@ -1,6 +1,6 @@
 ---
 name: kunglao-agent-failure-modes-lifecycle
-description: Lifecycle (F1-F6): dispatch / heartbeat / worker routing (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
+description: Lifecycle (F1-F6): dispatch / heartbeat / worker routing (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. dumb/stuck/mismatched — user shorthand describing the agent, not a literal matcher) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -59,7 +59,7 @@ not another rule.
 
 #43 and #44 read MECHANICAL STATE. Neither reads what the agent SAID. The
 2026-08-11 session (a2b5e25c) had a HEALTHY moving ledger (3 of 6 gaps fixed)
-while the declaration abandoned the user's goal ("全面分析") and cited cost
+while the declaration abandoned the user's goal ("comprehensive analysis") and cited cost
 ("$52.85 — informational") as stop reasoning — only #54 catches that.
 
 ### The 4 fingerprints (PT1-PT4) + detector
@@ -71,8 +71,8 @@ report, exit 0 clean / 1 fired / 2 unreadable input.
 
 | ID | Fingerprint | 2026-08-11 instance evidence | Heuristic |
 |---|---|---|---|
-| PT1 | self-anchoring | "Substantive task complete" while user said "全面分析" | self-summary done-phrase + task_text anchors absent from the agent region |
-| PT2 | self-invented tiering | "备注级（记录即可）" for G4-G6; "deferred" for #10-#12 | tier keyword (not grounded in task_text) + open-item ref |
+| PT1 | self-anchoring | "Substantive task complete" while user said "comprehensive analysis" | self-summary done-phrase + task_text anchors absent from the agent region |
+| PT2 | self-invented tiering | "note-level (just record it)" for G4-G6; "deferred" for #10-#12 | tier keyword (not grounded in task_text) + open-item ref |
 | PT3 | cost-semantic drift | "$52.85 — informational" in the declaration | cost figure + informational qualifier in one sentence (behavior #3 violation) |
 | PT4 | false completion | "task complete" + "Deferred (#10 #11 #12) — queued" | completion declaration + open-items-remaining signal (zero-open phrasing excluded) |
 
@@ -80,5 +80,3 @@ Acceptance: all 4 fire on the issue #54 symptom-section regression fixture; 0 fi
 clean genuine completion. The detector is DETECTION only — the hard Stop-hook
 gate is #55's scope (completion_gate.py + task-oracle.yaml), which consumes
 this detector's JSON report.
-
-recall_useful: pending

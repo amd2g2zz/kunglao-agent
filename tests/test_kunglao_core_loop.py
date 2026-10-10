@@ -111,8 +111,10 @@ def test_convergence_check(tmp: Path) -> None:
     d = cc.decide(ws)
     check("cc.blocked", d["decision"] == "BLOCKED" and d["exit_code"] == 4, str(d))
 
-    # Branch 5: DISPATCH_VERIFIER (partial facts + free slots)
-    make_claim_reg(ws, [{"id": "C-1", "status": "PROVEN"}])
+    # Branch 5: DISPATCH_VERIFIER (partial facts + free slots) — the
+    # claim must be NON-terminal (#510: a PROVEN claim's facts owe
+    # nothing; that shape is the delivery face, pinned separately)
+    make_claim_reg(ws, [{"id": "C-1", "status": "PARTIALLY-VERIFIED"}])
     facts = ws / "facts"
     facts.mkdir()
     (facts / "_INDEX.md").write_text("F001 | PARTIAL | C-1 | test\n", encoding="utf-8")

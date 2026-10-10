@@ -25,24 +25,82 @@ static read first, spend installs deliberately.
 
 **Family: environment-attestation reading (falsifier-library family 17 vocabulary — know the read to answer the read)**
 
-| Channel | What the check does | Evidence | Variant inspiration |
+| Channel | What the check does | Evidence to capture | Variant inspiration |
 |---|---|---|---|
-| PackageManager API | `getPackageInfo(..., GET_SIGNATURES)` -> signature bytes -> digest -> compare against a baked-in constant | 1 article (full code) | Any API-served identity (installer source, first-install time) spoofs the same way |
-| APK file bytes | Library or Java code opens the APK path (from `ApplicationInfo.sourceDir` or `/proc/self/maps`) and digests it — path varies per device, so the read usually starts from a path/lookup | 2 articles (device-side and emulation-side attestation) | File-identity checks generalize: any "expected bytes at expected path" check is answerable at the file layer |
-| Mutual attestation ("triangle") | Native checks dex, a dynamically unpacked dex checks native, dex checks the unpacked dex — three reads, deleted after checking | 1 article | Mutual-attestation logic: single-point spoofs fail; every read channel needs a consistent answer |
-| Behavior gates on failure | Kill process / exit / finish-only (activity fades but check re-fires after restart by the process watcher) | 1 article | Failure-action taxonomy tells you whether your bypass "took": a finish-only gate looks bypassed then re-arms |
+| PackageManager API | `getPackageInfo(..., GET_SIGNATURES)` -> signature bytes -> digest -> compare against a baked-in constant | The compare constant + failing read trace | Any API-served identity (installer source, first-install time) spoofs the same way |
+| APK file bytes | Library or Java code opens the APK path (from `ApplicationInfo.sourceDir` or `/proc/self/maps`) and digests it — path varies per device, so the read usually starts from a path/lookup | The opened path string from the access log | File-identity checks generalize: any "expected bytes at expected path" check is answerable at the file layer |
+| Mutual attestation ("triangle") | Native checks dex, a dynamically unpacked dex checks native, dex checks the unpacked dex — three reads, deleted after checking | Which read fires first | Mutual-attestation logic: single-point spoofs fail; every read channel needs a consistent answer |
+| Behavior gates on failure | Kill process / exit / finish-only (activity fades but check re-fires after restart by the process watcher) | The gate action observed across restarts | Failure-action taxonomy tells you whether your bypass "took": a finish-only gate looks bypassed then re-arms |
 
 ## The spoof ladder (climb by invasiveness; stop at the first rung that verifies)
 
 **Family: tamper-countermeasure escalation (verification-safety minimal-patch vocabulary — a bypass is a probe license, never a ship artifact)**
 
-| Rung | Do this | Expected outcome (hypothesis) | Evidence | Variant inspiration |
+| Rung | Do this | Expected outcome (hypothesis) | Evidence to capture | Variant inspiration |
 |---|---|---|---|---|
-| 1. Framework-level signature spoof | Deploy a framework-module signature-spoof (device/Xposed-class) and install the resigned APK without repack changes | App reads its *original* signature from the API channel; check passes untouched | 1 article | Answers every API-channel check at once; useless against file-byte checks |
-| 2. Strip the check in smali/dex | Locate the verdict method, patch its body to return success | Cheap when the check is one method; mutates the package, so rung-3/4 checks may still fire | 1 article (tool-assisted class) | Binary-patch-and-verify pattern: patch, resign, observe — never assume the patch found every copy |
-| 3. App-layer PackageManager proxy | Reflect to the runtime's package-manager holder, wrap the binder interface in a dynamic proxy whose handler swaps signature bytes for the original's, and patch **both** injection points (the holder's static field and the app-side manager's private field — call paths reach both) | App-layer readers see original signature; no package mutation survives | 1 article (full code, 2 injection points) | Binder-interface proxying generalizes to any system service identity the app reads |
-| 4. Native IO redirection | Inline-hook the libc file-entry symbols (`open`, `openat`, `fopen`, and the variadic `syscall()` — raw syscall NRs bypass the libc wrappers, same SVC floor as dynamic-observation-ladders) plus `dlopen`-class if loads are checked; on path match, serve a preserved copy of the **original** APK's bytes; make the libc code page writable first (some builds protect it) | Native readers digest original bytes; also answers resource-read and some risk-counter reads | 1 article (full C code); emulation-side twin cross-cluster | Redirect capability triple: force read-only, deny with errno, replace path — reuse for root-detection file denials and startup-counter resets |
-| 5. Original keystore | Sign with the developer's actual key | Only fully clean closure; usually unavailable | 1 article (listed, half in jest) | The existence of rung 5 is why rungs 1-4 spoof reads, not identities |
+| 1. Framework-level signature spoof | Deploy a framework-module signature-spoof (device/Xposed-class) and install the resigned APK without repack changes | App reads its *original* signature from the API channel; check passes untouched | Verdict flip after install | Answers every API-channel check at once; useless against file-byte checks |
+| 2. Strip the check in smali/dex | Locate the verdict method, patch its body to return success | Cheap when the check is one method; mutates the package, so rung-3/4 checks may still fire | Which copy was patched; whether a second copy re-arms | Binary-patch-and-verify pattern: patch, resign, observe — never assume the patch found every copy |
+| 3. App-layer PackageManager proxy | Reflect to the runtime's package-manager holder, wrap the binder interface in a dynamic proxy whose handler swaps signature bytes for the original's (listing below); patch **both** injection points (the holder's static field and the app-side manager's private field — call paths reach both) | App-layer readers see original signature; no package mutation survives | Proxy hit log per read | Binder-interface proxying generalizes to any system service identity the app reads |
+| 4. Native IO redirection | Inline-hook the libc file-entry symbols (`open`, `openat`, `fopen`, and the variadic `syscall()` — raw NRs bypass the libc wrappers) plus `dlopen`-class if loads are checked; on path match, serve a preserved copy of the **original** APK's bytes (listing below) | Native readers digest original bytes; also answers resource-read and some risk-counter reads | Hook fire log with matched paths | Redirect capability triple: force read-only, deny with errno, replace path — reuse for root-detection file denials |
+| 5. Original keystore | Sign with the developer's actual key | Only fully clean closure; usually unavailable | — | The existence of rung 5 is why rungs 1-4 spoof reads, not identities |
+
+### Rung-3 listing — PackageManager binder proxy (skeleton)
+
+```java
+// Adapt the holder field names to the target Android build — they drift
+// across API levels; read them off the framework jar for the target.
+Class<?> atClass = Class.forName("android.app.ActivityThread");
+Object thread = atClass.getMethod("currentActivityThread").invoke(null);
+Field pmField = atClass.getDeclaredField("sPackageManager");
+pmField.setAccessible(true);
+final Object rawPm = pmField.get(thread);
+
+Class<?> iPm = Class.forName("android.content.pm.IPackageManager");
+Object proxied = Proxy.newProxyInstance(iPm.getClassLoader(), new Class<?>[]{ iPm },
+    (proxy, method, args) -> {
+        if ("getPackageInfo".equals(method.getName()) && args != null && args.length >= 2
+                && ((int) args[1] & PackageManager.GET_SIGNATURES) != 0) {
+            return signedWithOriginal((String) args[0]);   // serve ORIGINAL signature bytes
+        }
+        try {
+            return method.invoke(rawPm, args);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+    });
+pmField.set(thread, proxied);
+// SECOND injection point: the app-side manager caches its own binder — patch
+// that private field too, or one call path still reaches the raw interface.
+```
+
+### Rung-4 listing — libc IO redirection to original APK bytes (skeleton)
+
+```c
+// Hook lib: Dobby (documented C API). Cover open/openat/fopen AND the raw
+// syscall() — raw NRs bypass the libc wrappers entirely (the SVC floor).
+#include <dlfcn.h>
+#include <string.h>
+
+static const char *kRealApk = "/data/local/tmp/original.apk";  // preserved pre-repack
+static const char *kResignedApk = "/data/app/…/base.apk";      // read the live path from the access log
+
+static int (*orig_open)(const char *, int, ...);
+
+static int my_open(const char *path, int flags, ...) {
+    if (path != NULL && strcmp(path, kResignedApk) == 0) {
+        return orig_open(kRealApk, flags);   // serve ORIGINAL bytes at the file boundary
+    }
+    return orig_open(path, flags);
+}
+
+__attribute__((constructor)) static void install(void) {
+    void *handle = dlopen("libdobby.so", RTLD_NOW);
+    int (*DobbyHook)(void *, void *, void **) = dlsym(handle, "DobbyHook");
+    DobbyHook(dlsym(RTLD_DEFAULT, "open"), (void *) my_open, (void **) &orig_open);
+    // repeat for openat / fopen / syscall; on hardened builds make the libc
+    // code page writable first (some builds protect it).
+}
+```
 
 ## Rung-selection heuristics
 

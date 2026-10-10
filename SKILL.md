@@ -78,6 +78,13 @@ kunglao-agent subcommands:
                            print this usage list
                            example: /kunglao-agent:help
 
+  CLI face (console scripts — `uv sync` in the repo root installs them;
+  the router answers `kunglao --help`):
+    kunglao <sub>    decide | tick | verify | record | health | resume |
+                     check-stale | upgrade | analysis
+    standalone       kunglao-init / kunglao-verify / kunglao-upgrade
+                     heartbeat-tick / convergence-check
+
 Next steps:
   uninitialized workspace → /kunglao-agent:init
   initialized workspace   → /kunglao-agent:analysis
@@ -86,9 +93,6 @@ Next steps:
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
-(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table;
- zero-args guard below the router, per-command examples + next steps —
- menu/hints render skills/subcommands.yaml, the single source)
 ```
 
 
@@ -125,4 +129,3 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent resume ~/cases/synth-dropper`
 - `/kunglao-agent upgrade ~/cases/synth-dropper`
 - `/kunglao-agent help`
-(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table)

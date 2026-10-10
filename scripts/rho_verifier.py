@@ -10,25 +10,8 @@ back. Shadow: sample_and_pair records, nothing intercepts (the P3
 "completion claims pass a rho gate" is explicitly out of scope here).
 """
 from __future__ import annotations
-
-
-
-# issue 275 batch-3: fail-open handlers keep their liveness posture (never
-# raise, never change the return shape) but must leave ONE trace - a stderr
-# WARN naming the operation + reason, rate-limited to once per op until the
-# reason changes (the _zof_warn pattern of issue 276; one ws per process,
-# so op is the key).
-import sys
-_WARN_LAST: dict[str, str] = {}
-
-
-def warn(op: str, reason: str) -> None:
-    if _WARN_LAST.get(op) == reason:
-        return
-    _WARN_LAST[op] = reason
-    print(f"[kunglao-agent] rho_verifier WARN (fail-open): "
-          f"{op}: {reason}",
-          file=sys.stderr)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import json
 import os
 import re
@@ -189,11 +172,28 @@ def sample_and_pair(ws, z=None, emit=True):
                                "lexical": out.get("lexical"),
                                "cost": cost},
                               ensure_ascii=False))
+        # #134: the sampler rides the #127 liveness vocabulary — every
+        # checkpoint sample is a detector_eval (detector="rho_sampler");
+        # a SETTLED anchor is the detector_fired it exists for, so a
+        # sampler whose pairs never settle is a loud DORMANT finding
+        # (detector_liveness.liveness_report), never silence. Record-only:
+        # nothing intercepts these rows (shadow contract preserved).
+        kunglao_log.emit(
+            Path(ws), actor="rho_verifier", action="detector_eval",
+            detail=json.dumps({"detector": "rho_sampler",
+                               "rho": out["rho"], "z": z,
+                               "backend": out["backend"]},
+                              ensure_ascii=False))
         # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
         # terminal anchor fired: mission complete/failed) is a transition, so it
         # earns a result digest; plain per-checkpoint sampling rows stay lean
         # (no per-heartbeat spam).
         if z is not None:
+            kunglao_log.emit(
+                Path(ws), actor="rho_verifier", action="detector_fired",
+                detail=json.dumps({"detector": "rho_sampler",
+                                   "rho": out["rho"], "z": z},
+                                  ensure_ascii=False))
             kunglao_log.emit_result_digest(
                 Path(ws), actor="rho_verifier",
                 verdict="mission_complete" if float(z) >= 1.0 else "mission_failed",

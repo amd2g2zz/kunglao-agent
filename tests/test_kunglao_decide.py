@@ -199,7 +199,7 @@ def test_decide_top1_passes_gate_silently(tmp_path):
     top_id = out["top_actions"][0]["claim_id"]
     ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), top_id, ws=ws)
+        top_id, ws=ws)
     assert (ok, deviated) == (True, False), (
         f"dispatching DECIDE #1 ({top_id}) must pass the gate silently "
         f"(#101 single authority); got ok={ok} deviated={deviated} "
@@ -215,7 +215,7 @@ def test_deviation_msg_names_thompson_authority(tmp_path):
     ws = _conflict_ws(tmp_path, name="ws-auth")
     _ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-        str(ws / "task_spec.yaml"), "C-1", ws=ws)
+        "C-1", ws=ws)
     assert deviated is True, f"C-1 is a non-#1 dispatch; got msg={msg!r}"
     assert "thompson" in msg.lower(), (
         f"deviation msg must name the single ranking authority; got {msg!r}")
@@ -238,7 +238,7 @@ def test_gate_and_decide_agree_on_the_full_order(tmp_path):
     for cid in full:
         _ok, msg, deviated = wb.check_priority(
             str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
-            str(ws / "task_spec.yaml"), cid, ws=ws)
+            cid, ws=ws)
         rank = full.index(cid) + 1
         if rank == 1:
             assert (deviated, msg) == (False, ""), (

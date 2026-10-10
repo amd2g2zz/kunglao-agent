@@ -493,7 +493,10 @@ class TestTickIntegration:
         return mod
 
     def test_real_tick_carries_mechanisms_face_and_legacy_keys(self, tmp_path):
-        """真 tick：report["mechanisms"] 新面 + legacy key 全保留 + mech_run 落账。"""
+        """真 tick：report["mechanisms"] 新面 + legacy key 全保留 + mech_run 落账。
+        H1: event-gated 机制（workspace_monitor/notes_rollup）无事件时落在
+        skipped，legacy key（monitor/rollup_sweep）仍回填（skipped 结果也进
+        results），tick 照常绿。"""
         ws = _ws(tmp_path)
         (ws / "task_spec.yaml").write_text("mission: mech-test\n",
                                            encoding="utf-8")
@@ -503,13 +506,49 @@ class TestTickIntegration:
                             .read_text(encoding="utf-8"))
         mech = report["mechanisms"]
         assert isinstance(mech, dict) and "ran" in mech
-        for name in ("env_probe", "workspace_monitor", "stale_feedback",
-                     "verify_watch", "notes_rollup", "think_seat"):
+        for name in ("env_probe", "stale_feedback", "verify_watch",
+                     "think_seat"):
             assert name in mech["ran"], (name, mech)
+        # H1: tick-cadence -> event-cadence flips (no ledger events here).
+        for name in ("workspace_monitor", "notes_rollup"):
+            assert name in mech["skipped"], (name, mech)
         assert "policy_retro" in mech["skipped"], mech
         for key in ("env_state", "monitor", "feedback", "verify_watch",
                     "rollup_sweep", "think", "backtrack"):
             assert key in report, key
+        actions = [json.loads(ln)["action"] for ln in
+                   (ws / "runs" / "logs").glob("kunglao-*.jsonl")
+                   for ln in ln.read_text(encoding="utf-8").splitlines()
+                   if ln.strip()]
+        assert "mech_run" in actions
+        # H1a: no events -> the forensics faces are omitted from the report.
+        for face in ("h_bits", "rank", "verify_backlog", "detector_dormant"):
+            assert face not in report, face
+
+    def test_event_rows_wake_event_gated_mechanisms_and_faces(self, tmp_path):
+        """H1: 一条 settlement 行 → 下一 pass 唤醒 events_seen 门机制，
+        且 heartbeat_tick 的 forensics 面（entropy/rank/verify_backlog）
+        随事件运行（事件驱动，非 tick 节拍）。"""
+        import kunglao_log
+        ws = _ws(tmp_path)
+        (ws / "task_spec.yaml").write_text("mission: mech-test\n",
+                                           encoding="utf-8")
+        ht = self._load_tick()
+        # first tick: consumes nothing (bus starts at the 64KB tail of an
+        # empty ledger), primes the offset
+        ht.main([str(ws)])
+        # semantic event lands AFTER the first pass
+        kunglao_log.emit(ws, "test", "claim_settled", detail="h1-wake")
+        ht.main([str(ws)])
+        report = json.loads((ws / "runs" / ".heartbeat-tick.json")
+                            .read_text(encoding="utf-8"))
+        mech = report["mechanisms"]
+        assert "settlement" in (mech.get("events_seen") or []), mech
+        for name in ("workspace_monitor", "notes_rollup"):
+            assert name in mech["ran"], (name, mech)
+        # faces run with the event
+        assert "verify_backlog" in report
+        # policy_retro's gate may or may not fire, but the bus saw the event
         actions = [json.loads(ln)["action"] for ln in
                    (ws / "runs" / "logs").glob("kunglao-*.jsonl")
                    for ln in ln.read_text(encoding="utf-8").splitlines()

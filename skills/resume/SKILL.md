@@ -11,9 +11,9 @@ arguments: [workspace]
 argument-hint: <workspace> — no args → guided workspace prompt
 ---
 
-# kunglao-agent:resume — crash/reboot breakpoint recovery (issue #466)
+# kunglao-agent:resume — crash/reboot breakpoint recovery
 
-## Stale-workspace gate (#748, machine-checkable)
+## Stale-workspace gate (machine-checkable)
 
 Before producing the brief, the CLI runs the stale-workspace gate
 automatically (it is part of `scripts/kunglao.py resume`, not a separate
@@ -31,7 +31,7 @@ machine-checkable and cannot be skipped by the slash command.
 
 Run after a crash, reboot, or dead session to rebuild the breakpoint from
 mechanical state — never from the dying session's narrative. The brief is
-produced by `scripts/kunglao_resume.py` (also `python scripts/kunglao.py
+produced by `scripts/kunglao_resume.py` (also `uv run --project <SKILL_DIR> python scripts/kunglao.py
 resume <workspace> [--json]`) and covers:
 
 - **health** — claim-register presence, heartbeat liveness
@@ -63,7 +63,7 @@ no file. When the heartbeat is dead the brief advises the re-arm
 chain (`hook_activation --wire-up` + `--heartbeat-on` + CronCreate of the
 heartbeat loop, accepted via `heartbeat_loop_prompt.py --verify`);
 executing it is the operator's/init's job — resume never duplicates the
-wire-up. This is the split against `scripts/external_kicker.py` (#39):
+wire-up. This is the split against `scripts/external_kicker.py`:
 the kicker recovers the DYING session and writes; resume diagnoses the
 CRASHED workspace and only reads.
 
@@ -80,7 +80,7 @@ silently run against it. Never guess.
   known).
 - Consume `$ARGUMENTS` when present: `/kunglao-agent:resume <workspace>`.
 - With the workspace known, run
-  `python scripts/kunglao_resume.py <workspace>` (add `--json` for the
+  `uv run --project <SKILL_DIR> python scripts/kunglao_resume.py <workspace>` (add `--json` for the
   machine-readable brief) and relay the brief, its exit code, and the
   next step. rc 1 → surface the manual reasons and the re-arm advice
   BEFORE any other action. rc 2 → point the operator at
@@ -88,9 +88,9 @@ silently run against it. Never guess.
 
 ## Boundaries
 
-- resume does not repair: missing/corrupt sources are flagged
-  (degradation matrix, design D3), never silently defaulted.
-- The global_plan active-pointer fix belongs to ; resume only warns
-  when plan variants coexist.
+- resume does not repair: missing/corrupt sources are flagged in the
+  degradation matrix, never silently defaulted.
+- The global_plan active-pointer fix belongs to the analysis loop; resume
+  only warns when plan variants coexist.
 - `analysis_state.txt` / `progress.txt` are data-age rows only — LLM
-  self-descriptions are never events (research F4).
+  self-descriptions are never events.

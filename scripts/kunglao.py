@@ -5,7 +5,10 @@
 Replaces the 31 scattered CLIs with subcommands, each composing existing
 script pure functions. Output contract (JSON + exit codes) is FROZEN to
 match the legacy scripts — worker_pulse.py parses convergence_check --json
-and priority --json via subprocess, so byte-identical output is mandatory.
+via subprocess (worker_pulse.py:258), so byte-identical output is mandatory
+for that face. The priority leg now reads priority_ratio.py --json
+(worker_pulse.py:296) — the #107 Thompson ranker — and carries no
+byte-identity constraint on kunglao.py (which has no priority subcommand).
 
 E3.1 criteria: kunglao.py decide <ws> --json == convergence_check.py <ws> --json
 (byte-identical diff on same fixture).
@@ -195,8 +198,9 @@ def cmd_check_stale(args) -> int:
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
     try:
-        ws_key = template_version._semver_tuple(ws_v)
-        skill_key = template_version._semver_tuple(skill_v)
+        # parse-validation only — the call raises on an unparseable stamp
+        template_version._semver_tuple(ws_v)
+        template_version._semver_tuple(skill_v)
     except Exception:
         envelope = {
             "status": "stale",
@@ -208,7 +212,12 @@ def cmd_check_stale(args) -> int:
         }
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
-    if ws_key < skill_key:
+    if ws_v != skill_v:
+        # 0.1.6 sweep: EXACT-match gate (string equality — a .post agent
+        # or workspace is a mismatch too; the semver tuple is kept only
+        # for the unparseable-stamp face above). A workspace stamped
+        # OLDER **or NEWER** than the skill refuses (the #5 pending-merge
+        # recovery path still applies on the mismatch side).
         # #5: a pending manual-merge marker means a previous upgrade run
         # already REFUSED here — repeating "run /upgrade first" would loop
         # forever (the merge refusal is exactly what keeps the stamp stale).
@@ -246,7 +255,8 @@ def cmd_check_stale(args) -> int:
             "workspace_stamp": ws_v,
             "skill_version": skill_v,
             "advice": f"run /kunglao-agent:upgrade {ws} first "
-                      f"(stamp {ws_v} < skill {skill_v})",
+                      f"(stamp {ws_v} != skill {skill_v} — exact match "
+                      f"required; upgrade is the only path forward)",
         }
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
@@ -332,8 +342,9 @@ def _gate_stale_workspace(ws: Path) -> int:
         )
         return RC_STALE_WORKSPACE
     try:
-        ws_key = template_version._semver_tuple(ws_v)
-        skill_key = template_version._semver_tuple(skill_v)
+        # parse-validation only — the call raises on an unparseable stamp
+        template_version._semver_tuple(ws_v)
+        template_version._semver_tuple(skill_v)
     except Exception:
         print(
             f"kunglao: workspace stamp {ws_v!r} is not parseable — "
@@ -341,9 +352,11 @@ def _gate_stale_workspace(ws: Path) -> int:
             file=sys.stderr,
         )
         return RC_STALE_WORKSPACE
-    if ws_key < skill_key:
+    if ws_v != skill_v:
         print(
-            f"kunglao: workspace stamp {ws_v} trails skill version {skill_v} — "
+            f"kunglao: workspace stamp {ws_v} != skill version {skill_v} "
+            f"(exact match required, older AND newer refuse — the "
+            f"transactional upgrade is the only path forward): "
             f"run /kunglao-agent:upgrade {ws} first.",
             file=sys.stderr,
         )
