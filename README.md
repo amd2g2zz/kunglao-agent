@@ -14,6 +14,11 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
+> [!WARNING]
+> **v0.1.6 is the last Claude Code-native release line.** The next
+> milestone (v0.2) migrates the runtime wholesale to the PI Agent base —
+> same loop, same ledgers, new engine substrate. See the roadmap.
+
 ---
 
 ## 📖 Introduction

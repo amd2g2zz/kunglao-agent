@@ -362,3 +362,31 @@ def test_vkey_orders_pep440_post_releases(up):
     assert up._vkey("0.1.5.post10") > up._vkey("0.1.5.post2")
     with pytest.raises(ValueError):
         up._vkey("0.1.5-patch1")
+
+
+def test_vkey_orders_rc_prereleases_and_normalizes_nodash(up):
+    """RC prerelease extension (v0.1.6-rc1 release): X-rcN sorts strictly
+    between the prior line's posts and its own base — X-rcN < X <
+    X.postN — so rc-to-rc bumps (rc1 -> rc2, rc -> final) still move the
+    carry tail. The no-dash PEP 440 spelling "0.1.6rc1" normalizes to the
+    dashed form; tag-style suffixes stay rejected. Step GATING stays
+    rc-agnostic via _release_rank (an rc workspace carries its base's
+    step set — 783 already-current noop)."""
+    assert up._vkey("0.1.5.post2") < up._vkey("0.1.6-rc1") < up._vkey("0.1.6")
+    assert up._vkey("0.1.6-rc1") < up._vkey("0.1.6.post1")
+    assert up._vkey("0.1.6-rc1") < up._vkey("0.1.6-rc2")
+    assert up._vkey("0.1.5") < up._vkey("0.1.6-rc1")
+    assert up._vkey("0.1.6rc1") == up._vkey("0.1.6-rc1")
+    with pytest.raises(ValueError):
+        up._vkey("0.1.6-beta1")
+
+
+def test_release_rank_keeps_step_gating_rc_agnostic(up):
+    """_release_rank steps an rc origin down to its base rank: the step
+    registry plans by release lineage, never by prerelease spelling —
+    "0.1.6-rc1" and "0.1.6" origins plan the same step set (nothing,
+    at the current line), while 0.1.5 origins still see the sweep."""
+    rc_rank = up._release_rank(up._vkey("0.1.6-rc1"))
+    assert rc_rank == up._vkey("0.1.6")
+    assert [v for v, _f in up._plan_migrations(rc_rank, "0.1.6-rc1")] == []
+    assert [v for v, _f in up._plan_migrations(up._vkey("0.1.5"), "0.1.6-rc1")]         == ["0.1.6", "0.1.6-rc1"]

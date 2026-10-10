@@ -869,7 +869,10 @@ def _plan_migrations(origin_key: tuple[int, ...],
     A workspace already at the target plans NOTHING (fast path); any behind
     workspace gets its version-specific repairs followed by exactly one
     carry tail — no registry entry required for that, at any release."""
-    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
+    origin_rank = _release_rank(origin_key)
+    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_rank]
+    # the carry tail gates on the STRICT key: an rc bump (0.1.6-rc1 ->
+    # 0.1.6-rc2, or rc -> final) is a pure re-stamp, no steps replay.
     if _vkey(target) > origin_key:
         plan.append((target, _carry_tail))
     return plan
@@ -880,16 +883,54 @@ def _plan_migrations(origin_key: tuple[int, ...],
 # --------------------------------------------------------------------------
 
 def _vkey(version: str) -> tuple[int, ...]:
-    """Sortable key for registry versions. PEP 440 post releases sort
-    after their base: "0.1.5.post1" -> (0, 1, 5, 1) > (0, 1, 5).
-    (Ported from the release lineage for issue 258 — the naive int-split
-    crashed on the released 0.1.5.post1 skill version.)"""
-    parts = version.strip().split(".")
+    """Sortable key for registry versions.
+
+    Encoding: the plain-release marker (0,) closes every key, then
+    decorations rank around it — prerelease rcN appends (-1, N) BEFORE the
+    base marker and postN appends (1, N) after it, so the PEP 440 order
+    X-rcN < X < X.postN holds across the registry:
+        "0.1.5.post2" < "0.1.6-rc1" < "0.1.6" < "0.1.6.post1"
+    (Ported lineage: issue 258 — the naive int-split crashed on the
+    released 0.1.5.post1 skill version; the rc faces extend the same
+    parser to the 0.1.6-rc1 release identity.)
+
+    The no-dash PEP 440 spelling "0.1.6rc1" normalizes to "0.1.6-rc1".
+    Any other suffix stays unparseable: tag-style names ("0.1.5-patch1")
+    are rejected, per the 726 upgrade contract."""
+    v = version.strip()
+    # PEP 440 no-dash prerelease: "0.1.6rc1" == "0.1.6-rc1"
+    v = re.sub(r"(?<=\d)rc(?=\d+$)", r"-rc", v)
+    base, sep, pre = v.partition("-")
+    if sep and not (pre.startswith("rc") and pre[2:].isdigit()):
+        raise ValueError(f"unparseable version {version!r}")
     try:
-        return tuple(int(p[4:]) if p.startswith("post") else int(p)
-                     for p in parts)
+        nums: list[int] = []
+        post: int | None = None
+        for part in base.split("."):
+            if part.startswith("post"):
+                post = int(part[4:])
+            else:
+                nums.append(int(part))
     except ValueError:
         raise ValueError(f"unparseable version {version!r}")
+    if sep:
+        return tuple(nums) + (-1, int(pre[2:]))
+    if post is not None:
+        return tuple(nums) + (1, post)
+    return tuple(nums) + (0,)
+
+
+def _release_rank(key: tuple[int, ...]) -> tuple[int, ...]:
+    """The plain-release rank of a parsed key: an rc decoration steps its
+    origin down to its base, because MIGRATIONS ids are release-lineage
+    STEP names — an rc workspace has already run (or is queued for)
+    exactly its base's step set, so "0.1.6-rc1" plans the same steps as
+    "0.1.6" (a strict step gate would re-plan the 0.1.6 sweep on every
+    already-current rc workspace, breaking the 783 already-current
+    noop). Ordering across DISTINCT versions stays strict via _vkey."""
+    if len(key) >= 2 and key[-2] == -1:  # (-1, N) rc decoration
+        return key[:-2] + (0,)
+    return key
 
 
 # Framework-owned artifacts that live INSIDE user-data dirs (runs/):

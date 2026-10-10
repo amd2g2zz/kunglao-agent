@@ -14,6 +14,11 @@
 
 [English](README.md) · **简体中文**
 
+> [!WARNING]
+> **v0.1.6 是最后一条 Claude Code 原生版本线。** 下一个里程碑（v0.2）
+> 将运行时整体迁移到 PI Agent 基座——同一个循环、同一套账本、新的引擎
+> 底座。见路线图。
+
 > **术语约定**：`kunglao-agent`、`PROVEN`、`oracle`、`RLVR`、`DTS`、`fact`、`claim`、`MCP`、`task_spec.yaml`、`claim-register.yaml`、`evidence/_index.json` 等术语保留英文原文。
 
 ---

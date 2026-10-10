@@ -77,6 +77,9 @@ sys.path.insert(0, str(SCRIPTS))
 # 2026-10-09 regen (issue 584 hypothesis fields): the Facts carrier paragraph
 # gained one sentence (uncertainty / next_probe optional open-hypothesis
 # fields, absent is the common case) — no other byte changed per fixture.
+# 2026-10-10 regen (v0.1.6-rc1 release identity): the open-marker version
+# line only (kunglao:frame:v0.1.6 -> v0.1.6-rc1); every frame body byte
+# unchanged per fixture (diff-guarded regen, same sentinel renderer).
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

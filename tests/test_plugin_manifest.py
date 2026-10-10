@@ -39,16 +39,21 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1.6"
-# The Claude plugin manifests carry the STRICT X.Y.Z semver form of the
-# same release: the HOL plugin-scanner (ai-plugin-scanner-action, scanner
-# 2.0.1116) gates "Claude required fields and semver" on
-# SEMVER_RE = ^\d+\.\d+\.\d+$ (checks/ecosystem_common.py:9, applied at
-# checks/claude.py:66) — neither the PEP 440 ".post1" nor a semver
-# prerelease "0.1.5-post1" (CLAUDE_VERSION_BAD_SEMVER, -5 pts) matches.
-# Mapping: pyproject "0.1.5.post1" (tag v0.1.5.post1) <-> plugin face
-# "0.1.5". (Issue 258; scan-regression fix for PR 268.)
-PLUGIN_VERSION = "0.1.6"
+def _pyproject_version() -> str:
+    """The release identity, read from the declared single source."""
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    return pyproject["project"]["version"]
+
+
+# v0.1.6-rc1 (owner ruling): every face - pyproject.toml, release-manifest
+# .yaml, .claude-plugin/plugin.json, .claude-plugin/marketplace.json -
+# carries the SAME release string. "0.1.6-rc1" is simultaneously strict
+# semver (prerelease "-rc1") and PEP 440 (normalized as-is), so the 258-era
+# face split (pyproject PEP 440 vs plugin strict X.Y.Z, needed for the
+# "0.1.5.post1" lineage) is gone. The expected version DERIVES from
+# pyproject; the absolute release pin lives in tests/test_changelog.py.
+EXPECTED_VERSION = _pyproject_version()
+PLUGIN_VERSION = EXPECTED_VERSION
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage",
                    "license", "mcpServers"}

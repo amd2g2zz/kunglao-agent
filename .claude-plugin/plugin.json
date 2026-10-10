@@ -1,7 +1,7 @@
 {
   "name": "kunglao-agent",
   "description": "An autonomous reverse-engineering agent that runs for hours unattended, verifies every conclusion independently, and converges only when every answer survives a mechanical oracle verdict.",
-  "version": "0.1.6",
+  "version": "0.1.6-rc1",
   "author": {
     "name": "amd2g2zz"
   },
