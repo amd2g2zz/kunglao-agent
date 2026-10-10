@@ -217,7 +217,8 @@ mechanisms:
       gate: always
     cost_class: cheap
     depth: workspace
-    argv: ["--check-stale"]
+    argv: ["stale"]   # #630: feedback.py takes the subcommand positional; the
+                      # old ["--check-stale"] never existed -> rc=2 every tick
     cockpit_signal: "runs/.heartbeat-tick.json (feedback step stdout tail)"
     owner: scripts/feedback.py
     description: >

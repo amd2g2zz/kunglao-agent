@@ -261,8 +261,13 @@ def evaluate_tick_continuity(state: dict, *,
                     # them made deploy-day quiet gaps look like dead crons
                     # for ~24h (owner live run, 51job). Unknown/absent
                     # actors from legacy rows keep the old inclusive read.
+                    # local-fix: "renew" (hook_activation --renew rows) is a
+                    # THIRD non-tick stream in the same sidecar — it was
+                    # missing from the skip list, so renew->next-tick gaps
+                    # were adjudicated as cadence stalls (observed false gap
+                    # 2026-10-10T01:46:23Z -> 02:13:38Z, both rows renew).
                     actor = str(obj.get("actor") or "tick")
-                    if actor in ("hook", "register"):
+                    if actor in ("hook", "register", "renew"):
                         skipped_non_tick += 1
                         continue
                     ts = _parse_hb_ts(obj.get("ts"))

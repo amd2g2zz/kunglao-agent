@@ -18,6 +18,7 @@ Exit codes: 0 ok / 2 usage / 3 unreadable-or-invalid target / 4 refused
 """
 from __future__ import annotations
 
+import re
 import sys
 
 from pathlib import Path
@@ -87,6 +88,45 @@ def canonical_dump(doc) -> str:
     return yaml.safe_dump(doc, **CANONICAL_KWARGS)
 
 
+# #630: the template-version stamp is a COMMENT line (#536 carriers:
+# CLAUDE.md / facts/_INDEX.md / claim-register.yaml); safe_dump drops
+# every comment, so the register's single-writer rewrites silently
+# stripped its stamp — hooks_selfcheck reported
+# "template_version stamp faults: claim-register.yaml=missing" on every
+# tick. Re-emit the stamp on write: preserve a found value (an older
+# value must SURVIVE as the visible upgrade signal); an absent register
+# stamp recovers from the same-dir CLAUDE.md carrier (correct for both
+# the skill and the deployed copy), then the active skill version.
+_STAMP_RE = re.compile(r"^#\s*kunglao_template_version:\s*(\S+)",
+                       re.MULTILINE)
+
+
+def _stamp_value(old_text: str, path) -> str | None:
+    m = _STAMP_RE.search(old_text)
+    if m:
+        return m.group(1)
+    if Path(path).name != "claim-register.yaml":
+        return None
+    try:
+        sibling = (Path(path).resolve().parent / "CLAUDE.md").read_text(
+            encoding="utf-8", errors="replace")
+        m2 = _STAMP_RE.search(sibling)
+        if m2:
+            return m2.group(1)
+    except OSError:
+        pass
+    try:
+        import template_version as _tv
+        return _tv.read_skill_version()
+    except Exception:  # noqa: BLE001 — off-tree copy: no version source
+        return None
+
+
+def _stamp_prefix(old_text: str, path) -> str:
+    value = _stamp_value(old_text, path)
+    return f"# kunglao_template_version: {value}\n" if value else ""
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if len(argv) < 3 or argv[0] not in ("get", "set", "del"):
@@ -127,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         print("ws_yaml: write refused (non-round-tripping)",
               file=sys.stderr)
         return 4
+    text = _stamp_prefix(old_text, path) + text
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     if cmd != "get" and Path(path).name == "claim-register.yaml":
