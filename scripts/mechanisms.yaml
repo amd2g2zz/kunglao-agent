@@ -217,12 +217,62 @@ mechanisms:
       gate: always
     cost_class: cheap
     depth: workspace
-    argv: ["--check-stale"]
+    argv: ["stale"]   # #630: feedback.py takes the subcommand positional; the
+                      # old ["--check-stale"] never existed -> rc=2 every tick
     cockpit_signal: "runs/.heartbeat-tick.json (feedback step stdout tail)"
     owner: scripts/feedback.py
     description: >
       feedback.check_stale mechanical caller (#629 — was standalone since
       #237 planned it). Stdout-only face (no durable artifact yet).
+
+  - name: cadence_advisor
+    entry: scripts/cadence_advisor.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "runs/.cadence-advice.json (interval advice + state_hash)"
+    owner: scripts/cadence_advisor.py
+    description: >
+      #635: adaptive registration advisor — evaluates the interval every
+      3 tick passes within [5,25]m from environment observation (workers /
+      watchdog / RL signal bus) and emits the kind=cadence RL signal
+      (#637). The SCHEDULE change itself is orchestrator-applied.
+
+  - name: slot_monitor
+    entry: scripts/slot_monitor.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "runs/.slot-report.json (per-worker verdicts + slot ledger)"
+    owner: scripts/slot_monitor.py
+    description: >
+      #636: subagent slot decision table — age/silence/progress ->
+      keep|ping|terminate_review|gone + cap/active/free; non-keep verdicts
+      emit kind=slot RL signals. Recommends; never kills.
+
+  - name: credit_settle
+    entry: scripts/settle_round_credit.py
+    channel: tick
+    trigger:
+      type: settlement
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "runs/.heartbeat-tick.json (credit_settle stdout tail)"
+    owner: scripts/settle_round_credit.py
+    description: >
+      #634: the live round-credit settlement feed — per terminal claim,
+      grade the issue-433 ladder credit and settle + bank it into the
+      matching Q cell (idempotent; the credit strand's missing wire).
 
   - name: verify_watch
     entry: scripts/verify_status_watch.py

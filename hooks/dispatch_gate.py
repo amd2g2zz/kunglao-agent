@@ -942,13 +942,20 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
 
 def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     """③ #496: append the strategy dispatch row on the PASS path — the only
-    writer the strategy-novelty interface needs (opt-in: no
-    `[strategy <id>]` marker, no row). attempts_at_snapshot is the claim's
-    current promotion_attempts, so a later #495 analysis with a higher
-    covers_attempt counts as a same-strategy failure. Fail-open."""
+    writer the strategy-novelty interface needs. attempts_at_snapshot is the
+    claim's current promotion_attempts, so a later #495 analysis with a
+    higher covers_attempt counts as a same-strategy failure. Fail-open.
+
+    local-fix (owner review 2026-10-10): the marker was an OPT-IN gate with
+    no emitting side — the orchestrator was never told to carry
+    `[strategy <id>]`, so the log stayed empty, round-strategy's compose had
+    no input, and the strand cycled in degraded mode. Now a markerless pass
+    lands a `strategy: "default", declared: false` row (honest: no strategy
+    was declared) — the row the #120 read path and the compose face need. A
+    marker keeps its richer row."""
     m = STRATEGY_MARKER_RE.search(prompt_text or "")
-    if not m:
-        return
+    declared = m is not None
+    strategy = m.group(1) if m else "default"
     snapshot = 0
     try:
         reg = yaml.safe_load(
@@ -962,7 +969,8 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
         "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
                 .replace("+00:00", "Z"),
         "event": "dispatch",
-        "strategy": m.group(1),
+        "strategy": strategy,
+        "declared": declared,
         "claim": claim_id,
         "attempts_at_snapshot": snapshot,
     }
@@ -1085,6 +1093,14 @@ def _record_dispatch_intent(ws: Path, claim_id: str, prompt_text: str,
             method=_resolve_dispatch_agent(payload, prompt_text)
             or "dispatch",
             context_tags=decl["preconditions"],
+            # #626 local-fix CORRECTION (owner CI 2026-10-10): never
+            # backfill a missing declaration with a placeholder text — a
+            # fabricated uncertainty switches the ruling-3 gate OFF and
+            # the missing-intent census (oracle_cadence) goes blind. An
+            # undeclared dispatch stays undeclared: the gate declines,
+            # intent_unparsed lands as the durable signal, and the
+            # strategy-log row (declared: false) is the compose face's
+            # honest input.
             uncertainty=decl["uncertainty"],
             expected_artifact=decl["expected_artifact"])
         if not res.get("ok"):
@@ -1206,6 +1222,19 @@ def _tools_contract_violation(declared_tools: list[str],
     - write floor: a non-empty rack MUST contain Write or Edit (§1c file
       contract — Bash indirect writes do not count)."""
     if not declared_tools:
+        return None
+    # local-fix (owner ruling 2026-10-10): verifier-class agents are
+    # lane-universal adversarial checkers — the challenge must not be
+    # tool-limited. The Claude Code harness already grants them everything
+    # ("All tools except <disallowedTools>"); kunglao's own rack whitelist
+    # must not re-narrow that. Skip the subset rule AND the §1c write
+    # floor for VERIFIER_REMEDIATION_AGENTS (the checker's own report file
+    # is covered by its harness-level Bash/Write surface).
+    try:
+        from lib_kunglao import VERIFIER_REMEDIATION_AGENTS as _vra_local
+    except Exception:  # noqa: BLE001 — lib outage keeps legacy behavior
+        _vra_local = ()
+    if any(m in (agent_name or "") for m in _vra_local):
         return None
     allowed = _agent_allowed_tools(agent_name) or []
     offending = [
@@ -1666,6 +1695,46 @@ def _waiting_target_id(ws: Path, agent_name: str | None) -> str | None:
     return None
 
 
+def _delivery_verified(ws: Path, worker_id: str | None) -> tuple[bool, str]:
+    """#625 local-fix (owner ruling 2026-10-10): verify-before-unwake. A
+    waiting worker's latest delivery must have reached verification before
+    its wait may end. Reads the worker-status's declared facts/ artifacts;
+    every one present must carry verify_status: passes (or status
+    PROVEN/VERIFIED). No declared facts / no status file -> nothing to
+    verify (True — fail-open, the W-15 lint owns missing artifacts)."""
+    if not worker_id:
+        return True, "no worker identity"
+    p = Path(ws) / "runs" / f"worker-status-{worker_id}.md"
+    if not p.is_file():
+        return True, "no status file"
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return True, "status unreadable"
+    facts = re.findall(r"facts/(F[0-9A-Za-z._-]+\.md)", text)
+    if not facts:
+        return True, "no declared facts"
+    unverified: list[str] = []
+    for rel in sorted(set(facts)):
+        fp = Path(ws) / "facts" / rel.split("facts/")[-1]
+        if not fp.is_file():
+            continue  # declared-but-missing is the W-15 lint's business
+        try:
+            ftxt = fp.read_text(encoding="utf-8", errors="replace")
+            m = re.match(r"\A---\s*\n(.*?)\n---", ftxt, re.DOTALL)
+            fm = yaml.safe_load(m.group(1)) if m else {}
+            st = str((fm or {}).get("status") or "").upper()
+            vs = str((fm or {}).get("verify_status") or "").lower()
+            if st not in {"PROVEN", "VERIFIED"} and vs != "passes":
+                unverified.append(rel)
+        except Exception:  # noqa: BLE001 — an unreadable fact is not evidence
+            continue
+    if unverified:
+        return False, (f"unverified delivery: {', '.join(unverified)} "
+                       f"(verify-before-unwake, #625 owner ruling)")
+    return True, "delivery verified"
+
+
 def _write_wait_signal(ws: Path, agent_name: str | None,
                        claim_id: str | None) -> None:
     """UNWAIT: wake a waiting worker a dispatch is about to re-arm.
@@ -1678,6 +1747,15 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
     try:
         worker_id = _waiting_target_id(ws, agent_name)
         if worker_id is None:
+            return
+        # #625 local-fix (owner ruling 2026-10-10): verify-before-unwake —
+        # the wake signal must not end a delivery's wait before its facts
+        # reached a CONFIRMED verdict. Withheld: the worker keeps waiting;
+        # the orchestrator dispatches the verifier, arbitrates, then re-arms.
+        _ok, _why = _delivery_verified(ws, worker_id)
+        if not _ok:
+            print(f"dispatch_gate: UNWAIT withheld — {_why}",
+                  file=sys.stderr, flush=True)
             return
         path = ws / "runs" / f"wait-signal-{worker_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1697,7 +1775,28 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
               file=sys.stderr, flush=True)
 
 
+_ATTEMPT: dict = {}  # local-fix (#623): this attempt's (ws, claim) for reject-undo
+
+
 def main() -> int:
+    # local-fix (#623): a rejected attempt must not leave its anchor row —
+    # an earlier hook in the chain (worker_budget) stamps on ITS approval
+    # point, so any rc=2 from THIS gate rejects an attempt whose row may
+    # already be on disk. Undo it (fresh-tail match) before exiting.
+    rc = _main_inner()
+    if rc == 2 and _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
+        try:
+            _lib = load_hooks_lib()
+            _lib.undo_dispatch_anchor(_ATTEMPT["ws"], _ATTEMPT["cid"])
+            # #624: roll back this rejected attempt's approval-point
+            # OPEN->IN_PROGRESS flip (no fresh worker exists for it).
+            _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
+        except Exception:  # noqa: BLE001 — undo trouble never changes the verdict
+            pass
+    return rc
+
+
+def _main_inner() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
@@ -1729,6 +1828,7 @@ def main() -> int:
     prompt_text = _extract_prompt_text(payload)
     claim_id, proto = _parse_dispatch(prompt_text)
     if claim_id is not None:
+        _ATTEMPT["ws"], _ATTEMPT["cid"] = ws, claim_id
         rc = _mcp_prefix_gate(prompt_text)
         if rc is not None:
             return rc

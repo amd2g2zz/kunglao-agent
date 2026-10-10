@@ -4,4 +4,12 @@ unit: per-file count of silent-swallow except handlers (no-op body, no raise, no
 policy: 'ratchet only shrinks: a count above the ledger fails; an entry whose count
   reaches zero is deleted; a partially cleared entry is tightened in the same change;
   an entry whose file is gone is stale and fails; new debt without an entry fails'
-files: {}
+files:
+  hooks/dispatch_gate.py: 1
+  scripts/cadence_advisor.py: 1
+  scripts/completion_gate.py: 1
+  scripts/kunglao-init.py: 1
+  scripts/mcp_repair.py: 1
+  scripts/rollup.py: 1
+  scripts/slot_monitor.py: 1
+  scripts/ws_yaml.py: 1

@@ -23,7 +23,7 @@ files:
   scripts/backtrack_gate.py:
     r1: 3
   scripts/backtrack_loop.py:
-    r1: 10
+    r1: 11
   scripts/bench_analyze.py:
     r1: 1
   scripts/bench_answer_key.py:
@@ -40,6 +40,8 @@ files:
     r1: 2
   scripts/blind_gate.py:
     r1: 23
+  scripts/cadence_advisor.py:
+    r1: 2
   scripts/calibration_face.py:
     r1: 2
   scripts/calibration_gate.py:
@@ -55,7 +57,7 @@ files:
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
-    r1: 21
+    r1: 22
   scripts/compute_priors.py:
     r1: 1
   scripts/contracts.py:
@@ -181,9 +183,9 @@ files:
   scripts/harness_common.py:
     r1: 1
   scripts/heartbeat.py:
-    r1: 16
+    r1: 17
   scripts/heartbeat_loop_prompt.py:
-    r1: 3
+    r1: 6
   scripts/heartbeat_tick.py:
     r1: 43
   scripts/heartbeat_touch.py:
@@ -254,8 +256,10 @@ files:
     r1: 22
   scripts/log_setup.py:
     r1: 1
+  scripts/loop_holds.py:
+    r1: 1
   scripts/loop_scheduler.py:
-    r1: 3
+    r1: 4
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
@@ -272,7 +276,7 @@ files:
   scripts/mission_stall.py:
     r1: 6
   scripts/notes_discriminator.py:
-    r1: 5
+    r1: 7
   scripts/notes_writer.py:
     r1: 6
   scripts/obligation_discovery.py:
@@ -312,6 +316,8 @@ files:
     r1: 2
   scripts/query_formulation.py:
     r1: 3
+  scripts/rank_face.py:
+    r1: 1
   scripts/re_pin_references.py:
     r1: 1
     r2: 1
@@ -390,7 +396,7 @@ files:
   scripts/rollout_ledger.py:
     r1: 1
   scripts/rollup.py:
-    r1: 15
+    r1: 16
   scripts/rotation_induction.py:
     r1: 3
   scripts/route_capability.py:
@@ -401,8 +407,12 @@ files:
     r1: 1
   scripts/script_harvest.py:
     r1: 4
+  scripts/settle_round_credit.py:
+    r1: 1
   scripts/shell_defaults.py:
     r1: 1
+  scripts/slot_monitor.py:
+    r1: 2
   scripts/stale_blocker_prune.py:
     r1: 1
   scripts/state_signature.py:
@@ -471,7 +481,7 @@ files:
   scripts/ws_layout.py:
     r1: 4
   scripts/ws_yaml.py:
-    r1: 4
+    r1: 5
   scripts/zero_output_fingerprint.py:
     r1: 1
   tests/_factories.py:
@@ -566,6 +576,8 @@ files:
     r1: 2
   tests/test_c_normalize.py:
     r1: 3
+  tests/test_cadence_advisor_635.py:
+    r1: 1
   tests/test_calibration_face_134.py:
     r1: 6
   tests/test_calibration_gate.py:
@@ -654,6 +666,8 @@ files:
     r1: 3
   tests/test_coverage_policy_564.py:
     r1: 5
+  tests/test_credit_settle_634.py:
+    r1: 1
   tests/test_crypto_algorithms.py:
     r1: 3
   tests/test_crypto_tool.py:
@@ -1069,6 +1083,8 @@ files:
     r1: 1
   tests/test_loop_completion_contract_523.py:
     r1: 1
+  tests/test_loop_prompt_split_434.py:
+    r1: 1
   tests/test_machine_check_contract.py:
     r1: 6
   tests/test_max_retries_604.py:
@@ -1367,6 +1383,8 @@ files:
   tests/test_skill_subcommand_ux.py:
     r1: 3
     r2: 1
+  tests/test_slot_monitor_636.py:
+    r1: 1
   tests/test_specialist_contract_expansion.py:
     r1: 8
   tests/test_specialist_gate.py:

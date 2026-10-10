@@ -12,8 +12,14 @@ producer lands later; until it does the note still fires with the pointer
 named as unset — the continuity face is live from day one, never a crash,
 never silence.
 
-Inject-only (hookSpecificOutput.additionalContext for the PreCompact
-event), fail-open double cage: any error -> rc 0, silent.
+CHANNEL NOTE (#630): the deployed harness build REJECTS
+hookSpecificOutput on PreCompact (no PreCompact discriminator in the
+hookEventName enum — every /compact logged "Hook JSON output validation
+failed" and the note never reached the post-compact context). The note
+is therefore STASHED (runs/.compact-continuity-note.json) and DELIVERED
+by the SessionStart(compact) face — the supported additionalContext
+channel, the same face that already carries the constitution.
+Fail-open double cage: any error -> rc 0, silent.
 """
 from __future__ import annotations
 # The canonical warn — ONE implementation (process-wide dedupe per
@@ -29,9 +35,17 @@ except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
               file=sys.stderr)
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+
+# Stash contract (writer here, reader = session_start.main_with_payload on
+# source=compact). Fresh-only consume: a compact->SessionStart pair lands
+# seconds apart; a stale stash is dropped, never injected into an
+# unrelated later compact.
+STASH_REL = Path("runs") / ".compact-continuity-note.json"
+STASH_MAX_AGE_S = 900
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -46,10 +60,11 @@ def _resolve_workspace(payload: dict) -> Path | None:
 
 
 def process_event(payload: dict) -> int:
-    """Resolve the workspace, print the PreCompact additionalContext JSON,
-    and record ONE compact_continuity row (the injection is auditable —
-    an injector face records what it injected, the recall-inject
-    precedent)."""
+    """Resolve the workspace, STASH the compact-continuity note for the
+    SessionStart(compact) delivery face, and record ONE compact_continuity
+    row (the delivery is auditable — an injector face records what it
+    injected, the recall-inject precedent). Prints NOTHING: the harness
+    rejects hookSpecificOutput on PreCompact (#630)."""
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0
@@ -60,13 +75,12 @@ def process_event(payload: dict) -> int:
             pointer = strategy_sections.pointer(ws)
     except Exception as exc:  # noqa: BLE001 — seam failure degrades, never blocks
         warn("compact_continuity_seam", f"{type(exc).__name__}: {exc}")
-    note = _note_text(pointer, str(payload.get("trigger") or "auto"))
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreCompact",
-            "additionalContext": note,
-        }
-    }, ensure_ascii=False))
+    trigger = str(payload.get("trigger") or "auto")
+    note = _note_text(pointer, trigger)
+    try:
+        _stash_note(ws, note, pointer, trigger)
+    except Exception as exc:  # noqa: BLE001 — stashing never blocks the hook
+        warn("compact_continuity_stash", f"{type(exc).__name__}: {exc}")
     try:
         with scripts_on_path():
             import json as _json
@@ -82,6 +96,46 @@ def process_event(payload: dict) -> int:
     except Exception as exc:  # noqa: BLE001 — recording never blocks the hook
         warn("compact_continuity_record", f"{type(exc).__name__}: {exc}")
     return 0
+
+
+def _stash_note(ws: Path, note: str, pointer: str | None,
+                trigger: str) -> None:
+    """Persist the note for the SessionStart(compact) delivery face."""
+    p = ws / STASH_REL
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "trigger": trigger,
+        "strategy_pointer": pointer,
+        "note": note,
+    }, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def consume_stashed_note(ws: Path, *, max_age_s: int = STASH_MAX_AGE_S,
+                         now: datetime | None = None) -> str | None:
+    """The SessionStart(compact) delivery face: read + consume the stashed
+    PreCompact note. Fresh-only; fail-open — any error/unreadable/stale
+    stash -> None, never a crash on the bootstrap path."""
+    p = Path(ws) / STASH_REL
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    try:
+        p.unlink()
+    except OSError as exc:
+        warn("compact_continuity_consume", f"{type(exc).__name__}: {exc}")
+    try:
+        ts = datetime.strptime(
+            str(data.get("ts")), "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc)
+        ref = now or datetime.now(timezone.utc)
+        if (ref - ts).total_seconds() > max_age_s:
+            return None
+    except (ValueError, TypeError):
+        return None
+    note = data.get("note")
+    return str(note) if note else None
 
 
 def _note_text(pointer: str | None, trigger: str) -> str:

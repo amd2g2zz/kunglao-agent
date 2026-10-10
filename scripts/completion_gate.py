@@ -191,6 +191,31 @@ def _closure_defect(item: dict, claims: list | None) -> str | None:
 # #628: durable-note obligation (pending-queue face)
 # ---------------------------------------------------------------------------
 
+def _note_exists_for(notes_dir: "Path", cid: str) -> bool:
+    """#622-followup (owner note-norms 2026-10-10): a note's FILE NAME is a
+    descriptive phrase; the claim link lives in frontmatter (claim_id).
+    Existence = any note whose frontmatter claim_id == cid (the legacy
+    <cid>.md name stays accepted)."""
+    if (notes_dir / f"{cid}.md").exists():
+        return True
+    try:
+        for p in notes_dir.glob("*.md"):
+            if p.name.lower() == "readme.md":
+                continue
+            try:
+                txt = p.read_text(encoding="utf-8", errors="replace")
+                if not txt.startswith("---"):
+                    continue
+                fm = yaml.safe_load(txt.split("---", 2)[1]) or {}
+                if isinstance(fm, dict) and str(fm.get("claim_id") or "").strip() == cid:
+                    return True
+            except Exception:  # noqa: BLE001 — a bad note never blocks the sweep
+                continue
+    except Exception:  # noqa: BLE001 — unreadable dir -> legacy path only
+        pass
+    return False
+
+
 def notes_due(workspace: Path) -> list[str]:
     """#628: claim ids whose durable result note is still owed.
 
@@ -221,8 +246,9 @@ def notes_due(workspace: Path) -> list[str]:
     owed = []
     for e in entries:
         cid = e.get("claim_id") if isinstance(e, dict) else None
-        if cid and not (notes_dir / f"{cid}.md").exists():
-            owed.append(cid)
+        if not cid or _note_exists_for(notes_dir, cid):
+            continue
+        owed.append(cid)
     return owed
 
 

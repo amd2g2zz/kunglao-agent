@@ -105,20 +105,29 @@ runs/.ping-log.jsonl (isolation boundary: no agent teams; the orchestrator->work
 sanctioned channel).{diff_line}"""
 
 
-def build_prompt(ws: str, interval: str = "5m") -> str:
+def build_prompt(ws: str, interval: str = "5m", *,
+                 initial: bool = True) -> str:
     """The WATCHDOG cron body (issue 434): registration + one-command tick
     + the missed-event decision. The operating manual is NOT here — it is
-    constitution(), injected once at SessionStart."""
+    constitution(), injected once at SessionStart.
+
+    #635: the prompt is COMPOSED per registration — the stable core plus a
+    state-derived situation brief + the registration duty (the orchestrator
+    re-registers when the brief's state_hash drifts). The one-time startup
+    action rides only the FIRST registration; re-registrations pass
+    initial=False."""
     skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
     h = str(skill_dir / "scripts" / "hook_activation.py")
     tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
     cc = str(skill_dir / "scripts" / "convergence_check.py")
-    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
-
-[Startup action — run once on the loop's first trigger]
+    lp = str(skill_dir / "scripts" / "heartbeat_loop_prompt.py")
+    startup = (f"""[Startup action — run once on the loop's first trigger]
 python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
 
-[Watchdog tick — the heartbeat fires ONLY on missed events]
+""" if initial else "")
+    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
+
+{startup}[Watchdog tick — the heartbeat fires ONLY on missed events]
 0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
                                  # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
                                  # a quiet gap right after registration is deploy-day shape, not a dead cron (--reset-continuity re-arms).
@@ -131,7 +140,60 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
        step-failure    -> repair the failed mechanical step (the report's per-step stderr tails carry the text)
      then run python {cc} {ws} --json and follow the session constitution's decision semantics.
    - oracle_registered=false in the report -> run the Phase 0 task-oracle.yaml backfill now
-   - tick exit=2 with idle_circuit_breaker -> MANDATORY stop — do not re-tick through it"""
+   - tick exit=2 with idle_circuit_breaker -> MANDATORY stop — do not re-tick through it
+
+{situation_brief(ws, lp)}"""
+
+
+def situation_brief(ws: str, self_path: str) -> str:
+    """#635: the state-derived brief appended to every composed prompt.
+
+    Reads the live workspace (fail-open to an UNAVAILABLE marker — a brief
+    that cannot read state must never block a registration): the cadence
+    advice + state_hash (scripts/cadence_advisor), active workers, holds,
+    the last watchdog verdict. Ends with the registration duty the next
+    firing applies — the real-time edge is the state_hash comparison
+    (drift or evaluation_due => compose fresh + re-register)."""
+    try:
+        import cadence_advisor as ca
+        ws_p = Path(ws)
+        adv = ca.read_advice(ws_p)
+        workers = ca.active_workers(ws_p)
+        hold = ca.holds(ws_p)
+        shash = ca.state_hash(ws_p)
+        wd = (adv.get("sources") or {}).get("watchdog") or {}
+        wd_txt = ("fired: " + "; ".join(wd.get("reasons") or [])) \
+            if wd.get("fired") else "none"
+        lines = [
+            "[Situation brief — composed at registration; stale when "
+            "state_hash drifts]",
+            f"- state_hash: {shash}",
+            f"- cadence: current={adv.get('current_interval_min', '?')}m "
+            f"advice={adv.get('recommended_interval_min', '?')}m "
+            f"eval_tick={adv.get('ticks_since_eval', '?')}/3 "
+            f"due={adv.get('evaluation_due', '?')}",
+            f"- active workers: {', '.join(workers) if workers else 'none'}",
+            f"- holds: {' | '.join(hold) if hold else 'none'}",
+            f"- last watchdog: {wd_txt}",
+            "",
+            "[Registration duty — every firing; act ONLY when due/drifted]",
+            "1. read runs/.cadence-advice.json; if evaluation_due OR its "
+            f"state_hash differs from {shash}:",
+            f"   - compose fresh: python {self_path} {ws} --interval <N>m "
+            "--no-initial",
+            "   - CronDelete the firing job; CronCreate the composed prompt "
+            "with cron */<N> * * * *",
+            "   - sync state: hook_activation.py <ws> --heartbeat-on "
+            "(interval sync) + loop_scheduler.py <ws> --interval <N>m "
+            "(durable mirror)",
+            "2. else: this registration is current — run the watchdog block "
+            "above only.",
+        ]
+        return "\n".join(lines)
+    except Exception:  # noqa: BLE001 — brief degrades, never blocks birth
+        return ("[Situation brief — UNAVAILABLE (cadence_advisor read "
+                "failed); run scripts/cadence_advisor.py <ws> before "
+                "deciding on any re-registration]")
 
 
 def verify_loop(ws: str) -> int:
@@ -221,7 +283,8 @@ def main() -> int:
         i = sys.argv.index("--interval")
         if i + 1 < len(sys.argv):
             interval = sys.argv[i + 1]
-    print(build_prompt(ws, interval))
+    initial = "--no-initial" not in sys.argv  # #635: startup rides only birth
+    print(build_prompt(ws, interval, initial=initial))
     return 0
 
 

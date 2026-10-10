@@ -82,9 +82,13 @@ def write_fail_marker(ws, error) -> None:
 
 
 def clear_fail_marker(ws) -> None:
-    """A successful emit clears the marker (last-attempt semantics)."""
+    """A successful emit clears the marker (last-attempt semantics).
+
+    No marker = the clean face (nothing to clear) — silence, not a warn
+    (#630: the missing-marker FileNotFoundError warned on every
+    think-seat run; emit_health already reads absence as ok)."""
     try:
-        (Path(ws) / MARKER_REL).unlink()
+        (Path(ws) / MARKER_REL).unlink(missing_ok=True)
     except OSError as exc:
         warn("clear_fail_marker", f"{type(exc).__name__}: {exc}")
 

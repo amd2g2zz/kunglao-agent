@@ -43,6 +43,7 @@ State (runs/, derived-data dotfiles in the recall_metrics style):
 
 Usage:
   python backtrack_loop.py --policy <workspace>   # heartbeat_tick step (advisory)
+  python backtrack_loop.py <workspace> --policy   # scheduler form (uniform ws-first, #630)
   python backtrack_loop.py --status <workspace>   # lag / pending / due JSON
 Exit codes: always 0 (observability never gates; the tick rc contract is
 untouched).
@@ -738,7 +739,12 @@ def main(argv: list[str] | None = None) -> int:
         # captured stream without reconfigure (pytest capsys) tolerated
         warn("stdout_reconfigure", f"{type(exc).__name__}: {exc}")
     args = sys.argv[1:] if argv is None else argv
-    if "--policy" in args:
+    # #630: the mechanism scheduler invokes the uniform ws-first form
+    # (`<ws> --policy|--status` — the runner prepends the workspace);
+    # the legacy `--policy <ws>` form stays supported.
+    if args and args[0] not in ("--policy", "--status"):
+        rest = [args[0]]
+    elif "--policy" in args:
         rest = args[args.index("--policy") + 1:]
     elif "--status" in args:
         rest = args[args.index("--status") + 1:]
