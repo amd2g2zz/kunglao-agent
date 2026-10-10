@@ -82,18 +82,21 @@ def test_register_row_shape_and_id_allocation(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1",
                       "the stage handoff occurs inside region R",
-                      "handoff marker at offset 0x40 in region R dump")
+                      "handoff marker at offset 0x40 in region R dump", actor="worker-C-1")
     assert row is not None
     assert row["schema"] == "prediction-ledger/1"
     assert row["id"] == "P-1"
     assert row["claim_id"] == "C-1"
     assert row["status"] == "pending"
     assert row["registered_ts"].endswith("Z")
-    # the six schema fields, exactly — nothing else rides a pending row
+    # the eight schema fields, exactly — nothing else rides a pending
+    # row (registered_by is the 5-F4 authorship stamp)
     assert set(row) == {"schema", "id", "claim_id", "statement",
-                        "discriminator", "registered_ts", "status"}
+                        "discriminator", "registered_by",
+                        "registered_ts", "status"}
+    assert row["registered_by"] == "worker-C-1"
     second = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                         "decrypted header starts with the magic bytes")
+                         "decrypted header starts with the magic bytes", actor="worker-C-1")
     assert second["id"] == "P-2"
     assert len(_ledger_rows(ws)) == 2
 
@@ -104,7 +107,7 @@ def test_register_refuses_trivial_discriminator(tmp_path, capsys):
     # banks ~0 lift — refused, nothing appended, reason on the warn face
     row = pl.register(ws, "C-1",
                       "the config table lists three builders",
-                      "config table builders")
+                      "config table builders", actor="worker-C-1")
     assert row is None
     assert _ledger_rows(ws) == []
     assert "trivial" in capsys.readouterr().err.lower()
@@ -113,10 +116,10 @@ def test_register_refuses_trivial_discriminator(tmp_path, capsys):
 def test_register_refuses_duplicate_discriminator(tmp_path):
     ws = _ws(tmp_path)
     first = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                        "decrypted header starts with the magic bytes")
+                        "decrypted header starts with the magic bytes", actor="worker-C-1")
     assert first is not None
     dup = pl.register(ws, "C-2", "another phrasing of the same bet",
-                      "  Decrypted header starts with the magic bytes.  ")
+                      "  Decrypted header starts with the magic bytes.  ", actor="worker-C-1")
     assert dup is None  # dedup by discriminator, across claims
     assert len(_ledger_rows(ws)) == 1
 
@@ -124,9 +127,9 @@ def test_register_refuses_duplicate_discriminator(tmp_path):
 def test_register_rejects_empty_input(tmp_path):
     ws = _ws(tmp_path)
     with pytest.raises(ValueError):
-        pl.register(ws, "C-1", "  ", "offset 0x40 marker")
+        pl.register(ws, "C-1", "  ", "offset 0x40 marker", actor="worker-C-1")
     with pytest.raises(ValueError):
-        pl.register(ws, "C-1", "a real statement", "")
+        pl.register(ws, "C-1", "a real statement", "", actor="worker-C-1")
     assert _ledger_rows(ws) == []
 
 
@@ -155,7 +158,7 @@ def test_log_lift_pin_and_floor_clamp():
 def test_settle_confirmed_appends_transition_row(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     t_row = pl.settle(ws, row["id"], "confirmed")
     assert t_row is not None
     # the transition-ledger shape, via the existing face
@@ -177,7 +180,7 @@ def test_settle_confirmed_appends_transition_row(tmp_path):
 def test_settle_refuted_banks_zero_credit(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     t_row = pl.settle(ws, row["id"], "refuted")
     assert t_row is not None
     assert t_row["r_settle"] == 0.0
@@ -188,7 +191,7 @@ def test_settle_refuted_banks_zero_credit(tmp_path):
 def test_settle_rejects_invalid_outcome_and_unknown_id(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     with pytest.raises(ValueError):
         pl.settle(ws, row["id"], "vibes")
     assert pl.settle(ws, "P-999", "confirmed") is None
@@ -199,7 +202,7 @@ def test_settle_rejects_invalid_outcome_and_unknown_id(tmp_path):
 def test_double_settle_is_refused(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     assert pl.settle(ws, row["id"], "confirmed") is not None
     n = len(_ledger_rows(ws))
     assert pl.settle(ws, row["id"], "refuted") is None
@@ -212,7 +215,7 @@ def test_double_settle_is_refused(tmp_path):
 def test_ttl_expiry_flips_on_read_never_deletes(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     assert [r["id"] for r in pl.pending(ws)] == [row["id"]]
     _age_row(ws, row["id"], pl.PREDICTION_TTL_HOURS + 9)
     # flipped out of pending, visible as expired, bytes untouched on disk
@@ -226,9 +229,9 @@ def test_backlog_face_carries_count_and_max_age(tmp_path):
     ws = _ws(tmp_path)
     assert pl.backlog(ws) == {"count": 0, "max_age_hours": 0.0}
     pl.register(ws, "C-1", "blob decrypts under scheme X",
-                "decrypted header starts with the magic bytes")
+                "decrypted header starts with the magic bytes", actor="worker-C-1")
     pl.register(ws, "C-2", "stage handoff lands in region R",
-                "handoff marker at offset 0x40 in region R dump")
+                "handoff marker at offset 0x40 in region R dump", actor="worker-C-1")
     _age_row(ws, "P-2", 30.0)
     b = pl.backlog(ws)
     assert b["count"] == 2
@@ -240,9 +243,9 @@ def test_backlog_face_carries_count_and_max_age(tmp_path):
 def test_settle_matching_containment_settles_claim_predictions(tmp_path):
     ws = _ws(tmp_path)
     mine = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                       "decrypted header starts with the magic bytes")
+                       "decrypted header starts with the magic bytes", actor="worker-C-1")
     other = pl.register(ws, "C-2", "stage handoff lands in region R",
-                        "handoff marker at offset 0x40 in region R dump")
+                        "handoff marker at offset 0x40 in region R dump", actor="worker-C-1")
     note = ("ran the probe; observed: the decrypted header starts with the "
             "magic bytes per evidence/replay.json")
     settled = pl.settle_matching(ws, "C-1", note)
@@ -259,7 +262,7 @@ def test_settle_matching_containment_settles_claim_predictions(tmp_path):
 def test_settle_matching_ignores_expired_predictions(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     _age_row(ws, row["id"], pl.PREDICTION_TTL_HOURS + 1)
     assert pl.settle_matching(ws, "C-1",
                               "the decrypted header starts with the "
@@ -299,7 +302,7 @@ def test_compose_seam_renders_open_predictions_when_backlog_nonempty(
         tmp_path):
     ws = _ws(tmp_path)
     pl.register(ws, "C-1", "blob decrypts under scheme X",
-                "decrypted header starts with the magic bytes")
+                "decrypted header starts with the magic bytes", actor="worker-C-1")
     sections = _seam_sections(ws)
     titles = [s["title"] for s in sections]
     assert "open-predictions" in titles
@@ -318,7 +321,7 @@ def test_compose_seam_silent_when_backlog_empty(tmp_path):
 def test_settled_predictions_leave_the_backlog(tmp_path):
     ws = _ws(tmp_path)
     row = pl.register(ws, "C-1", "blob decrypts under scheme X",
-                      "decrypted header starts with the magic bytes")
+                      "decrypted header starts with the magic bytes", actor="worker-C-1")
     pl.settle(ws, row["id"], "confirmed")
     assert pl.pending(ws) == []
     assert pl.expired(ws) == []

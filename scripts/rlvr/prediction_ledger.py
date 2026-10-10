@@ -14,13 +14,20 @@ settlement pipeline consumes those rows unchanged.
 
 Faces:
 
-  register(ws, claim_id, statement, discriminator) -> row | None
+  register(ws, claim_id, statement, discriminator, actor) -> row | None
       One falsifiable prediction, schema ``prediction-ledger/1``.
       Refuses (None + loud warn) a trivial discriminator — one whose
       tokens are a subset of the statement's (the statement restates
-      what is already observed; it banks ~0 lift) — and a duplicate
-      discriminator against any open prediction (dedup). Input
-      validation at the boundary: empty statement/discriminator raise.
+      what is already observed; it banks ~0 lift) — a SCAFFOLD-AIMED
+      discriminator (4-L5: one whose tokens touch the checker's
+      own MANDATED output — the engine-parsed ``verdict:`` frontmatter
+      line settles on contract compliance, never on the claim's truth),
+      and a duplicate discriminator against any open prediction (dedup).
+      5-F4: ``actor`` (the registering act's identity) is REQUIRED
+      and rides the row as ``registered_by`` — the raw-JSONL-append
+      bypass (runs/predictions.jsonl is not a carrier) mints rows the
+      settle face will never honor. Input validation at the boundary:
+      empty statement/discriminator/actor raise.
 
   base_rate(discriminator, statement) -> float
       The trivial-prior estimate: 1.0 when the discriminator is trivial
@@ -91,6 +98,14 @@ BASE_RATE_FLOOR = 0.01
 # open predictions older than this many hours flip to expired on read
 PREDICTION_TTL_HOURS = 72
 
+# 4-L5: the checker's own MANDATED output — the `verdict:`
+# frontmatter line the dispatch contract requires and the engine itself
+# parses (checkpoints.py:1308/1518/1553). A discriminator touching
+# these tokens settles on contract compliance, never on the claim's
+# truth. Extension point: a scaffold line joins only when the contract
+# actually mandates it — never fabricated here.
+MANDATED_CHECKER_MARKERS = ("verdict",)
+
 _ID_RE = re.compile(r"^P-(\d+)$")
 
 
@@ -107,6 +122,16 @@ def is_trivial(discriminator: str, statement: str) -> bool:
     observed — base rate ~1, lift ~0)."""
     disc = _tokens(discriminator)
     return bool(disc) and disc <= _tokens(statement)
+
+
+def is_scaffold_aimed(discriminator: str) -> bool:
+    """4-L5: True when the discriminator's tokens touch the
+    checker's MANDATED output (``MANDATED_CHECKER_MARKERS``) — such a
+    discriminator is a guaranteed hit on any contract-compliant verifier
+    note regardless of the claim's truth (base rate ~1 by
+    construction)."""
+    disc = _tokens(discriminator)
+    return bool(disc) and bool(disc & set(MANDATED_CHECKER_MARKERS))
 
 
 def base_rate(discriminator: str, statement: str) -> float:
@@ -177,15 +202,27 @@ def latest_by_id(ws) -> dict[str, dict]:
 # ---------------------------------------------------------- registration
 
 def register(ws, claim_id: str, statement: str,
-             discriminator: str) -> dict | None:
-    """One falsifiable prediction (see module docstring)."""
+             discriminator: str, actor: str) -> dict | None:
+    """One falsifiable prediction (see module docstring). 5-F4:
+    ``actor`` (the registering act's identity) is required — the row
+    stamps it as ``registered_by`` and the settle faces refuse rows
+    without it, so the raw JSONL-append bypass mints rows that can
+    never bank lift."""
     statement = str(statement or "").strip()
     discriminator = str(discriminator or "").strip()
     claim_id = str(claim_id or "").strip()
-    if not statement or not discriminator or not claim_id:
+    actor = str(actor or "").strip()
+    if not statement or not discriminator or not claim_id or not actor:
         raise ValueError(
-            "prediction_ledger.register: claim_id, statement and "
-            "discriminator must all be non-empty")
+            "prediction_ledger.register: claim_id, statement, "
+            "discriminator and actor must all be non-empty")
+    if is_scaffold_aimed(discriminator):
+        warn("prediction_ledger.register",
+             f"refused scaffold-aimed discriminator {discriminator!r} "
+             f"for {claim_id}: its tokens touch the checker's MANDATED "
+             f"output {MANDATED_CHECKER_MARKERS} — it settles on "
+             f"contract compliance, not on the claim's truth (4-L5)")
+        return None
     if is_trivial(discriminator, statement):
         warn("prediction_ledger.register",
              f"refused trivial discriminator {discriminator!r} for "
@@ -214,6 +251,7 @@ def register(ws, claim_id: str, statement: str,
         "claim_id": claim_id,
         "statement": statement,
         "discriminator": discriminator,
+        "registered_by": actor,
         "registered_ts": utc_now_z(),
         "status": STATUS_PENDING,
     }
@@ -283,6 +321,15 @@ def settle(ws, prediction_id: str, outcome: str) -> dict | None:
              f"pending (status "
              f"{_latest_status(current or {}) or 'unknown'!r})")
         return None
+    if not str(current.get("registered_by") or "").strip():
+        # 5-F4: the raw JSONL-append bypass (runs/predictions.jsonl is
+        # not a carrier) mints rows with no authorship — they can never
+        # bank lift, no matter what the evidence text carries.
+        warn("prediction_ledger.settle",
+             f"refused settle of {prediction_id}: the pending row "
+             f"carries no registered_by authorship — a row that bypassed "
+             f"the register face never settles (5-F4)")
+        return None
     claim_id = str(current.get("claim_id") or "")
     statement = str(current.get("statement") or "")
     discriminator = str(current.get("discriminator") or "")
@@ -292,6 +339,7 @@ def settle(ws, prediction_id: str, outcome: str) -> dict | None:
         "claim_id": claim_id,
         "statement": statement,
         "discriminator": discriminator,
+        "registered_by": current.get("registered_by"),
         "registered_ts": current.get("registered_ts"),
         "status": outcome,
         "settled_ts": utc_now_z(),
@@ -335,6 +383,13 @@ def settle_matching(ws, claim_id: str, evidence_text) -> list[str]:
     settled: list[str] = []
     for row in pending(ws):
         if str(row.get("claim_id") or "") != str(claim_id or "").strip():
+            continue
+        if not str(row.get("registered_by") or "").strip():
+            # 5-F4: the raw-append bypass never settles (see settle).
+            warn("prediction_ledger.settle_matching",
+                 f"refused settle of {row.get('id')}: the pending row "
+                 f"carries no registered_by authorship — a row that "
+                 f"bypassed the register face never settles (5-F4)")
             continue
         discriminator = str(row.get("discriminator") or "").strip().lower()
         if discriminator and discriminator in text:

@@ -18,7 +18,14 @@ propensity p_i, realized reward r_i):
 per-family candidate weights (the Thompson draw distribution at decision
 time) give π_thompson; the greedy arm of ε-greedy takes the envelope's
 argmax; uniform is 1/K. Rows without a propensity (pre-fix logs) are
-skipped and counted — never silently imputed.
+skipped and counted — never silently imputed. 4-L8 discipline: rows
+whose envelope carries ``declared: true`` are skipped and counted (π=1.0
+by fiat — no draw receipt backs it, so the SNIPS mixing assumption does
+not hold for them), and the two on-disk π carriers stamped from the same
+receipt at the same dispatch — the audit envelope and the transition row
+(via the launch stash) — are cross-checked; a disagreeing pair is
+skipped, counted, and warned (a corrupted carrier can no longer move the
+verdict silently).
 
 Small-sample honesty (the design doc §6 risk): below MIN_DECISIONS the
 report carries `"verdict": "underpowered"` and no ranking — an ε-greedy
@@ -42,6 +49,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _common import utc_now_z
+from kunglao_log import warn  # canonical warn: ONE implementation
 from rlvr.incremental_reward import read_transitions
 
 MIN_DECISIONS = 40          # below this: underpowered, no verdict
@@ -87,6 +95,7 @@ def _audit_envelopes(ws: Path) -> list[dict]:
                         for k, v in cands.items()
                         if isinstance(v, dict)},
             "propensity": env.get("propensity"),
+            "declared": bool(env.get("declared")),
         })
     return out
 
@@ -151,11 +160,33 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
 
     decisions: list[dict] = []
     skipped_no_propensity = 0
+    skipped_declared_fiat = 0
+    skipped_propensity_mismatch = 0
     for t in transitions:
         key = f"{t.get('dispatch_id')}|{t.get('a')}"
         env = by_key.get(key)
         if env is None or env.get("propensity") is None:
             skipped_no_propensity += 1
+            continue
+        if env.get("declared"):
+            # 4-L8: declared selection rode π=1.0 by fiat — no draw
+            # receipt backs it, so the SNIPS mixing assumption does not
+            # hold; the row leaves the weighted join, counted.
+            skipped_declared_fiat += 1
+            continue
+        t_prop = t.get("propensity")
+        if t_prop is not None \
+                and abs(float(t_prop) - float(env["propensity"])) > 1e-9:
+            # 4-L8: the two π carriers (audit envelope + transition row
+            # via the launch stash) were stamped from the same receipt at
+            # the same dispatch — a disagreement means one was tampered
+            # with; the corrupted row can no longer move the verdict.
+            skipped_propensity_mismatch += 1
+            warn("policy_compare.compare",
+                 f"refused decision {key!r}: recorded propensity "
+                 f"{float(t_prop)} != envelope propensity "
+                 f"{float(env['propensity'])} — the π carriers disagree "
+                 f"(4-L8)")
             continue
         decisions.append({
             "family": t.get("a"),
@@ -171,6 +202,8 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
         "decisions": len(decisions),
         "transitions": len(transitions),
         "skipped_no_propensity": skipped_no_propensity,
+        "skipped_declared_fiat": skipped_declared_fiat,
+        "skipped_propensity_mismatch": skipped_propensity_mismatch,
         "epsilon": EPSILON,
         "policies": {},
         "verdict": None,
