@@ -1093,9 +1093,15 @@ def _record_dispatch_intent(ws: Path, claim_id: str, prompt_text: str,
             method=_resolve_dispatch_agent(payload, prompt_text)
             or "dispatch",
             context_tags=decl["preconditions"],
-            uncertainty=(decl["uncertainty"] or
-                         "undeclared - dispatch prompt carried no uncertainty "
-                         "declaration (backstop row, owner review 2026-10-10)"),
+            # #626 local-fix CORRECTION (owner CI 2026-10-10): never
+            # backfill a missing declaration with a placeholder text — a
+            # fabricated uncertainty switches the ruling-3 gate OFF and
+            # the missing-intent census (oracle_cadence) goes blind. An
+            # undeclared dispatch stays undeclared: the gate declines,
+            # intent_unparsed lands as the durable signal, and the
+            # strategy-log row (declared: false) is the compose face's
+            # honest input.
+            uncertainty=decl["uncertainty"],
             expected_artifact=decl["expected_artifact"])
         if not res.get("ok"):
             # Ruling-3 gate declined (MISSING_UNCERTAINTY): the dispatch

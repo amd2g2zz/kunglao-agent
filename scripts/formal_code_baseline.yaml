@@ -4,10 +4,10 @@ files:
   hooks/compact_continuity.py: 2
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 194
+  hooks/dispatch_gate.py: 207
   hooks/env_check_gate.py: 30
   hooks/heartbeat_touch.py: 22
-  hooks/lib_kunglao.py: 54
+  hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
   hooks/round_closure.py: 9

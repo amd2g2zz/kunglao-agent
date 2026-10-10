@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: c66ba6b8af0f9457d549f42723915130fee32205d5e88e2155d6ab2897edf6e0
+    sha256: 9cdb07c5f51d69420f372a6e922241457486984c9193f3c8a4d8dc66513ef512
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -35,7 +35,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: 53133847e4561ab2c28d43d202583eb66d746c684d13071472334cb8d5862b53
+    sha256: 0bcd39b6f00b3b0618ec79afed863bd5bc273f6829bb7ffe9a6a38349a22d995
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
