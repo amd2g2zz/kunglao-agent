@@ -47,7 +47,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 46c56a40bde61bd6bbfeacbc66bda26e5bc3591a60c99b0ed6c044f00ebeac72
+    sha256: 9b1231f9f65bc49039c49751ec5d4e354527ae226aa10fa34685f6c4cef9d1e7
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -579,7 +579,7 @@ files:
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
-    sha256: 0c444b08b554be0a242aca071dbdcd8c9707185542255cd1b2eae342abcc95f1
+    sha256: 918d0e5dfc8d1ee319308b810bf144cfa7644c5e5483c5981240bfe062c59607
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
@@ -996,6 +996,10 @@ files:
     dest: .claude/scripts/rho_verifier.py
     kind: scaffold
     sha256: eb9cc1c8700772cb5636c81b61723e1f6f2c338865f96e060396b45f8f2c2199
+  - src: scripts/rl_digest.py
+    dest: .claude/scripts/rl_digest.py
+    kind: scaffold
+    sha256: 23c2a64c5536f6f2eee4a5d945d2cc446a9cb372beb368adf4d09a43dc8e35b3
   - src: scripts/roi_settlement.py
     dest: .claude/scripts/roi_settlement.py
     kind: scaffold

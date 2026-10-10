@@ -84,7 +84,8 @@ HOOK_EXIT_SEMANTICS = {
         ExitCode.GENERAL_ERROR: "turn exit BLOCKED — actionable set non-empty; reason carries the next-decision guidance (issue 434 WORKGUARD). Deliberate block, NOT a crash",
     },
     "round_closure": {
-        ExitCode.OK: "closure event row appended (or pass-through; recorder, never blocks)",
+        ExitCode.OK: "closure event row appended + RL digest line emitted "
+                     "(or pass-through; recorder, never blocks)",
     },
     "session_start": {
         ExitCode.OK: "armed + renewed + constitution injected (or non-workspace notice; never blocks a session)",
