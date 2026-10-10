@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_rt_read_barrier_652.py — #652 5-F2: the RT read barrier is
+"""tests/test_rt_read_barrier_652.py — the RT read barrier is
 MECHANICAL, not prompt-enforced.
 
 RED: `agents/kunglao-redteam.md` allowedTools is (Read, Glob, Grep, Bash, ...)

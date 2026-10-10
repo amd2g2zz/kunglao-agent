@@ -174,6 +174,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `challenge_ledger.py` | 对抗账本数据层 — challenge/rebuttal/arbitration 结构化落盘（grounding 门禁 + 断言冻结 + 5 轮硬闸 + append-only HMAC 链 + keyed summary） | tests |
 | `report_consistency_check.py` | report↔evidence consistency check | tests, docs |
 | `write_gate.py` | write-side gate auditor (#236) — maker-checker stamp re-verification + independent anchors + defer references re-checkable | lib(1), tests |
+| `evidence_pin.py` | evidence sha-pin policy for checker-consumed artifacts: `pin` freezes an artifact's bytes at first consumption (runs/evidence-pins.json, evidence/** only), `check` reports missing/changed/corrupt (exit 2), `unpin --reason` is the audited supersede (blank reason refuses); the store behind hooks/evidence_pin_guard.py's write freeze and the promote_claims refusal | hooks/evidence_pin_guard, scripts/e2e/checkpoints, scripts/e2e/runtime, tests |
 
 ## State & lifecycle (claim/ledger/blocker maintenance)
 

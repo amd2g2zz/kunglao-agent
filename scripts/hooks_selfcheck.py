@@ -78,8 +78,8 @@ _KONG_SKIP_FILES = frozenset({
     "session_start.py",     # SessionStart arm + constitution — env_check scans it (issue 434)
     "compact_continuity.py",  # PreCompact continuity — env_check scans it (issue 434)
     "user_signal_capture.py",  # UserPromptSubmit observation — env_check scans it (issue 434)
-    "rt_read_barrier.py",    # RT read barrier (#652) — env_check scans it
-    "evidence_pin_guard.py",  # evidence sha-pin freeze (#652) — env_check scans it
+    "rt_read_barrier.py",    # RT read barrier — env_check scans it
+    "evidence_pin_guard.py",  # evidence sha-pin freeze — env_check scans it
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —

@@ -370,8 +370,8 @@ class TestMcpFaceWiring:
         assert wire_up_settings.DOUBLE_REGISTERED_HOOKS == frozenset({
             "worker_budget.py", "orchestrator_tool_guard.py",
             "write_guard.py",  # #516: the Bash register face
-            # #652: the RT read barrier (PreToolUse + UserPromptSubmit) and
-            # the evidence sha-pin freeze (Write|Edit|MultiEdit + Bash)
+            # the RT read barrier (PreToolUse + UserPromptSubmit) and the
+            # evidence sha-pin freeze (Write|Edit|MultiEdit + Bash)
             "rt_read_barrier.py", "evidence_pin_guard.py"})
 
     def test_emit_action_words_registered(self):

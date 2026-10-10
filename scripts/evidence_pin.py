@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""evidence_pin.py — #652 5-F3: sha-pin policy for checker-consumed evidence.
+"""evidence_pin.py — sha-pin policy for checker-consumed evidence.
 
 WHY: evidence/** was maker-writable (write_guard carriers cover only
 facts/**.md, notes/**.md, claim-register.yaml, facts/_INDEX.md) while BOTH

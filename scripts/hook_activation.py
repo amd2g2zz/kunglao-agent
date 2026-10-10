@@ -973,9 +973,9 @@ _DEPLOYED_WIRING = (
     ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
     ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
     ("PreToolUse", "Bash", "write_guard.py"),  # #516 register Bash face
-    ("PreToolUse", "Read|Glob|Grep|Bash|Agent", "rt_read_barrier.py"),  # #652 5-F2
-    ("PreToolUse", "Edit|Write|MultiEdit", "evidence_pin_guard.py"),  # #652 5-F3
-    ("PreToolUse", "Bash", "evidence_pin_guard.py"),  # #652 mutation idioms
+    ("PreToolUse", "Read|Glob|Grep|Bash|Agent", "rt_read_barrier.py"),
+    ("PreToolUse", "Edit|Write|MultiEdit", "evidence_pin_guard.py"),
+    ("PreToolUse", "Bash", "evidence_pin_guard.py"),  # mutation idioms
     ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
     ("PostToolUse", "Agent", "worker_pulse.py"),
     ("PostToolUse", "Agent", "state_anchor.py"),
@@ -989,7 +989,7 @@ _DEPLOYED_WIRING = (
     ("SessionStart", "", "session_start.py"),      # issue 434 constitution
     ("PreCompact", "", "compact_continuity.py"),   # issue 434 continuity
     ("UserPromptSubmit", "", "user_signal_capture.py"),  # issue 434 observation
-    ("UserPromptSubmit", "", "rt_read_barrier.py"),      # #652 5-F2 arming face
+    ("UserPromptSubmit", "", "rt_read_barrier.py"),      # RT arming face
 )
 
 
@@ -1213,7 +1213,7 @@ def register_hooks(workspace: Path | None = None,
     # mention the register, so this row is cheap for every other Bash call.
     pre, added = _ensure(pre, "Bash", "write_guard.py")
     count += added
-    # rt_read_barrier (#652 5-F2): the RT read barrier — a red-team act
+    # rt_read_barrier: the RT read barrier — a red-team act
     # (mechanical identity: payload agent_type on subagent tool calls; the
     # UserPromptSubmit-armed session for the top-level `claude -p` act
     # shape) is denied the maker faces (facts/**, notes/**, the verification
@@ -1222,7 +1222,7 @@ def register_hooks(workspace: Path | None = None,
     # faces AND the Agent face (identity laundering).
     pre, added = _ensure(pre, "Read|Glob|Grep|Bash|Agent", "rt_read_barrier.py")
     count += added
-    # evidence_pin_guard (#652 5-F3): checker-consumed evidence artifacts
+    # evidence_pin_guard: checker-consumed evidence artifacts
     # (sha-pinned in runs/evidence-pins.json) are frozen against Write/Edit
     # and against Bash mutation idioms; reads stay open by construction.
     pre, added = _ensure(pre, "Edit|Write|MultiEdit", "evidence_pin_guard.py")
@@ -1271,7 +1271,7 @@ def register_hooks(workspace: Path | None = None,
             ("SessionStart", "session_start.py"),
             ("PreCompact", "compact_continuity.py"),
             ("UserPromptSubmit", "user_signal_capture.py"),
-            # #652 5-F2: the RT arming face shares UserPromptSubmit with the
+            # the RT arming face shares UserPromptSubmit with the
             # observation feed — a second matcher-less entry (the Stop-bucket
             # shape: two files, dedupe by basename).
             ("UserPromptSubmit", "rt_read_barrier.py")):

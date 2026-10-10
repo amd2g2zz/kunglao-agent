@@ -62,8 +62,8 @@ def test_registry_exists_in_wire_up_settings() -> None:
         "session_start.py",            # issue 434 SessionStart constitution
         "compact_continuity.py",       # issue 434 PreCompact continuity
         "user_signal_capture.py",      # issue 434 UserPromptSubmit observation
-        "rt_read_barrier.py",          # #652 5-F2 RT read barrier + arming
-        "evidence_pin_guard.py",       # #652 5-F3 evidence sha-pin freeze
+        "rt_read_barrier.py",          # RT read barrier + arming
+        "evidence_pin_guard.py",       # evidence sha-pin freeze
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -82,10 +82,10 @@ def test_double_registered_hooks_sentinel() -> None:
                                  # #516: second PreToolUse matcher row — the
                                  # Bash register face beside Edit|Write
                                  "write_guard.py",
-                                 # #652: UserPromptSubmit arming face beside
+                                 # UserPromptSubmit arming face beside
                                  # the PreToolUse Read|Glob|Grep|Bash|Agent row
                                  "rt_read_barrier.py",
-                                 # #652: PreToolUse Bash mutation idioms beside
+                                 # PreToolUse Bash mutation idioms beside
                                  # the Write|Edit|MultiEdit freeze face
                                  "evidence_pin_guard.py"}), (
         f"DOUBLE_REGISTERED_HOOKS drifted: {sorted(doubled)} — a membership "
@@ -206,7 +206,7 @@ KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
              # deliberately skipped by both narrow subsets.
              "workguard_gate.py", "round_closure.py", "session_start.py",
              "compact_continuity.py", "user_signal_capture.py",
-             "rt_read_barrier.py", "evidence_pin_guard.py"}  # #652
+             "rt_read_barrier.py", "evidence_pin_guard.py"}
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 

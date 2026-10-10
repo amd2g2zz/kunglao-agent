@@ -92,7 +92,7 @@ def _write_settings(target_root: Path) -> Path:
     pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
         {"type": "command", "command": "python hooks/write_guard.py"},
         {"type": "command", "command": "python hooks/evidence_pin_guard.py"}]})
-    # #652: the RT read barrier rides one PreToolUse matcher row
+    # the RT read barrier rides one PreToolUse matcher row
     # (read/search/bash faces + the Agent re-delegation face).
     pre.append({"matcher": "Read|Glob|Grep|Bash|Agent", "hooks": [
         {"type": "command", "command": "python hooks/rt_read_barrier.py"}]})
@@ -111,7 +111,7 @@ def _write_settings(target_root: Path) -> Path:
     for event, command in plain_events.items():
         doc[event] = [{"hooks": [
             {"type": "command", "command": command}]}]
-    # #652: rt_read_barrier's second registration — the UserPromptSubmit
+    # rt_read_barrier's second registration — the UserPromptSubmit
     # arming face (bare-name dedupe: a second entry under the same event).
     doc["UserPromptSubmit"].append({"hooks": [
         {"type": "command", "command": "python hooks/rt_read_barrier.py"}]})

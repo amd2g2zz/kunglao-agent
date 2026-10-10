@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_evidence_pin_652.py — #652 5-F3: evidence/** surface policy.
+"""tests/test_evidence_pin_652.py — evidence/** surface policy.
 
 RED: hooks/write_guard.py carriers are only facts/**.md, notes/**.md,
 claim-register.yaml, facts/_INDEX.md — evidence/** was maker-writable via
@@ -155,7 +155,7 @@ def test_no_pins_means_no_traffic(tmp_path):
     rc, _e, _c = mod.evaluate(_payload(
         ws, "Write", {"file_path": str(ws / "evidence" / "replay-C-1.json"),
                       "content": "{}"}))
-    assert rc == 0, "target-based arming (#532 precedent): no pin, no guard"
+    assert rc == 0, "target-based arming (the write_guard precedent): no pin, no guard"
 
 
 def test_bash_mutations_denied_reads_allowed(tmp_path):
@@ -240,7 +240,7 @@ def test_promotion_untouched_without_pins(tmp_path):
 
 
 def test_checkpoints_helpers_fail_open_on_stub_repo(tmp_path):
-    """The #501 fixture repos ship no scripts/evidence_pin.py — the helpers
+    """The act-fixture repos ship no scripts/evidence_pin.py — the helpers
     must be loud-but-harmless, never break the act flow."""
     from types import SimpleNamespace
     from e2e import checkpoints

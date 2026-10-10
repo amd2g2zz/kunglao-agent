@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""rt_read_barrier.py — #652 5-F2: red-team blindness, MECHANICALLY enforced.
+"""rt_read_barrier.py — red-team blindness, MECHANICALLY enforced.
 
 RED: agents/kunglao-redteam.md allowedTools is (Read, Glob, Grep, Bash, …)
 and the act rides DEFAULT_RACK (scripts/e2e/llm_faces.py) because the RT
@@ -62,7 +62,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from _path_hygiene import load_hooks_lib, scripts_on_path  # #671 / #863
+from _path_hygiene import load_hooks_lib, scripts_on_path  # sys.path hygiene authority
 
 #: the red-team agent family — substring-matched against agent_type /
 #: dispatch meta.agent (mirrors blind_gate.VERIFIER_AGENT_MARKERS'
@@ -300,9 +300,9 @@ def _emit(ws: Path | None, face: str, tool: str, detail: str) -> None:
     """Durable trail (fail-open — the REJECT never depends on logging)."""
     try:
         if ws:
-            with scripts_on_path():  # #671 scoped membership
+            with scripts_on_path():  # scoped membership
                 import kunglao_log  # noqa: E402
-                kunglao_log.emit(ws, "rt_barrier", "rt_read_blocked",
+                kunglao_log.emit(ws, "hook:rt_read_barrier", "rt_read_blocked",
                                  tool=tool or None, detail=detail, exit=2,
                                  matched_rule=face)
     except Exception as exc:  # noqa: BLE001

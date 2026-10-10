@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""evidence_pin_guard.py — #652 5-F3: freeze checker-consumed evidence.
+"""evidence_pin_guard.py — freeze checker-consumed evidence.
 
 RED: evidence/** was maker-writable via Write/Edit/Bash while BOTH checker
 faces consume evidence/replay-<claim>.json as ground truth (the e2e
@@ -26,7 +26,8 @@ then rewrites, then re-runs the checker so the new bytes are re-consumed
 (e2e: checkpoints pins at act-land / unpins at act-launch, reason =
 re-verification round).
 
-Arming is TARGET-based (#532 precedent): no pin store / no pins -> exit 0.
+Arming is TARGET-based (the write_guard precedent): no pin store / no pins
+-> exit 0.
 Fail-open on unreadable payloads; a REJECT always leaves a durable
 runs/logs row (action=evidence_pin_blocked).
 """
@@ -46,7 +47,7 @@ import re
 import sys
 from pathlib import Path
 
-from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+from _path_hygiene import scripts_on_path  # sys.path hygiene authority
 
 #: the pin store (single source: scripts/evidence_pin.py owns the format)
 PIN_FILE_REL = ("runs", "evidence-pins.json")
@@ -152,9 +153,10 @@ def _emit(ws: Path | None, rel: str, tool: str, detail: str) -> None:
     """Durable trail (fail-open — the REJECT never depends on logging)."""
     try:
         if ws:
-            with scripts_on_path():  # #671 scoped membership
+            with scripts_on_path():  # scoped membership
                 import kunglao_log  # noqa: E402
-                kunglao_log.emit(ws, "evidence_pin", "evidence_pin_blocked",
+                kunglao_log.emit(ws, "hook:evidence_pin_guard",
+                                 "evidence_pin_blocked",
                                  tool=tool or None, detail=detail, exit=2,
                                  matched_rule=rel)
     except Exception as exc:  # noqa: BLE001
