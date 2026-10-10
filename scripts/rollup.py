@@ -119,20 +119,71 @@ def _rolled_up(workspace: Path, claim_id: str, terminal_status: str) -> bool:
 
 
 NOTES_DUE_FILE = "runs/notes-due.yaml"
+def _note_exists_for(notes_dir: "Path", cid: str) -> bool:
+    """#622-followup (owner note-norms 2026-10-10): a note's FILE NAME is a
+    descriptive phrase; the claim link lives in frontmatter (claim_id).
+    Existence = any note whose frontmatter claim_id == cid (the legacy
+    <cid>.md name stays accepted)."""
+    if (notes_dir / f"{cid}.md").exists():
+        return True
+    try:
+        for p in notes_dir.glob("*.md"):
+            if p.name.lower() == "readme.md":
+                continue
+            try:
+                txt = p.read_text(encoding="utf-8", errors="replace")
+                if not txt.startswith("---"):
+                    continue
+                fm = yaml.safe_load(txt.split("---", 2)[1]) or {}
+                if isinstance(fm, dict) and str(fm.get("claim_id") or "").strip() == cid:
+                    return True
+            except Exception:  # noqa: BLE001 — a bad note never blocks the sweep
+                continue
+    except Exception:  # noqa: BLE001 — unreadable dir -> legacy path only
+        pass
+    return False
 
 
 def _queue_notes_due(workspace: Path, claim_id: str, terminal_status: str) -> bool:
     """#628: append the durable-note obligation to runs/notes-due.yaml when
     the terminal claim has no notes/<id>.md. Idempotent (no duplicate entry
     per claim). Returns True when queued. The note itself is NEVER written
-    here — judge-then-revise first, the queue is only the reminder."""
+    here — judge-then-revise first, the queue is only the reminder.
+
+    local-fix (owner ruling 2026-10-10): scaffold seeds are init decisions
+    BY DESIGN — the matrix4b family, the same exemption the orphan check
+    carries. A note is durable *analysis content* (a valuable conclusion or
+    artifact); an init scaffold process is not that, so scaffold claims are
+    never queued, and a stale entry an earlier sweep queued for one is
+    swept on sight."""
+    is_scaffold = False
+    try:
+        _reg = yaml.safe_load(
+            (workspace / "claim-register.yaml").read_text(
+                encoding="utf-8")) or {}
+        for _c in (_reg.get("claims") or []):
+            if _c.get("id") == claim_id and str(
+                    _c.get("claim_class") or "").lower() == "scaffold":
+                is_scaffold = True
+                break
+    except Exception:  # noqa: BLE001 — unknown class keeps legacy behavior
+        is_scaffold = False
     notes_dir = workspace / "notes"
-    if (notes_dir / f"{claim_id}.md").exists():
-        return False
     due_path = workspace / NOTES_DUE_FILE
     try:
         data = yaml.safe_load(due_path.read_text(encoding="utf-8")) if due_path.exists() else None
         entries = (data or {}).get("due") or []
+        if is_scaffold:
+            fresh = [e for e in entries
+                     if not (isinstance(e, dict)
+                             and e.get("claim_id") == claim_id)]
+            if len(fresh) != len(entries):
+                due_path.write_text(
+                    yaml.safe_dump({"due": fresh}, allow_unicode=True),
+                    encoding="utf-8")
+            return False
+        if _note_exists_for(notes_dir, claim_id):
+            return False
         if any(e.get("claim_id") == claim_id for e in entries):
             return False
         entries.append({"claim_id": claim_id, "terminal": terminal_status,
