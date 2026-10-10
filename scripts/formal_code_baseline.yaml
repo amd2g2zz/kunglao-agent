@@ -141,7 +141,7 @@ files:
   scripts/intake_promise.py: 18
   scripts/jadx_exec.py: 21
   scripts/kunglao-decide.py: 9
-  scripts/kunglao-init.py: 296
+  scripts/kunglao-init.py: 298
   scripts/kunglao-monitor.py: 13
   scripts/kunglao-status.py: 1
   scripts/kunglao.py: 27
@@ -164,6 +164,7 @@ files:
   scripts/loop_state.py: 5
   scripts/loop_watchdog.py: 1
   scripts/mcp_probe.py: 41
+  scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
   scripts/method_families.py: 6
   scripts/migrate_facts.py: 12

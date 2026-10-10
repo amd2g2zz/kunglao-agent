@@ -651,7 +651,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: d7be9093ed2bbfe8c71d9f175f578c7b15986990602374231d7e43d6e0be12ac
+    sha256: c6af5fcf8b01b7739ef54fe22f486de42c704ef97dabb1a25f911a45bc1a0586
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -752,6 +752,10 @@ files:
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
     sha256: 82ee66ab23a2a7b3477d2c452b777121152d383ae89b6cd682e0147335c1493f
+  - src: scripts/mcp_repair.py
+    dest: .claude/scripts/mcp_repair.py
+    kind: scaffold
+    sha256: 0843f6f4c8c86c71ef939c62e9434b059622a2fb4196931a8e8d78f691328f08
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
@@ -1107,7 +1111,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 776bb1a2f242ea93c80b2a2fe3e37f7d7af60c90cc1fac20cbc6e9c65d888d4b
+    sha256: acf42d0ba7d21196dad76d2d9070e1a5087f2b7e4993f09053c8df131246a299
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
