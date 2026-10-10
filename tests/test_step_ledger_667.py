@@ -74,13 +74,12 @@ def test_record_step_refuses_smuggled_content(tmp_path) -> None:
 def test_recording_is_fail_open(tmp_path) -> None:
     ws = tmp_path / "bare"
     (ws / "runs").mkdir(parents=True)
-    (ws / "runs").chmod(0o500)      # unwritable ledger dir
-    try:
-        row = sl.build_step_row(session_id="s", tool="Bash",
-                                tool_input={}, tool_response={}, ts=TS)
-        assert sl.record_step(ws, row) is None   # None, never a raise
-    finally:
-        (ws / "runs").chmod(0o700)
+    # the ledger PATH is a directory: open("a") fails for ANY user
+    # (chmod bits are ignored by root — CI runs as root)
+    (ws / "runs" / "step-ledger.jsonl").mkdir()
+    row = sl.build_step_row(session_id="s", tool="Bash",
+                            tool_input={}, tool_response={}, ts=TS)
+    assert sl.record_step(ws, row) is None   # None, never a raise
 
 
 # ------------------------------------------------- the lifecycle ----
@@ -205,12 +204,9 @@ def test_intervention_row_is_hash_only(tmp_path) -> None:
 def test_intervention_fail_open(tmp_path) -> None:
     ws = tmp_path / "bare"
     (ws / "runs").mkdir(parents=True)
-    (ws / "runs").chmod(0o500)
-    try:
-        assert sl.record_intervention(ws, trigger="t", actor="a",
-                                      subject="s", note="n") is None
-    finally:
-        (ws / "runs").chmod(0o700)
+    (ws / "runs" / "interventions.jsonl").mkdir()
+    assert sl.record_intervention(ws, trigger="t", actor="a",
+                                  subject="s", note="n") is None
 
 
 # ---------------------------------------------------- the shadow hook ----
