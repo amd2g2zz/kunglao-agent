@@ -102,8 +102,10 @@ def mcp_handshake(argv: list[str], timeout: float = DEFAULT_TIMEOUT_S) -> tuple[
     try:
         proc.stdin.write(init + "\n")
         proc.stdin.flush()
-    except (BrokenPipeError, OSError):
-        pass  # server died before reading stdin — the read loop below reports it
+    except (BrokenPipeError, OSError) as exc:
+        from kunglao_log import warn
+        # server died before reading stdin — the read loop below reports it
+        warn("mcp_repair_stdin_write", f"{type(exc).__name__}: {exc}")
     deadline = time.time() + max(1.0, timeout)
     buf: list[str] = []
     try:

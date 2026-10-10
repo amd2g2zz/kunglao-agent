@@ -903,26 +903,6 @@ def _check_uv(report: ToolchainReport) -> None:
                 probe=ProbeTier.LIVENESS, root_cause="uv",
             ))
         return
-    # local-fix: probe the astral fallback paths UNCONDITIONALLY — a uv
-    # installed at ~/.local/bin/uv (the astral default) is a working uv even
-    # when PATH misses it. Pre-fix, these paths were only probed inside the
-    # AGENT-DO install branch, so a fallback-present / PATH-absent machine
-    # got a hard FAIL + a pointless install command.
-    for _cand in _UV_FALLBACK_PATHS:
-        _p = Path(os.path.expanduser(_cand))
-        if _p.is_file():
-            uv = str(_p)
-            break
-    if uv:
-        rc, out, err = _run_cmd([uv, "--version"], timeout=15)
-        if rc == 0 and out:
-            report.items.append(CheckResult(
-                name="uv", status=Status.PASS, tier=Tier.HARD,
-                detail=f"uv at {uv} (fallback path probe): "
-                       f"{out.splitlines()[0]}",
-                probe=ProbeTier.LIVENESS,
-            ))
-            return
     attempts: tuple[str, ...] = ()
     attempt_error = ""
     if _agent_do_enabled():

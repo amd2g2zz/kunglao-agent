@@ -148,9 +148,9 @@ class TestFirstDispatchAdmission:
             f"the REJECT face must carry the #55 producer tag; "
             f"stdout={r.stdout!r}")
         assert "q1" in r.stdout, f"repair text must name the PQ; {r.stdout!r}"
-        assert ("mint >=2 competing family arms for q1") in r.stdout, (
-            f"repair path must name the issue 252 mint face; "
-            f"stdout={r.stdout!r}")
+        assert ("mint >=3 competing family arms for q1") in r.stdout, (
+            f"repair path must name the issue 252 mint face (floor 3, "
+            f"#649); stdout={r.stdout!r}")
 
     def test_absent_hypotheses_dir_rejects(self, tmp_path) -> None:
         """No hypotheses/ at all = zero candidates — same REJECT (the layer
@@ -207,23 +207,25 @@ class TestFirstDispatchAdmission:
 # ---------- AC 2: filing the candidates admits the same dispatch ---------
 
 class TestAdmissionSatisfied:
-    def test_two_candidates_on_one_scaffold_pass(self, tmp_path) -> None:
+    def test_three_candidates_on_one_scaffold_pass(self, tmp_path) -> None:
         root = tmp_path
         ws = _mk_ws(root)
-        _write_hyp(ws, "H-001", candidates=["AES-CBC", "ChaCha20"])
+        _write_hyp(ws, "H-001",
+                   candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, (
-            f"filled candidate field must admit the dispatch; "
-            f"stderr={r.stderr!r}")
+            f"filled candidate field must admit the dispatch (floor 3, "
+            f"#649); stderr={r.stderr!r}")
 
-    def test_two_open_hypotheses_one_candidate_each_pass(
+    def test_three_open_hypotheses_one_candidate_each_pass(
             self, tmp_path) -> None:
-        """The unit is the candidate, not the file: two open hypotheses
+        """The unit is the candidate, not the file: three open hypotheses
         holding one candidate each also clear the bar."""
         root = tmp_path
         ws = _mk_ws(root)
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         _write_hyp(ws, "H-002", candidates=["custom-rolling-mac"])
+        _write_hyp(ws, "H-003", candidates=["truncated-digest"])
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, f"stderr={r.stderr!r}"
 
@@ -236,6 +238,8 @@ class TestAdmissionSatisfied:
                    claim_id="C-1", group="mac-structure", body_marker="")
         _write_hyp(ws, "H-002", candidates=["truncated-digest"],
                    claim_id="C-1", group="mac-structure", body_marker="")
+        _write_hyp(ws, "H-003", candidates=["custom-rolling-mac"],
+                   claim_id="C-1", group="mac-structure", body_marker="")
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, f"stderr={r.stderr!r}"
 
@@ -245,6 +249,8 @@ class TestAdmissionSatisfied:
         ws = _mk_ws(root)
         _write_hyp(ws, "H-001", candidates=["AES-CBC"], group="pq:q1")
         _write_hyp(ws, "H-002", candidates=["ChaCha20"], group="pq:q1")
+        _write_hyp(ws, "H-003", candidates=["custom-rolling-mac"],
+                   group="pq:q1")
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, f"stderr={r.stderr!r}"
 
@@ -264,7 +270,8 @@ class TestAdmissionSatisfied:
         import hypothesis_bridge as hb
         import priority_ratio as pr
         r = hb.mint_family_arms(ws, "H-001",
-                                ["AES-CBC", "custom-rolling-mac"],
+                                ["AES-CBC", "custom-rolling-mac",
+                                 "truncated-digest"],
                                 answers_question="q1")
         assert r["refused"] is None, r
         assert hb.check_bridge_lint(ws) == [], "lint-clean by construction"
@@ -279,7 +286,9 @@ class TestAdmissionSatisfied:
         ranked = pr.priority_ratio(claims, deps,
                                    pr.EvidenceView.from_workspace(ws))
         top = ranked[0].claim_id
-        gate = _run_gate(root, ws, _v1_envelope(top, ["Read", "Write"]))
+        gate = _run_gate(root, ws, _v1_envelope(top, ["Read", "Write"])
+                         + "\nagent-reasoning: minted-arm top-ranked seed; "
+                           "deviation is the authority ranker's draw")
         assert gate.returncode == 0, (
             f"a minted-arm workspace must pass first dispatch; "
             f"stderr={gate.stderr!r}")
@@ -312,7 +321,8 @@ class TestSecondDispatchUnrestricted:
         association, #105 producer) shows q1 was already dispatched."""
         root = tmp_path
         ws = _mk_ws(root)
-        _write_hyp(ws, "H-001", candidates=["AES-CBC", "ChaCha20"])
+        _write_hyp(ws, "H-001",
+                   candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         first = _PROMPT + "\nuncertainty: which mac the header uses"
         assert _run_gate(root, ws, first).returncode == 0
         assert _intent_rows(ws), "first dispatch must land the history row"

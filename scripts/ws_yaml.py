@@ -121,8 +121,9 @@ def _stamp_value(old_text: str, path) -> str | None:
         m2 = _STAMP_RE.search(sibling)
         if m2:
             return m2.group(1)
-    except OSError:
-        pass
+    except OSError as exc:
+        from kunglao_log import warn
+        warn("ws_yaml_stamp_read", f"{type(exc).__name__}: {exc}")
     try:
         import template_version as _tv
         return _tv.read_skill_version()

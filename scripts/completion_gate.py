@@ -211,8 +211,8 @@ def _note_exists_for(notes_dir: "Path", cid: str) -> bool:
                     return True
             except Exception:  # noqa: BLE001 — a bad note never blocks the sweep
                 continue
-    except Exception:  # noqa: BLE001 — unreadable dir -> legacy path only
-        pass
+    except Exception as exc:  # noqa: BLE001 — unreadable dir -> legacy path only
+        warn("completion_gate_notes_scan", f"{type(exc).__name__}: {exc}")
     return False
 
 

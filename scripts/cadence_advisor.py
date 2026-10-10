@@ -156,8 +156,9 @@ def state_hash(ws: Path) -> str:
         parts.append("claims=" + ",".join(sorted(rows)))
         parts.append("terminal=" + str(sum(
             1 for r in rows if r.split(":", 1)[-1].upper() in TERMINAL)))
-    except Exception:  # noqa: BLE001 - hash degrades, never blocks
-        pass
+    except Exception as exc:  # noqa: BLE001 - hash degrades, never blocks
+        from kunglao_log import warn
+        warn("cadence_state_hash", f"{type(exc).__name__}: {exc}")
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 

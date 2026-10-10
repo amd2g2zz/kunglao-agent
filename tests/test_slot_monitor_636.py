@@ -60,7 +60,7 @@ def test_silence_41m_gone(tmp_path):
 def test_long_frozen_review(tmp_path):
     import slot_monitor as sm
     ws = _ws(tmp_path)
-    old = time.strftime("%Y-%m-%dT%H:%M", time.gmtime(time.time() - 2000))
+    old = time.strftime("%Y-%m-%dT%H:%M", time.gmtime(time.time() - 4000))
     _worker(ws, first_ts=old, progress=1)
     (ws / "runs" / ".slot-report.json").write_text(json.dumps(
         {"workers": [{"worker": "C005", "progress_lines": 1}]}),

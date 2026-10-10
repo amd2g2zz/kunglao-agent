@@ -9,8 +9,11 @@
   "license": "AGPL-3.0-only",
   "mcpServers": {
     "camoufox-reverse": {
-      "command": "/Users/mikenike/projects/camoufox-reverse-mcp/.venv/bin/camoufox-reverse-mcp",
-      "args": []
+      "command": "python",
+      "args": [
+        "-m",
+        "camoufox_reverse_mcp"
+      ]
     }
   }
 }

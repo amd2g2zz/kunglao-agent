@@ -84,8 +84,9 @@ def _age_s(text: str, mtime: float, now: datetime) -> float:
             t = datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M").replace(
                 tzinfo=timezone.utc)
             return max(0.0, (now - t).total_seconds())
-        except ValueError:
-            pass
+        except ValueError as exc:
+            from kunglao_log import warn
+            warn("slot_age_parse", f"{type(exc).__name__}: {exc}")
     return max(0.0, now.timestamp() - mtime)
 
 

@@ -1799,8 +1799,8 @@ def main() -> int:
             # #624: roll back this rejected attempt's approval-point
             # OPEN->IN_PROGRESS flip (no fresh worker exists for it).
             _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
-        except Exception:  # noqa: BLE001 — undo trouble never changes the verdict
-            pass
+        except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
+            warn("undo_dispatch_anchor", f"{type(exc).__name__}: {exc}")
     return rc
 
 

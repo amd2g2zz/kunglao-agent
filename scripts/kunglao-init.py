@@ -3963,8 +3963,8 @@ def uv_sync_workspace(root: Path | None = None, timeout: int = 600) -> dict:
             try:
                 subprocess.run(["sh", "-c", _uv_cmd], capture_output=True,
                                text=True, timeout=300)
-            except (subprocess.TimeoutExpired, OSError):
-                pass
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                warn("uv_agent_install", f"{type(exc).__name__}: {exc}")
             uv = shutil.which("uv")
             if uv is None:
                 for _cand in _uv_paths:

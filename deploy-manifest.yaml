@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 91f4e9109322d4cac3b97b027a8ad4428195ebc3fb9e6b167d98187e1d49310e
+    sha256: 9fd5f7dc8b285ccce31be5739377edd1254496673d55e9fb900940522df229d1
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -235,7 +235,7 @@ files:
   - src: scripts/cadence_advisor.py
     dest: .claude/scripts/cadence_advisor.py
     kind: scaffold
-    sha256: 4ef0c86781f74505d3c3305b28c9edf0c0fee18c67b346cca3868a6690036d36
+    sha256: 6fa6190c20ce5aa912fe220dc1a9188cb37ccac2bb26becdd55770559219c50a
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -279,7 +279,7 @@ files:
   - src: scripts/completion_gate.py
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
-    sha256: db789abecb99d0636115431fee7f25f0901f383ff14c3cb83207e142ee1ffef1
+    sha256: 19de9b04ccae4e27341c8e98fb05436c6f599a66f7faea800234082323d0edff
   - src: scripts/compute_priors.py
     dest: .claude/scripts/compute_priors.py
     kind: scaffold
@@ -659,7 +659,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: c6af5fcf8b01b7739ef54fe22f486de42c704ef97dabb1a25f911a45bc1a0586
+    sha256: 5b061541498cda4ef76214cae3e14cdb796362cc994738bfbeb374209bfe1540
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -767,7 +767,7 @@ files:
   - src: scripts/mcp_repair.py
     dest: .claude/scripts/mcp_repair.py
     kind: scaffold
-    sha256: 0843f6f4c8c86c71ef939c62e9434b059622a2fb4196931a8e8d78f691328f08
+    sha256: f089ea9fee946c15163095d35eab6c655ca2189c8000a40af27e754b03eaeb83
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
@@ -1007,7 +1007,7 @@ files:
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: 1d8fd08c2f39807dad20a46b33eb1492f8ea03e803d70aef1651eadfe3319818
+    sha256: cbaae755263abec55a214fefa363a8eb01b7ad67f6641b93765303df3c1d0ee5
   - src: scripts/rotation_induction.py
     dest: .claude/scripts/rotation_induction.py
     kind: scaffold
@@ -1051,7 +1051,7 @@ files:
   - src: scripts/slot_monitor.py
     dest: .claude/scripts/slot_monitor.py
     kind: scaffold
-    sha256: 57a5aa9ddbe2ecb2d22b569f27e9bf1a3bb91e07b0f6530736883975028c7631
+    sha256: 484592ac45821b8d84f7fa00443d8e33b339183194c549e13cf14581a3727da3
   - src: scripts/stale_blocker_prune.py
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
@@ -1131,7 +1131,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: acf42d0ba7d21196dad76d2d9070e1a5087f2b7e4993f09053c8df131246a299
+    sha256: 776bb1a2f242ea93c80b2a2fe3e37f7d7af60c90cc1fac20cbc6e9c65d888d4b
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
@@ -1211,7 +1211,7 @@ files:
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
-    sha256: 6a0ddd810e902edec50a44887634f3585a6089ad037c9969c7af59a4f2c20e84
+    sha256: 8a97cf37bf9a946f69a3d698781ba458185e005effa8614253330d688ddf0b0a
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
@@ -1335,7 +1335,7 @@ files:
   - src: scripts/silent_except_baseline.yaml
     dest: .claude/scripts/silent_except_baseline.yaml
     kind: scaffold
-    sha256: ecfc462b376f074415b6afde6c1abc811c2af1877310085ffb2b1b7afcec0b5d
+    sha256: c07a50bb6c42e13458c31426aef2ffe41a061f206a80d620ea881aceee882877
   - src: scripts/tool_tiers.yaml
     dest: .claude/scripts/tool_tiers.yaml
     kind: scaffold
