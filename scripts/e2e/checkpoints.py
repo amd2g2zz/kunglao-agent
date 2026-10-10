@@ -1352,6 +1352,59 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
                          f"{type(exc).__name__}: {exc}")
 
 
+# ---- evidence sha-pin wiring (checker-consumed artifacts) ----
+
+def _checker_artifacts(ws: Path, claim: str) -> list[str]:
+    """The ws-relative evidence artifacts a checker face consumes: the
+    controlled-comparison replay artifact (verifier gate +
+    replay-equivalence face) for `claim`, and the verdict-scorer's
+    verdict.json. Existing-on-disk only — pinning is over artifacts."""
+    out = []
+    if claim:
+        rel = f"evidence/replay-{claim}.json"
+        if (Path(ws) / rel).is_file():
+            out.append(rel)
+    if (Path(ws) / "evidence" / "verdict.json").is_file():
+        out.append("evidence/verdict.json")
+    return out
+
+
+def _pin_checker_artifacts(ctx: RunContext, claim: str, *, by: str) -> None:
+    """Freeze the bytes a checker act consumed (sha-pin). Idempotent —
+    an existing pin is NEVER overwritten (frozen at first consumption; a
+    overwriting an existing pin would launder an out-of-band tamper).
+    Fail-open telemetry — the
+    pin policy never blocks the act flow itself."""
+    try:
+        ep = _load_repo_module(ctx.repo, "evidence_pin")
+        have = ep.pins_of(ctx.ws)
+        for rel in _checker_artifacts(ctx.ws, claim):
+            if rel in have:
+                continue
+            ep.pin(ctx.ws, rel, by=by, note=f"consumed by checker act ({claim})")
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud
+        kunglao_log.warn("e2e.evidence_pin",
+                         f"{type(exc).__name__}: {exc}")
+
+
+def _unpin_checker_artifacts(ctx: RunContext, claim: str, *, reason: str) -> None:
+    """Release the freeze before a NEW checker act launches — a fresh
+    verification round rewrites its own consumed artifact (the audited
+    supersede; the reason is recorded). claim -> the claim's replay
+    artifact; empty claim -> evidence/verdict.json (the verdict act's own
+    output). Store-visible pins only, so an unpinned workspace's launch
+    path writes nothing. Fail-open telemetry."""
+    try:
+        ep = _load_repo_module(ctx.repo, "evidence_pin")
+        wanted = {f"evidence/replay-{claim}.json"} if claim \
+            else {"evidence/verdict.json"}
+        for rel in sorted(set(ep.pins_of(ctx.ws)) & wanted):
+            ep.unpin(ctx.ws, rel, reason=reason, by="e2e")
+    except Exception as exc:  # noqa: BLE001 — telemetry, but loud
+        kunglao_log.warn("e2e.evidence_pin_unpin",
+                         f"{type(exc).__name__}: {exc}")
+
+
 def _settle_predictions(ctx: RunContext, claim: str,
                         evidence_text: str) -> None:
     """The prediction-ledger settle wiring: pending predictions
@@ -1424,6 +1477,10 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         method_family=getattr(ctx.state, "method_family", "") or None)
     _v_launch = _record_verify_launch(ctx, claim, "verify")
     _v_attempt = str((_v_launch or {}).get("attempt_id") or "")
+    # a fresh verification round regenerates its own replay
+    # artifact — release the previous pin (audited) before the act runs.
+    _unpin_checker_artifacts(
+        ctx, claim, reason=f"re-verification round ({ctx.state.run_id})")
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
@@ -1450,6 +1507,9 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     # repo gate; a refusal is honest progress info, never fatal (#819
     # fail-closed)
     _land_verify_note(ctx, claim)
+    # freeze the bytes this checker act consumed/produced before
+    # the promotion face evaluates them (idempotent; first pin wins).
+    _pin_checker_artifacts(ctx, claim, by=f"verify-act-{ctx.state.run_id}")
     _v = ""
     _note = ""
     try:
@@ -1567,6 +1627,10 @@ def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
         detail.setdefault("promotions", []).append(
             {claim: False, "redteam": "artifact-missing"})
         return
+    # the RT act's byte-exact comparison consumed the evidence
+    # artifacts — freeze them before the promotion retry evaluates the
+    # claim (idempotent; a verifier-land pin is never overwritten).
+    _pin_checker_artifacts(ctx, claim, by=f"redteam-act-{ctx.state.run_id}")
     retry = promote_claims(ctx.repo, ctx.ws, [claim])
     row = {claim: retry.get("ok"), "promoted": retry.get("promoted"),
            "violations": retry.get("violations")}
@@ -2072,6 +2136,10 @@ def _verdict_face(ctx: RunContext, detail: dict,
     if ctx.face.mode == "dry":
         act = ctx.face.verdict_act(ctx.ws)
     elif ctx.face.mode == "auto":
+        # the verdict act regenerates its own verdict.json —
+        # release a previous pin (audited) before it runs.
+        _unpin_checker_artifacts(
+            ctx, "", reason=f"verdict act relaunch ({ctx.state.run_id})")
         act = ctx.face.verdict_act(
             ctx.ws, prompt=_verdict_prompt(ctx))
     else:

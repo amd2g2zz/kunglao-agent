@@ -28,6 +28,10 @@ files:
     dest: .claude/hooks/env_check_gate.py
     kind: hook
     sha256: cd1bbf689718f5e09a46a1b44ac43e63238047a8f58c96e361e44ebb70c387eb
+  - src: hooks/evidence_pin_guard.py
+    dest: .claude/hooks/evidence_pin_guard.py
+    kind: hook
+    sha256: 372cb32b131aa54c576f6745d48802a7bffb0d6ac42d95cba524e79154ed26fc
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
@@ -48,6 +52,10 @@ files:
     dest: .claude/hooks/round_closure.py
     kind: hook
     sha256: 9b1231f9f65bc49039c49751ec5d4e354527ae226aa10fa34685f6c4cef9d1e7
+  - src: hooks/rt_read_barrier.py
+    dest: .claude/hooks/rt_read_barrier.py
+    kind: hook
+    sha256: 6058ea0c3d95e82e36e456fa94f4f5a8abfb4e26c3c356201e0262572ed7ba2f
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -111,7 +119,7 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: 07432dafdbbce033655b120f8082c88f9c5f40d7fe44bedb1985059d63929b15
+    sha256: c9730df32c474e7ba15e0ca3399e55b4311f0d95c444dfeb3cdebf8ea6f4e227
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -487,11 +495,15 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 32456e6650fbec5a69ac4d101b614571e98eaf709ef9d9f8bf6ee596aa7a0f6b
+    sha256: 51c10ef8eb0321e6ef1e16789abf2d29c8af5466165fee16be4fdabcaa784bb3
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
     sha256: fe8cf366d87bc1d16b8f35c2bbb26a8a50571c39d6ab7d24cf787398d394e320
+  - src: scripts/evidence_pin.py
+    dest: .claude/scripts/evidence_pin.py
+    kind: scaffold
+    sha256: e759e73a8c5f6063f0b28924531d87da61f7f82a6d13546169f6ef56e79c2387
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
@@ -503,7 +515,7 @@ files:
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
-    sha256: 90b224777695d2c0f66495a7526dc1b5a5dc4bda0e1ae1b9f1a1f6c240e02625
+    sha256: d86c55b27a133d3866b9b83b0124bd8f546db52921f136d925f3e990d06b5f47
   - src: scripts/fact_contradiction_gate.py
     dest: .claude/scripts/fact_contradiction_gate.py
     kind: scaffold
@@ -575,7 +587,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: e8789a6ee5f65f0e63583d90117cc2fd799c167d02c91d2cb50655312f4492e8
+    sha256: b86c856494ccc938fc417962474b7ac9cfebb91be4fa46da194cf077c099c24b
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -583,7 +595,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: 238ebe84828ffb7859007affa48cd1a70241362258e6538f8e16583aa4a52dbf
+    sha256: e1479a28c561b66ec27b3afb3ca26323859b371d7f8b0a20cb3864b4d54a0d8b
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
@@ -1191,7 +1203,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: f9bf42cb3dabe2fe658cef8bd3aaa7a0ab4b6cf6304eab735c7e0a06c93a5d0e
+    sha256: 205dea9239e7d6d17441653d91f62afc4830061a3579ceaadaec7bd3495a340d
   - src: scripts/worker_death.py
     dest: .claude/scripts/worker_death.py
     kind: scaffold
@@ -1915,7 +1927,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 20a554e2848a0529f7b6382a932ad82934d81d839022891a238b64f9b6265dd4
+    sha256: 756b97dab9a907a44665f6ba08cb7ed506a70b8ac195e41f7af04fb765224e3f
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

@@ -65,12 +65,14 @@ pass.**
 
 1. **BLIND** — never read the conclusion you are verifying:
    - ❌ `facts/F<NNN>-*.md` of your target claim
+   - ❌ `facts/_INDEX.md` too — it names the exact fact ids/titles (closed for RT acts by the barrier)
    - ❌ `notes/` (any note that cites the target)
    - ❌ `runs/worker-status-C<NNN>.md`, `runs/plan-C<NNN>.md` of the target worker
-   - ✅ `facts/_INDEX.md` (allowed — list only, no content)
-   - ✅ the sample binary (`bins/<sha>`) + fixtures + captured raw logs (`evidence/*.txt`)
+   - ❌ `runs/verification-*.md` / `runs/*-verify-note.md` (the verifier records) and `evidence/verdict.json`
+   - ✅ the sample binary (`bins/<sha>`) + fixtures + captured raw logs (`evidence/*.txt` / `evidence/*.json`)
    - ✅ reusable analysis tools under `tools/` (the registered toolshelf — they are tools, not conclusions)
    - ✅ WEB LANE: the captured request/response I/O pairs under `evidence/`, the `evidence/unpack_out/` unpack registries, page snapshots and recorded traces — the web lane's raw material (there is no `bins/<sha>` on a web target; the capture IS the artifact). Never read the maker's fact file of your target claim — same blindness, different artifact set.
+   - **This blindness is MECHANICAL**: `hooks/rt_read_barrier.py` denies the faces above (rc=2) on Read/Glob/Grep/Bash for any call identified as an RT act — no helper-subagent re-dispatch either. A rejection is the barrier working, not an environment fault: re-scope to evidence/.
 2. **DERIVE INDEPENDENTLY** — run your own commands (xxd / python / pefile / capstone / the
    reusable scripts) on the raw evidence. Your answer comes from the artifact, not from any summary.
 3. **STATE YOUR OWN FINDING FIRST** — write your conclusion before ever seeing the maker's.

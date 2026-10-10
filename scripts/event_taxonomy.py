@@ -209,6 +209,7 @@ EMIT_ACTIONS = [
     "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
+    "evidence_pin_blocked",  # evidence_pin_guard: write refused on a checker-consumed sha-pinned artifact
     "fact_status_synced",  # the promotion write-back row: a PROVEN settlement synced the citing facts' frontmatter (synced + fully named skips ride the detail)
     "failure_blocked",
     "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
@@ -294,6 +295,7 @@ EMIT_ACTIONS = [
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollout_settled",    # unified-reward tick face: adapters + settlement summary per rollup run
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "rt_read_blocked",    # rt_read_barrier: maker-face read refused for a red-team act
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
     "script_harvested",   # #477 per-script classification (landed/archived)
     "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face

@@ -87,9 +87,15 @@ def _write_settings(target_root: Path) -> Path:
         {"type": "command", "command": "python hooks/bash_fact_guard.py"}]})
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python hooks/heartbeat_touch.py"},
-        {"type": "command", "command": "python hooks/orchestrator_tool_guard.py"}]})
+        {"type": "command", "command": "python hooks/orchestrator_tool_guard.py"},
+        {"type": "command", "command": "python hooks/evidence_pin_guard.py"}]})
     pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
-        {"type": "command", "command": "python hooks/write_guard.py"}]})
+        {"type": "command", "command": "python hooks/write_guard.py"},
+        {"type": "command", "command": "python hooks/evidence_pin_guard.py"}]})
+    # the RT read barrier rides one PreToolUse matcher row
+    # (read/search/bash faces + the Agent re-delegation face).
+    pre.append({"matcher": "Read|Glob|Grep|Bash|Agent", "hooks": [
+        {"type": "command", "command": "python hooks/rt_read_barrier.py"}]})
     stop = [{"hooks": [
         {"type": "command", "command": "python hooks/completion_gate.py"},
         {"type": "command",
@@ -105,6 +111,10 @@ def _write_settings(target_root: Path) -> Path:
     for event, command in plain_events.items():
         doc[event] = [{"hooks": [
             {"type": "command", "command": command}]}]
+    # rt_read_barrier's second registration — the UserPromptSubmit
+    # arming face (bare-name dedupe: a second entry under the same event).
+    doc["UserPromptSubmit"].append({"hooks": [
+        {"type": "command", "command": "python hooks/rt_read_barrier.py"}]})
     settings.write_text(json.dumps({"hooks": doc}),
                         encoding="utf-8")
     # #675: the per-matcher grouping above mirrors register_hooks — the
