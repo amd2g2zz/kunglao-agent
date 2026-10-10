@@ -246,13 +246,14 @@ def _credit_ctx(stub_repo, tmp_path):
                                   sleep_fn=lambda _s: None)
 
 
-def _two_verified_facts(ws: Path, claim: str, start: int = 1) -> None:
-    """Two fact files that both cite the claim AND carry terminal
-    status — they move the Φ fact face (the progress credit face)."""
+def _two_citing_facts(ws: Path, claim: str, start: int = 1,
+                      status: str = "INFERRED") -> None:
+    """Two grammar-clean facts citing the claim (the certified citing
+    shape — for a terminal status the claim must be register-PROVEN,
+    the promotion-backed fact-production scenario)."""
+    from _factories import write_certified_fact
     for i in (start, start + 1):
-        (ws / "facts" / f"F{i:03d}.md").write_text(
-            f"---\nclaim_id: {claim}\nstatus: VERIFIED\n---\nbody\n",
-            encoding="utf-8")
+        write_certified_fact(ws, f"F{i:03d}", claim, status=status)
 
 
 def test_timeout_with_facts_banks_failure_floor_only(stub_repo, tmp_path):
@@ -262,7 +263,7 @@ def test_timeout_with_facts_banks_failure_floor_only(stub_repo, tmp_path):
     ctx = _credit_ctx(stub_repo, tmp_path)
     d2 = set()
     checkpoints._launch_dispatch(ctx, "C-005", d2)
-    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    _two_citing_facts(ctx.ws, "C-005")   # facts land mid-act
     checkpoints._land_dispatch(ctx, "C-005",
                                llm_faces.ActRecord(
                                    claim="C-005", mode="auto",
@@ -304,9 +305,15 @@ def test_timeout_with_facts_still_moves_the_progress_face(stub_repo,
     progress credit through Φ — the row's Φ moved and r_incr is
     positive — the facts never ride the settlement value again."""
     ctx = _credit_ctx(stub_repo, tmp_path)
+    # the promotion-backed scenario: the claim is register-PROVEN and
+    # the act's facts land PROVEN citing it — the certified terminal
+    # shape that moves the Φ fact face (post-promotion fact production)
+    (ctx.ws / "claim-register.yaml").write_text(
+        "claims:\n- id: C-004\n  status: OPEN\n"
+        "- id: C-005\n  status: PROVEN\n", encoding="utf-8")
     d2 = set()
     checkpoints._launch_dispatch(ctx, "C-005", d2)
-    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    _two_citing_facts(ctx.ws, "C-005", status="PROVEN")   # mid-act
     checkpoints._land_dispatch(ctx, "C-005",
                                llm_faces.ActRecord(
                                    claim="C-005", mode="auto",
@@ -327,7 +334,7 @@ def test_observed_error_with_facts_keeps_continuous_credit(stub_repo,
     ctx = _credit_ctx(stub_repo, tmp_path)
     d2 = set()
     checkpoints._launch_dispatch(ctx, "C-005", d2)
-    _two_verified_facts(ctx.ws, "C-005")   # facts land mid-act
+    _two_citing_facts(ctx.ws, "C-005")   # facts land mid-act
     checkpoints._land_dispatch(ctx, "C-005",
                                llm_faces.ActRecord(
                                    claim="C-005", mode="auto",

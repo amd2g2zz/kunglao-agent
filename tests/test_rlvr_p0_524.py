@@ -96,13 +96,14 @@ def test_continuous_credit_and_censoring(tmp_path):
     (ws / "runs").mkdir(parents=True)
     (ws / "facts").mkdir()
     (ws / "claim-register.yaml").write_text(
-        "claims:\n- id: C-004\n  status: OPEN\n", encoding="utf-8")
+        "claims:\n- id: C-004\n  status: OPEN\n"
+        "- id: C-005\n  status: OPEN\n", encoding="utf-8")
     # two facts cite the claim -> a DISPATCHED act banks 1.0; a TIMEOUT
     # (with the same facts) banks 0.0 — a censored outcome takes the
     # failure floor (#601 4-L1: no success mass from an unobserved act)
+    from _factories import write_certified_fact
     for fid in ("F001", "F002"):
-        (ws / "facts" / f"{fid}.md").write_text(
-            f"---\nclaim_id: C-004\n---\nbody\n", encoding="utf-8")
+        write_certified_fact(ws, fid, "C-004")
     state = model.RunState(
         run_id="r", unit="u", family="release", repo=str(ROOT),
         task_dir=str(ROOT), ws=str(ws), evidence_dir=str(tmp_path / "ev"),
@@ -133,9 +134,9 @@ def test_continuous_credit_and_censoring(tmp_path):
 
     # TIMEOUT path: censored flag on the posterior row, failure-floor
     # credit (#601 4-L1) — facts keep their progress face through Φ
+    from _factories import write_certified_fact
     for fid in ("F003", "F004"):  # facts citing C-005
-        (ws / "facts" / f"{fid}.md").write_text(
-            f"---\nclaim_id: C-005\n---\nbody\n", encoding="utf-8")
+        write_certified_fact(ws, fid, "C-005")
     d2 = set()
     checkpoints._launch_dispatch(ctx, "C-005", d2)
     checkpoints._land_dispatch(ctx, "C-005",
@@ -170,7 +171,8 @@ def test_canonical_ad3_c6pre(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "claim-register.yaml").write_text(
-        "claims:\n- id: C-004\n  status: OPEN\n", encoding="utf-8")
+        "claims:\n- id: C-004\n  status: OPEN\n"
+        "- id: C-005\n  status: OPEN\n", encoding="utf-8")
     state = model.RunState(
         run_id="r", unit="u", family="release", repo=str(ROOT),
         task_dir=str(ROOT), ws=str(ws), evidence_dir=str(tmp_path / "ev"),
