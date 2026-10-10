@@ -187,7 +187,13 @@ def _serialize_load_sensitive(request):
 if "MUTANT_UNDER_TEST" in os.environ:  # noqa: SIM102 - single guarded block
     try:
         import importlib
-        import tomllib
+
+        # tomllib is 3.11+; the repo floor is 3.10 — sanctioned tomli
+        # fallback contract (tests/test_python_floor.py anchors the shape).
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
 
         _mutmut_cfg = tomllib.loads(
             (Path(__file__).parent / "pyproject.toml").read_text("utf-8")
