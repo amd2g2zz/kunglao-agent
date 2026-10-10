@@ -320,6 +320,12 @@ jobs:
     runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_long) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # Gate 4 (#663) attests the mutation baseline's base_commit is an
+        # ancestor of HEAD; the default depth-1 checkout cannot resolve
+        # that ancestry (the baseline commit is absent from the clone),
+        # so this leg fetches full history.
+        fetch-depth: 0
 
     - name: Ensure git
       run: |
