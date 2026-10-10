@@ -17,6 +17,7 @@ These pins hold the pure-instrumentation contract:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -36,11 +37,28 @@ def _ws(tmp_path: Path, *, facts: tuple[int, int] | None = None,
     (ws / "facts").mkdir(exist_ok=True)
     if facts is not None:
         verified, total = facts
+        # grammar-clean, register-backed facts (the certification gate
+        # honors a terminal status only when the cited claim is
+        # register-PROVEN)
+        import hashlib
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n  - id: C-001\n    status: PROVEN\n"
+            "    question: q\n", encoding="utf-8")
         for i in range(total):
             status = "PROVEN" if i < verified else "OPEN"
+            confidence = "high" if status == "PROVEN" else "medium"
+            sha = hashlib.sha256(f"F{i:03d}:{status}".encode()).hexdigest()
             (ws / "facts" / f"F{i:03d}.md").write_text(
-                f"---\nid: F{i:03d}\ntype: fact\nstatus: {status}\n---\n",
-                encoding="utf-8")
+                f"---\nid: F{i:03d}-fact\ntype: fact\ntitle: fact {i}\n"
+                f"created: 2026-10-11\nlast_reviewed: 2026-10-11\n"
+                f"boundary_type: confirmed\npromotion_gate:\n"
+                f"provenance:\n  - role: public_doc\n"
+                f"    path: facts/F{i:03d}.md\n"
+                f"    content_sha256: {sha}\n    credibility: B2\n"
+                f"claim: claim statement\nreproduce: cmd\n"
+                f"expected: out\nverified: pending\nclaim_id: C-001\n"
+                f"source: public-osint\nconfidence: {confidence}\n"
+                f"status: {status}\n---\n\nbody\n", encoding="utf-8")
     if oracle is not None:
         passed, total = oracle
         cases = {f"case-{i}": {"status": "pass" if i < passed else "fail"}
@@ -90,8 +108,17 @@ def test_launch_settle_roundtrip(tmp_path):
 
     # settle: progress happened (one fact verified meanwhile)
     (ws / "facts" / "F000.md").write_text(
-        "---\nid: F000\ntype: fact\nstatus: PROVEN\n---\n",
-        encoding="utf-8")
+        "---\nid: F000-fact\ntype: fact\ntitle: fact 0\n"
+        "created: 2026-10-11\nlast_reviewed: 2026-10-11\n"
+        "boundary_type: confirmed\npromotion_gate:\n"
+        "provenance:\n  - role: public_doc\n"
+        "    path: facts/F000.md\n"
+        "    content_sha256: "
+        + hashlib.sha256(b"F000:PROVEN").hexdigest() + "\n"
+        "    credibility: B2\nclaim: claim statement\n"
+        "reproduce: cmd\nexpected: out\nverified: pending\n"
+        "claim_id: C-001\nsource: public-osint\nconfidence: high\n"
+        "status: PROVEN\n---\n\nbody\n", encoding="utf-8")
     row = ir.append_transition(ws, "C-007", "DISPATCHED",
                                status="done", facts=1,
                                seconds=600.0, r_settle=0.5)

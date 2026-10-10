@@ -35,11 +35,33 @@ import state_signature as ssig  # noqa: E402
 
 
 def _fact(ws: Path, fid: str, status: str, creator: str = "d-1") -> Path:
+    """A grammar-clean fact citing C-1, with C-1 registered PROVEN when
+    the workspace carries no register of its own — the fact-
+    certification gate honors a terminal status only when it is
+    register-backed, so the state-face fixtures build certified facts
+    (tests pinning the uncertified shape write their own minimal
+    file)."""
+    import hashlib
+    confidence = "high" if status in ("PROVEN", "VERIFIED", "REFUTED") \
+        else "medium"
     p = ws / "facts" / f"{fid}.md"
     p.parent.mkdir(parents=True, exist_ok=True)
+    sha = hashlib.sha256(f"{fid}:{status}".encode()).hexdigest()
     p.write_text(
-        f"---\nid: {fid}\nstatus: {status}\ncreator: {creator}\n"
+        f"---\nid: {fid}-fact\ntype: fact\ntitle: {fid}\n"
+        f"created: 2026-10-11\nlast_reviewed: 2026-10-11\n"
+        f"boundary_type: confirmed\npromotion_gate:\n"
+        f"provenance:\n  - role: public_doc\n"
+        f"    path: facts/{fid}.md\n    content_sha256: {sha}\n"
+        f"    credibility: B2\nclaim: claim statement\n"
+        f"reproduce: cmd\nexpected: out\nverified: pending\n"
+        f"claim_id: C-001\nsource: public-osint\n"
+        f"confidence: {confidence}\n"
+        f"status: {status}\ncreator: {creator}\n"
         f"---\n\n# {fid}\nbody\n", encoding="utf-8")
+    if not (ws / "claim-register.yaml").exists():
+        _register(ws, [{"id": "C-001", "status": "PROVEN",
+                        "question": "q"}])
     return p
 
 
@@ -267,11 +289,7 @@ class TestOracleStatusValidation:
         enter the potential at all."""
         sys.path.insert(0, str(SCRIPTS))
         from rlvr import incremental_reward as ir
-        facts = tmp_path / "facts"
-        facts.mkdir()
-        (facts / "F001.md").write_text(
-            "---\nid: F001\ntype: fact\nstatus: PROVEN\n---\n",
-            encoding="utf-8")
+        _fact(tmp_path, "F001", "PROVEN")  # certified: register-backed
         self._write(tmp_path, {"cases": {"c1": {"status": "pass"}}})
         # facts-only Φ: forged oracle dim absent => verified fraction alone
         assert ir.potential(tmp_path) == pytest.approx(1.0)
@@ -307,8 +325,8 @@ class TestSnapshotAndSignature:
         _fact(tmp_path, "F003", "OPEN")
         _fact(tmp_path, "F004", "PROVEN")
         _fact(tmp_path, "F005", "PROVEN")
-        _register(tmp_path, [{"id": "C-1", "status": "PROVEN"},
-                             {"id": "C-2", "status": "OPEN"}])
+        _register(tmp_path, [{"id": "C-001", "status": "PROVEN"},
+                             {"id": "C-002", "status": "OPEN"}])
         _cost(tmp_path, [10.0])
         (tmp_path / ".hook_state.json").write_text(json.dumps(
             {"phase": "VERIFY"}), encoding="utf-8")

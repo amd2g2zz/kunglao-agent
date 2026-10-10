@@ -943,21 +943,23 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
 
 
 def _facts_citing(ws, claim: str) -> int:
-    """Fact files whose frontmatter cites `claim` (claim_id / claim_ids)
-    — the fact-production signal for the continuous credit. Cheap
-    substring scan; malformed files count as 0 (fail-open)."""
+    """Certified citing facts — the fact-production signal for the
+    continuous credit. The frontmatter must parse, the fact grammar be
+    clean, the claim an EXACT frontmatter citation (collect_claim_refs;
+    the body-substring scan is retired — a body mention never counted
+    as a citation), and a terminal status register-backed (fabricated
+    terminals are excluded). Malformed files count as 0 (fail-open)."""
     try:
-        n = 0
-        for f in (Path(ws) / "facts").glob("*.md"):
-            try:
-                head = f.read_text(encoding="utf-8",
-                                   errors="replace")[:2000]
-            except OSError:
-                continue
-            if str(claim) in head:
-                n += 1
-        return n
+        from lint_facts import certification_scan
+        scan = certification_scan(Path(ws))
+        return sum(1 for info in scan.values()
+                   if info["certified"] and str(claim) in info["refs"])
     except OSError:
+        return 0
+    except Exception as exc:  # noqa: BLE001 — loud, fail-open
+        from kunglao_log import warn
+        warn("e2e.facts_citing",
+             f"{type(exc).__name__}: {exc} — counting 0 for {claim!r}")
         return 0
 
 

@@ -220,3 +220,32 @@ def seed_verifier_dispatch(ws: Path, claim_id: str = "C-001") -> Path:
         "RED-TEAM VERDICT: CONFIRMED\n",
         encoding="utf-8")
     return diff
+
+
+def write_certified_fact(ws: Path, fid: str, claim: str, *,
+                         status: str = "INFERRED",
+                         source: str = "inference") -> Path:
+    """A grammar-clean fact citing `claim` — the fact-certification
+    gate's certified shape for non-terminal statuses (a terminal status
+    additionally requires the claim register-PROVEN)."""
+    import hashlib
+    if status in ("PROVEN", "VERIFIED", "REFUTED"):
+        confidence = "high"
+        source = ("public-osint" if source == "inference" else source)
+    else:
+        confidence = "medium"
+    sha = hashlib.sha256(f"{fid}:{status}".encode()).hexdigest()
+    p = ws / "facts" / f"{fid}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        f"---\nid: {fid}-fact\ntype: fact\ntitle: {fid}\n"
+        f"created: 2026-10-11\nlast_reviewed: 2026-10-11\n"
+        f"boundary_type: confirmed\npromotion_gate:\n"
+        f"provenance:\n  - role: public_doc\n"
+        f"    path: facts/{fid}.md\n    content_sha256: {sha}\n"
+        f"    credibility: B2\nclaim: claim statement\n"
+        f"reproduce: cmd\nexpected: out\nverified: pending\n"
+        f"claim_id: {claim}\nsource: {source}\n"
+        f"confidence: {confidence}\nstatus: {status}\n"
+        f"---\n\nbody\n", encoding="utf-8")
+    return p

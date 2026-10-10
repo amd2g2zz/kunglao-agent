@@ -172,28 +172,35 @@ def _now() -> str:
 # ---------- face readers (tolerant, existing files only) ----------------
 
 def fact_face(ws) -> dict:
-    """{"count", "verified"} over facts/F*.md frontmatter status."""
+    """{"count", "verified"} over facts/F*.md — count is fact-file
+    presence (lint owns loudness); verified counts only CERTIFIED
+    terminal facts: the fact grammar clean AND the terminal status
+    (PROVEN/VERIFIED) register-backed — every claim the fact cites is
+    PROVEN in claim-register.yaml, whose promotion gate is the only
+    sanctioned writer of that status (the fact-certification gate). A
+    self-declared terminal status without the backing is not
+    verification: the premature lift was exactly the farmable shape
+    (static inflation cancels inside ΔΦ; the premature kind does not)."""
     ws = Path(ws)
-    count = verified = 0
     facts_dir = ws / "facts"
     if not facts_dir.is_dir():
         return {"count": 0, "verified": 0}
+    try:
+        import lint_facts
+    except ImportError:  # pragma: no cover — deployed together
+        from kunglao_log import warn
+        warn("rlvr.state.fact_face",
+             "the certification gate is unavailable — terminal fact "
+             "statuses go uncertified (fail-closed on reward)")
+        return {"count": sum(1 for _ in facts_dir.glob("F*.md")),
+                "verified": 0}
+    scan = lint_facts.certification_scan(ws)
+    count = verified = 0
     for path in sorted(facts_dir.glob("F*.md")):
-        try:
-            parts = path.read_text(
-                encoding="utf-8", errors="replace").split("---", 2)
-            meta = None
-            if len(parts) >= 3:
-                import yaml
-                meta = yaml.safe_load(parts[1])
-        except OSError:
-            continue
-        except Exception:  # noqa: BLE001 — unreadable frontmatter: skip
-            meta = None
         count += 1  # the file exists: it counts (lint owns loudness)
-        if isinstance(meta, dict) and str(
-                meta.get("status") or "").strip().upper() \
-                in TERMINAL_FACT_STATUSES:
+        info = scan.get(path.stem)
+        if info and info["certified"] \
+                and info["status"] in TERMINAL_FACT_STATUSES:
             verified += 1
     return {"count": count, "verified": verified}
 
