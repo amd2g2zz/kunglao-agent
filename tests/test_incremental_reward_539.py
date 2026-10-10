@@ -45,8 +45,11 @@ def _ws(tmp_path: Path, *, facts: tuple[int, int] | None = None,
         passed, total = oracle
         cases = {f"case-{i}": {"status": "pass" if i < passed else "fail"}
                  for i in range(total)}
+        # 4-L7: the canonical writer shape (schema tag required by
+        # the state reader's validation)
         (ws / "runs" / "oracle-status.json").write_text(
-            json.dumps({"cases": cases}), encoding="utf-8")
+            json.dumps({"schema": "oracle-status/1", "cases": cases}),
+            encoding="utf-8")
     return ws
 
 

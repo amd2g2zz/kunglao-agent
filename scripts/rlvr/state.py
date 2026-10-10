@@ -283,22 +283,78 @@ def _probe_signal_progress(ws) -> tuple[int, int] | None:
     return int(done), int(total)
 
 
+#: the canonical case-status vocabulary (oracle_runner.check_case + the
+#: counts mapping the writer narrows to) — 4-L7
+_ORACLE_CASE_STATUSES = frozenset({"pass", "fail", "pending"})
+
+
+def _oracle_counts_consistent(counts, passed: int, total: int) -> bool:
+    """The canonical writer always stamps {"red", "green", "pending"}; a
+    present counts block must be numeric and agree with the cases (a
+    status flip that forgot the counts block is the all-pass forgery's
+    tell). Absent counts: accepted (schema + typed cases already held)."""
+    if counts is None:
+        return True
+    if not isinstance(counts, dict):
+        return False
+
+    def _num(v) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+    for key in ("red", "green", "pending"):
+        if key in counts and not _num(counts[key]):
+            return False
+    if "green" in counts and counts["green"] != passed:
+        return False
+    if all(k in counts for k in ("red", "green", "pending")):
+        if counts["red"] + counts["green"] + counts["pending"] != total:
+            return False
+    return True
+
+
 def _oracle_status_progress(ws) -> tuple[int, int] | None:
     """runs/oracle-status.json armed cases: (pass, total) — the harvest
-    _oracle_face document shape ({"cases": {id: {"status": ...}}})."""
+    _oracle_face document shape ({"cases": {id: {"status": ...}}}).
+
+    4-L7: the file lives in the worker-writable runs/ between oracle
+    runs, and this pair feeds Φ's oracle dim (incremental_reward
+    .potential) plus the ch= dim — so only the canonical writer's
+    schema-validated shape is banked. A doc missing the
+    ``oracle-status/1`` schema tag (the cheap all-pass forgery), with a
+    non-mapping ``cases``, a non-string or out-of-vocabulary status
+    word, or a ``counts`` block contradicting the cases is honest
+    absence (None), never progress. Residual (named): a forger who
+    copies the full canonical shape is the same trust class as forged
+    liveness (oracle_runner's LIVENESS note) — red-team domain, not this
+    reader's."""
     p = Path(ws) / "runs" / "oracle-status.json"
     try:
         doc = json.loads(p.read_text(encoding="utf-8"))
-        cases = doc.get("cases") or {}
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict) \
+            or doc.get("schema") != "oracle-status/1":
+        return None
+    cases = doc.get("cases")
+    if not isinstance(cases, dict):
         return None
     total = 0
     passed = 0
     for case in cases.values():
+        if not isinstance(case, dict):
+            return None
+        status = case.get("status")
+        if not isinstance(status, str) \
+                or status.strip().lower() not in _ORACLE_CASE_STATUSES:
+            return None
         total += 1
-        if str((case or {}).get("status") or "").lower() == "pass":
+        if status.strip().lower() == "pass":
             passed += 1
-    return (passed, total) if total > 0 else None
+    if total <= 0:
+        return None
+    if not _oracle_counts_consistent(doc.get("counts"), passed, total):
+        return None
+    return passed, total
 
 
 def _mission_ledger_progress(ws) -> tuple[int, int] | None:

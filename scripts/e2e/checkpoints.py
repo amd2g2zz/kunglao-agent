@@ -895,11 +895,13 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     if method_family:
         audit.emit_method_family(str(ctx.ws), claim, method_family,
                                  envelope=receipt)
+    _launch_doc = None
     try:
         ir2 = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-        ir2.record_launch(str(ctx.ws), claim,
-                          action_key=method_family or "unattributed",
-                          propensity=(receipt or {}).get("propensity"))
+        _launch_doc = ir2.record_launch(
+            str(ctx.ws), claim,
+            action_key=method_family or "unattributed",
+            propensity=(receipt or {}).get("propensity"))
     except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
         kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     request = model.DispatchRequest(
@@ -907,12 +909,14 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         method_family=method_family or None,
         timeout_s=ladder_timeout_s,
-        mcp_prefixes=getattr(ctx, "mcp_prefixes", ()) or ())
+        mcp_prefixes=getattr(ctx, "mcp_prefixes", ()) or (),
+        launch_id=str((_launch_doc or {}).get("attempt_id") or ""))
     return request, ctx.face.launch_dispatch(request)
 
 
 def _land_dispatch(ctx: RunContext, claim: str, act: object,
-                   dispatched: set[str], detail: dict) -> None:
+                   dispatched: set[str], detail: dict,
+                   attempt_id: str = "") -> None:
     """Landing phase (#459) — MAIN THREAD ONLY: record the act + per-act
     rollback. #456 bug-2: a BLOCKED/TIMEOUT/ERROR act frees THAT claim
     only — without the discard the loop skips re-dispatch forever and
@@ -928,7 +932,7 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     # silent no-op, burning budget in the P2 stall shape). The plain and
     # the V: forms both release; re-dispatch remains possible, the pin is
     # gone.
-    _settle_dispatch_outcome(ctx, claim, act)
+    _settle_dispatch_outcome(ctx, claim, act, attempt_id=attempt_id)
     # the reconciliation: quota-class failure memory rides the settle
     # path — the lane's hold and its observable retreat rows are decided
     # HERE (the same face that banks the act's outcome), never at launch.
@@ -958,7 +962,8 @@ def _facts_citing(ws, claim: str) -> int:
 
 
 def _settle_dispatch_outcome(ctx: RunContext, claim: str,
-                             act: object) -> None:
+                             act: object,
+                             attempt_id: str = "") -> None:
     """#518 PR-2 (RC6, W2+W3): bank the act's outcome credit into the
     q cell its dispatch opened, and feed a TIMEOUT act to the obstacles
     registry (the termination floor's input — repeat-offender families
@@ -1004,7 +1009,8 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
                 status=str(getattr(act, "mode", "") or ""),
                 facts=_n_facts,
                 seconds=float(_dur_ms or 0) / 1000.0,
-                r_settle=credit)
+                r_settle=credit,
+                attempt_id=attempt_id)
         except Exception as exc:  # noqa: BLE001 — telemetry
             kunglao_log.warn("e2e.transition",
                              f"{type(exc).__name__}: {exc}")
@@ -1153,7 +1159,8 @@ def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
     if request is None:
         return None  # already emitted; wait for the act to land
     act = ctx.face.run_dispatch(request, handle)
-    _land_dispatch(ctx, claim, act, dispatched, detail)
+    _land_dispatch(ctx, claim, act, dispatched, detail,
+                   attempt_id=getattr(request, "launch_id", ""))
     return None
 
 
@@ -1178,8 +1185,14 @@ def _dispatch_wave(ctx: RunContext, claims: list[str],
     if not launched:
         return
     acts = llm_faces.run_dispatch_parallel(ctx.face, launched)
+    # 1-F2: the launch attempt id rides each act's settle — one
+    # in-flight launch per claim (the `dispatched` set), so the claim ->
+    # request correlation is unambiguous within the wave
+    _launch_ids = {str(req.claim): getattr(req, "launch_id", "")
+                   for req, _handle in launched}
     for act in acts:  # landing order; ActRecord.claim correlates 1:1
-        _land_dispatch(ctx, act.claim, act, dispatched, detail)
+        _land_dispatch(ctx, act.claim, act, dispatched, detail,
+                       attempt_id=_launch_ids.get(str(act.claim), ""))
 
 
 def _partial_claim_ids(ctx: RunContext) -> list:
@@ -1219,19 +1232,22 @@ def _partial_claim_ids(ctx: RunContext) -> list:
 
 
 def _record_verify_launch(ctx: RunContext, claim: str,
-                          variant: str) -> None:
+                          variant: str) -> dict | None:
     """#550: verify/red-team acts enter the SMDP ledger — the launch
     stash is action-type-scoped (never clobbers a pending dispatch
-    stash for the same claim). Fail-open telemetry."""
+    stash for the same claim). Fail-open telemetry. 1-F2: returns
+    the launch doc so the settle binds to THIS attempt's stash."""
     try:
         ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
-        ir.record_launch(str(ctx.ws), claim,
-                         action_key=("verify:redteam"
-                                     if variant == "redteam" else "verify"),
-                         action_type="verify", variant=variant)
+        return ir.record_launch(
+            str(ctx.ws), claim,
+            action_key=("verify:redteam"
+                        if variant == "redteam" else "verify"),
+            action_type="verify", variant=variant)
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
         kunglao_log.warn("e2e.verify_launch",
                          f"{type(exc).__name__}: {exc}")
+        return None
 
 
 # The verdict words a hard-killed verify act can be settled from: the
@@ -1297,13 +1313,16 @@ def _on_disk_verify_verdict(ctx: RunContext, claim: str,
 
 def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
                           verdict: str = "",
-                          absorbed_from_disk: bool = False) -> None:
+                          absorbed_from_disk: bool = False,
+                          attempt_id: str = "") -> None:
     """#550: close the verify/red-team transition — r_settle banks the
     verdict's credit (verified/CONFIRMED => 1.0, else 0.0); the Φ move
     from newly verified facts rides r_incr unchanged. Fail-open.
     absorbed_from_disk is the additive audit marker for the
     absorb-at-kill settle: the row keeps the kill outcome AND records
-    that the verdict was read back from the act's on-disk face."""
+    that the verdict was read back from the act's on-disk face.
+    1-F2: attempt_id binds the settle to the launch stash THIS
+    act wrote (a re-dispatch's stash is refused, never banked)."""
     try:
         ir = _load_repo_module(ctx.repo, "rlvr.incremental_reward")
         _dur_ms = (act.detail or {}).get("duration_ms") \
@@ -1314,7 +1333,8 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
             seconds=float(_dur_ms or 0) / 1000.0,
             r_settle=ir.verify_credit(verdict),
             action_type="verify", variant=variant,
-            absorbed_from_disk=absorbed_from_disk)
+            absorbed_from_disk=absorbed_from_disk,
+            attempt_id=attempt_id)
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud (#275)
         kunglao_log.warn("e2e.verify_settle",
                          f"{type(exc).__name__}: {exc}")
@@ -1402,7 +1422,8 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
         claim=claim, workspace=str(ctx.ws),
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         method_family=getattr(ctx.state, "method_family", "") or None)
-    _record_verify_launch(ctx, claim, "verify")
+    _v_launch = _record_verify_launch(ctx, claim, "verify")
+    _v_attempt = str((_v_launch or {}).get("attempt_id") or "")
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
@@ -1419,7 +1440,8 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
             # kill, the absorb flag rides for audit.
             _absorbed = _on_disk_verify_verdict(ctx, claim, stamp=_stamp)
         _record_verify_settle(ctx, claim, act, "verify", verdict=_absorbed,
-                              absorbed_from_disk=bool(_absorbed))
+                              absorbed_from_disk=bool(_absorbed),
+                              attempt_id=_v_attempt)
         dispatched.discard(vkey)
         return None
     # verification landed → land the gate-conformant verify-note (#501:
@@ -1439,7 +1461,8 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     except OSError as exc:  # loud per #275 — a missing note settles 0.0
         kunglao_log.warn("e2e.verify_verdict",
                          f"{type(exc).__name__}: {exc} (settling 0.0)")
-    _record_verify_settle(ctx, claim, act, "verify", verdict=_v)
+    _record_verify_settle(ctx, claim, act, "verify", verdict=_v,
+                          attempt_id=_v_attempt)
     _settle_predictions(ctx, claim, _note)
     promote = promote_claims(ctx.repo, ctx.ws, [claim])
     detail.setdefault("promotions", []).append(
@@ -1527,17 +1550,20 @@ def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
         prompt_file=str(prompt_file), run_id=ctx.state.run_id,
         agent="kunglao-redteam",
         method_family=getattr(ctx.state, "method_family", "") or None)
-    _record_verify_launch(ctx, claim, "redteam")
+    _rt_launch = _record_verify_launch(ctx, claim, "redteam")
+    _rt_attempt = str((_rt_launch or {}).get("attempt_id") or "")
     act = ctx.face.dispatch_act(request)
     ctx.acts.append(act.to_dict())
     detail["acts"].append(act.to_dict())
     if act.outcome in ("BLOCKED", "TIMEOUT", "ERROR"):
-        _record_verify_settle(ctx, claim, act, "redteam", verdict="")
+        _record_verify_settle(ctx, claim, act, "redteam", verdict="",
+                              attempt_id=_rt_attempt)
         dispatched.discard(rtkey)
         return
     artifact = Path(ctx.ws) / "runs" / f"verify-redteam-{claim}.md"
     if not artifact.is_file():
-        _record_verify_settle(ctx, claim, act, "redteam", verdict="")
+        _record_verify_settle(ctx, claim, act, "redteam", verdict="",
+                              attempt_id=_rt_attempt)
         detail.setdefault("promotions", []).append(
             {claim: False, "redteam": "artifact-missing"})
         return
@@ -1552,7 +1578,8 @@ def _maybe_redteam(ctx: RunContext, claim: str, promote: dict,
     verdict = m.group(1) if m else ""
     if retry.get("ok") is False:
         row["redteam"] = verdict or "unparsed"
-    _record_verify_settle(ctx, claim, act, "redteam", verdict=verdict)
+    _record_verify_settle(ctx, claim, act, "redteam", verdict=verdict,
+                          attempt_id=_rt_attempt)
     detail.setdefault("promotions", []).append(row)
 
 
