@@ -432,6 +432,96 @@ def collect_claim_refs(fm: dict) -> list[str]:
     return [r for r in refs if r]
 
 
+# ---------- the fact-certification gate ----------
+
+def read_register_proven(ws: Path) -> set:
+    """Claim ids the register carries as PROVEN. The promotion gate is
+    the only sanctioned writer of that status (ws_yaml single-writer +
+    the claims-count monotonicity wall), so this set is the anchor the
+    certification gate backs terminal fact statuses against. Tolerant:
+    an unreadable register yields an empty set — every terminal status
+    goes uncertified (the fail-closed-on-reward direction)."""
+    reg = Path(ws) / "claim-register.yaml"
+    if not reg.is_file():
+        return set()
+    try:
+        data = yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — tolerant read, the register posture
+        return set()
+    claims = data.get("claims") if isinstance(data, dict) else None
+    if not isinstance(claims, list):
+        return set()
+    return {str(c.get("id")) for c in claims
+            if isinstance(c, dict) and c.get("id")
+            and str(c.get("status") or "").strip().upper() == "PROVEN"}
+
+
+def certification_defects(fm: dict, body: str, proven: set,
+                          fact_ids: set) -> list:
+    """One fact's certification defects: the fact grammar's error
+    defects (lint_fact) plus the terminal-status provenance rule — a
+    PROVEN/VERIFIED status counts as verified only when EVERY claim the
+    fact cites is register-PROVEN; a terminal status without any claim
+    citation is uncertifiable. Non-terminal statuses carry no
+    certification defect (the grammar still applies)."""
+    errs = [d for d in lint_fact(str(fm.get("id") or ""), fm, fact_ids,
+                                 body) if d[0] == "error"]
+    status = str(fm.get("status") or "").strip().upper()
+    if status in ("PROVEN", "VERIFIED"):
+        refs = collect_claim_refs(fm)
+        if not refs:
+            errs.append(_issue("error", "UNCERTIFIABLE_TERMINAL",
+                               str(fm.get("id") or ""),
+                               "terminal status without a claim citation "
+                               "is not certifiable"))
+        elif not all(r in proven for r in refs):
+            errs.append(_issue(
+                "error", "TERMINAL_NOT_REGISTER_BACKED",
+                str(fm.get("id") or ""),
+                "terminal status is not register-backed (cited claims "
+                "not PROVEN: "
+                f"{sorted(r for r in refs if r not in proven)})"))
+    return errs
+
+
+def certification_scan(ws: Path) -> dict:
+    """The workspace certification scan: one tolerant pass over
+    facts/*.md returning stem -> {certified, status, refs}. A fact is
+    CERTIFIED iff its grammar is clean (lint_fact, error severity) and
+    a terminal status (PROVEN/VERIFIED) is register-backed (the
+    promotion write-back sync is the sanctioned terminal writer).
+    Malformed files scan as uncertified; never a raise."""
+    ws = Path(ws)
+    facts_dir = ws / "facts"
+    out: dict = {}
+    if not facts_dir.is_dir():
+        return out
+    fact_ids: set = set()
+    parsed: list = []
+    for p in sorted(facts_dir.glob("*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        fm, body, _err = parse_frontmatter(text)
+        fid = str((fm or {}).get("id") or p.stem)
+        if fm and fm.get("id"):
+            fact_ids.add(str(fm.get("id")))
+        parsed.append((p, fid, fm or {}, body))
+    proven = read_register_proven(ws)
+    for p, fid, fm, body in parsed:
+        if not fm:
+            out[p.stem] = {"certified": False, "status": "", "refs": []}
+            continue
+        errs = certification_defects(fm, body, proven, fact_ids)
+        out[p.stem] = {
+            "certified": not errs,
+            "status": str(fm.get("status") or "").strip().upper(),
+            "refs": collect_claim_refs(fm),
+        }
+    return out
+
+
 # ---------- Issue 648: creator provenance vs dispatch anchors ----------
 
 def claim_has_dispatch_anchor(ws: Path, claim_id: str) -> bool:
