@@ -75,11 +75,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 0fdfc30cc262277b02e6d6f2d8112796de25315aeea763e380976ec97455f767
+    sha256: ea5bbe6607716a2eaa9ce02b6fd02de8934c779f11ac80da5b5c947d9059aa83
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: b16efde5a07d5f2bfd93c13d2d80c8cb1647d1c0ff814e81222200b085acfeac
+    sha256: d93163378be37e55a4dba3f03f2faa34f31e7cad23cdd5eacdbba1a4260c0910
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1171,7 +1171,7 @@ files:
   - src: scripts/workguard.py
     dest: .claude/scripts/workguard.py
     kind: scaffold
-    sha256: 4cb14d9198879a59079215d85c56f097da539e839cddd083cb50e80ca1dc670c
+    sha256: 43bf0508b96a9ff306589f9694855d59297f6333f406f288b789c88ddd693f96
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold

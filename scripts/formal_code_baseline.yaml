@@ -17,8 +17,8 @@ files:
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 49
-  hooks/worker_budget_gates.py: 114
-  hooks/worker_budget_sinks.py: 105
+  hooks/worker_budget_gates.py: 117
+  hooks/worker_budget_sinks.py: 107
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -278,7 +278,7 @@ files:
   scripts/winrate_curve.py: 5
   scripts/wire_up_settings.py: 52
   scripts/worker_death.py: 9
-  scripts/workguard.py: 1
+  scripts/workguard.py: 2
   scripts/write_gate.py: 12
   scripts/write_guard_unlock.py: 2
   scripts/ws_layout.py: 11
