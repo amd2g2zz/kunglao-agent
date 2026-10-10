@@ -1423,6 +1423,72 @@ def _settle_predictions(ctx: RunContext, claim: str,
                          f"{type(exc).__name__}: {exc}")
 
 
+def _verifier_dispatch_text(claim: str, stamp: str, timeout_s: int,
+                            facts_dir: str) -> str:
+    """The V-dispatch prompt body (pure — tests pin it). The verify-stage
+    contract per the verify-stage hybrid ruling: the verifier may read the
+    maker's facts for ORIENTATION, but every reproduce command its
+    verdict relies on must be re-run by the verifier itself, attested by
+    a machine-checkable receipt block; a `verdict: verified` note
+    without one is refused by the landing gate."""
+    return (
+        f"facts-snapshot: {facts_dir}\nclaim: {claim}\n\n"
+        "VERIFIER contract (maker-checker #484): you VERIFY, you never "
+        "make. Read the claim's facts and artifacts, run the workspace's "
+        "verification faces (replay_equivalence, oracle probes, byte-exact "
+        "comparisons). RE-RUN RECEIPTS (the hybrid ruling): re-run every "
+        "reproduce command your verdict relies on YOURSELF, and never "
+        "copy outputs recorded in fact files — trusting the maker's "
+        "recorded output is not verification. For each such command, "
+        "land a receipt block in the note:\n"
+        "re-run: <the command you ran>\n"
+        "rc: <integer exit code you observed>\n"
+        "out-sha: <sha256 hex of the output you observed>\n"
+        "A `verdict: verified` note carrying no well-formed receipt is "
+        "refused by the engine (no verify credit, no promotion). When the "
+        "claim answers a primary question under a "
+        "reproduction-verified task, the controlled-comparison artifact "
+        "MUST land as evidence/replay-<claim>.json (schema "
+        "replay-equivalence/1, one matched pair minimum) — the engine's "
+        "convergence face scans exactly that name; any other filename "
+        "starves the reproduction gate. Write runs/verification-"
+        f"{claim}.md with a frontmatter verdict (verified|refuted) plus "
+        "evidence citations (file:line) and the dispatch binding line "
+        f"`verify-stamp: {stamp}` — the orchestrator settles a killed "
+        "act's verdict ONLY from a note carrying this exact stamp. "
+        "NEVER write facts/F*.md. If a "
+        "state file must change, mutate it ONLY via `python3 "
+        "scripts/ws_yaml.py set|del <file> <dotted.path> <value>` — "
+        "claim-register.yaml is single-writer (#516) and direct writes "
+        "(cat/sed/python-open/Edit/Write) are refused by the write guard. "
+        "End with STATUS: DONE or STATUS: BLOCKED.\n"
+        f"ACT BUDGET: this act is KILLED at {timeout_s}s "
+        "— verify ONLY (never expand scope), write the verification file "
+        "before 70% of the budget, and END before the cap. A verifier "
+        "killed at the cap leaves the claim unverified and the loop "
+        "blocked.\n")
+
+
+def _verify_note_receipts(note: str, verdict: str) -> tuple[bool, str]:
+    """The 5-F1 re-run receipt gate (the verify-stage hybrid ruling): a
+    `verified` verdict MUST carry at least one well-formed re-run
+    receipt (`re-run:` command line, then `rc:` integer, then
+    `out-sha:` 64 hex) — the mechanical face distinguishing "re-ran it
+    myself" from "trusted the maker's recorded output". A refuted
+    verdict is exempt (it banks no success credit); a refusal returns
+    (False, reason)."""
+    if str(verdict).strip().lower() != "verified":
+        return True, ""
+    text = str(note or "")
+    if re.search(r"re-run:[^\n]*\nrc:[ \t]*\d+[ \t]*\n"
+                 r"out-sha:[ \t]*[0-9a-fA-F]{64}", text):
+        return True, ""
+    return False, ("a verified verdict carries no well-formed re-run "
+                   "receipt (re-run:/rc:/out-sha:) — re-running the "
+                   "reproduce commands is the verify contract; trusting "
+                   "the maker's recorded output is not verification")
+
+
 def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
                        detail: dict) -> model.CheckpointResult | None:
     """#484: DISPATCH_VERIFIER decisions finally act — a verifier face for
@@ -1445,31 +1511,10 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
             "action_type": "verify",
             "context_recipe": "facts_snapshot",
             "verification_mode": "replay_probe"}})
-        + f"\n\nfacts-snapshot: {ctx.ws}/facts\nclaim: {claim}\n\n"
-        "VERIFIER contract (maker-checker #484): you VERIFY, you never "
-        "make. Read the claim's facts and artifacts, run the workspace's "
-        "verification faces (replay_equivalence, oracle probes, byte-exact "
-        "comparisons). When the claim answers a primary question under a "
-        "reproduction-verified task, the controlled-comparison artifact "
-        "MUST land as evidence/replay-<claim>.json (schema "
-        "replay-equivalence/1, one matched pair minimum) — the engine's "
-        "convergence face scans exactly that name; any other filename "
-        "starves the reproduction gate. Write runs/verification-"
-        f"{claim}.md with a frontmatter verdict (verified|refuted) plus "
-        "evidence citations (file:line) and the dispatch binding line "
-        f"`verify-stamp: {_stamp}` — the orchestrator settles a killed "
-        "act's verdict ONLY from a note carrying this exact stamp. "
-        "NEVER write facts/F*.md. If a "
-        "state file must change, mutate it ONLY via `python3 "
-        "scripts/ws_yaml.py set|del <file> <dotted.path> <value>` — "
-        "claim-register.yaml is single-writer (#516) and direct writes "
-        "(cat/sed/python-open/Edit/Write) are refused by the write guard. "
-        "End with STATUS: DONE or STATUS: BLOCKED.\n"
-        f"ACT BUDGET: this act is KILLED at {llm_faces.CLAUDE_ACT_TIMEOUT_S}s "
-        "— verify ONLY (never expand scope), write the verification file "
-        "before 70% of the budget, and END before the cap. A verifier "
-        "killed at the cap leaves the claim unverified and the loop "
-        "blocked.\n",
+        + "\n\n"
+        + _verifier_dispatch_text(
+            claim, _stamp, llm_faces.CLAUDE_ACT_TIMEOUT_S,
+            f"{ctx.ws}/facts"),
         encoding="utf-8")
     request = model.DispatchRequest(
         claim=claim, workspace=str(ctx.ws),
@@ -1521,13 +1566,28 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
     except OSError as exc:  # loud per #275 — a missing note settles 0.0
         kunglao_log.warn("e2e.verify_verdict",
                          f"{type(exc).__name__}: {exc} (settling 0.0)")
+    # the landing gate: a `verified` note without a well-formed
+    # re-run receipt is refused — the verdict settles as absent (0.0),
+    # predictions never fire off a refused note, and the promotion
+    # attempt is replaced by a recorded refusal.
+    _receipts_ok, _why = _verify_note_receipts(_note, _v)
+    if not _receipts_ok:
+        kunglao_log.warn("e2e.verify_receipts",
+                         f"{claim}: verification refused — {_why}")
+        _v = ""
     _record_verify_settle(ctx, claim, act, "verify", verdict=_v,
                           attempt_id=_v_attempt)
-    _settle_predictions(ctx, claim, _note)
-    promote = promote_claims(ctx.repo, ctx.ws, [claim])
-    detail.setdefault("promotions", []).append(
-        {claim: promote.get("ok"), "promoted": promote.get("promoted"),
-         "violations": promote.get("violations")})
+    promote: dict = {"ok": False, "promoted": False, "violations": []}
+    if _receipts_ok:
+        _settle_predictions(ctx, claim, _note)
+        promote = promote_claims(ctx.repo, ctx.ws, [claim])
+        detail.setdefault("promotions", []).append(
+            {claim: promote.get("ok"), "promoted": promote.get("promoted"),
+             "violations": promote.get("violations")})
+    else:
+        detail.setdefault("promotions", []).append(
+            {claim: False, "promoted": False,
+             "violations": [f"verify-note refused: {_why}"]})
     _maybe_redteam(ctx, claim, promote, dispatched, detail)
     return None
 
