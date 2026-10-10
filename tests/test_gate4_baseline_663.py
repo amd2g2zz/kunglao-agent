@@ -5,8 +5,8 @@ Gate 4 used to PASS on `find_spec('mutmut')` alone (tool availability =
 effectiveness — the vacuous pass this change closes). It now reads the
 committed mutation baseline (devkit/mutation-baseline.json, schema
 mutation-baseline/1) and fails on: missing artifact, bad schema, zero
-totals, partial runs (not_checked > 0), stale recorded_at, or a
-base_commit that is not an ancestor of HEAD.
+totals, partial runs (not_checked > 0), scores below the 0.7 floor,
+stale recorded_at, or a base_commit that is not an ancestor of HEAD.
 
 Also pins the recorder's sidecar parsing (devkit/mutation_baseline.py):
 mutmut exit codes map through mutmut's own status table, and an
@@ -54,11 +54,11 @@ def _doc(**over) -> dict:
         "scope": {"source_paths": ["scripts"],
                   "only_mutate": ["scripts/slot_monitor.py"],
                   "test_selection": ["tests/test_slot_monitor_636.py"]},
-        "totals": {"killed": 6, "survived": 4, "timeout": 0,
+        "totals": {"killed": 8, "survived": 2, "timeout": 0,
                    "suspicious": 0, "skipped": 0, "no_tests": 0,
                    "type_check_error": 0, "interrupted": 0,
                    "not_checked": 0, "total": 10},
-        "score": 0.6,
+        "score": 0.8,
     }
     base.update(over)
     return base
@@ -98,6 +98,18 @@ def test_partial_run_fails(tmp_path) -> None:
     """not_checked > 0 = an unfinished run — never evidence."""
     doc = _doc()
     doc["totals"] = {**doc["totals"], "not_checked": 1, "total": 11}
+    assert _gate(_write(tmp_path, doc)) is False
+
+
+def test_below_floor_score_fails(tmp_path) -> None:
+    """A recorded score under the 0.7 floor is not effective evidence."""
+    doc = _doc(score=0.6)
+    assert _gate(_write(tmp_path, doc)) is False
+
+
+def test_missing_score_fails(tmp_path) -> None:
+    doc = _doc()
+    del doc["score"]
     assert _gate(_write(tmp_path, doc)) is False
 
 

@@ -2,8 +2,8 @@
   "schema": "mutation-baseline/1",
   "tool": "mutmut",
   "tool_version": "3.7.0",
-  "recorded_at": "2026-10-10T15:13:57Z",
-  "base_commit": "68f91524658bb00ad9f38d8f2259ed8317c02dae",
+  "recorded_at": "2026-10-10T15:26:44Z",
+  "base_commit": "06e45282a53a38ffbbe6080ceb20c983039147e6",
   "scope": {
     "source_paths": [
       "scripts"
@@ -16,8 +16,8 @@
     ]
   },
   "totals": {
-    "killed": 210,
-    "survived": 135,
+    "killed": 265,
+    "survived": 80,
     "timeout": 0,
     "suspicious": 0,
     "skipped": 0,
@@ -27,5 +27,5 @@
     "not_checked": 0,
     "total": 345
   },
-  "score": 0.6087
+  "score": 0.7681
 }

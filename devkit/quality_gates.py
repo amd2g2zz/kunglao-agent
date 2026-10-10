@@ -35,9 +35,10 @@ Gate semantics:
   4. Test Effectiveness — a committed, FRESH mutation baseline exists
      (devkit/mutation-baseline.json, recorded by
      devkit/mutation_baseline.py --record, #663): schema valid, real
-     totals with zero not-checked mutants, base_commit an ancestor of
-     HEAD, age within MUTATION_BASELINE_MAX_AGE_DAYS. A missing or
-     stale artifact FAILS — tool availability alone is not evidence.
+     totals with zero not-checked mutants, score >= MUTATION_SCORE_FLOOR
+     (0.7), base_commit an ancestor of HEAD, age within
+     MUTATION_BASELINE_MAX_AGE_DAYS. A missing, stale, or sub-floor
+     artifact FAILS — tool availability alone is not evidence.
   5. Subagent Review — execution-layer maker-checker evidence: commits
      touching domain paths need a valid .subagent-review/*.json
      (devkit/subagent_review.py, #462).
@@ -84,6 +85,9 @@ CONTRACT_MODULES = ("decision_pending", "init_state", "log_setup")
 MUTATION_BASELINE_REL = Path("devkit") / "mutation-baseline.json"
 MUTATION_BASELINE_SCHEMA = "mutation-baseline/1"
 MUTATION_BASELINE_MAX_AGE_DAYS = 90
+#: The floor a recorded baseline must clear (owner ruling 2026-10-10:
+#: a score under 0.7 is not evidence of test effectiveness).
+MUTATION_SCORE_FLOOR = 0.7
 
 
 def _gate1_requirement_correctness(verbose: bool = True) -> bool:
@@ -180,6 +184,14 @@ def _gate4_test_effectiveness(verbose: bool = True,
         print(f"  [fail] mutation baseline is PARTIAL "
               f"({totals['not_checked']} not-checked of {totals['total']}) — "
               "an unfinished run is not evidence; re-record")
+        return False
+    score = doc.get("score")
+    if not isinstance(score, (int, float)) or score < MUTATION_SCORE_FLOOR:
+        print(f"  [fail] mutation score {score!r} is below the floor "
+              f"{MUTATION_SCORE_FLOOR} "
+              f"({totals.get('survived')} survived of {totals['total']}) — "
+              "strengthen the tests (or widen the scope deliberately), "
+              "then re-record")
         return False
     try:
         recorded = datetime.strptime(str(doc.get("recorded_at", "")),

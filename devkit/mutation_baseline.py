@@ -27,7 +27,8 @@ Exit codes: 0 ok; 1 error (no config / run failed / unparseable).
 
 The artifact is COMMITTED: Gate 4 passes only while a fresh, valid
 baseline exists (schema + totals + not-checked==0 + base_commit an
-ancestor of HEAD + age <= quality_gates.MUTATION_BASELINE_MAX_AGE_DAYS).
+ancestor of HEAD + age <= MUTATION_BASELINE_MAX_AGE_DAYS + score >=
+MUTATION_SCORE_FLOOR, all in devkit/quality_gates.py).
 """
 from __future__ import annotations
 
