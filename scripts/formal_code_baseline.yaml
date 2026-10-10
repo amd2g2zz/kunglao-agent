@@ -124,8 +124,8 @@ files:
   scripts/guardian_kpi.py: 5
   scripts/harness_common.py: 2
   scripts/heartbeat.py: 23
-  scripts/heartbeat_loop_prompt.py: 12
-  scripts/heartbeat_tick.py: 60
+  scripts/heartbeat_loop_prompt.py: 13
+  scripts/heartbeat_tick.py: 61
   scripts/heartbeat_touch.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
@@ -159,7 +159,7 @@ files:
   scripts/lane_spec.py: 2
   scripts/lessons_telemetry.py: 4
   scripts/lint_facts.py: 44
-  scripts/liveness_policy.py: 23
+  scripts/liveness_policy.py: 28
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
@@ -223,7 +223,7 @@ files:
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 13
   scripts/rlvr/ledger.py: 3
-  scripts/rlvr/liveness.py: 22
+  scripts/rlvr/liveness.py: 40
   scripts/rlvr/meta_arms.py: 8
   scripts/rlvr/obstacles.py: 3
   scripts/rlvr/policy_compare.py: 5

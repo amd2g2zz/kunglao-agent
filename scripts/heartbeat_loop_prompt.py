@@ -128,7 +128,10 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
     return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
 
 {startup}[Watchdog tick — the heartbeat fires ONLY on missed events]
-0. python {tk} {ws}              # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
+0. python {tk} {ws} --origin cron   # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
+                                 # --origin cron (#616): this prompt body executing IS the proof the durable loop ran — the sidecar row is
+                                 # tagged cron-born. In-session manual runs (re-arm chain) carry origin=manual, so the reset gate can tell
+                                 # "the cron has fired" from "a human ticked" instead of refusing the only in-session recovery.
                                  # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
                                  # a quiet gap right after registration is deploy-day shape, not a dead cron (--reset-continuity re-arms).
    - report.watchdog.fired == false -> this wake is a NO-OP: end the turn NOW. Events already wake the session

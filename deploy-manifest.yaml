@@ -563,11 +563,11 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: aa889b6a624216542aa6558555133e834293a761722ec75e4bb8c359210eac41
+    sha256: 9ca6a33891acaeef8f17d3d6b4d08eb6a42967208b5b01d3232bb79f02ff1aa2
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 3fac04b5ae1139d094ff650f5be4a56a5871992af431e29f2eb34b20ca67a27d
+    sha256: 208bfd803c38795ea7f36a29d938e0d3a2d7a1ddabf0f1c3662225494b159761
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -735,7 +735,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 6417d12e2197e6ce56afe48ba224625ff043db18c36173f904183f6ae0f4963b
+    sha256: 7aa0aaf7e313a14dc173435441a76c402a91de9c8d1c259af609b42830b9f16a
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -1247,7 +1247,7 @@ files:
   - src: scripts/rlvr/liveness.py
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
-    sha256: bb0a56af6c74fdfb5f3a90b6c590eb76ce9ac744547098d8f8833b191c5008dc
+    sha256: 54099382e65a94c8b8ac06283d5ec7e3906bc7cc06fb64c4ced1674a5b99d400
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
@@ -1319,11 +1319,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 1d44910178dec20da9e7b2d8ffaf29ab05740e6ab477d20a5aee8ea9cdb51dbe
+    sha256: 3c0ffba3b91863c4f7f5e9dca9adcd568aa5f2f363cfabb1ed58d8c4b124cd25
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 2a6380cf1918a1bc9fac6ff7dc10cc1466f1e3af1329b82932d33b6410714940
+    sha256: c521a238155c4857d5825d5f803fb36b266d5fc89c492bf275d883a7688cb0f0
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

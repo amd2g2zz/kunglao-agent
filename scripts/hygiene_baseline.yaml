@@ -189,7 +189,7 @@ files:
   scripts/heartbeat_loop_prompt.py:
     r1: 6
   scripts/heartbeat_tick.py:
-    r1: 43
+    r1: 44
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
@@ -257,7 +257,7 @@ files:
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 22
+    r1: 26
   scripts/log_setup.py:
     r1: 1
   scripts/loop_holds.py:
@@ -374,7 +374,7 @@ files:
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
-    r1: 14
+    r1: 18
   scripts/rlvr/meta_arms.py:
     r1: 6
   scripts/rlvr/policy_compare.py:
@@ -709,7 +709,7 @@ files:
   tests/test_dedup_319.py:
     r1: 4
   tests/test_delegation_863i.py:
-    r1: 2
+    r1: 3
   tests/test_deobf_composition.py:
     r1: 3
   tests/test_deploy_closure_810.py:
@@ -964,7 +964,7 @@ files:
   tests/test_heartbeat_tick_argv.py:
     r1: 2
   tests/test_heartbeat_window_4.py:
-    r1: 2
+    r1: 3
   tests/test_hook_exit_codes.py:
     r1: 4
   tests/test_hook_registration_entry.py:
@@ -1289,6 +1289,8 @@ files:
     r1: 3
   tests/test_reproduction_oracle_248.py:
     r1: 2
+  tests/test_reset_continuity_616.py:
+    r1: 6
   tests/test_resume_hypotheses_528.py:
     r1: 3
   tests/test_resume_prompt.py:
@@ -1312,6 +1314,8 @@ files:
     r1: 1
   tests/test_rl_wiring_518.py:
     r1: 4
+  tests/test_rlvr_bitexact.py:
+    r1: 1
   tests/test_rlvr_p0_524.py:
     r1: 3
   tests/test_rlvr_termination_461.py:
