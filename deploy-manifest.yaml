@@ -64,6 +64,10 @@ files:
     dest: .claude/hooks/state_anchor.py
     kind: hook
     sha256: 5ee5160a19064beb20311682c8a5c610671a872b81c9b424f7d5889714b11d0d
+  - src: hooks/step_record_capture.py
+    dest: .claude/hooks/step_record_capture.py
+    kind: hook
+    sha256: 2fc9bdeea12017e34b8aadf5bdcfefc4b26eefc3c7845baa72f9d0132969b590
   - src: hooks/user_signal_capture.py
     dest: .claude/hooks/user_signal_capture.py
     kind: hook
@@ -587,7 +591,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: b86c856494ccc938fc417962474b7ac9cfebb91be4fa46da194cf077c099c24b
+    sha256: c2b842d974a63661f81019404bd255c6d5b93bbefa4f27a7798fc8025a220929
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -1308,6 +1312,10 @@ files:
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
     sha256: db6c9bc3b63a3c4e6573a44ee3b88c50468c5860e94b5c3902d8b2065a9cf067
+  - src: scripts/rlvr/step_ledger.py
+    dest: .claude/scripts/rlvr/step_ledger.py
+    kind: scaffold
+    sha256: af6b23f2bae04e282dffa0816be42cdd96712d0c6f138f7f893cbb345718dc8f
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
