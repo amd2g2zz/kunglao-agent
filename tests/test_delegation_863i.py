@@ -208,7 +208,9 @@ K_RESIDUAL_PINS = {
     "kunglao_record": (1, 1),
     "kunglao_resume": (2, 0),
     "heartbeat": (3, 2),
-    "rlvr/liveness": (1, 1),
+    # #616: +1 loads — reset_continuity_baseline reads loop_registered from
+    # .heartbeat.json to preserve it across the baseline rebuild.
+    "rlvr/liveness": (2, 1),
     "infeasible_signal": (2, 2),
     "mechanism_scheduler": (3, 0),
     "external_kicker": (2, 0),

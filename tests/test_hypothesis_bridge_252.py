@@ -159,6 +159,143 @@ def test_sweep_is_idempotent(tmp_path):
 
 
 # =====================================================================
+# REQ1b — the PQ link survives the mint
+#
+# The mint must carry the family's PQ binding onto every arm row as
+# `answers_question`, so the admission, drift and economy faces rebuild
+# hypothesis -> PQ -> arm from the register alone. The three binding
+# shapes are the store's (body marker, competitor_group, the claim_id ->
+# answers_question link); a non-PQ family mints without the field.
+# =====================================================================
+
+def _arms_of(ws: Path, hid: str) -> list[dict]:
+    return [c for c in _load_reg(ws)["claims"]
+            if c.get("hypothesis_ref") == hid]
+
+
+def test_bound_question_qid_reads_all_three_binding_shapes():
+    H = hstore.Hypothesis
+
+    def mk(**kw):
+        fields = {"id": "H-001", "claim_id": "C-PENDING",
+                  "competitor_group": "", "body": ""}
+        fields.update(kw)
+        return H(**fields)
+
+    assert hb.bound_question_qid(mk(competitor_group="pq-q7")) == "q7"
+    assert hb.bound_question_qid(mk(competitor_group="pq:q7")) == "q7"
+    assert hb.bound_question_qid(mk(body="pq:q8\n\nledger body\n")) == "q8"
+    assert hb.bound_question_qid(
+        mk(claim_id="C-009"),
+        [{"id": "C-009", "answers_question": "q5"}]) == "q5"
+    assert hb.bound_question_qid(mk(competitor_group="retro-x|y")) is None
+    assert hb.bound_question_qid(mk()) is None
+    # prose that merely opens with the marker prefix is not a binding
+    assert hb.bound_question_qid(mk(body="pq: the open question\n")) is None
+
+
+def test_mint_propagates_the_pq_link_from_the_scaffold(tmp_path):
+    ws = tmp_path
+    _pq_scaffold(ws, "H-001", "q2")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    r = hb.mint_family_arms(ws, "H-001", ["arm a", "arm b"])
+    assert r["refused"] is None
+    arms = _arms_of(ws, "H-001")
+    assert len(arms) == 2
+    assert all(a.get("answers_question") == "q2" for a in arms)
+
+
+def test_minted_arms_credit_the_pq_for_the_drift_detector(tmp_path):
+    """The reported symptom: freshly minted OPEN arms left the primary
+    question reported UNANSWERED because the mint dropped the link."""
+    import plan_drift_detector as pdd
+    ws = tmp_path
+    _pq_scaffold(ws, "H-001", "q1")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    hb.mint_family_arms(ws, "H-001", ["arm a", "arm b"])
+    claims = _load_reg(ws)["claims"]
+    assert claims[0].get("answers_question") is None  # unrelated base claim
+    assert pdd.question_progress(
+        "q1", claims, ws / "claim_deps.yaml") == "in-progress"
+
+
+def test_minted_arms_rebuild_the_admission_path(tmp_path):
+    """open_family_arms_for_question finds the arms through the hypothesis
+    binding — the PQ -> family -> arm path, register-side."""
+    ws = tmp_path
+    _pq_scaffold(ws, "H-001", "q2")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    r = hb.mint_family_arms(ws, "H-001", ["arm a", "arm b"])
+    claims = _load_reg(ws)["claims"]
+    hyps = hstore.HypothesisStore(ws / "hypotheses").list_all()
+    arms = hb.open_family_arms_for_question(claims, hyps, "q2")
+    assert sorted(arms) == sorted(m["id"] for m in r["minted"])
+
+
+def test_mint_pq_link_rides_the_body_marker_and_claim_id_shapes(tmp_path):
+    ws = tmp_path
+    store = hstore.HypothesisStore(ws / "hypotheses")
+    store.create(hstore.Hypothesis(
+        id="H-002", claim_id="C-PENDING", competitor_group="",
+        candidates=[], status="open", body="pq:q3\n\nfamily ledger\n"))
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    hb.mint_family_arms(ws, "H-002", ["arm a"])
+    assert _arms_of(ws, "H-002")[0]["answers_question"] == "q3"
+
+    store.create(hstore.Hypothesis(
+        id="H-003", claim_id="C-004", competitor_group="",
+        candidates=[], status="open", body="attached to C-004\n"))
+    _write_reg(ws, [
+        {"id": "C-001", "status": "OPEN", "statement": "base"},
+        {"id": "C-004", "status": "OPEN", "statement": "answers q4",
+         "answers_question": "q4"},
+    ])
+    hb.mint_family_arms(ws, "H-003", ["arm a"])
+    assert _arms_of(ws, "H-003")[0]["answers_question"] == "q4"
+
+
+def test_mint_explicit_answers_question_wins(tmp_path):
+    ws = tmp_path
+    _pq_scaffold(ws, "H-001", "q2")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    hb.mint_family_arms(ws, "H-001", ["arm a"], answers_question="q9")
+    assert _arms_of(ws, "H-001")[0]["answers_question"] == "q9"
+
+
+def test_mint_pq_link_absent_for_unbound_family(tmp_path):
+    ws = tmp_path
+    _mk_hyp(ws, "H-005", group="retro-generic-binary|(unlabeled)")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    hb.mint_family_arms(ws, "H-005", ["arm a"])
+    arms = _arms_of(ws, "H-005")
+    assert arms and all("answers_question" not in a for a in arms)
+
+
+def test_sweep_pays_candidates_with_the_pq_link(tmp_path):
+    ws = tmp_path
+    hstore.HypothesisStore(ws / "hypotheses").create(hstore.Hypothesis(
+        id="H-006", claim_id="C-PENDING", competitor_group="pq-q6",
+        candidates=["apkid:packer:BaseAPK"], status="open", body="pq:q6\n"))
+    _write_reg(ws, [])
+    hb.mint_pending_candidates(ws)
+    arms = _arms_of(ws, "H-006")
+    assert arms and arms[0]["answers_question"] == "q6"
+
+
+def test_arc_open_payload_carries_the_pq_link(tmp_path, monkeypatch):
+    ws = tmp_path
+    _pq_scaffold(ws, "H-001", "q2")
+    _write_reg(ws, [{"id": "C-001", "status": "OPEN", "statement": "base"}])
+    seen: list = []
+    monkeypatch.setattr(
+        hb, "_emit_arc_event",
+        lambda _ws, action, hyp, payload: seen.append((action, payload)))
+    hb.mint_family_arms(ws, "H-001", ["arm a"])
+    opens = [p for a, p in seen if a == "investment_arc_open"]
+    assert opens and opens[0]["qid"] == "q2"
+
+
+# =====================================================================
 # REQ2 — the family ledger syncs from claim settlements
 # =====================================================================
 

@@ -432,6 +432,28 @@ def collect_claim_refs(fm: dict) -> list[str]:
     return [r for r in refs if r]
 
 
+# ---------- Issue 648: creator provenance vs dispatch anchors ----------
+
+def claim_has_dispatch_anchor(ws: Path, claim_id: str) -> bool:
+    """True when the claim's approval-point anchor log carries content.
+
+    The anchor log (`runs/.dispatch-anchor-<key>.jsonl`, key = claim id with
+    dashes stripped — the worker_budget_gates.stamp_dispatch_anchor
+    convention) is appended at the dispatch APPROVAL point, so a non-empty
+    log is proof that at least one dispatch ran for this claim. The question
+    here is presence-of-content ("was this claim ever dispatched?"), so any
+    non-blank line counts — unlike the anchor EVIDENCE reads, which skip
+    unparseable rows.
+    """
+    key = str(claim_id).replace("-", "")
+    log = Path(ws) / "runs" / f".dispatch-anchor-{key}.jsonl"
+    try:
+        return any(ln.strip() for ln in log.read_text(
+            encoding="utf-8", errors="replace").splitlines())
+    except OSError:
+        return False
+
+
 # ---------- L-2 / W-4: facts/_INDEX.md row linter (#532) ----------
 # #538 constraint: tools/_lib/index_schema.py is THE single _INDEX parser.
 # The row grammar derives from it (SEP=' | ', 4 columns, status in
@@ -497,14 +519,13 @@ def lint_index_row(row: str, lineno: int) -> list:
     return issues
 
 
-def lint_index(path: Path) -> list:
-    """Every data row of facts/_INDEX.md. Comments, blanks, pipe-table
-    header + separator rows skipped. Pipe-table rows keep their leading
-    '|' (strip() handles it) and both row grammars validate through
-    lint_index_row."""
+def _index_data_rows(path: Path):
+    """(lineno, raw line) of every data row of facts/_INDEX.md —
+    comments, blanks, the pipe-table header and separator rows skipped
+    (the single skip set both lint_index and the 1-F4 divergence
+    detector walk)."""
     if not Path(path).is_file():
-        return []
-    issues: list = []
+        return
     for lineno, line in enumerate(
             Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         s = line.strip()
@@ -514,7 +535,66 @@ def lint_index(path: Path) -> list:
             continue
         if s.startswith("|") and s.lower().startswith("| fact"):
             continue  # pipe-table header row
-        issues.extend(lint_index_row(s, lineno))
+        yield lineno, line
+
+
+def lint_index(path: Path) -> list:
+    """Every data row of facts/_INDEX.md. Comments, blanks, pipe-table
+    header + separator rows skipped. Pipe-table rows keep their leading
+    '|' (strip() handles it) and both row grammars validate through
+    lint_index_row."""
+    issues: list = []
+    for lineno, line in _index_data_rows(path):
+        issues.extend(lint_index_row(line.strip(), lineno))
+    return issues
+
+
+# 1-F4: the row ↔ frontmatter agreement detector. The only index
+# writer is promotion-scoped (fact_status_sync), so every other status
+# transition leaves the row behind; this join is the audit-named
+# cheapest detector (lint validated row SHAPE, never agreement).
+_FACT_TOKEN_RE = re.compile(r"^F\d+")
+
+
+def _index_status_divergence(parsed: dict, index_path: Path) -> list:
+    """Warning-level rows whose status column disagrees with the fact
+    file's frontmatter status. The join normalizes the slugged file name
+    and the bare F<NNN> row token (an ambiguous token — several facts —
+    is skipped, never guessed); a row naming no fact file has no
+    frontmatter to compare and stays the shape validator's domain."""
+    by_key: dict[str, str] = {}
+    by_token: dict[str, str | None] = {}
+    for p, (fm, _body, _perr) in parsed.items():
+        status = str(fm.get("status") or "").strip().upper()
+        if not status:
+            continue
+        for key in (str(fm.get("id") or "").strip(), Path(p).stem):
+            if key:
+                by_key[key] = status
+        m = _FACT_TOKEN_RE.match(Path(p).stem)
+        if m:
+            token = m.group(0)
+            if by_token.get(token, status) != status:
+                by_token[token] = None  # ambiguous: two facts, two statuses
+            else:
+                by_token[token] = status
+    issues: list = []
+    for lineno, line in _index_data_rows(index_path):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 4:
+            continue  # BAD_INDEX_SHAPE owns the structural defect
+        fact_cell, status_cell = cells[0], cells[1]
+        status = by_key.get(fact_cell)
+        if status is None:
+            m = _FACT_TOKEN_RE.match(fact_cell)
+            status = by_token.get(m.group(0)) if m else None
+        if status is None or status_cell.upper() == status:
+            continue
+        issues.append(("warning", "INDEX_STATUS_DIVERGENCE",
+                       f"_INDEX.md:{lineno}: row status {status_cell!r} "
+                       f"disagrees with fact {fact_cell!r} frontmatter "
+                       f"status {status!r} — reconcile the row (the "
+                       f"promotion sync only covers PROVEN) (1-F4)"))
     return issues
 
 
@@ -863,9 +943,41 @@ def lint_workspace(ws: Path):
                 errors.append(("error", "GHOST_CLAIM",
                                f"{p.name}: cites claim {ref!r} which is absent "
                                f"from claim-register.yaml (L-1)"))
+    # Issue 648: creator provenance — WARN (never error) when a fact lacks
+    # `creator` while its claim carries dispatch anchors. The anchors prove
+    # dispatches happened, so the round-credit ladder (issue 379) has no per-dispatch
+    # link to this fact and degrades to the trace_id fallback (mission-level
+    # attribution). Facts are write-guarded carriers — the lint never
+    # backfills an existing fact; the warning is the creation-time contract's
+    # enforcement face (and CI visibility into a workspace-wide gap).
+    anchor_seen: dict[str, bool] = {}
+    for p, (fm, _body, _perr) in sorted(parsed.items()):
+        if str(fm.get("creator") or "").strip():
+            continue
+        for ref in collect_claim_refs(fm):
+            if not CLAIM_ID_RE.match(ref):
+                continue
+            if ref not in anchor_seen:
+                anchor_seen[ref] = claim_has_dispatch_anchor(ws, ref)
+            if anchor_seen[ref]:
+                warnings.append((
+                    "warn", "MISSING_CREATOR",
+                    f"{p.name}: fact lacks `creator` while claim {ref} has "
+                    f"dispatch anchors (runs/.dispatch-anchor-"
+                    f"{ref.replace('-', '')}.jsonl) — write "
+                    f"`creator: {ref}` at creation so round-credit can "
+                    f"attribute this fact to its dispatch (issue #648)"))
+                break
     # L-2/W-4 (#532): facts/_INDEX.md rows share one definition with the
     # writer (update_index → tools/_lib/index_schema.py).
     for sev, code, msg in lint_index(facts_dir / "_INDEX.md"):
+        (errors if sev == "error" else warnings).append((sev, code, msg))
+    # 1-F4: row ↔ frontmatter status agreement — the promotion-
+    # scoped sync never covers the PARTIAL/verify_status edge, so any
+    # other transition leaves the row behind (WARNING: drift is
+    # visibility; the register stays authoritative).
+    for sev, code, msg in _index_status_divergence(parsed,
+                                                   facts_dir / "_INDEX.md"):
         (errors if sev == "error" else warnings).append((sev, code, msg))
     # notes' fact references must point at existing (slugged) fact ids
     notes_dir = ws / "notes"

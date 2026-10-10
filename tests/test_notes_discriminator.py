@@ -125,8 +125,9 @@ def test_threshold_configurable(tmp_path):
     """0.0 → 任何重叠即拒；1.0 → 重叠规则不触发（引用+叙事充足仍过）。"""
     fact_body = (
         "handler 0x14002abcd allocates 0x150 bytes via size gate comparison "
-        "before write\n"
-    )
+        "before write path dispatch table entry lookup stride aligned region "
+        "bounds check branch predictor miss statistic counter\n"
+    )  # >= the #834 R1 small-denominator floor (20 UNIQUE words)
     note = (
         "---\nclaim_id: C-001\n---\n" + fact_body +
         "\nEvidence: F001.\n"

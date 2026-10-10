@@ -147,6 +147,8 @@ _KICKER_SKIP_FILES = frozenset({
     "session_start.py",     # SessionStart arm + constitution (issue 434)
     "compact_continuity.py",  # PreCompact continuity (issue 434) — ditto
     "user_signal_capture.py",  # UserPromptSubmit observation (issue 434)
+    "rt_read_barrier.py",    # RT read barrier — full --wire-up restores it
+    "evidence_pin_guard.py",  # evidence sha-pin freeze — ditto
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 

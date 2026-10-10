@@ -197,9 +197,11 @@ class TestSessionStartInjection:
 
 
 class TestPreCompactContinuity:
-    def test_compact_note_carries_strategy_pointer(self, tmp_path, capsys):
-        """PreCompact injects a compact-continuity note carrying the
-        current strategy pointer — compaction must not evaporate the
+    def test_compact_note_stashed_for_delivery(self, tmp_path, capsys):
+        """The PreCompact face STASHES the continuity note carrying the
+        current strategy pointer (this harness build refuses
+        hookSpecificOutput on PreCompact — #630 — so delivery rides
+        SessionStart(compact)); compaction must not evaporate the
         strategy the round is running."""
         import compact_continuity
         ws = _mk_session_ws(tmp_path)
@@ -211,28 +213,63 @@ class TestPreCompactContinuity:
             {"cwd": str(ws), "trigger": "auto"})
         out = capsys.readouterr().out
         assert rc == 0
-        payload = json.loads(out)
-        ctx = payload["hookSpecificOutput"]["additionalContext"]
-        assert "round-strategy.json" in ctx
-        assert "compaction" in ctx.lower() or "compact" in ctx.lower()
+        assert out == ""  # the rejected hookSpecificOutput shape is gone
+        stash = json.loads((ws / "runs" / ".compact-continuity-note.json")
+                           .read_text(encoding="utf-8"))
+        assert "round-strategy.json (SET" in stash["note"]
+        assert "compact" in stash["note"].lower()
 
     def test_compact_note_without_strategy_points_at_seam(
             self, tmp_path, capsys):
         """No strategy object yet (producer lands later): the note still
-        fires (compaction continuity face is live) and says the pointer is
-        unset — never a crash, never silence."""
+        stashes (compaction continuity face is live) and says the pointer
+        is unset — never a crash, never silence."""
         import compact_continuity
         ws = _mk_session_ws(tmp_path)
         rc = compact_continuity.process_event(
             {"cwd": str(ws), "trigger": "manual"})
         out = capsys.readouterr().out
-        assert rc == 0
-        payload = json.loads(out)
-        assert "round-strategy.json" in payload[
-            "hookSpecificOutput"]["additionalContext"]
+        assert rc == 0 and out == ""
+        stash = json.loads((ws / "runs" / ".compact-continuity-note.json")
+                           .read_text(encoding="utf-8"))
+        assert "round-strategy.json (unset" in stash["note"]
 
     def test_compact_no_workspace_passes_through(self, tmp_path, capsys):
         import compact_continuity
         rc = compact_continuity.process_event({"cwd": str(tmp_path)})
         out = capsys.readouterr().out
         assert rc == 0 and out == ""
+
+    def test_stash_delivered_and_consumed_on_compact_session_start(
+            self, tmp_path, capsys):
+        """SessionStart(source=compact) delivers the stashed note through
+        the supported stdout channel, exactly once; unrelated starts
+        (startup) do not re-deliver it."""
+        import compact_continuity
+        import session_start as ss
+        ws = _mk_session_ws(tmp_path)
+        compact_continuity.process_event({"cwd": str(ws), "trigger": "auto"})
+        capsys.readouterr()
+        rc = ss.main_with_payload({"cwd": str(ws), "source": "compact"})
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "compact-continuity" in out
+        assert "round-strategy.json" in out
+        assert not (ws / "runs" / ".compact-continuity-note.json").exists()
+        ss.main_with_payload({"cwd": str(ws), "source": "startup"})
+        out2 = capsys.readouterr().out
+        assert "compact-continuity" not in out2
+
+    def test_stale_stash_not_injected(self, tmp_path, capsys):
+        """A stash older than the consume window is dropped, never
+        injected into an unrelated later compact."""
+        import compact_continuity
+        ws = _mk_session_ws(tmp_path)
+        stash = ws / "runs" / ".compact-continuity-note.json"
+        stash.write_text(json.dumps({
+            "ts": "2026-01-01T00:00:00Z", "trigger": "auto",
+            "strategy_pointer": None, "note": "old note"}),
+            encoding="utf-8")
+        assert compact_continuity.consume_stashed_note(ws) is None
+        assert not stash.exists()  # still consumed: a stale note never
+                                   # lingers to fire at a later compact

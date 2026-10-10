@@ -1172,6 +1172,52 @@ def _deploy_drift_now(ws: Path) -> bool:
         return True
 
 
+def _identity_status_now(ws: Path) -> dict:
+    """Currency by update IDENTITY, not the version string — thin
+    read-only face over deploy_manifest.identity_status (source head hash
+    primary, manifest digest fallback). Unreadable probes answer
+    changed=True — fail towards doing the work (the _deploy_drift_now
+    posture): an unverifiable identity is never reported current."""
+    try:
+        import deploy_manifest as _dm
+        return _dm.identity_status(ws)
+    except Exception:  # noqa: BLE001 — fail towards the refresh
+        return {"changed": True, "basis": "none", "recorded_head": None,
+                "current_head": None, "recorded_digest": None,
+                "current_digest": None}
+
+
+def _identity_label(idst: dict) -> str:
+    """The identity basis, named for humans: the head hash is the primary
+    identity; the manifest digest is the non-git fallback."""
+    return {"head": "source head",
+            "digest": "source manifest digest"}.get(
+                idst.get("basis"), "source identity")
+
+
+def _identity_line(idst: dict, origin: str) -> str:
+    """The explicit identity-move report: both sides of the hash are
+    named, the unchanged version is stated as metadata, and the action is
+    announced. 'Already at version' is deliberately absent: equal version
+    is exactly the case this face must NOT fake currency on."""
+    old = (idst.get("recorded_head") or idst.get("recorded_digest")
+           or "unrecorded")
+    new = idst.get("current_head") or idst.get("current_digest") or "unknown"
+    return (f"kunglao-upgrade: {_identity_label(idst)} changed {old} -> {new} "
+            f"(version {origin} unchanged) — refreshing deployed copies")
+
+
+def _identity_current_suffix(idst: dict) -> str:
+    """The 'current' report speaks the identity too, so an operator can
+    tell WHICH batch the workspace is current against."""
+    head = idst.get("current_head")
+    if head:
+        return f" (source head {head[:12]} — current)"
+    digest = idst.get("current_digest") or ""
+    return (f" (source manifest digest {digest[:12]} — current)"
+            if digest else " (current)")
+
+
 def _refuse_dirty(ws: Path, dirty_n: int) -> int:
     """#753 B1 refusal face — shared by the main migration path and the
     #783 early-exit refresh (identical output; guidance pinned by tests)."""
@@ -1956,16 +2002,41 @@ def upgrade(ws: Path, dry_run: bool = False,
 
     plan = _plan_migrations(origin_key, target)
     if origin_key >= target_key and not plan:
-        print(f"kunglao-upgrade: already at version {origin}")
+        # Currency is keyed on the UPDATE IDENTITY — the source tree's
+        # head hash (manifest digest as the non-git fallback) — never the
+        # version string: a re-cut release batch carries different content
+        # under an equal version, and only a matching head hash means
+        # current. The identity face applies to workspaces carrying
+        # deployed copies (the deploy-refresh population); a copies-less
+        # workspace has no deployed content whose currency could be
+        # verified and keeps the historic version-stamp line.
+        deployed = (ws / ".claude" / "hooks").is_dir()
+        idst = _identity_status_now(ws) if deployed else None
+        identity_changed = bool(idst and idst.get("changed"))
+        if not deployed:
+            print(f"kunglao-upgrade: already at version {origin}")
+        elif identity_changed:
+            print(_identity_line(idst, origin))
+            _emit_event("identity", "refresh",
+                        f"{_identity_label(idst)}: "
+                        f"{idst.get('recorded_head') or idst.get('recorded_digest') or 'unrecorded'}"
+                        f" -> {idst.get('current_head') or idst.get('current_digest') or 'unknown'}"
+                        f" (version {origin})")
+        else:
+            print(f"kunglao-upgrade: already at version {origin}"
+                  f"{_identity_current_suffix(idst)}")
         # #783 T5 chain-hole: the already-current fast path must still
         # refresh DEPLOYED framework copies (overwrite semantics are
         # version-free) — otherwise check-stale's deploy-drift advice
-        # ("run /kunglao-agent:upgrade") would spin without effect. Only
-        # workspaces carrying deployed copies enter this item, and only
-        # when deploy_drift says a write is actually needed — the
-        # no-drift case stays the historic true noop (rc 0, no gate),
-        # pinned by #726's already-current contract.
-        if (ws / ".claude" / "hooks").is_dir() and _deploy_drift_now(ws):
+        # ("run /kunglao-agent:upgrade") would spin without effect. The
+        # identity leg adds: content moved even when every digest face
+        # is silent (a re-cut touching files outside the deployed set)
+        # still re-records the carrier head. Only workspaces carrying
+        # deployed copies enter this item, and only when a write is
+        # actually required — the same-head, no-drift case stays the
+        # historic true noop (rc 0, no gate), pinned by #726's
+        # already-current contract.
+        if deployed and (identity_changed or _deploy_drift_now(ws)):
             if dry_run:
                 item = _item_deployed_refresh(ws, dry=True)
                 print(f"  [{target}] {item}")
@@ -1993,8 +2064,10 @@ def upgrade(ws: Path, dry_run: bool = False,
                 _emit(ws, "upgrade_item", item)
                 _emit_event("item", "ok", item)
                 if items_out is not None:
-                    items_out.append({"name": item, "action": "applied",
-                                       "detail": "early-exit-refresh"})
+                    items_out.append({
+                        "name": item, "action": "applied",
+                        "detail": ("identity-refresh" if identity_changed
+                                   else "early-exit-refresh")})
                 if anchor.get("status") == "created":
                     # anchor we created this run: land the post-state commit
                     # so the tree ends clean (same promise as the main path).

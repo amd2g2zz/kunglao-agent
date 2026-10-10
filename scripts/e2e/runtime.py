@@ -201,6 +201,28 @@ def promote_claims(repo: Path, ws: Path, claim_ids: list[str]) -> dict:
                     f"repair the register, never write back claims: []")
     claims = (doc or {}).get("claims") or []
     wanted = set(claim_ids)
+    # a checker-consumed evidence artifact that no longer
+    # matches its sha-pin means the bytes a checker verified are NOT the
+    # bytes on disk — promotion must not certify them. Scoped to the
+    # promoted claims' artifacts; a corrupt store is itself a refusal
+    # (fail-closed).
+    try:
+        ep = _load_repo_module(repo, "evidence_pin")
+        rels = {"evidence/verdict.json"} | {
+            f"evidence/replay-{c}.json" for c in wanted}
+        pin_violations = [
+            v for v in ep.check(ws)
+            if v.startswith("pin store corrupt")
+            or any(v.startswith(r + ":") for r in rels)]
+    except Exception as exc:  # noqa: BLE001 — the fixture repos ship no evidence_pin module; every failure stays loud (batch-3 posture)
+        pin_violations = []
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("promote_claims.evidence_pin", f"{type(exc).__name__}: {exc}")
+    if pin_violations:
+        return {"ok": False,
+                "violations": [f"evidence pin: {v}" for v in pin_violations],
+                "waivers": [], "promoted": [], "settlements": 0,
+                "written": False}
     promoted: list[str] = []
     for claim in claims:
         if str(claim.get("id")) in wanted and \

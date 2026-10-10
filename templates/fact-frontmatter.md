@@ -103,9 +103,18 @@ sample claim); the credibility letter/number rules above are unchanged.
 kunglao keeps six fields the schema does not define. They are an explicit
 extension layer — consumed by `scripts/kunglao_verify.py` and the #379
 round-credit settlement, NOT part of the 12 mandatory fields; all six are
-known to `lint_facts` (`creator` is optional, the rest are REQUIRED on
-every kunglao fact). Above them sit two OPTIONAL hypothesis fields —
-`uncertainty` and `next_probe`, the open-hypothesis pair documented below.
+known to `lint_facts` (`creator` is optional at the schema level, the rest
+are REQUIRED on every kunglao fact). Above them sit two OPTIONAL hypothesis
+fields — `uncertainty` and `next_probe`, the open-hypothesis pair documented
+below.
+
+`creator` carries CREATION-TIME expectations the schema layer cannot
+express: the worker echoes it into the fact frontmatter the moment the
+fact is written (same channel as `claim_id` / `trace_id`), and
+`lint_facts` emits `MISSING_CREATOR` (warning, never error — existing
+facts are write-guarded carriers and are never backfilled by tooling)
+when a fact lacks it while its claim has dispatch anchors
+(`runs/.dispatch-anchor-<key>.jsonl`).
 
 | Field | Meaning |
 |-------|---------|
@@ -114,7 +123,7 @@ every kunglao fact). Above them sit two OPTIONAL hypothesis fields —
 | `expected` | L1 oracle: sha256 of reproduce stdout, or assignment-class `field=value` assertions |
 | `verified` | date of last L1 pass (`pending` when none yet) |
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
-| `creator` | #379 round-credit provenance: the dispatch id that wrote this fact (`tr-<mission>-d<N>` form; optional; falls back to `trace_id` attribution) |
+| `creator` | #379/#648 round-credit provenance: the dispatch claim id that wrote this fact — `creator: C-<NNN>` (the claim the dispatch executed; the live #634 settlement feed keys its `dispatch_id` on exactly this id). Optional in the schema; written by the worker AT CREATION whenever the dispatch carries a claim id. A fact that lands without it while its claim has dispatch anchors (`runs/.dispatch-anchor-<key>.jsonl`, key = claim id without dashes) draws a `MISSING_CREATOR` lint WARNING — the trace_id fallback attributes to the mission, never to the dispatch |
 
 ### `evidence_class` — the evidence-grade class (claim gate input)
 
@@ -181,6 +190,7 @@ source: static-decompile
 evidence_class: decompile
 confidence: high
 claim_id: C-999
+creator: C-999
 boundary_type: observation
 promotion_gate: "Runtime capture of HttpSendRequestW to the decoded endpoint from this process"
 confidence_zh: 可确认

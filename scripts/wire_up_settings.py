@@ -75,6 +75,8 @@ WIRE_UP_HOOK_FILES = frozenset({
     "session_start.py",        # SessionStart — arm + constitution injection (issue 434)
     "compact_continuity.py",   # PreCompact — strategy continuity note (issue 434)
     "user_signal_capture.py",  # UserPromptSubmit — operator observation + signal capture (issue 434)
+    "rt_read_barrier.py",      # PreToolUse Read|Glob|Grep|Bash + UserPromptSubmit — RT read barrier
+    "evidence_pin_guard.py",   # PreToolUse Write|Edit|MultiEdit + Bash — evidence sha-pin freeze
 })
 
 # #675: hooks registered on MORE THAN ONE event slot by
@@ -92,7 +94,15 @@ WIRE_UP_HOOK_FILES = frozenset({
 # Bash register face beside the Edit|Write|MultiEdit face).
 DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py",
                                      "orchestrator_tool_guard.py",
-                                     "write_guard.py"})
+                                     "write_guard.py",
+                                     # the RT barrier: PreToolUse
+                                     # Read|Glob|Grep|Bash + UserPromptSubmit
+                                     # (the arming face)
+                                     "rt_read_barrier.py",
+                                     # the evidence freeze: PreToolUse
+                                     # Write|Edit|MultiEdit + PreToolUse Bash
+                                     # (the mutation idioms)
+                                     "evidence_pin_guard.py"})
 
 
 # #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The

@@ -249,5 +249,12 @@ def heartbeat_off(workspace: Path, force: bool = False) -> int:
     except OSError as exc:
         print(f"FAIL: cannot remove {path} ({exc})", file=sys.stderr)
         return 1
-    print("Convergence complete, heartbeat stopped; to restart use --heartbeat-on")
+    if force:
+        # #638: never report a convergence that did not happen - the
+        # forced path bypassed the guard by explicit operator override.
+        print("heartbeat stopped (FORCED — the convergence guard was "
+              "bypassed); to restart use --heartbeat-on")
+    else:
+        print("Convergence complete, heartbeat stopped; to restart use "
+              "--heartbeat-on")
     return 0

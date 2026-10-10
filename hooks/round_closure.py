@@ -19,6 +19,15 @@ distillation capability the closure also scans the report surface for
 shelf-miss signals (marker / unknown-format probe) and stamps the
 trigger state the orchestrator's tick consumes.
 
+The closure ALSO carries the RL digest face (round-closure visibility):
+one ``{"systemMessage": "RL: lead=..."}`` line on stdout — the Claude
+Code user-facing hook message field — so the operator's scrolling
+transcript shows what the RL just decided (method lead in force + its
+age + the last settlement) without opening runs/*.jsonl by hand. The
+line is rate-limited per DECISION (scripts/rl_digest.py owns the marker
+and the template): an unchanged round stays silent, and none in force
+renders nothing at all.
+
 Pure-closure posture, fail-open double cage: any error -> rc 0, silent.
 A closure observation must never disturb the subagent's own stop path.
 """
@@ -78,7 +87,7 @@ def process_event(payload: dict) -> int:
 
 
 def _kernel_faces(ws: Path) -> None:
-    """Issues #462 W1+W6: the production round-closure kernel faces.
+    """The production round-closure kernel faces (closure kernel + RL digest).
 
     Stop(worker) IS the round-closure event (#429 §6), so this hook now
     hosts what until now fired only from eval_loop_runner:
@@ -107,6 +116,10 @@ def _kernel_faces(ws: Path) -> None:
         the orchestrator's decision per the loop protocol) and stamps
         runs/distill-trigger.json the orchestrator's tick reads. Budget
         is checked here so the row carries the honest refusal.
+      - RL digest face (round-closure visibility): one user-visible line
+        per NEW decision (scripts/rl_digest.emit — template + rate limit
+        live there), printed as ``{"systemMessage": ...}`` so the
+        transcript shows the lead in force + age + last settlement.
 
     Fail-open double cage: each face is wrapped separately — a kernel
     failure is one rate-limited warn and never disturbs the subagent's
@@ -119,6 +132,20 @@ def _kernel_faces(ws: Path) -> None:
             compose.write_strategy(ws, obj)
     except Exception as exc:  # noqa: BLE001 — kernel face, never blocks
         warn("round_closure_compose", f"{type(exc).__name__}: {exc}")
+    # The RL digest line — ONE user-visible line per new
+    # decision (rate-limited + rendered by scripts/rl_digest.py). It runs
+    # AFTER the compose face so it reads the strategy object just versioned
+    # (and the one in force when compose is caged); the systemMessage
+    # envelope is the Claude Code field rendered in the transcript.
+    try:
+        with scripts_on_path():
+            import rl_digest
+            digest_line = rl_digest.emit(ws)
+        if digest_line:
+            print(json.dumps({"systemMessage": digest_line},
+                             ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001 — decision face, never blocks
+        warn("round_closure_digest", f"{type(exc).__name__}: {exc}")
     try:
         with scripts_on_path():
             import verification_ladder

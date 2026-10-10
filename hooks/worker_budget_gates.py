@@ -38,7 +38,7 @@ import yaml  # noqa: E402
 
 from _path_hygiene import load_hooks_lib, on_path  # noqa: E402  # #671 sys.path hygiene authority
 
-from status_defs import TERMINAL  # noqa: E402,F401  # single source (#34, #95)
+from status_defs import TERMINAL, SUSPENDED  # noqa: E402,F401  # single source (#34, #95, #627)
 
 """worker_budget_gates — dispatch admission checks (5 dispatch + 3 advisory + PROVEN/claim-status gates).
 
@@ -560,6 +560,12 @@ def check_tier_gate(reg_path: Path, tier: int) -> tuple[bool, str]:
     threshold = tier - 1
     for c in _read_all_claims(reg_path):
         if c.get('status') in TERMINAL:
+            continue
+        # #627 local-fix (owner review 2026-10-10): PARK (SUSPENDED) claims
+        # are not "open" here — status_defs/workguard exclude them from the
+        # dispatchable frontier; counting them blocked unrelated tier-N
+        # dispatches on a suspended claim's evidence_tier.
+        if c.get('status') in SUSPENDED:
             continue
         eta = int(c.get('evidence_tier_attempted', 0))
         if eta < threshold:

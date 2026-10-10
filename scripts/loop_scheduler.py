@@ -205,6 +205,32 @@ def upsert_durable_loop(ws: Path | str, interval: str = "5m") -> int:
     return 0
 
 
+def remove_durable_loop(ws: Path | str) -> int:
+    """#638: the sanctioned REMOVAL face for our durable loop entry.
+
+    Cancelling the loop previously required hand-editing
+    scheduled_tasks.json: CronDelete cannot remove a loop_scheduler-written
+    entry (it was never armed in the runtime), and this module had upsert
+    only. Idempotent: no entry -> "nothing to remove", rc 0. Foreign
+    entries are never touched."""
+    path = scheduled_tasks_path(ws)
+    entries, corrupt_backup = _read_entries(path)
+    kept = [e for e in entries if e.get("id") != JOB_ID]
+    removed = len(entries) - len(kept)
+    if corrupt_backup:
+        print(f"loop_scheduler: prior schedule file was unreadable/"
+              f"unrecognized - original preserved at {corrupt_backup}",
+              file=sys.stderr)
+    if removed:
+        _write_file(path, kept)
+        print(f"OK: durable /loop entry removed from {path} "
+              f"({removed} entr{'y' if removed == 1 else 'ies'} removed, "
+              f"{len(kept)} left)")
+    else:
+        print(f"OK: no durable /loop entry at {path} - nothing to remove")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="loop_scheduler.py",
                                  description="durable /loop registration")
@@ -212,9 +238,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--interval", default="5m")
     ap.add_argument("--check", action="store_true",
                     help="rc0 when the entry exists, rc2 when missing (no write)")
+    ap.add_argument("--remove", action="store_true",
+                    help="#638: remove OUR durable entry (idempotent; "
+                         "foreign entries untouched)")
     args = ap.parse_args(argv)
     if args.check:
         return 0 if loop_entry_exists(args.workspace) else 2
+    if args.remove:
+        return remove_durable_loop(args.workspace)
     return upsert_durable_loop(args.workspace, args.interval)
 
 

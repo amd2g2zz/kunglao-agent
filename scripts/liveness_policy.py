@@ -97,18 +97,31 @@ TICK_INTERVAL_DEFAULT_MIN = 5
 # jitter; two is a dead cron) and the DEAD_WORKER_MINUTES = 2x pattern.
 SCHEDULER_STALE_TICKS = 2
 
-# scripts/heartbeat.py (#4): the continuity verdict reads a SLIDING WINDOW,
-# not the whole durable tick sidecar - a tick participates when it is among
-# the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;
-# older ticks stay on disk (append-only, nothing deleted) but stop voting.
-# Sized to the real cadence above (5m): 12 ticks ~= 1 hour of normal
-# operation, so ordinary jitter never trips it. 0.1.6 sweep (#415, owner
-# ruling): the age bound drops 24h -> 2h — a historical stall stops
-# counting within 2 hours instead of re-rejecting the workspace for ~a
-# day after one mid-life gap (deploy-day quiet gaps must not poison the
-# verdict until tomorrow; the #415.3 gated baseline reset is the other
-# half of the recovery).
-CONTINUITY_WINDOW_TICKS = 12
+# scripts/heartbeat.py (#4; re-ruled by #616): the continuity verdict reads a
+# SLIDING WINDOW = the most recent CONTINUITY_WINDOW_TICKS ticks; older ticks
+# stay on disk (append-only, nothing deleted) but stop voting, and aged-out
+# stalls are surfaced in the verdict detail. #616 made the COUNT bound the
+# single retention rule: the pre-#616 window was the UNION of "last N ticks OR
+# within M hours", so its effective retention was the MAX of the two arms — a
+# stale gap pair younger than M hours kept voting no matter how many fresh
+# on-cadence ticks landed (live: five fresh ticks did not clear a 25-min
+# pair), and the re-arm chain could not flush it within a bounded number of
+# ticks (dead zone until 12 ticks or 2h). Value 6 = one full 30-min
+# hook-activation TTL at the 5-min cadence and 3x the dead-cron threshold
+# (2 missed ticks, #754): long enough that a real stall still rejects through
+# the re-arm chain's first ticks, short enough that a genuinely recovered
+# cadence clears a stale pair within ~30 min. The 0.1.6 sweep rationale
+# survives via this bound: a historical stall stops counting within one
+# window of ticks instead of re-rejecting the workspace for ~a day
+# (deploy-day quiet gaps must not poison the verdict until tomorrow; the
+# #415.3 gated baseline reset is the other half of the recovery).
+CONTINUITY_WINDOW_TICKS = 6
+
+# scripts/heartbeat.py (#4): the pre-#616 union's second retention arm, in
+# hours. RETIRED by #616 — the count bound above is the single retention
+# knob; this no longer widens (or caps) the window. Kept exported for API
+# compatibility (heartbeat.py / rlvr re-exports, evaluate_tick_continuity's
+# window_hours parameter — accepted, documented as inert).
 CONTINUITY_WINDOW_HOURS = 2
 
 # ---------------------------------------------------------------------------

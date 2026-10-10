@@ -61,8 +61,9 @@ def heartbeat_log_path(workspace: Path) -> Path:
     return Path(workspace) / "runs" / HEARTBEAT_LOG_NAME
 
 
-def append_tick_log(workspace, actor: str = "tick") -> None:
-    """#830: append one durable tick line {"ts","actor"} to
+def append_tick_log(workspace, actor: str = "tick",
+                    origin: str | None = None) -> None:
+    """#830: append one durable tick line {"ts","actor","origin"?} to
     runs/.heartbeat.log (JSONL, append-only).
 
     Dedicated sidecar, NOT the convergence ledger: (a) the incident itself
@@ -72,10 +73,20 @@ def append_tick_log(workspace, actor: str = "tick") -> None:
     #836 CI) - a single-file sidecar keeps the liveness substrate
     contract-free and midnight-stable. Append-only discipline: writers only
     ever append; no rotation (growth ~288 lines/day at 5-min cadence).
+
+    #616 provenance: `origin` ("manual" | "cron") records WHO produced the
+    tick. A durable cron registered MID-SESSION does not fire until the next
+    session (#415), so every in-session tick is a manual run - the reset
+    gate must not read those as "the cron has fired". Rows written without
+    an origin (pre-#616) keep their legacy shape; the gate treats them as
+    unknown provenance, fail-closed.
     """
     log = heartbeat_log_path(workspace)
     log.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps({"ts": utc_now_z(), "actor": str(actor)})
+    row = {"ts": utc_now_z(), "actor": str(actor)}
+    if origin:
+        row["origin"] = str(origin)
+    line = json.dumps(row)
     with log.open("a", encoding="utf-8") as fh:
         fh.write(line + chr(10))
 
@@ -92,29 +103,63 @@ def reset_continuity_baseline(workspace: Path, *, force: bool = False,
     rebuilds tick_history from one fresh registration tick, so continuity
     re-arms from NOW.
 
-    Gate (fail-closed by default):
-      - any REAL tick row (actor="tick") in the sidecar -> REFUSE: real
-        cron ticks prove the loop fired; a stall then means a REAL dead
-        cron and the re-arm chain is the remedy, not a reset.
+    Gate (fail-closed by default), #616 provenance:
+      - a tick row with origin="cron" -> REFUSE: the durable loop has
+        fired; a stall then means a REAL dead cron and the re-arm chain is
+        the remedy, not a reset.
+      - a LEGACY tick row with NO origin (pre-#616) -> REFUSE: provenance
+        unknown, fail-closed — the bounded re-arm chain recovers without
+        touching the audit.
+      - tick rows with origin="manual" alone do NOT block the reset: per
+        #415 every in-session tick is a manual heartbeat_tick run — reading
+        those as proof "the cron has fired" was the #616 dead zone (the
+        reset refused exactly when it was the only legal recovery).
       - the existing heartbeat state older than max_age_hours -> REFUSE
         (only a fresh deploy may reset).
 
-    Returns {"status": "reset"|"refused", "reason"?, "rotated_to"?}.
+    #616 secondary wrinkle: the rebuild PRESERVES loop_registered — the
+    pre-#616 reset silently cleared the marker, so the next gate reported
+    HEARTBEAT LOOP NOT REGISTERED and recovery needed a --loop-registered
+    re-mark.
+
+    Returns {"status": "reset"|"refused", "reason"?, "rotated_to"?,
+    "manual_ticks": <count>}.
     """
     import time as _time
     log = heartbeat_log_path(workspace)
-    real_ticks = 0
+    cron_ticks = 0
+    manual_ticks = 0
+    legacy_ticks = 0
     if log.exists():
         for obj in iter_jsonl(
                 log.read_text(encoding="utf-8",
                               errors="replace").splitlines()):
-            if isinstance(obj, dict) and str(obj.get("actor")) == "tick":
-                real_ticks += 1
-    if real_ticks and not force:
+            if not (isinstance(obj, dict)
+                    and str(obj.get("actor")) == "tick"):
+                continue
+            origin = str(obj.get("origin") or "")
+            if origin == "cron":
+                cron_ticks += 1
+            elif origin == "manual":
+                manual_ticks += 1
+            else:
+                legacy_ticks += 1
+    if (cron_ticks or legacy_ticks) and not force:
+        evidence = []
+        if cron_ticks:
+            evidence.append(f"{cron_ticks} real tick row(s) with "
+                            f"origin=cron — the durable loop has fired")
+        if legacy_ticks:
+            evidence.append(f"{legacy_ticks} real tick row(s) present "
+                            f"without provenance (pre-#616 legacy rows — "
+                            f"fail-closed)")
         return {"status": "refused",
-                "reason": f"{real_ticks} real tick row(s) present — the cron "
-                          f"has fired; a stall is REAL, use the re-arm "
-                          f"chain (heartbeat_tick.py <ws>), not a reset"}
+                "reason": ("; ".join(evidence) +
+                           f"; a stall is REAL, use the re-arm chain "
+                           f"(heartbeat_tick.py <ws>) — a recovered cadence "
+                           f"clears the stale gap within one window "
+                           f"({CONTINUITY_WINDOW_TICKS} on-cadence ticks), "
+                           f"not a reset")}
     state_path = workspace / "runs" / ".heartbeat.json"
     if not state_path.is_file():
         return {"status": "refused", "reason": "no heartbeat state — "
@@ -134,13 +179,25 @@ def reset_continuity_baseline(workspace: Path, *, force: bool = False,
         rotated = workspace / "runs" / f".heartbeat.log.reset-{stamp}"
         log.replace(rotated)
         rotated_to = rotated.name
+    # #616: preserve loop_registered across the rebuild — the marker is the
+    # #461 cron-registration proof, orthogonal to continuity; dropping it
+    # forced a re-mark and made the next gate report LOOP NOT REGISTERED.
+    preserved_marker = False
+    try:
+        preserved_marker = (json.loads(
+            state_path.read_text(encoding="utf-8")).get("loop_registered")
+            is True)
+    except Exception:  # noqa: BLE001 — unreadable cache = no marker to preserve
+        preserved_marker = False
     now_z = utc_now_z()
     state = {"ts": now_z, "interval_min": TICK_INTERVAL_DEFAULT_MIN,
              "tick_history": [now_z],
-             "continuity_baseline_reset": now_z}
+             "continuity_baseline_reset": now_z,
+             "loop_registered": preserved_marker}
     state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False)
                           + "\n", encoding="utf-8")
-    return {"status": "reset", "rotated_to": rotated_to}
+    return {"status": "reset", "rotated_to": rotated_to,
+            "manual_ticks": manual_ticks}
 
 
 def newest_sidecar_ts(workspace) -> str | None:
@@ -218,13 +275,18 @@ def evaluate_tick_continuity(state: dict, *,
          is a dead cron);
       3. the newest tick <= stale_minutes old (the pre-existing 35-min line).
 
-    #4 sliding window: the verdict reads only RECENT ticks — among the last
-    window_ticks OR within the last window_hours (defaults in liveness_policy,
-    sized to the 5-min cadence). History outside the window is NOT deleted —
-    the durable sidecar stays append-only — it just stops participating, so
-    one mid-life stall (laptop asleep over a weekend) ages out instead of
-    re-rejecting the workspace forever. Aged-out stalls are counted and
-    surfaced in the detail text: no silent history rewriting.
+    #4/#616 sliding window: the verdict reads only RECENT ticks — the last
+    window_ticks stamps (default in liveness_policy, sized to the 5-min
+    cadence). History outside the window is NOT deleted — the durable
+    sidecar stays append-only — it just stops participating, so one
+    mid-life stall ages out instead of re-rejecting the workspace forever.
+    Aged-out stalls are counted and surfaced in the detail text: no silent
+    history rewriting. The count bound is the ONE retention knob (#616):
+    the pre-#616 union ("last N ticks OR within M hours") retained the MAX
+    of both arms, so a stale gap pair younger than M hours kept voting no
+    matter how many fresh on-cadence ticks landed — the re-arm chain could
+    not clear it within a bounded number of ticks. `window_hours` is kept
+    in the signature for API compatibility; it no longer widens the window.
 
     STRICT legacy handling (adjudicated): files WITHOUT tick_history REJECT —
     that format-shape IS the incident file, and a compatibility pass would
@@ -261,8 +323,13 @@ def evaluate_tick_continuity(state: dict, *,
                     # them made deploy-day quiet gaps look like dead crons
                     # for ~24h (owner live run, 51job). Unknown/absent
                     # actors from legacy rows keep the old inclusive read.
+                    # local-fix: "renew" (hook_activation --renew rows) is a
+                    # THIRD non-tick stream in the same sidecar — it was
+                    # missing from the skip list, so renew->next-tick gaps
+                    # were adjudicated as cadence stalls (observed false gap
+                    # 2026-10-10T01:46:23Z -> 02:13:38Z, both rows renew).
                     actor = str(obj.get("actor") or "tick")
-                    if actor in ("hook", "register"):
+                    if actor in ("hook", "register", "renew"):
                         skipped_non_tick += 1
                         continue
                     ts = _parse_hb_ts(obj.get("ts"))
@@ -295,13 +362,15 @@ def evaluate_tick_continuity(state: dict, *,
     except (TypeError, ValueError, OverflowError):
         interval = float(TICK_INTERVAL_DEFAULT_MIN)
     max_gap = timedelta(minutes=2 * interval)
-    # #4: sliding window over the sorted history — union of "recent N ticks"
-    # and "recent M hours". The tick-count bound caps the scan for slow
-    # cadences; the age bound guarantees any stall ages out within ~a day.
+    # #616: the window is the last N ticks — the count bound is the single
+    # retention rule. A stale gap pair stops voting once N newer ticks
+    # exist, so a genuinely recovered cadence clears it within one window
+    # of on-cadence ticks (bounded re-arm); a REAL stall still rejects at
+    # every tick before that point (#754 standard untouched). The retired
+    # pre-#616 union arm ("OR within window_hours") retained old pairs
+    # regardless of the count — the dead zone this suite pins closed.
     n = max(1, int(window_ticks))
-    cutoff = moment - timedelta(hours=max(0, int(window_hours)))
-    window = [t for i, t in enumerate(stamps)
-              if i >= len(stamps) - n or t >= cutoff]
+    window = stamps[-n:]
     in_window = set(window)
     # Stalls (oversized adjacent gaps) that no longer participate: the pair
     # is not fully inside the window, so the gap loop below never sees it.

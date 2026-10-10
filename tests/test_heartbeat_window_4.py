@@ -5,9 +5,12 @@ RED contract: the #754 continuity evaluator scanned the ENTIRE durable tick
 sidecar, so ONE mid-life stall (laptop asleep over a weekend) re-rejected
 the workspace forever - every later evaluation re-read the same historical
 gap and no sanctioned recovery path existed. The verdict now reads a
-SLIDING WINDOW (recent N ticks OR recent M hours); older ticks stay on disk
-(append-only sidecar, nothing deleted) but stop participating in the
-verdict, and aged-out stalls are surfaced in the detail text.
+SLIDING WINDOW of the most recent N ticks (#616: the pre-#616 "OR within M
+hours" arm was retired - as a union it retained the MAX of both bounds and
+left the re-arm chain unable to flush a stale pair within a bounded number
+of ticks); older ticks stay on disk (append-only sidecar, nothing deleted)
+but stop participating in the verdict, and aged-out stalls are surfaced in
+the detail text.
 
   W1  early-history stall + recent continuous ticks -> PASS (was REJECT)
   W2  stall INSIDE the window -> still REJECT (fix must not weaken
@@ -115,7 +118,8 @@ class TestInWindowStillRejects:
 
     def test_stall_with_too_few_resumed_ticks_still_rejects(self, tmp_path):
         """Recovery needs a full window: a 3h-old stall with only 4 resumed
-        ticks is still inside the window (last-12 and 24h both reach it)."""
+        ticks is still inside the window (#616: the last-6 count bound
+        reaches it — the tick before the bound keeps rejecting)."""
         ws = _mk_ws(tmp_path)
         pre = [NOW - timedelta(hours=3), NOW - timedelta(hours=3) +
                timedelta(minutes=5)]
@@ -161,8 +165,8 @@ class TestAgedOutSurfacing:
     def test_clean_long_history_no_aged_out_note(self, tmp_path):
         """Old out-of-window ticks with NO stall anywhere: verdict stays
         clean - no spurious aged-out claim. Uninterrupted ~25h of 5-min
-        ticking: ticks older than the 24h bound drop out of the window, but
-        no gap in the raw history ever exceeds 2x the interval."""
+        ticking: ticks past the last-N count bound drop out of the window,
+        but no gap in the raw history ever exceeds 2x the interval."""
         ws = _mk_ws(tmp_path)
         stamps = [NOW - timedelta(minutes=5 * i) for i in range(307, 0, -1)]
         log = _write_sidecar(ws, stamps)
