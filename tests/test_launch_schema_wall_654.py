@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #654 1-F3 — the launch-stash schema wall.
+"""Issue 1-F3 — the launch-stash schema wall.
 
 The audit's lens-1 report caught the live shape: an orchestrator session
 parked a full dispatch envelope (``status: PARKED_NOT_LAUNCHED``,
@@ -11,8 +11,7 @@ launch state (phi=0.0) and delete the wake plan on a settle.
 The wall: ``record_launch`` stamps ``schema: "dispatch-launch/1"``;
 ``append_transition`` refuses (None + ONE warn, stash LEFT INTACT) any
 stash doc carrying a foreign ``schema`` or a ``status`` field. Legacy
-stashes carrying neither field settle byte-identically (the #550
-back-compat rule).
+stashes carrying neither field settle byte-identically (the back-compat rule).
 """
 from __future__ import annotations
 

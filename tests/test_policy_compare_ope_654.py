@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #654 4-L8 — the SNIPS comparator's π discipline.
+"""Issue 4-L8 — the SNIPS comparator's π discipline.
 
 Lens finding: declared propensities enter SNIPS at π=1.0 by fiat (no
 draw receipt backs them — mixing them violates the SNIPS assumption the

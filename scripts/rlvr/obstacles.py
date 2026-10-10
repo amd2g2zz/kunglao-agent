@@ -37,17 +37,17 @@ tolerantly into the canonical snapshot + signature (the ob= segment).
 
 Integrity posture: record-time checks are structural + artifact
 existence + probe-marker shape; read() re-validates structure, then
-(#654 4-L6) re-runs the probe-marker check on a cited artifact that
+(4-L6) re-runs the probe-marker check on a cited artifact that
 still exists — present-but-shapeless (rewritten after the row landed)
 is excluded with one warn, absent artifact keeps the row (attribution
 is history — scratch cleanup under runs/ must not erase it from state).
-#654 1-F9 adds the invalidation face: a row may carry the retraction
+1-F9 adds the invalidation face: a row may carry the retraction
 marker (``retracted: true`` + ``retracted_ts`` + ``retracted_reason``,
 written INTO the row file by retract()/sweep_stale_obstacles() — the
 history stays on disk); retracted rows are excluded from read()/face()
 so a repaired environment stops feeding the state signature and the
 termination floor. The sweep pairs ``kind=missing_env_entry`` rows that
-carry the additive optional ``env_key`` against the #475 env-state
+carry the additive optional ``env_key`` against the env-state
 single source (``runs/env-state.json``); unkeyed rows are never guessed.
 Well-formed hand-edited rows still enter as training noise the Phase-2
 posterior outvotes (a forger who preserves the marker shape is the
@@ -256,7 +256,7 @@ def record(ws, *, kind: str, cause: str, evidence_path: str,
            ts: str | None = None) -> dict:
     """Record one obstacle row. Loud-result fail-open (the
     posteriors.record idiom): invalid input -> named reason, no file,
-    never an exception into the producer. #654 1-F9: the optional
+    never an exception into the producer. 1-F9: the optional
     ``env_key`` names the env-state capability the row pairs against
     (the missing_env_entry sweep's join key — a wrong key just never
     matches; unkeyed rows are never swept)."""
@@ -303,12 +303,12 @@ def _structurally_valid(row) -> bool:
 def read(ws) -> list[dict]:
     """Tolerant read: structurally valid rows, sorted by parsed id
     number (rollover-safe); corrupt/invalid rows skipped, never a
-    raise. #654 4-L6: a cited artifact that still EXISTS is re-checked
+    raise. 4-L6: a cited artifact that still EXISTS is re-checked
     against the probe-marker discipline — present-but-shapeless (the
     artifact was rewritten after the row landed) is uncertified and
     excluded with ONE warn; an absent artifact KEEPS the row
     (attribution is history — scratch cleanup under runs/ must not
-    erase it from state). #654 1-F9: retracted rows are excluded (the
+    erase it from state). 1-F9: retracted rows are excluded (the
     invalidation face — the marker lives in the row file)."""
     d = _registry(ws)
     if not d.is_dir():
@@ -373,12 +373,12 @@ def retract(ws, obstacle_id: str, reason: str) -> bool:
     return True
 
 
-ENV_STATE_REL = "runs/env-state.json"  # the #475 single source (read-only here)
+ENV_STATE_REL = "runs/env-state.json"  # the env-state single source (read-only here)
 
 
 def sweep_stale_obstacles(ws) -> list[dict]:
     """1-F9 — the stale-obstacle sweep: ``kind=missing_env_entry`` rows
-    that carry an ``env_key`` are paired against the #475 env-state
+    that carry an ``env_key`` are paired against the env-state
     single source; an entry now probing ``pass`` means the environment
     REPAIRED itself and the obstacle must stop feeding the state
     signature and the termination floor. Retracts via retract() (the

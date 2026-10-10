@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #654 1-F9 + 4-L6 — the obstacle invalidation face + read-time
+"""Issue 1-F9 + 4-L6 — the obstacle invalidation face + read-time
 probe re-certification.
 
 Lens findings:

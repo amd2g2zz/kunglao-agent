@@ -19,11 +19,11 @@ Faces:
       Refuses (None + loud warn) a trivial discriminator — one whose
       tokens are a subset of the statement's (the statement restates
       what is already observed; it banks ~0 lift) — a SCAFFOLD-AIMED
-      discriminator (#654 4-L5: one whose tokens touch the checker's
+      discriminator (4-L5: one whose tokens touch the checker's
       own MANDATED output — the engine-parsed ``verdict:`` frontmatter
       line settles on contract compliance, never on the claim's truth),
       and a duplicate discriminator against any open prediction (dedup).
-      #654 5-F4: ``actor`` (the registering act's identity) is REQUIRED
+      5-F4: ``actor`` (the registering act's identity) is REQUIRED
       and rides the row as ``registered_by`` — the raw-JSONL-append
       bypass (runs/predictions.jsonl is not a carrier) mints rows the
       settle face will never honor. Input validation at the boundary:
@@ -98,7 +98,7 @@ BASE_RATE_FLOOR = 0.01
 # open predictions older than this many hours flip to expired on read
 PREDICTION_TTL_HOURS = 72
 
-# #654 4-L5: the checker's own MANDATED output — the `verdict:`
+# 4-L5: the checker's own MANDATED output — the `verdict:`
 # frontmatter line the dispatch contract requires and the engine itself
 # parses (checkpoints.py:1308/1518/1553). A discriminator touching
 # these tokens settles on contract compliance, never on the claim's
@@ -125,7 +125,7 @@ def is_trivial(discriminator: str, statement: str) -> bool:
 
 
 def is_scaffold_aimed(discriminator: str) -> bool:
-    """#654 4-L5: True when the discriminator's tokens touch the
+    """4-L5: True when the discriminator's tokens touch the
     checker's MANDATED output (``MANDATED_CHECKER_MARKERS``) — such a
     discriminator is a guaranteed hit on any contract-compliant verifier
     note regardless of the claim's truth (base rate ~1 by
@@ -203,7 +203,7 @@ def latest_by_id(ws) -> dict[str, dict]:
 
 def register(ws, claim_id: str, statement: str,
              discriminator: str, actor: str) -> dict | None:
-    """One falsifiable prediction (see module docstring). #654 5-F4:
+    """One falsifiable prediction (see module docstring). 5-F4:
     ``actor`` (the registering act's identity) is required — the row
     stamps it as ``registered_by`` and the settle faces refuse rows
     without it, so the raw JSONL-append bypass mints rows that can

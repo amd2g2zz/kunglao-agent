@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #654 4-L5 + 5-F4 — scaffold-aimed discriminators refused;
+"""Issue 4-L5 + 5-F4 — scaffold-aimed discriminators refused;
 prediction rows carry authorship; unattributed rows cannot settle.
 
 Lens findings:

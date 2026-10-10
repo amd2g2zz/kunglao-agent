@@ -90,7 +90,7 @@ def test_register_row_shape_and_id_allocation(tmp_path):
     assert row["status"] == "pending"
     assert row["registered_ts"].endswith("Z")
     # the eight schema fields, exactly — nothing else rides a pending
-    # row (registered_by is the #654 5-F4 authorship stamp)
+    # row (registered_by is the 5-F4 authorship stamp)
     assert set(row) == {"schema", "id", "claim_id", "statement",
                         "discriminator", "registered_by",
                         "registered_ts", "status"}

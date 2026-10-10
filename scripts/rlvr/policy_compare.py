@@ -18,7 +18,7 @@ propensity p_i, realized reward r_i):
 per-family candidate weights (the Thompson draw distribution at decision
 time) give π_thompson; the greedy arm of ε-greedy takes the envelope's
 argmax; uniform is 1/K. Rows without a propensity (pre-fix logs) are
-skipped and counted — never silently imputed. #654 4-L8 discipline: rows
+skipped and counted — never silently imputed. 4-L8 discipline: rows
 whose envelope carries ``declared: true`` are skipped and counted (π=1.0
 by fiat — no draw receipt backs it, so the SNIPS mixing assumption does
 not hold for them), and the two on-disk π carriers stamped from the same
