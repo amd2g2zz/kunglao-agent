@@ -52,6 +52,7 @@ assets:
     - hooks/bash_fact_guard.py        # #809 Bash PostToolUse facts-write lint recorder
     - hooks/cost_input_capture.py     # #873 PostToolUse cost input recorder
     - hooks/rt_read_barrier.py        # #652 RT read barrier (PreToolUse + UserPromptSubmit arming)
+    - hooks/step_record_capture.py    # shadow step ledger capture (PostToolUse)
     - hooks/evidence_pin_guard.py     # #652 evidence sha-pin freeze (Write|Edit|MultiEdit + Bash)
   templates:
     # #156: --html rendering assets (Jinja2 face template — the Apache-2.0
