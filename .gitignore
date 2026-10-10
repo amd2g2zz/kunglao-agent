@@ -113,3 +113,8 @@ docs/superpowers/
 # posteriors across this machine's workspaces) — never committed; the
 # guarded prior_store_root scan covers whatever exists locally.
 scripts/rlvr/patterns/posterior-store.jsonl
+
+# mutmut working artifacts (Gate 4, #663): the mutants/ copy tree and the
+# results cache are per-run scratch, never committed.
+/mutants/
+/.mutmut-cache

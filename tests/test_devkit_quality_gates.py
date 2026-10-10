@@ -11,7 +11,8 @@ convention:
 - devkit/ is dev scaffolding, NOT shipped product
 - gates that call subprocess (Gates 2 + 3) are smoke-tested with `--collect-only`
   style checks; Gate 1 is fully asserted
-- Gate 4 is `import mutmut` only — no threshold (Phase 2)
+- Gate 4 reads the committed mutation baseline (recorded by
+  devkit/mutation_baseline.py --record; see test_gate4_baseline_663.py)
 """
 from __future__ import annotations
 

@@ -57,7 +57,8 @@ dev = [
     "tomli>=2.0; python_version < '3.11'",
     # #564 coverage policy alignment: coverage is OBSERVATION (#463),
     # pytest-cov is wired only so the report lands in CI artifacts;
-    # the primary quality metric is Gate 4 (mutmut availability),
+    # the primary quality metric is Gate 4 (the RECORDED mutation
+    # baseline, #663 — tool availability alone is not evidence),
     # not a coverage line %. tests/test_coverage_policy_564.py is the
     # drift guard for this declaration.
     "pytest-cov>=5.0",
@@ -227,4 +228,16 @@ max-complexity = 12
 "tools/validate_index.py" = ["C901"]
 
 # #914 legacy ratchet: grandfathered E501/C901, cleared file-by-file as touched
+
+# Gate 4 (Test Effectiveness, #663): the bounded mutmut scope the baseline
+# recorder runs and the mutation-baseline artifact attests. The default
+# target is a self-contained module with real functions and a pinned test
+# file (mutmut's test<->mutant mapping needs called functions; a
+# constants-only module maps nothing). Expanding the scope is a policy act
+# recorded in the artifact's `scope` field, never a silent default.
+[tool.mutmut]
+source_paths = ["scripts"]
+also_copy = ["tests", "conftest.py", "pytest.ini", "hooks", "tools"]
+only_mutate = ["scripts/slot_monitor.py"]
+pytest_add_cli_args_test_selection = ["tests/test_slot_monitor_636.py"]
 
