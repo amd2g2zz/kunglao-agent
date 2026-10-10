@@ -387,10 +387,21 @@ jobs:
     - name: Oracle self-check (issue #121)
       run: uv run python scripts/kunglao_eval.py --oracle-selfcheck
 
+    - name: Generate release receipt (docs-only fast path — suite intentionally skipped)
+      # The docs-only fast path skipped the suite above, so no junit exists;
+      # the receipt then records the intentional skip explicitly
+      # (tests.not_run + reason) instead of erroring on the absent file.
+      # Same docs_only signal as the suite step — never a parallel detection.
+      if: needs.runner-probe.outputs.docs_only == 'true'
+      run: uv run python scripts/release_receipt.py --tests-not-run-fast-path --out release-receipt.json
+
     - name: Generate release receipt
       # The receipt counts the integration+slow junit (this leg). The fast
       # and docs legs upload their junit artifacts alongside it, so the
-      # union is auditable from the three artifacts.
+      # union is auditable from the three artifacts. This branch REQUIRES
+      # the junit: whenever the suite was supposed to run, a missing or
+      # crashed suite keeps the job red — no fast-path fallback here.
+      if: needs.runner-probe.outputs.docs_only != 'true'
       run: uv run python scripts/release_receipt.py --pytest-junit .pytest-result.xml --out release-receipt.json
 
     - name: Upload release receipt

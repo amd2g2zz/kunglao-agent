@@ -59,6 +59,25 @@ ships in the GitHub Release notes.
 - **kunglao_upgrade version parsing** handles PEP 440 rc suffixes
   (0.1.6-rc1 orders before 0.1.6, after 0.1.5.postN) - the upgrade
   ladder previously crashed on the suffix.
+- **The v0.1.6 fix campaign folds in (#646, waves 2-4; supersedes
+  #639-#643, #645)**: the dispatch-gate family hardening (#615, #617,
+  #619-#627: verifier exemption, undo-anchor rollback with the
+  approval-point reopen, the delivery-verified gate, no-fabrication
+  intent handling, rank and strategy rows) plus the PQ-link mint path
+  (#618: mint stamps answers_question; ws_yaml gains the append face);
+  the heartbeat continuity dead zone closed (#616: tick-row provenance
+  manual|cron, the count-bounded 6-tick window with the age arm retired,
+  loop_registered preserved across resets) with the autonomy batch
+  (#630-#638: compact-continuity stash + delivery, stale-feedback
+  invocation, stamp re-emit, rank-face warn, live round-credit
+  settlement, the cadence advisor and the slot monitor, durable-loop
+  removal); the RLVR live seams wired (#647: cross-task strategy-store
+  bank, case-settlement posteriors for the ranker, compose settled-ledger
+  fallback, episode tiers) with fact provenance landing end to end
+  (#648: creator stamps, the failure-analysis seeder); the exploration
+  arm policy pinned at the 3/5/8/16 ladder (#649 - floor 3, default 5,
+  active ceiling 8, library ceiling 16; temperature is not a lever, per
+  the owner ruling); test-infra fixtures aligned (#644).
 
 ## [0.1.6] - 2026-09-27
 

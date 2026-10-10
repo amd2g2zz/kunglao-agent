@@ -15,19 +15,27 @@ Usage:
                                        [--manifest release-manifest.yaml]
                                        [--pytest-junit <junit.xml>]
                                        [--no-tests]
+                                       [--tests-not-run-fast-path]
                                        [--check]
 
 Exit contract: 0 = receipt written (or --check passed); 1 = manifest/CLI
 validation failed or the receipt could not be produced. Test failures are
 DATA recorded in the receipt — the CI pytest step is the GATE.
 
-Test result intake:
+Test result intake (mutually exclusive):
   --pytest-junit <file>   read counts from a junit XML (CI passes the pytest
                           step's own output — no double test run)
   (default)               run the standard test command (python -m pytest -q)
                           and parse the summary line, plus a --collect-only
                           probe for the collected count
   --no-tests              omit the test result (fast local manifest check)
+  --tests-not-run-fast-path
+                          explicit tests-not-run marker for the docs-only
+                          fast path, where CI intentionally skips the suite
+                          and no junit exists — never a silent omission, and
+                          never a substitute for a suite that was supposed
+                          to run (a missing junit stays a hard error on the
+                          normal intake)
 
 The receipt contains inventory digests only — never file contents, env vars,
 or secrets.
@@ -191,6 +199,13 @@ def router_inventory(subcommands: list[str], errors: list[str]) -> dict:
 
 # ---------- test result ----------
 
+# Docs-only fast path: CI intentionally skips the suite for markdown-only
+# diffs, so no junit exists. The marker names that skip explicitly; the
+# tolerant intake is opt-in, and a missing junit on the normal intake stays
+# a hard error — the fast path can never mask a suite that was meant to run.
+FAST_PATH_NOT_RUN_REASON = "docs-only fast path: tests intentionally skipped"
+
+
 def parse_junit(path: Path) -> dict:
     root = ET.parse(str(path)).getroot()
     suites = [root] if root.tag == "testsuite" else [c for c in root if c.tag == "testsuite"]
@@ -276,10 +291,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="revision override (default: git rev-parse HEAD)")
     ap.add_argument("--manifest", default="release-manifest.yaml",
                     help="release manifest path (override for tests)")
-    ap.add_argument("--pytest-junit", default=None,
-                    help="read test counts from a junit XML instead of running pytest")
-    ap.add_argument("--no-tests", action="store_true",
-                    help="omit the test result (fast local manifest check)")
+    intake = ap.add_mutually_exclusive_group()
+    intake.add_argument("--pytest-junit", default=None,
+                        help="read test counts from a junit XML instead of running pytest")
+    intake.add_argument("--no-tests", action="store_true",
+                        help="omit the test result (fast local manifest check)")
+    intake.add_argument("--tests-not-run-fast-path", action="store_true",
+                        help="record an explicit tests-not-run marker instead of reading a "
+                             "junit or running pytest (docs-only fast path: the suite was "
+                             "intentionally skipped)")
     ap.add_argument("--check", action="store_true",
                     help="validate manifest + CLI surface only; write no receipt")
     args = ap.parse_args(argv)
@@ -314,6 +334,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"ERROR: junit file not found: {jp}", file=sys.stderr)
                 return 1
             test_result = parse_junit(jp)
+        elif args.tests_not_run_fast_path:
+            test_result = {"not_run": True, "reason": FAST_PATH_NOT_RUN_REASON}
         else:
             test_result = run_tests(manifest.get("test_command", "python -m pytest -q"))
 

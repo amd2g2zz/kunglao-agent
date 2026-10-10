@@ -87,6 +87,20 @@ whose framework stamp rides ON data files (comment form) have the stamp
 line normalized away before hashing, so a sanctioned stamp refresh never
 trips the rule.
 
+## Update identity (source head hash)
+
+Currency is keyed on the update IDENTITY, not the version string. The
+executing source tree's git head hash is recorded in the workspace's
+deployment carrier (`<ws>/.claude/deployed-manifest.json`, field
+`source_head`; the version stays there as human metadata, `source_version`),
+and a workspace carrying deployed copies is refreshed whenever the head
+hash differs — even at an equal version string, the re-cut release batch
+case. The refresh reports the explicit `<old> -> <new>` hash change;
+`already at version ... (source head <hash> — current)` is reported only
+when the head hash matches. On non-git installs (plugin/zip copies) the
+deploy-manifest digest carries the same identity, so a same-content install
+still reports current.
+
 ## Out of scope
 
 - Touching user data — abort + snapshot instead.

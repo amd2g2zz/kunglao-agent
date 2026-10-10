@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -197,15 +198,67 @@ def deployed_carrier_path(ws: Path) -> Path:
     return Path(ws) / CARRIER_REL
 
 
+# ---------------------------------------------------------------------------
+# update identity — source head hash (manifest digest as fallback)
+# ---------------------------------------------------------------------------
+
+def source_head(root: Path | None = None) -> str | None:
+    """The SOURCE TREE's git head hash — the unique update identity of
+    `kunglao upgrade`. The version string stays human-facing metadata; a
+    re-cut batch can carry different content under the same version, and
+    only the head hash separates the batches.
+
+    Accepted ONLY when <root> is its OWN repo top: a plugin copy nested
+    inside an unrelated host repo must not inherit the host's head (identity
+    would then move on every unrelated host commit). Not-a-repo, no-commits
+    and git-missing all answer None — callers fall back to the manifest
+    digest, which the carrier already records.
+    """
+    base = Path(root) if root is not None else ROOT
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(base), "rev-parse", "HEAD"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace")
+        top = subprocess.run(
+            ["git", "-C", str(base), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace")
+        if head.returncode != 0 or top.returncode != 0:
+            return None
+        top_out = top.stdout.strip()
+        if not top_out or Path(top_out).resolve() != base.resolve():
+            return None
+    except (OSError, ValueError):
+        return None
+    return head.stdout.strip() or None
+
+
+def _source_version() -> str | None:
+    """Human-facing metadata for the carrier: the skill version the
+    deployment came from. Lazy import + fail-open — a version probe must
+    never break a deployment."""
+    try:
+        import template_version
+        return template_version.read_skill_version()
+    except Exception:  # noqa: BLE001 — metadata only
+        return None
+
+
 def write_carrier(ws: Path, entries: list[dict]) -> dict:
     """Stamp the deployment carrier recording what was just written into
     <ws>/.claude/ (both writer faces: deploy_workspace_copy at init,
     deployed_refresh at upgrade). #810: dests list added so the activation
-    completeness face can verify the deployed surface without the manifest."""
+    completeness face can verify the deployed surface without the manifest.
+    source_head + source_version added — the update identity (git head of
+    the executing source tree; None on non-git installs, where the digest
+    carries identity) plus the version kept as human metadata."""
     import time
     carrier = {
-        "schema_version": 2,
+        "schema_version": 3,
         "deployed_digest": manifest_digest(entries),
+        "source_head": source_head(),
+        "source_version": _source_version(),
         "entries": len(entries),
         "dests": sorted(str(e.get("dest", "")) for e in entries),
         "deployed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -272,6 +325,45 @@ def deploy_drift(ws: Path) -> dict:
     if observed != expected:
         out.update(drift=True, reason="copy-drift")
     return out
+
+
+def identity_status(ws: Path) -> dict:
+    """The update identity — workspace-recorded vs source-current.
+
+    Identity precedence: the git head hash on BOTH sides when both are
+    available (the primary basis); otherwise the manifest digest the
+    carrier already records (`deployed_digest` vs the digest recomputed
+    from the executing tree — the deploy-manifest digest algorithm, the
+    fallback for non-git installs and legacy carriers). The RECORDED side is the
+    workspace carrier: a missing/unreadable carrier (or one without a
+    digest) yields changed=True — the deploy_drift fail-towards-work
+    posture, an unverifiable identity is never reported current.
+
+    Read-only. Returns {"changed": bool, "basis": "head"|"digest"|"none",
+    "recorded_head", "current_head", "recorded_digest", "current_digest"}.
+    """
+    current_digest = manifest_digest(build_entries())
+    current_head = source_head()
+    recorded_head = recorded_digest = None
+    path = deployed_carrier_path(ws)
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            recorded_head = str(data.get("source_head") or "") or None
+            recorded_digest = str(data.get("deployed_digest") or "") or None
+    if recorded_digest is None:
+        changed, basis = True, "none"
+    elif recorded_head and current_head:
+        changed, basis = (recorded_head != current_head), "head"
+    else:
+        changed, basis = (recorded_digest != current_digest), "digest"
+    return {"changed": changed, "basis": basis,
+            "recorded_head": recorded_head, "current_head": current_head,
+            "recorded_digest": recorded_digest,
+            "current_digest": current_digest}
 
 
 def render_yaml(entries: list[dict]) -> str:
