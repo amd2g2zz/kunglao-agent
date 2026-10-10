@@ -903,3 +903,96 @@ def drift_detected(ws) -> bool:
     writing every loop, zero state progress (F2/F3, wf_5c50b792-f7c).
     """
     return signature_rotation(ws) >= ROTATION_WINDOW and not workers_progressing(ws)
+
+
+def undo_dispatch_anchor(ws, cid, window_s: float = 90.0) -> bool:
+    """#623 local-fix: a REJECTED dispatch attempt must not leave its anchor
+    row behind. An earlier hook in the PreToolUse chain (worker_budget)
+    stamps the anchor on ITS approval point, before dispatch_gate's own
+    gates run — a later REJECT then leaves a row that arms the plan gate on
+    this claim's NEXT dispatch, silently voiding the first-dispatch plan
+    exemption (observed on C-005: two rejected attempts left rows that
+    turned the next launch into a "re-dispatch without plan reference").
+
+    Removes the claim's log's LAST row when it is fresh (stamped within
+    window_s — this attempt's own stamp); an old tail row belongs to an
+    earlier attempt and is left alone. Fail-open: any parse/IO trouble
+    returns False and the log stays untouched."""
+    if not ws or not cid:
+        return False
+    log = Path(ws) / "runs" / f".dispatch-anchor-{str(cid).replace('-', '')}.jsonl"
+    if not log.is_file():
+        return False
+    try:
+        rows = [ln for ln in log.read_text(encoding="utf-8").splitlines()
+                if ln.strip()]
+        if not rows:
+            return False
+        last = json.loads(rows[-1])
+        ts = str(last.get("ts") or "")
+        try:
+            t = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc)
+        except ValueError:
+            return False  # legacy/unknown ts shape — conservative no-op
+        if (datetime.now(tz=timezone.utc) - t).total_seconds() > window_s:
+            return False
+        rows = rows[:-1]
+        tmp = log.with_suffix(".jsonl.tmp")
+        tmp.write_text(("\n".join(rows) + "\n") if rows else "",
+                       encoding="utf-8")
+        tmp.replace(log)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def fresh_worker_for(ws, cid, fresh_minutes: int = 10) -> bool:
+    """#624 local-fix helper: is there a FRESH in-progress worker-status file
+    for this claim? (claim key matched on the file's C-NNN token; freshness
+    window mirrors the lib's fresh_minutes convention.) Unknown/unreadable
+    state is treated as LIVE (conservative: never reopen under uncertainty)."""
+    key = str(cid).replace('-', '').upper()
+    try:
+        for s in iter_worker_states(Path(ws)):
+            name = Path(s.get("file") or "").name
+            m = re.search(r"[Cc]-?\d+", name)
+            if not (m and m.group(0).replace('-', '').upper() == key):
+                continue
+            if str(s.get("status") or "") != "in-progress":
+                continue
+            mt = s.get("mtime")
+            if mt is not None and (datetime.now(tz=timezone.utc) - mt) < timedelta(minutes=fresh_minutes):
+                return True
+    except Exception:  # noqa: BLE001 — unknown -> conservative (treat as live)
+        return True
+    return False
+
+
+def reopen_claim_no_worker(ws, cid, fresh_minutes: int = 10) -> bool:
+    """#624 local-fix: a rejected dispatch attempt flips its claim OPEN ->
+    IN_PROGRESS at the approval point (worker_budget, before dispatch_gate's
+    gates run). When a later gate REJECTS the attempt, the claim must flip
+    back unless a genuinely fresh worker exists for it — otherwise the
+    in-flight marker lies and the dispatch frontier loses the claim. Also
+    heals a zombie IN_PROGRESS (no fresh worker at all). Canonical register
+    write via ws_yaml (the single-writer renderer). Fail-open: never changes
+    the gate verdict."""
+    if not ws or not cid:
+        return False
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import ws_yaml as _wsy
+        p = Path(ws) / "claim-register.yaml"
+        doc = _wsy.yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        for c in (doc.get("claims") or []):
+            if c.get("id") == cid and str(c.get("status") or "").upper() == "IN_PROGRESS":
+                if fresh_worker_for(ws, cid, fresh_minutes):
+                    return False
+                c["status"] = "OPEN"
+                p.write_text(_wsy.canonical_dump(doc), encoding="utf-8")
+                return True
+        return False
+    except Exception:  # noqa: BLE001 — fail-open: never change the verdict
+        return False
