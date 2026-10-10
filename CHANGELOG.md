@@ -50,6 +50,35 @@ ships in the GitHub Release notes.
   last Claude Code-native release line - v0.2 migrates the runtime to
   the PI Agent base.
 
+### Re-cut additions (2026-10-11)
+
+The rc1 tag re-cuts under one version (the #655 head-hash identity
+distinguishes the batches). The post-cut wave folds in:
+
+- **Gate 4 reads the recorded mutation baseline (#663)**: evidence-based
+  semantics (the recorded `devkit/mutation-baseline.json`, ancestry and
+  freshness enforced) replace the vacuous mutmut-availability pass; the
+  recorder and the bootstrap baseline land in the same change.
+- **The verify-stage hybrid ruling (#653)**: the V-dispatch mandates
+  re-run receipts (`re-run:`/`rc:`/`out-sha:`) and the landing gate
+  refuses a `verified` verdict without one — "re-ran it myself" is
+  mechanically distinguishable from trusting the maker's recorded
+  output; the V prompt is sibling-free.
+- **The fact-certification gate (#651)**: a terminal fact status is
+  honored only when register-backed (every cited claim register-PROVEN);
+  `facts_citing` parses frontmatter with exact citations (the substring
+  scan is retired); the two-junk-files farming scenario nets zero
+  through the real settle path.
+- **The batch-repair card wave 2 (#654)**: the launch-stash schema wall,
+  the obstacle invalidation + read-time probe re-certification, the
+  scaffold-aimed prediction discriminator refusal, prediction authorship
+  (unattributed rows cannot settle), and the SNIPS π discipline
+  (declared rows excluded, the two π carriers cross-checked).
+- **The shadow experience substrate (#667)**: step-record/1,
+  evidence-item/1 + credit-amendment/1, intervention/1 — hash-only,
+  fail-open, zero-behavior-change (the escrow admission rule fixed
+  before anything consumes the rows).
+
 ### Fixed
 
 - **Adversarial memory (#582) and the prediction ledger (#575)** land
