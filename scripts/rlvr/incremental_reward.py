@@ -44,6 +44,10 @@ LAUNCH_REL = "runs/dispatch-launch-{claim}.json"
 # stash so it never clobbers a pending dispatch stash for the same claim
 # (the untyped path stays byte-identical for in-flight workspaces).
 LAUNCH_REL_TYPED = "runs/dispatch-launch-{claim}--{action_type}.json"
+# 1-F3: the stash namespace is owned by record_launch's shape — the
+# schema stamp is what append_transition's wall checks the doc against
+# (a foreign schema or a status-bearing envelope is never launch state).
+LAUNCH_SCHEMA = "dispatch-launch/1"
 
 # ---- policy constants (design doc §2; NOT fitted) ------------------------
 ALPHA = 1.0          # potential-difference weight
@@ -116,6 +120,7 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
         p = _launch_path(ws, claim, action_type)
         p.parent.mkdir(parents=True, exist_ok=True)
         doc = {
+            "schema": LAUNCH_SCHEMA,
             "ts": utc_now_z(),
             "claim": str(claim),
             "a": str(action_key),
@@ -162,7 +167,13 @@ def append_transition(ws, claim: str, outcome: str, *,
     launch and the stash carries a DIFFERENT one (a re-dispatch
     overwrote it), the settle is refused — the newer launch keeps
     ownership of its stash, and no row banks the newer launch's
-    phi_before/a. An empty attempt_id keeps the exact legacy behavior."""
+    phi_before/a. An empty attempt_id keeps the exact legacy behavior.
+    1-F3: the schema wall — a stash doc bearing a foreign ``schema`` or
+    any ``status`` field is NOT launch state (the live shape: an
+    orchestrator PARKED envelope with a wake plan parked in this
+    namespace); the settle is refused with ONE warn and the file is
+    LEFT INTACT (consuming it would delete the wake plan). Legacy
+    schema-less stashes carry neither field and settle unchanged."""
     try:
         ws = Path(ws)
         launch_p = _launch_path(ws, claim, action_type)
@@ -174,6 +185,18 @@ def append_transition(ws, claim: str, outcome: str, *,
                  f"transition row banked (1-F1)")
             return None
         launch = json.loads(launch_p.read_text(encoding="utf-8"))
+        if "status" in launch or ("schema" in launch
+                                  and launch.get("schema")
+                                  != LAUNCH_SCHEMA):
+            from kunglao_log import warn  # noqa: PLC0415
+            warn("incremental_reward.append_transition",
+                 f"refused settle for {claim!r} "
+                 f"(action_type={action_type or 'dispatch'!r}): the "
+                 f"stash doc is not launch state (schema="
+                 f"{launch.get('schema')!r}, status="
+                 f"{launch.get('status')!r}) — foreign envelopes are "
+                 f"never consumed and never deleted (1-F3)")
+            return None
         if str(attempt_id) and str(launch.get("attempt_id") or "") \
                 != str(attempt_id):
             from kunglao_log import warn  # noqa: PLC0415

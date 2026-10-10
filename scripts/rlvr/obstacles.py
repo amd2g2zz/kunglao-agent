@@ -36,10 +36,22 @@ stays legal output). The state face (rlvr.state) reads the registry
 tolerantly into the canonical snapshot + signature (the ob= segment).
 
 Integrity posture: record-time checks are structural + artifact
-existence + probe-marker shape; read() re-validates structure only
-(attribution is history — scratch cleanup under runs/ must not erase
-it from state). Well-formed hand-edited rows enter as training noise
-the Phase-2 posterior outvotes.
+existence + probe-marker shape; read() re-validates structure, then
+(#654 4-L6) re-runs the probe-marker check on a cited artifact that
+still exists — present-but-shapeless (rewritten after the row landed)
+is excluded with one warn, absent artifact keeps the row (attribution
+is history — scratch cleanup under runs/ must not erase it from state).
+#654 1-F9 adds the invalidation face: a row may carry the retraction
+marker (``retracted: true`` + ``retracted_ts`` + ``retracted_reason``,
+written INTO the row file by retract()/sweep_stale_obstacles() — the
+history stays on disk); retracted rows are excluded from read()/face()
+so a repaired environment stops feeding the state signature and the
+termination floor. The sweep pairs ``kind=missing_env_entry`` rows that
+carry the additive optional ``env_key`` against the #475 env-state
+single source (``runs/env-state.json``); unkeyed rows are never guessed.
+Well-formed hand-edited rows still enter as training noise the Phase-2
+posterior outvotes (a forger who preserves the marker shape is the
+red-team trust class).
 
 ZERO DECISION POSTURE: pure reads + fail-open writes; no dispatch,
 gate, or settlement face imports this module (396 freeze wall).
@@ -240,11 +252,14 @@ def _exclusive_create(path: Path, data: bytes) -> bool:
 
 def record(ws, *, kind: str, cause: str, evidence_path: str,
            method_family: str, claim: str | None = None,
-           dispatch_id: str | None = None,
+           dispatch_id: str | None = None, env_key: str | None = None,
            ts: str | None = None) -> dict:
     """Record one obstacle row. Loud-result fail-open (the
     posteriors.record idiom): invalid input -> named reason, no file,
-    never an exception into the producer."""
+    never an exception into the producer. #654 1-F9: the optional
+    ``env_key`` names the env-state capability the row pairs against
+    (the missing_env_entry sweep's join key — a wrong key just never
+    matches; unkeyed rows are never swept)."""
     ws = Path(ws)
     row = {
         "schema": SCHEMA,
@@ -259,6 +274,8 @@ def record(ws, *, kind: str, cause: str, evidence_path: str,
         row["claim"] = str(claim)
     if dispatch_id:
         row["dispatch_id"] = str(dispatch_id)
+    if env_key and str(env_key).strip():
+        row["env_key"] = str(env_key).strip()
     errs = validate_obstacle(row, ws)
     if errs:
         return {"appended": False, "errors": errs, "row": None,
@@ -286,7 +303,13 @@ def _structurally_valid(row) -> bool:
 def read(ws) -> list[dict]:
     """Tolerant read: structurally valid rows, sorted by parsed id
     number (rollover-safe); corrupt/invalid rows skipped, never a
-    raise. Artifact existence is NOT re-checked — a row is history."""
+    raise. #654 4-L6: a cited artifact that still EXISTS is re-checked
+    against the probe-marker discipline — present-but-shapeless (the
+    artifact was rewritten after the row landed) is uncertified and
+    excluded with ONE warn; an absent artifact KEEPS the row
+    (attribution is history — scratch cleanup under runs/ must not
+    erase it from state). #654 1-F9: retracted rows are excluded (the
+    invalidation face — the marker lives in the row file)."""
     d = _registry(ws)
     if not d.is_dir():
         return []
@@ -300,10 +323,110 @@ def read(ws) -> list[dict]:
                                          errors="replace"))
         except (OSError, ValueError):
             continue
-        if isinstance(row, dict) and _structurally_valid(row):
-            out.append((int(m.group(1)), row))
+        if not isinstance(row, dict) or not _structurally_valid(row):
+            continue
+        if row.get("retracted") is True:
+            continue  # 1-F9: the invalidation face
+        rel = str(row.get("evidence_path") or "")
+        if rel and (Path(ws) / rel).is_file():
+            ok, why = _marker_ok(Path(ws), rel)
+            if not ok:
+                warn("obstacles.read",
+                     f"{row.get('id')}: cited artifact no longer "
+                     f"certifies — {why} (4-L6)")
+                continue
+        out.append((int(m.group(1)), row))
     out.sort(key=lambda t: t[0])
     return [row for _, row in out]
+
+
+def retract(ws, obstacle_id: str, reason: str) -> bool:
+    """1-F9 — the invalidation face: write the retraction marker INTO
+    the row file (history preserved in place; the row stops feeding the
+    state signature and the termination floor's family decay).
+    Idempotent on an already-retracted row (the first reason stands).
+    Fail-open: an unknown id or an unwritable file returns False with
+    ONE warn, never a raise."""
+    ws = Path(ws)
+    p = _registry(ws) / f"{obstacle_id}.json"
+    try:
+        row = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        warn("obstacles.retract",
+             f"{obstacle_id}: no readable row file to retract")
+        return False
+    if not isinstance(row, dict) or row.get("id") != str(obstacle_id):
+        warn("obstacles.retract",
+             f"{obstacle_id}: file/doc id mismatch — not retracted")
+        return False
+    if row.get("retracted") is True:
+        return True
+    row["retracted"] = True
+    row["retracted_ts"] = _now()
+    row["retracted_reason"] = str(reason or "").strip()
+    try:
+        p.write_text(json.dumps(row, ensure_ascii=False, indent=2) + "\n",
+                     encoding="utf-8")
+    except OSError as exc:
+        warn("obstacles.retract", f"{obstacle_id}: {exc}")
+        return False
+    return True
+
+
+ENV_STATE_REL = "runs/env-state.json"  # the #475 single source (read-only here)
+
+
+def sweep_stale_obstacles(ws) -> list[dict]:
+    """1-F9 — the stale-obstacle sweep: ``kind=missing_env_entry`` rows
+    that carry an ``env_key`` are paired against the #475 env-state
+    single source; an entry now probing ``pass`` means the environment
+    REPAIRED itself and the obstacle must stop feeding the state
+    signature and the termination floor. Retracts via retract() (the
+    marker lands in the row file — history preserved) and emits ONE
+    warn when anything retracted. Unkeyed rows and non-``pass`` entries
+    are never touched; a missing/unreadable env-state pairs nothing (a
+    normal pre-tick state, not an anomaly). Fail-open: returns the
+    retracted rows (``[]`` on any workspace failure), never raises."""
+    try:
+        ws = Path(ws)
+        state_p = ws / ENV_STATE_REL
+        if not state_p.is_file():
+            return []
+        try:
+            state = json.loads(state_p.read_text(encoding="utf-8",
+                                                 errors="replace"))
+        except ValueError:
+            return []
+        caps = state.get("per_capability") \
+            if isinstance(state, dict) else None
+        if not isinstance(caps, dict):
+            return []
+        retracted: list[dict] = []
+        for row in read(ws):
+            if row.get("kind") != "missing_env_entry":
+                continue
+            key = str(row.get("env_key") or "").strip()
+            if not key:
+                continue  # unkeyed rows are never guessed
+            entry = caps.get(key)
+            if isinstance(entry, dict) \
+                    and str(entry.get("status") or "") == "pass":
+                if retract(ws, str(row.get("id")),
+                           f"env-state reports {key!r} pass (repaired) "
+                           f"— sweep (1-F9)"):
+                    retracted.append(row)
+        if retracted:
+            listing = ", ".join(str(r.get("id")) for r in retracted[:5])
+            more = (f" (+{len(retracted) - 5} more)"
+                    if len(retracted) > 5 else "")
+            warn("obstacles.sweep_stale_obstacles",
+                 f"{len(retracted)} repaired-environment obstacle(s) "
+                 f"retracted: {listing}{more} (1-F9)")
+        return retracted
+    except OSError as exc:
+        warn("obstacles.sweep_stale_obstacles",
+             f"{type(exc).__name__}: {exc}")
+        return []
 
 
 def face(ws) -> dict:
@@ -342,6 +465,9 @@ def main(argv: list[str] | None = None) -> int:
                      help="the failed act's declared family")
     rec.add_argument("--claim", default=None)
     rec.add_argument("--dispatch-id", dest="dispatch_id", default=None)
+    rec.add_argument("--env-key", dest="env_key", default=None,
+                     help="env-state capability this row pairs against "
+                          "(the 1-F9 repair sweep's join key)")
     rec.add_argument("--ts", default=None, help="ISO-8601 override")
     fc = sub.add_parser("face", help="print the state digest")
     fc.add_argument("ws", help="workspace root")
@@ -352,7 +478,8 @@ def main(argv: list[str] | None = None) -> int:
     out = record(args.ws, kind=args.kind, cause=args.cause,
                  evidence_path=args.evidence_path,
                  method_family=args.method_family, claim=args.claim,
-                 dispatch_id=args.dispatch_id, ts=args.ts)
+                 dispatch_id=args.dispatch_id, env_key=args.env_key,
+                 ts=args.ts)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0 if out["appended"] else 1
 
