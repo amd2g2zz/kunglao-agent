@@ -51,6 +51,8 @@ assets:
     - hooks/violation_capture.py      # #718 Bash PostToolUse violation recorder
     - hooks/bash_fact_guard.py        # #809 Bash PostToolUse facts-write lint recorder
     - hooks/cost_input_capture.py     # #873 PostToolUse cost input recorder
+    - hooks/rt_read_barrier.py        # #652 RT read barrier (PreToolUse + UserPromptSubmit arming)
+    - hooks/evidence_pin_guard.py     # #652 evidence sha-pin freeze (Write|Edit|MultiEdit + Bash)
   templates:
     # #156: --html rendering assets (Jinja2 face template — the Apache-2.0
     # ECharts library is inlined in the .j2 itself under {% raw %}, #162
