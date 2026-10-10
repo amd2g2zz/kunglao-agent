@@ -231,7 +231,7 @@ files:
   - src: scripts/cadence_advisor.py
     dest: .claude/scripts/cadence_advisor.py
     kind: scaffold
-    sha256: 46e0458bd0d1999bd20fb912e21a1abb62798d0c8801023bb0b0655658e6c061
+    sha256: 4ef0c86781f74505d3c3305b28c9edf0c0fee18c67b346cca3868a6690036d36
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -1047,7 +1047,7 @@ files:
   - src: scripts/slot_monitor.py
     dest: .claude/scripts/slot_monitor.py
     kind: scaffold
-    sha256: 25ec445bbfd1abcd1417d61f4903a243a157c288eb9e7b6b87cb9bd2fd86b5ed
+    sha256: 57a5aa9ddbe2ecb2d22b569f27e9bf1a3bb91e07b0f6530736883975028c7631
   - src: scripts/stale_blocker_prune.py
     dest: .claude/scripts/stale_blocker_prune.py
     kind: scaffold
@@ -1315,11 +1315,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: d8514f4e464e79c07a199f562ff2c752a7ec458fe7eb709cb665ac2bdb1684f8
+    sha256: 30acdd0057c2090b9343cb2006bb85a0169af5180522d75bdd3691afec720fb2
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 5b9bc497fb1f18056b913713a072b5b7f505e1415012a9f7f540fe5a3a5be97f
+    sha256: b12d39d02b4b9d85e7702edda2cc150584883334b35fb385ec2558cedb070ecc
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1331,7 +1331,7 @@ files:
   - src: scripts/silent_except_baseline.yaml
     dest: .claude/scripts/silent_except_baseline.yaml
     kind: scaffold
-    sha256: c07a50bb6c42e13458c31426aef2ffe41a061f206a80d620ea881aceee882877
+    sha256: ecfc462b376f074415b6afde6c1abc811c2af1877310085ffb2b1b7afcec0b5d
   - src: scripts/tool_tiers.yaml
     dest: .claude/scripts/tool_tiers.yaml
     kind: scaffold
@@ -1907,7 +1907,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: e090075d03862e2411b3bed3cb759c3ba508314ab342a08fa51333fb22b3daf6
+    sha256: a14652a0360653bcccbd152fc9ba395c4403310ad8d2ad7e9ac6980a2bc6a820
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

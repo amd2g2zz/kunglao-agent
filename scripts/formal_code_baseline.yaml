@@ -45,7 +45,7 @@ files:
   scripts/bench_tokens.py: 2
   scripts/blind_gate.py: 4
   scripts/blocker_lint.py: 2
-  scripts/cadence_advisor.py: 5
+  scripts/cadence_advisor.py: 7
   scripts/calibration_face.py: 10
   scripts/calibration_gate.py: 1
   scripts/carrier_consistency.py: 3
@@ -248,7 +248,7 @@ files:
   scripts/shell_defaults.py: 4
   scripts/signals_stream.py: 3
   scripts/silent_except_lint.py: 1
-  scripts/slot_monitor.py: 4
+  scripts/slot_monitor.py: 8
   scripts/stale_blocker_prune.py: 1
   scripts/state_signature.py: 2
   scripts/status_defs.py: 4

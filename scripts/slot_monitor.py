@@ -13,9 +13,9 @@ Policy (constants from liveness_policy, never hand-rolled):
                                       record + resume signal; this face
                                       only reports it)
   silence >= STUCK_MINUTES         -> "ping" (the smart-ping protocol)
-  age >= 1800s AND progress frozen -> "terminate_review" (owner trigger:
-    > 1800s runtime with no new "] step:" lines since the previous report;
-    the orchestrator decides TaskStop)
+  age >= 3800s AND progress frozen -> "terminate_review" (owner trigger,
+    ruling 2026-10-10: > 3800s runtime with no new "] step:" lines since
+    the previous report; the orchestrator decides TaskStop)
   else                             -> "keep"
 
 Frozen detection is report-to-report (progress_lines compared against the
@@ -40,8 +40,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #444: the ONE worker-status parser
+
 REPORT_REL = Path("runs") / ".slot-report.json"
-OWNER_AGE_S = 1800  # owner trigger: evaluate long-running workers
+# Owner ruling 2026-10-10 (raised from 1800): the long-run review trigger.
+# A subagent may legitimately run 30-60 min on a deep task; the review fires
+# only past 3800s AND frozen progress.
+OWNER_AGE_S = 3800
 _TS_RE = re.compile(r"\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})Z?\]")
 _CLAIM_RE = re.compile(r"C(\d+)")
 
@@ -87,6 +92,7 @@ def _age_s(text: str, mtime: float, now: datetime) -> float:
 def scan(ws: Path, *, now: datetime | None = None) -> dict:
     """One monitor pass: verdict per active worker + the slot ledger."""
     import liveness_policy as lp
+    lib = load_hooks_lib()
     now = now or _now()
     prior = _read_json(ws / REPORT_REL) or {}
     prior_progress = {w.get("worker"): w.get("progress_lines")
@@ -101,8 +107,8 @@ def scan(ws: Path, *, now: datetime | None = None) -> dict:
             continue
         last = next((ln.strip() for ln in reversed(text.splitlines())
                      if ln.strip()), "")
-        if "in-progress" not in last.lower():
-            continue  # waiting/done files are not active slots
+        if lib.parse_worker_status(text) != "in-progress":
+            continue  # waiting/done files are not active slots (#444 parser)
         wid = f.stem.replace("worker-status-", "")
         age_s = _age_s(text, mtime, now)
         silence_s = max(0.0, now.timestamp() - mtime)

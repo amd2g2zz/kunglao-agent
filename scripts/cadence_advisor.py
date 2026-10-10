@@ -39,6 +39,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #444: the ONE worker-status parser
+
 FLOOR_MIN = 5
 CEIL_MIN = 25
 STEP_MIN = 5
@@ -72,15 +74,16 @@ def current_interval_min(ws: Path) -> int:
 
 
 def active_workers(ws: Path) -> list[str]:
-    """Fresh in-progress worker ids (status file last line = in-progress)."""
+    """Fresh in-progress worker ids — the canonical #444 parser (last
+    ``status:`` token wins; never a hand-rolled scan)."""
+    lib = load_hooks_lib()
     out: list[str] = []
     for f in sorted((ws / "runs").glob("worker-status-*.md")):
         try:
-            lines = [ln for ln in f.read_text(
-                encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+            text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if lines and "in-progress" in lines[-1].lower():
+        if lib.parse_worker_status(text) == "in-progress":
             out.append(f.stem.replace("worker-status-", ""))
     return out
 
