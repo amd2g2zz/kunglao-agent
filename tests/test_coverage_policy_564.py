@@ -6,7 +6,7 @@ Coverage is OBSERVATION-only per #463 (4-gate quality framework):
   - pytest.ini MUST NOT carry `--cov-fail-under`
   - release-check.yml MUST NOT carry `--cov-fail-under`
   - pyproject.toml MUST NOT carry a cov config that fails on %
-  - Gate 4 (mutmut availability) is the primary quality metric, NOT
+  - Gate 4 (the recorded mutation baseline, #663) is the primary metric, NOT
     a coverage line %. pytest-cov is wired only so the report lands
     in CI artifacts and can be inspected manually.
 

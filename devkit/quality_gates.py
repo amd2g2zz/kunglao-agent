@@ -32,9 +32,13 @@ Gate semantics:
      are tracked separately (devkit/docs/defect_escape_rate.md).
   3. Engineering Quality — `pytest --collect-only -q` must succeed
      (import errors, syntax errors, missing modules all fail).
-  4. Test Effectiveness — `import mutmut` succeeds (mutation testing
-     tool available locally). Phase 1 only verifies tool availability;
-     Phase 2 will run mutmut on PR diff and enforce a threshold.
+  4. Test Effectiveness — a committed, FRESH mutation baseline exists
+     (devkit/mutation-baseline.json, recorded by
+     devkit/mutation_baseline.py --record, #663): schema valid, real
+     totals with zero not-checked mutants, score >= MUTATION_SCORE_FLOOR
+     (0.7), base_commit an ancestor of HEAD, age within
+     MUTATION_BASELINE_MAX_AGE_DAYS. A missing, stale, or sub-floor
+     artifact FAILS — tool availability alone is not evidence.
   5. Subagent Review — execution-layer maker-checker evidence: commits
      touching domain paths need a valid .subagent-review/*.json
      (devkit/subagent_review.py, #462).
@@ -63,15 +67,27 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Contract surfaces (modules that MUST exist for the product to function)
 CONTRACT_MODULES = ("decision_pending", "init_state", "log_setup")
+
+# Gate 4 (#663): the committed mutation-baseline artifact and its
+# staleness bound. Recorded by devkit/mutation_baseline.py --record; the
+# gate reads the artifact — it never trusts availability.
+MUTATION_BASELINE_REL = Path("devkit") / "mutation-baseline.json"
+MUTATION_BASELINE_SCHEMA = "mutation-baseline/1"
+MUTATION_BASELINE_MAX_AGE_DAYS = 90
+#: The floor a recorded baseline must clear (owner ruling 2026-10-10:
+#: a score under 0.7 is not evidence of test effectiveness).
+MUTATION_SCORE_FLOOR = 0.7
 
 
 def _gate1_requirement_correctness(verbose: bool = True) -> bool:
@@ -132,20 +148,79 @@ def _gate3_engineering_quality(verbose: bool = True) -> bool:
     return r.returncode == 0
 
 
-def _gate4_test_effectiveness(verbose: bool = True) -> bool:
-    """`import mutmut` must succeed.
+def _gate4_test_effectiveness(verbose: bool = True,
+                              baseline_path: Path | None = None) -> bool:
+    """A committed, fresh mutation baseline must exist (issue #663).
 
-    Phase 1 only verifies the tool is installed locally; we do NOT
-    enforce a mutation score threshold (no baseline established).
-    Phase 2 will run mutmut on the PR diff and add a threshold.
+    Evidence, not availability: the gate reads
+    devkit/mutation-baseline.json (recorded by
+    devkit/mutation_baseline.py --record from a REAL mutmut run) and
+    FAILS when the artifact is missing, malformed, empty or partial
+    (zero totals, or any not-checked mutants — an unfinished run is not
+    evidence), recorded_at is older than MUTATION_BASELINE_MAX_AGE_DAYS,
+    or base_commit is not an ancestor of HEAD (history moved on — the
+    baseline no longer attests the tree under test).
     """
-    spec = importlib.util.find_spec("mutmut")
-    if spec is None:
-        print("  [warn] mutmut not installed — "
-              "`uv pip install mutmut` (dev dep in pyproject.toml)")
-        return True  # NOT a fail — Phase 1 tool-adoption only
+    path = baseline_path or (REPO_ROOT / MUTATION_BASELINE_REL)
+    if not path.is_file():
+        print(f"  [fail] no mutation baseline at {path} — record one: "
+              "`uv run --project . python devkit/mutation_baseline.py "
+              "--record`")
+        return False
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"  [fail] mutation baseline unreadable: {exc}")
+        return False
+    if doc.get("schema") != MUTATION_BASELINE_SCHEMA:
+        print(f"  [fail] mutation baseline schema {doc.get('schema')!r} is "
+              f"not {MUTATION_BASELINE_SCHEMA!r}")
+        return False
+    totals = doc.get("totals")
+    if not isinstance(totals, dict) or not int(totals.get("total", 0)):
+        print("  [fail] mutation baseline carries no mutant totals — re-record")
+        return False
+    if int(totals.get("not_checked", 0)):
+        print(f"  [fail] mutation baseline is PARTIAL "
+              f"({totals['not_checked']} not-checked of {totals['total']}) — "
+              "an unfinished run is not evidence; re-record")
+        return False
+    score = doc.get("score")
+    if not isinstance(score, (int, float)) or score < MUTATION_SCORE_FLOOR:
+        print(f"  [fail] mutation score {score!r} is below the floor "
+              f"{MUTATION_SCORE_FLOOR} "
+              f"({totals.get('survived')} survived of {totals['total']}) — "
+              "strengthen the tests (or widen the scope deliberately), "
+              "then re-record")
+        return False
+    try:
+        recorded = datetime.strptime(str(doc.get("recorded_at", "")),
+                                     "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc)
+    except ValueError:
+        print(f"  [fail] mutation baseline recorded_at "
+              f"{doc.get('recorded_at')!r} is not ISO-8601 Z")
+        return False
+    age_days = (datetime.now(timezone.utc) - recorded).days
+    if age_days > MUTATION_BASELINE_MAX_AGE_DAYS:
+        print(f"  [fail] mutation baseline is {age_days} days old "
+              f"(> {MUTATION_BASELINE_MAX_AGE_DAYS}) — re-record")
+        return False
+    base = str(doc.get("base_commit") or "")
+    if not base:
+        print("  [fail] mutation baseline carries no base_commit")
+        return False
+    r = subprocess.run(["git", "merge-base", "--is-ancestor", base, "HEAD"],
+                       cwd=REPO_ROOT, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    if r.returncode != 0:
+        print(f"  [fail] baseline base_commit {base[:12]} is not an "
+              "ancestor of HEAD — history moved on; re-record")
+        return False
     if verbose:
-        print("  [ok] mutmut available — run `mutmut run` for baseline")
+        print(f"  [ok] mutation baseline {totals.get('killed')}/"
+              f"{totals['total']} killed (score {doc.get('score')}), "
+              f"recorded {doc['recorded_at']} at {base[:12]}")
     return True
 
 

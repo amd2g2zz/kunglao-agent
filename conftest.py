@@ -175,6 +175,40 @@ def _serialize_load_sensitive(request):
         yield
 
 
+# ---------- #663: mutmut flat-name -> path-qualified module bridge ----------
+#
+# mutmut keys mutants by their PATH-qualified module name
+# (scripts.slot_monitor.x_main__mutmut_3) while this repo's tests import
+# flat names via pytest.ini pythonpath=scripts. Under the mutation runner
+# only, bind each configured target's flat name to the qualified module
+# object so the trampoline records the keys mutmut expects; normal runs
+# never enter this branch. Best-effort: mutmut's own diagnostics remain
+# the loud face when the bridge cannot run.
+if "MUTANT_UNDER_TEST" in os.environ:  # noqa: SIM102 - single guarded block
+    try:
+        import importlib
+
+        # tomllib is 3.11+; the repo floor is 3.10 — sanctioned tomli
+        # fallback contract (tests/test_python_floor.py anchors the shape).
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+
+        _mutmut_cfg = tomllib.loads(
+            (Path(__file__).parent / "pyproject.toml").read_text("utf-8")
+        )["tool"]["mutmut"]
+        for _target in _mutmut_cfg.get("only_mutate", []):
+            if not str(_target).endswith(".py"):
+                continue
+            _qualified = str(_target)[:-3].replace("/", ".")
+            sys.modules.setdefault(
+                _qualified.rsplit(".", 1)[-1],
+                importlib.import_module(_qualified))
+    except Exception:  # noqa: BLE001 - bridge is best-effort, never a gate
+        pass
+
+
 # ---------- #770: sys.path mutation guard (session teardown) ----------
 #
 # Shared-name twins (completion_gate / heartbeat_touch / lib_kunglao) resolve
@@ -186,6 +220,14 @@ def _serialize_load_sensitive(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def _syspath_collision_order_guard():
+    # #663: mutmut's runner owns sys.path by design — the mutants/ tree must
+    # shadow the originals (Gate 4 baseline runs). Presence, not truthiness:
+    # mutmut marks its validation phase with the empty string. The #770
+    # contract polices TEST modules, never the runner.
+    if "MUTANT_UNDER_TEST" in os.environ:
+        yield
+        return
+
     def _wins() -> dict:
         out = {}
         for p in sys.path:
