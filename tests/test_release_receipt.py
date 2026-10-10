@@ -150,6 +150,33 @@ def test_receipt_contains_no_secrets():
         assert not re.search(pat, blob, re.IGNORECASE), f"receipt leaks pattern {pat}"
 
 
+# ---------- docs-only fast path ----------
+
+def test_receipt_fast_path_records_explicit_not_run_marker(contract_validator):
+    """The docs-only fast path intentionally skips the suite, so no junit
+    exists: the receipt must then carry an explicit machine-readable
+    tests-not-run marker instead of erroring on the absent file — never a
+    silent omission."""
+    r = _run([sys.executable, str(SCRIPTS / "release_receipt.py"),
+              "--tests-not-run-fast-path", "--out", "-", "--revision", "test-sha"])
+    assert r.returncode == 0, f"receipt exit {r.returncode}\nstderr={r.stderr[:400]}"
+    receipt = json.loads(r.stdout)
+    contract_validator("release-receipt", receipt)
+    assert receipt["valid"] is True
+    assert receipt["tests"]["not_run"] is True
+    assert "fast path" in receipt["tests"]["reason"]
+
+
+def test_receipt_missing_junit_stays_hard_error_without_fast_path():
+    """Tolerance is opt-in: without the explicit fast-path flag a missing
+    junit remains exit 1, so a suite that was supposed to run can never be
+    masked by the fast path."""
+    r = _run([sys.executable, str(SCRIPTS / "release_receipt.py"),
+              "--pytest-junit", str(ROOT / "missing-junit.xml"), "--out", "-"])
+    assert r.returncode == 1, f"expected exit 1, got {r.returncode}"
+    assert "junit file not found" in (r.stdout + r.stderr)
+
+
 # ---------- README reconciliation ----------
 
 def test_readme_has_no_stale_test_count_or_dependency_claims():
@@ -172,3 +199,19 @@ def test_release_check_workflow_declares_clean_env_steps():
     for needle in ("uv sync --locked", "release_receipt.py --check",
                    "pytest", "upload-artifact", "release-receipt"):
         assert needle in wf, f"release-check.yml missing step/artifact {needle}"
+
+
+def test_workflow_receipt_steps_read_the_docs_only_fast_path_signal():
+    """The receipt step must distinguish the docs-only fast path (suite
+    intentionally skipped: explicit not-run marker) from the full run
+    (junit REQUIRED) using the SAME docs_only signal that gates the suite
+    steps — a missing junit can then never mask a suite that was supposed
+    to run."""
+    wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = wf["jobs"]["integration"]["steps"]
+    fast = [s for s in steps if "--tests-not-run-fast-path" in s.get("run", "")]
+    full = [s for s in steps if "--pytest-junit .pytest-result.xml" in s.get("run", "")]
+    assert len(fast) == 1, "expected exactly one docs-only fast-path receipt step"
+    assert len(full) == 1, "expected exactly one junit-backed receipt step"
+    assert fast[0].get("if") == "needs.runner-probe.outputs.docs_only == 'true'"
+    assert full[0].get("if") == "needs.runner-probe.outputs.docs_only != 'true'"

@@ -121,10 +121,14 @@ def refresh(ws: Path, *, dry: bool = False,
     # #783 T5: (re)stamp the digest carrier — the workspace-side witness the
     # check-stale third criterion reads. Computed over the entries this run
     # deployed (build_entries), so refresh and deploy faces always agree.
+    # the carrier also records the source head hash (the update identity);
+    # the refresh re-records it, and the detail names it.
     carrier_digest = None
+    carrier_head = None
     try:
         carrier = dm.write_carrier(ws, list(entries.values()))
         carrier_digest = carrier["deployed_digest"]
+        carrier_head = carrier.get("source_head")
     except Exception as exc:  # noqa: BLE001 — WARN-only posture
         warn("carrier_write", f"carrier write failed ({exc!r})")
 
@@ -137,6 +141,8 @@ def refresh(ws: Path, *, dry: bool = False,
         parts.append(f"dep_gap={dep_gap}")
     if carrier_digest:
         parts.append(f"carrier={carrier_digest[:8]}")
+    if carrier_head:
+        parts.append(f"head={carrier_head[:8]}")  # identity witness
     return "deployed_refresh(" + ",".join(parts) + ")"
 
 
