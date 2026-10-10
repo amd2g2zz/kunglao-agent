@@ -19,6 +19,8 @@ All fixtures are SYNTHETIC (privacy rule).
 from __future__ import annotations
 
 import sys
+
+import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,10 +30,12 @@ FIXTURES = ROOT / "tests" / "fixtures" / "experiments"
 sys.path.insert(0, str(FIXTURES))
 
 import state_signature as ssig  # noqa: E402
-from ex4_attribution_trap import (  # noqa: E402
-    TRAJECTORY,
-    replay,
-)
+_ex4 = pytest.importorskip(  # noqa: E402
+    "ex4_attribution_trap",
+    reason="the ex4 experiment module is not shipped in this repo state "
+           "(owner review 2026-10-10, issue #629)")
+TRAJECTORY = _ex4.TRAJECTORY
+replay = _ex4.replay
 
 EXPECTED_SEQUENCE = [
     ("detection_trigger", "dynamic-trace"),
