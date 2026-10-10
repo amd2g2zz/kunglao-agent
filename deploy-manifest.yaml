@@ -327,7 +327,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: f69c7ef40d50d8f43360f0157f87203cf8b78ae3c2139322ebbf516d238d6a14
+    sha256: edbc83ffef08adc240f013f98b65c41967929514980833e27cae9b80041e1e60
   - src: scripts/deploy_shim.py
     dest: .claude/scripts/deploy_shim.py
     kind: scaffold
@@ -335,7 +335,7 @@ files:
   - src: scripts/deployed_refresh.py
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
-    sha256: b4bf33fc0d8ae150bbe6527bc302988b5ed2e2f00766a90a23041de26cba75cc
+    sha256: e89caad8ad2f000b622cc65a48d5df9f14a8c21424cd42ed15fa822cd3dbf866
   - src: scripts/detector_liveness.py
     dest: .claude/scripts/detector_liveness.py
     kind: scaffold
@@ -707,7 +707,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 88662869caa64f08c7dcc31d6b5493bb952fc4a56235a5656171b24863563e5f
+    sha256: f612cb79c0990d6418b0326a92890f3ee970e262907f17489102f4b0241cfda1
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
