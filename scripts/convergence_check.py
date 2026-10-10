@@ -2391,6 +2391,17 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             write_terminal_settlement(workspace)
         except Exception as exc:  # noqa: BLE001 — fail-open per issue-275 WARN policy
             warn("terminal_settlement", f"{type(exc).__name__}: {exc}")
+        # 1-F1: the end-of-run launch-stash orphan sweep — any
+        # runs/dispatch-launch-*.json whose (claim, action_type) never
+        # produced a transitions row leaves ONE warn trace at the
+        # closure (the settle-side silent-None is the read-face twin).
+        # Fail-open; the decide() dict stays untouched (byte-frozen
+        # anchors — the trace IS the artifact).
+        try:
+            from rlvr import incremental_reward as _ir_sweep
+            _ir_sweep.sweep_orphan_launches(workspace)
+        except Exception as exc:  # noqa: BLE001 — fail-open per issue-275 WARN policy
+            warn("orphan_launch_sweep", f"{type(exc).__name__}: {exc}")
     # #618: dead-window alarm off the durable heartbeat sidecar (#830
     # substrate). Annotation + event only — never mutates the verdict
     # (unattended dead-window must be VISIBLE, and P3's value ordering

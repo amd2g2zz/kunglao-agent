@@ -299,14 +299,18 @@ def settle(ws, prediction_id: str, outcome: str) -> dict | None:
     _append_row(ws, settle_row)
     lift = log_lift(base_rate(discriminator, statement))
     try:
-        ir.record_launch(ws, claim_id, "prediction-settle",
-                         action_type="prediction-settle")
+        # 1-F2: the settle binds to the attempt it just launched —
+        # a concurrent re-dispatch's stash is never banked as this row's
+        # before-state (the guard refuses on a mismatched attempt id).
+        launch_doc = ir.record_launch(ws, claim_id, "prediction-settle",
+                                      action_type="prediction-settle")
         t_row = ir.append_transition(
             ws, claim_id, outcome,
             status=prediction_id,
             r_settle=ir.verify_credit(outcome),
             action_type="prediction-settle",
-            lift=lift)
+            lift=lift,
+            attempt_id=str((launch_doc or {}).get("attempt_id") or ""))
     except (OSError, ValueError, TypeError) as exc:  # loud telemetry
         warn("prediction_ledger.settle",
              f"transition face failed for {prediction_id}: "

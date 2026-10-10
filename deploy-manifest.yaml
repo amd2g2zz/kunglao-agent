@@ -299,7 +299,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 95b2898c4d25155c400a0b16d5a50f57f5e758c1bb6334ab219e10fb98d853ec
+    sha256: 80cce9d72a2b713805de6b828e22133810e570d1085298e9a7d6f88d296d1f19
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -727,7 +727,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 5eeab0eee101eb2140f0f32da341a5cd05b5ba4bbb93b1a3a50229ef5b6230af
+    sha256: ba1d9638b5c4f2b102faac83152a356238542f76fc4b585092771a11db583c8d
   - src: scripts/lint_protocol.py
     dest: .claude/scripts/lint_protocol.py
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: 3b18459464d2ec5ede3fe7ed7790c232631a1def3aacbff74dae166a3fe46b0c
+    sha256: 2d8a0758f000a796f45411a106ec1b5afe36c45af450a0a5828bef8c54d6eec0
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1267,7 +1267,7 @@ files:
   - src: scripts/rlvr/prediction_ledger.py
     dest: .claude/scripts/rlvr/prediction_ledger.py
     kind: scaffold
-    sha256: f6b5f8d16463d14b743320674b09fc469e64d28cc57c4953c9ceb0b6f8258d92
+    sha256: 33dab1be44d7154a3534136c9209776ef2ad55a5fe640adc6e93f37cb6504639
   - src: scripts/rlvr/priors.py
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
@@ -1291,7 +1291,7 @@ files:
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: 65587c0d00260005eaf06dba6c6a8b28165781fcc35d6ccbe25fb4a732089d11
+    sha256: db6c9bc3b63a3c4e6573a44ee3b88c50468c5860e94b5c3902d8b2065a9cf067
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
@@ -1323,7 +1323,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c521a238155c4857d5825d5f803fb36b266d5fc89c492bf275d883a7688cb0f0
+    sha256: 2ff706bcd31eadcdbf1bd21097b05a20b8bf0523c7a85698ec5aa8bc944fbcaf
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
