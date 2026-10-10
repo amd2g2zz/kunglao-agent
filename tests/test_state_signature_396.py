@@ -163,7 +163,9 @@ class TestChainProgress:
     def test_oracle_status_fallback(self, tmp_path):
         runs = tmp_path / "runs"
         runs.mkdir()
+        # 4-L7: the canonical writer shape (schema + typed cases)
         (runs / "oracle-status.json").write_text(json.dumps({
+            "schema": "oracle-status/1",
             "cases": {"c1": {"status": "pass"}, "c2": {"status": "pass"},
                       "c3": {"status": "fail"}}}), encoding="utf-8")
         assert ssig.chain_progress(tmp_path) == (2, 3)
@@ -181,7 +183,8 @@ class TestChainProgress:
         runs = tmp_path / "runs"
         runs.mkdir()
         (runs / "oracle-status.json").write_text(json.dumps(
-            {"cases": {"c1": {"status": "pass"}}}), encoding="utf-8")
+            {"schema": "oracle-status/1",
+             "cases": {"c1": {"status": "pass"}}}), encoding="utf-8")
         rl.record(tmp_path, kind="task", anchor="T-a", signals=[
             {"type": "dense_layers", "source": "oracle", "value":
                 {"passed": 2, "total": 6}, "ts": "2026-09-27T00:00:00Z"}])
@@ -189,6 +192,93 @@ class TestChainProgress:
 
     def test_no_face_none(self, tmp_path):
         assert ssig.chain_progress(tmp_path) is None
+
+
+# ---------- 4-L7: oracle-status validation ----------
+
+class TestOracleStatusValidation:
+    """The oracle-status face feeds Φ's oracle dim (incremental_reward
+    .potential) and the ch= state dim — and runs/ is worker-writable
+    between runs. The reader banks ONLY the canonical writer's schema-
+    validated shape; a malformed or hand-forged all-pass doc is honest
+    absence (None), never progress."""
+
+    @staticmethod
+    def _write(tmp_path, doc) -> None:
+        runs = tmp_path / "runs"
+        runs.mkdir(exist_ok=True)
+        (runs / "oracle-status.json").write_text(
+            json.dumps(doc) if not isinstance(doc, str) else doc,
+            encoding="utf-8")
+
+    def test_forged_all_pass_without_schema_is_rejected(self, tmp_path):
+        # the cheap forgery: a raw cases dict with every case pass
+        self._write(tmp_path, {"cases": {"c1": {"status": "pass"},
+                                         "c2": {"status": "pass"}}})
+        assert ssig.chain_progress(tmp_path) is None
+
+    def test_wrong_schema_id_is_rejected(self, tmp_path):
+        self._write(tmp_path, {"schema": "oracle-status/2",
+                               "cases": {"c1": {"status": "pass"}}})
+        assert ssig.chain_progress(tmp_path) is None
+
+    @pytest.mark.parametrize("cases", [
+        ["not", "a", "dict"],                      # cases not a mapping
+        {"c1": "pass"},                            # case row not a mapping
+        {"c1": {"status": 1}},                     # status not a string
+        {"c1": {"status": "PASSED"}},              # not the canonical word
+        {"c1": {}},                                # status missing
+    ])
+    def test_malformed_case_shapes_are_rejected(self, tmp_path, cases):
+        self._write(tmp_path, {"schema": "oracle-status/1", "cases": cases})
+        assert ssig.chain_progress(tmp_path) is None
+
+    def test_all_pass_with_inconsistent_counts_is_rejected(self, tmp_path):
+        # statuses flipped to pass but the counts block still says green 0
+        self._write(tmp_path, {
+            "schema": "oracle-status/1",
+            "cases": {"c1": {"status": "pass"}, "c2": {"status": "pass"}},
+            "counts": {"red": 2, "green": 0, "pending": 0}})
+        assert ssig.chain_progress(tmp_path) is None
+
+    def test_canonical_doc_with_consistent_counts_is_accepted(self,
+                                                              tmp_path):
+        self._write(tmp_path, {
+            "schema": "oracle-status/1",
+            "cases": {"c1": {"status": "pass"}, "c2": {"status": "pass"},
+                      "c3": {"status": "fail"}},
+            "counts": {"red": 1, "green": 2, "pending": 0}})
+        assert ssig.chain_progress(tmp_path) == (2, 3)
+
+    def test_canonical_doc_without_counts_is_accepted(self, tmp_path):
+        # legacy tolerance: the schema tag + typed cases suffice; counts
+        # are validated only when present
+        self._write(tmp_path, {
+            "schema": "oracle-status/1",
+            "cases": {"c1": {"status": "pass"}, "c2": {"status": "pending"}}})
+        assert ssig.chain_progress(tmp_path) == (1, 2)
+
+    def test_non_dict_document_is_rejected(self, tmp_path):
+        self._write(tmp_path, "[1, 2, 3]")
+        assert ssig.chain_progress(tmp_path) is None
+
+    def test_potential_drops_the_forged_dim(self, tmp_path):
+        """Φ renormalizes over present dims: a forged oracle doc must not
+        enter the potential at all."""
+        sys.path.insert(0, str(SCRIPTS))
+        from rlvr import incremental_reward as ir
+        facts = tmp_path / "facts"
+        facts.mkdir()
+        (facts / "F001.md").write_text(
+            "---\nid: F001\ntype: fact\nstatus: PROVEN\n---\n",
+            encoding="utf-8")
+        self._write(tmp_path, {"cases": {"c1": {"status": "pass"}}})
+        # facts-only Φ: forged oracle dim absent => verified fraction alone
+        assert ir.potential(tmp_path) == pytest.approx(1.0)
+        self._write(tmp_path, {"schema": "oracle-status/1",
+                               "cases": {"c1": {"status": "fail"}}})
+        # canonical dim present: weighted mean (0.3*1.0 + 0.5*0.0)/0.8
+        assert ir.potential(tmp_path) == pytest.approx(0.375)
 
 
 # ---------- phase + sides ----------

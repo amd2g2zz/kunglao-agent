@@ -998,6 +998,8 @@ files:
     r1: 3
   tests/test_index_docs_contract.py:
     r1: 8
+  tests/test_index_status_divergence_654.py:
+    r1: 1
   tests/test_infeasible_proposal_815.py:
     r1: 1
   tests/test_infeasible_signal.py:
@@ -1063,6 +1065,8 @@ files:
     r1: 13
   tests/test_kunglao_wait_902.py:
     r1: 6
+  tests/test_launch_stash_integrity_654.py:
+    r1: 2
   tests/test_ledger_settlement_8.py:
     r1: 2
   tests/test_ledger_stdlib_584.py:

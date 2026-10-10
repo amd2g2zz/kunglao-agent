@@ -441,6 +441,10 @@ class DispatchRequest:
     # MCP arming: the unit-declared servers' tool prefixes riding the
     # rack — runtime-only (never serialized; the envelope stays clean).
     mcp_prefixes: tuple[str, ...] = ()
+    # 1-F2: the launch stash's attempt id, bound at launch so the
+    # act's settle can refuse a stash a re-dispatch has overwritten —
+    # runtime-only (never serialized; the envelope stays clean).
+    launch_id: str = ""
 
     def to_dict(self) -> dict:
         emitted_ts = self.emitted_ts or utc_now()

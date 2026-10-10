@@ -211,6 +211,44 @@ def test_decide_converged_hooks_the_writer(tmp_path):
     assert rows[0].get("actor") == "convergence_check"
 
 
+def test_decide_converged_sweeps_orphan_launch_stashes(tmp_path, monkeypatch):
+    """1-F1: the closure is the end-of-run sweep point — a launch
+    stash with no transitions row for its (claim, action_type) leaves ONE
+    warn trace; the decide() dict stays untouched."""
+    import kunglao_log
+    ws = _base_ws(tmp_path)
+    _seed_ledger(ws)
+    (ws / "runs" / "dispatch-launch-C-101--redteam.json").write_text(
+        json.dumps({"status": "PARKED_NOT_LAUNCHED"}), encoding="utf-8")
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        kunglao_log, "warn",
+        lambda op, reason, **kw: calls.append((str(op), str(reason))))
+    d = decide(ws)
+    assert d["decision"] == "CONVERGED"
+    sweep = [c for c in calls
+             if c[0] == "incremental_reward.sweep_orphan_launches"]
+    assert len(sweep) == 1, f"expected ONE sweep trace, got {calls}"
+    assert "C-101/redteam" in sweep[0][1]
+
+
+def test_decide_converged_with_clean_stashes_is_silent(tmp_path,
+                                                       monkeypatch):
+    """A workspace whose launch stashes all settled produces no sweep
+    trace (the detector never manufactures orphans)."""
+    import kunglao_log
+    ws = _base_ws(tmp_path)
+    _seed_ledger(ws)
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        kunglao_log, "warn",
+        lambda op, reason, **kw: calls.append((str(op), str(reason))))
+    d = decide(ws)
+    assert d["decision"] == "CONVERGED"
+    assert not [c for c in calls
+                if c[0] == "incremental_reward.sweep_orphan_launches"]
+
+
 # =====================================================================
 # idempotency + edge cases
 # =====================================================================

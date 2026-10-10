@@ -519,14 +519,13 @@ def lint_index_row(row: str, lineno: int) -> list:
     return issues
 
 
-def lint_index(path: Path) -> list:
-    """Every data row of facts/_INDEX.md. Comments, blanks, pipe-table
-    header + separator rows skipped. Pipe-table rows keep their leading
-    '|' (strip() handles it) and both row grammars validate through
-    lint_index_row."""
+def _index_data_rows(path: Path):
+    """(lineno, raw line) of every data row of facts/_INDEX.md —
+    comments, blanks, the pipe-table header and separator rows skipped
+    (the single skip set both lint_index and the 1-F4 divergence
+    detector walk)."""
     if not Path(path).is_file():
-        return []
-    issues: list = []
+        return
     for lineno, line in enumerate(
             Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         s = line.strip()
@@ -536,7 +535,66 @@ def lint_index(path: Path) -> list:
             continue
         if s.startswith("|") and s.lower().startswith("| fact"):
             continue  # pipe-table header row
-        issues.extend(lint_index_row(s, lineno))
+        yield lineno, line
+
+
+def lint_index(path: Path) -> list:
+    """Every data row of facts/_INDEX.md. Comments, blanks, pipe-table
+    header + separator rows skipped. Pipe-table rows keep their leading
+    '|' (strip() handles it) and both row grammars validate through
+    lint_index_row."""
+    issues: list = []
+    for lineno, line in _index_data_rows(path):
+        issues.extend(lint_index_row(line.strip(), lineno))
+    return issues
+
+
+# 1-F4: the row ↔ frontmatter agreement detector. The only index
+# writer is promotion-scoped (fact_status_sync), so every other status
+# transition leaves the row behind; this join is the audit-named
+# cheapest detector (lint validated row SHAPE, never agreement).
+_FACT_TOKEN_RE = re.compile(r"^F\d+")
+
+
+def _index_status_divergence(parsed: dict, index_path: Path) -> list:
+    """Warning-level rows whose status column disagrees with the fact
+    file's frontmatter status. The join normalizes the slugged file name
+    and the bare F<NNN> row token (an ambiguous token — several facts —
+    is skipped, never guessed); a row naming no fact file has no
+    frontmatter to compare and stays the shape validator's domain."""
+    by_key: dict[str, str] = {}
+    by_token: dict[str, str | None] = {}
+    for p, (fm, _body, _perr) in parsed.items():
+        status = str(fm.get("status") or "").strip().upper()
+        if not status:
+            continue
+        for key in (str(fm.get("id") or "").strip(), Path(p).stem):
+            if key:
+                by_key[key] = status
+        m = _FACT_TOKEN_RE.match(Path(p).stem)
+        if m:
+            token = m.group(0)
+            if by_token.get(token, status) != status:
+                by_token[token] = None  # ambiguous: two facts, two statuses
+            else:
+                by_token[token] = status
+    issues: list = []
+    for lineno, line in _index_data_rows(index_path):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 4:
+            continue  # BAD_INDEX_SHAPE owns the structural defect
+        fact_cell, status_cell = cells[0], cells[1]
+        status = by_key.get(fact_cell)
+        if status is None:
+            m = _FACT_TOKEN_RE.match(fact_cell)
+            status = by_token.get(m.group(0)) if m else None
+        if status is None or status_cell.upper() == status:
+            continue
+        issues.append(("warning", "INDEX_STATUS_DIVERGENCE",
+                       f"_INDEX.md:{lineno}: row status {status_cell!r} "
+                       f"disagrees with fact {fact_cell!r} frontmatter "
+                       f"status {status!r} — reconcile the row (the "
+                       f"promotion sync only covers PROVEN) (1-F4)"))
     return issues
 
 
@@ -913,6 +971,13 @@ def lint_workspace(ws: Path):
     # L-2/W-4 (#532): facts/_INDEX.md rows share one definition with the
     # writer (update_index → tools/_lib/index_schema.py).
     for sev, code, msg in lint_index(facts_dir / "_INDEX.md"):
+        (errors if sev == "error" else warnings).append((sev, code, msg))
+    # 1-F4: row ↔ frontmatter status agreement — the promotion-
+    # scoped sync never covers the PARTIAL/verify_status edge, so any
+    # other transition leaves the row behind (WARNING: drift is
+    # visibility; the register stays authoritative).
+    for sev, code, msg in _index_status_divergence(parsed,
+                                                   facts_dir / "_INDEX.md"):
         (errors if sev == "error" else warnings).append((sev, code, msg))
     # notes' fact references must point at existing (slugged) fact ids
     notes_dir = ws / "notes"
