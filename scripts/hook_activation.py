@@ -983,6 +983,8 @@ _DEPLOYED_WIRING = (
     ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
     ("PostToolUse", "Edit|Write|MultiEdit|Agent",
      "cost_input_capture.py"),  # #873 cost 输入捕获
+    ("PostToolUse", "Bash|Read|Glob|Grep|Edit|Write|MultiEdit|mcp__",
+     "step_record_capture.py"),  # the shadow step ledger
     ("Stop", "", "completion_gate.py"),
     ("Stop", "", "workguard_gate.py"),        # issue 434 WORKGUARD
     ("SubagentStop", "", "round_closure.py"),      # issue 434 closure feed
