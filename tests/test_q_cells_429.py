@@ -769,3 +769,60 @@ class TestSettlementFeed462:
         fold = q_cells.fold(q_cells.JSONLQStore(ws))
         assert fold.family_mass("static-symbolic")[1] \
             == pytest.approx(1.0)
+
+    def test_bank_keys_the_cross_task_store_row_once(self, tmp_path):
+        """The bank result's arm_key/fingerprint key the cross-task store
+        row (the store's write face is called at the bank point — its
+        only live caller): one row per first settlement, keyed by the
+        dispatch's own arm, workspace-stamped, replay adds none."""
+        import scalar_settlement as ss
+        from rlvr import strategy_store
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        dispatches = [{"dispatch_id": "tr-m1-d1", "round": 1}]
+        ss.settle_round_credit(ws, dispatches,
+                               [self._cited("F1", "tr-m1-d1")], [],
+                               now="2026-09-30T00:00:00Z")
+        rows = [r for r in strategy_store.load_rows(ws=None)
+                if str((r.get("provenance") or {}).get("dispatch_id"))
+                == "tr-m1-d1"]
+        assert len(rows) == 1
+        assert rows[0]["arm_key"] == "static-symbolic|facts_snapshot|none|0"
+        assert rows[0]["method_family"] == "static-symbolic"
+        assert rows[0]["credit"] == pytest.approx(1.0)
+        assert rows[0]["facts_citing"] == 1  # the settlement's own F1
+        assert rows[0]["workspace_id"] == ws.name
+        # the replay (duplicate) settles nothing, so it keys nothing new
+        ss.settle_round_credit(ws, dispatches,
+                               [self._cited("F1", "tr-m1-d1")], [],
+                               now="2026-09-30T06:00:00Z")
+        rows = [r for r in strategy_store.load_rows(ws=None)
+                if str((r.get("provenance") or {}).get("dispatch_id"))
+                == "tr-m1-d1"]
+        assert len(rows) == 1
+
+    def test_bank_returns_the_first_settled_dispatch_ids(self, tmp_path):
+        """settle_round_credit reports the dispatches whose FIRST
+        settlement rode the pass (the case-posterior leg's key set):
+        a fresh settlement lists the id; a replay lists none."""
+        import scalar_settlement as ss
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        q_cells.record_dispatch_observation(
+            ws, V1_PROMPT,
+            envelope_meta={"method_family": "static-symbolic"},
+            claim="tr-m1-d1")
+        first = ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
+            [self._cited("F1", "tr-m1-d1")], [],
+            now="2026-09-30T00:00:00Z")
+        assert first["banked"] == ["tr-m1-d1"]
+        replay = ss.settle_round_credit(
+            ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
+            [self._cited("F1", "tr-m1-d1")], [],
+            now="2026-09-30T06:00:00Z")
+        assert replay["banked"] == []

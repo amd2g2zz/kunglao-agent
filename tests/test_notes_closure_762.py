@@ -212,13 +212,30 @@ class TestTickWiring:
 # K1a — CLI compat (legacy invocation unchanged, sweep mode added)
 # ===========================================================================
 
+def _cli_env(home: Path) -> dict:
+    """Subprocess env with HOME/USERPROFILE redirected under tmp.
+
+    Issue 647 item 6: the rollup terminal path seeds failure-analysis
+    skeletons and aggregate_lessons' DEFAULTS (lessons library, reflect
+    queue) resolve off Path.home() at module import — in sweep mode the
+    --library/--reflect-queue flags never reach run_rollup, so the env
+    redirect is the isolation that keeps a CLI-subprocess test off the
+    developer's real ~/.claude."""
+    import os
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    return env
+
+
 class TestCliCompat:
     def test_sweep_mode_end_to_end(self, tmp_path):
         ws = _make_ws(tmp_path, [{"id": "C-1", "status": "REFUTED"}])
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "rollup.py"), str(ws),
              "--sweep-terminal"],
-            capture_output=True, text=True, timeout=60)
+            capture_output=True, text=True, timeout=60,
+            env=_cli_env(tmp_path))
         assert r.returncode == 0, r.stderr
         assert "C-1" in _due_ids(ws)
 
@@ -227,8 +244,11 @@ class TestCliCompat:
         ws = _make_ws(tmp_path, [{"id": "C-L", "status": "PROVEN"}])
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "rollup.py"), str(ws),
-             "C-L", "--status", "PROVEN"],
-            capture_output=True, text=True, timeout=60)
+             "C-L", "--status", "PROVEN",
+             "--library", str(tmp_path / "lib"),
+             "--reflect-queue", str(tmp_path / "q.json")],
+            capture_output=True, text=True, timeout=60,
+            env=_cli_env(tmp_path))
         assert r.returncode == 0, r.stderr
         assert "C-L" in _due_ids(ws)
 

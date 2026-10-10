@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ws_yaml.py — YAML-safe get/set/del for worker-writable workspace state
-(#482: hand-edited YAML with unquoted colons corrupted the claim register
-and crashed the convergence face for three consecutive runs).
+"""ws_yaml.py — YAML-safe get/set/del/append for worker-writable workspace
+state (#482: hand-edited YAML with unquoted colons corrupted the claim
+register and crashed the convergence face for three consecutive runs).
 
 Workers edit registers/ledgers through THIS tool instead of hand-editing:
 every write goes safe_load -> mutate -> safe_dump -> re-load validate
 (a write that does not round-trip is refused, exit 4). Dotted paths
 address nesting; numeric segments index lists (claims.3.evidence).
+`append` adds one scalar to the list at <dotted.path>. The parent path
+must already exist; an ABSENT final key under a mapping materializes as
+an empty list (the first item), while an EXISTING non-list target is
+refused (exit 3) — a scalar is never silently coerced into a list. No
+nested structure is invented: the value is one scalar, list-valued
+fields grow one sanctioned item at a time instead of by replacing the
+whole list through a container literal.
 
 Usage:
   python3 ws_yaml.py get  <file> <dotted.path>
   python3 ws_yaml.py set  <file> <dotted.path> <value>
   python3 ws_yaml.py del  <file> <dotted.path>
+  python3 ws_yaml.py append <file> <dotted.path> <value>
 Exit codes: 0 ok / 2 usage / 3 unreadable-or-invalid target / 4 refused
-(non-round-tripping write) / 5 path-not-found (get/del).
+(non-round-tripping write) / 5 path-not-found (get/del/append).
 """
 from __future__ import annotations
 
+import re
 import sys
 
 from pathlib import Path
@@ -87,9 +96,49 @@ def canonical_dump(doc) -> str:
     return yaml.safe_dump(doc, **CANONICAL_KWARGS)
 
 
+# #630: the template-version stamp is a COMMENT line (#536 carriers:
+# CLAUDE.md / facts/_INDEX.md / claim-register.yaml); safe_dump drops
+# every comment, so the register's single-writer rewrites silently
+# stripped its stamp — hooks_selfcheck reported
+# "template_version stamp faults: claim-register.yaml=missing" on every
+# tick. Re-emit the stamp on write: preserve a found value (an older
+# value must SURVIVE as the visible upgrade signal); an absent register
+# stamp recovers from the same-dir CLAUDE.md carrier (correct for both
+# the skill and the deployed copy), then the active skill version.
+_STAMP_RE = re.compile(r"^#\s*kunglao_template_version:\s*(\S+)",
+                       re.MULTILINE)
+
+
+def _stamp_value(old_text: str, path) -> str | None:
+    m = _STAMP_RE.search(old_text)
+    if m:
+        return m.group(1)
+    if Path(path).name != "claim-register.yaml":
+        return None
+    try:
+        sibling = (Path(path).resolve().parent / "CLAUDE.md").read_text(
+            encoding="utf-8", errors="replace")
+        m2 = _STAMP_RE.search(sibling)
+        if m2:
+            return m2.group(1)
+    except OSError as exc:
+        from kunglao_log import warn
+        warn("ws_yaml_stamp_read", f"{type(exc).__name__}: {exc}")
+    try:
+        import template_version as _tv
+        return _tv.read_skill_version()
+    except Exception:  # noqa: BLE001 — off-tree copy: no version source
+        return None
+
+
+def _stamp_prefix(old_text: str, path) -> str:
+    value = _stamp_value(old_text, path)
+    return f"# kunglao_template_version: {value}\n" if value else ""
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) < 3 or argv[0] not in ("get", "set", "del"):
+    if len(argv) < 3 or argv[0] not in ("get", "set", "del", "append"):
         print(__doc__.split("Usage:")[0], file=sys.stderr)
         return 2
     cmd, path, dotted = argv[0], argv[1], argv[2]
@@ -114,6 +163,18 @@ def main(argv: list[str] | None = None) -> int:
         if cmd == "del":
             node, key = _walk(doc, segments)
             del node[key]
+        elif cmd == "append":
+            if len(argv) < 4:
+                return 2
+            node, key = _walk(doc, segments)  # parent path must exist
+            if isinstance(node, dict) and key not in node:
+                node[key] = []  # first item materializes the list
+            cur = node[key]
+            if not isinstance(cur, list):
+                print(f"ws_yaml: append target is not a list: {dotted} "
+                      f"({type(cur).__name__})", file=sys.stderr)
+                return 3
+            node[key] = [*cur, _coerce(argv[3])]
         else:  # set
             if len(argv) < 4:
                 return 2
@@ -127,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
         print("ws_yaml: write refused (non-round-tripping)",
               file=sys.stderr)
         return 4
+    text = _stamp_prefix(old_text, path) + text
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     if cmd != "get" and Path(path).name == "claim-register.yaml":

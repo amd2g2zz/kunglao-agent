@@ -360,11 +360,13 @@ class TestContinuityVerdicts:
         """A stall older than the sliding window stops voting but is
         counted in the detail — pinned including the aged-out note. The
         history carries 14 ticks so the ancient pair drops out of the
-        last-12 tick-count bound (and is past the 24h age bound)."""
+        last-6 tick-count bound (#616: the count bound is the single
+        retention rule — the pre-#616 union's age arm kept such pairs
+        voting for up to CONTINUITY_WINDOW_HOURS)."""
         history = self._ticks([3000, 2995] + list(range(55, -1, -5)))
         self._assert_verdict(
             self._state(history),
             True,
-            "continuous ticks OK (12 in window, latest 2026-09-28T12:00:00Z, "
-            "cadence <= 10m); window: last 12 ticks (older history excluded: "
+            "continuous ticks OK (6 in window, latest 2026-09-28T12:00:00Z, "
+            "cadence <= 10m); window: last 6 ticks (older history excluded: "
             "1 stall(s) aged out)")

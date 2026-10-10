@@ -228,7 +228,12 @@ is discarded as untrusted. Write in this order:
    feeds reference demotion. Trace echo: when the dispatch envelope carries
    `trace_id` (`tr-<mission>-<seq>`), copy it into EVERY worker-status line
    (`| trace: <trace_id>`) and each fact's frontmatter
-   (`trace_id: <trace_id>`) — the claim-id channel.
+   (`trace_id: <trace_id>`) — the claim-id channel. Creator echo:
+   EVERY fact's frontmatter also carries `creator: <your dispatch claim
+   id>` (e.g. `creator: C-007`) — the round-credit provenance link (issue 379);
+   without it the settlement cannot attribute the fact to its dispatch,
+   and `lint_facts` warns `MISSING_CREATOR` when the claim has dispatch
+   anchors.
 2. **IMMEDIATELY after deriving each fact** — write `facts/F<NNN>.md`
    (crash-safe partial state; `self_caveat: "unverified — needs
    independent verifier pass"` by default).
@@ -438,6 +443,7 @@ sample_refs:
   - <sample-sha>
 cites: [Fxxx, ...]                      # must EXIST as fact files, else lint ERR
 claim_id: C-NN                          # lint-required field
+creator: C-NN                           # round-credit provenance (issue 648): echo the dispatch claim id that wrote this fact
 verified: false                         # lint-required field (false = verifier pending)
 provenance:                             # lint-required — {role, path} dicts; role ∈ sample|source|capture_log|recompute_script|other
   - {role: sample, path: bins/<sha>}

@@ -18,6 +18,8 @@ import re
 from pathlib import Path
 
 DEFAULT_MAX_OVERLAP = 0.6
+# local-fix (#622-followup): R1's small-denominator guard — see check().
+_R1_MIN_WORDS = 20
 
 _FACT_FILE_RE = re.compile(r"^F-?(\d+)", re.IGNORECASE)
 _FACT_REF_RE = re.compile(r"\bF-?\d+\b")
@@ -54,7 +56,10 @@ def check(notes_dir, facts_dir, max_overlap: float = DEFAULT_MAX_OVERLAP) -> dic
     violations: list[str] = []
     if not notes_dir.exists():
         return {"ok": True, "violations": [], "checked": 0}
-    note_files = sorted(notes_dir.glob("*.md"))
+    # 本地修复: README.md 是目录约定说明文件（init 生成、无 frontmatter），
+    # 不是 note——排除它。否则新工作区在任何真 note 出现前就被 R2 误伤。
+    note_files = sorted(p for p in notes_dir.glob("*.md")
+                        if p.name.lower() != "readme.md")
     fact_files = sorted(facts_dir.glob("*.md")) if facts_dir.exists() else []
 
     if not fact_files:
@@ -80,7 +85,12 @@ def check(notes_dir, facts_dir, max_overlap: float = DEFAULT_MAX_OVERLAP) -> dic
         body = _body(n.read_text(encoding="utf-8", errors="replace"))  # #103
         checked += 1
         words = _words(body)
-        if words:
+        # local-fix (#622-followup): a SHORT note's ratio is a small-
+        # denominator artifact — the latin tokens it must carry (the fact-id
+        # citation itself) already live in the corpus, so the ratio pins to
+        # ~1.0 while nothing was copied. R1's target is the long copied fact
+        # BODY; below _R1_MIN_WORDS the word-set test is uninformative.
+        if words and len(words) >= _R1_MIN_WORDS:
             # R1 复制即拒——只有 R1 依赖词集。#103: _WORD_RE 只收 [a-z0-9]，
             # 纯中文 note（本仓库工作语言！）词集为空；空词集仅跳过 R1，
             # 决不能连 R2/R3 引用检查一起跳过——fact-id 正则与语言无关。

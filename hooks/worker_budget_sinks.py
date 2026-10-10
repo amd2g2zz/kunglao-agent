@@ -936,6 +936,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
     # Fail-open; after the lifecycle line the dispatch is already approved.
     stamp_dispatch_anchor(paths, cid, prompt, agent_name)
+    # #624 local-fix: the claim flip lives at the SAME approval point as the
+    # anchor stamp (single writer); a later REJECT in the chain rolls it
+    # back (dispatch_gate -> reopen_claim_no_worker).
+    _flip_claim_in_progress(paths, cid)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -944,6 +948,32 @@ def pre_check(payload: dict, paths: dict) -> int:
         'tools': tools,
     })
     return 0
+
+
+def _flip_claim_in_progress(paths: dict, cid: str | None) -> bool:
+    """#624 local-fix: flip the dispatched claim OPEN -> IN_PROGRESS at the
+    approval point (status_defs: an in-flight claim is NOT dispatchable — no
+    auto writer existed, so the orchestrator had to patch it by hand and the
+    turn-exit gate fought the claim's own in-flight worker). Only OPEN flips
+    (PARK/terminal untouched); canonical register write via ws_yaml (the
+    single-writer renderer). Fail-open — never changes the dispatch verdict."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws or not cid:
+        return False
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import ws_yaml as _wsy
+        p = Path(ws) / 'claim-register.yaml'
+        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        for c in (doc.get('claims') or []):
+            if c.get('id') == cid and str(c.get('status') or '').upper() == 'OPEN':
+                c['status'] = 'IN_PROGRESS'
+                p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
+                return True
+        return False
+    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
+        return False
 
 
 def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:

@@ -262,7 +262,9 @@ def test_helper_wake_update_with_colons(tmp_path):
 
 
 def test_helper_output_is_canonical(tmp_path):
-    """ws_yaml's on-disk bytes ARE the canonical form write_guard accepts."""
+    """ws_yaml's on-disk bytes ARE the canonical form write_guard accepts —
+    canonical safe_dump plus the re-emitted comment stamp (the stamp rides
+    the comment header, so the YAML body stays the canonical rendering)."""
     from ws_yaml import canonical_dump  # noqa: PLC0415
 
     ws = _mk_ws(tmp_path)
@@ -273,7 +275,172 @@ def test_helper_output_is_canonical(tmp_path):
     import yaml  # noqa: PLC0415
 
     doc = yaml.safe_load(text)
-    assert text == canonical_dump(doc)
+    tail = canonical_dump(doc)
+    assert text.endswith(tail)
+    head = text[:len(text) - len(tail)]
+    assert all(ln.startswith("#") for ln in head.splitlines()), head
+
+
+# --------------------------------------------------------------------------
+# The append face — list-valued fields grow one sanctioned item at a time
+# --------------------------------------------------------------------------
+
+def _seed_list_doc(ws: Path) -> Path:
+    """A register whose list-valued field exists and is empty."""
+    from ws_yaml import canonical_dump  # noqa: PLC0415
+    reg = ws / "claim-register.yaml"
+    reg.write_text(canonical_dump({
+        "claims": [{"id": "C-001", "status": "OPEN",
+                    "statement": "synthetic claim",
+                    "depends_on": []}],
+    }), encoding="utf-8")
+    return reg
+
+
+def _read_doc(reg: Path):
+    import yaml  # noqa: PLC0415
+    return yaml.safe_load(reg.read_text(encoding="utf-8"))
+
+
+def test_append_adds_one_list_item(tmp_path):
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    r = _ws_yaml(ws, "append", "claim-register.yaml",
+                 "claims.0.depends_on", "C-000")
+    assert r.returncode == 0, r.stderr
+    assert _read_doc(reg)["claims"][0]["depends_on"] == ["C-000"]
+
+
+def test_append_never_builds_a_container(tmp_path):
+    """The #516 rule holds on the append face: a container literal lands
+    as the literal STRING, never as a nested structure."""
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    _ws_yaml(ws, "append", "claim-register.yaml",
+             "claims.0.depends_on", "[C-000, C-001]")
+    assert _read_doc(reg)["claims"][0]["depends_on"] == ["[C-000, C-001]"]
+
+
+def test_append_preserves_order_and_existing_items(tmp_path):
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    _ws_yaml(ws, "append", "claim-register.yaml",
+             "claims.0.depends_on", "C-000")
+    _ws_yaml(ws, "append", "claim-register.yaml",
+             "claims.0.depends_on", "C-002")
+    assert _read_doc(reg)["claims"][0]["depends_on"] == ["C-000", "C-002"]
+
+
+def test_append_bytes_stay_canonical(tmp_path):
+    """The append rendering is the canonical safe_dump (plus the comment
+    stamp) — the writer's byte contract holds on this face too."""
+    from ws_yaml import canonical_dump  # noqa: PLC0415
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    _ws_yaml(ws, "append", "claim-register.yaml",
+             "claims.0.depends_on", "C-000")
+    text = reg.read_text(encoding="utf-8")
+    tail = canonical_dump(_read_doc(reg))
+    assert text.endswith(tail)
+    head = text[:len(text) - len(tail)]
+    assert all(ln.startswith("#") for ln in head.splitlines()), head
+
+
+def test_append_materializes_an_absent_final_key(tmp_path):
+    """The mapping-of-lists shape (claim_deps.yaml depends_on[<id>]): an
+    absent final key under an existing mapping grows a real list — `set`
+    cannot build one (a container literal lands as a string), so append is
+    the only sanctioned first-item path."""
+    from ws_yaml import canonical_dump  # noqa: PLC0415
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    r = _ws_yaml(ws, "append", "claim-register.yaml",
+                 "claims.0.decomposition", "C-000")
+    assert r.returncode == 0, r.stderr
+    doc = _read_doc(reg)
+    assert doc["claims"][0]["decomposition"] == ["C-000"]
+    assert isinstance(doc["claims"][0]["decomposition"], list)
+    # claim_deps shape: depends_on is a mapping of child -> parent list
+    deps = ws / "claim_deps.yaml"
+    deps.write_text(canonical_dump({"depends_on": {}}), encoding="utf-8")
+    r2 = _ws_yaml(ws, "append", "claim_deps.yaml",
+                  "depends_on.C-009", "C-001")
+    assert r2.returncode == 0, r2.stderr
+    assert _read_doc(deps)["depends_on"] == {"C-009": ["C-001"]}
+
+
+def test_append_refuses_a_missing_parent_path(tmp_path):
+    """No structure invention: the parent path must exist (exit 5) and an
+    existing non-list target is refused (exit 3) — nothing lands."""
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    before = reg.read_text(encoding="utf-8")
+    missing = _ws_yaml(ws, "append", "claim-register.yaml",
+                       "claims.9.depends_on", "C-000")
+    assert missing.returncode == 5, missing.stderr
+    deep = _ws_yaml(ws, "append", "claim-register.yaml",
+                    "no_such_section.list", "C-000")
+    assert deep.returncode == 5, deep.stderr
+    scalar = _ws_yaml(ws, "append", "claim-register.yaml",
+                      "claims.0.status", "PROVEN")
+    assert scalar.returncode == 3, scalar.stderr
+    assert "not a list" in scalar.stderr
+    assert reg.read_text(encoding="utf-8") == before, "nothing landed"
+
+
+def test_append_typo_grows_one_visible_key_only(tmp_path):
+    """A final-segment typo is inspectable and reversible (get/del), never
+    a nested structure: exactly one new list key appears."""
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    _ws_yaml(ws, "append", "claim-register.yaml",
+             "claims.0.depends_on_typo", "C-000")
+    doc = _read_doc(reg)
+    assert doc["claims"][0]["depends_on_typo"] == ["C-000"]
+    assert [k for k in doc if k != "claims"] == []
+    got = _ws_yaml(ws, "get", "claim-register.yaml",
+                   "claims.0.depends_on_typo")
+    assert got.returncode == 0 and got.stdout.strip() == "[C-000]", got.stdout
+
+
+def test_append_requires_a_value(tmp_path):
+    ws = _mk_ws(tmp_path)
+    _seed_list_doc(ws)
+    r = _ws_yaml(ws, "append", "claim-register.yaml", "claims.0.depends_on")
+    assert r.returncode == 2, r.stderr
+
+
+def test_append_register_write_settles(tmp_path, monkeypatch):
+    """The append face rides the register's settlement emitter leg — the
+    sanctioned-writer semantics are identical on every mutating command."""
+    import register_proven_gate  # noqa: PLC0415
+    import ws_yaml  # noqa: PLC0415
+
+    ws = _mk_ws(tmp_path)
+    reg = _seed_list_doc(ws)
+    calls: list = []
+    monkeypatch.setattr(
+        register_proven_gate, "emit_settlements",
+        lambda parent, text, old_text: calls.append(parent))
+    rc = ws_yaml.main(["append", str(reg), "claims.0.depends_on", "C-000"])
+    assert rc == 0
+    assert calls == [ws], calls
+
+
+def test_append_non_register_write_does_not_settle(tmp_path, monkeypatch):
+    import register_proven_gate  # noqa: PLC0415
+    import ws_yaml  # noqa: PLC0415
+
+    ws = _mk_ws(tmp_path)
+    other = ws / "mission_ledger.yaml"
+    other.write_text("arms: []\n", encoding="utf-8")
+    calls: list = []
+    monkeypatch.setattr(
+        register_proven_gate, "emit_settlements",
+        lambda parent, text, old_text: calls.append(parent))
+    rc = ws_yaml.main(["append", str(other), "arms", "arm-1"])
+    assert rc == 0
+    assert calls == [], "the emission leg arms ONLY on the register carrier"
 
 
 # --------------------------------------------------------------------------

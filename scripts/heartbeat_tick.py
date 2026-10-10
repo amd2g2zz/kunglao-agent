@@ -397,12 +397,23 @@ def main(argv: list[str] | None = None) -> int:
         help="initialized workspace directory (default: probe cwd, then "
              "cwd/<workspace_dir>; never created — init owns that)")
     parser.add_argument(
+        "--origin", choices=("manual", "cron"), default="manual",
+        help="#616 tick provenance: 'cron' marks a tick executed from the "
+             "durable /loop cron prompt (the one channel whose execution "
+             "proves the scheduled loop ran); 'manual' (default) marks "
+             "every direct/in-session run, including the re-arm chain. The "
+             "durable sidecar row carries it; --reset-continuity honors "
+             "only cron rows as proof the loop fired.")
+    parser.add_argument(
         "--reset-continuity", action="store_true",
         help="#415: gated continuity-baseline reset for VERIFIED FRESH "
              "DEPLOYS — rotates runs/.heartbeat.log and rebuilds "
-             "tick_history from now. Refused (fail-closed) when any real "
-             "tick row exists or the heartbeat state is older than 24h: "
-             "those are real stalls, and the re-arm chain is the remedy.")
+             "tick_history from now. Refused (fail-closed) when a "
+             "cron-provenance tick row (origin=cron) or an unmarked legacy "
+             "tick row exists, or the heartbeat state is older than 24h: "
+             "those are real stalls (or unknown provenance), and the "
+             "bounded re-arm chain is the remedy — a recovered cadence "
+             "clears the stale gap within one window of on-cadence ticks.")
     parsed = parser.parse_args(args)
     ws_arg = parsed.workspace or None
     # A path-shaped positional must EXIST: the tick writes telemetry into the
@@ -436,9 +447,12 @@ def main(argv: list[str] | None = None) -> int:
     # (actor="tick") so continuity counts real cadence, never hook pulses
     # (the sidecar had only hook/register rows before: hook activity then
     # masqueraded as ticks and deploy-day quiet gaps looked like dead crons).
+    # #616: the row carries its PROVENANCE (origin) — 'cron' only when this
+    # run came from the durable /loop prompt (--origin cron), 'manual' for
+    # every direct/in-session run. The reset gate distinguishes the two.
     try:
         from heartbeat import append_tick_log
-        append_tick_log(ws, actor="tick")
+        append_tick_log(ws, actor="tick", origin=parsed.origin)
     except Exception as exc:  # noqa: BLE001 — telemetry must never kill the tick
         _note("tick_row", f"{type(exc).__name__}: {exc}")
     # #534 observability lifeline, #413 fix: the "module wired" row lands

@@ -909,6 +909,13 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str,
     for c in claims:
         lines.append(f"- id: {c['id']}")
         lines.append(f"  status: {c['status']}")
+        # local-fix: claim_class was silently dropped by this hand-rolled
+        # serializer — seed_claims stamps "scaffold" (the orphan-check
+        # exemption, matrix4b) but the written register never carried it,
+        # so convergence_check held CONVERGED hostage on the scaffold
+        # seeds in every fresh workspace. Tolerate absence for legacy shapes.
+        if c.get("claim_class"):
+            lines.append(f"  claim_class: {c['claim_class']}")
         lines.append(f"  boundary_type: {c['boundary_type']}")
         lines.append(f"  evidence_tier_attempted: {c['evidence_tier_attempted']}")
         lines.append(f"  promotion_attempts: {c['promotion_attempts']}")
@@ -3544,6 +3551,39 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             print(f"kunglao-init: WARNING uv env not materialized: "
                   f"{uv_env['detail']}", file=sys.stderr)
 
+    # MCP liveness + bounded self-repair (owner ruling 2026-10-10): every
+    # declared server is TESTED at connect level (real MCP initialize
+    # handshake via scripts/mcp_repair.py) — a registered-but-dead server
+    # must not pass init and then fail every worker live (the observed
+    # 2026-10-10 field case: PATH-resolved `python` poisoned by a foreign
+    # VIRTUAL_ENV). R1 pins entries to absolute paths; R2 falls back to
+    # verified family candidates; still-failing servers are a loud WARNING
+    # with the fix hint attached.
+    if not skip_toolchain:
+        try:
+            import mcp_repair as _mcp_repair
+            _rows = [_mcp_repair.repair_server(_n, _e,
+                                               _mcp_repair.DEFAULT_TIMEOUT_S)
+                     for _n, _e in sorted(
+                         _mcp_repair.declared_servers(ws).items())]
+            for _r in _rows:
+                _p = _r.get("probe") or {}
+                _rep = _r.get("repair") or {}
+                if _p.get("ok"):
+                    _how = (f" (repaired via {_rep['action']})"
+                            if _rep.get("action") not in (None, "none")
+                            else "")
+                    print(f"kunglao-init: MCP {_r['name']}: connect OK"
+                          f"{_how} — {_p.get('detail')}")
+                else:
+                    print(f"kunglao-init: WARNING MCP {_r['name']}: "
+                          f"connect FAILED — {_p.get('detail')}; repair: "
+                          f"{_rep.get('detail') or _rep.get('action')}",
+                          file=sys.stderr)
+        except Exception as _exc:  # noqa: BLE001 — fail-open lifeline
+            print(f"kunglao-init: WARNING mcp liveness probe skipped: "
+                  f"{type(_exc).__name__}: {_exc}", file=sys.stderr)
+
     # #460 intake probe battery (the instrument face): die-probe +
     # apkid-prescan run ONCE over the aligned sample BEFORE the promise
     # block (probe, then record) — die/apkid features exist from run #1,
@@ -3900,9 +3940,44 @@ def uv_sync_workspace(root: Path | None = None, timeout: int = 600) -> dict:
         Path(__file__).resolve().parent.parent)
     uv = shutil.which("uv")
     if uv is None:
-        return {"ok": False, "venv": "",
-                "detail": "uv not on PATH (the toolchain check_uv face owns "
-                          "the install)"}
+        # local-fix: mirror toolchain._check_uv's recovery ladder instead of
+        # silently degrading — probe the astral fallback paths, attempt the
+        # AGENT-DO installer (KUNGLAO_AGENT_DO=1), then always return an
+        # actionable next step. web/labs lanes downgrade uv to non-HARD, so
+        # this branch is the only place the gap becomes visible; before this
+        # fix it neither probed fallbacks nor installed nor said what to do.
+        try:
+            from toolchain import (UV_INSTALL_CMD as _uv_cmd,
+                                   _UV_FALLBACK_PATHS as _uv_paths,
+                                   _agent_do_enabled as _uv_agent_do)
+        except Exception:  # noqa: BLE001 — partial-deploy lifeline
+            _uv_cmd = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+            _uv_paths = ("~/.local/bin/uv", "~/bin/uv")
+            _uv_agent_do = None
+        for _cand in _uv_paths:
+            _p = Path(os.path.expanduser(_cand))
+            if _p.is_file():
+                uv = str(_p)
+                break
+        if uv is None and callable(_uv_agent_do) and _uv_agent_do():
+            try:
+                subprocess.run(["sh", "-c", _uv_cmd], capture_output=True,
+                               text=True, timeout=300)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                warn("uv_agent_install", f"{type(exc).__name__}: {exc}")
+            uv = shutil.which("uv")
+            if uv is None:
+                for _cand in _uv_paths:
+                    _p = Path(os.path.expanduser(_cand))
+                    if _p.is_file():
+                        uv = str(_p)
+                        break
+        if uv is None:
+            return {"ok": False, "venv": "",
+                    "detail": ("uv not on PATH (fallback paths probed; "
+                               "AGENT-DO install not enabled or not "
+                               f"effective). Fix: {_uv_cmd} — then re-run "
+                               "init.")}
     try:
         proc = subprocess.run([uv, "sync", "--locked"], cwd=str(project_root),
                               capture_output=True, text=True, timeout=timeout,

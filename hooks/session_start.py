@@ -116,6 +116,22 @@ def main_with_payload(payload: dict) -> int:
             warn("session_start_strategy_seam",
                  f"{type(exc).__name__}: {exc}")
 
+        if str(payload.get("source") or "") == "compact":
+            # #630: the PreCompact hook cannot carry additionalContext in
+            # this harness build — it stashes the compact-continuity note
+            # and THIS face (the supported stdout channel) delivers it,
+            # consuming it exactly once.
+            try:
+                from compact_continuity import consume_stashed_note
+                note = consume_stashed_note(ws)
+            except Exception as exc:  # noqa: BLE001 — delivery is fail-open
+                from kunglao_log import warn
+                warn("session_start_compact_note",
+                     f"{type(exc).__name__}: {exc}")
+                note = None
+            if note:
+                print(note)
+
         try:
             import kunglao_log
             kunglao_log.emit(ws, actor="hook:session_start",

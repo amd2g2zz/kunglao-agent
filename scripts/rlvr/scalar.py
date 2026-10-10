@@ -509,10 +509,14 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     row's identity ts for its signal, so the signal set is byte-identical
     and record/settle dedupe (no ledger churn). ROUND_CREDIT is
     polarity-none: it feeds no Beta prior and the scalar feed reads
-    episode scalars only."""
+    episode scalars only. Returns {"settled", "untraced",
+    "unattributed_waste", "banked"} — ``banked`` lists the dispatch ids
+    whose FIRST settlement rode this pass (the learning clock's tick);
+    replays and the late-cite amendment path report none."""
     ws = Path(ws)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
+    banked: list[str] = []
     ts = now or _now()
     for row in doc["rows"]:
         rid = f"{KIND_ROUND_CREDIT}/{row['dispatch_id']}"
@@ -578,23 +582,61 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # double-count the round.
             if not (existing and existing.get("settlement") is not None):
                 _bank_q_cell_credit(ws, row)
+                banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
     return {"settled": settled_n, "untraced": doc["untraced"],
-            "unattributed_waste": doc["unattributed_waste"]}
+            "unattributed_waste": doc["unattributed_waste"],
+            # the dispatches whose FIRST settlement rode this pass (the
+            # learning clock's tick) — the case-posterior observation
+            # leg keys on exactly this set, so a replay or late-cite
+            # amendment additively reports none
+            "banked": banked}
 
 
 def _bank_q_cell_credit(ws, row: dict) -> None:
     """Issue 462 W5: bank one settled round credit into the matching Q
     cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
-    Telemetry posture: fail-open, a banked-credit failure is one
+    The bank result carries the matched row's ``arm_key``/``fingerprint``
+    so the SAME settled credit keys the cross-task posterior store row
+    (rlvr.strategy_store.append_store_row) without a second scan — the
+    store's write face exists for exactly this call and had no live
+    caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
     covers the ledger receipt; the Q bank is the learning feed)."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        _qc.observe_settlement(ws, str(row["dispatch_id"]), row["r"])
+        bank = _qc.observe_settlement(ws, str(row["dispatch_id"]), row["r"])
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
+        return
+    _bank_strategy_store_row(ws, row, bank)
+
+
+def _bank_strategy_store_row(ws, row: dict, bank: dict) -> None:
+    """Append the settled dispatch's cross-task store row, keyed by the
+    dispatch's own arm key/fingerprint the Q bank returned. The honest
+    gap (unmatched dispatch, no banked credit) writes nothing — the same
+    no-row-never-a-fabricated-bucket posture as the Q bank. The credit
+    is the settled ladder value; ``facts_citing`` is the settlement's
+    own full-credit fact count; the status names the settlement band the
+    row describes. Fail-open telemetry: a store failure is one
+    rate-limited WARN, never a settlement break."""
+    try:
+        if not (bank.get("matched") and bank.get("appended")):
+            return
+        from rlvr import strategy_store as _store  # noqa: PLC0415
+        _store.append_store_row(
+            ws,
+            method_family=str(bank.get("method_family") or ""),
+            status=BAND_ROUND_CREDIT,
+            credit=row["r"],
+            dispatch_id=str(row["dispatch_id"]),
+            arm_key=bank.get("arm_key"),
+            fingerprint=bank.get("fingerprint"),
+            facts_citing=len(row.get("credited") or []))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("q_cell_bank.store", f"{type(exc).__name__}: {exc}")
 
 
 # --- scalar prior feed (exponential family, consumed by compute_priors) --
