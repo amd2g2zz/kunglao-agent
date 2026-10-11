@@ -3,7 +3,7 @@
   "tool": "mutmut",
   "tool_version": "3.7.0",
   "recorded_at": "2026-10-10T15:26:44Z",
-  "base_commit": "06e45282a53a38ffbbe6080ceb20c983039147e6",
+  "base_commit": "38acadc1363e6ac00ee55f45e165cb953151b485",
   "scope": {
     "source_paths": [
       "scripts"
