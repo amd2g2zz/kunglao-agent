@@ -26,7 +26,11 @@ emit a one-line upgrade warning when the workspace is behind.
 Version authority: pyproject.toml [project].version — the SAME source
 release_receipt.py checks against release-manifest.yaml and
 .claude-plugin/plugin.json. No third version file (a skills/VERSION would
-drift from the receipt-checked pair).
+drift from the receipt-checked pair). Deployed copies — where the repo
+pair is absent by design (the deployed manifest carries neither) — resolve
+by the deployed-manifest.json `source_version` receipt (#674): the version
+the deploy machinery minted from that same source, not a hand-maintained
+file.
 """
 from __future__ import annotations
 
@@ -71,19 +75,40 @@ def _read_version_from_plugin_manifest() -> str | None:
         return None
 
 
+def _read_version_from_deployed_manifest() -> str | None:
+    """Deployed-copy receipt (#674): a workspace's deployed-manifest.json
+    records the `source_version` its deployed scripts were cut from —
+    minted by the deploy machinery from the same receipt-checked source,
+    never hand-edited. Absent in the repo tree (deploy-manifest.yaml is a
+    different asset), so skill-tree resolution is unchanged."""
+    p = _REPO_ROOT / "deployed-manifest.json"
+    if not p.is_file():
+        return None
+    try:
+        return str(json.loads(p.read_text(encoding="utf-8")).get("source_version") or "")
+    except (ValueError, OSError):
+        return None
+
+
 def read_skill_version() -> str:
     """The skill package version (single source: pyproject.toml, receipt-
     checked against release-manifest.yaml + plugin.json).
 
+    In a deployed copy — no repo assets at _REPO_ROOT — resolution falls
+    back to the deployed-manifest.json `source_version` receipt (#674).
+
     Function, not a frozen constant, so tests and future callers can
     re-read after a version bump without an import cycle."""
-    v = _read_version_from_pyproject() or _read_version_from_plugin_manifest()
+    v = (_read_version_from_pyproject()
+         or _read_version_from_plugin_manifest()
+         or _read_version_from_deployed_manifest())
     if v:
         return v
     raise RuntimeError(
-        "template_version: no skill version found — neither pyproject.toml "
-        "nor .claude-plugin/plugin.json declares one (both are repo-contract "
-        "assets; a missing one is a release defect, not a default)")
+        "template_version: no skill version found — pyproject.toml and "
+        ".claude-plugin/plugin.json (the repo-contract pair) and the "
+        "deployed-manifest.json source_version receipt are all absent or "
+        "empty (an absent source is a release/deploy defect, not a default)")
 
 
 def stamp_line(version: str) -> str:
