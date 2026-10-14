@@ -337,6 +337,28 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
 }
 
 
+def _record_reject(name: str, msg: str, paths: dict) -> None:
+    """#683: a REJECT must be DURABLE, not stdout-only — one row appended
+    to runs/gate-telemetry.jsonl (the shared gate-telemetry face,
+    gate_telemetry.append_row), gate=worker_budget.<name>, rc=2 (the exit
+    code this emission site returns), msg = the rejection reason. Pre-#683
+    every worker_budget gate verdict (tier / cap / liveness / heartbeat /
+    ...) printed and vanished — an orchestrator looping on the same
+    REJECT accumulated silently and a post-mortem had nothing to count.
+
+    Fail-open: bookkeeping must never change the verdict (a broken/absent
+    ledger degrades to ONE rate-limited warn, the issue-275 batch-3
+    posture) — the REJECT still fires either way."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return
+    try:
+        import gate_telemetry as _gt
+        _gt.append_row(ws, f'worker_budget.{name}', 2, msg=msg)
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks enforcement
+        warn('reject_telemetry', f'{type(exc).__name__}: {exc}')
+
+
 def _reject(name: str, msg: str, paths: dict) -> int:
     """REJECT with guidance (issue #270): stderr summary + stdout JSON
     hookSpecificOutput.additionalContext. Exit 2 semantics unchanged.
@@ -346,8 +368,13 @@ def _reject(name: str, msg: str, paths: dict) -> int:
     producer-attributed unit (references/contracts/xml-injection-standard.md). The
     tag is applied HERE, at the emission site, so the REJECT_FIXES table
     and the stderr summary stay raw. Tags mark, never gate: rc=2 unchanged.
+
+    #683: THE chokepoint for every worker_budget gate REJECT — the durable
+    telemetry row is written HERE, so tier/cap/liveness/heartbeat and the
+    whole pre_check battery are auditable without touching each gate.
     """
     print(f'REJECT {name}: {msg}', file=sys.stderr)
+    _record_reject(name, msg, paths)
     entry = REJECT_FIXES.get(name)
     if not entry:
         return 2
