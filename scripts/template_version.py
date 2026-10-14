@@ -26,7 +26,12 @@ emit a one-line upgrade warning when the workspace is behind.
 Version authority: pyproject.toml [project].version — the SAME source
 release_receipt.py checks against release-manifest.yaml and
 .claude-plugin/plugin.json. No third version file (a skills/VERSION would
-drift from the receipt-checked pair).
+drift from the receipt-checked pair). The one derived carrier that IS
+accepted: the deployed copy's sibling deployed-manifest.json — its
+source_version field is minted by the deploy machinery itself from the
+receipt-checked source, so it is a receipt, not a hand-maintained file.
+The skill tree never resolves there (its root ships deploy-manifest.yaml,
+a different asset), which keeps pyproject first everywhere in-tree.
 """
 from __future__ import annotations
 
@@ -71,19 +76,51 @@ def _read_version_from_plugin_manifest() -> str | None:
         return None
 
 
+def _read_version_from_deployed_manifest() -> str | None:
+    """Version receipt of a workspace-deployed copy: the sibling
+    deployed-manifest.json's source_version — minted by the deploy
+    machinery from the receipt-checked source itself (nothing
+    hand-maintained, no drift surface). The deployed root resolves this
+    module's parent to <ws>/.claude, which holds the carrier and never
+    holds the repo version assets. Absent (every in-tree root), unreadable
+    or versionless all answer None; the caller's guard still decides."""
+    p = _REPO_ROOT / "deployed-manifest.json"
+    if not p.is_file():
+        return None
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        # fail-open to the guard below, never silent: a corrupt carrier
+        # must be visible while the run decides
+        from kunglao_log import warn
+        warn("template_version.manifest", f"{type(exc).__name__}: {exc}")
+        return None
+    if not isinstance(doc, dict):
+        from kunglao_log import warn
+        warn("template_version.manifest", "carrier root is not a JSON object")
+        return None
+    v = doc.get("source_version")
+    return str(v) if v else None
+
+
 def read_skill_version() -> str:
     """The skill package version (single source: pyproject.toml, receipt-
-    checked against release-manifest.yaml + plugin.json).
+    checked against release-manifest.yaml + plugin.json; the deployed
+    copy falls back to its own manifest's source_version receipt).
 
     Function, not a frozen constant, so tests and future callers can
     re-read after a version bump without an import cycle."""
-    v = _read_version_from_pyproject() or _read_version_from_plugin_manifest()
+    v = (_read_version_from_pyproject()
+         or _read_version_from_plugin_manifest()
+         or _read_version_from_deployed_manifest())
     if v:
         return v
     raise RuntimeError(
-        "template_version: no skill version found — neither pyproject.toml "
-        "nor .claude-plugin/plugin.json declares one (both are repo-contract "
-        "assets; a missing one is a release defect, not a default)")
+        "template_version: no skill version found — neither pyproject.toml, "
+        ".claude-plugin/plugin.json nor deployed-manifest.json:source_version "
+        "declares one (the first two are repo-contract assets, the third the "
+        "deploy machinery's receipt; a missing one is a release defect, "
+        "not a default)")
 
 
 def stamp_line(version: str) -> str:
