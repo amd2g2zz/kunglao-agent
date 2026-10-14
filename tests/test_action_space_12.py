@@ -151,26 +151,28 @@ _FIXTURE_DEPS = {"depends_on": {}, "competitor_groups": {}}
 
 # Frozen PRE-CHANGE capture (scripts/priority_ratio.py at base 8fcb264,
 # rng-seeded + default-rng faces). Any diff = behavior change = REJECT.
+# #680 update: `tier` added to Action.to_dict() (additive — the dispatch
+# envelope's tier derives from it); scores/order/other keys unchanged.
 _FROZEN = {
     "seed42": [
         {"claim_id": "C-2", "action": "family_attribution", "score": 0.682,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 2},
         {"claim_id": "C-3", "action": "persistence", "score": 0.441,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 3},
         {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.329,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-4", "action": "evidence_collection", "score": 0.328,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
     ],
     "default": [
         {"claim_id": "C-4", "action": "evidence_collection", "score": 0.924,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-3", "action": "persistence", "score": 0.338,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 3},
         {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.21,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-2", "action": "family_attribution", "score": 0.016,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 2},
     ],
 }
 
