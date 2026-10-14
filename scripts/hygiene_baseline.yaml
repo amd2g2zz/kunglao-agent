@@ -313,7 +313,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 56
+    r1: 58
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -507,6 +507,8 @@ files:
   tests/test_acceptance_689.py:
     r1: 4
   tests/test_act_budget_523.py:
+    r1: 1
+  tests/test_action_space_12.py:
     r1: 1
   tests/test_action_space_539.py:
     r1: 1
@@ -1467,6 +1469,8 @@ files:
     r1: 2
   tests/test_tick_rc_617.py:
     r1: 2
+  tests/test_tier_contract_680.py:
+    r1: 3
   tests/test_tier_rules.py:
     r1: 1
   tests/test_timeline_v2_586.py:
@@ -1590,7 +1594,7 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 48
+    r1: 55
     r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7
