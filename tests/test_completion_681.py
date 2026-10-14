@@ -24,6 +24,7 @@ The fix contract (D-681.1 / D-681.2):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -520,8 +521,11 @@ class TestMonotoneDelivery:
         assert delivery["candidate_rel"] == "artifacts/derive_reimpl.py"
         assert delivery["unit"] == "py-derive-v1"
         assert delivery["run_id"] == run_id
-        assert isinstance(delivery.get("candidate_sha256"), str)
-        assert delivery["candidate_sha256"]
+        # exact digest pin: the file hashed is the delivered candidate
+        # as it stands on disk after the run (the dry act may have
+        # overwritten the planted stub — the digest tracks the bytes)
+        assert delivery["candidate_sha256"] == hashlib.sha256(
+            (ws / "artifacts/derive_reimpl.py").read_bytes()).hexdigest()
 
     def test_no_candidate_writes_no_delivery_file(self, stub_repo, tmp_path,
                                                   monkeypatch):
@@ -550,3 +554,35 @@ class TestMonotoneDelivery:
             (stub_repo / f"runs/e2e/{run_id}/report.json")
             .read_text(encoding="utf-8"))
         assert report["final_status"] == "PARTIAL"
+
+    def test_delivered_file_is_never_retracted(self, stub_repo, tmp_path):
+        """The monotone half: a later finalize that finds NO candidate
+        leaves the already-delivered file untouched — a delivered
+        artifact is not retracted by a subsequent resume."""
+        ws = tmp_path / "ws"
+        (ws / "artifacts").mkdir(parents=True)
+        cand = ws / "artifacts/derive_reimpl.py"
+        cand.write_text(DERIVE_PY, encoding="utf-8")
+        ev_dir = tmp_path / "ev"
+        state = model.RunState(
+            run_id="monotone", unit="py-derive-v1", family="smoke",
+            repo=str(stub_repo),
+            task_dir=str(stub_repo / "eval/v1/tasks/smoke/py-derive-v1"),
+            ws=str(ws), evidence_dir=str(ev_dir), budget_seconds=100,
+            llm_mode="dry", started_ts="t", started_monotonic=0.0,
+            anchors=dict(ANCHORS))
+        runner = ScriptedRunner()
+        ctx = checkpoints.RunContext(
+            state=state, runner=runner,
+            face=llm_faces.face_for("dry", runner, ev_dir),
+            clock=FakeClock(), sleep_fn=lambda _s: None)
+
+        out = ws / "runs/deliverable-best-so-far.json"
+        checkpoints._deliver_best_so_far(ctx, "PARTIAL")
+        first = out.read_text(encoding="utf-8")
+        assert json.loads(first)["candidate_sha256"] == hashlib.sha256(
+            DERIVE_PY.encode()).hexdigest()
+
+        cand.unlink()  # the next finalize finds nothing to deliver
+        checkpoints._deliver_best_so_far(ctx, "PARTIAL")
+        assert out.read_text(encoding="utf-8") == first  # untouched
