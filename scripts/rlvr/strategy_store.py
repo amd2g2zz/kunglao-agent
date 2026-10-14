@@ -353,8 +353,10 @@ class PosteriorStrategyStore:
         intake doc when no history exists (the prior it was TOLD) —
         retired tokens filtered by the same registry wall as every other
         prior face, share-normalized like any candidate set. Fail-open:
-        an unreadable intake doc is one rate-limited warn and the chain
-        continues empty (the loud-degrade posture of _registered_only)."""
+        the #544 tolerant read face maps a missing/corrupt intake doc to
+        empty silently (never a raise); only an unexpected failure at
+        THIS seam warns (one rate-limited warn, error class only) and
+        the chain continues empty."""
         prior = self._proposal_prior()
         if prior:
             return prior, "history"

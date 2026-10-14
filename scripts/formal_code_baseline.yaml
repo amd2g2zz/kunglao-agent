@@ -233,7 +233,7 @@ files:
   scripts/rlvr/reward.py: 8
   scripts/rlvr/scalar.py: 26
   scripts/rlvr/state.py: 25
-  scripts/rlvr/strategy_store.py: 21
+  scripts/rlvr/strategy_store.py: 22
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14
