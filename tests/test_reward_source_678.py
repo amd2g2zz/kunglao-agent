@@ -38,6 +38,7 @@ import hashlib
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,13 +58,21 @@ import settle_round_credit as src  # noqa: E402
 
 def _grammar_fact(ws: Path, fid: str, status: str, *,
                   claim_id: str | None = None, creator: str | None = None,
-                  confidence: str | None = None) -> None:
-    """A grammar-clean fact (the #539/#651 fixture shape): the front-
-    matter id carries the mandatory ``<FNNN>-<slug>`` grammar (the file
-    is ``<FNNN>.md`'), terminal statuses ride high confidence,
-    non-terminal medium unless pinned."""
-    conf = confidence or ("high" if status in ("PROVEN", "VERIFIED",
-                                               "REFUTED") else "medium")
+                  confidence: str | None = None,
+                  bare: bool = False) -> None:
+    """A fact fixture (the #539/#651 fixture shape): the front-matter
+    id carries the mandatory ``<FNNN>-<slug>`` grammar (the file is
+    ``<FNNN>.md``). With ``claim_id`` and the default confidence the
+    shape is lint-clean; WITHOUT ``claim_id`` it carries the
+    MISSING_CLAIM_ID grammar error on purpose — such fixtures feed only
+    certification-blind faces (the round-credit ladder keys on status +
+    citation, never on certification). ``bare=True`` omits source/
+    confidence for OPEN/DEFERRED (the status matrix forbids both)."""
+    if bare:
+        conf = None
+    else:
+        conf = confidence or ("high" if status in ("PROVEN", "VERIFIED",
+                                                   "REFUTED") else "medium")
     sha = hashlib.sha256(f"{fid}:{status}".encode()).hexdigest()
     lines = ["---", f"id: {fid}-fact", "type: fact", f"title: {fid}",
              "created: 2026-10-11", "last_reviewed: 2026-10-11",
@@ -73,8 +82,10 @@ def _grammar_fact(ws: Path, fid: str, status: str, *,
              f"    content_sha256: {sha}", "    credibility: B2",
              "claim: claim statement", "reproduce: cmd",
              "expected: out", "verified: pending",
-             "source: public-osint", f"confidence: {conf}",
+             "source: public-osint" if not bare else None,
+             f"confidence: {conf}" if conf else None,
              f"status: {status}"]
+    lines = [ln for ln in lines if ln is not None]
     if claim_id:
         lines.append(f"claim_id: {claim_id}")
     if creator:
@@ -140,21 +151,25 @@ def test_creatorless_fact_on_a_settled_claim_backfills_the_creator(
 def test_cited_ids_producer_marks_deliverable_refs(tmp_path):
     """A deliverable document naming F008 marks that fact
     ``cited_by_deliverable`` — the citation leg had NO producer, so the
-    flag was permanently False for every live workspace."""
+    flag was permanently False for every live workspace. Both scanned
+    trees are exercised: notes/ names F008, analyses/ names F009."""
     ws = _ws(tmp_path)
     _grammar_fact(ws, "F008", "PROVEN", creator="tr-rt-1")
     _grammar_fact(ws, "F009", "PROVEN", creator="tr-rt-1")
     (ws / "notes").mkdir(exist_ok=True)
     (ws / "notes" / "n-summary.md").write_text(
         "# summary\n\nThe key schedule lives in F008.\n", encoding="utf-8")
+    (ws / "analyses").mkdir(exist_ok=True)
+    (ws / "analyses" / "a-deep-dive.md").write_text(
+        "cross-fact synthesis citing F009.\n", encoding="utf-8")
 
     cited = ss.cited_ids_from_deliverables(ws)
     assert "F008" in cited
-    assert "F009" not in cited
+    assert "F009" in cited
 
     rows = {r["id"]: r for r in ss.fact_artifacts(ws)}
     assert rows["F008-fact"]["cited_by_deliverable"] is True
-    assert rows["F009-fact"]["cited_by_deliverable"] is False
+    assert rows["F009-fact"]["cited_by_deliverable"] is True
 
 
 # ---------- 3. D-678.4b: the verification citation leg ----------------------
@@ -236,6 +251,24 @@ def test_trace_credit_does_not_bank_as_failure_mass(tmp_path):
     assert scell.failure == 0.0
 
 
+def test_observation_band_edges_are_pinned(tmp_path):
+    """The band top (the TRACE rail ceiling) is INSIDE the observation
+    band; one tick above it folds as a normal credit."""
+    top_store = q_cells.InMemoryStore([
+        _q_row("sig1", "dynamic-trace", q_cells.OBSERVATION_BAND_CEIL)])
+    top = q_cells.fold(top_store, gamma=1.0).cells[("sig1",
+                                                    "dynamic-trace")]
+    assert (top.success, top.failure) == (0.0, 0.0)
+
+    above_store = q_cells.InMemoryStore([
+        _q_row("sig1", "dynamic-trace",
+               q_cells.OBSERVATION_BAND_CEIL + 0.01)])
+    above = q_cells.fold(above_store, gamma=1.0).cells[("sig1",
+                                                        "dynamic-trace")]
+    assert above.success == pytest.approx(0.06)
+    assert above.failure == pytest.approx(0.94)
+
+
 # ---------- 6. D-678.5: Φ non-degeneracy -----------------------------------
 
 def test_phi_has_intermediate_values_with_graded_facts(tmp_path):
@@ -270,6 +303,25 @@ def test_phi_partial_certification_is_strictly_intermediate(tmp_path):
     assert abs(face["weighted_fraction"] - 0.75) < 1e-9
     phi = ir.potential(ws)
     assert 0.5 < phi < 1.0
+
+
+def test_phi_draft_and_junk_tiers(tmp_path):
+    """The outer rungs: a grammar-clean OPEN draft grades 0.25; a
+    malformed junk file grades 0.0 (the #651 farm wall — junk never
+    lifts Φ)."""
+    draft_ws = _ws(tmp_path, "draft-ws")
+    _grammar_fact(draft_ws, "F700", "OPEN", claim_id="C-001", bare=True)
+    face = rl_state.fact_face(draft_ws)
+    assert face["verified"] == 0
+    assert face["weighted_fraction"] == 0.25
+
+    junk_ws = _ws(tmp_path, "junk-ws")
+    (junk_ws / "facts").mkdir(exist_ok=True)
+    (junk_ws / "facts" / "F701.md").write_text(
+        "junk prose, no frontmatter\n", encoding="utf-8")
+    junk = rl_state.fact_face(junk_ws)
+    assert junk["count"] == 1
+    assert junk["weighted_fraction"] == 0.0
 
 
 def test_transition_row_carries_phi_delta_and_claim_ref(tmp_path):
