@@ -855,7 +855,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: a19713fd442966d448d54764f21f6e20348f031cf6c5f4a781eee7fa3c96d92f
+    sha256: ef720839212b12cb4796993c14e5ae1bc291ca3f927a6f0e90fae16e9189ee53
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
@@ -1119,7 +1119,7 @@ files:
   - src: scripts/template_version.py
     dest: .claude/scripts/template_version.py
     kind: scaffold
-    sha256: 4adfe1b1619125bec0fce2a1062e7c0a98b1455a3e703464ed281f45995549b9
+    sha256: fc9cebed2a3a10eb8f6fa80881810c57195880cb6d4d4b55f50c1ce9348eb858
   - src: scripts/terminal_settlement.py
     dest: .claude/scripts/terminal_settlement.py
     kind: scaffold
@@ -1231,7 +1231,7 @@ files:
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
-    sha256: 8a97cf37bf9a946f69a3d698781ba458185e005effa8614253330d688ddf0b0a
+    sha256: 77a220ee2be5685093c2c9483d35fe16800df3eeb1e6ad6f02e8eff8c7eda750
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
