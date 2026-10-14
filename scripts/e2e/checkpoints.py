@@ -15,7 +15,8 @@ Encodes the runbook (.claude/e2e-runbook-source.md) exactly:
   C7  promotion (register_proven_gate), verdict, CONVERGED,
       completion_gate, settlement rows
   ORACLE  replay checker from the REPO tree (finding #3), VERDICT PASS +
-      min_pair_ratio 1.0 = the run's final verdict
+      min_pair_ratio 1.0 + the constraint-witness leg (verdict = witness
+      AND outcome) = the run's final verdict
 
 No silent degradation: every step's outcome lands in structured
 evidence; the first failure stops the pipeline (recorded, never retried).
@@ -31,7 +32,7 @@ import time
 import uuid
 from pathlib import Path
 
-from e2e import audit, evidence, llm_faces, model
+from e2e import audit, constraint_witness, evidence, llm_faces, model
 from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     IMPORT_ERRORS, RunContext, budget_ok as _guard_budget,
     family_of, new_run_id, parse_decision as _decide,
@@ -199,6 +200,24 @@ def build_goal_op_doc(anchors: dict[str, str]) -> dict:
             "parameters asserted without a fact file + evidence pointer "
             "do not count as done",
         ],
+        "constraint_witness": {
+            "schema": "constraint-witness/1",
+            "witnesses": {
+                "a re-implementation matching only the two __main__ probe "
+                "strings does not count as done": {
+                    "none": "probe-string matching leaves no separable "
+                            "runtime artifact at replay; the 12 fresh "
+                            "checker probes price this at the outcome "
+                            "layer",
+                },
+                "parameters asserted without a fact file + evidence "
+                "pointer do not count as done": {
+                    "none": "fact-file presence is gated by the "
+                            "promotion register, not separable from the "
+                            "candidate at oracle time",
+                },
+            },
+        },
         "diff_vs_verbatim": [
             "analysis material is the constructed eval target "
             "(target/derive.py), not a live binary sample",
@@ -2611,7 +2630,9 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
     text lines — no JSON on stdout, review F1); the observed replay pair
     ratio is derived from the evidence FILE the checker writes
     (faces.replay matched/count). Acceptance = VERDICT PASS + rc 0 +
-    observed ratio >= the task's required min_pair_ratio; a missing or
+    observed ratio >= the task's required min_pair_ratio + the declared
+    constraint-witness block evaluating clean (verdict = witness AND
+    outcome; an undeclared workspace warns and fails open); a missing or
     unreadable evidence file FAILs (the checker always writes it — no
     vacuous pass)."""
     candidate_events: list[dict] = []
@@ -2680,6 +2701,17 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
     if violations:
         status = model.FAIL
     detail["contamination_violations"] = violations
+    # the constraint-witness leg: verdict = witness AND outcome. A row
+    # whose declared check trips turns the oracle RED even with a green
+    # outcome; an undeclared workspace fails open with a warning (the
+    # hard refusal lives at intake + the dispatch gate).
+    witness = constraint_witness.evaluate(
+        Path(ctx.ws), ctx.repo,
+        run=lambda cmd, cwd: ctx.cmd(
+            cmd, cwd=cwd,
+            timeout=constraint_witness.WITNESS_TIMEOUT_S)[0])
+    detail["constraint_witness"] = witness
+    status = constraint_witness.joint(status, witness["status"])
     return _record(ctx, "ORACLE", "oracle", status, out.rc, out, ms,
                    detail, [candidate, checker])
 
