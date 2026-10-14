@@ -91,7 +91,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 9cb04909d8b60c8dfdc421c6daaac1c0b10ee9732251a069bf4e2e4b0a7ae1a6
+    sha256: d0389015f640d86212d2246583474626fcc01645232d1d083241588c9df7ad14
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -519,7 +519,7 @@ files:
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
-    sha256: d86c55b27a133d3866b9b83b0124bd8f546db52921f136d925f3e990d06b5f47
+    sha256: 1f4cb467d2be02a69c266fec34d07023d60ee56289e72694e0a2144851776f22
   - src: scripts/fact_contradiction_gate.py
     dest: .claude/scripts/fact_contradiction_gate.py
     kind: scaffold
@@ -559,7 +559,7 @@ files:
   - src: scripts/gate_telemetry.py
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
-    sha256: 3686389ae72c4b1e3cb9689b3b2e56f429d21b92981b388ff5afffee8ca7a3c8
+    sha256: 1da043603da9016b6976e36f689a278af603af1a89e7217fd1ee8cff5a98ed74
   - src: scripts/goal_operationalization.py
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
@@ -591,7 +591,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: c2b842d974a63661f81019404bd255c6d5b93bbefa4f27a7798fc8025a220929
+    sha256: 0c8bba6f4f2dd8e9d6df026442b44b09ace318592b37ed0f376284b7c63a35c1
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -599,7 +599,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: e1479a28c561b66ec27b3afb3ca26323859b371d7f8b0a20cb3864b4d54a0d8b
+    sha256: 3b9dcccc2d5604adc9b01a1833735b9b04652bcdf0eaee771c1636206c1fe17f
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
@@ -1207,7 +1207,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: 205dea9239e7d6d17441653d91f62afc4830061a3579ceaadaec7bd3495a340d
+    sha256: e783916feac0da859b267dbb31e86d6faf76bd20c9e328e306cfff9fc346e937
   - src: scripts/worker_death.py
     dest: .claude/scripts/worker_death.py
     kind: scaffold
@@ -1343,11 +1343,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 7ba30dc4c9e8d4ff061ef23c119a878a12e6c46d4dec5d11046622bce55d6044
+    sha256: 9d1f05f3f79087ca073cf72189d7202959c8e5a0d9bcc04d792284e018376ab0
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: edfb4ae1b5d43082da8c931fccb94935150acbfb068ccf4b73a54efa609db9fb
+    sha256: 10d3e66cf7d814bcb743c49de99ba4f101bed720a2b44acfee110ba9f19f89ca
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

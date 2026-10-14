@@ -167,7 +167,7 @@ files:
   scripts/experience_triples.py:
     r1: 1
   scripts/external_kicker.py:
-    r1: 32
+    r1: 34
   scripts/fact_contradiction_gate.py:
     r1: 1
   scripts/failure_analysis_gate.py:
@@ -178,6 +178,8 @@ files:
     r1: 2
   scripts/fixture_excerpt_lint.py:
     r1: 1
+  scripts/gate_telemetry.py:
+    r1: 2
   scripts/goal_operationalization.py:
     r1: 1
   scripts/guardian_kpi.py:
@@ -193,11 +195,11 @@ files:
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 80
+    r1: 83
   scripts/hook_exit_codes.py:
     r1: 6
   scripts/hooks_selfcheck.py:
-    r1: 38
+    r1: 40
   scripts/hypothesis_bridge.py:
     r1: 3
   scripts/hypothesis_seeder.py:
@@ -475,7 +477,7 @@ files:
   scripts/winrate_curve.py:
     r1: 3
   scripts/wire_up_settings.py:
-    r1: 27
+    r1: 30
   scripts/worker_death.py:
     r1: 9
   scripts/write_gate.py:
@@ -804,7 +806,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 30
+    r1: 32
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
@@ -976,7 +978,7 @@ files:
   tests/test_hook_registration_entry.py:
     r1: 9
   tests/test_hook_registry_singlesource.py:
-    r1: 19
+    r1: 23
   tests/test_hooks_resolve_workspace_delegation_865.py:
     r1: 3
     r2: 1
@@ -1453,6 +1455,8 @@ files:
   tests/test_subcommand_zeroarg_ux.py:
     r1: 7
     r2: 1
+  tests/test_substrate_wiring_683.py:
+    r1: 5
   tests/test_suite_health.py:
     r1: 1
     r2: 1

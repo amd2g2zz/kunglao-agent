@@ -18,7 +18,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 51
   hooks/worker_budget_gates.py: 124
-  hooks/worker_budget_sinks.py: 113
+  hooks/worker_budget_sinks.py: 116
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -112,14 +112,14 @@ files:
   scripts/event_taxonomy.py: 157
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
-  scripts/external_kicker.py: 37
+  scripts/external_kicker.py: 41
   scripts/failure_analysis_gate.py: 58
   scripts/feature_mining.py: 4
   scripts/feedback.py: 3
   scripts/fix_guard.py: 2
   scripts/formal_code_lint.py: 5
   scripts/gap_notes.py: 1
-  scripts/gate_telemetry.py: 1
+  scripts/gate_telemetry.py: 3
   scripts/goal_operationalization.py: 2
   scripts/guardian_kpi.py: 5
   scripts/harness_common.py: 2
@@ -129,7 +129,7 @@ files:
   scripts/heartbeat_touch.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
-  scripts/hooks_selfcheck.py: 59
+  scripts/hooks_selfcheck.py: 63
   scripts/hypothesis_bridge.py: 34
   scripts/hypothesis_seeder.py: 21
   scripts/hypothesis_store.py: 11
@@ -282,7 +282,7 @@ files:
   scripts/verify_status_watch.py: 4
   scripts/wait_dispose.py: 8
   scripts/winrate_curve.py: 5
-  scripts/wire_up_settings.py: 52
+  scripts/wire_up_settings.py: 59
   scripts/worker_death.py: 9
   scripts/workguard.py: 2
   scripts/write_gate.py: 12
