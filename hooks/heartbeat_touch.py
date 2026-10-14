@@ -15,7 +15,9 @@ Edit/Agent tool call — purely mechanical, zero thinking required. Any
 tool activity = the session is alive = OBSERVABLE activity, NOT the heartbeat.
 E2.3 semantic split: tick_ts (cron only, gates 35-min check) vs activity_ts (any tool, observation only). The cron
 tick remains for its REAL job: reconcile/ping/verifier supervision (the
-"what" — this hook proves "you're awake").
+"what" — this hook proves "you're awake"). #682(b) enforcement: the hook
+NEVER writes last_tick_ts (the pre-fix setdefault seeded it from
+activity_ts, so tool use masqueraded as ticks for legacy readers).
 
 Trigger wiring: PreToolUse matcher=Bash (or any matcher covering tool use).
 Registered by hook_activation.py --wire-up (v1.9.36).
@@ -125,7 +127,13 @@ def main() -> int:
         try:
             data = json.loads(hb.read_text(encoding="utf-8"))
             data["activity_ts"] = utc_now()
-            data.setdefault("last_tick_ts", data["activity_ts"])  # legacy readers
+            # #682(b): activity NEVER seeds the tick stream. The old
+            # setdefault("last_tick_ts", activity_ts) seeded the cron-owned
+            # field from tool activity on the reset-shaped state, so a
+            # human typing kept every last_tick_ts reader (monitor M5.2,
+            # external_kicker tick_fresh, resume) reading a dead cron as
+            # alive. last_tick_ts is written by the renew/registration tick
+            # only — this hook owns activity_ts alone.
             # F2 (#14): atomic write (tmp→replace) replaces bare write_text,
             # eliminating the RC3 concurrent race (no lost writes when the
             # orchestrator + N workers trigger this hook concurrently).
