@@ -1343,7 +1343,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 3c0ffba3b91863c4f7f5e9dca9adcd568aa5f2f363cfabb1ed58d8c4b124cd25
+    sha256: 93b7b3792841a42a1fb02f678163d58c980a378adb3a1c05b23fc82f3edb6f0a
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
