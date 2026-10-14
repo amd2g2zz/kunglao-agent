@@ -160,3 +160,4 @@ def test_joint_verdict_requires_witness_and_outcome(tmp_path):
     result2 = cw.evaluate(ws, repo=tmp_path)
     assert result2["status"] == cw.UNDECLARED, result2
     assert result2["warnings"]
+
