@@ -718,6 +718,63 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
         return False
 
 
+def _sample_reconciliation(ws, declared: str | None) -> dict:
+    """#691: what the RL sampler would choose for THIS dispatch — the
+    gate's own draw (rlvr.strategy_store.reconcile_declaration: the same
+    face ``method_lead`` renders, recomputed at dispatch time so nothing
+    the envelope says can move it) plus the declared family's propensity
+    under it. Fail-open to the all-None gap view: a sampler failure is
+    ONE rate-limited warn (error class only) and the dispatch proceeds —
+    telemetry never turns an ALLOW into anything else."""
+    gap = {"sampled_family": None, "propensity": None,
+           "prior_source": None, "deviates": False}
+    if not ws or not declared:
+        return gap
+    try:
+        from rlvr import strategy_store as _ss691  # noqa: PLC0415 — lazy
+        return _ss691.reconcile_declaration(ws, declared)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('method_family.sample_view', f'{type(exc).__name__}: {exc}')
+        return gap
+
+
+def _emit_sample_deviation(ws, cid, declared, view: dict,
+                           prompt: str) -> None:
+    """#691: the deviation from the sampler's draw is a RECORDED
+    decision, never a new gate (2026-10-14 acceptance amendment:
+    exception paths are decisions with recorded reasons, never a new
+    prefix bypass) — one ``sample_deviation`` event into the unified log
+    carrying the deviation's logged propensity, the sampler view it
+    deviated from, and the dispatch's own recorded reason when it
+    declared one (``agent-reasoning:`` — the prefix that excuses the
+    top-1 claim rank elsewhere never silences this record). Fail-open: a
+    logging failure never blocks the dispatch (one stderr note)."""
+    reason = None
+    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
+                  re.IGNORECASE)
+    if m:
+        reason = m.group(1).strip()[:200] or None
+    detail = json.dumps({
+        'declared': str(declared),
+        'sampled': view.get('sampled_family'),
+        'propensity': view.get('propensity'),
+        'prior_source': view.get('prior_source'),
+        'reason': reason,
+    }, ensure_ascii=False)
+    try:
+        if ws and _klog is not None:
+            _klog.emit(Path(ws), 'hook:worker_budget', 'sample_deviation',
+                       claim=cid, detail=detail,
+                       trace_id=_declared_trace_id(prompt))
+    except Exception as exc:  # noqa: BLE001 — logging never blocks dispatch
+        print(f'worker_budget: sample_deviation emit failed ({exc!r})',
+              file=sys.stderr, flush=True)
+    print(f'SAMPLE-DEV: declared {declared} != sampled '
+          f'{view.get("sampled_family")} '
+          f'(propensity={view.get("propensity")})',
+          file=sys.stderr, flush=True)
+
+
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
                         tools: list) -> tuple[int | None, str | None]:
@@ -737,7 +794,15 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     REJECT already emitted; token feeds the lifecycle row so the unified
     log is replay-re-indexable. Callers pass cid=None to skip (the leg
     fires only on a recognized dispatch shape — a plain Agent prompt is
-    not a kunglao dispatch and keeps the pre-#432 behavior)."""
+    not a kunglao dispatch and keeps the pre-#432 behavior).
+
+    #691: the validated declaration is ALSO reconciled against the
+    gate's own sampler draw (see _sample_reconciliation) — the usage
+    row carries propensity + sampled_family + prior_source, and a
+    deviation emits the recorded-decision ``sample_deviation`` event.
+    The reconciliation NEVER rejects (fail-open + warn): vocabulary
+    validation stays this gate's only REJECT face (2026-10-14
+    acceptance amendment — no new rule gate)."""
     if cid is None:
         return (None, None)
     if _mf432 is None:
@@ -761,12 +826,22 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
         return (_reject('methodfamily', mf_msg, paths), None)
+    # #691: the declaration reconciliation view (fail-open gap on any
+    # miss) rides the usage row — the recorded sample-vs-declared pair
+    # the issue measured absent from runs/method-family-log.jsonl.
+    view = _sample_reconciliation(paths.get('workspace'), mf_value)
     _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
-                            row_agent, tier, tools)
+                            row_agent, tier, tools,
+                            propensity=view.get('propensity'),
+                            sampled_family=view.get('sampled_family'),
+                            prior_source=view.get('prior_source'))
     mf_other = _mf432.parse_other_detail(mf_value)
     if mf_other is not None:
         _mf432.append_quarantine_row(paths.get('workspace'), cid,
                                      mf_other, row_agent)
+    if view.get('deviates'):
+        _emit_sample_deviation(paths.get('workspace'), cid, mf_value,
+                               view, prompt)
     return (None, mf_value)
 
 

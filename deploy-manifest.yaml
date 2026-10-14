@@ -91,7 +91,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: d0389015f640d86212d2246583474626fcc01645232d1d083241588c9df7ad14
+    sha256: 6aaf60f7be1bca385217f2f7aa17a82083f0e5fab4896ffcc28541ddaea57d3d
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -499,7 +499,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 51c10ef8eb0321e6ef1e16789abf2d29c8af5466165fee16be4fdabcaa784bb3
+    sha256: 1a7cfd35b7223e0a8d654a14c4fc7993d757e61ee94523937909c76ccb4d94be
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -791,7 +791,7 @@ files:
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold
-    sha256: 3143ff9fcb1776fa16b6d3daccc67794fa382c56cc8008a9fd2854c7d85796ed
+    sha256: c60b00f49d58ba49fd71799b0c0c8733ad2cb36fab57f186590a18daa3fc33bc
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -1319,7 +1319,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: a4a471577c6158f267236cd36bfa0e8dd7d236cbc99754889fab3e34e13dac1b
+    sha256: b4e768810177f66761848ecb963356620c30105c88d5b706c35acbf667a680b5
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1343,11 +1343,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 9d1f05f3f79087ca073cf72189d7202959c8e5a0d9bcc04d792284e018376ab0
+    sha256: 29bfea6fe2f95492bf420a5d787a696e191826dd3083c79a2e53a74aaf36b62d
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 10d3e66cf7d814bcb743c49de99ba4f101bed720a2b44acfee110ba9f19f89ca
+    sha256: fff1dc74995610ed382520891530b22de914a58f018dbd35fe6b2013b8a94b25
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

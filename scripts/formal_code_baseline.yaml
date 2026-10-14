@@ -18,7 +18,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 51
   hooks/worker_budget_gates.py: 124
-  hooks/worker_budget_sinks.py: 116
+  hooks/worker_budget_sinks.py: 122
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -109,7 +109,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 157
+  scripts/event_taxonomy.py: 158
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
   scripts/external_kicker.py: 41
@@ -169,7 +169,7 @@ files:
   scripts/mcp_probe.py: 41
   scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
-  scripts/method_families.py: 6
+  scripts/method_families.py: 7
   scripts/migrate_facts.py: 12
   scripts/mission_ledger.py: 27
   scripts/mission_stall.py: 10
@@ -233,7 +233,7 @@ files:
   scripts/rlvr/reward.py: 8
   scripts/rlvr/scalar.py: 26
   scripts/rlvr/state.py: 25
-  scripts/rlvr/strategy_store.py: 17
+  scripts/rlvr/strategy_store.py: 21
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14

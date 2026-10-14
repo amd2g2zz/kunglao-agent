@@ -313,10 +313,26 @@ class PosteriorStrategyStore:
         candidate set — the live store write (the settlement bank keys
         its row with the dispatch's own arm key) is only half a wire
         without this read face, and the warm pools need a candidate set
-        to ride or they never reach the draw."""
-        prior = self._proposal_prior()
+        to ride or they never reach the draw. #691: delegates to
+        ``method_sample`` — ONE draw implementation behind two faces (the
+        advisory lead string and the full reconciliation receipt), so
+        the lead the orchestrator reads and the gate's own draw can
+        never disagree on the same state."""
+        receipt = self.method_sample(state_fingerprint)
+        return str(receipt["family"]) if receipt else None
+
+    def method_sample(self, state_fingerprint: str) -> dict | None:
+        """#691: the full draw receipt behind ``method_lead`` — the SAME
+        prior chain (measured history → the explicit intake llm-prior →
+        the cross-task store), the SAME ``q_cells_seed_state`` seed, the
+        SAME sampler kwargs, plus the additive ``prior_source`` label
+        (history | llm_prior | store) so receipts distinguish a prior
+        the workspace earned from one it was TOLD. None = no candidates
+        anywhere — the honest cold gap, never a fabricated draw."""
+        prior, source = self.proposal_prior_labeled()
         if not prior:
             prior = self._store_prior()
+            source = "store" if prior else source
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
@@ -326,7 +342,31 @@ class PosteriorStrategyStore:
         kwargs.update(self._termination_kwargs(prior.keys()))
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
-        return str(receipt["family"])
+        receipt["prior_source"] = source
+        return receipt
+
+    def proposal_prior_labeled(self) -> tuple[dict[str, float], str]:
+        """#691 T3 — ``_proposal_prior``'s labeled face: (prior, source),
+        source ∈ {``history``, ``llm_prior``, ``none``}. ``history`` is
+        the workspace's measured declaration shares (the prior it
+        earned); ``llm_prior`` is the explicit runs/llm-prior.json
+        intake doc when no history exists (the prior it was TOLD) —
+        retired tokens filtered by the same registry wall as every other
+        prior face, share-normalized like any candidate set. Fail-open:
+        an unreadable intake doc is one rate-limited warn and the chain
+        continues empty (the loud-degrade posture of _registered_only)."""
+        prior = self._proposal_prior()
+        if prior:
+            return prior, "history"
+        try:
+            from rlvr import priors as _priors  # noqa: PLC0415 — lazy
+            seeded = _priors.intake_prior_weights(self.ws)
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.llm_prior",
+                 f"{type(exc).__name__}: {exc} (fail-open: no llm prior)")
+            seeded = {}
+        prior = _share(_registered_only(seeded or {}))
+        return (prior, "llm_prior") if prior else ({}, "none")
 
     def _store_prior(self) -> dict[str, float]:
         """The cross-task fallback candidate channel: families the keyed
@@ -500,6 +540,54 @@ def _row_outcome(row: dict) -> float:
     except (TypeError, ValueError):
         return 0.5
     return max(0.0, min(1.0, reward))
+
+
+def reconcile_declaration(ws, declared: str | None) -> dict:
+    """#691 — the dispatch-gate reconciliation view for ONE declared
+    method family: the gate's OWN sampler draw (the same face
+    ``method_lead`` renders, recomputed at dispatch time — anti-spoof:
+    nothing the envelope says can move it) plus the DECLARED family's
+    draw probability under it.
+
+    Returns ``{"sampled_family", "propensity", "prior_source",
+    "deviates"}`` — or the all-None gap view on every miss: no workspace,
+    no declaration, no proposal material (the honest cold gap), or any
+    failure (ONE rate-limited warn carrying the error class only).
+    Fail-open by design: telemetry never turns an ALLOW into anything
+    else. ``propensity`` is the sampler's draw probability of the
+    DECLARED family (0.0 when it is not a candidate at all — the draw
+    could never have chosen it; the honest number, not a gap)."""
+    gap = {"sampled_family": None, "propensity": None,
+           "prior_source": None, "deviates": False}
+    if not ws or not declared:
+        return gap
+    try:
+        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
+        store = PosteriorStrategyStore(ws)
+        fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
+        receipt = store.method_sample(fp)
+        if receipt is None:
+            return gap
+        sampled = str(receipt.get("family") or "").strip() or None
+        weights: dict[str, float] = {}
+        for fam, cand in (receipt.get("candidates") or {}).items():
+            try:
+                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
+            except (TypeError, ValueError):
+                weights[str(fam)] = 0.0
+        total = sum(weights.values())
+        propensity = (round(weights.get(str(declared), 0.0) / total, 6)
+                      if total > 0.0 else None)
+        return {
+            "sampled_family": sampled,
+            "propensity": propensity,
+            "prior_source": receipt.get("prior_source"),
+            "deviates": bool(sampled) and str(declared) != sampled,
+        }
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn("strategy_store.reconcile_declaration",
+             f"{type(exc).__name__}: {exc}")
+        return gap
 
 
 def load_store(ws) -> "PosteriorStrategyStore":
