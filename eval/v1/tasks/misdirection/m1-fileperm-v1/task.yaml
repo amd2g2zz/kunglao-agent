@@ -36,6 +36,7 @@ checker:
   - converged
   thresholds:
     min_evidence_entries: 1
+  candidate: verdict.json
 ground_truth:
   file: ground_truth.json
   space_bits: 256

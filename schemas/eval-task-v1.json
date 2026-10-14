@@ -89,6 +89,11 @@
               "type": "number", "exclusiveMinimum": 0, "maximum": 1
             }
           }
+        },
+        "candidate": {
+          "description": "ws-relative contract path of the graded candidate artifact (#681 D-681.2; the suffix must match the family contract in eval_contract).",
+          "type": "string",
+          "minLength": 1
         }
       }
     },
