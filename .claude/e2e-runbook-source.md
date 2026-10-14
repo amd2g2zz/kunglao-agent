@@ -97,6 +97,9 @@ goal-operationalization.yaml at WS root and fill FROM the verbatim task:
        not count as done"
     - "parameters asserted without a fact file + evidence pointer do not count
        as done"
+  constraint_witness:            # every not_done row binds one witness
+    schema: constraint-witness/1 # (exactly one of check: / none: — the
+    witnesses: {..}              #  ORACLE verdict = witness AND outcome)
   diff_vs_verbatim: ["analysis material is the constructed eval target
        (target/derive.py), not a live binary sample"]
   generalization: required          # goal says "on arbitrary inputs";

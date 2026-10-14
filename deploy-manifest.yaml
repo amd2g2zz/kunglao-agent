@@ -563,7 +563,7 @@ files:
   - src: scripts/goal_operationalization.py
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
-    sha256: c86cfa266c7d526479e73317f9d73c4e54231125a7e7378578c708a288ed81d5
+    sha256: a5c2db641e10f7e94523f91af9e29a64d86479d1e9f0c5c8cfa16d6e6ff94f21
   - src: scripts/guardian_kpi.py
     dest: .claude/scripts/guardian_kpi.py
     kind: scaffold
@@ -579,7 +579,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 9ca6a33891acaeef8f17d3d6b4d08eb6a42967208b5b01d3232bb79f02ff1aa2
+    sha256: 7ffe9ae583310e9c175beff56eba3c8782e46145ccd1879c4bdf3386ac631e63
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -675,7 +675,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 5b061541498cda4ef76214cae3e14cdb796362cc994738bfbeb374209bfe1540
+    sha256: 3d89060ff09c0a0d1e63ee907e21e9e04add7b291424e5c102514aa71ece5048
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1907,7 +1907,7 @@ files:
   - src: templates/state/goal-operationalization.yaml
     dest: .claude/templates/state/goal-operationalization.yaml
     kind: asset
-    sha256: 794ea0e6b2485235c26814da116951d218252b279780ba351ed22a9bea974d3f
+    sha256: bd4d41c1de0469448e4c6e1db7f127154a193a3f2613b57360fc36505757e716
   - src: templates/state/task-oracle.yaml
     dest: .claude/templates/state/task-oracle.yaml
     kind: asset
