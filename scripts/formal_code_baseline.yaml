@@ -76,10 +76,10 @@ files:
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 103
+  scripts/e2e/checkpoints.py: 108
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 17
-  scripts/e2e/model.py: 4
+  scripts/e2e/model.py: 7
   scripts/e2e/runtime.py: 11
   scripts/emit_gate.py: 12
   scripts/encoding_lint.py: 4
@@ -98,7 +98,7 @@ files:
   scripts/eval_contract.py: 3
   scripts/eval_control_arm.py: 4
   scripts/eval_crypto.py: 4
-  scripts/eval_dataset.py: 13
+  scripts/eval_dataset.py: 14
   scripts/eval_loop_runner.py: 36
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
@@ -108,7 +108,7 @@ files:
   scripts/eval_targets.py: 12
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
-  scripts/eval_toolflex.py: 5
+  scripts/eval_toolflex.py: 6
   scripts/event_taxonomy.py: 157
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
