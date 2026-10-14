@@ -98,11 +98,11 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 77
+    r1: 82
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
-    r1: 6
+    r1: 9
   scripts/e2e/runtime.py:
     r1: 6
   scripts/emit_gate.py:
@@ -140,7 +140,7 @@ files:
   scripts/eval_crypto.py:
     r1: 1
   scripts/eval_dataset.py:
-    r1: 3
+    r1: 4
   scripts/eval_loop_runner.py:
     r1: 9
   scripts/eval_native_sources.py:
@@ -158,7 +158,7 @@ files:
   scripts/eval_tf_shadow.py:
     r1: 1
   scripts/eval_toolflex.py:
-    r1: 1
+    r1: 2
   scripts/event_taxonomy.py:
     r1: 118
     r2: 1
@@ -635,6 +635,8 @@ files:
     r1: 5
   tests/test_compat_removal_863d.py:
     r1: 7
+  tests/test_completion_681.py:
+    r1: 1
   tests/test_completion_gate.py:
     r1: 14
   tests/test_completion_gate_optout.py:

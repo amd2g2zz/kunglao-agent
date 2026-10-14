@@ -447,7 +447,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: e9c7f26df08efc4d3d7aa07c1454e929cc8585451af98a81d4ab46172e7132ae
+    sha256: f128c891003bb15b52864bab86b0391b6e1c43e26a75c76c7a09a5f207bc3e97
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -495,7 +495,7 @@ files:
   - src: scripts/eval_toolflex.py
     dest: .claude/scripts/eval_toolflex.py
     kind: scaffold
-    sha256: a077d7425a44e931e142d16603d18bdc6fe457481d820225ed1607c567c31cb4
+    sha256: 2455a5c5edfe09b8ad78caf9e9ad269b77e832349bcb6a738fb4ca450ad1f7c5
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
@@ -1347,7 +1347,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 8cf6e24aa2e0eb9d2b8cbe96a3b4ec7ec7354d0977a3e9e70788d668fbdc44e7
+    sha256: 2ea8c451dec1c7855253144e2633eb5c90f690a102e7b7b32c0c3d06bcb5ae58
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
