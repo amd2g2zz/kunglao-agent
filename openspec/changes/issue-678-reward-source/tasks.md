@@ -63,7 +63,7 @@
 ## 7. Verification
 
 - [x] `uv run ruff check` clean on all changed files
-- [x] targeted suites green: 678 (11), state-396, cert-651, incr-539,
+- [x] targeted suites green: 678 (13), state-396, cert-651, incr-539,
   q-cells-429, round-credit 433/438, scalar-379, reward-366,
   transitions-550, launch-stash/schema-wall-654, absorb-597,
   censored-548, ope-654, dispatch-704, rc1-601 + the remaining

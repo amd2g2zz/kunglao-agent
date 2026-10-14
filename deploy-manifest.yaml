@@ -1043,7 +1043,7 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: d6ed12c3573255af5121d4c12c7ee0be55f0915a6a490c94e7b4ae3350bbbe1c
+    sha256: 96b3b410be5559d45e347a259b485f8fba717502d413f0426fe4dd112835f879
   - src: scripts/script_harvest.py
     dest: .claude/scripts/script_harvest.py
     kind: scaffold
@@ -1055,7 +1055,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: ae9f04d4183712c0acce01bc6b288ee799df9d9f7970fe754cd845e7f0127141
+    sha256: 5317882f6f29aa2fa490636cddcd3573c0b1686e620f37f1766097841e96148c
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1259,7 +1259,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: d834ec49498c481b18ce82287dd71cbe074a3d25705a058eeb1b0060b1864a46
+    sha256: 76b894a18e7ea53563d241682eb2767027480d41b2771f8cb6f1cd39f0a63f74
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1295,7 +1295,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 59d1060d4be7e8afba22c4cf4b13206132e81a953efaff0cddad752dcf3b1d2b
+    sha256: 91056b2f7f2249b4ee00280efd9593e907313ce0fc2cbb5c73d2020bc3e73753
   - src: scripts/rlvr/refutation_fold.py
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
@@ -1307,11 +1307,11 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 1cf21caa43ce1de1e23d382f7aa31fd65315cd96d28360e468f2d7f722735afa
+    sha256: cba9d54ace17a673810cecab87ca84a8dda22ad00758b9e079e9ab826a0bd1a5
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: ac252ee765a55bfabe458e96ae1350e49360d83c36d73e812e8abd10081da792
+    sha256: 3c1ae39ef54898cec301fb4eae404ea83b07aa60cf25477b7fe6c9ad8e4c3502
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
