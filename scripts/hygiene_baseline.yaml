@@ -370,7 +370,7 @@ files:
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
-    r1: 8
+    r1: 9
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -386,9 +386,9 @@ files:
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
-    r1: 1
+    r1: 2
   scripts/rlvr/state.py:
-    r1: 1
+    r1: 5
   scripts/rlvr/strategy_store.py:
     r1: 9
   scripts/rlvr/triples.py:
@@ -875,6 +875,8 @@ files:
     r1: 1
   tests/test_external_kicker.py:
     r1: 13
+  tests/test_fact_certification_651.py:
+    r1: 1
   tests/test_fact_contradiction_gate.py:
     r1: 6
   tests/test_fact_expected_binding.py:
@@ -1316,6 +1318,9 @@ files:
     r1: 10
   tests/test_reward_settlement_366.py:
     r1: 1
+  tests/test_reward_source_678.py:
+    r1: 4
+    r2: 1
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:
