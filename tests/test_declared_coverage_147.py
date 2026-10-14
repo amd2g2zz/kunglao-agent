@@ -92,6 +92,15 @@ def _goal_op_doc(generalization: str = "required",
             "the client generates valid output for never-captured inputs"],
         "acceptance": ["oracle cases pass on fresh-input generation"],
         "not_done": ["a replay of captured traffic does not count as done"],
+        "constraint_witness": {
+            "schema": go.WITNESS_SCHEMA,
+            "witnesses": {
+                "a replay of captured traffic does not count as done": {
+                    "none": "replay-only traffic is priced by the "
+                            "declared coverage gate at the case layer",
+                },
+            },
+        },
         "diff_vs_verbatim": [
             "translated the verbatim ask into mechanically checkable lists"],
         "probe_cases": ["fresh-input: generate valid output for a "
