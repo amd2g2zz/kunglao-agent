@@ -83,15 +83,15 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: c89f2e02aad45861d71e247481e85a6ea468541349330a713c43c8d7166e0b7e
+    sha256: aea0313f3d55625f7fbfbc58678a7e276a35da80eeac07d94546efbde4d9287b
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: ea5bbe6607716a2eaa9ce02b6fd02de8934c779f11ac80da5b5c947d9059aa83
+    sha256: 7649a25752e8dc049e1e64e1d27b68dc5c30e6d056eee24ebff728ae205c6e89
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: d93163378be37e55a4dba3f03f2faa34f31e7cad23cdd5eacdbba1a4260c0910
+    sha256: 9cb04909d8b60c8dfdc421c6daaac1c0b10ee9732251a069bf4e2e4b0a7ae1a6
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -891,7 +891,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 7f1b7f399378f0bcf91a9bc2aee9a97ed59000b3eb8e12a95943e5173ba0b917
+    sha256: 17a384fb31614052905d8823707c647856706fa081d764dbb3930bfd0f942287
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
