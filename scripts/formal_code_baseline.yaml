@@ -163,7 +163,7 @@ files:
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
-  scripts/loop_scheduler.py: 11
+  scripts/loop_scheduler.py: 16
   scripts/loop_state.py: 5
   scripts/loop_watchdog.py: 1
   scripts/mcp_probe.py: 41

@@ -767,7 +767,7 @@ files:
   - src: scripts/loop_scheduler.py
     dest: .claude/scripts/loop_scheduler.py
     kind: scaffold
-    sha256: 0768519c6f8ad9e667813121f1d3e32e2ebd563e11aba048accdb4d4fb19fd64
+    sha256: cb44c6023916b399b8a74389f1c61f5b1e49d43708cdf983ff256cb35508773e
   - src: scripts/loop_state.py
     dest: .claude/scripts/loop_state.py
     kind: scaffold
@@ -1343,11 +1343,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 5315f6c08594c6c5e95c87410a089e059f308b826a273d6c5b6e2832d9180553
+    sha256: 7ba30dc4c9e8d4ff061ef23c119a878a12e6c46d4dec5d11046622bce55d6044
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 24bdb2119fb3b11307a1a752a71ac9acac6cdf4ca0c52814dc62e9ef0595a277
+    sha256: edfb4ae1b5d43082da8c931fccb94935150acbfb068ccf4b73a54efa609db9fb
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

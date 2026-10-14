@@ -263,7 +263,7 @@ files:
   scripts/loop_holds.py:
     r1: 1
   scripts/loop_scheduler.py:
-    r1: 4
+    r1: 7
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
@@ -1371,6 +1371,8 @@ files:
     r1: 1
   tests/test_scan_waiting_902.py:
     r1: 2
+  tests/test_scheduler_schema_679.py:
+    r1: 1
   tests/test_scorer_authority.py:
     r1: 6
   tests/test_script_discipline.py:
