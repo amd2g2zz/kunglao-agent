@@ -43,7 +43,7 @@ files:
   scripts/blind_gate.py:
     r1: 23
   scripts/cadence_advisor.py:
-    r1: 4
+    r1: 5
   scripts/calibration_face.py:
     r1: 2
   scripts/calibration_gate.py:
@@ -480,6 +480,8 @@ files:
     r1: 30
   scripts/worker_death.py:
     r1: 9
+  scripts/workguard.py:
+    r1: 3
   scripts/write_gate.py:
     r1: 10
   scripts/write_guard_unlock.py:
@@ -1091,6 +1093,8 @@ files:
     r1: 9
   tests/test_liveness_policy_597.py:
     r1: 4
+  tests/test_liveness_triad_682.py:
+    r1: 5
   tests/test_load_lock.py:
     r1: 1
   tests/test_loader_delegation_863b.py:

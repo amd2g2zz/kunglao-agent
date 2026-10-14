@@ -35,7 +35,7 @@ files:
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
-    sha256: b4ed563f8f9040ef62abce442340e3fc030f9945a581ff5c9e7553187af6dc37
+    sha256: 51a1f006dc7b091f8bda7e3398bb2a76a0f3f18e75a04ec32d14cbe9ee856307
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
@@ -247,7 +247,7 @@ files:
   - src: scripts/cadence_advisor.py
     dest: .claude/scripts/cadence_advisor.py
     kind: scaffold
-    sha256: 6fa6190c20ce5aa912fe220dc1a9188cb37ccac2bb26becdd55770559219c50a
+    sha256: 94753dc755da5c1f493d1d8bab51e404e067e10de0a2a409ee321b3d3b198a5e
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: scripts/workguard.py
     dest: .claude/scripts/workguard.py
     kind: scaffold
-    sha256: 43bf0508b96a9ff306589f9694855d59297f6333f406f288b789c88ddd693f96
+    sha256: a9c3ad6acb2a664c339a43d9c6e058377e120e45a5d65b96d93cd44529bde456
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
@@ -1343,11 +1343,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 30c703424ab6ba3d077b0c4a206c6b0aaa688b8dec4fa8acd65b373da5509b73
+    sha256: e62446532ad3e61387f87ff32f458c60b96d5d388b7d47e1cb31983ad87d9716
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: fff1dc74995610ed382520891530b22de914a58f018dbd35fe6b2013b8a94b25
+    sha256: e0cadee6af2c766acea048f435515c6e9f55067d2df464f554d2d2bf4bc1be4d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

@@ -6,7 +6,7 @@ files:
   hooks/cost_input_capture.py: 2
   hooks/dispatch_gate.py: 209
   hooks/env_check_gate.py: 30
-  hooks/heartbeat_touch.py: 22
+  hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
@@ -46,7 +46,7 @@ files:
   scripts/bench_tokens.py: 2
   scripts/blind_gate.py: 4
   scripts/blocker_lint.py: 2
-  scripts/cadence_advisor.py: 7
+  scripts/cadence_advisor.py: 9
   scripts/calibration_face.py: 10
   scripts/calibration_gate.py: 1
   scripts/carrier_consistency.py: 3
@@ -284,7 +284,7 @@ files:
   scripts/winrate_curve.py: 5
   scripts/wire_up_settings.py: 59
   scripts/worker_death.py: 9
-  scripts/workguard.py: 2
+  scripts/workguard.py: 6
   scripts/write_gate.py: 12
   scripts/write_guard_unlock.py: 2
   scripts/ws_layout.py: 11
