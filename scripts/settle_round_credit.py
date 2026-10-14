@@ -106,6 +106,58 @@ def _linked_case_ids(ws: Path, pq: str) -> list[str]:
     return out
 
 
+# issue-678 T5 — the oracle-arm arming fields: a case doc carrying ALL
+# five (non-empty) is ARMED — loadable and mutation-checkable by the
+# runner, linkable by this pass's posterior leg. A thinner doc is
+# readable but not armed. The armed count is what makes the live silent
+# gap LOUD: oracle/cases/ never existed in the workspace the issue
+# sampled, so runs/posteriors.yaml was never created and no case
+# posterior ever moved — invisibly.
+CASE_ARMING_FIELDS = ("channel", "hypothesis_ref", "update_map",
+                      "expected", "mutations")
+
+
+def _arming_field_present(doc: dict, field: str) -> bool:
+    """One arming field non-empty: ``expected`` must carry a non-empty
+    ``evidence_refs`` list; mappings/lists must be non-empty; scalars
+    must be non-blank strings."""
+    value = doc.get(field)
+    if field == "expected":
+        return (isinstance(value, dict)
+                and bool(value.get("evidence_refs")))
+    if isinstance(value, (dict, list)):
+        return bool(value)
+    return bool(str(value or "").strip())
+
+
+def armed_case_ids(ws: Path) -> set[str]:
+    """Case ids whose oracle/cases/*.yaml doc is ARMED (every field in
+    CASE_ARMING_FIELDS present and non-empty). Deterministic file order;
+    a broken or non-mapping case doc is skipped (an unreadable case is
+    never armed). Fail-open: never raises into the tick."""
+    import yaml
+
+    cdir = Path(ws) / "oracle" / "cases"
+    if not cdir.is_dir():
+        return set()
+    out: set[str] = set()
+    for path in sorted(cdir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(
+                path.read_text(encoding="utf-8", errors="replace")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if not all(_arming_field_present(doc, f)
+                   for f in CASE_ARMING_FIELDS):
+            continue
+        cid = str(doc.get("id") or path.stem).strip()
+        if cid:
+            out.add(cid)
+    return out
+
+
 def record_case_settlements(ws: Path, banked: list[str]) -> dict:
     """The ranker's live posterior-update leg: for every dispatch this
     pass newly banked, record ONE Bernoulli observation per linked oracle
@@ -167,11 +219,16 @@ def _round_credit_pass(ws: Path, dispatches: list[dict], *,
     per dispatch. Telemetry posture: any failure inside degrades to an
     error field, never a crash (the tick must not die)."""
     try:
-        from rlvr.scalar import fact_artifacts
+        from rlvr.scalar import backfill_artifact_creators, fact_artifacts
         artifacts = fact_artifacts(ws)
         if dry_run:
             from rlvr.scalar import round_credit
-            doc = round_credit(dispatches, artifacts, [])
+            # the SAME backfill the settle path applies, so the dry-run
+            # grade matches what a real pass would settle (issue-678 T3)
+            dispatch_ids = [str(d.get("dispatch_id") or "")
+                            for d in dispatches]
+            graded = backfill_artifact_creators(artifacts, dispatch_ids)
+            doc = round_credit(dispatches, graded, [])
             return {"settled": 0, "rounds": len(dispatches),
                     "artifacts": len(artifacts), "dry_run": True,
                     "would_settle": len(doc.get("rows") or []),
@@ -234,6 +291,16 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     claims = terminal_claims(ws)
     dispatches = [{"dispatch_id": cid, "round": i + 1}
                   for i, cid in enumerate(claims)]
+    # issue-678 T5: the armed-case count rides EVERY pass (dry included)
+    # — zero armed cases is the silent gap that kept
+    # runs/posteriors.yaml from ever existing, now loud
+    armed = armed_case_ids(ws)
+    if not armed:
+        warn("settle_round_credit.run",
+             "no armed oracle cases (oracle/cases/*.yaml missing or "
+             "lacking the arming fields channel/hypothesis_ref/"
+             "update_map/expected.evidence_refs/mutations) — case "
+             "posteriors never move (issue-678 T5)")
     if dispatches:
         out = _round_credit_pass(ws, dispatches, dry_run=dry_run)
         banked = [str(d) for d in (out.pop("banked", None) or [])]
@@ -246,6 +313,7 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     else:
         out = {"settled": 0, "rounds": 0,
                "reason": "no terminal claims - nothing to settle"}
+    out["cases_armed"] = len(armed)
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:
