@@ -367,6 +367,8 @@ files:
     r1: 1
   scripts/rlvr/compose.py:
     r1: 5
+  scripts/rlvr/consolidated_ledger.py:
+    r1: 3
   scripts/rlvr/expansion.py:
     r1: 2
   scripts/rlvr/feature_prior.py:
@@ -1085,6 +1087,8 @@ files:
     r1: 6
   tests/test_launch_stash_integrity_654.py:
     r1: 2
+  tests/test_ledger_consolidation_721.py:
+    r1: 1
   tests/test_ledger_settlement_8.py:
     r1: 2
   tests/test_ledger_stdlib_584.py:

@@ -1260,6 +1260,10 @@ files:
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
     sha256: 30e0753991520b1b585730dffa9c069b67ef09907764523c115779a196cf932a
+  - src: scripts/rlvr/consolidated_ledger.py
+    dest: .claude/scripts/rlvr/consolidated_ledger.py
+    kind: scaffold
+    sha256: 382ea7195ea561dff272905edcb1b18d7f8460b47c86912623e1a91ddd7e0878
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1379,11 +1383,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: aae820731c15a56d3e417db044be4f9658f9753d5c7948914a1278874c038ac3
+    sha256: c4b27e91d51c768928a9e20eda31c58e17aaa0b5518e51732d6499764e5d53b0
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: b039b8c59ae39a9f68df990f9cc17863c10ae0a8eb97d9011d4a71926fe5dd46
+    sha256: c0ac46698daeed1a20e3468661f7249e626c597d7d16c013c242751369a92757
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

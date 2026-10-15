@@ -219,6 +219,7 @@ files:
   scripts/rlvr/__init__.py: 30
   scripts/rlvr/censored_review.py: 2
   scripts/rlvr/compose.py: 17
+  scripts/rlvr/consolidated_ledger.py: 5
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 17
