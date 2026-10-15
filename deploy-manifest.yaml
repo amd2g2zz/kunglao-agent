@@ -171,7 +171,7 @@ files:
   - src: scripts/action_space.py
     dest: .claude/scripts/action_space.py
     kind: scaffold
-    sha256: 6428a81c7e47d70f1075aa9f9f9ebc293c378cc5754b5bb65a08465d8727d885
+    sha256: 07ea5e7ce9a2aa01c77db6f230bfea9c514b34a95e972a4221a309effac8b489
   - src: scripts/active_intervention.py
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
