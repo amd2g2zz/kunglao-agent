@@ -352,6 +352,14 @@ def _phi_delta_of(row: dict) -> float:
     return float(pd)
 
 
+def _admits_to_posterior(row: dict) -> bool:
+    """#705 agent-level credit: verification credit CONFIRMS existing
+    knowledge — it is recorded (the audit trail) but is inadmissible to
+    the Beta posterior (success, failure AND n_pending). Absent or any
+    other credit_kind is the solve path (bit-identical to pre-#705)."""
+    return str(row.get("credit_kind") or "solve") != "verification"
+
+
 def tiebroken_credit(credit: float, phi_delta) -> float:
     """The #548 tiebreaker on the credit read: clamp01(credit +
     PHI_TIEBREAK_WEIGHT · phi_delta). phi_delta=0/None is bit-identical
@@ -413,10 +421,17 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     (0, OBSERVATION_BAND_CEIL] adds no cell mass — success and failure
     stay put (the information option is an observation, never a
     verdict); a genuine 0.0 still trains failure. The band keys on the
-    raw settled credit; the tiebreaker only refines admissible rows."""
+    raw settled credit; the tiebreaker only refines admissible rows.
+
+    #705 agent-level credit: rows carrying
+    ``credit_kind: "verification"`` are inadmissible — they contribute
+    to neither success, failure, nor n_pending (verification confirms
+    knowledge, it never produces it). Absent credit_kind is the solve
+    path, bit-identical."""
     schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
-            if isinstance(r, dict) and _credit_of(r) is not None]
+            if isinstance(r, dict) and _credit_of(r) is not None
+            and _admits_to_posterior(r)]
     n = len(rows)
     gammas = [0.0] * n
     for i, row in enumerate(rows):
@@ -454,6 +469,8 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     for row in store.observations():
         if not isinstance(row, dict) or _credit_of(row) is not None:
             continue
+        if not _admits_to_posterior(row):
+            continue          # #705: verification rows are never pending
         key = (str(row.get("signature_hash") or ""),
                _action_key_of(row))
         cell = cells.get(key) or CellCounts(key[0], key[1])
@@ -470,7 +487,8 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
 def cell_posterior(fold_view: Fold, signature_hash: str,
                    family: str, *,
                    feature_pool=None, warm_pool=None,
-                   arm_key: str | None = None) -> tuple[float, float]:
+                   arm_key: str | None = None,
+                   negative_pool=None) -> tuple[float, float]:
     """The SHRUNK Beta posterior used for sampling — (alpha, beta).
 
     Anchor = the family's global aggregate LEAVE-ONE-OUT (this cell's
@@ -483,6 +501,23 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     family key (old logs — the dual-write tolerance) POOLS into the
     local mass, and the leave-one-out anchor subtracts BOTH, so a
     key-addressed read never self-echoes its own family-grain history.
+
+    #705 MARL: a 5-dim agent-conditioned key (…|agent) reads its OWN
+    cell as local mass and does NOT pool the same-arm 4-dim cell into
+    local — every peer's mass (other agents, the untyped pool) stays in
+    the leave-one-out anchor, so knowledge transfers through the
+    warm-start prior, never through forced pooling. The anchor is
+    family_aggregate − local, so a cold agent cell inherits its peers
+    by construction.
+
+    ``negative_pool`` (#705, class-level dead ends): a duck-typed pool
+    whose FAILURE mass is added to the anchor face under the SAME single
+    SHRINK_CAP as every other anchor source. The guaranteed effect is a
+    HIGHER β — the borrowed anchor is a failure pseudo-count, never a
+    deletion — but the mean does NOT always fall: the anchor's own mean
+    is (BASE_ALPHA + s_anchor)/(BASE_ALPHA + BASE_BETA + n_anchor), so a
+    cell whose failures already sit below that mean can see a slight
+    lift. Absent/None is bit-identical to the pre-change kernel.
 
     ``feature_pool`` (#460 Part B, predict-before-try) and ``warm_pool``
     (#545, the cross-task posterior store) are optional duck-typed
@@ -498,7 +533,11 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
         (signature_hash, arm_key or family),
         CellCounts(signature_hash, family))
     s_local, f_local = cell.success, cell.failure
-    if arm_key and arm_key != family:
+    # #539/#545 legacy tolerance: a 4-dim key pools the bare family cell
+    # into local (and the leave-one-out anchor subtracts both). A 5-dim
+    # agent key skips this — the same-arm mass stays ANCHOR (prior),
+    # never this agent's own evidence.
+    if arm_key and arm_key != family and not _is_agent_key(arm_key):
         legacy = fold_view.cells.get((signature_hash, family))
         if legacy is not None:
             s_local += legacy.success
@@ -512,6 +551,9 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     if warm_pool is not None:
         s_anchor += float(warm_pool.success)
         f_anchor += float(warm_pool.failure)
+    if negative_pool is not None:
+        s_anchor += float(negative_pool.success)
+        f_anchor += float(negative_pool.failure)
     n_anchor = s_anchor + f_anchor
     if n_anchor <= 0.0:
         return (BASE_ALPHA + s_local, BASE_BETA + f_local)
@@ -627,7 +669,8 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                          feature_table=None,
                          death: Mapping | None = None,
                          warm_pools: Mapping | None = None,
-                         arm_context: Mapping | None = None) -> dict:
+                         arm_context: Mapping | None = None,
+                         negative_pools: Mapping | None = None) -> dict:
     """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
@@ -671,7 +714,15 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     start is traceable, 逐句可归因. ``arm_context`` (recipe/verif/tier —
     the dispatch meta) keys the per-candidate cell read at the 4-dim
     arm_key; candidates carry an additive ``arm_key`` receipt field.
-    Both None (default) = the pre-#545 sampler, byte-identical."""
+    Both None (default) = the pre-#545 sampler, byte-identical.
+
+    #705 MARL: ``arm_context`` may carry an ``agent_type`` (the 5th arm
+    key dim) so each worker type samples from its OWN cell, and
+    ``negative_pools`` ({family → duck-typed pool} of CLASS-LEVEL dead
+    ends, rlvr.marl.negative_pools) adds failure mass to the anchor
+    face under the same SHRINK_CAP — candidates with contributing
+    negative rows carry an additive ``negative_knowledge`` receipt
+    block. Both absent = the pre-#705 sampler, byte-identical."""
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
     schedule = _resolve_schedule(gamma)
@@ -692,12 +743,14 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                              or "facts_snapshot"),
                          str(arm_context.get("verification_mode")
                              or "none"),
-                         arm_context.get("tier", 0))
+                         arm_context.get("tier", 0),
+                         arm_context.get("agent_type"))
         warm = (warm_pools or {}).get(family)
+        neg = (negative_pools or {}).get(family)
         alpha, beta = cell_posterior(
             fold_view, sig, family,
             feature_pool=pools.get(family) if pools else None,
-            warm_pool=warm, arm_key=ak)
+            warm_pool=warm, arm_key=ak, negative_pool=neg)
         child = random.Random(f"qcell/{base}/{family}")
         theta = child.betavariate(alpha, beta)
         multiplier, death_doc = _death_multiplier(death, family)
@@ -729,6 +782,13 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                 "success": round(warm.success, 9),
                 "failure": round(warm.failure, 9),
                 "rows": warm.rows,
+            }
+        if neg is not None and neg.rows > 0:
+            # additive block — #705 class-level dead end, traceable
+            cand["negative_knowledge"] = {
+                "success": round(neg.success, 9),
+                "failure": round(neg.failure, 9),
+                "rows": neg.rows,
             }
         cand_doc[family] = cand
     # numpy adoption (issue 420 Phase 2, README rule 1): the sampling
@@ -815,15 +875,38 @@ def _append_row(path: Path, row: dict) -> bool:
 
 
 def arm_key(method_family: str, context_recipe: str,
-            verification_mode: str, tier) -> str:
+            verification_mode: str, tier, agent_type: str | None = None
+            ) -> str:
     """#539 WS1: the 4-dim arm key (family|recipe|verif|tier) — the
     anti-explosion compromise: tool_sequence/budget/control ride as
-    feature columns, never as key dimensions. Tier buckets to int."""
+    feature columns, never as key dimensions. Tier buckets to int.
+
+    #705 MARL: a NON-EMPTY ``agent_type`` appends a fifth segment
+    (family|recipe|verif|tier|agent) so each worker type addresses its
+    OWN Beta cell. A falsy agent type produces the exact pre-#705
+    4-dim string — the determinism wall (test_action_space_539 pins it;
+    every golden that pins an arm key stays byte-identical)."""
     try:
         t = int(tier)
     except (TypeError, ValueError):
         t = 0
-    return f"{method_family}|{context_recipe}|{verification_mode}|{t}"
+    base = f"{method_family}|{context_recipe}|{verification_mode}|{t}"
+    agent = str(agent_type).strip() if agent_type is not None else ""
+    return f"{base}|{agent}" if agent else base
+
+
+def agent_of_action(action_key: str) -> str | None:
+    """#705 MARL: the AGENT part of a consumed action key — the fifth
+    segment of a 5-dim key, or None for a legacy 4-dim/family key."""
+    parts = str(action_key or "").split("|")
+    return parts[4] if len(parts) >= 5 and parts[4] else None
+
+
+def _is_agent_key(action_key: str) -> bool:
+    """True for a 5-dim agent-conditioned key (the #705 local-mass
+    carve-out: a 5-dim read never pools a same-arm 4-dim cell into
+    local — sharing rides the anchor, never forced pooling)."""
+    return len(str(action_key or "").split("|")) >= 5
 
 
 def append_observation(ws, signature_hash: str, method_family: str,
@@ -835,12 +918,17 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        fingerprint: str | None = None,
                        arm_key_col: str | None = None,
                        action_type: str | None = None,
-                       phi_delta: float | None = None) -> dict:
+                       phi_delta: float | None = None,
+                       credit_kind: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
     Fail-open: an unwritable log is one rate-limited warn, never an
-    exception into the producer."""
+    exception into the producer.
+
+    #705 agent-level credit: ``credit_kind`` ("solve" | "verification")
+    rides the row so the fold can apply the admission rule. Absent or
+    "solve" is the pre-#705 path (the row carries no kind column)."""
     credit_out = None
     if credit is not None:
         if isinstance(credit, bool) or not isinstance(credit, (int, float)):
@@ -874,6 +962,11 @@ def append_observation(ws, signature_hash: str, method_family: str,
         "action_type": action_type,
         "phi_delta": phi_out,
     }
+    # #705 agent-level credit: the column is emitted ONLY for
+    # "verification" — the solve path's row stays byte-identical to
+    # pre-#705 (no key at all, not even a null).
+    if credit_kind:
+        row["credit_kind"] = str(credit_kind)
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended, "row": row}
 
@@ -888,7 +981,8 @@ def observe(ws, signature_hash: str, method_family: str,
 
 
 def observe_settlement(ws, dispatch_id: str, credit,
-                       *, phi_delta: float | None = None) -> dict:
+                       *, phi_delta: float | None = None,
+                       credit_kind: str = "solve") -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -916,8 +1010,17 @@ def observe_settlement(ws, dispatch_id: str, credit,
     ``phi_delta`` threads to the row (the #548 tiebreaker raw
     material). The result carries ``arm_key``/``fingerprint`` so the
     cross-task store's write face (rlvr.strategy_store) can key its row
-    without a second scan."""
+    without a second scan.
+
+    #705 agent-level credit: ``credit_kind`` decomposes the settlement
+    into "solve" (produced new evidence — the DEFAULT, bit-identical to
+    the pre-#705 path) and "verification" (confirmed existing knowledge
+    — the row is still recorded for the audit trail but the fold marks
+    it inadmissible, so the Beta posterior never moves). The result
+    carries ``beta_updated: bool`` reporting the decomposition."""
     did = str(dispatch_id or "")
+    kind = "verification" if str(credit_kind or "").strip() == \
+        "verification" else "solve"
     try:
         match = None
         for row in reversed(JSONLQStore(ws).observations()):
@@ -934,7 +1037,8 @@ def observe_settlement(ws, dispatch_id: str, credit,
                  f"no pending dispatch row for {did!r} — credit not "
                  f"banked (the honest gap)")
             return {"appended": False, "matched": False,
-                    "reason": "unmatched", "dispatch_id": did}
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
         out = append_observation(ws, str(match.get("signature_hash")),
                                  str(match.get("method_family")), credit,
                                  source="settlement",
@@ -943,10 +1047,17 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  dispatch_id=did,
                                  fingerprint=match.get("fingerprint"),
                                  arm_key_col=match.get("arm_key"),
-                                 phi_delta=phi_delta)
+                                 phi_delta=phi_delta,
+                                 # the solve path emits NO kind column —
+                                 # the default row stays byte-identical
+                                 # to pre-#705; only verification marks.
+                                 credit_kind=(kind if kind == "verification"
+                                              else None))
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
+                "credit_kind": kind,
+                "beta_updated": bool(out["appended"] and kind == "solve"),
                 "signature_hash": match.get("signature_hash"),
                 "method_family": match.get("method_family"),
                 "arm_key": match.get("arm_key"),
@@ -955,7 +1066,8 @@ def observe_settlement(ws, dispatch_id: str, credit,
         warn("q_cells.observe_settlement", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "matched": False,
                 "reason": f"error:{type(exc).__name__}",
-                "dispatch_id": did}
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:
@@ -993,7 +1105,9 @@ def record_dispatch_observation(ws, prompt: str, *,
                     "family": None, "signature_hash": None}
         sig = ssig.signature_hash(ssig.snapshot(ws))
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
-        # (v1 back-fill defaults keep legacy shapes identical)
+        # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
+        # an envelope-declared agent_type appends the 5th dim so the
+        # dispatch opens the AGENT's own cell.
         meta = envelope_meta if isinstance(envelope_meta, dict) else {}
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
@@ -1002,7 +1116,8 @@ def record_dispatch_observation(ws, prompt: str, *,
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
                                  arm_key_col=arm_key(family, recipe,
-                                                     verif, tier),
+                                                     verif, tier,
+                                                     meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
                                                  or "dispatch"))
         return {"appended": out["appended"], "reason": None,

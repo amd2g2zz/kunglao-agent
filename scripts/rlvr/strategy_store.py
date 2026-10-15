@@ -181,13 +181,21 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                      dispatch_id: str | None = None, arm_key: str | None
                      = None, feature_key: str | None = None,
                      fingerprint: str | None = None,
+                     agent_type: str | None = None,
+                     claim: str | None = None,
+                     credit_kind: str | None = None,
                      ts: str | None = None) -> dict:
     """Build and append one ``posterior-store/1`` row (the settlement
     hook's face): schema stamp, ts, workspace identity, feature key
     (ws-derived defaults), the 4-dim arm key, the settled credit, the
     censoring flag, the fact signal, the OPE propensity, and the Φ
     tiebreaker — one field, no new machinery (the #548 verdict's fix
-    rides the row). Delegates to ``append_row`` (filter + fail-open)."""
+    rides the row). Delegates to ``append_row`` (filter + fail-open).
+
+    #705 MARL: ``agent_type`` rides the row (the agent-conditioned
+    store), ``claim`` carries the claim ID for the solution-broadcast
+    face, and ``credit_kind`` marks solve vs verification. All three
+    absent → the row is byte-identical to pre-#705."""
     from harness_common import utc_now_z  # noqa: PLC0415
     row = {
         "schema": STORE_SCHEMA,
@@ -212,6 +220,13 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                       and not isinstance(phi_delta, bool) else None),
         "provenance": {"dispatch_id": str(dispatch_id or "")},
     }
+    # #705 MARL: the three agent-credit columns are emitted ONLY when
+    # present — a caller that passes none writes the exact pre-#705 row
+    # (no keys at all, not even nulls).
+    for key, val in (("agent_type", agent_type), ("claim", claim),
+                     ("credit_kind", credit_kind)):
+        if val:
+            row[key] = str(val)
     return append_row(row)
 
 
@@ -243,7 +258,13 @@ def warm_pools(ws, families) -> dict:
     face; the #548 tiebreaker rides the credit). NEVER full weight,
     NEVER a local-cell write. Returns {family → FeaturePool} (the
     sampler's duck type) — families without pool rows are absent (a
-    zero-mass pool is a no-op at the anchor)."""
+    zero-mass pool is a no-op at the anchor).
+
+    #705 agent-level credit: rows carrying ``credit_kind:
+    "verification"`` are EXCLUDED — verification confirms existing
+    knowledge, it never produces it, so a family whose only cross-task
+    evidence is verification credit warms from nothing. Absent
+    credit_kind is the solve path (bit-identical)."""
     rows = load_rows(ws=ws)
     if not rows:
         return {}
@@ -251,6 +272,8 @@ def warm_pools(ws, families) -> dict:
     acc: dict[str, list[float]] = {}
     from rlvr import meta_arms as _ma  # noqa: PLC0415 — the temper
     for r in rows:
+        if str(r.get("credit_kind") or "solve") == "verification":
+            continue          # #705: verification is inadmissible to the prior
         fam = str(r.get("method_family") or "")
         if fam not in wanted:
             continue
@@ -339,6 +362,7 @@ class PosteriorStrategyStore:
         kwargs: dict = {}
         kwargs.update(self._feature_prior_kwargs())
         kwargs.update(self._warm_pool_kwargs(prior.keys()))
+        kwargs.update(self._negative_pool_kwargs(prior.keys()))
         kwargs.update(self._termination_kwargs(prior.keys()))
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
@@ -416,6 +440,23 @@ class PosteriorStrategyStore:
             return {"warm_pools": pools} if pools else {}
         except Exception as exc:  # noqa: BLE001 — fail-open at the seam
             warn("strategy_store.warm_pools",
+                 f"{type(exc).__name__}: {exc}")
+            return {}
+
+    def _negative_pool_kwargs(self, families=None) -> dict:
+        """#705 wiring (class-level negative knowledge): thread this
+        workspace's CLASS dead ends into call site 2 — without this the
+        transfer protocol would be write-only (recorded, never consulted
+        at planning entry). Fail-open: any failure yields {} (the sampler
+        stays negative-knowledge-blind, the pre-change draw)."""
+        try:
+            fams = families if families is not None \
+                else self._proposal_prior().keys()
+            from rlvr import marl as _marl  # noqa: PLC0415 — lazy
+            pools = _marl.negative_pools(self.ws, fams)
+            return {"negative_pools": pools} if pools else {}
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.negative_pools",
                  f"{type(exc).__name__}: {exc}")
             return {}
 
