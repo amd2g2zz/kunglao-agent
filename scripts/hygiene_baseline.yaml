@@ -43,7 +43,7 @@ files:
   scripts/blind_gate.py:
     r1: 23
   scripts/cadence_advisor.py:
-    r1: 4
+    r1: 5
   scripts/calibration_face.py:
     r1: 2
   scripts/calibration_gate.py:
@@ -98,11 +98,11 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 77
+    r1: 82
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
-    r1: 6
+    r1: 9
   scripts/e2e/runtime.py:
     r1: 6
   scripts/emit_gate.py:
@@ -140,7 +140,7 @@ files:
   scripts/eval_crypto.py:
     r1: 1
   scripts/eval_dataset.py:
-    r1: 3
+    r1: 4
   scripts/eval_loop_runner.py:
     r1: 9
   scripts/eval_native_sources.py:
@@ -158,16 +158,16 @@ files:
   scripts/eval_tf_shadow.py:
     r1: 1
   scripts/eval_toolflex.py:
-    r1: 1
+    r1: 2
   scripts/event_taxonomy.py:
-    r1: 118
+    r1: 119
     r2: 1
   scripts/exogenous.py:
     r1: 2
   scripts/experience_triples.py:
     r1: 1
   scripts/external_kicker.py:
-    r1: 32
+    r1: 34
   scripts/fact_contradiction_gate.py:
     r1: 1
   scripts/failure_analysis_gate.py:
@@ -178,6 +178,8 @@ files:
     r1: 2
   scripts/fixture_excerpt_lint.py:
     r1: 1
+  scripts/gate_telemetry.py:
+    r1: 2
   scripts/goal_operationalization.py:
     r1: 1
   scripts/guardian_kpi.py:
@@ -193,11 +195,11 @@ files:
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
-    r1: 80
+    r1: 83
   scripts/hook_exit_codes.py:
     r1: 6
   scripts/hooks_selfcheck.py:
-    r1: 38
+    r1: 40
   scripts/hypothesis_bridge.py:
     r1: 3
   scripts/hypothesis_seeder.py:
@@ -263,7 +265,7 @@ files:
   scripts/loop_holds.py:
     r1: 1
   scripts/loop_scheduler.py:
-    r1: 4
+    r1: 7
   scripts/loop_state.py:
     r1: 3
   scripts/mcp_probe.py:
@@ -271,7 +273,7 @@ files:
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/method_families.py:
-    r1: 5
+    r1: 6
   scripts/migrate_facts.py:
     r1: 7
   scripts/mission_ledger.py:
@@ -313,7 +315,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 57
+    r1: 59
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -370,7 +372,7 @@ files:
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
-    r1: 8
+    r1: 9
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -386,15 +388,15 @@ files:
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
-    r1: 1
+    r1: 2
   scripts/rlvr/state.py:
-    r1: 1
+    r1: 5
   scripts/rlvr/step_grain.py:
     r1: 6
   scripts/rlvr/step_ledger.py:
     r1: 3
   scripts/rlvr/strategy_store.py:
-    r1: 9
+    r1: 13
   scripts/rlvr/triples.py:
     r1: 3
   scripts/rlvr/winrate.py:
@@ -479,9 +481,11 @@ files:
   scripts/winrate_curve.py:
     r1: 3
   scripts/wire_up_settings.py:
-    r1: 27
+    r1: 30
   scripts/worker_death.py:
     r1: 9
+  scripts/workguard.py:
+    r1: 3
   scripts/write_gate.py:
     r1: 10
   scripts/write_guard_unlock.py:
@@ -511,6 +515,8 @@ files:
   tests/test_acceptance_689.py:
     r1: 4
   tests/test_act_budget_523.py:
+    r1: 1
+  tests/test_action_space_12.py:
     r1: 1
   tests/test_action_space_539.py:
     r1: 1
@@ -639,6 +645,8 @@ files:
     r1: 5
   tests/test_compat_removal_863d.py:
     r1: 7
+  tests/test_completion_681.py:
+    r1: 1
   tests/test_completion_gate.py:
     r1: 14
   tests/test_completion_gate_optout.py:
@@ -806,7 +814,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 30
+    r1: 32
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
@@ -877,6 +885,8 @@ files:
     r1: 1
   tests/test_external_kicker.py:
     r1: 13
+  tests/test_fact_certification_651.py:
+    r1: 1
   tests/test_fact_contradiction_gate.py:
     r1: 6
   tests/test_fact_expected_binding.py:
@@ -976,7 +986,7 @@ files:
   tests/test_hook_registration_entry.py:
     r1: 9
   tests/test_hook_registry_singlesource.py:
-    r1: 19
+    r1: 23
   tests/test_hooks_resolve_workspace_delegation_865.py:
     r1: 3
     r2: 1
@@ -1089,6 +1099,8 @@ files:
     r1: 9
   tests/test_liveness_policy_597.py:
     r1: 4
+  tests/test_liveness_triad_682.py:
+    r1: 5
   tests/test_load_lock.py:
     r1: 1
   tests/test_loader_delegation_863b.py:
@@ -1320,10 +1332,15 @@ files:
     r1: 10
   tests/test_reward_settlement_366.py:
     r1: 1
+  tests/test_reward_source_678.py:
+    r1: 4
+    r2: 1
   tests/test_rho_checkpoint.py:
     r1: 2
   tests/test_rho_verifier_823p2.py:
     r1: 1
+  tests/test_rl_output_path_691.py:
+    r1: 5
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
@@ -1370,6 +1387,8 @@ files:
     r1: 1
   tests/test_scan_waiting_902.py:
     r1: 2
+  tests/test_scheduler_schema_679.py:
+    r1: 1
   tests/test_scorer_authority.py:
     r1: 6
   tests/test_script_discipline.py:
@@ -1454,6 +1473,8 @@ files:
   tests/test_subcommand_zeroarg_ux.py:
     r1: 7
     r2: 1
+  tests/test_substrate_wiring_683.py:
+    r1: 5
   tests/test_suite_health.py:
     r1: 1
     r2: 1
@@ -1479,6 +1500,8 @@ files:
     r1: 2
   tests/test_tick_rc_617.py:
     r1: 2
+  tests/test_tier_contract_680.py:
+    r1: 3
   tests/test_tier_rules.py:
     r1: 1
   tests/test_timeline_v2_586.py:
@@ -1602,7 +1625,7 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 53
+    r1: 60
     r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7

@@ -41,8 +41,9 @@ import priority_ratio as pr  # noqa: E402
 
 EXPECTED_OPERATORS = {"observe", "trace", "hook", "emulate", "derive",
                       "verify", "search", "ask", "plan_segment"}
-EXPECTED_ORCHESTRATION = {"dispatch", "verify", "deepen", "replan",
-                          "osint", "expand"}
+EXPECTED_ORCHESTRATION = {"dispatch", "verify", "deepen", "osint", "expand"}
+EXPECTED_POLICY = {"mint_arm", "split_claim", "supersede", "park",
+                   "rewire_deps", "replan"}
 EXPECTED_STRATEGIC = {"fight", "bypass", "invest"}
 
 
@@ -51,7 +52,9 @@ def test_registry_holds_exactly_the_issue_vocabulary():
         return {s.name.split(".", 1)[1]
                 for s in aspace.actions_of(level)}
     assert _bare(aspace.OPERATOR) == EXPECTED_OPERATORS
+    # replan moved to the policy tier (candidate-set controls own it)
     assert _bare(aspace.ORCHESTRATION) == EXPECTED_ORCHESTRATION
+    assert _bare(aspace.POLICY) == EXPECTED_POLICY
     assert _bare(aspace.STRATEGIC) == EXPECTED_STRATEGIC
     # keys are level-namespaced: both vocabularies carry a verify
     assert "operator.verify" in aspace.ACTIONS
@@ -151,26 +154,28 @@ _FIXTURE_DEPS = {"depends_on": {}, "competitor_groups": {}}
 
 # Frozen PRE-CHANGE capture (scripts/priority_ratio.py at base 8fcb264,
 # rng-seeded + default-rng faces). Any diff = behavior change = REJECT.
+# #680 update: `tier` added to Action.to_dict() (additive — the dispatch
+# envelope's tier derives from it); scores/order/other keys unchanged.
 _FROZEN = {
     "seed42": [
         {"claim_id": "C-2", "action": "family_attribution", "score": 0.682,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 2},
         {"claim_id": "C-3", "action": "persistence", "score": 0.441,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 3},
         {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.329,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-4", "action": "evidence_collection", "score": 0.328,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
     ],
     "default": [
         {"claim_id": "C-4", "action": "evidence_collection", "score": 0.924,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-3", "action": "persistence", "score": 0.338,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 3},
         {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.21,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 1},
         {"claim_id": "C-2", "action": "family_attribution", "score": 0.016,
-         "skill": None, "weight": 1.0},
+         "skill": None, "weight": 1.0, "tier": 2},
     ],
 }
 

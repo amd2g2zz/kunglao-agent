@@ -20,6 +20,7 @@ from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
     TOOL_ERRORS_FILE, GENERIC_WORK_AGENT, _SKILL_ROOT,
     _ratio_rank, _EvidenceView, _PRIORITY_AVAILABLE,
+    _action_tier,  # #680: action_tier single-sourced from priority_ratio
     _load_specialist_table, _recommend_agent_type, _AGENTTYPE_AVAILABLE,
     _tep, TOOL_ERROR_POLICY_LOADED, _ha_link, _klog,
     _load_yaml, _run_py, _format_worker, _parse_worker_line,
@@ -636,6 +637,53 @@ def check_tier_gate(reg_path: Path, tier: int) -> tuple[bool, str]:
         if eta < threshold:
             return (False, f'open claim {c.get("id")} at evidence_tier={eta} < {threshold}')
     return (True, f'all open claims at evidence_tier >= {threshold}')
+
+
+def check_tier_consistency(reg_path: Path, claim_id: str | None,
+                           tier: int, prompt: str = '') -> tuple[bool, str]:
+    """#680: the dispatch envelope's tier must equal action_tier(claim).
+
+    action_tier = min(evidence_tier_attempted + 1, 3) — the claim's own
+    mechanical next tier (priority_ratio, the #107/#103 authority). Before
+    this gate the envelope's `tier` was a free LLM input: C-007 declared
+    tier=2 for an eta=0 claim, check_tier_gate rejected (eta < 1), and
+    nothing ever wrote evidence_tier_attempted — the ladder could never
+    climb (self-deadlock).
+
+    Mismatch REJECTs with the correct value in the guidance. A recorded
+    deviation (`agent-reasoning:` prefix — same discipline as the #310
+    agenttype / #496 top-1 faces) passes with a stderr note. Uncheckable
+    shapes allow: no claim id, claim not in register (fresh claim), or the
+    priority_ratio import unavailable (partial deploy — same posture as
+    check_priority's _PRIORITY_AVAILABLE skip).
+    """
+    if not claim_id:
+        return (True, 'no target claim')
+    if _action_tier is None:  # pragma: no cover - partial deploy lifeline
+        return (True, 'priority_ratio unavailable - tier consistency skipped')
+    claim = read_claim(reg_path, claim_id)
+    if claim is None:
+        return (True, f'claim {claim_id} not in register (cannot check, allow)')
+    try:
+        expected = int(_action_tier(claim))
+    except Exception as exc:  # noqa: BLE001 - fail-open (gate must not crash dispatch)
+        warn('gate_error:tier_consistency', f'{type(exc).__name__}: {exc}')
+        return (True, f'action_tier computation failed ({exc}) - allow')
+    if tier == expected:
+        return (True, f'envelope tier={tier} matches action_tier')
+    if 'agent-reasoning:' in (prompt or '').lower():
+        print(f'TIER (deviation recorded): envelope declares tier={tier}, '
+              f'action_tier({claim_id})={expected}', file=sys.stderr, flush=True)
+        return (True, f'tier deviation recorded (envelope {tier} != '
+                      f'action_tier {expected})')
+    return (False, (
+        f'tier mismatch: envelope declares tier={tier} but '
+        f'action_tier({claim_id})={expected} '
+        f'(evidence_tier_attempted={claim.get("evidence_tier_attempted", 0)}). '
+        f'Re-dispatch with tier={expected} — the envelope tier is DERIVED '
+        f'from the claim\'s attempt history (min(eta+1, 3)), never free-'
+        f'chosen; if a different tier is genuinely warranted, record '
+        f'`agent-reasoning: <why>` in the dispatch prompt.'))
 
 
 def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str]:

@@ -174,8 +174,12 @@ def test_unstamped_foreign_file_keeps_the_bare_kill(stub_repo, tmp_path):
     assert row["o"]["status"] == "TIMEOUT"
     assert row["r_settle"] == 0.0
     assert "absorbed_from_disk" not in row["o"]
+    # RE-MINT AUDIT (issue-678 T4): append_transition grew three
+    # additive provenance columns (phi_delta + claim_ref/action_key);
+    # the bare-kill shape is otherwise unchanged.
     assert set(row) == {"ts", "dispatch_id", "action_type", "s", "a",
-                        "o", "s_prime_phi", "phi_before", "r_incr",
+                        "o", "s_prime_phi", "phi_before", "phi_delta",
+                        "claim_ref", "action_key", "r_incr",
                         "r_settle", "done"}
 
 

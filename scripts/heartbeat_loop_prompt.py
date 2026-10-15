@@ -91,7 +91,9 @@ PRE-DISPATCH CONTRACT (do once, before the first dispatch — while it is unaudi
 BLOCKED and CONVERGED is unreachable, no matter how good the deliverable is):
    1. goal-operationalization.yaml passes `python {go} <ws>/goal-operationalization.yaml`
       (draft: true = unaudited: fill deliverables/acceptance/not_done/diff_vs_verbatim/
-      probe_cases, validate, then --stamp-dispatch — it is append-only after the stamp).
+      probe_cases/constraint_witness (every not_done row needs a check: probe or a
+      none: reason), validate, then --stamp-dispatch — it is append-only after the
+      stamp).
    2. The declared probe cases are ARMED (oracle/ case files + oracle/client.py) and green:
       `python {orr} <ws> --json` — with generalization required|unknown, zero armed cases
       keeps CONVERGED closed even after the operationalization passes.

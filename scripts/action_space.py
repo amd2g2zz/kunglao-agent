@@ -12,7 +12,15 @@ measuring nothing". This module is the vocabulary:
   - operator level (the worker's hands): observe / trace / hook / emulate /
     derive / verify / search / ask / plan_segment;
   - orchestration level (the loop's teeth): dispatch / verify / deepen /
-    replan / osint / expand;
+    osint / expand;
+  - policy level (the claim economy): mint_arm / split_claim / supersede /
+    park / rewire_deps / replan — the candidate-set controls. Mint / split /
+    supersede / park / rewire predate the tier as mechanisms fired by
+    detectors (claim_granularity, hypothesis_bridge, infeasible_proposal,
+    the stale-plan nag); the tier makes them CHOOSABLE actions carrying
+    propensity, settleable and revocable against their producing step
+    (scripts/planning_actions.py — the evidence-credit discipline applied
+    to candidate-set changes);
   - strategic level (the route choice): FIGHT (push through: dispatch
     against the obstacle) / BYPASS (defer: DEFERRED + wake_condition, the
     negative-exit machinery — referenced, never rebuilt) / INVEST (build
@@ -54,6 +62,7 @@ import yaml
 
 OPERATOR = "operator"
 ORCHESTRATION = "orchestration"
+POLICY = "policy"
 STRATEGIC = "strategic"
 
 
@@ -111,6 +120,11 @@ class ActionSpec:
                     observation vs reproduction vs verification).
     consumer      — who dispatches/holds the action.
     references    — existing machinery the action REUSES (no new semantics).
+    settleable    — the action changes the claim economy's candidate set, so
+                    it rides the escrow/revoke discipline (scripts/
+                    planning_actions.py): recorded with its producing step_ref
+                    and propensity, revocable against that step. False for
+                    every non-planning action (default).
     """
 
     name: str
@@ -121,15 +135,17 @@ class ActionSpec:
     consumer: str
     delta_estimator: DeltaEstimator
     references: tuple[str, ...] = field(default_factory=tuple)
+    settleable: bool = False
 
 
 def _spec(name: str, level: str, cost: float, precondition: str,
           proof_power: str, consumer: str,
-          references: tuple[str, ...] = ()) -> ActionSpec:
+          references: tuple[str, ...] = (),
+          settleable: bool = False) -> ActionSpec:
     return ActionSpec(name=f"{level}.{name}", level=level, cost=float(cost),
                       precondition=precondition, proof_power=proof_power,
                       consumer=consumer, delta_estimator=_est(f"delta_v/{level}.{name}"),
-                      references=references)
+                      references=references, settleable=settleable)
 
 
 # ---- the registry --------------------------------------------------------------
@@ -185,9 +201,12 @@ _register(
           "authority — an operator ruling settles what evidence cannot",
           "orchestrator (escalation ladder)"),
     _spec("plan_segment", OPERATOR, 1,
-          ">=2 open claims on the dispatch frontier sharing a route",
-          "none (organizational) — sequencing, never evidence",
-          "orchestrator"),
+          "a worker plan with >= 2 enumerated step groups sharing a route "
+          "(the plan-first contract: planning is the worker's first act — "
+          "plan_segment sequences the worker's OWN steps)",
+          "none (organizational) — sequencing, never evidence and never a "
+          "candidate-set change (that is the policy tier)",
+          "worker (plan authorship)"),
     # ---- orchestration level: the loop's teeth ----
     _spec("dispatch", ORCHESTRATION, 3,
           "claim OPEN + promotion_attempts<3 + every depends_on parent "
@@ -205,11 +224,6 @@ _register(
           "target/attack-surface ladder",
           "capability settlement — a PROVEN obstacle means 'really can't'",
           "orchestrator"),
-    _spec("replan", ORCHESTRATION, 4,
-          "plan-drift detected (severe drift auto-integrates; warning "
-          "saturates) or the frontier is stale",
-          "none (organizational) — replanning never manufactures evidence",
-          "orchestrator"),
     _spec("osint", ORCHESTRATION, 4,
           "an external-facing surface (web target / public artifact) and a "
           "sanctioned lane",
@@ -221,6 +235,70 @@ _register(
           "+ sub claims)",
           "inherits the sub-claims' proof power",
           "orchestrator"),
+    # ---- policy level: the claim economy's candidate-set controls ----
+    # Every entry is settleable: it changes WHICH claims the policy can
+    # choose from, so it rides the escrow/revoke attribution discipline
+    # (scripts/planning_actions.py — recorded against the producing step
+    # with its propensity, revocable against that step). The mechanisms
+    # referenced below predate the tier; the tier makes them CHOOSABLE.
+    _spec("mint_arm", POLICY, 3,
+          "an unsettled question with competitor candidates (hypothesis "
+          "family pending or a situational unknown): mint a new OPEN "
+          "hypothesis-arm claim into the register",
+          "none (construction) — an arm is a candidate, never evidence; "
+          "it enters the TS rank pool OPEN",
+          "orchestrator (policy tier)",
+          references=("scripts/hypothesis_bridge.mint_family_arms "
+                      "(arm minting — reused)",),
+          settleable=True),
+    _spec("split_claim", POLICY, 4,
+          "a monolithic claim: plan exceeds GRANULARITY_MAX_STEPS or spans "
+          ">=2 mechanism domains (claim_granularity --check verdict)",
+          "none (construction) — the split parent SUPERSEDES into domain "
+          "sub-claims; proof power inherits from the sub-claims",
+          "orchestrator (policy tier)",
+          references=("scripts/claim_granularity.mint_split_claims "
+                      "(the granularity fan-out — reused)",),
+          settleable=True),
+    _spec("supersede", POLICY, 4,
+          "successor claims ready to carry a predecessor's whole scope "
+          "(settle lineage: winner names the superseded, or a split/"
+          "hypothesis replacement)",
+          "none (replacement) — the successors carry the evidence; "
+          "supersede moves scope between candidates",
+          "orchestrator (policy tier)",
+          references=("SUPERSEDED + superseded_by replacement semantics "
+                      "(issue-59 lineage — reused)",),
+          settleable=True),
+    _spec("park", POLICY, 2,
+          "a claim blocked on an external wake predicate: DEFERRED with a "
+          "non-empty wake_condition, revivable through the wake face",
+          "none (suspension) — a parked claim exits the frontier "
+          "revocably, never terminally",
+          "orchestrator (policy tier)",
+          references=("scripts/infeasible_proposal.py file_proposal/wake "
+                      "(DEFERRED + wake_condition machinery — reused, not "
+                      "rebuilt)",),
+          settleable=True),
+    _spec("rewire_deps", POLICY, 2,
+          "a depends_on edge that no longer reflects the claim DAG "
+          "(settled parent, obsolete blocker, or a re-scoped successor "
+          "chain)",
+          "none (topology) — dependency edges order dispatch, never "
+          "evidence",
+          "orchestrator (policy tier)",
+          references=("_scriptlib.ensure_dep_edge / claim_deps.yaml "
+                      "(the dep-edge machinery — reused)",),
+          settleable=True),
+    _spec("replan", POLICY, 4,
+          "plan-drift detected (severe drift auto-integrates; warning "
+          "saturates) or the frontier is stale — re-derive global_plan "
+          "against the current claim economy",
+          "none (organizational) — replanning never manufactures evidence; "
+          "the stale_plan_on_new_evidence detector is this action's "
+          "trigger, never a substitute for taking it",
+          "orchestrator (policy tier)",
+          settleable=True),
     # ---- strategic level: the route choice (the 2026-09-20 ruling) ----
     _spec("fight", STRATEGIC, 12,
           "obstacle identified + the capability-disproof ladder walkable "
@@ -250,7 +328,7 @@ _register(
           references=("rule 14 tool creation", "tools/_INDEX.yaml registration")),
 )
 
-assert len(ACTIONS) == 18, "the vocabulary is exactly 9 + 6 + 3"
+assert len(ACTIONS) == 23, "the vocabulary is exactly 9 + 5 + 6 + 3"
 
 
 def actions_of(level: str) -> list[ActionSpec]:

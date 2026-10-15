@@ -149,6 +149,8 @@ _KICKER_SKIP_FILES = frozenset({
     "user_signal_capture.py",  # UserPromptSubmit observation (issue 434)
     "rt_read_barrier.py",    # RT read barrier — full --wire-up restores it
     "evidence_pin_guard.py",  # evidence sha-pin freeze — ditto
+    "step_record_capture.py",  # shadow step ledger (#670) — full --wire-up restores it (#683)
+    "cost_input_capture.py",   # cost input capture (#873) — ditto (#683)
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 

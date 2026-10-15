@@ -270,9 +270,12 @@ class Action:
         # feeds stay object-level diagnostics, NOT a json face key:
         # consumers compare full to_dict() payloads across workspaces where
         # feed STATES legitimately differ while scores do not.
+        # #680: tier rides the dict (additive) — the dispatch envelope's
+        # tier is DERIVED from this value (action_tier), so the decision
+        # face must be able to see it.
         return {"claim_id": self.claim_id, "action": self.action,
                 "score": round(self.score, 3), "skill": self.skill,
-                "weight": round(self.weight, 3)}
+                "weight": round(self.weight, 3), "tier": self.tier}
 
 
 def is_open(claim: dict) -> bool:
@@ -824,6 +827,11 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "feeds": {a.claim_id: dict(a.feeds) for a in actions},
             "scores": {a.claim_id: a.score for a in actions},
             "ranked_order": [a.claim_id for a in actions],
+            # #680 additive: the per-claim action_tier (min(eta+1, 3)) — the
+            # decision face reads the tier the dispatch envelope MUST carry
+            # instead of guessing it (the free-LLM tier was the C-007
+            # deadlock's root cause). Existing keys untouched.
+            "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",

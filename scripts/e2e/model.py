@@ -261,12 +261,52 @@ def check_contamination(ws: Path) -> list[str]:
     return violations
 
 
-def resolve_candidate(ws: Path, task_yaml: Path) -> Path:
+#: The default candidate path (the smoke-rehearsal shape). Legitimate
+#: for .py families; a silent .py FALLBACK for any other family is the
+#: #681 defect class — the resolver emits a typed event instead.
+DEFAULT_CANDIDATE_REL = "artifacts/derive_reimpl.py"
+
+#: #681 D-681.2: the typed candidate-resolution event — a unit that
+#: neither declares checker.candidate nor matches its family's contract
+#: suffix at the default path.
+CANDIDATE_UNDECLARED = "candidate-undeclared"
+
+
+def _family_contract_suffix(doc: dict) -> str | None:
+    """The family's grading suffix from eval_contract (the single
+    source, the same face eval_checker._validate_candidate grades
+    against); None when the family is absent or unregistered —
+    fail-open, never a KeyError into the pipeline."""
+    family = doc.get("family")
+    if not isinstance(family, str) or not family.strip():
+        return None
+    try:
+        import eval_contract as ec  # noqa: PLC0415 — scripts/ on sys.path
+        return ec.candidate_suffix(family.strip())
+    except KeyError:
+        return None  # unregistered family: no contract to judge against
+    except Exception as exc:  # noqa: BLE001 — loud, fail-open
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("e2e.family_suffix",
+             f"{type(exc).__name__}: {exc} — no suffix contract for "
+             f"{family!r}")
+        return None
+
+
+def resolve_candidate(ws: Path, task_yaml: Path,
+                      events: list[dict] | None = None) -> Path:
     """The oracle face's replay candidate: the unit's OWN declaration
     (task.yaml checker.candidate, ws-relative) when present, else the
     smoke-rehearsal default artifacts/derive_reimpl.py. matrix4b G3:
     the combat units' contract is a ws-root client.py — the hardcoded
-    rehearsal shape sent finished work to a no-candidate BLOCK."""
+    rehearsal shape sent finished work to a no-candidate BLOCK.
+
+    #681 D-681.2: when the unit neither declares a candidate NOR
+    matches its family's contract suffix at the default path, exactly
+    one typed candidate-undeclared event lands (append-only on
+    ``events`` + ONE warn) — the silent .py fallback class is closed.
+    Fail-open: the default path still resolves (no raise into the
+    pipeline); an absent ``events`` list still warns."""
     import yaml  # local import: yaml is a repo dependency, keep lean
     try:
         doc = yaml.safe_load(Path(task_yaml).read_text(encoding="utf-8")) or {}
@@ -276,7 +316,25 @@ def resolve_candidate(ws: Path, task_yaml: Path) -> Path:
                 if isinstance(doc.get("checker"), dict) else None)
     if isinstance(declared, str) and declared.strip():
         return Path(ws) / declared.strip().lstrip("/")
-    return Path(ws) / "artifacts" / "derive_reimpl.py"
+    default = Path(ws) / DEFAULT_CANDIDATE_REL
+    suffix = _family_contract_suffix(doc) if isinstance(doc, dict) else None
+    if suffix and default.suffix != suffix:
+        event = {
+            "event": CANDIDATE_UNDECLARED,
+            "task_id": str(doc.get("task_id") or ""),
+            "family": str(doc.get("family") or ""),
+            "expected_suffix": suffix,
+            "default_rel": DEFAULT_CANDIDATE_REL,
+        }
+        if events is not None:
+            events.append(event)
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("e2e.resolve_candidate",
+             f"{CANDIDATE_UNDECLARED}: {event['task_id']} (family "
+             f"{event['family']}) grades a {suffix} candidate — declare "
+             f"checker.candidate; default {DEFAULT_CANDIDATE_REL} "
+             f"mismatches the contract")
+    return default
 
 
 def resolve_checker(repo: Path, family: str, unit: str) -> Path | None:

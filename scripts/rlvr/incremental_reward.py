@@ -13,7 +13,12 @@ change, no sampling change, no critic.
 Reward form (design doc docs/design/external-smdp-phase-b.md §2):
 
     r_t = ALPHA * [Φ(s') - Φ(s)] - LAMBDA * cost_t
-    Φ(s) = W_FACTS * verified_facts_fraction + W_ORACLE * oracle_green_rate
+    Φ(s) = W_FACTS * graded_fact_fraction + W_ORACLE * oracle_green_rate
+
+(the facts term is fact_face's graded ``weighted_fraction`` since
+issue-678 D-678.5 — certified 1.0 / present 0.5 / draft 0.25; the
+binary verified-count it replaced made Φ degenerate in live
+workspaces)
 
 Φ is a potential function — potential-based shaping (Ng, Harada & Russell
 1999) preserves the optimal-policy order, so layering it over the
@@ -61,12 +66,17 @@ COST_SECONDS_DIV = 3_600.0   # normalize: 1 wall hour = 1 cost unit
 def potential(ws) -> float:
     """Φ(s) ∈ [0, 1]: verified-facts fraction + oracle green rate,
     renormalized over PRESENT dims (a missing organ drops its dim —
-    the honest-absence doctrine, state.py precedent)."""
+    the honest-absence doctrine, state.py precedent). The facts term
+    reads fact_face's GRADED ``weighted_fraction`` (issue-678 D-678.5:
+    certified terminal 1.0 / present non-terminal 0.5 / draft 0.25), so
+    partially-verified workspaces produce INTERMEDIATE potentials — the
+    binary verified-count made Φ degenerate ({0.0, 1.0} in live
+    workspaces) and the transition ledger recorded no partial progress."""
     ws = Path(ws)
     parts: list[tuple[float, float]] = []  # (weight, value)
     ff = fact_face(ws)
     if ff["count"] > 0:
-        parts.append((W_FACTS, ff["verified"] / ff["count"]))
+        parts.append((W_FACTS, float(ff.get("weighted_fraction", 0.0))))
     oracle = _oracle_status_progress(ws)
     if oracle is not None:
         passed, total = oracle
@@ -182,7 +192,11 @@ def append_transition(ws, claim: str, outcome: str, *,
     orchestrator PARKED envelope with a wake plan parked in this
     namespace); the settle is refused with ONE warn and the file is
     LEFT INTACT (consuming it would delete the wake plan). Legacy
-    schema-less stashes carry neither field and settle unchanged."""
+    schema-less stashes carry neither field and settle unchanged.
+    Issue-678 T4: every row carries the explicit ``phi_delta``
+    (= s_prime_phi − phi_before) plus ``claim_ref``/``action_key``
+    copied from the launch stash — additive columns, self-attributing
+    provenance for the tiebreaker feed."""
     try:
         ws = Path(ws)
         launch_p = _launch_path(ws, claim, action_type)
@@ -235,6 +249,14 @@ def append_transition(ws, claim: str, outcome: str, *,
                      if absorbed_from_disk else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
+            # issue-678 T4: the EXPLICIT Φ movement (the #548 tiebreaker
+            # raw material was previously only derivable by subtraction)
+            # plus the launch stash's claim/action provenance — the row
+            # is self-attributing without re-reading the (consumed) stash
+            "phi_delta": round(phi_after
+                               - float(launch.get("phi", 0.0)), 6),
+            "claim_ref": str(launch.get("claim") or claim),
+            "action_key": str(launch.get("a") or ""),
             "r_incr": r_incr,
             "r_settle": (round(float(r_settle), 6)
                          if r_settle is not None else None),

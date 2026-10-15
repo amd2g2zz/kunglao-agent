@@ -6,7 +6,7 @@ files:
   hooks/cost_input_capture.py: 2
   hooks/dispatch_gate.py: 209
   hooks/env_check_gate.py: 30
-  hooks/heartbeat_touch.py: 22
+  hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
@@ -16,9 +16,9 @@ files:
   hooks/user_signal_capture.py: 3
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
-  hooks/worker_budget_core.py: 49
-  hooks/worker_budget_gates.py: 122
-  hooks/worker_budget_sinks.py: 114
+  hooks/worker_budget_core.py: 51
+  hooks/worker_budget_gates.py: 129
+  hooks/worker_budget_sinks.py: 129
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -46,7 +46,7 @@ files:
   scripts/bench_tokens.py: 2
   scripts/blind_gate.py: 4
   scripts/blocker_lint.py: 2
-  scripts/cadence_advisor.py: 7
+  scripts/cadence_advisor.py: 9
   scripts/calibration_face.py: 10
   scripts/calibration_gate.py: 1
   scripts/carrier_consistency.py: 3
@@ -76,10 +76,10 @@ files:
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 103
+  scripts/e2e/checkpoints.py: 108
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 17
-  scripts/e2e/model.py: 4
+  scripts/e2e/model.py: 7
   scripts/e2e/runtime.py: 11
   scripts/emit_gate.py: 12
   scripts/encoding_lint.py: 4
@@ -98,7 +98,7 @@ files:
   scripts/eval_contract.py: 3
   scripts/eval_control_arm.py: 4
   scripts/eval_crypto.py: 4
-  scripts/eval_dataset.py: 13
+  scripts/eval_dataset.py: 14
   scripts/eval_loop_runner.py: 36
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
@@ -108,18 +108,18 @@ files:
   scripts/eval_targets.py: 12
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
-  scripts/eval_toolflex.py: 5
-  scripts/event_taxonomy.py: 157
+  scripts/eval_toolflex.py: 6
+  scripts/event_taxonomy.py: 158
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
-  scripts/external_kicker.py: 37
+  scripts/external_kicker.py: 41
   scripts/failure_analysis_gate.py: 58
   scripts/feature_mining.py: 4
   scripts/feedback.py: 3
   scripts/fix_guard.py: 2
   scripts/formal_code_lint.py: 5
   scripts/gap_notes.py: 1
-  scripts/gate_telemetry.py: 1
+  scripts/gate_telemetry.py: 3
   scripts/goal_operationalization.py: 2
   scripts/guardian_kpi.py: 5
   scripts/harness_common.py: 2
@@ -129,7 +129,7 @@ files:
   scripts/heartbeat_touch.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
-  scripts/hooks_selfcheck.py: 59
+  scripts/hooks_selfcheck.py: 63
   scripts/hypothesis_bridge.py: 34
   scripts/hypothesis_seeder.py: 21
   scripts/hypothesis_store.py: 11
@@ -163,13 +163,13 @@ files:
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
-  scripts/loop_scheduler.py: 11
+  scripts/loop_scheduler.py: 16
   scripts/loop_state.py: 5
   scripts/loop_watchdog.py: 1
   scripts/mcp_probe.py: 41
   scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
-  scripts/method_families.py: 6
+  scripts/method_families.py: 7
   scripts/migrate_facts.py: 12
   scripts/mission_ledger.py: 27
   scripts/mission_stall.py: 10
@@ -191,7 +191,7 @@ files:
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
   scripts/premise_gate.py: 3
-  scripts/priority_ratio.py: 112
+  scripts/priority_ratio.py: 114
   scripts/progress_report.py: 9
   scripts/progress_timeline.py: 7
   scripts/provider_health.py: 4
@@ -221,7 +221,7 @@ files:
   scripts/rlvr/compose.py: 17
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 15
+  scripts/rlvr/incremental_reward.py: 16
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/meta_arms.py: 8
@@ -231,11 +231,11 @@ files:
   scripts/rlvr/priors.py: 18
   scripts/rlvr/q_cells.py: 72
   scripts/rlvr/reward.py: 8
-  scripts/rlvr/scalar.py: 22
-  scripts/rlvr/state.py: 21
+  scripts/rlvr/scalar.py: 26
+  scripts/rlvr/state.py: 25
   scripts/rlvr/step_grain.py: 8
   scripts/rlvr/step_ledger.py: 5
-  scripts/rlvr/strategy_store.py: 17
+  scripts/rlvr/strategy_store.py: 22
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14
@@ -284,9 +284,9 @@ files:
   scripts/verify_status_watch.py: 4
   scripts/wait_dispose.py: 8
   scripts/winrate_curve.py: 5
-  scripts/wire_up_settings.py: 52
+  scripts/wire_up_settings.py: 59
   scripts/worker_death.py: 9
-  scripts/workguard.py: 2
+  scripts/workguard.py: 6
   scripts/write_gate.py: 12
   scripts/write_guard_unlock.py: 2
   scripts/ws_layout.py: 11

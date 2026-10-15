@@ -25,10 +25,21 @@ evidence; loop_registered still flips true only on the prompt's first real
 action (--heartbeat-on --loop-registered). #618's crontab/register_daemon
 route is explicitly REJECTED — Claude Code durable cron is the right path.
 
-Reader tolerates three shapes of an existing file:
+Reader tolerates four shapes of an existing file:
   [entry, ...]                 bare array
-  {"jobs": [entry, ...]}       wrapper object
+  {"jobs": [entry, ...]}       wrapper object (kunglao's own key)
+  {"tasks": [entry, ...]}      wrapper object (harness key, #679)
   corrupt bytes                backed up to *.corrupt-<ts> then rebuilt
+
+#679 schema war — the harness writes ``{"tasks": [...]}``; an earlier reader
+only knew ``jobs``/bare arrays, so it quarantined harness files to
+*.unrecognized-*, treated them as EMPTY, and rebuilt the file as
+{"jobs": [...]} — destroying the harness's tasks key on every upsert while
+exiling kunglao's own entries to sidecars. Both wrapper keys are now first-
+class: reads pick the container (jobs preferred when both ride one document),
+writes preserve the original container key AND every unknown sibling key
+byte-for-byte in place. Fail-open: shapes we still don't understand keep the
+r3-M1 sidecar backup — never a silent clobber.
 
 Usage:
     python scripts/loop_scheduler.py <workspace>            # upsert, prints status
@@ -51,6 +62,12 @@ JOB_NAME = "kunglao-agent heartbeat"
 PROMPT_MARKERS = ("kunglao-agent heartbeat", "--heartbeat-on")
 
 SCHEDULE_FILE_REL = Path(".claude") / "scheduled_tasks.json"
+
+# Known entry-container keys, preferred order. "jobs" is kunglao's own key;
+# "tasks" is the harness's key (#679 schema war) — both first-class, never
+# clobbered. When a document carries BOTH, jobs wins as our container and
+# tasks rides along as foreign data.
+ENTRY_KEYS = ("jobs", "tasks")
 
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
@@ -87,8 +104,8 @@ def _backup_bytes(path: Path, raw: bytes, kind: str) -> Path:
 
 
 def _read_entries(path: Path) -> tuple[list[dict], Path | None]:
-    """Load entries from path; tolerate array / jobs-wrapper / corruption /
-    valid-but-unrecognized shapes.
+    """Load entries from path; tolerate array / jobs-wrapper / tasks-wrapper
+    (#679) / corruption / valid-but-unrecognized shapes.
 
     Returns (entries, sidecar_path-or-None). NOTHING is ever silently
     clobbered: unreadable bytes AND structurally-valid-but-unknown shapes
@@ -107,26 +124,55 @@ def _read_entries(path: Path) -> tuple[list[dict], Path | None]:
     if isinstance(data, list):
         return [e for e in data if isinstance(e, dict)], None
     if isinstance(data, dict):
-        jobs = data.get("jobs")
-        recognized = isinstance(jobs, list)
-        if recognized and len(data) > 1:
-            # sibling keys beside "jobs" (schemaVersion etc.) are FOREIGN DATA;
-            # flattening them into our rewrite loses bytes -> preserve first.
-            return ([e for e in jobs if isinstance(e, dict)],
-                    _backup_bytes(path, raw, "unrecognized"))
-        if recognized:
-            return [e for e in jobs if isinstance(e, dict)], None
-        return [], _backup_bytes(path, raw, "unrecognized")
+        # jobs first (our container) — a document carrying both keys keeps
+        # "tasks" as foreign data that the write path preserves untouched.
+        key = next((k for k in ENTRY_KEYS if isinstance(data.get(k), list)),
+                   None)
+        if key is None:
+            return [], _backup_bytes(path, raw, "unrecognized")
+        entries = [e for e in data[key] if isinstance(e, dict)]
+        if len(data) > 1:
+            # sibling keys beside the container (schemaVersion, owner, the
+            # other entry key ...) are FOREIGN DATA; belt+braces sidecar even
+            # though _write_file now also preserves them in place (r3-M1).
+            return entries, _backup_bytes(path, raw, "unrecognized")
+        return entries, None
     return [], _backup_bytes(path, raw, "unrecognized")
 
 
 def _write_file(path: Path, entries: list[dict]) -> None:
-    """Write preserving the WRAPPER shape when the original had one."""
-    was_wrapper = False
+    """Write preserving the ORIGINAL document shape (#679).
+
+    A wrapper document keeps its container key — {"tasks": [...]} stays a
+    tasks file, {"jobs": [...]} stays a jobs file — and every unknown sibling
+    key is carried over in place. Bare arrays stay bare arrays. Fail-open:
+    if the prior bytes can't be parsed, fall back to the wrapper detection
+    below (head starts with "{") so a corrupt file still rebuilds as before.
+    """
+    payload: object = entries
     if path.exists():
         head = path.read_text(encoding="utf-8", errors="replace").strip()
-        was_wrapper = head.startswith("{")
-    payload = {"jobs": entries} if was_wrapper else entries
+        try:
+            data = json.loads(path.read_bytes().decode("utf-8-sig"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = None
+        if isinstance(data, dict):
+            # same container choice as _read_entries: first known key whose
+            # value is actually a list (jobs preferred), else first known key
+            # present, else default "jobs" (add ours, keep every sibling).
+            key = next((k for k in ENTRY_KEYS
+                        if isinstance(data.get(k), list)), None)
+            if key is None:
+                key = next((k for k in ENTRY_KEYS if k in data), "jobs")
+            rebuilt = {k: (entries if k == key else v)
+                       for k, v in data.items()}
+            if key not in data:      # no known container -> add ours, keep rest
+                rebuilt[key] = entries
+            payload = rebuilt
+        elif isinstance(data, list):
+            payload = entries
+        elif head.startswith("{"):
+            payload = {"jobs": entries}
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2),

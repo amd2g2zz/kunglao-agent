@@ -13,6 +13,10 @@ the goal -> operationalization translation lives beside it in
     probe_cases:       fresh-input / no-dependency / materialized-artifact
     generalization:    declared structural bit — required | not-applicable |
                        unknown
+    constraint_witness: per-row mechanical witnesses for not_done (schema
+                       constraint-witness/1): exactly one of
+                       check: <command> (exit 0 = constraint holds) or
+                       none: <reason> (explicitly unwitnessable)
 
 Rules (mechanical; per the owner amendments there is NO user confirmation
 round — the human lives at the verbatim task and at the delivery receipt):
@@ -34,13 +38,22 @@ round — the human lives at the verbatim task and at the delivery receipt):
   R4 pre-registration is timestamped (declared_ts) — an unstamped
      translation is not a record.
   R5 post-dispatch the file is append-only: --stamp-dispatch freezes the
-     constitution (the five lists + generalization); from then on dropping
-     or rewording a not_done / deliverables / acceptance entry is REFUSED
-     (an edit that contradicts the constitution), generalization never
-     flips, and every other drift becomes a re-scope record that the
+     constitution (the five lists + generalization + the witness block);
+     from then on dropping or rewording a not_done / deliverables /
+     acceptance entry is REFUSED (an edit that contradicts the
+     constitution), generalization never flips, and every other drift
+     becomes a re-scope record that the
      delivery receipt must restate. Delivery restates the not_done list +
      the generalization declaration (restatement()) — that is the user's
      audit point; ask_for_direction stays the only escalation channel.
+  R6 every not_done counterexample carries a mechanical witness under
+     `constraint_witness` (schema constraint-witness/1): one entry per
+     not_done row binding exactly one of `check: <command>` (exit 0 = the
+     constraint holds at the delivered workspace) or `none: <reason>` (an
+     explicit declaration that no mechanical witness exists). A row with
+     no witness is refused here — settlement prices the row jointly
+     (verdict = witness AND outcome), so an unwitnessed row would be
+     reward-blind.
 
 File IO mirrors scripts/hypothesis_store.py (read -> parse -> validate;
 writes happen only through stamp_dispatch(), which refuses an unaudited
@@ -50,6 +63,7 @@ versions, and an undeclared generalization bit — no fail-open walls.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from datetime import datetime, timezone
@@ -58,6 +72,7 @@ from pathlib import Path
 import yaml
 
 SCHEMA_ID = "goal-operationalization/1"
+WITNESS_SCHEMA = "constraint-witness/1"
 GENERALIZATION_VALUES = ("required", "not-applicable", "unknown")
 
 LIST_FIELDS = ("deliverables", "acceptance", "not_done", "diff_vs_verbatim",
@@ -84,6 +99,75 @@ def _string_list(doc: dict, name: str) -> list:
     if not isinstance(value, list):
         return []
     return [v for v in value if isinstance(v, str) and v.strip()]
+
+
+def witness_block(doc: dict) -> dict | None:
+    """The declared constraint-witness block, or None when absent or not
+    a mapping (the shape the lint and the oracle both read)."""
+    block = doc.get("constraint_witness")
+    return block if isinstance(block, dict) else None
+
+
+def witness_map(doc: dict) -> dict:
+    """{not_done row: witness spec} — {} when the block is absent, not a
+    mapping, or carries a foreign schema."""
+    block = witness_block(doc)
+    if not block or block.get("schema") != WITNESS_SCHEMA:
+        return {}
+    witnesses = block.get("witnesses")
+    return dict(witnesses) if isinstance(witnesses, dict) else {}
+
+
+def _witness_spec_error(spec) -> str | None:
+    """R6 spec shape: a mapping with exactly one non-empty check/none."""
+    if not isinstance(spec, dict):
+        return "witness spec must be a mapping (check: or none:)"
+    check, none = spec.get("check"), spec.get("none")
+    has_check = isinstance(check, str) and bool(check.strip())
+    has_none = isinstance(none, str) and bool(none.strip())
+    if has_check == has_none:
+        return ("needs exactly one of check: (exit 0 = the constraint "
+                "holds) or none: <reason>")
+    extra = sorted(k for k in spec if k not in ("check", "none"))
+    if extra:
+        return f"unknown witness keys: {', '.join(str(k) for k in extra)}"
+    return None
+
+
+def _witness_errors(doc: dict) -> list[str]:
+    """R6: every not_done row binds 1:1 to a witness declaration."""
+    rows = _string_list(doc, "not_done")
+    if not rows:
+        return []
+    block = witness_block(doc)
+    if block is None:
+        return ["constraint_witness: missing — every not_done entry needs "
+                "a mechanical witness (check:) or an explicit declaration "
+                "(none: reason)"]
+    if block.get("schema") != WITNESS_SCHEMA:
+        return [f"constraint_witness.schema: expected {WITNESS_SCHEMA!r}, "
+                f"got {block.get('schema')!r} — refusing an unknown "
+                "witness format"]
+    witnesses = block.get("witnesses")
+    if not isinstance(witnesses, dict):
+        return ["constraint_witness.witnesses: must be a mapping of "
+                "not_done entry -> witness spec"]
+    errors: list[str] = []
+    for row in rows:
+        if row not in witnesses:
+            errors.append(f"constraint_witness: not_done entry has no "
+                          f"mechanical witness ({row!r}) — declare check: "
+                          "<command> or none: <reason>")
+            continue
+        spec_error = _witness_spec_error(witnesses[row])
+        if spec_error:
+            errors.append(f"constraint_witness: {row!r} {spec_error}")
+    for key in witnesses:
+        if key not in rows:
+            errors.append(f"constraint_witness: {key!r} is not a declared "
+                          "not_done entry — witnesses bind 1:1 to the "
+                          "constitution")
+    return errors
 
 
 def _generalization_errors(bit: str, diff: list, probes: list) -> list[str]:
@@ -139,6 +223,7 @@ def _content_errors(doc: dict) -> list[str]:
                     "— silent equivalence is refused")
     errors += _generalization_errors(
         doc["generalization"], diff, _string_list(doc, "probe_cases"))
+    errors += _witness_errors(doc)
     if not (doc.get("declared_ts") or "").strip():
         errors.append(
             "declared_ts: empty — a pre-registration without a timestamp "
@@ -168,6 +253,20 @@ def _constitution_errors(doc: dict) -> list[str]:
             "generalization: post-dispatch flip refused — the declared bit "
             "is immutable; narrowing goes through ask_for_direction, never "
             "a silent edit")
+    frozen_w = con.get("constraint_witness")
+    if isinstance(frozen_w, dict) and frozen_w:
+        if witness_block(doc) is None:
+            errors.append(
+                "constraint_witness: post-dispatch withdrawal refused — "
+                "the frozen witness block left the append-only "
+                "constitution")
+        else:
+            current = witness_map(doc)
+            for row, spec in frozen_w.items():
+                if current.get(row) != spec:
+                    errors.append(
+                        "constraint_witness: post-dispatch witness "
+                        f"withdrawal/weakening refused ({row!r})")
     return errors
 
 
@@ -233,6 +332,7 @@ def stamp_dispatch(doc: dict, ts: str) -> dict:
     constitution = {"generalization": doc["generalization"]}
     for name in LIST_FIELDS:
         constitution[name] = list(_string_list(doc, name))
+    constitution["constraint_witness"] = copy.deepcopy(witness_map(doc))
     return dict(doc, first_dispatch_ts=ts, constitution=constitution)
 
 

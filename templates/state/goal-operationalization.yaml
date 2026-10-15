@@ -18,6 +18,15 @@ deliverables: []       # - what counts as delivered (concrete artifacts / capabi
 acceptance: []         # - how each deliverable is checked, mechanically where possible
 not_done: []           # - counterexamples, "X does not count as done" — the immutable
                        #   constitution: append-only after the first dispatch
+constraint_witness:    # - mechanical witnesses binding 1:1 to the not_done rows
+  schema: constraint-witness/1
+  witnesses: {}        #   "<exact not_done row>":
+                       #     check: "<shell command>"   # exit 0 = constraint holds
+                       #   or
+                       #     none: "<reason>"           # explicitly unwitnessable
+                       #   A row with no witness is refused by the validator; at the
+                       #   ORACLE the verdict = witness AND outcome (a tripped check
+                       #   turns RED even when the outcome checker is green).
 diff_vs_verbatim: []   # - declared delta vs the verbatim task; no silent equivalence
 probe_cases: []        # - must include the fresh-input case whenever generalization is
                        #   required/unknown — for protocol client simulation the

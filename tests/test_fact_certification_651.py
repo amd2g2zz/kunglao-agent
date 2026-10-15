@@ -176,7 +176,10 @@ def test_fact_face_junk_file_counts_toward_presence_only(tmp_path) -> None:
     (ws / "facts" / "F001-decrypt-key.md").write_text(
         "junk prose mentioning C-005\n", encoding="utf-8")
     face = state.fact_face(ws)
-    assert face == {"count": 1, "verified": 0}
+    # RE-MINT AUDIT (issue-678 D-678.5): fact_face grew the graded
+    # ``weighted_fraction`` column; a malformed file carries ZERO
+    # graded weight (the #651 farm wall holds — junk never lifts Φ).
+    assert face == {"count": 1, "verified": 0, "weighted_fraction": 0.0}
 
 
 # ---------------------------------------------------- _facts_citing ----

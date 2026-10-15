@@ -49,6 +49,7 @@ checker:
   - converged
   thresholds:
     min_pair_ratio: 1.0
+  candidate: answer.txt
 ground_truth:
   file: ground_truth.json
   space_bits: 448
