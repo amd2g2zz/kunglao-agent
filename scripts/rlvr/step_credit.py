@@ -37,6 +37,18 @@ carries an ICD-203 Admiralty credibility letter (A completely reliable
 WORST letter governs (a claim resting on one weak source is weak);
 no provenance letter -> weight 1.0 ("weighted ... if available").
 
+The LEARNED source-reliability discount (``rlvr.source_reliability``)
+rides ON TOP: when an evidence item carries source labels (``source`` +
+``reference_class``) its credit is multiplied by a Thompson draw from
+the Beta folded over invalidation events — evidence REFUTED by later
+evidence lowers its source class's reliability, CONFIRMED raises it,
+and no event about a source means the uniform prior (the absence of a
+rule; the learned face reads neither the Admiralty table nor any other
+rule table). Unlabeled evidence rides weight 1.0 — "weighted ... if
+available" — so an unlabeled window scores byte-identical to the
+pre-discount value. ``weighted_step_credit`` is the composition face;
+``step_credit`` routes through it.
+
 Window rule: the step's evidence is ``facts/F*.md`` with mtime in
 ``(since_ts, until]`` AND a claim channel naming THIS claim
 (claim_id / claim_ids / claims / creator). Facts outside the window or
@@ -53,10 +65,13 @@ may raise into the SubagentStop path (rlvr.step_grain owns the cage).
 """
 from __future__ import annotations
 
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
 from kunglao_log import warn  # canonical warn: ONE implementation
+
+from rlvr import source_reliability as _sr  # the learned weight
 
 #: the three verification classes the step score prices (#712 A)
 CROSS_VALIDATED = "cross_validated"
@@ -158,14 +173,43 @@ def item_credit(meta: dict) -> float:
 
 def step_credit(items) -> float:
     """The step-boundary score: the mean credit of the evidence items
-    the step touched. Empty window -> the unverified provisional floor
-    (the step happened; claim-terminal calibration corrects it — a step
-    with no evidence is never banked as 0, which would keep the signal
-    degenerate)."""
+    the step touched, each discounted by its item's LEARNED source
+    reliability (``weighted_step_credit`` — unlabeled items ride the
+    neutral weight, so the pre-discount score is preserved). Empty
+    window -> the unverified provisional floor (the step happened;
+    claim-terminal calibration corrects it — a step with no evidence is
+    never banked as 0, which would keep the signal degenerate)."""
+    return weighted_step_credit(items)
+
+
+def weighted_step_credit(items, *, context_class=None,
+                         rng: random.Random | None = None,
+                         source_view=None) -> float:
+    """The step score with the LEARNED source-reliability discount: the
+    mean over items of ``item_credit(meta) × theta``, where theta is a
+    Thompson draw from the learned source-reliability Beta
+    (``rlvr.source_reliability``) for the item's source class. The
+    discount is learned from invalidation events — never a
+    source-to-trust table. An item carrying no source labels rides
+    theta = 1.0 ("weighted ... if available"), so an unlabeled window
+    scores byte-identical to the pre-discount value. ``source_view``
+    lets a caller reuse one fold across items; the store is read only
+    when a labeled item is present (no I/O for unlabeled windows)."""
     rows = [i for i in (items or []) if isinstance(i, dict)]
     if not rows:
         return CREDIT_BY_CLASS[UNVERIFIED]
-    return round(sum(item_credit(i) for i in rows) / len(rows), 6)
+    view = source_view
+    total = 0.0
+    for meta in rows:
+        weight = 1.0
+        if _sr.has_source_labels(meta):
+            if view is None:
+                view = _sr.fold()
+            weight = _sr.reliability_weight(meta,
+                                            context_class=context_class,
+                                            rng=rng, view=view)
+        total += item_credit(meta) * weight
+    return round(total / len(rows), 6)
 
 
 # --------------------------------------------------------- the evidence window

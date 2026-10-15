@@ -8,13 +8,18 @@ faces:
      evidence CONFIRMED raises alpha — the invalidation events are the
      only teacher.
   2. a low-reliability source's step credit is discounted by the sampled
-     theta (step_credit *= source_reliability_theta).
+     theta (item_credit × source_reliability_theta, composed onto the
+     step-credit module's own score).
   3. Thompson sampling naturally explores uncertain sources — a
      settled-bad source is effectively never retried while an uncertain
      one keeps drawing wide.
   4. no rule table: every labeled class starts Beta(1, 1); reliability
      learned for a source applies to that source in NEW contexts (the
      marginal backoff).
+
+The credit face under test is the step-credit module's
+(classify_verification / item_credit / step_credit — whose scoring this
+suite discounts) with the learned weight riding on top.
 
 Every scenario is derived from the change's spec deltas
 (openspec/changes/issue-715-source-reliability), not from the
@@ -75,7 +80,7 @@ def test_confirmed_evidence_updates_source_beta(store):
     assert after["mean"] > before["mean"]
 
 
-# 2. credit weighting -------------------------------------------------------
+# 2. credit weighting (composed onto the step-credit module's score) --------
 
 def test_low_reliability_source_discounts_credit(store):
     for _ in range(10):
@@ -83,27 +88,32 @@ def test_low_reliability_source_discounts_credit(store):
     for _ in range(10):
         sr.record_confirmation(ASM)
 
-    # step_credit = anchor(verification_class) * source_reliability_theta
-    assert sc.anchor("cross_validated") == 1.0
-    assert sc.anchor("unverified") == 0.3
-    assert sc.anchor("refuted") == 0.0
+    # the step-credit module's own verification-class scale is untouched
+    assert sc.CREDIT_BY_CLASS[sc.CROSS_VALIDATED] == 1.0
+    assert sc.CREDIT_BY_CLASS[sc.UNVERIFIED] == 0.3
+    assert sc.CREDIT_BY_CLASS[sc.REFUTED] == 0.0
+    assert sc.classify_verification("PROVEN", "passes") == sc.CROSS_VALIDATED
 
-    theta_low = sr.reliability_weight(PSEUDO, rng=random.Random(7))
-    theta_high = sr.reliability_weight(ASM, rng=random.Random(7))
-    credit_low = sc.apply_source_reliability(1.0, theta_low)
-    credit_high = sc.apply_source_reliability(1.0, theta_high)
+    bad = {"status": "PROVEN", "verify_status": "passes", **PSEUDO}
+    good = {"status": "PROVEN", "verify_status": "passes", **ASM}
+    credit_bad = sc.weighted_step_credit([bad], rng=random.Random(7))
+    credit_good = sc.weighted_step_credit([good], rng=random.Random(7))
 
-    assert credit_low == pytest.approx(theta_low)     # step_credit *= theta
-    assert credit_high == pytest.approx(theta_high)
-    # the composed face agrees with the manual composition
-    assert sc.weighted_step_credit(1.0, PSEUDO, rng=random.Random(7)) == \
-        pytest.approx(credit_low)
+    # step_credit = item_credit(meta) * source_reliability_theta
+    # (the module's 6-decimal rounding is its scoring convention)
+    theta_bad = sr.reliability_weight(bad, rng=random.Random(7))
+    assert credit_bad == round(sc.item_credit(bad) * theta_bad, 6)
     # Beta(1, 11) vs Beta(11, 1): the discount is not marginal
-    assert credit_low < 0.35
-    assert credit_high > 0.65
-    # unlabeled evidence rides the neutral weight — "if available"
+    assert credit_bad < 0.35
+    assert credit_good > 0.65
+    assert credit_bad < credit_good
+    # the production entry (step_credit) carries the same discount
+    assert sc.step_credit([bad]) == sc.weighted_step_credit([bad])
+    assert sc.step_credit([bad]) < 0.35
+    # unlabeled evidence rides the neutral weight — byte-identical score
+    plain = {"status": "PROVEN", "verify_status": "passes"}
+    assert sc.weighted_step_credit([plain]) == sc.step_credit([plain]) == 1.0
     assert sr.reliability_weight({"eid": "E-x"}) == 1.0
-    assert sc.weighted_step_credit(0.3, {"eid": "E-x"}) == pytest.approx(0.3)
 
 
 # 3. TS exploration of uncertain sources ------------------------------------

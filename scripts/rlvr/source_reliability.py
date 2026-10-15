@@ -116,6 +116,14 @@ def _norm_context(context_class) -> str:
     return ctx or DEFAULT_CONTEXT
 
 
+def has_source_labels(evidence) -> bool:
+    """True when the item carries valid source labels (``source`` +
+    ``reference_class``). The cheap probe composition faces use to skip
+    the store read for unlabeled evidence ("weighted ... if
+    available")."""
+    return _resolve(evidence, None) is not None
+
+
 # ------------------------------------------------- the write faces (events)
 
 def record_outcome(evidence, outcome, *, context_class=None, by=None,
@@ -292,6 +300,6 @@ def reliability_weight(evidence, *, context_class=None,
 
 __all__ = ["SCHEMA", "STORE_REL", "REFERENCE_CLASSES", "DEFAULT_CONTEXT",
            "CONFIRMED", "REFUTED", "store_path", "evidence_labels",
-           "source_class_of", "record_outcome", "record_refutation",
-           "record_confirmation", "ReliabilityView", "fold",
-           "reliability_weight"]
+           "source_class_of", "has_source_labels", "record_outcome",
+           "record_refutation", "record_confirmation", "ReliabilityView",
+           "fold", "reliability_weight"]
