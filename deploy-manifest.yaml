@@ -1344,6 +1344,10 @@ files:
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
     sha256: 2488cf85e820bf43377af7bf2a20546f4db6c30499f8c8e01549ecadc8aab170
+  - src: scripts/rlvr/source_reliability.py
+    dest: .claude/scripts/rlvr/source_reliability.py
+    kind: scaffold
+    sha256: b8c23cea8f90fbd296334213c1cd695529775e52412612391ebf1e4ad1c5adb6
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
