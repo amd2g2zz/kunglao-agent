@@ -301,13 +301,33 @@ def append_quarantine_row(ws, claim: str | None, detail: str,
 
 
 def append_usage_row(ws, claim: str | None, family: str, agent: str | None,
-                     tier: int = 0, tools: list | None = None) -> None:
+                     tier: int = 0, tools: list | None = None, *,
+                     propensity: float | None = None,
+                     sampled_family: str | None = None,
+                     prior_source: str | None = None) -> None:
     """One usage row per approved dispatch — the (family, cell) counting
-    feed. cell = the claim id today; W2 re-keys to state signatures."""
+    feed. cell = the claim id today; W2 re-keys to state signatures.
+
+    #691: the row is ALSO the declaration reconciliation record —
+    ``propensity`` (the sampler's draw probability of the DECLARED
+    family), ``sampled_family`` (what the gate's own draw would have
+    chosen) and ``prior_source`` (history | llm_prior | store) ride every
+    row as explicit nulls when the sampler view is unavailable (the
+    honest gap, never a fabricated number). Values are validated at this
+    boundary: a non-numeric / NaN / out-of-[0,1] propensity degrades to
+    null, never a raise."""
+    if isinstance(propensity, bool) or not isinstance(
+            propensity, (int, float)) or propensity != propensity \
+            or not (0.0 <= float(propensity) <= 1.0):
+        propensity = None
     _append_jsonl(Path(ws) / USAGE_REL, {
         "schema": USAGE_SCHEMA, "ts": _utc_now_z(),
         "claim": claim, "cell": claim, "family": family, "agent": agent,
-        "tier": tier, "tools": list(tools or [])})
+        "tier": tier, "tools": list(tools or []),
+        "propensity": (None if propensity is None
+                       else round(float(propensity), 6)),
+        "sampled_family": str(sampled_family) if sampled_family else None,
+        "prior_source": str(prior_source) if prior_source else None})
 
 
 def _read_jsonl(path: Path) -> list[dict]:

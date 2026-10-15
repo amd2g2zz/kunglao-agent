@@ -36,7 +36,7 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from _hooks_path import load_hooks_lib  # #444: the ONE worker-status parser
@@ -46,6 +46,11 @@ CEIL_MIN = 25
 STEP_MIN = 5
 EVAL_EVERY_TICKS = 3
 RECENT_SIGNAL_MIN = 30  # a signal row younger than this = activity
+# #682(a): the freshness cut, same 10-min rule as workguard's waiting_live —
+# a killed worker leaves an in-progress status tail whose mtime keeps aging;
+# without the cut it counted as busy forever and pinned the cadence at the
+# floor (live evidence: C006/C019, 94% of fires in [4,6] min).
+WORKER_FRESH_MIN = 10
 ADVICE_REL = Path("runs") / ".cadence-advice.json"
 
 
@@ -73,17 +78,24 @@ def current_interval_min(ws: Path) -> int:
     return int(TICK_INTERVAL_DEFAULT_MIN)
 
 
-def active_workers(ws: Path) -> list[str]:
+def active_workers(ws: Path, *,
+                   now: datetime | None = None) -> list[str]:
     """Fresh in-progress worker ids — the canonical #444 parser (last
-    ``status:`` token wins; never a hand-rolled scan)."""
+    ``status:`` token wins; never a hand-rolled scan) plus the #682(a)
+    freshness cut: a status file untouched for > WORKER_FRESH_MIN is a
+    zombie tail (killed worker), not load, and must not pin the cadence
+    at the floor. The cut mirrors workguard's waiting_live 10-min rule."""
     lib = load_hooks_lib()
+    now = now or _now()
+    cut = now - timedelta(minutes=WORKER_FRESH_MIN)
     out: list[str] = []
     for f in sorted((ws / "runs").glob("worker-status-*.md")):
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
+            mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
         except OSError:
             continue
-        if lib.parse_worker_status(text) == "in-progress":
+        if lib.parse_worker_status(text) == "in-progress" and mtime >= cut:
             out.append(f.stem.replace("worker-status-", ""))
     return out
 

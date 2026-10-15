@@ -101,10 +101,13 @@ def canonical_dump(doc) -> str:
 # every comment, so the register's single-writer rewrites silently
 # stripped its stamp — hooks_selfcheck reported
 # "template_version stamp faults: claim-register.yaml=missing" on every
-# tick. Re-emit the stamp on write: preserve a found value (an older
-# value must SURVIVE as the visible upgrade signal); an absent register
-# stamp recovers from the same-dir CLAUDE.md carrier (correct for both
-# the skill and the deployed copy), then the active skill version.
+# tick. The whole LEADING COMMENT HEADER is re-emitted on write, not only
+# the stamp: the marker family (the [initialized] header) rides the same
+# block and is just as load-bearing — a found header survives verbatim (an
+# older stamp value must SURVIVE as the visible upgrade signal); a
+# register header without the stamp recovers the value from the file, the
+# same-dir CLAUDE.md carrier (correct for both the skill and the deployed
+# copy), then the active skill version.
 _STAMP_RE = re.compile(r"^#\s*kunglao_template_version:\s*(\S+)",
                        re.MULTILINE)
 
@@ -131,9 +134,70 @@ def _stamp_value(old_text: str, path) -> str | None:
         return None
 
 
-def _stamp_prefix(old_text: str, path) -> str:
+def _leading_header(old_text: str) -> str:
+    """The maximal run of leading comment lines, byte-identical — the
+    block the stamp and the marker family both ride."""
+    out: list[str] = []
+    for line in old_text.splitlines(keepends=True):
+        if not line.lstrip().startswith("#"):
+            break
+        out.append(line if line.endswith("\n") else line + "\n")
+    return "".join(out)
+
+
+def _write_prefix(old_text: str, path) -> str:
+    """The header re-emitted above the canonical body: the found leading
+    comment block verbatim, with the stamp value recovered above it when
+    the block does not carry one (file, then the same-dir CLAUDE.md
+    carrier for the register, then the active skill version)."""
+    header = _leading_header(old_text)
+    if _STAMP_RE.search(header):
+        return header
     value = _stamp_value(old_text, path)
-    return f"# kunglao_template_version: {value}\n" if value else ""
+    stamp = f"# kunglao_template_version: {value}\n" if value else ""
+    return stamp + header
+
+
+def _apply_append(doc, argv, dotted, segments) -> int | None:
+    """The append branch: grow the list by ONE scalar (or materialize an
+    absent final key as a fresh list). None = mutated in place; 3 = the
+    existing target is not a list (never silently coerced)."""
+    node, key = _walk(doc, segments)  # parent path must exist
+    if isinstance(node, dict) and key not in node:
+        node[key] = []  # first item materializes the list
+    cur = node[key]
+    if not isinstance(cur, list):
+        print(f"ws_yaml: append target is not a list: {dotted} "
+              f"({type(cur).__name__})", file=sys.stderr)
+        return 3
+    node[key] = [*cur, _coerce(argv[3])]
+    return None
+
+
+def _mutate(cmd: str, doc, argv: list[str], dotted: str,
+            segments: list[str]) -> int | None:
+    """Apply the sanctioned command to the loaded document.
+
+    None = document mutated in place (the caller round-trips and writes);
+    0 = command complete WITHOUT a write (get prints and stops); any other
+    int = the exit code to return (stderr already printed where relevant).
+    A missing path raises KeyError — main maps it to exit 5."""
+    if cmd == "get":
+        node, key = _walk(doc, segments)
+        print(yaml.safe_dump([node[key]], default_flow_style=True)
+              .strip()[1:-1].strip())
+        return 0
+    if cmd == "del":
+        node, key = _walk(doc, segments)
+        del node[key]
+        return None
+    if len(argv) < 4:
+        return 2
+    if cmd == "append":
+        return _apply_append(doc, argv, dotted, segments)
+    node, key = _walk(doc, segments, create=True)  # set
+    node[key] = _coerce(argv[3])
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -155,43 +219,21 @@ def main(argv: list[str] | None = None) -> int:
     if doc is None:
         doc = {}
     try:
-        if cmd == "get":
-            node, key = _walk(doc, segments)
-            print(yaml.safe_dump([node[key]], default_flow_style=True)
-                  .strip()[1:-1].strip())
-            return 0
-        if cmd == "del":
-            node, key = _walk(doc, segments)
-            del node[key]
-        elif cmd == "append":
-            if len(argv) < 4:
-                return 2
-            node, key = _walk(doc, segments)  # parent path must exist
-            if isinstance(node, dict) and key not in node:
-                node[key] = []  # first item materializes the list
-            cur = node[key]
-            if not isinstance(cur, list):
-                print(f"ws_yaml: append target is not a list: {dotted} "
-                      f"({type(cur).__name__})", file=sys.stderr)
-                return 3
-            node[key] = [*cur, _coerce(argv[3])]
-        else:  # set
-            if len(argv) < 4:
-                return 2
-            node, key = _walk(doc, segments, create=True)
-            node[key] = _coerce(argv[3])
+        done = _mutate(cmd, doc, argv, dotted, segments)
     except KeyError as exc:
         print(f"ws_yaml: path not found: {dotted} ({exc})", file=sys.stderr)
         return 5
+    if done is not None:
+        return done
     text = canonical_dump(doc)
     if yaml.safe_load(text) != doc:  # refuse non-round-tripping writes
         print("ws_yaml: write refused (non-round-tripping)",
               file=sys.stderr)
         return 4
-    text = _stamp_prefix(old_text, path) + text
+    text = _write_prefix(old_text, path) + text
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    if cmd != "get" and Path(path).name == "claim-register.yaml":
+    if Path(path).name == "claim-register.yaml":
         # matrix4b G2: the sanctioned register write settles its claim
         # transitions (the settlement ledger face). Workers write the register
         # ONLY through this tool (single-writer), so without this leg

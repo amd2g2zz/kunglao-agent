@@ -10,7 +10,7 @@ cron heartbeat demotes to a true watchdog. This module is the PURE
 predicate the WORKGUARD evaluates at every turn-exit attempt:
 
     actionable := claims OPEN-or-returnable with no active worker,
-                  not PARKed, no blocking wall (budget/deadline),
+                  not PARKed, no blocking wall (budget/deadline/liveness),
                   deps satisfied
 
   non-empty actionable set -> the turn exit is BLOCKED (guidance injected);
@@ -33,6 +33,11 @@ Fields consumed (workspace state, read-only):
   task_spec.yaml + runs/.heartbeat.json
                         time_budget_minutes elapsed since started_ts ->
                         DEADLINE wall
+  analysis_state.txt + runs/.heartbeat.json
+                        the dispatch gate's own verdict (worker_budget_sinks
+                        .check_heartbeat_alive) -> LIVENESS wall while every
+                        dispatch would be REJECTed (#682c: the two
+                        schedulers must not demand each other's precondition)
 
 Fail-open posture: an unreadable register degrades to the empty set with
 ONE canonical warn (the guard must never become a session deadlock
@@ -190,6 +195,47 @@ def _deps_satisfied(claim: dict, depends_on: dict[str, list[str]],
     return True
 
 
+def _liveness_wall(ws: Path) -> dict | None:
+    """#682(c): the dispatch gate's OWN verdict, shared verbatim.
+
+    hooks/worker_budget_sinks.check_heartbeat_alive is the mechanical
+    dispatch-gate authority (#754 continuous-tick liveness). While it
+    would REJECT every dispatch (dead heartbeat), the actionable set must
+    not demand one: pre-fix the two schedulers deadlocked in
+    'dispatch REJECT (liveness) -> turn-exit BLOCK (workguard) -> retry',
+    each waiting on the other's precondition. The wall gates BOTH faces
+    exactly like budget/deadline — a dispatch that cannot happen is not
+    actionable work — and the detail names the repair chain.
+
+    Parity discipline: the gate's own predicate is called (never a
+    re-implementation), so its skip semantics (no analysis_state.txt ->
+    pass) and skill-side fallback carry over — workguard can never wall
+    a workspace the gate would let through, nor un-wall one it rejects.
+    Fail-open: any load/read failure -> no wall (the guard never becomes
+    the deadlock source it exists to prevent).
+    """
+    state_path = Path(ws) / "analysis_state.txt"
+    try:
+        from _hooks_path import load_module_by_path
+        sinks = load_module_by_path(
+            "_workguard_wb_sinks",
+            Path(__file__).resolve().parent.parent / "hooks"
+            / "worker_budget_sinks.py")
+        alive, detail = sinks.check_heartbeat_alive(state_path)
+    except Exception as exc:  # noqa: BLE001 — the wall must never crash the guard
+        warn("workguard_liveness", f"{type(exc).__name__}: {exc}")
+        return None
+    if alive:
+        return None
+    return {"wall": "liveness",
+            "detail": f"dispatch gate REJECTs while the heartbeat is down "
+                      f"({detail}) — re-arm it before dispatching "
+                      f"(heartbeat_tick.py {ws}, or re-register with "
+                      f"hook_activation.py {ws} --heartbeat-on); until then "
+                      f"no dispatch is possible and turn exit is legal "
+                      f"sleep (#682c)"}
+
+
 def actionable_set(ws: Path, *, now: datetime | None = None) -> dict:
     """The pure WORKGUARD predicate. Returns:
 
@@ -203,12 +249,15 @@ def actionable_set(ws: Path, *, now: datetime | None = None) -> dict:
     Walls gate BOTH faces (a paused/deadline'd run may not dispatch nor
     re-dispatch; settlement stays legal only because it is not this
     guard's job to force it — the watchdog and the operator own paused
-    runs).
+    runs). The #682(c) liveness wall joins the same gate: while the
+    dispatch gate would reject every dispatch, demanding one is not
+    actionable work (the mutual-block deadlock cannot form).
     """
     ws = Path(ws)
     now = now or datetime.now(timezone.utc)
     claims, _ok = _load_claims(ws)
-    walls = [w for w in (_budget_wall(ws), _deadline_wall(ws, now)) if w]
+    walls = [w for w in (_budget_wall(ws), _deadline_wall(ws, now),
+                         _liveness_wall(ws)) if w]
     active, _stuck = _worker_faces(ws)
     # local-fix (owner ruling 2026-10-10): a FRESH waiting worker is ALIVE —
     # it parked per the WAIT contract precisely to await verification, and

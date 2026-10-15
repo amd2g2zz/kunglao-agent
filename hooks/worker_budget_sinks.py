@@ -30,6 +30,7 @@ from worker_budget_gates import (
     check_workers_lt_3, check_promotion_attempts, check_tools_allowed,
     check_max_retries,  # #427: the #604 breaker wired into live enforcement
     check_host_forbidden_tools, check_deadline, check_tier_gate,
+    check_tier_consistency,  # #680: envelope tier == action_tier(claim)
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
     check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
@@ -151,6 +152,17 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'evidence first - raise the open claim\'s evidence_tier_attempted '
             'in claim-register.yaml by doing that tier\'s work (static/CTI '
             'before VM), then re-dispatch the tier=N claim.'
+        ),
+    },
+    'tiercons': {
+        'additionalContext': (
+            'tier mismatch (#680): the dispatch envelope\'s `tier` must '
+            'equal min(evidence_tier_attempted+1, 3) for the target claim '
+            '(action_tier). Fix: re-dispatch with the tier named in the '
+            'REJECT message - the rank_feeds event payload (`tiers` key) '
+            'shows the computed tier per claim. To deliberately deviate, '
+            'prefix the dispatch prompt with `agent-reasoning: <why>` '
+            '(the deviation is recorded, not silently skipped).'
         ),
     },
     'selfcap': {
@@ -325,6 +337,28 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
 }
 
 
+def _record_reject(name: str, msg: str, paths: dict) -> None:
+    """#683: a REJECT must be DURABLE, not stdout-only — one row appended
+    to runs/gate-telemetry.jsonl (the shared gate-telemetry face,
+    gate_telemetry.append_row), gate=worker_budget.<name>, rc=2 (the exit
+    code this emission site returns), msg = the rejection reason. Pre-#683
+    every worker_budget gate verdict (tier / cap / liveness / heartbeat /
+    ...) printed and vanished — an orchestrator looping on the same
+    REJECT accumulated silently and a post-mortem had nothing to count.
+
+    Fail-open: bookkeeping must never change the verdict (a broken/absent
+    ledger degrades to ONE rate-limited warn, the issue-275 batch-3
+    posture) — the REJECT still fires either way."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return
+    try:
+        import gate_telemetry as _gt
+        _gt.append_row(ws, f'worker_budget.{name}', 2, msg=msg)
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks enforcement
+        warn('reject_telemetry', f'{type(exc).__name__}: {exc}')
+
+
 def _reject(name: str, msg: str, paths: dict) -> int:
     """REJECT with guidance (issue #270): stderr summary + stdout JSON
     hookSpecificOutput.additionalContext. Exit 2 semantics unchanged.
@@ -334,8 +368,13 @@ def _reject(name: str, msg: str, paths: dict) -> int:
     producer-attributed unit (references/contracts/xml-injection-standard.md). The
     tag is applied HERE, at the emission site, so the REJECT_FIXES table
     and the stderr summary stay raw. Tags mark, never gate: rc=2 unchanged.
+
+    #683: THE chokepoint for every worker_budget gate REJECT — the durable
+    telemetry row is written HERE, so tier/cap/liveness/heartbeat and the
+    whole pre_check battery are auditable without touching each gate.
     """
     print(f'REJECT {name}: {msg}', file=sys.stderr)
+    _record_reject(name, msg, paths)
     entry = REJECT_FIXES.get(name)
     if not entry:
         return 2
@@ -679,6 +718,63 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
         return False
 
 
+def _sample_reconciliation(ws, declared: str | None) -> dict:
+    """#691: what the RL sampler would choose for THIS dispatch — the
+    gate's own draw (rlvr.strategy_store.reconcile_declaration: the same
+    face ``method_lead`` renders, recomputed at dispatch time so nothing
+    the envelope says can move it) plus the declared family's propensity
+    under it. Fail-open to the all-None gap view: a sampler failure is
+    ONE rate-limited warn (error class only) and the dispatch proceeds —
+    telemetry never turns an ALLOW into anything else."""
+    gap = {"sampled_family": None, "propensity": None,
+           "prior_source": None, "deviates": False}
+    if not ws or not declared:
+        return gap
+    try:
+        from rlvr import strategy_store as _ss691  # noqa: PLC0415 — lazy
+        return _ss691.reconcile_declaration(ws, declared)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('method_family.sample_view', f'{type(exc).__name__}: {exc}')
+        return gap
+
+
+def _emit_sample_deviation(ws, cid, declared, view: dict,
+                           prompt: str) -> None:
+    """#691: the deviation from the sampler's draw is a RECORDED
+    decision, never a new gate (2026-10-14 acceptance amendment:
+    exception paths are decisions with recorded reasons, never a new
+    prefix bypass) — one ``sample_deviation`` event into the unified log
+    carrying the deviation's logged propensity, the sampler view it
+    deviated from, and the dispatch's own recorded reason when it
+    declared one (``agent-reasoning:`` — the prefix that excuses the
+    top-1 claim rank elsewhere never silences this record). Fail-open: a
+    logging failure never blocks the dispatch (one stderr note)."""
+    reason = None
+    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
+                  re.IGNORECASE)
+    if m:
+        reason = m.group(1).strip()[:200] or None
+    detail = json.dumps({
+        'declared': str(declared),
+        'sampled': view.get('sampled_family'),
+        'propensity': view.get('propensity'),
+        'prior_source': view.get('prior_source'),
+        'reason': reason,
+    }, ensure_ascii=False)
+    try:
+        if ws and _klog is not None:
+            _klog.emit(Path(ws), 'hook:worker_budget', 'sample_deviation',
+                       claim=cid, detail=detail,
+                       trace_id=_declared_trace_id(prompt))
+    except Exception as exc:  # noqa: BLE001 — logging never blocks dispatch
+        print(f'worker_budget: sample_deviation emit failed ({exc!r})',
+              file=sys.stderr, flush=True)
+    print(f'SAMPLE-DEV: declared {declared} != sampled '
+          f'{view.get("sampled_family")} '
+          f'(propensity={view.get("propensity")})',
+          file=sys.stderr, flush=True)
+
+
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
                         tools: list) -> tuple[int | None, str | None]:
@@ -698,7 +794,15 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     REJECT already emitted; token feeds the lifecycle row so the unified
     log is replay-re-indexable. Callers pass cid=None to skip (the leg
     fires only on a recognized dispatch shape — a plain Agent prompt is
-    not a kunglao dispatch and keeps the pre-#432 behavior)."""
+    not a kunglao dispatch and keeps the pre-#432 behavior).
+
+    #691: the validated declaration is ALSO reconciled against the
+    gate's own sampler draw (see _sample_reconciliation) — the usage
+    row carries propensity + sampled_family + prior_source, and a
+    deviation emits the recorded-decision ``sample_deviation`` event.
+    The reconciliation NEVER rejects (fail-open + warn): vocabulary
+    validation stays this gate's only REJECT face (2026-10-14
+    acceptance amendment — no new rule gate)."""
     if cid is None:
         return (None, None)
     if _mf432 is None:
@@ -722,12 +826,22 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
         return (_reject('methodfamily', mf_msg, paths), None)
+    # #691: the declaration reconciliation view (fail-open gap on any
+    # miss) rides the usage row — the recorded sample-vs-declared pair
+    # the issue measured absent from runs/method-family-log.jsonl.
+    view = _sample_reconciliation(paths.get('workspace'), mf_value)
     _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
-                            row_agent, tier, tools)
+                            row_agent, tier, tools,
+                            propensity=view.get('propensity'),
+                            sampled_family=view.get('sampled_family'),
+                            prior_source=view.get('prior_source'))
     mf_other = _mf432.parse_other_detail(mf_value)
     if mf_other is not None:
         _mf432.append_quarantine_row(paths.get('workspace'), cid,
                                      mf_other, row_agent)
+    if view.get('deviates'):
+        _emit_sample_deviation(paths.get('workspace'), cid, mf_value,
+                               view, prompt)
     return (None, mf_value)
 
 
@@ -784,6 +898,16 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
         ('deadline', check_deadline(paths['state'])),
+        # #680: tier consistency BEFORE the tier ladder gate — on the C-007
+        # shape (declared tier=2, eta=0) both would reject; this one carries
+        # the ACTIONABLE message (the correct tier = action_tier), while the
+        # ladder gate only states the invariant. #680 D2 mirror: skipped for
+        # verifier-remediation dispatches — a redteam/verdict-scorer tier is
+        # not the claim's evidence-ladder step, and gating it would
+        # re-create the blocked-remediation deadlock class the D2
+        # pass-through exists to prevent.
+        ('tiercons', (True, '') if verifier_remediation
+         else check_tier_consistency(paths['register'], cid, tier, prompt)),
         ('tier', check_tier_gate(paths['register'], tier)),
         ('selfcap', check_no_self_cap(desc, paths['task_spec'])),
         # v1.9.28: heartbeat MUST be alive before any dispatch — mechanical
@@ -940,6 +1064,19 @@ def pre_check(payload: dict, paths: dict) -> int:
     # anchor stamp (single writer); a later REJECT in the chain rolls it
     # back (dispatch_gate -> reopen_claim_no_worker).
     _flip_claim_in_progress(paths, cid)
+    # #680: the MISSING evidence_tier_attempted writer. check_tier_gate's
+    # ladder requires eta >= tier-1 for tier>=2 dispatches, but before this
+    # line NOTHING ever wrote eta — the ladder could never climb (C-007
+    # self-deadlock: declared tier=2, gate rejects on eta=0, nobody does
+    # tier-1 work to raise eta). Dispatch-time write = ATTEMPTED semantics
+    # (design D-680.1: the worker is being sent out to attempt this tier NOW;
+    # a settle-time write would let a silently-dead worker leave eta
+    # unclimbed and re-deadlock the next dispatch). Monotonic max(eta,
+    # tier) — a cheaper re-dispatch never lowers attempt history.
+    # Single-writer: canonical register write via ws_yaml renderer (same
+    # shape as _flip_claim_in_progress). Fail-open — the dispatch verdict
+    # is already decided at this point.
+    _write_eta_at_dispatch(paths, cid, tier)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -971,6 +1108,45 @@ def _flip_claim_in_progress(paths: dict, cid: str | None) -> bool:
                 c['status'] = 'IN_PROGRESS'
                 p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
                 return True
+        return False
+    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
+        return False
+
+
+def _write_eta_at_dispatch(paths: dict, cid: str | None, tier: int) -> bool:
+    """#680: raise the dispatched claim's evidence_tier_attempted to
+    max(current_eta, tier) at the ALLOW tail (the tier-ladder writer that
+    never existed).
+
+    Dispatch-time = ATTEMPTED semantics (design D-680.1): the worker is
+    being sent out to attempt this tier now; the attempt history — not the
+    outcome — is what check_tier_gate prices. Monotonic (max) so a cheaper
+    re-dispatch can never erase deeper attempt history. Canonical register
+    write via ws_yaml renderer (single-writer, same shape as
+    _flip_claim_in_progress). Fail-open — never changes the dispatch
+    verdict; an absent register / unknown claim is a no-op."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws or not cid or tier not in (1, 2, 3):
+        return False
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import ws_yaml as _wsy
+        p = Path(ws) / 'claim-register.yaml'
+        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        for c in (doc.get('claims') or []):
+            if c.get('id') != cid:
+                continue
+            try:
+                eta = int(c.get('evidence_tier_attempted', 0))
+            except (TypeError, ValueError):
+                eta = 0  # dirty value degrades to 0 (#103 tolerance) — max still climbs
+            new_eta = max(eta, int(tier))
+            if new_eta == eta:
+                return False  # nothing to raise (monotonic no-op)
+            c['evidence_tier_attempted'] = new_eta
+            p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
+            return True
         return False
     except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
         return False

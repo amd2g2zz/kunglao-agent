@@ -172,6 +172,19 @@ SHRINK_CAP = 8.0
 # bit-identical to the pre-change fold (the determinism wall).
 PHI_TIEBREAK_WEIGHT = 0.25
 
+# issue-678 D-678.4a — the TRACE observation band: a settled credit in
+# (0, OBSERVATION_BAND_CEIL] is the reward ladder's INFORMATION option
+# (trace canonical 0.01 — refuted-with-replay / uncited-verified), not
+# a verdict. The fold previously banked it as (1 − credit) FAILURE
+# mass, so a 0.01 credit trained 0.99 failure against method families
+# that produced verified work (the live un-training defect: 4 of 5
+# failure units landed on successes). Such rows stay in the observation
+# log and in the decay/schedule chain — they add NEITHER success nor
+# failure mass. A genuine 0.0 remains a failure observation (nothing
+# was produced). Mirrors scalar.OUTPUT_RAILS TRACE range top —
+# dependency-light redeclaration, the TERMINAL_FACT_STATUSES precedent.
+OBSERVATION_BAND_CEIL = 0.05
+
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
 
@@ -394,7 +407,13 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     #548 tiebreaker: a row's effective credit runs through
     ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
     [0,1] clamp; rows without phi_delta are bit-identical to the
-    pre-change fold."""
+    pre-change fold.
+
+    issue-678 D-678.4a (TRACE observation band): a SETTLED credit in
+    (0, OBSERVATION_BAND_CEIL] adds no cell mass — success and failure
+    stay put (the information option is an observation, never a
+    verdict); a genuine 0.0 still trains failure. The band keys on the
+    raw settled credit; the tiebreaker only refines admissible rows."""
     schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
             if isinstance(r, dict) and _credit_of(r) is not None]
@@ -410,8 +429,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         weights[i] = w
     cells: dict[tuple[str, str], CellCounts] = {}
     for i, row in enumerate(rows):
-        credit = tiebroken_credit(_credit_of(row),
-                                  row.get("phi_delta"))
+        raw_credit = _credit_of(row)
         weight = weights[i]
         key = (str(row.get("signature_hash") or ""),
                _action_key_of(row))
@@ -419,6 +437,15 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         if cell is None:
             cell = CellCounts(key[0], key[1])
             cells[key] = cell
+        if 0.0 < raw_credit <= OBSERVATION_BAND_CEIL:
+            # issue-678 D-678.4a: the TRACE information option is an
+            # OBSERVATION, not a verdict — the cell records the row's
+            # existence (zero mass) and the schedule/decay chain above
+            # already consumed it; the band keys on the SETTLED credit,
+            # never the tiebroken one (phi_delta refines admissible
+            # rows, it never promotes an information option)
+            continue
+        credit = tiebroken_credit(raw_credit, row.get("phi_delta"))
         cells[key] = CellCounts(
             key[0], key[1],
             success=cell.success + weight * credit,

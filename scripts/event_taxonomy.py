@@ -297,6 +297,7 @@ EMIT_ACTIONS = [
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
     "rt_read_blocked",    # rt_read_barrier: maker-face read refused for a red-team act
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
+    "sample_deviation",   # #691 the declaration-vs-sampler deviation record: declared family != the gate's own draw (recorded decision, never a reject; reason rides detail)
     "script_harvested",   # #477 per-script classification (landed/archived)
     "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation

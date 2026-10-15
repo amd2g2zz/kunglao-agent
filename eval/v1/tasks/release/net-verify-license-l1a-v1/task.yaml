@@ -38,6 +38,7 @@ checker:
   thresholds:
     min_constant_hits: 1
     min_pair_ratio: 1.0
+  candidate: client.js
 ground_truth:
   file: ground_truth.json
   space_bits: 256

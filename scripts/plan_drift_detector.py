@@ -9,7 +9,13 @@ progressed while the files never caught up")
 
 6 drift types detected:
   1. ORPHAN_CLAIM: claim in claim-register.yaml but NOT in global_plan.txt
-     (mid-iteration discovery not logged in plan)
+     (mid-iteration discovery not logged in plan). Terminal-status claims
+     are exempt: the rendered plan face carries the open thread only, so a
+     terminal claim is structurally unrepresentable there — flagging it
+     re-fired after every re-render and blocked dispatch forever. An
+     unlogged frontier item is by definition not terminal, and the
+     remaining classes (UNVERIFIED_EVIDENCE, STALE_NEXT_STEP) keep
+     auditing the terminal claims themselves.
   2. STALE_PLAN_ENTRY: global_plan.txt lists claim that no longer exists
      in claim-register.yaml (abandoned/decomposed, not removed)
   3. MISSING_DEP_LINK: claim has parent_claim but claim_deps.yaml doesn't
@@ -776,7 +782,14 @@ def check(workspace: Path, active_only: bool = False) -> int:
     if plan_refers_to_register:
         for c in claims:
             cid = c.get("id")
-            if cid and plan_path and cid not in plan_ids:
+            # Terminal claims never appear in a rendered plan face (the
+            # renderer filters them out by construction), so their absence
+            # is not drift — without this exemption the same ORPHAN rows
+            # returned after every re-render and gated dispatch forever.
+            # The frontier classes still cover every non-terminal claim.
+            if cid and plan_path and cid not in plan_ids \
+                    and str(c.get("status") or "").upper() \
+                    not in TERMINAL_STATUSES:
                 drifts.append({
                     "type": "ORPHAN_CLAIM",
                     "claim_id": cid,

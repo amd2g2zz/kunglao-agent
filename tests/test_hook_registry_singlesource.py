@@ -64,6 +64,11 @@ def test_registry_exists_in_wire_up_settings() -> None:
         "user_signal_capture.py",      # issue 434 UserPromptSubmit observation
         "rt_read_barrier.py",          # RT read barrier + arming
         "evidence_pin_guard.py",       # evidence sha-pin freeze
+        # #683: the substrate pair — registry growth that closes the
+        # 2-hook drift (they sat in _DEPLOYED_WIRING only, so the canonical
+        # writer never wrote them and the self-check stayed GREEN).
+        "step_record_capture.py",      # the shadow step ledger (#670)
+        "cost_input_capture.py",       # cost input capture (#873)
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -206,7 +211,11 @@ KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
              # deliberately skipped by both narrow subsets.
              "workguard_gate.py", "round_closure.py", "session_start.py",
              "compact_continuity.py", "user_signal_capture.py",
-             "rt_read_barrier.py", "evidence_pin_guard.py"}
+             "rt_read_barrier.py", "evidence_pin_guard.py",
+             # #683: the substrate pair — PostToolUse recorders outside the
+             # dead-session liveness chain (env_check's full scan covers
+             # them once the full wire-up restores them).
+             "step_record_capture.py", "cost_input_capture.py"}
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 

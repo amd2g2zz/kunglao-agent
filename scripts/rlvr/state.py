@@ -135,6 +135,31 @@ SITUATION_SCHEMA = "situation/1"
 # dependency-light and import-direction clean)
 TERMINAL_FACT_STATUSES = frozenset({"PROVEN", "VERIFIED"})
 
+# issue-678 D-678.5 — graded fact weights for Φ's fact dimension (the
+# non-degeneracy fix): the binary certified-count gave Φ only 0.0 or
+# 1.0 in live workspaces (facts are either all-certified or none), so
+# the incremental reward never produced an intermediate value and the
+# transition ledger recorded no partial progress. Documented policy
+# constants (this module's precedent — rationale carried, never fitted):
+#   1.0  certified terminal — PROVEN/VERIFIED with register backing
+#        (the #651 certification gate);
+#   0.5  certified substantive non-terminal — grammar-clean INFERRED /
+#        STAMP / NEGATIVE / REFUTED (real partial or refuting work);
+#   0.25 certified draft — grammar-clean OPEN / DEFERRED (stage-one
+#        statuses: the fact exists, nothing concluded yet);
+#   0.0  everything else — junk, malformed, unknown-status, or a
+#        premature self-declared terminal that failed the certification
+#        gate: the #651 wall holds, a fabricated file NEVER lifts Φ.
+# Only GRAMMAR-CLEAN facts (certification_scan) carry graded weight —
+# the grammar is the admission ticket for every rung.
+GRADED_WEIGHT_CERTIFIED = 1.0
+GRADED_WEIGHT_PRESENT = 0.5
+GRADED_WEIGHT_DRAFT = 0.25
+GRADED_WEIGHT_ABSENT = 0.0
+GRADED_PRESENT_STATUSES = frozenset({
+    "INFERRED", "STAMP", "NEGATIVE", "REFUTED"})
+GRADED_DRAFT_STATUSES = frozenset({"OPEN", "DEFERRED"})
+
 # fact-count buckets (upper-inclusive edges): 0 | 1-4 | 5-9 | 10-19 |
 # 20-49 | 50+. Discretization keeps signatures bucketable per the owner
 # spec; the raw counts ride the snapshot document beside the bucket.
@@ -172,19 +197,28 @@ def _now() -> str:
 # ---------- face readers (tolerant, existing files only) ----------------
 
 def fact_face(ws) -> dict:
-    """{"count", "verified"} over facts/F*.md — count is fact-file
-    presence (lint owns loudness); verified counts only CERTIFIED
-    terminal facts: the fact grammar clean AND the terminal status
-    (PROVEN/VERIFIED) register-backed — every claim the fact cites is
-    PROVEN in claim-register.yaml, whose promotion gate is the only
-    sanctioned writer of that status (the fact-certification gate). A
-    self-declared terminal status without the backing is not
+    """{"count", "verified", "weighted_fraction"} over facts/F*.md —
+    count is fact-file presence (lint owns loudness); verified counts
+    only CERTIFIED terminal facts: the fact grammar clean AND the
+    terminal status (PROVEN/VERIFIED) register-backed — every claim the
+    fact cites is PROVEN in claim-register.yaml, whose promotion gate is
+    the only sanctioned writer of that status (the fact-certification
+    gate). A self-declared terminal status without the backing is not
     verification: the premature lift was exactly the farmable shape
-    (static inflation cancels inside ΔΦ; the premature kind does not)."""
+    (static inflation cancels inside ΔΦ; the premature kind does not).
+    ``weighted_fraction`` (issue-678 D-678.5) is the GRADED presence
+    value over the same files (1.0 certified terminal / 0.5 certified
+    substantive non-terminal / 0.25 certified draft / 0.0 junk — the
+    module constants above; only grammar-clean facts carry graded
+    weight, so the #651 farm wall holds): Φ's fact term reads it so
+    partially-verified workspaces produce intermediate potentials
+    instead of the degenerate {0.0, 1.0} the binary pair gave
+    (count/verified themselves stay byte-identical — the signature fv=
+    dim and the V anchor are untouched)."""
     ws = Path(ws)
     facts_dir = ws / "facts"
     if not facts_dir.is_dir():
-        return {"count": 0, "verified": 0}
+        return {"count": 0, "verified": 0, "weighted_fraction": 0.0}
     try:
         import lint_facts
     except ImportError:  # pragma: no cover — deployed together
@@ -193,16 +227,34 @@ def fact_face(ws) -> dict:
              "the certification gate is unavailable — terminal fact "
              "statuses go uncertified (fail-closed on reward)")
         return {"count": sum(1 for _ in facts_dir.glob("F*.md")),
-                "verified": 0}
+                "verified": 0, "weighted_fraction": 0.0}
     scan = lint_facts.certification_scan(ws)
     count = verified = 0
+    weighted = 0.0
     for path in sorted(facts_dir.glob("F*.md")):
         count += 1  # the file exists: it counts (lint owns loudness)
         info = scan.get(path.stem)
+        status = str((info or {}).get("status") or "").strip().upper()
         if info and info["certified"] \
                 and info["status"] in TERMINAL_FACT_STATUSES:
             verified += 1
-    return {"count": count, "verified": verified}
+            weighted += GRADED_WEIGHT_CERTIFIED
+        elif info and info["certified"] \
+                and status in GRADED_PRESENT_STATUSES:
+            weighted += GRADED_WEIGHT_PRESENT
+        elif info and info["certified"] \
+                and status in GRADED_DRAFT_STATUSES:
+            weighted += GRADED_WEIGHT_DRAFT
+        else:
+            # junk / malformed / unknown status / premature terminal:
+            # the #651 wall — a fabricated file never lifts Φ
+            weighted += GRADED_WEIGHT_ABSENT
+    # issue-678 D-678.5: the graded fraction rides beside the binary
+    # pair (count/verified stay byte-identical — the signature's fv=
+    # dim and the V anchor are untouched; only Φ's fact term grades)
+    return {"count": count, "verified": verified,
+            "weighted_fraction": (round(weighted / count, 6)
+                                  if count else 0.0)}
 
 
 def fact_bucket(count: int) -> int:

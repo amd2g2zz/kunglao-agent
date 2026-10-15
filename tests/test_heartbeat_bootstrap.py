@@ -133,7 +133,7 @@ def _write_register(path: Path, claims: list[dict]) -> None:
         lines.append(f"- id: {c['id']}")
         lines.append(f"  status: {c.get('status', 'OPEN')}")
         lines.append(f"  promotion_attempts: {c.get('promotion_attempts', 0)}")
-        lines.append(f"  evidence_tier_attempted: {c.get('evidence_tier_attempted', 1)}")
+        lines.append(f"  evidence_tier_attempted: {c.get('evidence_tier_attempted', 0)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -154,7 +154,7 @@ def _healthy_ws(path: Path) -> Path:
         f"deadline_ts: {int(time.time()) + 3600}\n", encoding="utf-8")
     _write_register(ws / "claim-register.yaml", [
         {"id": "C-001", "status": "OPEN", "promotion_attempts": 0,
-         "evidence_tier_attempted": 1}])
+         "evidence_tier_attempted": 0}])
     (ws / "claim_deps.yaml").write_text("depends_on: {}\n", encoding="utf-8")
     (ws / "task_spec.yaml").write_text(
         "constraints:\n  vm_detonation: allowed\n", encoding="utf-8")

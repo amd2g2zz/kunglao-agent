@@ -76,7 +76,12 @@ def _ws(tmp_path: Path, *, facts: tuple[int, int] | None = None,
 def test_potential_renormalizes_over_present_dims(tmp_path):
     # no organs at all: 0.0 (absent dims drop, never fabricate)
     assert ir.potential(_ws(tmp_path / "a")) == 0.0
-    # only facts present: facts fraction alone (renormalized)
+    # only facts present: facts term alone (renormalized). NOTE
+    # (issue-678 D-678.5): Φ's fact term reads fact_face's GRADED
+    # weighted_fraction (grammar-clean certified 1.0 / substantive
+    # non-terminal 0.5 / draft 0.25 / junk 0.0); this fixture's OPEN
+    # fillers carry illegal source/confidence for OPEN (grammar-unclean)
+    # and grade 0.0, so the numbers are unchanged from the binary era.
     ws = _ws(tmp_path / "b", facts=(2, 4))
     assert abs(ir.potential(ws) - 0.5) < 1e-9
     # both present: weighted mean of (0.5 facts, 1.0 oracle)
@@ -127,6 +132,11 @@ def test_launch_settle_roundtrip(tmp_path):
     assert row["o"] == {"status": "DISPATCHED", "class": "done",
                         "facts": 1}
     assert row["r_settle"] == 0.5
+    # NOTE (issue-678 D-678.5): the graded Φ fact term — the OPEN
+    # fillers are grammar-unclean (illegal source/confidence for OPEN)
+    # and grade 0.0, so launch Φ = 0.0 and settle Φ = 1 certified/2 =
+    # 0.5 exactly as before; the graded pin lives in
+    # test_reward_source_678.py
     assert abs(row["r_incr"] - (0.5 - 600.0 / 3600.0)) < 1e-6
     assert not stash.exists()  # consumed
     assert ir.read_transitions(ws) == [row]  # ledger has it
