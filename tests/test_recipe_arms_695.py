@@ -289,6 +289,21 @@ def test_no_new_reject_surface_for_tool_choice(tmp_path, capsys):
     det = _detail(_events(ws2, 'recipe_deviation')[-1])
     assert det['registered'] is False
 
+    # the none-gap dispatch (an other(...) family — passes the #432
+    # gate, has NO registered arms): pre-#695 byte-identity — the row
+    # carries NO recipe keys at all (review-1: source "none" must not
+    # trip the emit gate)
+    ws3 = tmp_path / 'ws3'
+    rc = sinks.pre_check(
+        _dispatch_payload(
+            _full_prompt('other(unknown approach)', None, claim='C-004')),
+        _min_paths(ws3))
+    assert rc == 0, capsys.readouterr().err
+    row = _dispatch_rows(ws3)[-1]
+    assert 'recipe_id' not in row
+    assert 'recipe_propensity' not in row
+    assert 'recipe_source' not in row
+
 
 # ---------------------------------------------------------------------------
 # 5. S2-shape replay: arm-level separation before any online switch

@@ -909,6 +909,42 @@ def _is_agent_key(action_key: str) -> bool:
     return len(str(action_key or "").split("|")) >= 5
 
 
+def _recipe_cols(recipe_id, recipe_propensity,
+                 recipe_source) -> tuple[str | None, float | None,
+                                         str | None]:
+    """#695 boundary validation for the recipe triple — non-string ids,
+    NaN / out-of-[0,1] propensities and foreign sources degrade to null
+    with one warn each, never a raise (the #691 usage-row boundary
+    semantics)."""
+    rid_out, rprop_out, rsrc_out = None, None, None
+    if isinstance(recipe_id, str) and recipe_id.strip():
+        rid_out = recipe_id.strip()
+    elif recipe_id is not None:
+        warn("q_cells.append", f"non-string recipe_id dropped: {recipe_id!r}")
+    if recipe_propensity is not None:
+        if isinstance(recipe_propensity, bool) \
+                or not isinstance(recipe_propensity, (int, float)):
+            warn("q_cells.append",
+                 f"non-numeric recipe_propensity dropped: "
+                 f"{recipe_propensity!r}")
+        else:
+            v = float(recipe_propensity)
+            if v == v and 0.0 <= v <= 1.0:   # finite + in-range (NaN fails)
+                rprop_out = round(v, 6)
+            else:
+                warn("q_cells.append",
+                     f"out-of-range recipe_propensity dropped: "
+                     f"{recipe_propensity!r}")
+    if recipe_source is not None:
+        s = str(recipe_source).strip()
+        if s in ("sampled", "declared", "none"):
+            rsrc_out = s
+        else:
+            warn("q_cells.append",
+                 f"foreign recipe_source dropped: {recipe_source!r}")
+    return rid_out, rprop_out, rsrc_out
+
+
 def append_observation(ws, signature_hash: str, method_family: str,
                        credit: float | None = None, *, source: str,
                        claim: str | None = None,
@@ -919,7 +955,10 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        arm_key_col: str | None = None,
                        action_type: str | None = None,
                        phi_delta: float | None = None,
-                       credit_kind: str | None = None) -> dict:
+                       credit_kind: str | None = None,
+                       recipe_id: str | None = None,
+                       recipe_propensity: float | None = None,
+                       recipe_source: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -928,7 +967,16 @@ def append_observation(ws, signature_hash: str, method_family: str,
 
     #705 agent-level credit: ``credit_kind`` ("solve" | "verification")
     rides the row so the fold can apply the admission rule. Absent or
-    "solve" is the pre-#705 path (the row carries no kind column)."""
+    "solve" is the pre-#705 path (the row carries no kind column).
+
+    #695 recipe arms: the dispatch-time recipe triple rides the row as
+    ``recipe_id`` / ``recipe_propensity`` / ``recipe_source`` (closed
+    vocab sampled|declared|none). The three keys are emitted TOGETHER
+    (explicit nulls inside) and ONLY when the view carries a recipe —
+    every pre-#695 writer (``observe()``, the reindex faces) stays
+    byte-identical. The boundary validates: non-string ids, NaN /
+    out-of-[0,1] propensities and foreign sources degrade to null with
+    one warn, never a raise."""
     credit_out = None
     if credit is not None:
         if isinstance(credit, bool) or not isinstance(credit, (int, float)):
@@ -943,6 +991,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                  f"non-numeric phi_delta dropped: {phi_delta!r}")
         else:
             phi_out = round(float(phi_delta), 6)
+    rid_out, rprop_out, rsrc_out = _recipe_cols(
+        recipe_id, recipe_propensity, recipe_source)
     row = {
         "schema": OBS_SCHEMA,
         "ts": ts or _now(),
@@ -967,6 +1017,13 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # pre-#705 (no key at all, not even a null).
     if credit_kind:
         row["credit_kind"] = str(credit_kind)
+    # #695: the recipe triple rides TOGETHER, only when the view names
+    # a recipe (the none-gap row — no recipe_id — stays byte-identical
+    # to pre-#695; review-1: source "none" must NOT trip the gate).
+    if rid_out is not None:
+        row["recipe_id"] = rid_out
+        row["recipe_propensity"] = rprop_out
+        row["recipe_source"] = rsrc_out
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended, "row": row}
 
@@ -1017,7 +1074,14 @@ def observe_settlement(ws, dispatch_id: str, credit,
     the pre-#705 path) and "verification" (confirmed existing knowledge
     — the row is still recorded for the audit trail but the fold marks
     it inadmissible, so the Beta posterior never moves). The result
-    carries ``beta_updated: bool`` reporting the decomposition."""
+    carries ``beta_updated: bool`` reporting the decomposition.
+
+    #695 recipe arms: the matched dispatch row's recipe triple
+    (``recipe_id``/``recipe_propensity``/``recipe_source``) rides the
+    settlement row and the result — the credit banks against the
+    DISPATCH-RECORDED recipe (ITT via the #678 trusted chain); no
+    worker narrative is ever read here (the #881 ``steps:`` pattern
+    stays dead)."""
     did = str(dispatch_id or "")
     kind = "verification" if str(credit_kind or "").strip() == \
         "verification" else "solve"
@@ -1052,7 +1116,14 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  # the default row stays byte-identical
                                  # to pre-#705; only verification marks.
                                  credit_kind=(kind if kind == "verification"
-                                              else None))
+                                              else None),
+                                 # #695: credit banks against the
+                                 # DISPATCH-RECORDED recipe (ITT) —
+                                 # the triple rides the settlement row
+                                 recipe_id=match.get("recipe_id"),
+                                 recipe_propensity=match.get(
+                                     "recipe_propensity"),
+                                 recipe_source=match.get("recipe_source"))
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -1061,7 +1132,10 @@ def observe_settlement(ws, dispatch_id: str, credit,
                 "signature_hash": match.get("signature_hash"),
                 "method_family": match.get("method_family"),
                 "arm_key": match.get("arm_key"),
-                "fingerprint": match.get("fingerprint")}
+                "fingerprint": match.get("fingerprint"),
+                "recipe_id": match.get("recipe_id"),
+                "recipe_propensity": match.get("recipe_propensity"),
+                "recipe_source": match.get("recipe_source")}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.observe_settlement", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "matched": False,
@@ -1086,6 +1160,29 @@ def declared_family(envelope_meta, prompt_text: str) -> str | None:
     return None
 
 
+#: the #695 recipe-view gap — the honest none (explicit nulls; the
+#: dispatch row stays byte-identical to pre-#695 on any miss).
+_RECIPE_GAP = {"recipe_id": None, "propensity": None, "source": "none",
+               "sampled_recipe": None, "deviates": False,
+               "registered": None, "reason": None}
+
+
+def _recipe_view(ws, family: str, meta: dict, prompt: str | None,
+                 agent: str | None, claim: str | None) -> dict:
+    """#695: the recipe-arms view at the ALLOW tail (lazy import — the
+    decision faces stay import-clean). Fail-open to the none gap with
+    one rate-limited warn: a recipe failure never breaks the dispatch
+    observation itself."""
+    try:
+        from rlvr import recipe_arms as _ra695  # noqa: PLC0415 — lazy
+        return _ra695.record_dispatch_recipe(
+            ws, family=family, envelope_meta=meta, prompt=prompt,
+            agent=agent, claim=claim)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn("q_cells.recipe_view", f"{type(exc).__name__}: {exc}")
+        return dict(_RECIPE_GAP)
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
@@ -1097,7 +1194,13 @@ def record_dispatch_observation(ws, prompt: str, *,
     The signature is computed HERE (the hook must stay state_signature-
     free per the #396 freeze). Undeclared families are the honest gap:
     no row, never a fabricated bucket (the #432 gate is the enforcement
-    face that makes declaration mandatory). Fail-open throughout."""
+    face that makes declaration mandatory). Fail-open throughout.
+
+    #695: the row also carries the recipe triple ({recipe_id,
+    recipe_propensity, recipe_source: sampled|declared|none} — see
+    rlvr.recipe_arms.record_dispatch_recipe) and the result gains the
+    additive ``recipe`` view; the deviation event fires inside the
+    recipe face, never here."""
     try:
         family = declared_family(envelope_meta, prompt or "")
         if not family:
@@ -1112,6 +1215,10 @@ def record_dispatch_observation(ws, prompt: str, *,
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
         tier = meta.get("tier", 0)
+        # #695 recipe arms: the dispatch-time recipe view (envelope
+        # declaration reconciled against the gate's own arm sampler —
+        # rlvr.recipe_arms, fail-open to the none gap on any miss)
+        view = _recipe_view(ws, family, meta, prompt, agent, claim)
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
@@ -1119,9 +1226,13 @@ def record_dispatch_observation(ws, prompt: str, *,
                                                      verif, tier,
                                                      meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
-                                                 or "dispatch"))
+                                                 or "dispatch"),
+                                 recipe_id=view.get("recipe_id"),
+                                 recipe_propensity=view.get("propensity"),
+                                 recipe_source=view.get("source"))
         return {"appended": out["appended"], "reason": None,
-                "family": family, "signature_hash": sig}
+                "family": family, "signature_hash": sig,
+                "recipe": view}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.record_dispatch",
              f"{type(exc).__name__}: {exc}")
