@@ -377,6 +377,8 @@ files:
     r1: 1
   scripts/rlvr/liveness.py:
     r1: 18
+  scripts/rlvr/marl.py:
+    r1: 2
   scripts/rlvr/meta_arms.py:
     r1: 6
   scripts/rlvr/policy_compare.py:
@@ -384,7 +386,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 29
+    r1: 39
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
@@ -1115,6 +1117,8 @@ files:
     r1: 1
   tests/test_machine_check_contract.py:
     r1: 6
+  tests/test_marl_architecture_705.py:
+    r1: 4
   tests/test_max_retries_604.py:
     r1: 2
   tests/test_mcp_env_e2e.py:

@@ -1288,6 +1288,10 @@ files:
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
     sha256: 54099382e65a94c8b8ac06283d5ec7e3906bc7cc06fb64c4ced1674a5b99d400
+  - src: scripts/rlvr/marl.py
+    dest: .claude/scripts/rlvr/marl.py
+    kind: scaffold
+    sha256: 4dcefd7f9fe752c795d096ad08520d0285d45b4326350996cc63768f7492562e
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
@@ -1315,7 +1319,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 91056b2f7f2249b4ee00280efd9593e907313ce0fc2cbb5c73d2020bc3e73753
+    sha256: a14973536291f82e4065955721541392bda3864eab3863ee7d300a72da8f65ba
   - src: scripts/rlvr/refutation_fold.py
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
@@ -1347,7 +1351,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 80711469fa3b6843205aedc419c6a03c4e3a120675a625645b6b0ba989e52579
+    sha256: f7d84dab1e01b1618308eea077bfa1792db95bfbe10d522d46f35e620f50f390
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1371,11 +1375,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: b93dc0ba25afdf4a86a3d1af1bc8788f19aac60f9b44c2a977ae697e04742a94
+    sha256: aae820731c15a56d3e417db044be4f9658f9753d5c7948914a1278874c038ac3
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c233fc2d11de95779562c834286cdd66b782a6caeea06c8b24e0bda02c502a59
+    sha256: cbca3b1e22ccc2e13d7ea799e39ff243b77d42dd646b3df514e68423518cd454
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
