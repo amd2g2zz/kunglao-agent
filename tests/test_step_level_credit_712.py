@@ -183,3 +183,208 @@ def test_ten_step_rollout_produces_ten_signals(tmp_path):
     assert rl.fold(ws, "round_credit/C-72") is None
 
 
+# ------------------------------- 3. claim-terminal residual correction --
+
+def test_claim_terminal_calibration_corrects_cumulative_beta(tmp_path):
+    """At claim-terminal the residual (ladder - Σstep) corrects the
+    cumulative Beta in BOTH directions — over-credit clawed back,
+    under-credit topped up — and the endpoint equals the step-less
+    (legacy) settlement: dense credit changes the path, not the
+    destination. Exact at the explicit γ=1 calibration face."""
+    from rlvr import scalar
+    cited = {"id": "F80-cited", "creator": "C-73", "status": "PROVEN",
+             "verify_status": "passes", "cited_by_deliverable": True,
+             "answers_question": False, "oracle_backed_refutation": False}
+
+    def _rollout(claim, fact_status, fact_verify, steps):
+        ws = _ws(tmp_path / claim, [{"id": claim, "status": "IN_PROGRESS"}])
+        _dispatch(ws, claim)
+        for k in range(1, steps + 1):
+            step_now = T0 + timedelta(seconds=10 * k)
+            _launch(ws, claim, ts=step_now - timedelta(seconds=5))
+            _fact(ws, f"F8{k}-s", status=fact_status,
+                  verify_status=fact_verify, claim_id=claim,
+                  mtime=step_now - timedelta(seconds=1))
+            sg.settle_step(ws, "sess-c", now=step_now)
+        return ws
+
+    # OVER-credit: three cross-validated steps bank Σ=3.0, the ladder
+    # settles 1.0 — the terminal row claws back 2.0 (and the failure
+    # mass the provisional rows did not carry stays 0).
+    ws = _rollout("C-73", "PROVEN", "passes", 3)
+    assert _cell(ws).success == pytest.approx(3.0)  # interim inflated
+    res = scalar.settle_round_credit(
+        ws, [{"dispatch_id": "C-73", "round": 1}], [dict(cited,
+                                                         creator="C-73")], [])
+    assert res["banked"] == ["C-73"]
+    calib = _calibration_rows(ws)
+    assert len(calib) == 1, "the first settlement banks ONE calibration row"
+    assert calib[0]["credit"] == pytest.approx(-2.0)  # 1.0 - 3.0
+    cell = _cell(ws)
+    assert cell.success == pytest.approx(1.0)   # cumulative == ladder
+    assert cell.failure == pytest.approx(0.0)   # endpoint (1-L) == (0, 0+0)
+
+    # UNDER-credit: one provisional step banks 0.3, the ladder settles
+    # 1.0 — the terminal row tops up +0.7 onto the success mass.
+    ws2 = _rollout("C-74", "OPEN", "pending", 1)
+    assert _cell(ws2).success == pytest.approx(0.3)
+    scalar.settle_round_credit(
+        ws2, [{"dispatch_id": "C-74", "round": 1}], [dict(cited,
+                                                          creator="C-74")], [])
+    assert _cell(ws2).success == pytest.approx(1.0)
+    assert _cell(ws2).failure == pytest.approx(0.0)  # 0.7 failure washed
+
+    # REFUTED terminal: cross-validated steps banked 2.0 but the claim
+    # settles 0 (no cited artifact) — full clawback to the (0, 1) endpoint.
+    ws3 = _rollout("C-75", "PROVEN", "passes", 2)
+    scalar.settle_round_credit(
+        ws3, [{"dispatch_id": "C-75", "round": 1}], [], [])
+    assert _cell(ws3).success == pytest.approx(0.0)
+    assert _cell(ws3).failure == pytest.approx(1.0)
+
+
+def test_backward_compatible_settlement_without_step_credit(tmp_path):
+    """A claim that settles with NO step credit (any claim settling
+    before this change) takes the legacy face: no credit_kind column on
+    the settlement row, and the folded endpoint is the pre-#712
+    (L, 1-L)."""
+    from rlvr import scalar
+    ws = _ws(tmp_path, [{"id": "C-76", "status": "IN_PROGRESS"}])
+    _dispatch(ws, "C-76")
+    cited = {"id": "F86-cited", "creator": "C-76", "status": "PROVEN",
+             "verify_status": "passes", "cited_by_deliverable": True,
+             "answers_question": False, "oracle_backed_refutation": False}
+    res = scalar.settle_round_credit(
+        ws, [{"dispatch_id": "C-76", "round": 1}], [cited], [])
+    assert res["banked"] == ["C-76"]
+    assert not _calibration_rows(ws), "no step rows -> no calibration row"
+    rows = [r for r in qc.JSONLQStore(ws).observations()
+            if r.get("source") == "settlement"]
+    assert len(rows) == 1
+    assert "credit_kind" not in rows[0], "legacy settlement row shape"
+    assert rows[0]["credit"] == pytest.approx(1.0)
+    cell = _cell(ws)
+    assert cell.success == pytest.approx(1.0)
+    assert cell.failure == pytest.approx(0.0)
+
+
+def test_terminal_endpoint_is_independent_of_step_count(tmp_path):
+    """The path/destination invariant: the SAME claim outcome settles to
+    the SAME cell endpoint whether it took three banked steps or none —
+    calibration exists so dense credit never shifts the end state."""
+    from rlvr import scalar
+    cited = {"id": "F88-cited", "status": "PROVEN", "verify_status": "passes",
+             "cited_by_deliverable": True, "answers_question": False,
+             "oracle_backed_refutation": False}
+
+    # stepped: three provisional (0.3) steps then a full settlement
+    ws = _ws(tmp_path / "stepped", [{"id": "C-77", "status": "IN_PROGRESS"}])
+    _dispatch(ws, "C-77")
+    for k in range(1, 4):
+        step_now = T0 + timedelta(seconds=10 * k)
+        _launch(ws, "C-77", ts=step_now - timedelta(seconds=5))
+        _fact(ws, f"F77{k}-s", status="OPEN", verify_status="pending",
+              claim_id="C-77", mtime=step_now - timedelta(seconds=1))
+        sg.settle_step(ws, "sess-d", now=step_now)
+    scalar.settle_round_credit(
+        ws, [{"dispatch_id": "C-77", "round": 1}],
+        [dict(cited, creator="C-77")], [])
+
+    # step-less twin: same ladder, zero steps
+    ws2 = _ws(tmp_path / "plain", [{"id": "C-78", "status": "IN_PROGRESS"}])
+    _dispatch(ws2, "C-78")
+    scalar.settle_round_credit(
+        ws2, [{"dispatch_id": "C-78", "round": 1}],
+        [dict(cited, creator="C-78")], [])
+
+    a, b = _cell(ws), _cell(ws2)
+    assert a.success == pytest.approx(b.success)
+    assert a.failure == pytest.approx(b.failure)
+
+
+def test_calibration_never_claws_back_band_valued_steps(tmp_path):
+    """D-678.4a × #712 (the independent-review finding): a step whose
+    credit lands in the observation band (0, 0.05] adds NO fold mass, so
+    the residual must not claw it back — the operand counts the fold's
+    mass view only. A 0.05-credit step then a full ladder settles to
+    the (1, 0) endpoint; the raw-sum operand would land (0.95, −0.95)."""
+    from rlvr import scalar
+    ws = _ws(tmp_path, [{"id": "C-81", "status": "IN_PROGRESS"}])
+    _dispatch(ws, "C-81")
+    _launch(ws, "C-81", ts=T0)
+    # one band-valued evidence mix: unverified@F6 (0.15) + two refuted
+    # (0.0) -> mean 0.05 — inside the information-option band
+    _fact(ws, "F810-band", status="OPEN", verify_status="pending",
+          claim_id="C-81", credibility="F6",
+          mtime=T0 + timedelta(seconds=9))
+    _fact(ws, "F811-ref", status="REFUTED", verify_status="passes",
+          claim_id="C-81", mtime=T0 + timedelta(seconds=9))
+    _fact(ws, "F812-ref", status="REFUTED", verify_status="passes",
+          claim_id="C-81", mtime=T0 + timedelta(seconds=9))
+    out = sg.settle_step(ws, "sess-f", now=T0 + timedelta(seconds=60))
+    assert (out or {}).get("step_credit") == pytest.approx(0.05)
+    assert _cell(ws).success == pytest.approx(0.0)  # band: no mass banked
+    cited = {"id": "F813-cited", "creator": "C-81", "status": "PROVEN",
+             "verify_status": "passes", "cited_by_deliverable": True,
+             "answers_question": False, "oracle_backed_refutation": False}
+    scalar.settle_round_credit(
+        ws, [{"dispatch_id": "C-81", "round": 1}], [cited], [])
+    cell = _cell(ws)
+    assert cell.success == pytest.approx(1.0)
+    assert cell.failure == pytest.approx(0.0)
+
+
+# ------------------------------- 4. evidence-quality weighted (non-uniform) --
+
+def test_step_credit_weighted_by_evidence_quality(tmp_path):
+    """step_credit = f(evidence_quality, verification_status): the three
+    anchors (cross-validated 1.0 / unverified 0.3 / refuted 0.0), the
+    empty-evidence provisional floor, source-reliability weighting, and
+    the claim+window scoping that keeps foreign/stale facts out."""
+    from rlvr import step_credit as sc
+
+    proven = {"status": "PROVEN", "verify_status": "passes"}
+    pending = {"status": "OPEN", "verify_status": "pending"}
+    refuted = {"status": "REFUTED", "verify_status": "passes"}
+
+    assert sc.step_credit([proven]) == pytest.approx(1.0)
+    assert sc.step_credit([pending]) == pytest.approx(0.3)
+    assert sc.step_credit([refuted]) == pytest.approx(0.0)
+    assert sc.step_credit([]) == pytest.approx(0.3), (
+        "a step with no evidence banks the provisional floor, never 0")
+    # non-uniform: mixes grade between the anchors
+    assert sc.step_credit([proven, refuted]) == pytest.approx(0.5)
+    assert sc.step_credit([proven, proven, pending]) == pytest.approx(
+        (2.0 + 0.3) / 3)
+    # source_reliability weighting (ICD-203 Admiralty letter, if available)
+    b_credible = dict(proven, provenance=[{"credibility": "B2"}])
+    assert sc.step_credit([b_credible]) == pytest.approx(0.9)
+    f_credible = dict(proven, provenance=[{"credibility": "F6"}])
+    assert sc.step_credit([f_credible]) == pytest.approx(0.5)
+    # verification status dominates the letter
+    assert sc.step_credit([dict(refuted,
+                                provenance=[{"credibility": "A1"}])]
+                          ) == pytest.approx(0.0)
+
+    # window + claim scoping through the settle face
+    ws = _ws(tmp_path, [{"id": "C-79", "status": "IN_PROGRESS"}])
+    _dispatch(ws, "C-79")
+    _launch(ws, "C-79", ts=T0)
+    _fact(ws, "F790-mine", status="PROVEN", verify_status="passes",
+          claim_id="C-79", mtime=T0 + timedelta(seconds=9))       # in
+    _fact(ws, "F791-foreign", status="PROVEN", verify_status="passes",
+          claim_id="C-999", mtime=T0 + timedelta(seconds=9))      # other claim
+    _fact(ws, "F792-stale", status="PROVEN", verify_status="passes",
+          claim_id="C-79", mtime=T0 - timedelta(seconds=60))      # before window
+    items = sc.evidence_in_window(ws, claim="C-79", since_ts=_ts(T0),
+                                  until=T0 + timedelta(seconds=60))
+    assert [i["id"] for i in items] == ["F790-mine"]
+    # the graded settle path is non-uniform across evidence classes
+    ws2 = _ws(tmp_path / "graded", [{"id": "C-80", "status": "IN_PROGRESS"}])
+    _dispatch(ws2, "C-80")
+    _launch(ws2, "C-80", ts=T0)
+    _fact(ws2, "F800-refuted", status="REFUTED", verify_status="passes",
+          claim_id="C-80", mtime=T0 + timedelta(seconds=9))
+    out = sg.settle_step(ws2, "sess-e", now=T0 + timedelta(seconds=60))
+    assert (out or {}).get("step_credit") == pytest.approx(0.0)
+    assert _step_rows(ws2)[0]["credit"] == pytest.approx(0.0)
