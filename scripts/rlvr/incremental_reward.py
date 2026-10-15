@@ -51,10 +51,11 @@ from pathlib import Path
 from rlvr.state import fact_face, _oracle_status_progress
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
-TRANSITIONS_REL = "runs/transitions.jsonl"  # legacy rel (pre-#721 archive)
-# #721: the row stamp inside runs/experience.jsonl. Transition rows
-# carried no stamp through v0.1.6; a multi-schema file makes the stamp
-# mandatory (attribution + per-schema liveness).
+# #721: the row stamp inside runs/experience.jsonl (the legacy
+# runs/transitions.jsonl rel lives in the consolidated_ledger LEGACY
+# registry — the single source). Transition rows carried no stamp
+# through v0.1.6; a multi-schema file makes the stamp mandatory
+# (attribution + per-schema liveness).
 TRANSITION_SCHEMA = "transition/1"
 LAUNCH_REL = "runs/dispatch-launch-{claim}.json"
 # #550: action-type-scoped stashes — a verify/red-team act keeps its own

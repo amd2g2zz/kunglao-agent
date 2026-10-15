@@ -326,9 +326,12 @@ def find_transition_files(run_dirs: list[str | Path]) -> list[Path]:
                 if "runs" not in candidate.parent.parts:
                     continue
                 # skip the #721 migration archive (rows are already in
-                # the consolidated file — scanning it would double count)
-                if (candidate.parent.name == "archive"
-                        and "runs" in candidate.parent.parent.parts):
+                # the consolidated file — scanning it would double count);
+                # ANY 'archive' component under the runs dir qualifies
+                # (a nested runs/archive/<sub>/ copy would double count
+                # under a direct-child-only rule)
+                parts = candidate.parts
+                if "archive" in parts[parts.index("runs"):]:
                     continue
                 found.append(candidate)
     return sorted(found, key=str)

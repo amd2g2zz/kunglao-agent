@@ -73,7 +73,9 @@ for a constant γ this is exactly the γ^age weight.
 
 ## Recording face (the sampler's data spine)
 
-``runs/q-cell-log.jsonl`` — append-only rows
+``runs/experience.jsonl`` (the consolidated WHAT-HAPPENED file, #721;
+``runs/q-cell-log.jsonl`` remains readable — and migration-archived —
+during the compat window) — append-only rows
 {schema: q-cell-obs/1, ts, source: dispatch|settlement, signature_hash,
 method_family, claim, agent, credit}. Dispatch rows carry credit=None
 (pending — structural cell mass, never posterior mass); settlement rows
@@ -141,10 +143,13 @@ if __package__ in (None, ""):
 from kunglao_log import iter_jsonl, warn
 
 from rlvr import state as ssig  # the package face (issue 420 Phase 2)
+from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
-OBS_REL = "runs/q-cell-log.jsonl"
+OBS_REL = "runs/q-cell-log.jsonl"  # legacy rel (pre-#721 archive)
+# #721: the consolidated experience rel (the live observation home)
+EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
 CELLS_SCHEMA = "q-cell-table/1"
@@ -256,21 +261,18 @@ class InMemoryStore:
 
 
 class JSONLQStore:
-    """The default day-one store: runs/q-cell-log.jsonl (tolerant)."""
+    """The default day-one store: the consolidated runs/experience.jsonl
+    (#721) with the legacy runs/q-cell-log.jsonl riding the compat
+    window. The stamp filter keeps the file's other schemas out — only
+    q-cell-obs rows ever enter the fold."""
 
     def __init__(self, root):
-        self.path = Path(root) / OBS_REL
+        self.root = Path(root)
+        self.path = self.root / OBS_REL  # legacy rel (kept for callers)
 
     def observations(self) -> list[dict]:
-        if not self.path.is_file():
-            return []
-        try:
-            text = self.path.read_text(encoding="utf-8",
-                                       errors="replace")
-        except OSError:
-            return []
-        return [row for row in iter_jsonl(text.splitlines())
-                if isinstance(row, dict)]
+        return _cl.read(self.root, "experience",
+                        schema_prefix="q-cell-obs")
 
 
 def default_store(ws) -> QCellStore:
@@ -967,7 +969,7 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # pre-#705 (no key at all, not even a null).
     if credit_kind:
         row["credit_kind"] = str(credit_kind)
-    appended = _append_row(Path(ws) / OBS_REL, row)
+    appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
 
 
@@ -1227,9 +1229,16 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    for p in sorted(root.rglob(OBS_REL)):
+    for p in (sorted(root.rglob(OBS_REL))
+              + sorted(root.rglob(EXPERIENCE_REL))):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
+        if p.name == Path(EXPERIENCE_REL).name:
+            # #721: the consolidated file is multi-schema — only
+            # q-cell-obs rows are face-1 rows; the legacy group above
+            # precedes this one (archive history predates the file)
+            rows = [r for r in rows
+                    if str(r.get("schema") or "").startswith("q-cell-obs")]
         rows_scanned += len(rows)
         face1_rows.extend(rows)
     fold_view = fold(InMemoryStore(face1_rows), gamma=schedule)

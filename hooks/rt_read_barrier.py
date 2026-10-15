@@ -38,6 +38,11 @@ THE BARRIER (two faces, one file — the orchestrator_tool_guard pattern):
     - runs/method-family-log.jsonl + runs/q-cell-log.jsonl
                         (the policy learning faces — arm identity and
                         arm values; closed for EVERY blind act)
+    - runs/experience.jsonl
+                        (the #721 consolidated learning feed — the
+                        q-cell arm values ride it, and its transition
+                        rows are reward-bearing policy feedback; the
+                        whole file is closed for every blind act)
     - evidence/verdict.json    (the verdict-scorer's conclusion)
     - Agent/Task       (re-delegating the read to a helper subagent would
                         launder it through a different agent identity)
@@ -109,8 +114,12 @@ _RUNS_DENY_PREFIXES = ("verification-", "worker-status-")
 _RUNS_DENY_SUFFIXES = ("-verify-note.md",)
 #: runs/ basenames that are policy LEARNING faces (issue-687): arm
 #: identity and arm values — closed for every blind act (a grader that
-#: knows the arm can shape credit per arm)
-_RUNS_DENY_FILES = ("method-family-log.jsonl", "q-cell-log.jsonl")
+#: knows the arm can shape credit per arm). #721: the q-cell arm values
+#: moved into the consolidated experience.jsonl — the whole consolidated
+#: learning feed is closed (its transitions rows are reward-bearing
+#: policy feedback too), so the move cannot unblind any act.
+_RUNS_DENY_FILES = ("method-family-log.jsonl", "q-cell-log.jsonl",
+                    "experience.jsonl")
 
 #: single-file denials that live outside the deny dirs
 _DENY_FILES = {
@@ -125,7 +134,7 @@ _BASH_DIR_RES = (
 )
 _BASH_SUBSTRINGS = ("verification-", "worker-status-", "-verify-note",
                     "evidence/verdict.json", "method-family-log",
-                    "q-cell-log")
+                    "q-cell-log", "experience.jsonl")
 #: Bash string variants needed for the token scan (normalized)
 _BASH_TOOL = "Bash"
 _READ_TOOL = "Read"
@@ -237,7 +246,7 @@ def _deny_pattern(pat: str) -> str | None:
     if re.search(r"(?<![\w-])notes(?=[/]|$)", p) or "notes/" in p:
         return "a pattern naming notes/"
     for token in ("verification-", "worker-status-", "-verify-note",
-                  "method-family-log", "q-cell-log"):
+                  "method-family-log", "q-cell-log", "experience.jsonl"):
         if token in p:
             return f"a pattern naming {token}*"
     if "verdict.json" in p:

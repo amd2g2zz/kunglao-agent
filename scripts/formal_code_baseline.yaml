@@ -11,6 +11,7 @@ files:
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
   hooks/round_closure.py: 11
+  hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
   hooks/user_signal_capture.py: 3
@@ -99,7 +100,7 @@ files:
   scripts/eval_control_arm.py: 4
   scripts/eval_crypto.py: 4
   scripts/eval_dataset.py: 14
-  scripts/eval_loop_runner.py: 36
+  scripts/eval_loop_runner.py: 37
   scripts/eval_matrix_report.py: 1
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
@@ -223,7 +224,7 @@ files:
   scripts/rlvr/consolidated_ledger.py: 5
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 24
+  scripts/rlvr/incremental_reward.py: 23
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/marl.py: 3
@@ -232,9 +233,10 @@ files:
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 95
+  scripts/rlvr/q_cells.py: 101
   scripts/rlvr/reward.py: 8
   scripts/rlvr/scalar.py: 26
+  scripts/rlvr/settlement_scorer.py: 2
   scripts/rlvr/state.py: 25
   scripts/rlvr/step_grain.py: 14
   scripts/rlvr/step_ledger.py: 5
@@ -244,7 +246,7 @@ files:
   scripts/rlvr/winrate.py: 14
   scripts/roi_settlement.py: 4
   scripts/rollout_ledger.py: 2
-  scripts/rollup.py: 40
+  scripts/rollup.py: 42
   scripts/rotation_induction.py: 6
   scripts/route_capability.py: 19
   scripts/runtime_facts.py: 3

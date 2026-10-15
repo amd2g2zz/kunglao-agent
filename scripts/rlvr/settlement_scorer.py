@@ -11,10 +11,12 @@ door in — three mechanical properties:
    table as path + sha256). Producer narrative (notes/, worker-status,
    verification/verify-note records, fact conclusions, the verdict
    conclusion) and the policy learning faces
-   (runs/method-family-log.jsonl, runs/q-cell-log.jsonl) are excluded
-   BY CONSTRUCTION: a refused path raises BEFORE any read; a legal build
-   opens exactly the listed artifacts (never scans the workspace).
-   Case-folded comparisons — the dev filesystem is case-insensitive.
+   (runs/method-family-log.jsonl, runs/q-cell-log.jsonl, and since #721
+   the consolidated runs/experience.jsonl carrying the q-cell arm
+   values) are excluded BY CONSTRUCTION: a refused path raises BEFORE
+   any read; a legal build opens exactly the listed artifacts (never
+   scans the workspace). Case-folded comparisons — the dev filesystem
+   is case-insensitive.
 
 2. IDENTITY. Every input doc carries a non-empty settler identity (the
    dual_gate verifier-identity discipline: no named grader, no settle).
@@ -60,6 +62,10 @@ EXCLUDED_SUFFIXES = ("-verify-note.md",)
 EXCLUDED_FILES = {
     "runs/method-family-log.jsonl": "the method-family learning face",
     "runs/q-cell-log.jsonl": "the q-cell learning face (arm values)",
+    # #721: the q-cell arm values now ride the consolidated learning
+    # feed — the whole file joins the wall (its transition rows are
+    # reward-bearing policy feedback too)
+    "runs/experience.jsonl": "the consolidated learning feed (#721)",
     "evidence/verdict.json": "the verdict conclusion",
 }
 #: basename view — the rules table may live outside the ws

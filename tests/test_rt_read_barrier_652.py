@@ -304,6 +304,7 @@ def test_settler_read_of_maker_and_learning_faces_rejected(tmp_path):
     mod = _load_hook()
     ws = _ws(tmp_path)
     for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl",
+                "runs/experience.jsonl",  # #721: the consolidated feed
                 "notes/n.md", "runs/worker-status-w1.md",
                 "runs/verification-C-1.md", "runs/C-1-verify-note.md",
                 "facts/F001.md", "evidence/verdict.json"):
@@ -316,10 +317,12 @@ def test_settler_read_of_maker_and_learning_faces_rejected(tmp_path):
 
 def test_learning_faces_denied_to_rt_acts_too(tmp_path):
     """The two learning logs joined the shared deny face: an RT act is
-    blinded from arm identity/values as well."""
+    blinded from arm identity/values as well. #721: their consolidated
+    home (runs/experience.jsonl) rides the same wall."""
     mod = _load_hook()
     ws = _ws(tmp_path)
-    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl"):
+    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl",
+                "runs/experience.jsonl"):
         rc, _err, _ctx = mod.evaluate(
             _payload(ws, "Read", {"file_path": str(ws / rel)},
                      agent_type=_RT))
@@ -335,11 +338,22 @@ def test_learning_faces_denied_on_bash_and_pattern_faces(tmp_path):
                  agent_type="kunglao-settler"))
     assert rc == 2, "Bash path tokens ride the same deny face"
     rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash",
+                 {"command": "tail -n 5 runs/experience.jsonl"},  # #721
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "the consolidated feed is a Bash-denied path token"
+    rc, _e, _c = mod.evaluate(
         _payload(ws, "Glob",
                  {"path": str(ws / "evidence"),
                   "pattern": "*/q-cell-log.jsonl"},
                  agent_type="kunglao-settler"))
     assert rc == 2, "a pattern naming a learning face is the same read"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Glob",
+                 {"path": str(ws / "runs"),
+                  "pattern": "*experience.jsonl"},  # #721
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "a pattern naming the consolidated feed is denied too"
 
 
 def test_settler_working_face_and_worker_untouched(tmp_path):

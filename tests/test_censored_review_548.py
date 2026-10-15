@@ -330,6 +330,10 @@ def test_experience_file_scanned_and_archive_skipped(tmp_path):
     (runs / "archive").mkdir()
     (runs / "archive" / "transitions.jsonl").write_text(
         json.dumps(row) + "\n", encoding="utf-8")
+    nested = runs / "archive" / "2026-q1"
+    nested.mkdir()
+    (nested / "transitions.jsonl").write_text(
+        json.dumps(row) + "\n", encoding="utf-8")  # nested archive too
     found = cr.find_transition_files([ws])
     assert [f.name for f in found] == ["experience.jsonl"]
     rows, stats = cr.read_ledger(found)

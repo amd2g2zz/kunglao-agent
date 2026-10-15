@@ -500,6 +500,7 @@ def test_record_dispatch_observation_undeclared_is_honest_gap(tmp_path):
     assert out["appended"] is False
     assert out["reason"] == "undeclared"
     assert not (ws / q_cells.OBS_REL).exists()
+    assert not (ws / q_cells.EXPERIENCE_REL).exists()  # #721: the live home
 
 
 def test_observe_clamps_credit_into_the_unit_interval(tmp_path):

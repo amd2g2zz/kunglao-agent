@@ -53,6 +53,8 @@ def _ws(tmp_path: Path) -> Path:
         '{"sentinel": "POISON_METHOD_FAMILY"}\n', encoding="utf-8")
     (ws / "runs" / "q-cell-log.jsonl").write_text(
         '{"sentinel": "POISON_Q_CELL"}\n', encoding="utf-8")
+    (ws / "runs" / "experience.jsonl").write_text(
+        '{"sentinel": "POISON_EXPERIENCE"}\n', encoding="utf-8")
     for name, body in (("worker-status-w9.md", "POISON_WORKER_STATUS"),
                        ("W9-verify-note.md", "POISON_VERIFY_NOTE"),
                        ("verification-C-9.md", "POISON_VERIFICATION")):
@@ -101,7 +103,9 @@ def _spy_opens(monkeypatch) -> list[str]:
 def test_settler_inputs_exclude_method_family_log(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
     # refused at the door — the learning faces are never legal artifacts
-    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl"):
+    # (#721: the consolidated experience.jsonl rides the same wall)
+    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl",
+                "runs/experience.jsonl"):
         with pytest.raises(ValueError, match="excluded"):
             bss.settler_input(ws, claim="C-9", identity="settle-1",
                               artifact_paths=[rel])
@@ -113,7 +117,9 @@ def test_settler_inputs_exclude_method_family_log(tmp_path, monkeypatch):
     assert doc["schema"] == bss.SETTLEMENT_INPUT_SCHEMA
     assert "POISON_METHOD_FAMILY" not in blob
     assert "POISON_Q_CELL" not in blob
+    assert "POISON_EXPERIENCE" not in blob
     assert not any("method-family-log" in p or "q-cell-log" in p
+                   or "experience.jsonl" in p
                    for p in opened), opened
     assert any(p.endswith("raw-step.bin") for p in opened), opened
 
