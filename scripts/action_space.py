@@ -12,7 +12,11 @@ measuring nothing". This module is the vocabulary:
   - operator level (the worker's hands): observe / trace / hook / emulate /
     derive / verify / search / ask / plan_segment;
   - orchestration level (the loop's teeth): dispatch / verify / deepen /
-    osint / expand / distill;
+  - orchestration level (the loop's teeth): dispatch / verify / deepen /
+    osint / expand / distill, plus the scheduling five (sleep / wake_on /
+    probe / close_loop / none — the wake decision itself is an action: the
+    fixed cron becomes a chosen, attributable alternative with a logging
+    seat);
   - policy level (the claim economy): mint_arm / split_claim / supersede /
     park / rewire_deps / replan — the candidate-set controls. Mint / split /
     supersede / park / rewire predate the tier as mechanisms fired by
@@ -125,6 +129,12 @@ class ActionSpec:
                     planning_actions.py): recorded with its producing step_ref
                     and propensity, revocable against that step. False for
                     every non-planning action (default).
+    scheduling    — the action lives in the WAKE-decision vocabulary (the
+                    scheduling five at the orchestration level). The tag is
+                    what makes the scheduling set registry-derived instead of
+                    a hand-kept parallel list; the decision recorder
+                    (scripts/intelligent_scheduling.py) selects from exactly
+                    the flagged subset. False for every other action.
     """
 
     name: str
@@ -136,16 +146,19 @@ class ActionSpec:
     delta_estimator: DeltaEstimator
     references: tuple[str, ...] = field(default_factory=tuple)
     settleable: bool = False
+    scheduling: bool = False
 
 
 def _spec(name: str, level: str, cost: float, precondition: str,
           proof_power: str, consumer: str,
           references: tuple[str, ...] = (),
-          settleable: bool = False) -> ActionSpec:
+          settleable: bool = False,
+          scheduling: bool = False) -> ActionSpec:
     return ActionSpec(name=f"{level}.{name}", level=level, cost=float(cost),
                       precondition=precondition, proof_power=proof_power,
                       consumer=consumer, delta_estimator=_est(f"delta_v/{level}.{name}"),
-                      references=references, settleable=settleable)
+                      references=references, settleable=settleable,
+                      scheduling=scheduling)
 
 
 # ---- the registry --------------------------------------------------------------
@@ -248,6 +261,56 @@ _register(
                       "reserve_act — reused, not rebuilt)",
                       "runs/distill-budget.json (per-run act + hop caps: "
                       "the restraint ruling lives as BUDGET)")),
+    # ---- the scheduling five (the wake decision is an action) ----
+    # The fixed cron used to BE the schedule: no alternative was chosen, no
+    # propensity was logged, nothing was evaluable off-policy. These five
+    # make the wake decision a first-class choice — the interval constants
+    # become day-one priors and every decision is recorded with its
+    # propensity (scripts/intelligent_scheduling.py). The cron path itself
+    # is DEMOTED to an armed watchdog (event-first, polling as fallback),
+    # never deleted.
+    _spec("sleep", ORCHESTRATION, 1,
+          "a live loop with no higher-priority wake pending — schedule the "
+          "next timer wake at the chosen interval",
+          "none (temporal) — choosing WHEN to look cannot prove anything; "
+          "the wake itself re-enters the normal decision faces",
+          "orchestrator (wake decision)",
+          references=("cadence_advisor (interval priors + advice surface)",),
+          scheduling=True),
+    _spec("wake_on", ORCHESTRATION, 1,
+          "an event predicate the topology already delivers (dispatch "
+          "return / worker completion / oracle result / user signal) — wait "
+          "on the event instead of polling for it",
+          "none (temporal) — event-first wakes change WHEN the loop runs, "
+          "never what it concludes",
+          "orchestrator (wake decision)",
+          references=("loop_watchdog (missed-event predicate)",),
+          scheduling=True),
+    _spec("probe", ORCHESTRATION, 2,
+          "an active worker whose liveness is undecided — ask for status "
+          "(the smart-ping channel) instead of waiting for the next tick",
+          "observation — a probe reads liveness, it never settles a claim "
+          "(worker_death owns the record)",
+          "orchestrator (wake decision)",
+          references=("slot_monitor verdicts", "the smart-ping protocol"),
+          scheduling=True),
+    _spec("close_loop", ORCHESTRATION, 1,
+          "convergence reached and the completion oracle closed — stop "
+          "waking (the guarded teardown criteria)",
+          "none (terminal) — an intentional close, never a silent stop",
+          "orchestrator (wake decision)",
+          references=("heartbeat_off guarded teardown",),
+          scheduling=True),
+    _spec("none", ORCHESTRATION, 0,
+          "always available — do nothing at this decision point: the null "
+          "action, cost 0 and value 0, the baseline every timer action is "
+          "measured against",
+          "none (the null intervention) — recorded with its own propensity "
+          "so inaction is off-policy evaluable too",
+          "orchestrator (wake decision)",
+          references=("the null-action baseline protocol "
+                      "(scripts/intelligent_scheduling.py)",),
+          scheduling=True),
     # ---- policy level: the claim economy's candidate-set controls ----
     # Every entry is settleable: it changes WHICH claims the policy can
     # choose from, so it rides the escrow/revoke attribution discipline
@@ -341,7 +404,7 @@ _register(
           references=("rule 14 tool creation", "tools/_INDEX.yaml registration")),
 )
 
-assert len(ACTIONS) == 24, "the vocabulary is exactly 9 + 6 + 6 + 3"
+assert len(ACTIONS) == 29, "the vocabulary is exactly 9 + 11 + 6 + 3"
 
 
 def actions_of(level: str) -> list[ActionSpec]:

@@ -103,7 +103,7 @@ import random
 import re
 import sys
 from typing import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -847,7 +847,8 @@ def _view_stats(actions: list) -> dict:
 
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
                      rng_base: int, actions: list[Action],
-                     round_no: int | None) -> None:
+                     round_no: int | None,
+                     planner: dict | None = None) -> None:
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
     per-claim Thompson feeds + the input fingerprint (claims hash,
     evidence-view digest, rng base draw, #251 round). Given the seed inputs,
@@ -879,7 +880,14 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     They are pure functions of the ranked actions, computed here at the
     decision point, and stay OUTSIDE input_fingerprint: the fingerprint
     covers ranking inputs, these are outputs, so the replay hash and the
-    frozen-sampling observability stay byte-identical."""
+    frozen-sampling observability stay byte-identical.
+
+    #718 additive planner block: when the L1 planner's advisory factors
+    moved any candidate this run (the value store is non-empty and at
+    least one claim is knowledge-solved), the per-claim factors ride the
+    payload under ``planner`` — an OUTPUT key (same convention as the
+    view keys), so an all-empty run emits the pre-#718 payload
+    byte-identically."""
     try:
         claims_hash = hashlib.sha256(json.dumps(
             claims, sort_keys=True, ensure_ascii=False, default=repr)
@@ -900,6 +908,8 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
             **_view_stats(actions),
+            # additive-when-present (#718): no factors -> no key at all
+            **({"planner": dict(planner)} if planner else {}),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                             arm=(actions[0].claim_id if actions else None),
@@ -1066,6 +1076,39 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
             weight=weight, feeds=feeds,
         ))
+    # #718 additive L1 planner signal: while the value store is empty
+    # `advisory_factors` returns {} and nothing here runs (the ranking
+    # above stays byte-identical — the frozen-capture contract). Once
+    # learned, a claim whose dispatch the planner does not endorse (its
+    # verified answer already exists — reuse dominates its ratio) is
+    # dragged by the dispatch SHARE; exact-1.0 claims keep their score
+    # and their feeds untouched. Fail-open: a broken planner never
+    # touches the ranking result.
+    planner_block: dict | None = None
+    if evidence.ws is not None:
+        factors: dict = {}
+        try:
+            from rlvr import l1_planner as _l1p  # noqa: PLC0415 — lazy
+            factors = _l1p.advisory_factors(
+                evidence.ws, [(a.claim_id, a.cost) for a in actions],
+                rng=random.Random(f"l1rank/{base}"))
+        except Exception as exc:  # noqa: BLE001 — the rank never breaks
+            warn("priority_ratio.planner",
+                 f"{type(exc).__name__}: {exc}")
+        moves = {cid: f for cid, f in factors.items() if 0.0 < f < 1.0}
+        if moves:
+            planner_block = {cid: round(f, 6) for cid, f in moves.items()}
+            actions = [
+                replace(a, score=round(a.score * moves[a.claim_id], 6),
+                        feeds=dict(
+                            a.feeds,
+                            planner=f"l1 dispatch share={round(moves[a.claim_id], 6)} "
+                                    f"(the planner does not endorse this "
+                                    f"dispatch: a knowledge-solved claim is "
+                                    f"reused unless a re-attempt's value/cost "
+                                    f"beats the replay's)"))
+                if a.claim_id in moves else a
+                for a in actions]
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
     # The emit below reads actions[0] as the event's arm — valid only
@@ -1077,7 +1120,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # surface, nothing to log to (bare-EvidenceView calls stay pure).
     if evidence.ws is not None:
         _emit_rank_feeds(evidence.ws, claims, evidence, base, actions,
-                         round_no=round_no)
+                         round_no=round_no, planner=planner_block)
     return actions
 
 
