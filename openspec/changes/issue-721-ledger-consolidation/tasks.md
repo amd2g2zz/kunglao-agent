@@ -81,8 +81,8 @@ together), then migrates with
       interventions (`rlvr/step_ledger.record_intervention`),
       predictions (`rlvr/prediction_ledger.py`), situation-stream
       (`rlvr/state.py` append_snapshot/read_situations), strategy-log
-      (written by `hooks/dispatch_gate.py:394`; read by
-      `rlvr/triples.py` + `priority_ratio` faces; rows unstamped
+      (written by `hooks/dispatch_gate.py`; read by `rlvr/triples.py`
+      and `hooks/dispatch_gate.py`'s own read path; rows unstamped
       `event=…` — the card must add a stamp or a documented
       legacy-unstamped exception)
 - [ ] **knowledge family** — `knowledge-store.jsonl` under the guarded

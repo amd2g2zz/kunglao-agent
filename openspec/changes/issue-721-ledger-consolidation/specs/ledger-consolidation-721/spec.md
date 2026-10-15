@@ -81,7 +81,10 @@ truncate, or delete a legacy file.
 Every consumer of a migrated store SHALL read through the consolidated
 read face: legacy archive rows first (if the rel still exists), then the
 consolidated file's rows under the requested stamp filter. A direct
-path read of a migrated rel SHALL NOT remain in production code. The
+path read of a migrated rel SHALL NOT remain on a production read path
+— the only permitted exception is a documented partial-deploy fallback
+(an ImportError guard whose body IS the legacy read, taken only when
+the rlvr core is absent). The
 fold (`q_cells.fold` via its store) SHALL read observations from the
 consolidated file through the `q-cell-obs` stamp filter with the legacy
 fallback.
