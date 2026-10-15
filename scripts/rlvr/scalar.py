@@ -53,6 +53,7 @@ machine signals — no model-call path, no judgment slots (U3 extended).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np  # issue 420: ordered-float reductions only (see _seq_sum)
@@ -118,6 +119,19 @@ DEMOTION_REFUTED_INFORMATION = "refuted_with_replay_evidence"
 # the reward-rules.yaml promotion is a declared follow-up, not this
 # change.
 CITED_CAP_DEFAULT = 2
+
+# --- the deliverable-citation producer (issue 678, T2) ---------------------
+#
+# ``cited_ids`` had NO production caller: ``cited_by_deliverable`` was
+# permanently False and the deliverable half of the issue-433 citation
+# relation was dead (only the claim-provenance leg ever fired). The
+# producer scans the deliverable-facing document trees (notes/ results
+# layer, analyses/ long-form, runs/deliverables/) for ``F<NNN>`` fact-id
+# mentions. Content reads only, tolerant: an unreadable file contributes
+# no citations and never raises (the question_claims precedent).
+CITED_DELIVERABLE_RELS = ("notes", "analyses", "runs/deliverables")
+CITED_DELIVERABLE_SUFFIXES = frozenset({".md", ".txt", ".yaml", ".yml"})
+FACT_ID_CITE_RE = re.compile(r"\bF\d{3}\b")
 DEMOTION_CITED_OVER_CAP = "cited_over_cap"
 
 TIER_GOLD = "GOLD"
@@ -514,6 +528,13 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     whose FIRST settlement rode this pass (the learning clock's tick);
     replays and the late-cite amendment path report none."""
     ws = Path(ws)
+    # issue-678 T3: the creator backfill rides the SAME pass — a
+    # creator-less artifact whose claim_id names a dispatch in THIS
+    # settlement attributes to that claim (new dicts; the pure core
+    # below sees the backfilled rows, never the originals)
+    dispatch_ids = [str(d.get("dispatch_id") or "")
+                    for d in (dispatches or [])]
+    artifacts = backfill_artifact_creators(artifacts, dispatch_ids)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
@@ -763,6 +784,82 @@ def question_claims(ws) -> set[str]:
     return out
 
 
+def cited_ids_from_deliverables(ws) -> set[str]:
+    """<ws> deliverable trees -> every ``F<NNN>`` fact id named by a
+    deliverable document — THE producer the issue-433 deliverable
+    citation face never had (issue 678 T2: no production caller ever
+    passed ``cited_ids``, so ``cited_by_deliverable`` was permanently
+    False). Scans notes/, analyses/, runs/deliverables/ recursively for
+    text/yaml files. Tolerant: an unreadable file contributes no
+    citations and never raises; an absent tree is an empty set (the
+    honest absence, same posture as question_claims)."""
+    ws = Path(ws)
+    out: set[str] = set()
+    for rel in CITED_DELIVERABLE_RELS:
+        root = ws / rel
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() \
+                    or path.suffix.lower() not in CITED_DELIVERABLE_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            out |= set(FACT_ID_CITE_RE.findall(text))
+    return out
+
+
+def backfill_artifact_creators(artifacts: list[dict],
+                               dispatch_ids) -> list[dict]:
+    """Issue-678 T3 — the creator backfill (settlement path only).
+
+    A creator-less artifact whose ``claim_id`` names a dispatch in THIS
+    settlement attributes to that claim (the claim id IS the dispatch
+    identity the settlement face keys on — the CLI assembles dispatch
+    rows from terminal claims, so the two ids coincide by construction).
+    Launch stashes were considered as the attribution source and
+    REJECTED: ``append_transition`` consumes the stash on settle, so the
+    namespace is empty exactly when the old (pre-#648) facts need
+    backfilling; the claim id is the same identity, durable in the
+    register. A creator-less artifact with no path stays untraced and is
+    explicitly marked ``creditable: false`` — the named non-creditable
+    face the issue asks for, auditable instead of silent. New dicts
+    throughout (immutability): rows WITH a creator pass through
+    unchanged."""
+    known = {str(d).strip() for d in (dispatch_ids or [])}
+    out: list[dict] = []
+    for a in (artifacts or []):
+        creator = str(a.get("creator") or "").strip()
+        if creator:
+            out.append(a)
+            continue
+        claim_id = str(a.get("claim_id") or "").strip()
+        if claim_id and claim_id in known:
+            out.append({**a, "creator": claim_id, "creditable": True})
+        else:
+            out.append({**a, "creditable": False})
+    return out
+
+
+def _deliverable_cited(fid: str, cited: set[str]) -> bool:
+    """The deliverable citation match: exact id membership first (the
+    explicit ``cited_ids`` face — a caller may pass slugged ids), then
+    the BARE-token leg the producer needs: fact ids carry slugs
+    (``F008-decrypt-key`` — the ``<FNNN>-<slug>`` grammar) while a
+    deliverable document names the bare token ``F008`` (the ``\\b``
+    boundary treats the hyphen separator as non-word, so the scan
+    extracts exactly the bare id). Match on the artifact id's own
+    ``F<NNN>`` token — a bare id (legacy grammar) matches itself."""
+    if not fid or not cited:
+        return False
+    if fid in cited:
+        return True
+    token = FACT_ID_CITE_RE.search(fid)
+    return bool(token) and token.group(0) in cited
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -772,14 +869,20 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     channels, trace_id is mission-stable so it attributes to the mission,
     not the dispatch). Status/verify_status are the oracle faces;
     ``cited_by_deliverable`` comes from the deliverable citation face
-    (cited_ids — the ids the deliverable document names) and
+    (cited_ids — the ids the deliverable document names; issue 678 T2:
+    ``cited_ids=None`` — the default every production caller uses — now
+    INVOKES the producer ``cited_ids_from_deliverables`` instead of
+    meaning "no citations"; an explicit set keeps its exact meaning) and
     ``answers_question`` from the claim-provenance face (claim_id
     resolving to a question-bearing claim — the used-toward-stage leg of
     the issue-433 citation relation; see question_claims). Tolerant read:
     unparseable or extension-layer-incomplete files are skipped (they are
     not credit artifacts; lint_facts owns their loudness)."""
     import yaml
-    cited = {str(c) for c in (cited_ids or [])}
+    if cited_ids is None:
+        cited = cited_ids_from_deliverables(ws)
+    else:
+        cited = {str(c) for c in cited_ids}
     question_bearing = question_claims(ws)
     out: list[dict] = []
     facts_dir = Path(ws) / "facts"
@@ -806,7 +909,8 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
                     "claim_id": claim_id or None,
                     "answers_question": bool(claim_id)
                     and claim_id in question_bearing,
-                    "cited_by_deliverable": fid in cited,
+                    "cited_by_deliverable": _deliverable_cited(fid,
+                                                               cited),
                     "oracle_backed_refutation": str(
                         meta.get("status") or "").strip().upper()
                         in _REFUTATION_STATUSES})

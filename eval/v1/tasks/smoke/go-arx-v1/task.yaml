@@ -46,6 +46,7 @@ checker:
   thresholds:
     min_constant_hits: 3
     min_pair_ratio: 0.75
+  candidate: client.go
 ground_truth:
   file: ground_truth.json
   space_bits: 96

@@ -178,8 +178,12 @@ def test_kill_without_verdict_on_disk_is_the_bare_kill(ctx):
     assert row["o"] == {"status": "TIMEOUT", "class": "verify",
                         "facts": 0, "variant": "verify"}
     assert row["r_settle"] == 0.0
+    # RE-MINT AUDIT (issue-678 T4): append_transition grew three
+    # additive provenance columns (phi_delta + claim_ref/action_key
+    # from the launch stash); the row stays a bare kill otherwise.
     assert set(row) == {"ts", "dispatch_id", "action_type", "s", "a",
-                        "o", "s_prime_phi", "phi_before", "r_incr",
+                        "o", "s_prime_phi", "phi_before", "phi_delta",
+                        "claim_ref", "action_key", "r_incr",
                         "r_settle", "done"}
 
 

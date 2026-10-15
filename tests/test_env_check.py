@@ -85,6 +85,15 @@ def _write_settings(target_root: Path) -> Path:
     post.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python hooks/violation_capture.py"},
         {"type": "command", "command": "python hooks/bash_fact_guard.py"}]})
+    # #683: the substrate pair rides its own PostToolUse matcher rows
+    # (matchers mirror WIRE_UP_HOOK_WIRING; the #675 guard below counts
+    # FILES, but the fixture stays honest to the real wiring).
+    post.append({"matcher": "Edit|Write|MultiEdit|Agent", "hooks": [
+        {"type": "command", "command": "python hooks/cost_input_capture.py"}]})
+    post.append({"matcher": "Bash|Read|Glob|Grep|Edit|Write|MultiEdit|mcp__",
+                 "hooks": [
+                     {"type": "command",
+                      "command": "python hooks/step_record_capture.py"}]})
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python hooks/heartbeat_touch.py"},
         {"type": "command", "command": "python hooks/orchestrator_tool_guard.py"},

@@ -99,6 +99,13 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# #683: the registry is THE data source (single-sourcing the two hook
+# registries) — imported eagerly so the wiring table + matcher constant
+# below ARE the registry's rows, not a second hand-kept copy. (The lazy
+# `import wire_up_settings` in the checkers below is unchanged: same
+# module, already in sys.modules by the time they run.)
+import wire_up_settings  # noqa: E402
+
 HOOK_STATE_FILE = ".hook_state.json"
 # #597: TTL value single-sourced in liveness_policy (rationale there).
 from liveness_policy import DEFAULT_TTL_MINUTES  # noqa: E402
@@ -830,8 +837,10 @@ def deploy_workspace_copy(ws: Path) -> dict:
 # VM-only dynamic-analysis namespaces ride the SAME orchestrator_tool_guard
 # hook file (second PreToolUse entry; workers inside .wt-* pass in-script).
 # Double-registration bookkeeping: wire_up_settings.DOUBLE_REGISTERED_HOOKS.
-ORCHESTRATOR_MCP_MATCHER = (
-    "mcp__ghidra__.*|mcp__x64dbg__.*|mcp__frida__.*")
+# #683: the definition moved to wire_up_settings (the wiring table that
+# carries this matcher is the registry's row list) — re-exported here for
+# the #601-era consumers (tests pin hook_activation.ORCHESTRATOR_MCP_MATCHER).
+ORCHESTRATOR_MCP_MATCHER = wire_up_settings.ORCHESTRATOR_MCP_MATCHER
 
 # #142: the statusline registration — NOT a hook. It rides the top-level
 # `statusLine` settings key: same #258 PROJECT-scoped file
@@ -962,37 +971,22 @@ def _register_statusline_warn(ws: Path | None) -> None:
 
 
 
-_DEPLOYED_WIRING = (
-    # (event, matcher, hook_file) — mirrors register_hooks exactly.
-    ("PreToolUse", "Agent", "env_check_gate.py"),
-    ("PreToolUse", "Agent", "worker_budget.py"),
-    ("PreToolUse", "Agent", "dispatch_gate.py"),
-    ("PreToolUse", "Agent", "recall_inject.py"),
-    ("PreToolUse", "Bash", "heartbeat_touch.py"),
-    ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
-    ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
-    ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
-    ("PreToolUse", "Bash", "write_guard.py"),  # #516 register Bash face
-    ("PreToolUse", "Read|Glob|Grep|Bash|Agent", "rt_read_barrier.py"),
-    ("PreToolUse", "Edit|Write|MultiEdit", "evidence_pin_guard.py"),
-    ("PreToolUse", "Bash", "evidence_pin_guard.py"),  # mutation idioms
-    ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
-    ("PostToolUse", "Agent", "worker_pulse.py"),
-    ("PostToolUse", "Agent", "state_anchor.py"),
-    ("PostToolUse", "Bash", "violation_capture.py"),
-    ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
-    ("PostToolUse", "Edit|Write|MultiEdit|Agent",
-     "cost_input_capture.py"),  # #873 cost 输入捕获
-    ("PostToolUse", "Bash|Read|Glob|Grep|Edit|Write|MultiEdit|mcp__",
-     "step_record_capture.py"),  # the shadow step ledger
-    ("Stop", "", "completion_gate.py"),
-    ("Stop", "", "workguard_gate.py"),        # issue 434 WORKGUARD
-    ("SubagentStop", "", "round_closure.py"),      # issue 434 closure feed
-    ("SessionStart", "", "session_start.py"),      # issue 434 constitution
-    ("PreCompact", "", "compact_continuity.py"),   # issue 434 continuity
-    ("UserPromptSubmit", "", "user_signal_capture.py"),  # issue 434 observation
-    ("UserPromptSubmit", "", "rt_read_barrier.py"),      # RT arming face
-)
+# #683: the deployed writer's row table IS the registry's wiring table —
+# one list, both consumers (the deployed writer below, and the canonical
+# register_hooks which must reach every row; pinned by
+# tests/test_substrate_wiring_683.py). Pre-#683 this was a second
+# hand-written copy that had drifted: step_record_capture.py +
+# cost_input_capture.py lived only here, so register_hooks never wrote
+# them while the self-check (keyed to the smaller registry) stayed GREEN.
+_DEPLOYED_WIRING = wire_up_settings.WIRE_UP_HOOK_WIRING
+
+
+def _post_rows(hook_file: str) -> tuple[str, ...]:
+    """#683: the PostToolUse matchers one hook file rides, derived from the
+    shared wiring table — the writer never re-types a matcher literal (a
+    mirrored literal is the drift this card closes)."""
+    return tuple(matcher for event, matcher, f in _DEPLOYED_WIRING
+                 if f == hook_file and event == "PostToolUse")
 
 
 def register_hooks_deployed(ws: Path) -> int:
@@ -1255,6 +1249,16 @@ def register_hooks(workspace: Path | None = None,
     # 仍在 write_guard 的结构门，本 face 负责"盲区不再无声"。
     post, added = _ensure(post, "Bash", "bash_fact_guard.py")
     count += added
+    # #683: the substrate hooks — cost input capture (#873) + the shadow
+    # step ledger (#670). Pre-#683 they lived ONLY in the wiring table, so
+    # this canonical writer never wrote them while its self-check stayed
+    # GREEN (the expected set was the smaller registry — a missing hook was
+    # invisible by construction). Matchers come from the shared table, so
+    # the row and the write can never disagree.
+    for hook_file in ("cost_input_capture.py", "step_record_capture.py"):
+        for matcher in _post_rows(hook_file):
+            post, added = _ensure(post, matcher, hook_file)
+            count += added
 
     # completion_gate (#55): the code-owned completion gate. Stop hook — fires
     # at session termination, blocks when task-oracle.yaml is unsatisfied.

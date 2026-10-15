@@ -80,6 +80,8 @@ _KONG_SKIP_FILES = frozenset({
     "user_signal_capture.py",  # UserPromptSubmit observation — env_check scans it (issue 434)
     "rt_read_barrier.py",    # RT read barrier — env_check scans it
     "evidence_pin_guard.py",  # evidence sha-pin freeze — env_check scans it
+    "step_record_capture.py",  # shadow step ledger (#670) — env_check scans it (#683)
+    "cost_input_capture.py",   # cost input capture (#873) — env_check scans it (#683)
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —

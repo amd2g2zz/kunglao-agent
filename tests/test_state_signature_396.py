@@ -82,14 +82,21 @@ def _cost(ws: Path, amounts: list[float]) -> None:
 
 class TestFactFace:
     def test_counts_and_terminal_verified(self, tmp_path):
+        # RE-MINT AUDIT (issue-678 D-678.5): fact_face grew the graded
+        # ``weighted_fraction`` column (count/verified byte-identical).
+        # F001/F002 are certified terminals (1.0); F003's OPEN status
+        # is grammar-unclean under this fixture (illegal source/
+        # confidence for OPEN) and grades 0.0 — (1+1+0)/3.
         _fact(tmp_path, "F001", "PROVEN")
         _fact(tmp_path, "F002", "VERIFIED")
         _fact(tmp_path, "F003", "OPEN")
         face = ssig.fact_face(tmp_path)
-        assert face == {"count": 3, "verified": 2}
+        assert face == {"count": 3, "verified": 2,
+                        "weighted_fraction": 0.666667}
 
     def test_empty_workspace_zero(self, tmp_path):
-        assert ssig.fact_face(tmp_path) == {"count": 0, "verified": 0}
+        assert ssig.fact_face(tmp_path) == {"count": 0, "verified": 0,
+                                            "weighted_fraction": 0.0}
 
     def test_unreadable_frontmatter_skipped(self, tmp_path):
         _fact(tmp_path, "F001", "PROVEN")
