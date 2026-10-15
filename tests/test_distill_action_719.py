@@ -67,7 +67,8 @@ def test_distill_is_selectable_action():
     (both are workspace capability acquisition): level orchestration,
     cost 5 (a budgeted act — the distill budget ledger is the hard cap),
     a real availability precondition, and the budget machinery named in
-    its references. The vocabulary count moves 23 -> 24."""
+    its references. The vocabulary count moved 23 -> 24 with distill; the
+    scheduling five (wake-decision actions) widen it further to 29."""
     spec = aspace.ACTIONS.get("orchestration.distill")
     assert spec is not None, (
         "distill must be in the action vocabulary — the policy cannot "
@@ -91,8 +92,10 @@ def test_distill_is_selectable_action():
         "learns WHEN (value/cost), it is never told when")
     # the estimator stub is still a stub (v0.2 owns the estimators)
     assert spec.delta_estimator.implemented is False
-    # the vocabulary is exactly 9 + 6 + 6 + 3
-    assert len(aspace.ACTIONS) == 24
+    # the vocabulary is exactly 9 + 11 + 6 + 3 (distill is the 24th entry;
+    # the scheduling five — sleep / wake_on / probe / close_loop / none —
+    # widen the orchestration level to 11)
+    assert len(aspace.ACTIONS) == 29
 
 
 def test_distill_rides_standard_registry_metadata():
