@@ -274,7 +274,7 @@ class Action:
         # feed STATES legitimately differ while scores do not.
         return {"claim_id": self.claim_id, "action": self.action,
                 "score": round(self.score, 3), "skill": self.skill,
-                "weight": round(self.weight, 3)}
+                "weight": round(self.weight, 3), "tier": self.tier}
 
 
 def is_open(claim: dict) -> bool:
@@ -897,6 +897,7 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "feeds": {a.claim_id: dict(a.feeds) for a in actions},
             "scores": {a.claim_id: a.score for a in actions},
             "ranked_order": [a.claim_id for a in actions],
+            "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
             **_view_stats(actions),
         }
