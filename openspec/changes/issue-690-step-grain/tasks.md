@@ -38,7 +38,20 @@
   aggregation + step_id determinism, wall_s overrun -> attributed-waste,
   retries exhaustion + independent accrual, rank-feed visibility
 
-## 5. Verification
+## 5. Review hardening (round-1 independent review findings)
+
+- [x] CRITICAL — path traversal via worker-writable stash identity:
+  `_launch_path` refuses non-token claim/action_type (ValueError ->
+  fail-open warn + None in record_launch / append_transition);
+  `pending_step` skips such stashes at the read boundary (RED test
+  reproduces the deletion, then pins the wall)
+- [x] HIGH — orphaned stash after a later-hook REJECT:
+  `step_grain.cancel_step_open` (consumes the untyped stash, rolls
+  dispatch_count back, idempotent, foreign envelopes intact) wired into
+  dispatch_gate's rc=2 undo path; RED tests cover the unit face and the
+  dispatch_gate wiring face
+
+## 6. Verification
 
 - [x] targeted suite green (`pytest tests/test_step_grain_690.py -n 2`)
 - [x] ruff clean on the touched files

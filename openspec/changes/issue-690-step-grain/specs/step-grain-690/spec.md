@@ -84,3 +84,47 @@ unconstrained (fail-open).
 - **THEN** the battery rejects the next dispatch naming the exhausted
   budget; with no budget the dispatch is unconstrained and the register
   shows dispatch_count accrued with promotion_attempts untouched
+
+### Requirement: Launch-stash path components are single safe tokens
+
+The claim and action_type formatted into launch-stash FILENAMES SHALL
+be validated at both the read boundary (`pending_step` skips such a
+stash — never pending, never consumed, never guessed) and the sink
+(`_launch_path` refuses the shape for every caller — `record_launch`
+and `append_transition` return None with ONE fail-open warn). A
+worker-writable stash doc carrying `/` or `..` in either field SHALL
+never resolve outside `runs/`, never unlink an arbitrary file, and
+never bank a transition.
+
+#### Scenario: a traversal claim is never consumed
+
+- **WHEN** a stash doc whose claim is `x/../../victim-important` sits in
+  runs/ (with a planted intermediate directory) and a settle fires
+- **THEN** pending_step skips it, append_transition and record_launch
+  refuse with ONE warn each, no transition row banks, and the victim
+  file outside runs/ still exists
+
+### Requirement: A rejected dispatch cancels the step it opened
+
+`cancel_step_open` SHALL consume the untyped launch stash a rejected
+attempt opened at the approval point and roll its `dispatch_count` bump
+back (floor 0), wired into the dispatch-gate rc=2 undo path beside the
+anchor undo and claim reopen. The barrier SHALL lift immediately (never
+ride out the stale TTL on a never-dispatched attempt); typed sibling
+stashes (verify / redteam / prediction-settle) and 1-F3 foreign
+envelopes SHALL be left intact. The face SHALL be idempotent and
+fail-open.
+
+#### Scenario: approve then REJECT leaves no frozen barrier
+
+- **WHEN** worker_budget approves (stash + dispatch_count accrue) and
+  dispatch_gate then rejects (rc=2)
+- **THEN** the undo consumes the stash, the dispatch_count returns to
+  its pre-attempt value, the barrier admits the next dispatch at once,
+  and a second cancel is a no-op
+
+#### Scenario: a foreign envelope survives the cancel
+
+- **WHEN** a status-bearing foreign doc is parked at the claim's stash
+  path and cancel_step_open runs
+- **THEN** the doc is left intact and the face reports False

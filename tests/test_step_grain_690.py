@@ -252,3 +252,90 @@ def test_dispatch_count_visible_in_rank_feed(tmp_path) -> None:
     assert "2" in by["C-5"].feeds["dispatch_count"]
     assert "dispatch_count" not in by["C-6"].feeds, (
         "absent when zero — the legacy feeds stay byte-identical")
+
+
+# --------------------------------- 5. the #690 review hardening faces ----
+
+def test_traversal_stash_identity_is_never_consumed(tmp_path) -> None:
+    """#690 review CRITICAL: a stash doc is worker-writable, so its
+    claim/action_type fields are an untrusted path component — a value
+    like ``x/../../victim-important`` would make the settle's unlink
+    (append_transition) resolve OUTSIDE runs/. The read boundary skips
+    such a stash (never consumed, never guessed — the 1-F3 posture) and
+    the shared sink refuses the same shape for every caller."""
+    ws = _ws(tmp_path)
+    victim = ws / "victim-important.json"
+    victim.write_text(json.dumps({"phi": 0.5}), encoding="utf-8")
+    (ws / "runs" / "dispatch-launch-x").mkdir()  # planted intermediate dir
+    evil = {"schema": "dispatch-launch/1", "ts": TS,
+            "claim": "x/../../victim-important",
+            "action_type": "dispatch", "phi": 0.1}
+    (ws / "runs" / "dispatch-launch-evil.json").write_text(
+        json.dumps(evil), encoding="utf-8")
+    assert sg.pending_step(ws) is None, (
+        "a traversal claim is never a pending step")
+    assert sg.settle_step(ws, "sess-9") is None
+    assert victim.exists(), "settle must never unlink outside runs/"
+    # the sink-side wall: every caller (settle, #550 acts, e2e replay)
+    # is refused the same shape, for both path components
+    assert ir.append_transition(
+        ws, "x/../../victim-important", "completed") is None
+    assert ir.record_launch(ws, "x/../../evil", "a") is None
+    assert ir.append_transition(
+        ws, "C-5", "completed", action_type="../evil") is None
+    assert ir.record_launch(ws, "C-5", "a", action_type="/abs") is None
+    assert victim.exists()
+    assert ir.read_transitions(ws) == []
+
+
+def test_rejected_dispatch_cancels_the_opened_step(tmp_path) -> None:
+    """#690 review HIGH: a dispatch REJECTED after the approval point
+    (the dispatch_gate rc=2 undo — the #623/#624 live path) never ran a
+    worker, so the step _open_step opened must be cancelled: the launch
+    stash is consumed (the sync barrier lifts immediately instead of
+    riding out the stale TTL) and the dispatch_count bump is rolled back
+    (the retries budget is not charged for a dispatch that never
+    dispatched). Idempotent; foreign envelopes stay untouched."""
+    from rlvr.step_grain import cancel_step_open
+    ws = _ws(tmp_path)
+    ir.record_launch(ws, "C-5", "static-first",
+                     branch_budget={"wall_s": 600, "retries": 2})
+    sg.bump_dispatch_count(ws, "C-5")
+    assert sg.barrier_verdict(ws)[0] is False
+    assert cancel_step_open(ws, "C-5") is True
+    assert sg.barrier_verdict(ws)[0] is True, (
+        "the reject-undo must lift the barrier at once")
+    assert sg.dispatch_count(ws, "C-5") == 0, (
+        "a never-dispatched attempt must not charge the retries budget")
+    assert cancel_step_open(ws, "C-5") is False, "idempotent second call"
+    # a foreign envelope (1-F3) parked at the claim's stash path is left
+    # intact — cancel never deletes what it does not own
+    foreign = {"schema": "other/1", "status": "PARKED",
+               "claim": "C-6", "wake": "plan"}
+    p = ws / "runs" / "dispatch-launch-C-6.json"
+    p.write_text(json.dumps(foreign), encoding="utf-8")
+    assert cancel_step_open(ws, "C-6") is False
+    assert p.exists()
+
+
+def test_dispatch_gate_undo_wires_the_step_cancel(tmp_path, monkeypatch) -> None:
+    """#690 review HIGH wiring: dispatch_gate's rc=2 undo path cancels
+    the opened step alongside the anchor undo + claim reopen — the seam
+    the reviewer found untested (approve -> later REJECT -> the barrier
+    froze until the stale TTL)."""
+    import importlib.util
+    hooks = ROOT / "hooks"
+    spec = importlib.util.spec_from_file_location(
+        "_dispatch_gate_for_690_undo_test", hooks / "dispatch_gate.py")
+    dg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dg)
+    ws = _ws(tmp_path)
+    ir.record_launch(ws, "C-5", "static-first")
+    sg.bump_dispatch_count(ws, "C-5")
+    assert sg.barrier_verdict(ws)[0] is False
+    monkeypatch.setattr(dg, "_main_inner", lambda: 2)
+    dg._ATTEMPT.clear()
+    dg._ATTEMPT["ws"], dg._ATTEMPT["cid"] = ws, "C-5"
+    assert dg.main() == 2
+    assert sg.barrier_verdict(ws)[0] is True
+    assert sg.dispatch_count(ws, "C-5") == 0

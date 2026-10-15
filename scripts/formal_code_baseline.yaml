@@ -4,7 +4,7 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 209
+  hooks/dispatch_gate.py: 210
   hooks/env_check_gate.py: 30
   hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
@@ -221,7 +221,7 @@ files:
   scripts/rlvr/compose.py: 17
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 16
+  scripts/rlvr/incremental_reward.py: 17
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/meta_arms.py: 8
@@ -233,7 +233,7 @@ files:
   scripts/rlvr/reward.py: 8
   scripts/rlvr/scalar.py: 26
   scripts/rlvr/state.py: 25
-  scripts/rlvr/step_grain.py: 8
+  scripts/rlvr/step_grain.py: 14
   scripts/rlvr/step_ledger.py: 5
   scripts/rlvr/strategy_store.py: 22
   scripts/rlvr/termination.py: 1

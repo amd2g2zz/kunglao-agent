@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 9fd5f7dc8b285ccce31be5739377edd1254496673d55e9fb900940522df229d1
+    sha256: bf543d2959290f81c9c877f7d49a99de6f9da73a901ac49e60b86137092ca8d0
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -1263,7 +1263,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: b464a5ad79a2f45abf94745ea6dd919b8a85423366ebb3b3768f0dcea403aef0
+    sha256: 57e0d8c8241bc7a3f16a97578f9a42d8131698ecbac8dc48120e73c5544b5712
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1319,7 +1319,7 @@ files:
   - src: scripts/rlvr/step_grain.py
     dest: .claude/scripts/rlvr/step_grain.py
     kind: scaffold
-    sha256: 940eaa16c4c465e3a2eadcdf79e9127c69372b441af63b32e71be58ae703fc72
+    sha256: cac738a045b0b36f8ff105845c3eb4e0efa4112adfa8e6cfdcc03a8b4126db9d
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
@@ -1351,11 +1351,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 6a58d73cc065274d2f61f28e9f54578c9039c0fcdfc81b66bbf1f69df9365d6a
+    sha256: b93dc0ba25afdf4a86a3d1af1bc8788f19aac60f9b44c2a977ae697e04742a94
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f79ced666192f6d61acc8ba2517b779d6edd7bb480b9eee24013f34fff42fb4c
+    sha256: c233fc2d11de95779562c834286cdd66b782a6caeea06c8b24e0bda02c502a59
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

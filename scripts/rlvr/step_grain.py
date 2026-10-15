@@ -99,6 +99,12 @@ def pending_step(ws) -> dict | None:
     dispatch-launch mapping, #690). 1-F3 foreign envelopes (a status-
     bearing or foreign-schema doc parked in the namespace) and
     unparseable docs are skipped — never consumed, never guessed.
+    #690 review CRITICAL: a stash whose claim/action_type is not a
+    single safe path token is skipped at THIS read boundary too — the
+    fields are worker-writable and later format into stash paths, so a
+    traversal payload never becomes a pending step, never maps a
+    claim_ref, and never reaches the barrier (sink-side wall in
+    incremental_reward._launch_path is the second line of defense).
     None = nothing pending (fully settled)."""
     try:
         runs = Path(ws) / "runs"
@@ -122,13 +128,16 @@ def pending_step(ws) -> dict | None:
                 if ident is None:
                     continue
                 claim = ident[0]
+            action_type = str(doc.get("action_type") or "dispatch")
+            if not (_ir._safe_stash_token(claim)
+                    and _ir._safe_stash_token(action_type)):
+                continue  # #690: worker-writable path components — skip
             ts = str(doc.get("ts") or "")
             if best is None or (ts and ts < best["ts"]):
                 budget = doc.get("branch_budget")
                 best = {
                     "claim": claim,
-                    "action_type": str(doc.get("action_type")
-                                       or "dispatch"),
+                    "action_type": action_type,
                     "ts": ts,
                     "attempt_id": str(doc.get("attempt_id") or ""),
                     "branch_budget": (budget
@@ -329,3 +338,56 @@ def bump_dispatch_count(ws, claim: str) -> int:
         warn("rlvr.step_grain.bump_dispatch_count",
              f"{type(exc).__name__}: {exc}")
         return -1
+
+
+def cancel_step_open(ws, claim: str) -> bool:
+    """#690 review HIGH: the reject-undo face — a dispatch REJECTED after
+    the approval point (dispatch_gate rc=2, the #623/#624 undo path) never
+    ran a worker, so the step ``_open_step`` opened is cancelled here:
+    the untyped launch stash is consumed (the sync barrier lifts at once
+    instead of riding out the stale TTL, and no phantom settle can bank
+    this attempt later) and the claim's ``dispatch_count`` bump is rolled
+    back (the retries budget is not charged for a dispatch that never
+    dispatched). Only the untyped dispatch stash is this face's to
+    consume — a typed sibling (verify / redteam / prediction-settle)
+    belongs to its own act; a 1-F3 foreign envelope parked at the claim's
+    path is LEFT INTACT (never consumed, never deleted). Idempotent:
+    True when a stash was consumed, False when there was nothing to
+    cancel. Fail-open: ONE warn, never raises into the undo path."""
+    if not _ir._safe_stash_token(str(claim or "")):
+        return False
+    try:
+        p = Path(ws) / _ir.LAUNCH_REL.format(claim=claim)
+        if p.is_file():
+            try:
+                doc = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = None
+            if (isinstance(doc, dict) and "status" not in doc
+                    and ("schema" not in doc
+                         or doc.get("schema") == _ir.LAUNCH_SCHEMA)):
+                p.unlink(missing_ok=True)
+                # the attempt never dispatched — roll the accrual back
+                # (floor 0; a dirty value degrades to the floor)
+                import ws_yaml as _wsy
+                reg = Path(ws) / "claim-register.yaml"
+                if reg.is_file():
+                    rdoc = (_wsy.yaml.safe_load(
+                        reg.read_text(encoding="utf-8")) or {})
+                    for c in (rdoc.get("claims") or []):
+                        if str(c.get("id") or "") == str(claim):
+                            try:
+                                n = max(0, int(c.get("dispatch_count") or 0)
+                                        - 1)
+                            except (TypeError, ValueError):
+                                n = 0
+                            c["dispatch_count"] = n
+                            reg.write_text(_wsy.canonical_dump(rdoc),
+                                           encoding="utf-8")
+                            break
+                return True
+        return False
+    except Exception as exc:  # noqa: BLE001 — undo trouble never the verdict
+        warn("rlvr.step_grain.cancel_step_open",
+             f"{type(exc).__name__}: {exc}")
+        return False

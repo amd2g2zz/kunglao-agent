@@ -1801,6 +1801,20 @@ def main() -> int:
             _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
         except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
             warn("undo_dispatch_anchor", f"{type(exc).__name__}: {exc}")
+        # #690 review HIGH: cancel the step this rejected attempt opened
+        # at the approval point (worker_budget._open_step) — the launch
+        # stash is consumed (the settle->update->decide barrier lifts at
+        # once instead of riding out the stale TTL, and no phantom settle
+        # banks a dispatch that never ran) and the dispatch_count bump is
+        # rolled back (the branch retries budget is not charged). Fail-open:
+        # never changes the verdict.
+        try:
+            from _path_hygiene import ensure_scripts_path as _esp690
+            _esp690()
+            from rlvr import step_grain as _sg690
+            _sg690.cancel_step_open(_ATTEMPT["ws"], _ATTEMPT["cid"])
+        except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
+            warn("cancel_step_open", f"{type(exc).__name__}: {exc}")
     return rc
 
 
