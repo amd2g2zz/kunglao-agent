@@ -467,7 +467,7 @@ files:
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
-    sha256: fd2d0b6108f8fb766b3b1c337f7488a6989a401a0c7517587811ddced1c8c5a1
+    sha256: cfdb134cfa7e8312f3d2da83cb72fd555ae4e49c6e60ce4a43e9fbfc77ab9624
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
