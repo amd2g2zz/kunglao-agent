@@ -28,10 +28,16 @@ coefficients are DOCUMENTED POLICY CONSTANTS (the state.py precedent:
 most three; ALPHA/LAMBDA ride at 1.0 until the offline comparison says
 otherwise.
 
-The transition ledger is append-only runs/transitions.jsonl — the s'
-face the 2026-09-27 quadruple-rejection pin denied; the 2026-10-06
-ruling (external SMDP, transition recording authorized) overturns that
-pin (see scripts/rlvr/triples.py's docstring pin block for the citation).
+The transition ledger is append-only — runs/transitions.jsonl through
+v0.1.6, runs/experience.jsonl since #721 (the consolidated
+WHAT-HAPPENED file: transitions + q-cell observations + step records —
+one logical experience, one physical file). Rows carry the
+``transition/1`` stamp so the multi-schema file stays attributable;
+the legacy path stays readable during the compat window and is archived
+(bytes intact) by the one-time migration. The ledger is the s' face the
+2026-09-27 quadruple-rejection pin denied; the 2026-10-06 ruling
+(external SMDP, transition recording authorized) overturns that pin
+(see scripts/rlvr/triples.py's docstring pin block for the citation).
 """
 from __future__ import annotations
 
@@ -43,8 +49,13 @@ from _common import utc_now_z
 from pathlib import Path
 
 from rlvr.state import fact_face, _oracle_status_progress
+from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
-TRANSITIONS_REL = "runs/transitions.jsonl"
+TRANSITIONS_REL = "runs/transitions.jsonl"  # legacy rel (pre-#721 archive)
+# #721: the row stamp inside runs/experience.jsonl. Transition rows
+# carried no stamp through v0.1.6; a multi-schema file makes the stamp
+# mandatory (attribution + per-schema liveness).
+TRANSITION_SCHEMA = "transition/1"
 LAUNCH_REL = "runs/dispatch-launch-{claim}.json"
 # #550: action-type-scoped stashes — a verify/red-team act keeps its own
 # stash so it never clobbers a pending dispatch stash for the same claim
@@ -265,6 +276,7 @@ def append_transition(ws, claim: str, outcome: str, *,
             float(launch.get("phi", 0.0)), phi_after,
             tokens=tokens, seconds=seconds)
         row = {
+            "schema": TRANSITION_SCHEMA,
             "ts": utc_now_z(),
             "dispatch_id": str(claim),
             "action_type": str(launch.get("action_type")
@@ -297,10 +309,10 @@ def append_transition(ws, claim: str, outcome: str, *,
             **({"propensity": launch["propensity"]}
                if launch.get("propensity") is not None else {}),
         }
-        out = ws / TRANSITIONS_REL
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        if not _cl.append(ws, "experience", row):
+            # append-only refusal (ONE warn already emitted by the core):
+            # the row never banked — the stash stays for a later settle
+            return None
         launch_p.unlink(missing_ok=True)  # stash consumed
         return row
     except (OSError, ValueError, TypeError) as exc:  # loud telemetry (#275)
@@ -387,18 +399,8 @@ def sweep_orphan_launches(ws) -> list[dict]:
 
 
 def read_transitions(ws) -> list[dict]:
-    """The ledger read face: all rows, oldest first; absent = []."""
-    p = Path(ws) / TRANSITIONS_REL
-    if not p.is_file():
-        return []
-    rows = []
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return rows
+    """The ledger read face: all transition rows, oldest first; absent =
+    []. #721: backed by the consolidated experience file, with the
+    legacy archive (runs/transitions.jsonl) riding the compat window —
+    archive rows come first, they predate the live file."""
+    return _cl.read(ws, "experience", schema_prefix="transition")

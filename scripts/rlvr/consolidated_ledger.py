@@ -196,19 +196,30 @@ def _locked_append(p: Path, data: bytes) -> bool:
 def append(ws, family: str, row: dict) -> bool:
     """Append one row to the family's consolidated file (flock-guarded,
     append-only). The ROW CONTRACT is enforced here: a row without a
-    non-empty ``schema`` stamp is refused (ONE warn, False) — the
-    multi-schema file stays attributable. Fail-open: never raises."""
+    non-empty, whitespace-free STRING ``schema`` stamp is refused (ONE
+    warn, False) — the multi-schema file stays attributable, and an
+    unstripped stamp can never go invisible to its own filtered read.
+    Fail-open: never raises into a producer (a non-serializable row is
+    refused, not propagated)."""
     if family not in CONSOLIDATED:
         warn("rlvr.consolidated_ledger.append",
              f"unknown family {family!r} — row not appended")
         return False
-    if not isinstance(row, dict) or not str(row.get("schema") or "").strip():
+    stamp = row.get("schema") if isinstance(row, dict) else None
+    if (not isinstance(row, dict) or not isinstance(stamp, str)
+            or not stamp.strip() or stamp != stamp.strip()):
         warn("rlvr.consolidated_ledger.append",
-             f"refused a stampless row for {family!r}: every row in a "
-             f"consolidated file must carry a <name>/N schema stamp "
-             f"(the #721 row contract)")
+             f"refused a row without a valid <name>/N schema stamp for "
+             f"{family!r} (got {stamp!r}): stamps must be non-empty, "
+             f"whitespace-free strings — the #721 attribution contract")
         return False
-    data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    try:
+        data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        warn("rlvr.consolidated_ledger.append",
+             f"row not JSON-serializable for {family!r} "
+             f"({type(exc).__name__}: {exc}) — not appended")
+        return False
     return _locked_append(family_path(ws, family), data)
 
 
@@ -224,40 +235,55 @@ def _read_rows(p: Path) -> list[dict]:
             if isinstance(row, dict)]
 
 
-def _stamp_kept(row: dict, schema_prefix: str | None) -> bool:
-    if schema_prefix is None:
+def _prefixes(schema_prefix: str | tuple[str, ...]) -> tuple[str, ...]:
+    if isinstance(schema_prefix, str):
+        return (schema_prefix,)
+    return tuple(schema_prefix)
+
+
+def _stamp_kept(row: dict, prefixes: tuple[str, ...] | None) -> bool:
+    if prefixes is None:
         return True
-    return str(row.get("schema") or "").startswith(schema_prefix)
+    stamp = str(row.get("schema") or "")
+    return any(stamp.startswith(p) for p in prefixes)
 
 
 def _legacy_kept(row: dict, schemas: tuple[str, ...],
-                 schema_prefix: str | None) -> bool:
+                 prefixes: tuple[str, ...] | None) -> bool:
     """A legacy (archive-window) row: a stamped row filters on its stamp;
     an UNSTAMPED row (the pre-stamp transitions archive) passes only
-    when one of its rel's registered stamps matches the requested
-    prefix — never leaking into another schema's read."""
-    if schema_prefix is None:
+    when one of its rel's registered stamps matches a requested prefix —
+    never leaking into another schema's read."""
+    if prefixes is None:
         return True
     stamp = str(row.get("schema") or "")
     if stamp:
-        return stamp.startswith(schema_prefix)
-    return any(s.startswith(schema_prefix) for s in schemas)
+        return any(stamp.startswith(p) for p in prefixes)
+    return any(s.startswith(p) for s in schemas for p in prefixes)
 
 
-def read(ws, family: str, *, schema_prefix: str | None = None,
+def read(ws, family: str, *,
+         schema_prefix: str | tuple[str, ...] | None = None,
          include_legacy: bool = True) -> list[dict]:
     """All rows of one family, oldest first: legacy archive rows (in
     registry order — they predate the live file), then the consolidated
     rows. ``schema_prefix`` keeps a multi-schema file readable through
-    its stamps (e.g. ``"step-record"`` catches /1 and /2)."""
+    its stamps (``"step-record"`` catches /1 and /2; a tuple is
+    any-of). An unknown family reads [] with ONE warn (the append()
+    refusal symmetry — fail-open on both faces)."""
+    if family not in CONSOLIDATED:
+        warn("rlvr.consolidated_ledger.read",
+             f"unknown family {family!r} — no rows read")
+        return []
+    prefixes = None if schema_prefix is None else _prefixes(schema_prefix)
     rows: list[dict] = []
     if include_legacy:
         for rel, schemas in LEGACY.get(family, {}).items():
             for row in _read_rows(legacy_path(ws, family, rel)):
-                if _legacy_kept(row, schemas, schema_prefix):
+                if _legacy_kept(row, schemas, prefixes):
                     rows.append(row)
     for row in _read_rows(family_path(ws, family)):
-        if _stamp_kept(row, schema_prefix):
+        if _stamp_kept(row, prefixes):
             rows.append(row)
     return rows
 

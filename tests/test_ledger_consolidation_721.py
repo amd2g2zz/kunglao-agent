@@ -158,6 +158,43 @@ def test_per_schema_liveness_counters_visible(tmp_path, monkeypatch):
     assert cl.liveness(ws)["experience:(no-schema)"] == 1
 
 
+def test_append_refuses_unserializable_and_malformed_stamps(tmp_path):
+    """Review hardening (t5-721-core F1/F3): a non-serializable row and
+    a non-string / unstripped / blank stamp are REFUSED — ONE warn,
+    never a raise, never a half-write."""
+    ws = _ws(tmp_path)
+    p = ws / "runs" / "experience.jsonl"
+    assert cl.append(ws, "experience",
+                     {"schema": "step-record/1", "ts": TS,
+                      "reads": {TS}}) is False          # a set is not JSON
+    assert cl.append(ws, "experience", {"schema": 123, "ts": TS}) is False
+    assert cl.append(ws, "experience",
+                     {"schema": " s/1 ", "ts": TS}) is False
+    assert cl.append(ws, "experience", {"schema": "  ", "ts": TS}) is False
+    assert not p.exists()                                 # no half-write
+
+
+def test_read_unknown_family_fails_open(tmp_path):
+    """F2 symmetry: append() refuses an unknown family gracefully — read()
+    must too (no KeyError escapes into a consumer)."""
+    ws = _ws(tmp_path)
+    assert cl.read(ws, "nope") == []
+
+
+def test_read_accepts_a_tuple_of_prefixes(tmp_path):
+    ws = _ws(tmp_path)
+    assert cl.append(ws, "experience",
+                     {"schema": "step-record/1", "ts": TS}) is True
+    assert cl.append(ws, "experience",
+                     {"schema": "evidence-item/1", "ts": TS}) is True
+    assert cl.append(ws, "experience",
+                     {"schema": "q-cell-obs/1", "ts": TS}) is True
+    got = cl.read(ws, "experience",
+                  schema_prefix=("step-record", "evidence-item"))
+    assert sorted(r["schema"] for r in got) == ["evidence-item/1",
+                                                "step-record/1"]
+
+
 def test_knowledge_family_rides_the_guarded_root(tmp_path, monkeypatch):
     monkeypatch.setenv(cl.STORE_ENV, str(tmp_path / "root"))
     p = cl.family_path(tmp_path / "ws", "knowledge")

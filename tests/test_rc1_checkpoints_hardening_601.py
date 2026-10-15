@@ -112,11 +112,10 @@ class _ContractKillRunner(ScriptedRunner):
 
 
 def _rows(ws: Path) -> list[dict]:
-    p = Path(ws) / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8")
-            .splitlines() if l.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    from rlvr import incremental_reward as _ir
+    return _ir.read_transitions(ws)
 
 
 # ================================================================ Fix 2
@@ -177,9 +176,11 @@ def test_unstamped_foreign_file_keeps_the_bare_kill(stub_repo, tmp_path):
     # RE-MINT AUDIT (issue-678 T4): append_transition grew three
     # additive provenance columns (phi_delta + claim_ref/action_key);
     # the bare-kill shape is otherwise unchanged.
-    assert set(row) == {"ts", "dispatch_id", "action_type", "s", "a",
-                        "o", "s_prime_phi", "phi_before", "phi_delta",
-                        "claim_ref", "action_key", "r_incr",
+    # RE-MINT AUDIT (#721): the transition/1 schema stamp rides the row
+    # (the consolidated multi-schema file's attribution contract).
+    assert set(row) == {"schema", "ts", "dispatch_id", "action_type",
+                        "s", "a", "o", "s_prime_phi", "phi_before",
+                        "phi_delta", "claim_ref", "action_key", "r_incr",
                         "r_settle", "done"}
 
 

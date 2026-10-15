@@ -94,11 +94,10 @@ def _register_pending(ws, claim: str = "C-005") -> None:
 
 
 def _rows(ws: Path) -> list[dict]:
-    p = Path(ws) / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(line) for line in
-            p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    from rlvr import incremental_reward as _ir  # noqa: PLC0415
+    return _ir.read_transitions(ws)
 
 
 # ------------------------------------------------- the landing gate ----

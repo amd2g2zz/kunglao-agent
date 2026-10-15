@@ -129,11 +129,9 @@ class _KilledAtCapRunner(ScriptedRunner):
 
 
 def _rows(ws: Path) -> list[dict]:
-    p = Path(ws) / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8")
-            .splitlines() if l.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    return ir.read_transitions(ws)
 
 
 def _write_verdict(ws: Path, claim: str, verdict: str) -> None:
@@ -181,9 +179,11 @@ def test_kill_without_verdict_on_disk_is_the_bare_kill(ctx):
     # RE-MINT AUDIT (issue-678 T4): append_transition grew three
     # additive provenance columns (phi_delta + claim_ref/action_key
     # from the launch stash); the row stays a bare kill otherwise.
-    assert set(row) == {"ts", "dispatch_id", "action_type", "s", "a",
-                        "o", "s_prime_phi", "phi_before", "phi_delta",
-                        "claim_ref", "action_key", "r_incr",
+    # RE-MINT AUDIT (#721): the row now carries the transition/1 schema
+    # stamp (the consolidated multi-schema file's attribution contract).
+    assert set(row) == {"schema", "ts", "dispatch_id", "action_type",
+                        "s", "a", "o", "s_prime_phi", "phi_before",
+                        "phi_delta", "claim_ref", "action_key", "r_incr",
                         "r_settle", "done"}
 
 

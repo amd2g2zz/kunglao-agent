@@ -463,7 +463,7 @@ files:
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: cc8b16b8587f8f14b776fc3768322c93108ded54d05e25b1763e0a21e29e027c
+    sha256: 247a2372177ec64fa04610abf70b8e36ea4d58662947e02f006e0e594ae5cc23
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
@@ -1255,7 +1255,7 @@ files:
   - src: scripts/rlvr/censored_review.py
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
-    sha256: 4737c41bc9058b4153fc79890a1f26a88b8180a6df27fadcfd7f0d2561b20b00
+    sha256: 7a3a6d57190fef49daf5460b12cca61c443cf019bf467392a261390b14d8fb17
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
@@ -1263,7 +1263,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 382ea7195ea561dff272905edcb1b18d7f8460b47c86912623e1a91ddd7e0878
+    sha256: d66c5a9602486466d85a68d277af00aa37794c81e00fa1e991c595bde24e7792
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1283,7 +1283,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: 57e0d8c8241bc7a3f16a97578f9a42d8131698ecbac8dc48120e73c5544b5712
+    sha256: c886ef0a20f9a95dbe75497b7b6863bdfb661e5be6a3ea4cfc2f59c0a5f798a7
   - src: scripts/rlvr/invariants.py
     dest: .claude/scripts/rlvr/invariants.py
     kind: scaffold
@@ -1383,11 +1383,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: c4b27e91d51c768928a9e20eda31c58e17aaa0b5518e51732d6499764e5d53b0
+    sha256: 0b3c45f6fe605e6cc6ea900ef72e405c286a97324358ee82029810cf713c9248
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c0ac46698daeed1a20e3468661f7249e626c597d7d16c013c242751369a92757
+    sha256: 820d8abb47c8ad3092f20807c6d8043b30781d1f9169e4cdc63be8684017c766
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

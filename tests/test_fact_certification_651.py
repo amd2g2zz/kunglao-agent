@@ -291,9 +291,7 @@ def _run_settle(ctx, ws, claim: str = "C-005") -> dict:
                                 detail={"duration_ms": 1000},
                                 mode="dispatch")
     checkpoints._settle_dispatch_outcome(ctx, claim, act, attempt_id="")
-    rows = [json.loads(line) for line in
-            (ws / "runs" / "transitions.jsonl")
-            .read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = ir.read_transitions(str(ws))   # #721: the read face
     assert rows, "the transition row must land"
     return rows[-1]
 

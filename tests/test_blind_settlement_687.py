@@ -287,7 +287,8 @@ def test_settler_cost_cannot_double_bill(tmp_path):
     first = bss.settle_blind(ws, "task/C-9", v, **args)
     assert first["settled"] is True, first
     assert first["settler_cost"]["o"]["status"] == "SUCCESS"
-    trans = ws / "runs" / "transitions.jsonl"
+    # the transition rows land in the consolidated experience file
+    trans = ws / "runs" / "experience.jsonl"
     bytes_after_first = trans.read_bytes()
     second = bss.settle_blind(ws, "task/C-9", v, **args)
     assert second["settled"] is False  # duplicate settlement
