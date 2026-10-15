@@ -1703,7 +1703,7 @@ ext:
     consume: "invoke"
     source: "hooks/rt_read_barrier.py"
     usage: "hook hooks/rt_read_barrier.py (settings.json wiring; JSON on stdin; exit code = verdict)"
-    description: "rt_read_barrier.py — red-team blindness, MECHANICALLY enforced."
+    description: "rt_read_barrier.py — blind-act blindness (red-team + settler), MECHANICALLY enforced."
   - name: "scalar_settlement"
     capability: "unknown"
     type: "tool"
