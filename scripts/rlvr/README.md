@@ -190,6 +190,19 @@ never an obstacle claim.
 | `main()` | `rlvr.termination` (CLI `report` subcommand — offline diagnostic; live faces are library calls consumed by the sampler hosts) |
 | `_death_multiplier()` | `rlvr.q_cells` (the sampler-side duck-typed verdict application: weight x multiplier, additive receipt block, malformed -> 1.0 fail-open; the sampler never imports the termination/obstacles faces — the import wall) |
 
+### l1_value + l1_planner — the L1 layer (the orchestration learner)
+
+| face | home |
+|------|------|
+| `compute_rollout_return()`, `ROLLOUT_GAMMA` | `rlvr.l1_value` (the return: `R(τ) = Σ γ^t·r_t` — the discounted SUM, terminal-dominated; γ=1.0 shipped, the exact telescope; never the mean) |
+| `record_terminal_return()`, `record_observation()` | `rlvr.l1_value` (the `l1-value-obs/1` append face; called from `scalar.settle_round_credit`'s first-settlement tick; no dispatch-time signature -> no row, ONE warn) |
+| `fold()`, `ValueFold`, `ValueCounts`, `cell_posterior()`, `sample_value()`, `seed_state()` | `rlvr.l1_value` (the (state_signature, action_kind) Beta cells + the q_cells DTS machinery mirrored; the #428 adaptive schedule imported; `seed_state` = f(store, round)) |
+| `value_table()`, `main()` | `rlvr.l1_value` (CLI `--table` — the offline cell table; the live faces are library calls) |
+| `candidate()`, `Candidate`, `plan()`, `plan_for_claim()` | `rlvr.l1_planner` (the policy: one DTS draw per candidate, argmax value/cost — park is the 0-ratio baseline; reuse joins on solved knowledge; no trigger rules exist) |
+| `knowledge_query()` | `rlvr.l1_planner` (register / facts index / cross-task store, each fail-open; `answer_strength` = the answer faces only — lifecycle is not an answer) |
+| `advisory_factors()` | `rlvr.l1_planner` (the rank path's additive consumption: {} while the value store is empty — byte identity — else the dispatch share per claim) |
+| `ACTION_KINDS`, `VALUE_SCALE`, `REUSE_COST`, `PARK_COST` | `rlvr.l1_planner` / `rlvr.l1_value` (the closed action vocabulary + documented policy constants — never runtime-tuned) |
+
 ### liveness — from `scripts/heartbeat.py` (continuity core) + `scripts/liveness_policy.py` (constants)
 
 | current face | final home |

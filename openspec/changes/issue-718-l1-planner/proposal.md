@@ -4,8 +4,10 @@
 
 The orchestration layer has NO learner. Measured state on dev:
 
-- the only learned object is the L2 cell — `(signature_hash, arm_key)`
-  Beta posteriors updated by per-dispatch / per-step credit;
+- the only learned object on the EXECUTION side is the L2 cell —
+  `(signature_hash, arm_key)` Beta posteriors updated by per-dispatch /
+  per-step credit (the ranker's case posteriors are outcome-updated
+  heuristics, not the credit-attributed execution learner);
 - no rollout-level return is computed, stored, or consumed anywhere
   (`runs/transitions.jsonl` rows carry per-step shaped rewards, but
   nothing sums them; the round-credit ladder settles per dispatch and

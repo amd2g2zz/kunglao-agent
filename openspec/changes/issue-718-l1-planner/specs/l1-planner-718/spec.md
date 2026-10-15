@@ -57,9 +57,12 @@ signature's features — no failure-count trigger exists.
 ### Requirement: The planner chooses by value/cost over DTS draws
 
 `rlvr.l1_planner.plan` SHALL sample one DTS draw per candidate from its
-(s, action_kind) cell (a candidate carrying a `value_hint` — a KNOWN
-value, e.g. the knowledge strength — SHALL use it instead of a draw)
-and choose the argmax of value / cost. The action vocabulary SHALL be
+(s, action_kind) cell and choose the argmax of value / cost, where a
+candidate's value is the draw times VALUE_SCALE — except a candidate
+carrying a `value_hint` (a KNOWN value, e.g. the knowledge strength),
+whose value SHALL be the hint itself (the cell's draw is still reported
+in the receipt for audit, but its value is never sampled: you do not
+pretend uncertainty about a fact). The action vocabulary SHALL be
 exactly dispatch / park / split / verify / reuse, a non-park candidate
 with cost ≤ 0 SHALL be refused at the candidate boundary, park SHALL be
 the do-nothing baseline (cost 0, value 0, ratio 0.0), and a candidate

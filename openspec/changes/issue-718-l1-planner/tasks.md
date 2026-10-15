@@ -70,7 +70,7 @@
 
 ## 7. Validation
 
-- [x] `uv run python -m pytest tests/test_l1_planner_718.py -q -n 2` — 9
+- [x] `uv run python -m pytest tests/test_l1_planner_718.py -q -n 2` — 10
   passed
 - [x] settle/credit regression batch (712 / 597 / 634 / 433 / 438 / 379)
 - [x] rank regression batch (12 / 688 / 157 / priority_ratio / 218 / 9 /

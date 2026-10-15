@@ -145,8 +145,10 @@ def default_store(ws) -> L1Store:
 def has_observations(store: L1Store) -> bool:
     """True once the store carries at least one numeric return — the
     advisory face's dormancy gate (an empty store means every rank
-    path stays byte-identical)."""
-    return any(_return_of(r) is not None for r in store.observations())
+    path stays byte-identical). Non-mapping rows are skipped (the
+    q_cells filter — a hostile store never raises here)."""
+    return any(isinstance(r, dict) and _return_of(r) is not None
+               for r in store.observations())
 
 
 # ---------------------------------------------------------------------------
@@ -195,13 +197,16 @@ def compute_rollout_return(transitions, terminal_credit,
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             continue
         value = float(value)
-        if value != value:
-            continue
+        if value != value or value in (float("inf"), float("-inf")):
+            continue          # non-finite is not a reward (the honest gap)
         raw += value
         total += weight * value
         weight *= g
         steps += 1
     terminal = float(terminal_credit)
+    if terminal != terminal or terminal in (float("inf"), float("-inf")):
+        raise ValueError(
+            f"terminal_credit must be finite: {terminal_credit!r}")
     total += weight * terminal
     return {"schema": "l1-return/1",
             "return": round(total, 6),
@@ -404,7 +409,8 @@ def fold(store: L1Store, gamma=None) -> ValueFold:
     observation (the do-nothing outcome cannot displace the prior).
     Rows without a numeric return are the honest gap: skipped."""
     schedule = _resolve_schedule(gamma)
-    rows = [r for r in store.observations() if _return_of(r) is not None]
+    rows = [r for r in store.observations()
+            if isinstance(r, dict) and _return_of(r) is not None]
     n = len(rows)
     gammas = [0.0] * n
     for i, row in enumerate(rows):

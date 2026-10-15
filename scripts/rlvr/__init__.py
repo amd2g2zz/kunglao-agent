@@ -117,6 +117,15 @@ map):
   the (state_signature, action_kind) Beta cells folded from it
   (``fold`` / ``cell_posterior`` / ``sample_value`` — the q_cells DTS
   machinery one level up, the #428 adaptive schedule imported).
+
+- ``rlvr.l1_planner`` — the L1 planner (WHAT / WHEN / WHO): action
+  selection is a POLICY, not a rule — every choice is the argmax of
+  value/cost over DTS draws from the value cells (``plan`` /
+  ``plan_for_claim``); ``knowledge_query`` reads the substrate
+  (register / facts index / cross-task store) so a solved claim gets
+  the near-zero-cost ``reuse`` action; ``advisory_factors`` is the rank
+  path's additive consumption face (dormant — {} — while the value
+  store is empty).
 """
 from __future__ import annotations
 
@@ -126,6 +135,7 @@ from . import feature_prior
 from . import hypotheses
 from . import invariants
 from . import l1_value
+from . import l1_planner
 from . import ledger
 from . import liveness
 from . import obstacles
@@ -331,6 +341,15 @@ from .l1_value import (
     state_signature_of,
     value_table as l1_value_table,
 )
+from .l1_planner import (
+    Candidate as L1Candidate,
+    REUSE_COST as L1_REUSE_COST,
+    advisory_factors as l1_advisory_factors,
+    candidate as l1_candidate,
+    knowledge_query as l1_knowledge_query,
+    plan as l1_plan,
+    plan_for_claim as l1_plan_for_claim,
+)
 
 __all__ = [
     # modules
@@ -340,6 +359,7 @@ __all__ = [
     "feature_prior",
     "hypotheses",
     "invariants",
+    "l1_planner",
     "l1_value",
     "ledger",
     "liveness",
@@ -531,4 +551,12 @@ __all__ = [
     "record_l1_observation",
     "sample_l1_value",
     "state_signature_of",
+    # L1 planner faces
+    "L1Candidate",
+    "L1_REUSE_COST",
+    "l1_advisory_factors",
+    "l1_candidate",
+    "l1_knowledge_query",
+    "l1_plan",
+    "l1_plan_for_claim",
 ]
