@@ -3,7 +3,8 @@
 """rlvr/step_ledger.py — the shadow experience substrate (the online
 off-policy controller's recording face, issue-667 design).
 
-Three append-only, hash-only ledgers under runs/:
+Three append-only, hash-only ledgers (#721: two of the three rode the
+consolidation — the row schemas are unchanged, only the home file):
 
   runs/step-ledger.jsonl       step-record/1       one row per tool call
                               step-record/2       one row per subagent
@@ -15,6 +16,13 @@ Three append-only, hash-only ledgers under runs/:
                                                    escrow lifecycle
   runs/interventions.jsonl     intervention/1      operator/controller
                                                    interventions
+
+Since #721 the step-record/1+2 and evidence-item/1+credit-amendment/1
+rows live in the consolidated ``runs/experience.jsonl`` (WHAT HAPPENED);
+the legacy rels above stay readable during the compat window and are
+bytes-archived by the one-time migration. interventions.jsonl is the
+telemetry family's — it switches whole in its own card, so it keeps its
+legacy path here.
 
 The trust boundary is HASH-ONLY: content-bearing fields (tool input,
 tool output, artifact bytes, subject text, notes) never land — the row
@@ -49,15 +57,17 @@ from pathlib import Path
 from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
 
+from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
+
 STEP_SCHEMA = "step-record/1"
 STEP_SCHEMA_V2 = "step-record/2"
 EVIDENCE_SCHEMA = "evidence-item/1"
 AMENDMENT_SCHEMA = "credit-amendment/1"
 INTERVENTION_SCHEMA = "intervention/1"
 
-STEP_LEDGER_REL = "runs/step-ledger.jsonl"
-CREDIT_LEDGER_REL = "runs/evidence-credit.jsonl"
-INTERVENTIONS_REL = "runs/interventions.jsonl"
+STEP_LEDGER_REL = "runs/step-ledger.jsonl"        # legacy rel (pre-#721)
+CREDIT_LEDGER_REL = "runs/evidence-credit.jsonl"  # legacy rel (pre-#721)
+INTERVENTIONS_REL = "runs/interventions.jsonl"    # telemetry card's rel
 
 # the escrow lifecycle: escrow opens, the three closures resolve it
 ACTIONS = ("escrow", "confirm", "revoke", "expire")
@@ -79,7 +89,21 @@ def sha_of(obj) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+#: #721 family routing: the step + credit rows ride the consolidated
+#: WHAT-HAPPENED file; interventions stay on the legacy path until the
+#: telemetry card switches its family whole.
+_FAMILY_OF_REL = {
+    STEP_LEDGER_REL: "experience",
+    CREDIT_LEDGER_REL: "experience",
+}
+
+
 def _append(rel: str, row: dict, ws) -> dict | None:
+    family = _FAMILY_OF_REL.get(rel)
+    if family is not None:
+        # the consolidated face enforces the stamp contract + warns on
+        # refusal; a refused row is None (fail-open, never a raise)
+        return row if _cl.append(ws, family, row) else None
     try:
         p = Path(ws) / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +115,18 @@ def _append(rel: str, row: dict, ws) -> dict | None:
         return None
 
 
+#: #721 read prefixes per rel: the consolidated file is multi-schema, so
+#: every read goes through its stamps ("step-record" catches /1 and /2).
+_READ_PREFIXES = {
+    STEP_LEDGER_REL: ("step-record",),
+    CREDIT_LEDGER_REL: ("evidence-item", "credit-amendment"),
+}
+
+
 def _read(rel: str, ws) -> list[dict]:
+    prefixes = _READ_PREFIXES.get(rel)
+    if prefixes is not None:
+        return _cl.read(ws, "experience", schema_prefix=prefixes)
     p = Path(ws) / rel
     if not p.is_file():
         return []

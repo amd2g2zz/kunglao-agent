@@ -402,7 +402,7 @@ files:
   scripts/rlvr/step_grain.py:
     r1: 8
   scripts/rlvr/step_ledger.py:
-    r1: 3
+    r1: 8
   scripts/rlvr/strategy_store.py:
     r1: 17
   scripts/rlvr/triples.py:
@@ -1475,7 +1475,10 @@ files:
   tests/test_statusline_v2_142.py:
     r1: 9
   tests/test_step_grain_690.py:
-    r1: 6
+    r1: 7
+  tests/test_step_ledger_667.py:
+    r1: 1
+    r2: 1
   tests/test_strategy_compose_431.py:
     r1: 4
   tests/test_structural_check.py:

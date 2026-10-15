@@ -6,7 +6,8 @@
 call id、工具名、输入/输出 sha、读/写集 sha、duration 已知时带上）。
 信任边界是 HASH-ONLY——原始命令、输出、文件内容物理上到不了账本。
 
-ZERO DECISION POSTURE：只写 runs/step-ledger.jsonl，永不读回、永不
+ZERO DECISION POSTURE：只写经验账本（#721 起为 runs/experience.jsonl；
+旧路径 runs/step-ledger.jsonl 仅作迁移归档），永不读回、永不
 参与任何决策路径；任何异常 → 静默无行（FAIL_OPEN，永不打断工具流），
 退出码恒为 0。
 

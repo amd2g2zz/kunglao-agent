@@ -27,6 +27,15 @@ from rlvr import step_ledger as sl  # noqa: E402
 
 TS = "2026-10-11T00:00:00Z"
 
+# #721: the step-record + evidence-credit rows live in the consolidated
+# WHAT-HAPPENED file (the legacy rels stay readable during the compat
+# window — exercised by the consolidation suite, not re-pinned here)
+EXP = ("runs", "experience.jsonl")
+
+
+def _wk(ws: Path) -> Path:
+    return ws.joinpath(*EXP)
+
 
 def _ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
@@ -50,7 +59,7 @@ def _step(ws: Path, tool: str = "Bash", session: str = "s1") -> dict:
 def test_step_row_is_hash_only(tmp_path) -> None:
     ws = _ws(tmp_path)
     _step(ws)
-    text = (ws / "runs" / "step-ledger.jsonl").read_text("utf-8")
+    text = _wk(ws).read_text("utf-8")
     assert "SECRET-OUTPUT-TEXT" not in text
     assert "uv run python" not in text
     row = json.loads(text.splitlines()[0])
@@ -67,16 +76,16 @@ def test_record_step_refuses_smuggled_content(tmp_path) -> None:
                             ts=TS)
     row["raw_output"] = "SECRET"
     sl.record_step(ws, row)
-    text = (ws / "runs" / "step-ledger.jsonl").read_text("utf-8")
+    text = _wk(ws).read_text("utf-8")
     assert "SECRET" not in text
 
 
 def test_recording_is_fail_open(tmp_path) -> None:
     ws = tmp_path / "bare"
     (ws / "runs").mkdir(parents=True)
-    # the ledger PATH is a directory: open("a") fails for ANY user
-    # (chmod bits are ignored by root — CI runs as root)
-    (ws / "runs" / "step-ledger.jsonl").mkdir()
+    # the consolidated ledger PATH is a directory: the append fails for
+    # ANY user (chmod bits are ignored by root — CI runs as root)
+    _wk(ws).mkdir()
     row = sl.build_step_row(session_id="s", tool="Bash",
                             tool_input={}, tool_response={}, ts=TS)
     assert sl.record_step(ws, row) is None   # None, never a raise
@@ -139,12 +148,10 @@ def test_expire_pending_ages_items_out(tmp_path) -> None:
     item = _item(ws, certified=False)
     # rewrite the item's ts to the aged shape (append-only ledger: the
     # fixture does what time would)
-    lines = (ws / "runs" / "evidence-credit.jsonl").read_text(
-        "utf-8").splitlines()
+    lines = _wk(ws).read_text("utf-8").splitlines()
     lines[0] = json.dumps({**json.loads(lines[0]), "ts": old},
                           ensure_ascii=False)
-    (ws / "runs" / "evidence-credit.jsonl").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8")
+    _wk(ws).write_text("\n".join(lines) + "\n", encoding="utf-8")
     expired = sl.expire_pending(ws)
     assert expired == [item["id"]]
     actions = [a["action"] for a in sl.read_amendments(ws)]
@@ -171,7 +178,7 @@ def test_replay_is_byte_identical(tmp_path) -> None:
     ws = _ws(tmp_path)
     _record_session(ws)
     replayed = sl.replay_credit_ledger(ws)
-    recorded = (ws / "runs" / "evidence-credit.jsonl").read_text("utf-8")
+    recorded = _wk(ws).read_text("utf-8")
     amendments = [json.dumps(r, ensure_ascii=False) for r in
                   sl.read_amendments(ws)]
     assert replayed == "\n".join(amendments) + "\n"
@@ -182,10 +189,7 @@ def test_same_session_records_byte_identically(tmp_path) -> None:
     a, b = _ws(tmp_path / "a"), _ws(tmp_path / "b")
     for ws in (a, b):
         _record_session(ws)
-    assert ((a / "runs" / "step-ledger.jsonl").read_text("utf-8")
-            == (b / "runs" / "step-ledger.jsonl").read_text("utf-8"))
-    assert ((a / "runs" / "evidence-credit.jsonl").read_text("utf-8")
-            == (b / "runs" / "evidence-credit.jsonl").read_text("utf-8"))
+    assert _wk(a).read_text("utf-8") == _wk(b).read_text("utf-8")
 
 
 # ---------------------------------------------------- interventions ----
@@ -222,14 +226,15 @@ def test_hook_writes_only_its_ledger(tmp_path) -> None:
         [sys.executable, str(ROOT / "hooks" / "step_record_capture.py")],
         input=payload, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0
-    ledger = ws / "runs" / "step-ledger.jsonl"
+    ledger = _wk(ws)
     assert ledger.is_file()
     text = ledger.read_text("utf-8")
     assert "SECRET-COMMAND" not in text and "SECRET-OUT" not in text
-    # shadow posture: nothing else appeared in the workspace
+    # shadow posture: nothing else appeared in the workspace (the
+    # consolidated ledger + its flock guard are the hook's own files)
+    allowed = {ledger.name, "." + ledger.stem + ".lock"}
     unexpected = {p.relative_to(ws) for p in ws.rglob("*")
-                  if p.name != "step-ledger.jsonl"
-                  and p.parent.name == "runs"}
+                  if p.parent.name == "runs" and p.name not in allowed}
     assert not unexpected
 
 

@@ -14,6 +14,7 @@ files:
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
+  hooks/step_record_capture.py: 1
   hooks/user_signal_capture.py: 3
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
@@ -239,7 +240,7 @@ files:
   scripts/rlvr/settlement_scorer.py: 2
   scripts/rlvr/state.py: 25
   scripts/rlvr/step_grain.py: 14
-  scripts/rlvr/step_ledger.py: 5
+  scripts/rlvr/step_ledger.py: 12
   scripts/rlvr/strategy_store.py: 29
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15

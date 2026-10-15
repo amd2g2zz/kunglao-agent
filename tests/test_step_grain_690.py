@@ -96,11 +96,8 @@ def test_subagent_completion_triggers_settlement(tmp_path, capsys) -> None:
     assert not (ws / "runs" / "dispatch-launch-C-5.json").exists(), (
         "the settle consumes the launch stash")
     # the completion-grain step row lands with the claim_ref mapped from
-    # the dispatch-launch stash
-    step2 = [json.loads(ln) for ln in
-             (ws / "runs" / "step-ledger.jsonl").read_text("utf-8"
-                                                           ).splitlines()
-             if json.loads(ln).get("schema") == "step-record/2"]
+    # the dispatch-launch stash (#721: via the read face)
+    step2 = sl.read_step_grains(ws)
     assert len(step2) == 1
     assert step2[0]["claim_ref"] == "C-5"
     assert step2[0]["session_id"] == "sess-9"
