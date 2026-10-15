@@ -123,6 +123,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import random
 import re
 import sys
@@ -184,6 +185,20 @@ PHI_TIEBREAK_WEIGHT = 0.25
 # was produced). Mirrors scalar.OUTPUT_RAILS TRACE range top —
 # dependency-light redeclaration, the TERMINAL_FACT_STATUSES precedent.
 OBSERVATION_BAND_CEIL = 0.05
+
+# #712 step-level ladder credit — the two step-boundary credit kinds that
+# ride the #705 credit_kind column. "step" is an admissible DENSE
+# observation (folds exactly like solve credit: (c, 1-c) — provisional
+# mass that moves per SubagentStop, the fix for the 10-step-rollout-
+# one-signal defect). "step_calibration" is the claim-terminal residual
+# row carrying SIGNED mass deltas (credit = Δsuccess = ladder − Σstep,
+# failure_delta = Δfailure): the fold applies both verbatim (no [0,1]
+# clamp, no observation band, no Φ tiebreak) and never feeds them to the
+# adaptive γ EMA (a residual is bookkeeping, not an outcome regime
+# signal — a signed clawback would poison the schedule).
+CREDIT_KIND_STEP = "step"
+CREDIT_KIND_STEP_CALIBRATION = "step_calibration"
+
 
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
@@ -352,6 +367,15 @@ def _phi_delta_of(row: dict) -> float:
     return float(pd)
 
 
+def _failure_delta_of(row: dict) -> float:
+    """A #712 calibration row's signed Δfailure mass; absent or
+    non-numeric -> 0.0 (success-only residual, fail-open)."""
+    fd = row.get("failure_delta")
+    if isinstance(fd, bool) or not isinstance(fd, (int, float)):
+        return 0.0
+    return float(fd)
+
+
 def _admits_to_posterior(row: dict) -> bool:
     """#705 agent-level credit: verification credit CONFIRMS existing
     knowledge — it is recorded (the audit trail) but is inadmissible to
@@ -427,7 +451,14 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     ``credit_kind: "verification"`` are inadmissible — they contribute
     to neither success, failure, nor n_pending (verification confirms
     knowledge, it never produces it). Absent credit_kind is the solve
-    path, bit-identical."""
+    path, bit-identical.
+
+    #712 step-level credit: ``credit_kind: "step"`` rows are admissible
+    dense observations (folded exactly like solve credit — (c, 1-c) per
+    SubagentStop); ``credit_kind: "step_calibration"`` rows are the
+    claim-terminal residual — signed Δsuccess (row ``credit``) and
+    Δfailure (row ``failure_delta``) applied verbatim after the γ weight,
+    outside the band and the tiebreak, and excluded from the γ EMA."""
     schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
             if isinstance(r, dict) and _credit_of(r) is not None
@@ -436,7 +467,12 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     gammas = [0.0] * n
     for i, row in enumerate(rows):
         gammas[i] = schedule.gamma()
-        schedule.observe(_credit_of(row))
+        # #712: a step_calibration residual occupies a stream position
+        # (it takes this row's γ weight) but is NOT an outcome — it
+        # never feeds the adaptive EMA (a signed clawback would drag the
+        # schedule's γ off its declared range).
+        if str(row.get("credit_kind") or "") != CREDIT_KIND_STEP_CALIBRATION:
+            schedule.observe(_credit_of(row))
     weights = [1.0] * n
     w = 1.0
     for i in range(n - 2, -1, -1):
@@ -452,6 +488,18 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         if cell is None:
             cell = CellCounts(key[0], key[1])
             cells[key] = cell
+        if str(row.get("credit_kind") or "") == CREDIT_KIND_STEP_CALIBRATION:
+            # #712 signed mass deltas: the claim-terminal residual adds
+            # Δsuccess/Δfailure VERBATIM (both may be negative — the
+            # clawback face), so the cumulative mass lands on the
+            # step-less endpoint. No band, no tiebreak, no clamp: a
+            # residual is bookkeeping over what the steps banked.
+            cells[key] = CellCounts(
+                key[0], key[1],
+                success=cell.success + weight * raw_credit,
+                failure=cell.failure + weight * _failure_delta_of(row),
+                n_pending=cell.n_pending)
+            continue
         if 0.0 < raw_credit <= OBSERVATION_BAND_CEIL:
             # issue-678 D-678.4a: the TRACE information option is an
             # OBSERVATION, not a verdict — the cell records the row's
@@ -943,6 +991,42 @@ def _recipe_cols(recipe_id, recipe_propensity,
             warn("q_cells.append",
                  f"foreign recipe_source dropped: {recipe_source!r}")
     return rid_out, rprop_out, rsrc_out
+def _coerce_credit(credit, credit_kind, failure_delta):
+    """The append boundary's #712 credit validation: verdict credits
+    clamp into [0,1] (the #429 §4 rail — the boundary never trusts
+    input), a "step_calibration" credit is taken SIGNED with finite-only
+    validation (the clawback's job is to be negative), and
+    failure_delta is legal ONLY on a calibration row (ONE warn, else
+    dropped). Returns ``(credit, failure_delta)``; invalid input drops
+    to None."""
+    is_calibration = str(credit_kind or "") == CREDIT_KIND_STEP_CALIBRATION
+    credit_out = None
+    if credit is not None:
+        if isinstance(credit, bool) or not isinstance(credit, (int, float)):
+            warn("q_cells.append", f"non-numeric credit dropped: {credit!r}")
+        elif is_calibration:
+            if not math.isfinite(float(credit)):
+                warn("q_cells.append",
+                     f"non-finite calibration credit dropped: {credit!r}")
+            else:
+                credit_out = float(credit)
+        else:
+            credit_out = max(0.0, min(1.0, float(credit)))
+    failure_delta_out = None
+    if failure_delta is not None:
+        if not is_calibration:
+            warn("q_cells.append",
+                 "failure_delta outside a calibration row dropped")
+        elif isinstance(failure_delta, bool) or not isinstance(
+                failure_delta, (int, float)):
+            warn("q_cells.append",
+                 f"non-numeric failure_delta dropped: {failure_delta!r}")
+        elif not math.isfinite(float(failure_delta)):
+            warn("q_cells.append",
+                 f"non-finite failure_delta dropped: {failure_delta!r}")
+        else:
+            failure_delta_out = float(failure_delta)
+    return credit_out, failure_delta_out
 
 
 def append_observation(ws, signature_hash: str, method_family: str,
@@ -958,7 +1042,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        credit_kind: str | None = None,
                        recipe_id: str | None = None,
                        recipe_propensity: float | None = None,
-                       recipe_source: str | None = None) -> dict:
+                       recipe_source: str | None = None,
+                       failure_delta: float | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -976,13 +1061,17 @@ def append_observation(ws, signature_hash: str, method_family: str,
     every pre-#695 writer (``observe()``, the reindex faces) stays
     byte-identical. The boundary validates: non-string ids, NaN /
     out-of-[0,1] propensities and foreign sources degrade to null with
-    one warn, never a raise."""
-    credit_out = None
-    if credit is not None:
-        if isinstance(credit, bool) or not isinstance(credit, (int, float)):
-            warn("q_cells.append", f"non-numeric credit dropped: {credit!r}")
-        else:
-            credit_out = max(0.0, min(1.0, float(credit)))
+    one warn, never a raise.
+
+    #712 step-level credit: a ``credit_kind`` of "step" keeps the normal
+    [0,1] clamp (a dense step credit is still a bounded observation);
+    "step_calibration" takes the credit SIGNED (the claim-terminal
+    residual claws back mass — negative is its job) with finite-only
+    validation, and may carry ``failure_delta`` (the signed Δfailure the
+    fold applies verbatim). failure_delta outside a calibration row is
+    dropped with ONE warn — the column has exactly one legal home."""
+    credit_out, failure_delta_out = _coerce_credit(
+        credit, credit_kind, failure_delta)
     phi_out = None
     if phi_delta is not None:
         if isinstance(phi_delta, bool) or not isinstance(phi_delta,
@@ -1024,6 +1113,10 @@ def append_observation(ws, signature_hash: str, method_family: str,
         row["recipe_id"] = rid_out
         row["recipe_propensity"] = rprop_out
         row["recipe_source"] = rsrc_out
+    # #712: the signed Δfailure rides only a calibration row (the guard
+    # above already refused every other home).
+    if failure_delta_out is not None:
+        row["failure_delta"] = failure_delta_out
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended, "row": row}
 
@@ -1035,6 +1128,25 @@ def observe(ws, signature_hash: str, method_family: str,
     settlement wiring calls this from settled round_credit rows)."""
     return append_observation(ws, signature_hash, method_family, credit,
                               source="settlement")
+
+
+def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
+    """The LATEST pending dispatch row carrying this identity (claim id
+    or explicit dispatch_id) — the ONE match face shared by the #462 W5
+    settlement bank, the #712 step-credit bank and its claim-terminal
+    calibration. Pending means source=dispatch + credit=None (banked rows
+    carry a numeric credit and can never be re-matched). None = the
+    honest gap — no row, never a fabricated bucket."""
+    did = str(dispatch_id or "")
+    for row in reversed(JSONLQStore(ws).observations()):
+        if not isinstance(row, dict) \
+                or str(row.get("source") or "") != "dispatch" \
+                or row.get("credit") is not None:
+            continue
+        if did and (str(row.get("claim") or "") == did
+                    or str(row.get("dispatch_id") or "") == did):
+            return row
+    return None
 
 
 def observe_settlement(ws, dispatch_id: str, credit,
@@ -1086,16 +1198,7 @@ def observe_settlement(ws, dispatch_id: str, credit,
     kind = "verification" if str(credit_kind or "").strip() == \
         "verification" else "solve"
     try:
-        match = None
-        for row in reversed(JSONLQStore(ws).observations()):
-            if not isinstance(row, dict) \
-                    or str(row.get("source") or "") != "dispatch" \
-                    or row.get("credit") is not None:
-                continue
-            if did and (str(row.get("claim") or "") == did
-                        or str(row.get("dispatch_id") or "") == did):
-                match = row
-                break
+        match = _match_pending_dispatch(ws, did)
         if match is None:
             warn("q_cells.observe_settlement",
                  f"no pending dispatch row for {did!r} — credit not "
@@ -1142,6 +1245,139 @@ def observe_settlement(ws, dispatch_id: str, credit,
                 "reason": f"error:{type(exc).__name__}",
                 "dispatch_id": did,
                 "credit_kind": kind, "beta_updated": False}
+
+
+def _bank_matched(ws, did: str, match: dict, credit, *,
+                  kind: str, failure_delta: float | None = None) -> dict:
+    """Append one credit row into the matched dispatch's cell and shape
+    the shared result dict (the #712 faces' common tail: same keys
+    observe_settlement returns, so callers — strategy store, case-
+    posterior leg — read one shape)."""
+    out = append_observation(ws, str(match.get("signature_hash")),
+                             str(match.get("method_family")), credit,
+                             source="settlement",
+                             claim=match.get("claim"),
+                             agent=match.get("agent"),
+                             dispatch_id=did,
+                             fingerprint=match.get("fingerprint"),
+                             arm_key_col=match.get("arm_key"),
+                             credit_kind=kind,
+                             failure_delta=failure_delta)
+    return {"appended": out["appended"], "matched": True,
+            "reason": None if out["appended"] else "write-failed",
+            "dispatch_id": did,
+            "credit_kind": kind,
+            "beta_updated": bool(out["appended"]),
+            "signature_hash": match.get("signature_hash"),
+            "method_family": match.get("method_family"),
+            "arm_key": match.get("arm_key"),
+            "fingerprint": match.get("fingerprint")}
+
+
+def observe_step_credit(ws, dispatch_id: str, credit, *,
+                        step_ref: str | None = None) -> dict:
+    """#712: bank ONE step-boundary credit — the dense signal that moves
+    the Q-cell Beta at SubagentStop, BEFORE claim-terminal.
+
+    Matches the claim's pending dispatch row through the shared face
+    (the honest gap when none exists) and appends a settlement-source
+    row marked ``credit_kind: "step"``: the fold admits it exactly like
+    solve credit ((c, 1−c) per step), and the claim-terminal calibration
+    sums exactly these rows (``step_credit_totals``) to price its
+    residual. The credit here is rlvr.step_credit's evidence-quality
+    score (already in [0,1]); ``step_ref`` (the producing step_record/2
+    step_id) rides only the returned receipt — the append-only log stays
+    one optional column richer per kind, never content-bearing.
+    Fail-open: telemetry never breaks the settle that called it."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_STEP
+    try:
+        match = _match_pending_dispatch(ws, did)
+        if match is None:
+            warn("q_cells.observe_step_credit",
+                 f"no pending dispatch row for {did!r} — step credit not "
+                 f"banked (the honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        out = _bank_matched(ws, did, match, credit, kind=kind)
+        if step_ref:
+            out["step_ref"] = str(step_ref)
+        return out
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.observe_step_credit", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def observe_step_calibration(ws, dispatch_id: str, credit, *,
+                             failure_delta: float = 0.0) -> dict:
+    """#712: bank the claim-terminal RESIDUAL — ONE signed mass-delta row
+    that corrects the cumulative Beta into the step-less endpoint:
+    ``credit`` = Δsuccess = ladder_credit − Σ(step_credit) (negative =
+    over-credit clawback, positive = under-credit top-up) and
+    ``failure_delta`` = Δfailure so the failure mass also lands on
+    (1 − ladder) after the provisional step rows. Claims with no step
+    credit never reach this face — scalar._bank_q_cell_credit keeps them
+    on observe_settlement (byte-identical legacy rows). Fail-open."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_STEP_CALIBRATION
+    try:
+        match = _match_pending_dispatch(ws, did)
+        if match is None:
+            warn("q_cells.observe_step_calibration",
+                 f"no pending dispatch row for {did!r} — calibration not "
+                 f"banked (the honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        return _bank_matched(ws, did, match, credit, kind=kind,
+                             failure_delta=failure_delta)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.observe_step_calibration",
+             f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
+    """#712: (Σ credit, n rows) over the step rows whose credit actually
+    became FOLD MASS for this identity — the claim-terminal
+    calibration's operand, read from the SAME append-only log the fold
+    consumes (what actually banked, never a parallel tally that could
+    drift). Mirrors the fold's admission EXACTLY: credit == 0.0 is a
+    failure observation (mass (0, 1)); credit in
+    (0, OBSERVATION_BAND_CEIL] is the D-678.4a information option — NO
+    mass, so it counts in NEITHER the sum nor the count (clawing it
+    back would subtract mass that was never banked — the #712 review's
+    band-interaction finding); above the band a full observation.
+    Fail-open: an unreadable log reports (0.0, 0) so the settlement
+    takes the legacy face rather than a fabricated correction."""
+    did = str(dispatch_id or "")
+    total, count = 0.0, 0
+    try:
+        for row in JSONLQStore(ws).observations():
+            if not isinstance(row, dict) \
+                    or str(row.get("credit_kind") or "") != CREDIT_KIND_STEP:
+                continue
+            if not (did and (str(row.get("claim") or "") == did
+                             or str(row.get("dispatch_id") or "") == did)):
+                continue
+            credit = _credit_of(row)
+            if credit is None:
+                continue
+            if 0.0 < credit <= OBSERVATION_BAND_CEIL:
+                continue          # information option — zero mass, no operand
+            total += credit
+            count += 1
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cells.step_credit_totals", f"{type(exc).__name__}: {exc}")
+        return 0.0, 0
+    return round(total, 6), count
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:
