@@ -903,7 +903,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 4f87c52bd7409fef8ea590d6389011a27d14cf3af06ca6bda3d4926d47a00f5b
+    sha256: 56cc2cf2d0dc9de9c040c1f9b5f26a5f1ac7136943676c07901025ec81d30aec
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold

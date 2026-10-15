@@ -1055,6 +1055,12 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         if dc_dirty:
             feeds["A"] = (f"dispatch_count={c.get('dispatch_count')!r} "
                           "unparseable -> treated as 0 (#103)")
+        dc, _dc_dirty = _int_flag(c.get("dispatch_count", 0))
+        if dc > 0:
+            feeds["dispatch_count"] = (
+                f"dispatch_count={dc} (independent of promotion_attempts="
+                f"{attempts_of(c)}; the #690 branch act budget counts dispatches, "
+                f"not promotions)")
         actions.append(Action(
             claim_id=cid, action=classify_action(c), score=score, skill=None,
             tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
