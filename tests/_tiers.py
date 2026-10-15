@@ -33,7 +33,7 @@ FAST_MODULES = frozenset({
     "test_bash_fact_guard_809", "test_bench_analyze", "test_bench_grade", "test_bench_intake",
     "test_bench_redteam", "test_bench_runner", "test_bench_safety", "test_bench_tokens",
     "test_stalled_remedy_249",
-    "test_blind_gate", "test_budget_channel_862", "test_calibration_gate", "test_canary_gates",
+    "test_blind_gate", "test_blind_settlement_687", "test_budget_channel_862", "test_calibration_gate", "test_canary_gates",
     "test_carrier_consistency_829", "test_case_admission_301", "test_case_bank_110", "test_case_bank_49", "test_challenge_ledger_909",
     "test_changelog", "test_claim_granularity_241", "test_claim_status_guard", "test_classification_collapse_581", "test_claudemd_g2g3_758",
     "test_closure_contract_628_629", "test_coldstart_digest_528", "test_compat_removal_863d", "test_completion_gate_optout",
