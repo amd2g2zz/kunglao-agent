@@ -1323,7 +1323,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 715fe1244eca1244775e761dc320b6e8e60a0445a53a604d22ef4db2999e0fbc
+    sha256: f2d4a0dd0306105e533f22634c7dd9e64108297f85beb98f995b86c87ea93537
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1339,7 +1339,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: c2070727b4fb35f8147707ce1359794db51540549b1d565fa563022084b5afc3
+    sha256: 782bc3c5c4f12db74cdf339f1246db0e4e61f8b197c6a9c6df52a3d8712bd1a9
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -1348,10 +1348,14 @@ files:
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
     sha256: 3c1ae39ef54898cec301fb4eae404ea83b07aa60cf25477b7fe6c9ad8e4c3502
+  - src: scripts/rlvr/step_credit.py
+    dest: .claude/scripts/rlvr/step_credit.py
+    kind: scaffold
+    sha256: 7847b8a13faf8d22d4a6cbcec9c161ea1b3d614d508f458398aeeb4b6eefaf55
   - src: scripts/rlvr/step_grain.py
     dest: .claude/scripts/rlvr/step_grain.py
     kind: scaffold
-    sha256: cac738a045b0b36f8ff105845c3eb4e0efa4112adfa8e6cfdcc03a8b4126db9d
+    sha256: 1d591b20df90df1a3422368c26eff0850b4b9411b9670a247b6eaaf65bcba32f
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
@@ -1383,11 +1387,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: aa7a25278c2f14be6190c94ef62f252b752e24371f8cc686ba749f20e9a37f60
+    sha256: eb6535fa0873d27fde81d5073b353b1ecd5fed5f7874ab1d580b90d70a354ea2
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f153e7e35350b9de7fecf2e639040ce271b7059ab83d8744a3ab19ee974445d2
+    sha256: 500707fb9e63e5d237857c16d6ba936c2e757806cd2d743bea5c24e543636d5d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
