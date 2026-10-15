@@ -10,7 +10,7 @@ files:
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
-  hooks/round_closure.py: 9
+  hooks/round_closure.py: 8
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
   hooks/user_signal_capture.py: 3

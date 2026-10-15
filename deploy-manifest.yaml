@@ -167,7 +167,7 @@ files:
   - src: scripts/action_space.py
     dest: .claude/scripts/action_space.py
     kind: scaffold
-    sha256: b71bab891e5d9d275a6c83b012b8b7c4a50cd1f801138d5d154845529777a694
+    sha256: 6428a81c7e47d70f1075aa9f9f9ebc293c378cc5754b5bb65a08465d8727d885
   - src: scripts/active_intervention.py
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
@@ -868,6 +868,10 @@ files:
     dest: .claude/scripts/plan_stages.py
     kind: scaffold
     sha256: e9081d9ff7870af16a733eb18b5d8ee62037065ff5e2c12ca3fa0d4810905b36
+  - src: scripts/planning_actions.py
+    dest: .claude/scripts/planning_actions.py
+    kind: scaffold
+    sha256: 6b1208d5b2414bf40819e4a78bf553144a761073080498aa98b6ac9cb1ade194
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
@@ -1343,7 +1347,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 3c0ffba3b91863c4f7f5e9dca9adcd568aa5f2f363cfabb1ed58d8c4b124cd25
+    sha256: 69cf3d7f799705a79a9fc0e909c8daf5f54c2bba536d0e6b978d4961e6a0ca83
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
@@ -1935,7 +1939,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 6fa430b6778853b6653340dec86b2277a3fcf0307e357861fd7da67b49b85c35
+    sha256: f82200dbd313d4ecd9c2a7d4d102b2813c70222499636eeede5c4c621a5f45b2
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
