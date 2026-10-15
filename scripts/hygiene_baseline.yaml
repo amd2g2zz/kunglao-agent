@@ -1292,7 +1292,7 @@ files:
   tests/test_recall_quality_814.py:
     r1: 1
   tests/test_recipe_arms_695.py:
-    r1: 11
+    r1: 12
   tests/test_reconcile_workers.py:
     r1: 6
   tests/test_record_event_concurrent.py:
