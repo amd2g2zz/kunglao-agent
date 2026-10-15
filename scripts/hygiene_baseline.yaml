@@ -315,7 +315,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 59
+    r1: 55
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:

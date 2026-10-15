@@ -70,7 +70,8 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
 
   flip potential (diagnostic, feeds["case_flip_potential"]) — the
   conservative P(cflip) reading: 0.5 at cold start, decayed by the claim's
-  promotion_attempts (historical settlements), floored to
+  total attempt mass (attempts_of = max(dispatch_count,
+  promotion_attempts) — dispatch churn decays it too), floored to
   FLIP_POTENTIAL_FALLBACK = 0.3 when the action has no oracle case / PQ
   linkage. It rides Action.feeds; it does NOT enter the score.
 
@@ -271,12 +272,9 @@ class Action:
         # feeds stay object-level diagnostics, NOT a json face key:
         # consumers compare full to_dict() payloads across workspaces where
         # feed STATES legitimately differ while scores do not.
-        # #680: tier rides the dict (additive) — the dispatch envelope's
-        # tier is DERIVED from this value (action_tier), so the decision
-        # face must be able to see it.
         return {"claim_id": self.claim_id, "action": self.action,
                 "score": round(self.score, 3), "skill": self.skill,
-                "weight": round(self.weight, 3), "tier": self.tier}
+                "weight": round(self.weight, 3)}
 
 
 def is_open(claim: dict) -> bool:
@@ -324,8 +322,30 @@ def _int_flag(value) -> tuple[int, bool]:
 
 
 def attempts_of(claim: dict) -> int:
-    """promotion_attempts → int; unparseable → 0 (#103)."""
+    """Total attempt mass at a claim: max(dispatch_count,
+    promotion_attempts). Every dispatch accrues dispatch_count; a failed
+    dispatch ALSO strikes promotion_attempts — max counts the attempt
+    once, never double-counting a failure. Legacy registers without the
+    dispatch_count field read the strikes alone (pre-wiring behavior).
+    Feeds the flip-potential decay and Action.attempts — the churn
+    visibility the strike counter alone never had (a claim dispatched
+    7x with zero failures read 0)."""
+    return max(dispatch_count_of(claim), strikes_of(claim))
+
+
+def strikes_of(claim: dict) -> int:
+    """promotion_attempts → int; the DLQ failure-STRIKE face (dirty
+    tolerance, same guard as attempts_of). The candidate filter and the
+    must-ask lane key on THIS — dispatch churn alone never evicts a
+    claim from the frontier."""
     return _int_flag(claim.get("promotion_attempts", 0))[0]
+
+
+def dispatch_count_of(claim: dict) -> int:
+    """dispatch_count → int; every dispatch accrues here (dirty
+    tolerance, same guard as attempts_of). Absent field → 0 (legacy
+    register)."""
+    return _int_flag(claim.get("dispatch_count", 0))[0]
 
 
 def action_tier(claim: dict) -> int:
@@ -877,11 +897,6 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "feeds": {a.claim_id: dict(a.feeds) for a in actions},
             "scores": {a.claim_id: a.score for a in actions},
             "ranked_order": [a.claim_id for a in actions],
-            # #680 additive: the per-claim action_tier (min(eta+1, 3)) — the
-            # decision face reads the tier the dispatch envelope MUST carry
-            # instead of guessing it (the free-LLM tier was the C-007
-            # deadlock's root cause). Existing keys untouched.
-            "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
             **_view_stats(actions),
         }
@@ -952,7 +967,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         cid = c.get("id")
         if not cid or not is_open(c):
             continue
-        if attempts_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
+        if strikes_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
             continue
         parents = depends_on.get(cid, []) or []
         if any(p not in terminal and p not in superseded for p in parents):
@@ -1017,7 +1032,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             "thompson_sample": thompson_state,
             "case_flip_potential": (
                 f"P(flip)={round(fp, 3)} (base {FLIP_POTENTIAL_BASE} decayed "
-                f"by promotion_attempts={attempts_of(c)})"
+                f"by attempts={attempts_of(c)} [dispatches="
+                f"{dispatch_count_of(c)}, failure_strikes="
+                f"{strikes_of(c)}])"
                 + ("" if linked else
                    f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
             "downstream": (
@@ -1027,25 +1044,19 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         }
         # #103: attempts conversion is per-claim guarded; a dirty raw value
         # scores as 0 and surfaces here as a feed diagnostic instead of
-        # freezing the whole DECIDE run in conservative BLOCKED.
-        attempts, attempts_dirty = _int_flag(c.get("promotion_attempts", 0))
+        # freezing the whole DECIDE run in conservative BLOCKED. The
+        # Action.attempts face reads the total attempt mass (attempts_of).
+        attempts_dirty = _int_flag(c.get("promotion_attempts", 0))[1]
+        dc_dirty = _int_flag(c.get("dispatch_count", 0))[1]
         if attempts_dirty:
             feeds["A"] = (f"promotion_attempts={c.get('promotion_attempts')!r} "
                           "unparseable -> treated as 0 (#103)")
-        # #690: the independent dispatch counter rides the feeds — the
-        # acceptance face (attempts/dispatch count accrues AND is visible
-        # in the rank feed; the issue measured it pinned at 0 across 7
-        # live dispatches). Absent when zero: every legacy fixture's
-        # feeds stay byte-identical.
-        dc, _dc_dirty = _int_flag(c.get("dispatch_count", 0))
-        if dc > 0:
-            feeds["dispatch_count"] = (
-                f"dispatch_count={dc} (independent of promotion_attempts="
-                f"{attempts}; the #690 branch act budget counts dispatches, "
-                f"not promotions)")
+        if dc_dirty:
+            feeds["A"] = (f"dispatch_count={c.get('dispatch_count')!r} "
+                          "unparseable -> treated as 0 (#103)")
         actions.append(Action(
             claim_id=cid, action=classify_action(c), score=score, skill=None,
-            tier=action_tier(c), attempts=attempts, cost=action_cost(c),
+            tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
             weight=weight, feeds=feeds,
         ))
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
