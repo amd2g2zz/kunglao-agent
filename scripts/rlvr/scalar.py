@@ -735,6 +735,33 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             "banked": banked}
 
 
+def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
+                       *, band_ceil: float) -> tuple[float, float]:
+    """#712 the claim-terminal residual — the pure
+    ``calibration = ladder_credit − Σ(step_credit)`` of issue #712 A,
+    extended to BOTH Beta dimensions: ``(Δsuccess, Δfailure)`` landing
+    the cumulative mass on the step-less endpoint the legacy fold would
+    have banked for this ladder value.
+
+    Success target = clamp01(r) — the legacy rail clamp — band-aware
+    (D-678.4a: a TRACE-band ladder settled MASSLESS before, so the
+    target is (0, 0) and the step rows wash out completely);
+    failure target = 1 − L (the same legacy endpoint's failure mass).
+    Over-credit (Σstep > L) yields a negative Δsuccess — the clawback;
+    under-credit a positive top-up. ``step_sum``/``step_n`` arrive as
+    the fold's MASS view (q_cells.step_credit_totals excludes
+    band-valued information-option rows, which banked no mass — the
+    operand can never claw back mass that was never banked). Pure:
+    same inputs, same deltas."""
+    settled = clamp_credit(ladder_credit)      # the legacy [0,1] rail
+    if 0.0 < settled <= band_ceil:             # the information option
+        target_s, target_f = 0.0, 0.0
+    else:
+        target_s, target_f = settled, 1.0 - settled
+    return (round(target_s - float(step_sum), 6),
+            round(target_f - (int(step_n) - float(step_sum)), 6))
+
+
 def _bank_q_cell_credit(ws, row: dict) -> None:
     """Issue 462 W5: bank one settled round credit into the matching Q
     cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
@@ -744,10 +771,28 @@ def _bank_q_cell_credit(ws, row: dict) -> None:
     store's write face exists for exactly this call and had no live
     caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
-    covers the ledger receipt; the Q bank is the learning feed)."""
+    covers the ledger receipt; the Q bank is the learning feed).
+
+    #712 branch: when step credit already banked for this dispatch
+    (``step_credit_totals`` — n > 0) the terminal bank is the RESIDUAL,
+    not the raw ladder — one signed ``observe_step_calibration`` row so
+    cumulative success lands on the ladder value (over-credit clawed
+    back, under-credit topped up) and cumulative failure on 1 − L.
+    n == 0 keeps the legacy observe_settlement face byte-identically
+    (the backward-compatibility acceptance: claims that settled before
+    this change work unchanged)."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        bank = _qc.observe_settlement(ws, str(row["dispatch_id"]), row["r"])
+        did = str(row["dispatch_id"])
+        step_sum, step_n = _qc.step_credit_totals(ws, did)
+        if step_n == 0:
+            bank = _qc.observe_settlement(ws, did, row["r"])
+        else:
+            delta_success, delta_failure = _calibration_delta(
+                row["r"], step_sum, step_n,
+                band_ceil=_qc.OBSERVATION_BAND_CEIL)
+            bank = _qc.observe_step_calibration(
+                ws, did, delta_success, failure_delta=delta_failure)
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
         return

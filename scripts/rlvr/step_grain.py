@@ -17,7 +17,13 @@ faces:
              from the dispatch-launch stash), closes the transition via
              ``incremental_reward.append_transition`` (the missing
              production caller), and prices a branch_budget.wall_s
-             overrun into runs/attributed-waste.jsonl.
+             overrun into runs/attributed-waste.jsonl. Since #712 the
+             settle ALSO scores the evidence the step touched
+             (rlvr.step_credit — cross-validated 1.0 / unverified 0.3 /
+             refuted 0.0) and banks it into the Q-cell immediately, so
+             a 10-step rollout produces ten Beta movements instead of
+             one claim-terminal signal; claim-terminal calibration
+             (scalar._bank_q_cell_credit) reconciles the residual.
   barrier    settle -> update -> decide: ``barrier_verdict`` REJECTS a
              new dispatch while a prior step is unsettled (the
              worker_budget_gates.check_step_settled battery face). The
@@ -247,17 +253,27 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
     resolved from the dispatch-launch stash (the mapping), the session's
     tool-call rows aggregate into ONE step-record/2 row, the transition
     closes via append_transition (Φ(s') read at settle; the stash is
-    consumed there), and a branch_budget.wall_s overrun lands in
-    attributed-waste. Returns the step row (transition + waste attached)
-    or None — no pending step (silent: SubagentStop also fires for
-    non-worker subagents) or a refusal (fail-open, ONE warn)."""
+    consumed there), a branch_budget.wall_s overrun lands in
+    attributed-waste, and — #712 — the step's evidence window scores a
+    step credit banked into the Q-cell at this boundary (the returned
+    dict carries ``step_credit`` / ``credit_banked``; the ledger row
+    whitelist is untouched). Returns the step row (transition, waste and
+    credit receipt attached) or None — no pending step (silent:
+    SubagentStop also fires for non-worker subagents) or a refusal
+    (fail-open, ONE warn)."""
     try:
         pending = pending_step(ws)
         if pending is None:
             return None
         now_dt = now or datetime.now(timezone.utc)
         agg = aggregate_session_steps(ws, session_id)
-        ordinal = len(_sl.read_step_grains(ws, session_id))
+        prior = _sl.read_step_grains(ws, session_id)
+        ordinal = len(prior)
+        # #712 the step's evidence window: (last settled step, this
+        # settle] — the first step opens at the dispatch launch, so a
+        # fact never re-enters through a wider window than its step.
+        since_ts = (str(prior[-1].get("ts") or "") if prior
+                    else str(pending["ts"] or ""))
         step_row = _sl.build_step_grain_row(
             session_id=session_id,
             claim_ref=pending["claim"],
@@ -282,7 +298,32 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
                 ws, claim_ref=pending["claim"],
                 step_id=step_row["step_id"], kind="wall_s_overrun",
                 budget_s=budget_s, actual_s=actual_s)
-        return dict(step_row, transition=transition, waste=waste)
+        # #712 the step-boundary credit — score the evidence THIS step
+        # touched (rlvr.step_credit: cross-validated 1.0 / unverified
+        # 0.3 / refuted 0.0, reliability-weighted) and bank it into the
+        # Q-cell immediately: the Beta moves at the stop, not at
+        # claim-terminal, and the terminal residual reconciles later.
+        # Fail-open inside its own cage: a scoring/banking failure never
+        # undoes the settled step (the row + transition already landed).
+        step_credit_value = None
+        credit_banked = False
+        try:
+            from rlvr import q_cells as _qc  # noqa: PLC0415
+            from rlvr import step_credit as _sc  # noqa: PLC0415
+            items = _sc.evidence_in_window(
+                ws, claim=str(pending["claim"]),
+                since_ts=since_ts, until=now_dt)
+            step_credit_value = _sc.step_credit(items)
+            bank = _qc.observe_step_credit(
+                ws, pending["claim"], step_credit_value,
+                step_ref=step_row["step_id"])
+            credit_banked = bool(bank.get("appended"))
+        except Exception as exc:  # noqa: BLE001 — credit face, never the settle
+            warn("rlvr.step_grain.settle_step.credit",
+                 f"{type(exc).__name__}: {exc}")
+        return dict(step_row, transition=transition, waste=waste,
+                    step_credit=step_credit_value,
+                    credit_banked=credit_banked)
     except Exception as exc:  # noqa: BLE001 — settle never breaks the stop
         warn("rlvr.step_grain.settle_step", f"{type(exc).__name__}: {exc}")
         return None
