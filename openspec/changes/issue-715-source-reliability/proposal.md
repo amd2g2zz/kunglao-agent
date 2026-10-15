@@ -50,11 +50,14 @@ invalidation patterns, never from a hand-written trust table.
    of the posterior width.
 
 4. **Credit weighting (`source-credit-weighting-715`).** The step-credit
-   face multiplies by the sampled reliability: `step_credit *=
-   source_reliability_theta`. Credit from low-reliability sources is
-   discounted automatically; unlabeled evidence weights 1.0 ("weighted
-   ... if available"). This is the seam the step-level credit machinery
-   consumes at its per-item composition.
+   module (`scripts/rlvr/step_credit.py`) gains `weighted_step_credit`:
+   each evidence item's credit multiplied by its source's learned
+   theta — `step_credit = item_credit × source_reliability_theta` — and
+   the module's `step_credit` entry routes through the composition, so
+   the production settle path carries the learned discount. Credit from
+   low-reliability sources is discounted automatically; unlabeled
+   evidence weights 1.0 ("weighted ... if available"), keeping every
+   pre-existing fixture byte-identical.
 
 ## Non-goals (recorded)
 

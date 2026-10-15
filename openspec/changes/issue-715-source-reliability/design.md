@@ -45,17 +45,23 @@ settled-bad source's draws effectively cannot. The "cross-validation
 trigger" is therefore learned — nothing enumerates when to doubt which
 frame.
 
-## D5 — the credit-weighting composition
+## D5 — the credit-weighting composition rides ON TOP of the step score
 
-`apply_source_reliability(step_credit, theta)` = `clamp01(step_credit) *
-clamp01(theta)` — the literal `step_credit *= source_reliability_theta`.
-`reliability_weight(evidence)` is the "if available" face: the theta
-draw when the item carries source labels, 1.0 when it does not (absence
-of labels is not a trust signal either way). The step-credit machinery
-composes each evidence item's anchor with this learned weight; the
-ruled credibility lookup at the item-credit seam is superseded by the
-learned weight (the Admiralty table itself stays untouched where it is
-already consumed — the learned Beta simply does not read it).
+`weighted_step_credit(items)` = the mean of per-item
+`item_credit(meta) × theta(meta)`, where theta is a Thompson draw from
+the learned source-reliability Beta — 1.0 when the item carries no
+source labels ("weighted ... if available"), so an unlabeled window
+scores byte-identical to the pre-discount step score. The step-credit
+module routes its `step_credit` entry through the composition, so the
+production settle path carries the learned discount; the store is read
+only when a labeled item is present (no I/O for unlabeled windows).
+
+Interfaces with the step-credit module's OWN ruled credibility lookup
+(the Admiralty letter carried in an item's provenance): the learned
+face neither reads nor feeds it. The two modulations compose
+multiplicatively — the learned Beta is the learning layer this change
+adds; retiring the letter table is that module's own conversation,
+not silently done here.
 
 ## D6 — store posture: shared, fail-open, auditable
 
