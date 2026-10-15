@@ -304,3 +304,129 @@ def liveness(ws) -> dict[str, int]:
             key = f"{family}:{stamp}"
             counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+# --------------------------------------------------------- the migration
+
+#: the families whose migration is armed: a family is migrated only once
+#: its writers/readers are switched (its card landed) — migrating an
+#: unswitched family would strand its rows in a file nothing reads yet.
+DEFAULT_MIGRATION: tuple[str, ...] = SWITCHED
+
+ARCHIVE_DIR_REL = "runs/archive"
+
+
+def _canonical(row: dict) -> str:
+    return json.dumps(row, sort_keys=True, ensure_ascii=False)
+
+
+def _stamp_row(row: dict, schemas: tuple[str, ...]) -> dict:
+    """Migration stamping, deliberately timid: a row that already
+    carries a schema copies verbatim; an unstamped row gets a stamp ONLY
+    when its rel registers exactly ONE schema (the pre-stamp transitions
+    archive) — a two-schema rel's unstamped row is copied verbatim,
+    never guessed."""
+    if str(row.get("schema") or "").strip():
+        return row
+    if len(schemas) == 1:
+        return {**row, "schema": schemas[0]}
+    return row
+
+
+def _append_verbatim(target: Path, row: dict) -> bool:
+    """MIGRATION-ONLY bypass of the append() stamp gate: a row whose
+    stamp cannot be inferred (its rel registers multiple schemas) is
+    copied VERBATIM — the archive's bytes are the truth, and history is
+    never dropped. ONE loud warn names the anomaly; liveness counts the
+    row under ``(no-schema)``, so it stays visible. The public append()
+    contract is unchanged."""
+    warn("rlvr.consolidated_ledger.migrate",
+         f"copied an UNSTAMPED row verbatim into {target.name} — its rel "
+         f"registers multiple schemas, no stamp can be inferred; the row "
+         f"will count under {NO_SCHEMA} in liveness")
+    data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    return _locked_append(target, data)
+
+
+def _existing_counts(target: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in _read_rows(target):
+        key = _canonical(row)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def migrate(ws, families=None, *, dry_run: bool = False,
+            archive_dir: str = ARCHIVE_DIR_REL) -> dict:
+    """The one-time #721 migration, per rel: every legacy row is
+    APPENDED into the family's consolidated file (values preserved; a
+    missing stamp added per ``_stamp_row``), then the rel is MOVED into
+    ``<ws>/runs/archive/`` — bytes intact, never deleted, and the live
+    read face can never double-count it. Idempotent: rows the target
+    already carries (canonical-JSON multiset) are not re-appended, so a
+    re-run appends nothing. ``dry_run`` reports without writing.
+    Returns {family: {rel: {status, rows, appended, archived}}} with
+    status in absent|dry-run|migrated|partial|copied-unarchived."""
+    report: dict[str, dict] = {}
+    for family in (families or DEFAULT_MIGRATION):
+        fam: dict[str, dict] = {}
+        for rel, schemas in LEGACY.get(family, {}).items():
+            src = legacy_path(ws, family, rel)
+            if not src.is_file():
+                fam[rel] = {"status": "absent", "rows": 0, "appended": 0,
+                            "archived": None}
+                continue
+            legacy_rows = _read_rows(src)
+            stamped = [_stamp_row(row, schemas) for row in legacy_rows]
+            existing = _existing_counts(family_path(ws, family))
+            to_append: list[dict] = []
+            for row in stamped:
+                key = _canonical(row)
+                if existing.get(key, 0) > 0:
+                    existing[key] -= 1  # an already-copied row (re-run)
+                else:
+                    to_append.append(row)
+            if dry_run:
+                fam[rel] = {"status": "dry-run", "rows": len(legacy_rows),
+                            "appended": len(to_append), "archived": None}
+                continue
+            results = []
+            for row in to_append:
+                if str(row.get("schema") or "").strip():
+                    results.append(append(ws, family, row))
+                else:  # the multi-schema-rel anomaly — verbatim + warn
+                    results.append(_append_verbatim(family_path(ws, family),
+                                                    row))
+            if not all(results):
+                # append-only refusal: NEVER archive a rel whose rows did
+                # not fully land (a re-run retries the missing ones)
+                fam[rel] = {"status": "partial", "rows": len(legacy_rows),
+                            "appended": sum(1 for r in results if r),
+                            "archived": None}
+                continue
+            dst = Path(ws) / archive_dir / src.name
+            if dst.exists():
+                warn("rlvr.consolidated_ledger.migrate",
+                     f"{dst} already exists — never overwriting an "
+                     f"existing archive; {src} left in place (its rows "
+                     f"are in the consolidated file)")
+                fam[rel] = {"status": "copied-unarchived",
+                            "rows": len(legacy_rows),
+                            "appended": len(to_append), "archived": None}
+                continue
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                src.replace(dst)  # a MOVE — bytes intact, never deleted
+            except OSError as exc:
+                warn("rlvr.consolidated_ledger.migrate",
+                     f"archive move failed for {src}: "
+                     f"{type(exc).__name__}: {exc} — rows are in the "
+                     f"consolidated file, the legacy rel stays")
+                fam[rel] = {"status": "copied-unarchived",
+                            "rows": len(legacy_rows),
+                            "appended": len(to_append), "archived": None}
+                continue
+            fam[rel] = {"status": "migrated", "rows": len(legacy_rows),
+                        "appended": len(to_append), "archived": str(dst)}
+        report[family] = fam
+    return report

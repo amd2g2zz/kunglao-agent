@@ -300,6 +300,10 @@ files:
     dest: .claude/scripts/compute_priors.py
     kind: scaffold
     sha256: 60edf961e8cc89b47b0180d39b5525cf2c195511cc044360fb86537616d7d36e
+  - src: scripts/consolidate_ledgers.py
+    dest: .claude/scripts/consolidate_ledgers.py
+    kind: scaffold
+    sha256: 81c055c31d1c2465f16f6a4cb301152cf06907a8c8fcc9ea8362c3387107b93d
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -1263,7 +1267,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: d66c5a9602486466d85a68d277af00aa37794c81e00fa1e991c595bde24e7792
+    sha256: e9e0bffeb3eedef565cce780f46e15dd471e1619783317e84a6ad7a7cf9d00de
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1383,11 +1387,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 289ae086030e00040582ae192714a2462832c8a82c01d241072f809d0d134ff2
+    sha256: dcf24c9eea45243a2bfea30583d747266c661f774ea94b736086481c2b7d37e1
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 25a8b4f44f13ac03f182b137cd90e524793686035311a04d8da88588abcf6f34
+    sha256: 125e182bda2b6eefc6758281a1e7aae3ce26e0df666b2b95272eaadfb83b4f08
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1975,7 +1979,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3f532264a7305509c01f8c38ff8705b72eb96477cbb686d53bccc301eb84d319
+    sha256: 8ce8d87226a5158faf2cab02a7f0e68a0e87978366677567fbbb5a93b1420950
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

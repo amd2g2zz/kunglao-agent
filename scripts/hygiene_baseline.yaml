@@ -62,6 +62,8 @@ files:
     r1: 22
   scripts/compute_priors.py:
     r1: 1
+  scripts/consolidate_ledgers.py:
+    r1: 1
   scripts/contracts.py:
     r1: 12
   scripts/convergence_check.py:
@@ -370,7 +372,7 @@ files:
   scripts/rlvr/compose.py:
     r1: 5
   scripts/rlvr/consolidated_ledger.py:
-    r1: 3
+    r1: 4
   scripts/rlvr/expansion.py:
     r1: 2
   scripts/rlvr/feature_prior.py:

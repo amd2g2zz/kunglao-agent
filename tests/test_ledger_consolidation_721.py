@@ -130,7 +130,81 @@ def test_readers_accept_both_paths_during_compat(tmp_path, monkeypatch):
         [{"schema": "q-cell-obs/1", "ts": TS}]
 
 
-# ------------------------------------------- pin 4: per-schema liveness
+# ------------------------------------------- pin 2: append-only migration
+
+def test_migration_appends_never_rewrites_history(tmp_path, monkeypatch):
+    monkeypatch.delenv(cl.STORE_ENV, raising=False)
+    ws = _ws(tmp_path)
+    runs = ws / "runs"
+    obs = {"schema": "q-cell-obs/1", "ts": TS, "source": "settlement",
+           "signature_hash": "sig", "method_family": "web-re",
+           "claim": "C-1", "credit": 1.0}
+    step = {"schema": "step-record/1", "ts": TS, "session_id": "s1",
+            "tool": "Bash"}
+    ev = {"schema": "evidence-item/1", "ts": TS, "id": "e1",
+          "kind": "confirm"}
+    (runs / "transitions.jsonl").write_text(
+        json.dumps({"ts": TS, "dispatch_id": "C-1", "r_incr": 0.5}) + "\n"
+        + json.dumps({"ts": TS, "dispatch_id": "C-2", "r_incr": -1.0})
+        + "\n", "utf-8")
+    (runs / "q-cell-log.jsonl").write_text(json.dumps(obs) + "\n", "utf-8")
+    (runs / "step-ledger.jsonl").write_text(json.dumps(step) + "\n",
+                                            "utf-8")
+    (runs / "evidence-credit.jsonl").write_text(json.dumps(ev) + "\n",
+                                                "utf-8")
+    before = {name: (runs / name).read_bytes() for name in (
+        "transitions.jsonl", "q-cell-log.jsonl", "step-ledger.jsonl",
+        "evidence-credit.jsonl")}
+
+    report = cl.migrate(ws)
+    # originals archived byte-identical (never rewritten, never deleted)
+    # and MOVED — the read face can never double-count them
+    for name, raw in before.items():
+        arch = runs / "archive" / name
+        assert arch.is_file()
+        assert arch.read_bytes() == raw
+        assert not (runs / name).exists()
+    # every historical row survives; intra-schema order preserved; the
+    # missing stamp is the ONLY structural addition
+    rows = _lines(runs / "experience.jsonl")
+    assert rows == [
+        {"ts": TS, "dispatch_id": "C-1", "r_incr": 0.5,
+         "schema": "transition/1"},
+        {"ts": TS, "dispatch_id": "C-2", "r_incr": -1.0,
+         "schema": "transition/1"},
+        obs, step, ev,
+    ]
+    assert report["experience"]["runs/transitions.jsonl"]["appended"] == 2
+
+    # a re-run appends NOTHING (idempotent — never a duplicated history)
+    again = cl.migrate(ws)
+    assert _lines(runs / "experience.jsonl") == rows
+    assert again["experience"]["runs/transitions.jsonl"]["status"] \
+        == "absent"
+
+    # dry-run writes nothing at all
+    dry_ws = _ws(tmp_path / "d")
+    (dry_ws / "runs" / "transitions.jsonl").write_text(
+        json.dumps({"ts": TS, "dispatch_id": "C-9"}) + "\n", "utf-8")
+    dry = cl.migrate(dry_ws, dry_run=True)
+    assert dry["experience"]["runs/transitions.jsonl"]["status"] \
+        == "dry-run"
+    assert not (dry_ws / "runs" / "experience.jsonl").exists()
+    assert (dry_ws / "runs" / "transitions.jsonl").is_file()
+
+
+def test_migration_never_guesses_a_second_schema_stamp(tmp_path,
+                                                       monkeypatch):
+    """A rel with TWO registered stamps (step-ledger: step-record/1+2)
+    copying an unstamped row must NOT invent a stamp — verbatim copy."""
+    monkeypatch.delenv(cl.STORE_ENV, raising=False)
+    ws = _ws(tmp_path)
+    (ws / "runs" / "step-ledger.jsonl").write_text(
+        json.dumps({"ts": TS, "session_id": "s1"}) + "\n", "utf-8")
+    cl.migrate(ws)
+    rows = _lines(ws / "runs" / "experience.jsonl")
+    assert rows == [{"ts": TS, "session_id": "s1"}]  # verbatim, no guess
+
 
 def test_per_schema_liveness_counters_visible(tmp_path, monkeypatch):
     monkeypatch.delenv(cl.STORE_ENV, raising=False)
@@ -193,6 +267,36 @@ def test_read_accepts_a_tuple_of_prefixes(tmp_path):
                   schema_prefix=("step-record", "evidence-item"))
     assert sorted(r["schema"] for r in got) == ["evidence-item/1",
                                                 "step-record/1"]
+
+
+# ------------------------------------------------------- the migration CLI
+
+def test_cli_migrates_reports_and_reads_liveness(tmp_path, monkeypatch,
+                                                 capsys):
+    monkeypatch.delenv(cl.STORE_ENV, raising=False)
+    ws = _ws(tmp_path)
+    (ws / "runs" / "transitions.jsonl").write_text(
+        json.dumps({"ts": TS, "dispatch_id": "C-1"}) + "\n", "utf-8")
+    import consolidate_ledgers as cli  # noqa: PLC0415 — scripts on path
+
+    # dry-run writes nothing
+    assert cli.main([str(ws), "--dry-run"]) == 0
+    assert (ws / "runs" / "transitions.jsonl").is_file()
+    assert "dry-run" in capsys.readouterr().out
+    # the real migration moves the rel into the archive
+    assert cli.main([str(ws)]) == 0
+    assert (ws / "runs" / "archive" / "transitions.jsonl").is_file()
+    assert not (ws / "runs" / "transitions.jsonl").exists()
+    assert "migrated" in capsys.readouterr().out
+    # liveness: the migrated row is visible under its stamp, and a dead
+    # registered schema still reports 0 (the alarm, never silence)
+    assert cli.main([str(ws), "--liveness"]) == 0
+    out = capsys.readouterr().out
+    assert "experience:transition/1\t1" in out
+    assert "experience:step-record/1\t0" in out
+    # bad args: missing workspace / unknown family
+    assert cli.main([str(tmp_path / "nope")]) == 2
+    assert cli.main([str(ws), "--families", "bogus"]) == 2
 
 
 def test_knowledge_family_rides_the_guarded_root(tmp_path, monkeypatch):

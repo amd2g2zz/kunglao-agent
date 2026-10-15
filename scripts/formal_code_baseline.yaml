@@ -59,6 +59,7 @@ files:
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2
+  scripts/consolidate_ledgers.py: 2
   scripts/context_budget.py: 12
   scripts/contracts.py: 12
   scripts/convergence_check.py: 185
@@ -222,7 +223,7 @@ files:
   scripts/rlvr/__init__.py: 30
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/compose.py: 17
-  scripts/rlvr/consolidated_ledger.py: 5
+  scripts/rlvr/consolidated_ledger.py: 6
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 23

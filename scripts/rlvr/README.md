@@ -30,6 +30,12 @@ package surface; execution is **phase-gated**:
 scripts/rlvr/
 ├── __init__.py          # THE one import point + one export map
 ├── ledger.py            # rollout_ledger (U1) — append-only settlement ledger
+├── consolidated_ledger.py  # #721 the 4-file consolidation core —
+│                        #   experience/settlement/telemetry under runs/ +
+│                        #   knowledge under the guarded root; append()
+│                        #   (flock, stamp-refusing) / read() (legacy-first,
+│                        #   stamp filter) / liveness() / migrate()
+│                        #   (append-only, bytes-archived, idempotent)
 ├── reward.py            # reward_settlement (U2/U3) — band/reward engine
 ├── scalar.py            # scalar_settlement — tiers, tuples, Normal-Gamma,
 │                        #   round credit, trajectory validator
