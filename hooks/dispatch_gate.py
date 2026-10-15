@@ -2000,6 +2000,18 @@ def _main_inner() -> int:
     except Exception as exc:  # noqa: BLE001 — a signal never blocks dispatch
         print(f"dispatch_gate: signal-stream append failed ({exc!r})",
               file=sys.stderr, flush=True)
+    # dispatch churn counter: the ALLOW tail is the one face every real
+    # dispatch passes, so claim dispatch_count accrues HERE (independent
+    # of the DLQ failure strikes — those land at completion). Fail-open:
+    # a register hiccup never blocks the dispatch.
+    if claim_id:
+        try:
+            with scripts_on_path():  # scoped membership
+                import dead_letter as _dl
+            _dl.record_dispatch_count(Path(ws), claim_id)
+        except Exception as exc:  # noqa: BLE001 — a counter never blocks
+            print(f"dispatch_gate: dispatch-count increment failed "
+                  f"({exc!r})", file=sys.stderr, flush=True)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

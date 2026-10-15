@@ -184,6 +184,7 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                      agent_type: str | None = None,
                      claim: str | None = None,
                      credit_kind: str | None = None,
+                     outcome_class: str = "",
                      ts: str | None = None) -> dict:
     """Build and append one ``posterior-store/1`` row (the settlement
     hook's face): schema stamp, ts, workspace identity, feature key
@@ -195,7 +196,12 @@ def append_store_row(ws=None, *, method_family: str, status: str,
     #705 MARL: ``agent_type`` rides the row (the agent-conditioned
     store), ``claim`` carries the claim ID for the solution-broadcast
     face, and ``credit_kind`` marks solve vs verification. All three
-    absent → the row is byte-identical to pre-#705."""
+    absent → the row is byte-identical to pre-#705.
+
+    #689 settlement fairness: ``outcome_class`` (strategy|infra|censored
+    — the rlvr.scalar.classify_outcome vocabulary) rides the row
+    additively: warm_pools excludes infra rows, an environment refusal
+    is not strategy evidence."""
     from harness_common import utc_now_z  # noqa: PLC0415
     row = {
         "schema": STORE_SCHEMA,
@@ -219,6 +225,7 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                       if isinstance(phi_delta, (int, float))
                       and not isinstance(phi_delta, bool) else None),
         "provenance": {"dispatch_id": str(dispatch_id or "")},
+        **({"outcome_class": str(outcome_class)} if outcome_class else {}),
     }
     # #705 MARL: the three agent-credit columns are emitted ONLY when
     # present — a caller that passes none writes the exact pre-#705 row
@@ -271,12 +278,15 @@ def warm_pools(ws, families) -> dict:
     wanted = set(families)
     acc: dict[str, list[float]] = {}
     from rlvr import meta_arms as _ma  # noqa: PLC0415 — the temper
+    from rlvr.scalar import OUTCOME_INFRA  # noqa: PLC0415 — the class vocab
     for r in rows:
         if str(r.get("credit_kind") or "solve") == "verification":
             continue          # #705: verification is inadmissible to the prior
         fam = str(r.get("method_family") or "")
         if fam not in wanted:
             continue
+        if str(r.get("outcome_class") or "") == OUTCOME_INFRA:
+            continue  # an environment refusal is not strategy evidence
         c = r.get("credit")
         if isinstance(c, bool) or not isinstance(c, (int, float)):
             continue  # pending/unknown rows carry no outcome

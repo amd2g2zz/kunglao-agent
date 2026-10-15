@@ -41,6 +41,17 @@ COPY of the configured warm store (arms never share a live store), the
 cold arm reads a materialized empty store dir, and the store env is
 unset entirely for arms that declare store: none.
 
+Store scope (warm_up.store_mode): per-run (default) materializes a
+fresh isolated store per (arm, unit) cell. per-arm materializes ONE
+store per arm across its unit sequence — <out>/<arm>/store — so rows
+written by an earlier unit are visible to later units (within-sequence
+learning); arms stay mutually isolated. An accumulating arm's cells
+ride ONE sequential launch group in declared unit order: concurrent
+same-arm cells would race the shared store. The accumulating store
+PERSISTS across re-invocations into the same out dir (the launcher
+never wipes it): materialization is once per out dir, never once per
+invocation — a fresh measurement demands a fresh out dir.
+
 Faces:
   launch (default)  arms x units -> one child runner per (arm, unit),
                     per-run logs under <out>/<arm>/<unit>/, a progress
@@ -122,6 +133,10 @@ STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
 VALID_STORES = ("none", "cold", "warm")
 VALID_CORPORA = ("repo", "operator")
+# the store scope: per-run (default) = one isolated store per (arm, unit)
+# cell; per-arm = one accumulating store per arm across its unit sequence
+# (within-sequence learning; arms stay mutually isolated)
+VALID_STORE_MODES = ("per-run", "per-arm")
 # the B2 face: a cc arm's optional sampling protocol — N independent
 # samples of the same face at N x budget_each, which must equal the
 # matrix budget (same-cost is the whole point: pass@k at equal cost,
@@ -292,8 +307,22 @@ def load_config(path: Path) -> dict:
     warm = doc.get("warm_up") or {}
     if not isinstance(warm, dict):
         raise ConfigError("warm_up must be a mapping")
+    config_store_mode(doc)
     _check_same_cost(arms, budget)
     return doc
+
+
+def config_store_mode(doc: dict) -> str:
+    """The registry's store scope: warm_up.store_mode (default
+    per-run). A malformed value refuses — the two scopes materialize
+    different stores, and an ambiguous declaration must never silently
+    degrade to one of them."""
+    mode = (doc.get("warm_up") or {}).get("store_mode", "per-run")
+    if mode not in VALID_STORE_MODES:
+        raise ConfigError(
+            f"warm_up.store_mode must be one of {VALID_STORE_MODES}, "
+            f"got {mode!r}")
+    return str(mode)
 
 
 def config_units(doc: dict) -> list[dict]:
@@ -341,7 +370,9 @@ class RunPlan:
     """One (arm, unit) cell of the matrix — everything needed to launch
     and to account for the run. A multi-sample arm expands to
     sample_count plans per unit (sample_index 0..N-1), each capped at
-    budget_each, each its own run dir s0..s{N-1}."""
+    budget_each, each its own run dir s0..s{N-1}. store_mode is the
+    cell's store scope: per-run = the cell's own <run_dir>/store,
+    per-arm = the arm dir's shared <run_dir parent>/store."""
     arm_id: str
     runner_face: str
     unit: str
@@ -350,6 +381,7 @@ class RunPlan:
     run_dir: Path
     store_kind: str
     env_extra: tuple[tuple[str, str], ...]  # frozen mapping face
+    store_mode: str = "per-run"
     sample_index: int = 0
     sample_count: int = 1
     budget_each: float | None = None
@@ -374,11 +406,16 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
             raise ConfigError(f"unknown unit id(s): {unknown}")
         units = [u for u in units if u["id"] in set(units_filter)]
     plans: list[RunPlan] = []
+    store_mode = config_store_mode(doc)
     for arm in arms:
         sampling = arm.get("sampling") or {}
         samples = int(sampling.get("samples", 1)) if sampling else 1
         budget_each = (float(sampling["budget_each"])
                        if sampling else None)
+        # the accumulating scope binds store-bearing arms only: a cc
+        # arm never reads the store, so its cells stay independent
+        mode = store_mode if arm["store"] in ("cold", "warm") \
+            else "per-run"
         for unit in units:
             base = Path(out) / arm["id"] / unit["id"]
             # the B2 expansion: one registry arm becomes N child runs
@@ -395,6 +432,7 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
                     store_kind=arm["store"],
                     env_extra=tuple(sorted(
                         (arm.get("env") or {}).items())),
+                    store_mode=mode,
                     sample_index=k,
                     sample_count=samples,
                     budget_each=budget_each))
@@ -402,6 +440,15 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
 
 
 # ---- child construction (pure — the launch shape the tests pin) ----------
+
+def store_dir_of(plan: RunPlan) -> Path:
+    """The store dir this cell reads/writes. per-run: the cell's own
+    isolated <run_dir>/store. per-arm: the shared <arm>/store dir (the
+    run_dir's parent — one store across the arm's unit sequence, still
+    structurally isolated across arms)."""
+    if plan.store_mode == "per-arm":
+        return plan.run_dir.parent / "store"
+    return plan.run_dir / "store"
 
 def child_env(plan: RunPlan, base: dict | None = None, *,
               operator_root: str | None = None) -> dict:
@@ -415,7 +462,7 @@ def child_env(plan: RunPlan, base: dict | None = None, *,
         env.pop(name, None)
     env.pop(STORE_ENV, None)
     if plan.store_kind in ("cold", "warm"):
-        env[STORE_ENV] = str(plan.run_dir / "store")
+        env[STORE_ENV] = str(store_dir_of(plan))
     if plan.corpus == "operator":
         if not operator_root:
             raise ConfigError(
@@ -475,11 +522,29 @@ def warm_source_fault(plan: RunPlan, warm_source: Path | None) -> str | None:
 
 
 def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
-    """The run's isolated store dir. cold: an EMPTY dir (the store read
-    face no-ops over zero rows). warm: an isolated COPY of the configured
+    """The cell's store dir. cold: an EMPTY dir (the store read face
+    no-ops over zero rows). warm: an isolated COPY of the configured
     warm store — arms never share a live store, so one arm's settlement
-    writes can never contaminate another arm's reads mid-matrix."""
-    store_dir = plan.run_dir / "store"
+    writes can never contaminate another arm's reads mid-matrix.
+    per-arm scope materializes ONCE across the arm's sequence: the
+    first unit creates the dir (cold) or lands the source copy (warm),
+    and later units reuse it with accumulated rows intact — a per-unit
+    re-copy would wipe exactly the within-sequence learning the mode
+    exists for. A per-arm warm dir that exists without its store file
+    is a torn first materialization, repaired by the copy."""
+    store_dir = store_dir_of(plan)
+    if plan.store_mode == "per-arm":
+        if plan.store_kind == "warm" \
+                and not (store_dir / STORE_FILE).is_file():
+            fault = warm_source_fault(plan, warm_source)
+            if fault:
+                raise ConfigError(fault)
+            store_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(Path(warm_source) / STORE_FILE,
+                         store_dir / STORE_FILE)
+            return store_dir
+        store_dir.mkdir(parents=True, exist_ok=True)
+        return store_dir
     store_dir.mkdir(parents=True, exist_ok=True)
     if plan.store_kind == "warm":
         fault = warm_source_fault(plan, warm_source)
@@ -497,6 +562,8 @@ def _run_row(plan: RunPlan, status: str, **extra) -> dict:
     row = {"arm": plan.arm_id, "unit": plan.unit, "tier": plan.tier,
            "corpus": plan.corpus, "status": status,
            "run_dir": str(plan.run_dir)}
+    if plan.store_mode != "per-run":
+        row["store_mode"] = plan.store_mode
     if plan.sample_count > 1:
         row["sample"] = plan.sample_index
         row["sample_count"] = plan.sample_count
@@ -524,6 +591,29 @@ def read_progress(out: Path) -> dict | None:
 
 
 # ---- launch ---------------------------------------------------------------
+
+def launch_groups(plans: list[RunPlan]) -> list[list[RunPlan]]:
+    """The launch schedule, ENFORCED rather than caller-discipline:
+    every accumulating (per-arm store) cell gathers into exactly ONE
+    group keyed by arm id — same-arm cells never run concurrently under
+    ANY plan order, because they share one live store and the cell
+    order IS the sequence. Every other plan is its own group
+    (independent cells keep the matrix's parallelism). Within a group:
+    declared plan order; group order follows first appearance."""
+    groups: list[list[RunPlan]] = []
+    arm_group: dict[str, int] = {}
+    for plan in plans:
+        if plan.store_mode == "per-arm":
+            idx = arm_group.get(plan.arm_id)
+            if idx is None:
+                arm_group[plan.arm_id] = idx = len(groups)
+                groups.append([plan])
+            else:
+                groups[idx].append(plan)
+        else:
+            groups.append([plan])
+    return groups
+
 
 def _launch_one(plan: RunPlan, *, budget_usd: float, wall_cap_s: float,
                 session_cmd: str | None, plugin_dir: Path | None,
@@ -605,12 +695,20 @@ def _update_progress(out: Path, progress: dict) -> None:
         write_progress(out, progress)
 
 
+def _launch_group(group: list[RunPlan], **kw) -> list[dict]:
+    """One launch group: its cells run SEQUENTIALLY in declared order
+    (an accumulating arm's units share one live store — the order IS
+    the sequence). A single-plan group is the old independent cell."""
+    return [_launch_one(plan, **kw) for plan in group]
+
+
 def launch(plans: list[RunPlan], out: Path, *, budget_usd: float,
            wall_cap_s: float, session_cmd: str | None,
            plugin_dir: Path | None, warm_source: Path | None,
            warm_context_from: Path | None, operator_root: str | None,
-           max_parallel: int, dry_run: bool) -> dict:
-    """The whole matrix: plan -> per-cell launch -> progress JSON. The
+           max_parallel: int, dry_run: bool,
+           store_mode: str = "per-run") -> dict:
+    """The whole matrix: plan -> grouped launch -> progress JSON. The
     progress doc is the run's spine: --report reads it (and falls back
     to scanning run dirs when a cell predates the spine)."""
     out = Path(out)
@@ -620,30 +718,25 @@ def launch(plans: list[RunPlan], out: Path, *, budget_usd: float,
                 "budget_usd": budget_usd,
                 "wall_cap_s": wall_cap_s,
                 "max_parallel": max_parallel,
+                "store_mode": store_mode,
                 "runs": []}
     rows = progress["runs"]
+    groups = launch_groups(plans)
+    kw = dict(budget_usd=budget_usd, wall_cap_s=wall_cap_s,
+              session_cmd=session_cmd, plugin_dir=plugin_dir,
+              warm_source=warm_source,
+              warm_context_from=warm_context_from,
+              operator_root=operator_root, dry_run=dry_run)
     if max_parallel > 1 and not dry_run:
         with ThreadPoolExecutor(max_workers=max_parallel) as pool:
-            futures = [pool.submit(_launch_one, plan, budget_usd=budget_usd,
-                                   wall_cap_s=wall_cap_s,
-                                   session_cmd=session_cmd,
-                                   plugin_dir=plugin_dir,
-                                   warm_source=warm_source,
-                                   warm_context_from=warm_context_from,
-                                   operator_root=operator_root,
-                                   dry_run=dry_run)
-                       for plan in plans]
+            futures = [pool.submit(_launch_group, group, **kw)
+                       for group in groups]
             for fut in futures:
-                rows.append(fut.result())
+                rows.extend(fut.result())
                 _update_progress(out, progress)
     else:
-        for plan in plans:
-            rows.append(_launch_one(
-                plan, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
-                session_cmd=session_cmd, plugin_dir=plugin_dir,
-                warm_source=warm_source,
-                warm_context_from=warm_context_from,
-                operator_root=operator_root, dry_run=dry_run))
+        for group in groups:
+            rows.extend(_launch_group(group, **kw))
             _update_progress(out, progress)
     _update_progress(out, progress)
     return progress
@@ -754,7 +847,8 @@ def main(argv: list[str] | None = None) -> int:
                       warm_context_from=warm_context_from,
                       operator_root=operator_root,
                       max_parallel=max(1, args.max_parallel),
-                      dry_run=args.dry_run)
+                      dry_run=args.dry_run,
+                      store_mode=config_store_mode(doc))
     runs = progress["runs"]
     refused = sum(1 for r in runs if r["status"] in ("refused",
                                                      "unresolvable"))

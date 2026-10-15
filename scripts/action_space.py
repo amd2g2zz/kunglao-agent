@@ -12,7 +12,7 @@ measuring nothing". This module is the vocabulary:
   - operator level (the worker's hands): observe / trace / hook / emulate /
     derive / verify / search / ask / plan_segment;
   - orchestration level (the loop's teeth): dispatch / verify / deepen /
-    osint / expand;
+    osint / expand / distill;
   - policy level (the claim economy): mint_arm / split_claim / supersede /
     park / rewire_deps / replan — the candidate-set controls. Mint / split /
     supersede / park / rewire predate the tier as mechanisms fired by
@@ -235,6 +235,19 @@ _register(
           "+ sub claims)",
           "inherits the sub-claims' proof power",
           "orchestrator"),
+    _spec("distill", ORCHESTRATION, 5,
+          "the shelf has no viable candidate for the task at hand OR the "
+          "policy decides proactive capability acquisition (a costed choice, "
+          "never a trigger rule — the budget ledger is the hard cap)",
+          "capability acquisition — lands tool candidates on the run-local "
+          "shelf after anchored-sample oracle satisfaction; web/re-library "
+          "sources record URL+date, never directly PROVEN",
+          "orchestrator",
+          references=("scripts/online_distill.py "
+                      "(budgeted act: scan/land via budget_allows/"
+                      "reserve_act — reused, not rebuilt)",
+                      "runs/distill-budget.json (per-run act + hop caps: "
+                      "the restraint ruling lives as BUDGET)")),
     # ---- policy level: the claim economy's candidate-set controls ----
     # Every entry is settleable: it changes WHICH claims the policy can
     # choose from, so it rides the escrow/revoke attribution discipline
@@ -328,7 +341,7 @@ _register(
           references=("rule 14 tool creation", "tools/_INDEX.yaml registration")),
 )
 
-assert len(ACTIONS) == 23, "the vocabulary is exactly 9 + 5 + 6 + 3"
+assert len(ACTIONS) == 24, "the vocabulary is exactly 9 + 6 + 6 + 3"
 
 
 def actions_of(level: str) -> list[ActionSpec]:
@@ -339,6 +352,39 @@ def actions_of(level: str) -> list[ActionSpec]:
 def get(name: str) -> ActionSpec:
     """Namespaced lookup ("operator.trace"); KeyError on unknown."""
     return ACTIONS[name]
+
+
+# ---- distill actuation seam (issue-719) ------------------------------------
+# The policy's `distill` choice lands here and actuates through
+# online_distill's EXISTING budget guards — the action entry above names
+# the same machinery in its references. One call reserves ONE budgeted
+# act (the receipt carries the attempt id the scan/land faces fill);
+# refusal is explicit (None + online_distill.refuse_reason). The
+# reactive shelf-miss path (checkpoints._maybe_distill) keeps its own
+# entry to the same guards — this seam ADDS a policy face, it never
+# gates the marker path. Full orchestrator wiring of scan/land for a
+# proactive act is documented in
+# openspec/changes/issue-719-distill-action/design.md (D3).
+
+
+def actuate_distill(ws: Path, token: str, *,
+                    source_file: str | None = None,
+                    sample_hint: str | None = None) -> dict | None:
+    """Reserve ONE budgeted distillation act for a policy-chosen token.
+
+    Delegates to online_distill.reserve_act (the budget-ledger critical
+    section: per-run cap, duplicate-token refusal, fail-closed corrupt
+    ledger, never-loosen clamp). Returns the engine receipt dict or
+    None when the budget refuses — the caller records the refusal row
+    with online_distill.refuse_reason(ws, token).
+
+    This is the budget linkage only: the reserved act's scan/retrieve/
+    oracle/land halves stay on the engine's existing faces (the e2e
+    tick step for reactive acts; the orchestrator for proactive ones).
+    """
+    from online_distill import reserve_act  # lazy — keeps the engine import off module load
+    return reserve_act(ws, token, source_file=source_file,
+                       sample_hint=sample_hint)
 
 
 # ---- claim-category table (moved VERBATIM from priority_ratio) ----------------

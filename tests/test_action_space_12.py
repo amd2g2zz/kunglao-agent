@@ -41,7 +41,8 @@ import priority_ratio as pr  # noqa: E402
 
 EXPECTED_OPERATORS = {"observe", "trace", "hook", "emulate", "derive",
                       "verify", "search", "ask", "plan_segment"}
-EXPECTED_ORCHESTRATION = {"dispatch", "verify", "deepen", "osint", "expand"}
+EXPECTED_ORCHESTRATION = {"dispatch", "verify", "deepen", "osint", "expand",
+                          "distill"}
 EXPECTED_POLICY = {"mint_arm", "split_claim", "supersede", "park",
                    "rewire_deps", "replan"}
 EXPECTED_STRATEGIC = {"fight", "bypass", "invest"}

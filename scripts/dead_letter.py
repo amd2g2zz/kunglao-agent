@@ -115,6 +115,29 @@ def count_dead(workspace: Path) -> int:
     return sum(1 for c in claims if (c.get("status") or "").upper() == "DEAD")
 
 
+def record_dispatch_count(workspace: Path, claim_id: str) -> dict:
+    """Count one dispatch on a claim's dispatch_count field — the churn
+    counter INDEPENDENT of promotion_attempts (the DLQ failure-strike
+    face, see record_dispatch_failure). A dispatch accrues here whether
+    it later succeeds or fails; a failure strikes promotion_attempts
+    SEPARATELY, so the two counters never double-count one attempt
+    (attempts_of reads their max). Explicit no-ops: missing claim ->
+    {"counted": False, "reason": ...}; never raises (the dispatch path
+    must not die on a register hiccup — warnings only)."""
+    claims, reg, p = _load_reg(workspace)
+    claim = next((c for c in claims if c.get("id") == claim_id), None)
+    if claim is None:
+        return {"counted": False, "reason": f"claim {claim_id} not found"}
+    try:
+        n = int(claim.get("dispatch_count") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    n += 1
+    claim["dispatch_count"] = n
+    _write_reg(p, reg)
+    return {"counted": True, "claim_id": claim_id, "dispatch_count": n}
+
+
 def record_dispatch_failure(workspace: Path, claim_id: str) -> dict:
     """Count one dispatch failure on a claim; at DLQ_ATTEMPTS escalate to
     the charter must-ask lane.
