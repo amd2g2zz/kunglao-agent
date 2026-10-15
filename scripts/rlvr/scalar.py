@@ -1076,6 +1076,7 @@ def resolvable_registry(ws) -> set:
 def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
                                 oracle_verdict,
                                 has_reproducible_evidence: bool,
+                                extra_resolvable=(),
                                 now=None) -> dict:
     """Validate + settle a trajectory segment (settlement v3). Fail-closed:
     an invalid verdict doc writes NOTHING. Re-application with changed
@@ -1084,12 +1085,20 @@ def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
     and the audit chain ('where did this score come from') stays
     answerable. Prior settlement lineage (v1 band/reward/rule_id) is
     carried forward so hard-currency provenance survives; ``reward`` and
-    ``tier`` carry the v3 authoritative scalar."""
+    ``tier`` carry the v3 authoritative scalar. ``extra_resolvable`` is
+    an additive id set the CALLER already vouched for (the blind
+    settler's input-doc artifact paths ride here so a verdict citing
+    what it actually saw resolves); default empty keeps the citation
+    registry exactly the workspace-derived set."""
     ws = Path(ws)
-    validation = validate_verdict_doc(verdict_doc,
-                                      resolvable_registry(ws),
-                                      oracle_verdict,
-                                      has_reproducible_evidence)
+    if isinstance(extra_resolvable, str):
+        extra_resolvable = (extra_resolvable,)  # never iterate a bare str
+    validation = validate_verdict_doc(
+        verdict_doc,
+        resolvable_registry(ws)
+        | {str(i) for i in (extra_resolvable or ())},
+        oracle_verdict,
+        has_reproducible_evidence)
     if not validation["ok"]:
         return {"settled": False, "reason": "validation failed",
                 "validation": validation}
