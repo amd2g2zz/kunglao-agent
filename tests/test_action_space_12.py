@@ -42,7 +42,10 @@ import priority_ratio as pr  # noqa: E402
 EXPECTED_OPERATORS = {"observe", "trace", "hook", "emulate", "derive",
                       "verify", "search", "ask", "plan_segment"}
 EXPECTED_ORCHESTRATION = {"dispatch", "verify", "deepen", "osint", "expand",
-                          "distill"}
+                          "distill",
+                          # the scheduling five: the wake decision is an
+                          # action (the cron-watchdog demotion card)
+                          "sleep", "wake_on", "probe", "close_loop", "none"}
 EXPECTED_POLICY = {"mint_arm", "split_claim", "supersede", "park",
                    "rewire_deps", "replan"}
 EXPECTED_STRATEGIC = {"fight", "bypass", "invest"}
@@ -65,8 +68,13 @@ def test_registry_holds_exactly_the_issue_vocabulary():
 @pytest.mark.parametrize("name", sorted(aspace.ACTIONS))
 def test_every_action_carries_full_metadata(name):
     spec = aspace.ACTIONS[name]
-    # cost constant: strictly positive number
-    assert isinstance(spec.cost, (int, float)) and spec.cost > 0
+    # cost constant: strictly positive — except the null action, whose
+    # whole point is doing nothing at cost 0 (the do-nothing baseline)
+    assert isinstance(spec.cost, (int, float))
+    if name == "orchestration.none":
+        assert spec.cost == 0.0
+    else:
+        assert spec.cost > 0
     # precondition: non-empty statement
     assert isinstance(spec.precondition, str) and spec.precondition.strip()
     # proof-power metadata: non-empty statement
