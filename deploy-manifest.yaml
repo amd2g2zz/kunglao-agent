@@ -336,6 +336,10 @@ files:
     dest: .claude/scripts/decision_pending.py
     kind: scaffold
     sha256: c172f0f91ca4db7515ff8425b010baa45580b9af4c24268716bf560f9d1fa70a
+  - src: scripts/decision_view.py
+    dest: .claude/scripts/decision_view.py
+    kind: scaffold
+    sha256: 60623f33b4d3cef2f0c5dc3fbe255672fe1de1c6ac57add192d04060b8881122
   - src: scripts/dep_surface_gate.py
     dest: .claude/scripts/dep_surface_gate.py
     kind: scaffold
@@ -899,7 +903,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 672dbb1c589dc51a0924b9d3b47d81c60bbe6da1f5f9cc297363a5f45da82651
+    sha256: ac5c8569dd24b7c61ecd5fa9daddfa1c8ecc68866678de7e8110f62ed4c2f961
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -923,7 +927,7 @@ files:
   - src: scripts/rank_face.py
     dest: .claude/scripts/rank_face.py
     kind: scaffold
-    sha256: e7359314580bfc057f2eeffc0d63bc2a4778786b8a0c347c08ac327ff60f24f3
+    sha256: a3559d095def91c6c194589c259d83df2a7ac214b4bd1ac3947c5436a05f20a7
   - src: scripts/re_pin_references.py
     dest: .claude/scripts/re_pin_references.py
     kind: scaffold

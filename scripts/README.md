@@ -162,6 +162,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
 | `decision_lint.py` | pre-action compatibility lint (#213) — caller-supplied facts gate the next action: BLOCK on known-incompatible (package, fact) pairs, OK-with-note on unknowns; pure, never probes the environment | skills docs, tests |
+| `decision_view.py` | THE decision view-model contract (one model layer, two views) — build_view() assembles the six RL-decision faces (in_flight / why_this_one / just_settled / hypothesis_space / budget / next_candidates) from single-source readers; SCHEMA/FACES/FACE_KEYS/ABSENT pin the contract, fail-open per face, budget honest-null behind the cost-accounting blocker | tests, future workbench renderers |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `premise_gate.py` | premise epistemics (issue 340): premise-probe reconciliation (SUSPECT append-only marking + one-shot on-demand capability re-probe via toolchain --capability + env_premise_contradiction event) + premise expiry sweep (INVALIDATED(stale) after expires ticks); mechanism registry entry `premise_expiry`; CLI always exit 0 | hooks/worker_budget_sinks, mechanism scheduler, tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |

@@ -40,7 +40,7 @@ FAST_MODULES = frozenset({
     "test_common_leaf", "test_completion_transaction", "test_contract_docs", "test_context_budget_300", "test_convergence_completeness", "test_convergence_health_rollup",
     "test_convergence_health_stalled_2", "test_convergence_rules_file", "test_convergence_ws_identity_240", "test_course_distill_165", "test_coverage_floor_520",
     "test_coverage_policy_564", "test_crypto_algorithms", "test_dead_code_removal", "test_dead_letter",
-    "test_decide_regression_anchor", "test_decide_state_machine", "test_decision_pending", "test_decision_surface_anchor",
+    "test_decide_regression_anchor", "test_decide_state_machine", "test_decision_pending", "test_decision_surface_anchor", "test_decision_view_688",
     "test_declaration_scan", "test_declared_coverage_147", "test_delegation_863i", "test_deobf_composition",
     "test_deploy_closure_810", "test_deploy_inversion_783", "test_dep_surface_gate_467", "test_detector_utilization_127", "test_difficulty_thresholds_16",
     "test_digest", "test_digest_sec_g_528", "test_disasm_constant_check", "test_dispatch_background_704",

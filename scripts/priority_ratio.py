@@ -97,6 +97,7 @@ from kunglao_log import warn  # canonical warn: ONE implementation (process-wide
 import argparse
 import hashlib
 import json
+import math
 import random
 import re
 import sys
@@ -783,6 +784,47 @@ def _evidence_digest(evidence: EvidenceView) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _view_stats(actions: list) -> dict:
+    """The additive decision-view payload keys — pure functions of the
+    ranked actions (no workspace, no clock, no randomness), so same-seed
+    payload replay stays byte-identical including these keys:
+
+      k         — the ranked candidate count;
+      propensity — the top-ranked arm's share of the total score mass
+                   (6dp). The rank-time "how dominant was the pick"
+                  readout for the view; NOT the dispatch-receipt MC
+                  propensity (that one stays on the envelope, a
+                  different layer). Null when the ranking is empty or a
+                  multi-candidate score mass cannot be normalized;
+      entropy   — Shannon entropy in BITS of the normalized score
+                  distribution over the k candidates (6dp); 0.0 when the
+                  choice is fully determined (a single candidate),
+                  null when a multi-candidate mass cannot be
+                  normalized (zero total score);
+      tiers     — {claim_id: tier} over the ranked candidates, the same
+                  claim-keyed shape feeds/scores already use.
+
+    Negative scores (reachable only through a negative worth override)
+    clamp at zero before normalizing, so the shares always form a
+    simplex."""
+    k = len(actions)
+    tiers = {a.claim_id: a.tier for a in actions}
+    if k == 0:
+        return {"entropy": None, "propensity": None, "k": 0, "tiers": tiers}
+    if k == 1:
+        return {"entropy": 0.0, "propensity": 1.0, "k": 1, "tiers": tiers}
+    scores = [max(a.score, 0.0) for a in actions]
+    total = sum(scores)
+    if total <= 0:
+        return {"entropy": None, "propensity": None, "k": k, "tiers": tiers}
+    shares = [s / total for s in scores]
+    # 0.0 - sum(...) (not -sum(...)): the all-p=1 edge would otherwise
+    # yield a signed -0.0 that serializes as "-0.0" in the payload.
+    entropy = round(0.0 - sum(p * math.log2(p) for p in shares if p > 0), 6)
+    return {"entropy": entropy, "propensity": round(shares[0], 6),
+            "k": k, "tiers": tiers}
+
+
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
                      rng_base: int, actions: list[Action],
                      round_no: int | None) -> None:
@@ -809,7 +851,15 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
 
     The real writer reports a failed write by returning False instead of
     raising (kunglao_log.emit never raises), so the health bit keys off
-    BOTH shapes: a payload/build crash and a plain write failure."""
+    BOTH shapes: a payload/build crash and a plain write failure.
+
+    The payload additionally carries the four additive decision-view keys
+    (entropy of the score distribution in bits, the top arm's score share,
+    the candidate count k, and the per-claim tier map — see _view_stats).
+    They are pure functions of the ranked actions, computed here at the
+    decision point, and stay OUTSIDE input_fingerprint: the fingerprint
+    covers ranking inputs, these are outputs, so the replay hash and the
+    frozen-sampling observability stay byte-identical."""
     try:
         claims_hash = hashlib.sha256(json.dumps(
             claims, sort_keys=True, ensure_ascii=False, default=repr)
@@ -833,6 +883,7 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             # deadlock's root cause). Existing keys untouched.
             "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
+            **_view_stats(actions),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                             arm=(actions[0].claim_id if actions else None),
