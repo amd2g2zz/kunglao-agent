@@ -55,7 +55,7 @@ files:
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
-    sha256: 6058ea0c3d95e82e36e456fa94f4f5a8abfb4e26c3c356201e0262572ed7ba2f
+    sha256: 4fb247667627a74751d2811e3d8662eaa5ce33b74215ac185491f5dfc632e489
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -124,6 +124,10 @@ files:
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
     sha256: c9730df32c474e7ba15e0ca3399e55b4311f0d95c444dfeb3cdebf8ea6f4e227
+  - src: agents/kunglao-settler.md
+    dest: .claude/agents/kunglao-settler.md
+    kind: agent
+    sha256: ae3907b4fd64d6cafd5cc67c1cf885add84c1d2b334dedcfc01cd40f62e97450
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -675,7 +679,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 3d89060ff09c0a0d1e63ee907e21e9e04add7b291424e5c102514aa71ece5048
+    sha256: 19cb39d29faa11a072e4cfd4c40a519b9c155e39ddcc413f73a22565650fe4e1
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1323,7 +1327,11 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: cba9d54ace17a673810cecab87ca84a8dda22ad00758b9e079e9ab826a0bd1a5
+    sha256: f2eb4eddf461575a86a1783fad06736caf612825e7d591fcff439aac410d605d
+  - src: scripts/rlvr/settlement_scorer.py
+    dest: .claude/scripts/rlvr/settlement_scorer.py
+    kind: scaffold
+    sha256: 2488cf85e820bf43377af7bf2a20546f4db6c30499f8c8e01549ecadc8aab170
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
@@ -1955,7 +1963,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: f82200dbd313d4ecd9c2a7d4d102b2813c70222499636eeede5c4c621a5f45b2
+    sha256: 3f532264a7305509c01f8c38ff8705b72eb96477cbb686d53bccc301eb84d319
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
