@@ -99,16 +99,19 @@ def _dispatch(ws: Path, claim: str) -> dict:
 
 
 def _transition(ws: Path, claim: str, *, r_incr: float,
-                phi_delta: float = 0.0, cost: float = 0.0) -> None:
+                phi_delta: float = 0.0) -> None:
     """One closed transition row (the settle face's own shape; written
-    directly so the numbers are exact)."""
+    directly so the numbers are exact). ``r_incr`` already embeds
+    −cost (the production writer's ALPHA·ΔΦ − LAMBDA·cost), so the
+    fixture picks r_incr = phi_delta − cost pairs explicitly — there is
+    no cost column on a real row."""
     row = {"ts": T0.strftime("%Y-%m-%dT%H:%M:%SZ"), "dispatch_id": claim,
            "action_type": "dispatch", "s": "0" * 12, "a": FAM,
            "o": {"status": "ok", "class": "strategy", "facts": 1},
            "s_prime_phi": round(phi_delta, 6), "phi_before": 0.0,
            "phi_delta": round(phi_delta, 6), "claim_ref": claim,
            "action_key": FAM, "r_incr": r_incr, "r_settle": None,
-           "done": False, "cost": cost}
+           "done": False}
     p = ws / "runs" / "transitions.jsonl"
     with p.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row) + "\n")
@@ -151,10 +154,19 @@ def test_rollout_return_computed_at_terminal(tmp_path):
     adds no second row."""
     ws = _ws(tmp_path, [{"id": "C-718", "status": "IN_PROGRESS"}])
     disp = _dispatch(ws, "C-718")
-    _transition(ws, "C-718", r_incr=0.4, phi_delta=0.55, cost=0.15)
-    _transition(ws, "C-718", r_incr=-0.1, phi_delta=-0.05, cost=0.05)
+    # r_incr = phi_delta − cost, the production writer's own arithmetic
+    _transition(ws, "C-718", r_incr=0.4, phi_delta=0.55)   # cost 0.15
+    _transition(ws, "C-718", r_incr=-0.1, phi_delta=-0.05)  # cost 0.05
     assert _l1_rows(ws) == [], (
         "no rollout return exists before the terminal settlement")
+    # the workspace MOVES between dispatch and settle (one fact file
+    # lands — the state signature advances): the return must still key
+    # the DISPATCH-time state the action was chosen in, not the
+    # post-terminal snapshot
+    (ws / "facts" / "F718-late.md").write_text(
+        "---\nid: F718-late\ntype: fact\nstatus: OPEN\n---\n\nbody\n",
+        encoding="utf-8")
+    assert _sig(ws) != disp["signature_hash"]
 
     res = _settle(ws, "C-718")
     assert res["banked"] == ["C-718"]
@@ -177,8 +189,10 @@ def test_rollout_return_computed_at_terminal(tmp_path):
     phi = 0.55 - 0.05
     cost = 0.15 + 0.05
     assert row["components"]["transitions_sum"] == pytest.approx(phi - cost)
-    # keyed to the DISPATCH-time state (the state the action was chosen in)
-    assert row["state_signature"] == disp["signature_hash"] == _sig(ws)
+    # keyed to the DISPATCH-time state (the state the action was chosen
+    # in) — the terminal-state snapshot would be the wrong cell
+    assert row["state_signature"] == disp["signature_hash"]
+    assert row["state_signature"] != _sig(ws)
 
     # replay idempotence: the first-settlement guard covers the L1 bank
     _settle(ws, "C-718")
@@ -515,3 +529,11 @@ def test_knowledge_query_reads_the_cross_task_store(tmp_path, monkeypatch):
     assert kc["answer_strength"] == pytest.approx(lp.CROSS_TASK_STRENGTH)
     # a claim with no store row stays cold
     assert lp.knowledge_query(ws, "C-999")["solved"] is False
+    # the store's leave-one-out read: a row written BY this workspace
+    # never makes its own claim "solved elsewhere"
+    out2 = st.append_store_row(ws, method_family="static-symbolic",
+                               status="ROUND_CREDIT", credit=1.0,
+                               dispatch_id="C-734", claim="C-734")
+    assert out2["appended"] is True
+    assert lp.knowledge_query(ws, "C-734")["solved"] is False, (
+        "the ws's own store rows are never read (leave-one-out)")

@@ -109,6 +109,14 @@ map):
   hypotheses at their falsifiable layer; ``layer_death_cells`` keys
   termination accounting (kind, family, layer); ``covering_matrix``
   wires the t-way covering machinery into the search side.
+
+- ``rlvr.l1_value`` — the L1 value function: the rollout return
+  ``R(τ) = Σ γ^t·r_t`` (the discounted SUM, terminal-dominated — #716)
+  computed and stored at claim terminal (``record_terminal_return``,
+  hooked into ``scalar.settle_round_credit``'s first settlement), and
+  the (state_signature, action_kind) Beta cells folded from it
+  (``fold`` / ``cell_posterior`` / ``sample_value`` — the q_cells DTS
+  machinery one level up, the #428 adaptive schedule imported).
 """
 from __future__ import annotations
 
@@ -117,6 +125,7 @@ from . import constants_ref
 from . import feature_prior
 from . import hypotheses
 from . import invariants
+from . import l1_value
 from . import ledger
 from . import liveness
 from . import obstacles
@@ -304,6 +313,24 @@ from .termination import (
     report as option_death_report,
     verdicts as option_death_verdicts,
 )
+from .l1_value import (
+    ACTION_KINDS as L1_ACTION_KINDS,
+    OBS_REL as L1_VALUE_OBS_REL,
+    ROLLOUT_GAMMA,
+    ValueCounts,
+    ValueFold,
+    cell_posterior as l1_cell_posterior,
+    compute_rollout_return,
+    default_store as l1_default_store,
+    fold as fold_l1_values,
+    has_observations as l1_has_observations,
+    record_observation as record_l1_observation,
+    record_terminal_return,
+    sample_value as sample_l1_value,
+    seed_state as l1_seed_state,
+    state_signature_of,
+    value_table as l1_value_table,
+)
 
 __all__ = [
     # modules
@@ -313,6 +340,7 @@ __all__ = [
     "feature_prior",
     "hypotheses",
     "invariants",
+    "l1_value",
     "ledger",
     "liveness",
     "obstacles",
@@ -486,4 +514,21 @@ __all__ = [
     "option_dead",
     "option_death_report",
     "option_death_verdicts",
+    # L1 value faces (the orchestration layer's learner)
+    "L1_ACTION_KINDS",
+    "L1_VALUE_OBS_REL",
+    "ROLLOUT_GAMMA",
+    "ValueCounts",
+    "ValueFold",
+    "compute_rollout_return",
+    "record_terminal_return",
+    "l1_cell_posterior",
+    "l1_default_store",
+    "l1_has_observations",
+    "l1_seed_state",
+    "l1_value_table",
+    "fold_l1_values",
+    "record_l1_observation",
+    "sample_l1_value",
+    "state_signature_of",
 ]

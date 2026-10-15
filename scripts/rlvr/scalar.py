@@ -722,7 +722,12 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # observation log has no retraction face, so re-banking would
             # double-count the round.
             if not (existing and existing.get("settlement") is not None):
-                _bank_q_cell_credit(ws, row)
+                bank = _bank_q_cell_credit(ws, row)
+                # #718: the same first-settlement tick banks the L1
+                # rollout return — the claim-terminal learning target the
+                # orchestration layer consumes (fail-open, lazy import;
+                # the L2 bank above is never affected by this leg)
+                _bank_l1_rollout_return(ws, row, bank)
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
@@ -762,7 +767,7 @@ def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
             round(target_f - (int(step_n) - float(step_sum)), 6))
 
 
-def _bank_q_cell_credit(ws, row: dict) -> None:
+def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     """Issue 462 W5: bank one settled round credit into the matching Q
     cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
     The bank result carries the matched row's ``arm_key``/``fingerprint``
@@ -771,7 +776,10 @@ def _bank_q_cell_credit(ws, row: dict) -> None:
     store's write face exists for exactly this call and had no live
     caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
-    covers the ledger receipt; the Q bank is the learning feed).
+    covers the ledger receipt; the Q bank is the learning feed). Returns
+    the bank dict (None on failure) so the caller can thread the matched
+    dispatch signature into the L1 rollout-return bank (#718) without a
+    second match scan.
 
     #712 branch: when step credit already banked for this dispatch
     (``step_credit_totals`` — n > 0) the terminal bank is the RESIDUAL,
@@ -795,8 +803,28 @@ def _bank_q_cell_credit(ws, row: dict) -> None:
                 ws, did, delta_success, failure_delta=delta_failure)
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
-        return
+        return None
     _bank_strategy_store_row(ws, row, bank)
+    return bank
+
+
+def _bank_l1_rollout_return(ws, row: dict, bank: dict | None) -> None:
+    """#718: at the claim-terminal first settlement, compute and store
+    the rollout return (rlvr.l1_value — the discounted SUM of the
+    claim's transition rewards plus the terminal ladder credit, #716
+    semantics). The dispatch-time state signature rides the L2 bank
+    result (the matched dispatch row's recorded state — the state the
+    action was chosen in); no signature is the honest gap (no row, ONE
+    warn inside the callee). Fail-open: the L1 leg is telemetry — a
+    broken value store never breaks settlement, and the row's ladder
+    credit is unchanged by anything this face does."""
+    try:
+        from rlvr import l1_value as _l1  # noqa: PLC0415
+        _l1.record_terminal_return(
+            ws, str(row["dispatch_id"]), row["r"],
+            signature=(bank or {}).get("signature_hash"))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("l1_rollout_return", f"{type(exc).__name__}: {exc}")
 
 
 def _bank_strategy_store_row(ws, row: dict, bank: dict) -> None:
