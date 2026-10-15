@@ -973,6 +973,17 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         if attempts_dirty:
             feeds["A"] = (f"promotion_attempts={c.get('promotion_attempts')!r} "
                           "unparseable -> treated as 0 (#103)")
+        # #690: the independent dispatch counter rides the feeds — the
+        # acceptance face (attempts/dispatch count accrues AND is visible
+        # in the rank feed; the issue measured it pinned at 0 across 7
+        # live dispatches). Absent when zero: every legacy fixture's
+        # feeds stay byte-identical.
+        dc, _dc_dirty = _int_flag(c.get("dispatch_count", 0))
+        if dc > 0:
+            feeds["dispatch_count"] = (
+                f"dispatch_count={dc} (independent of promotion_attempts="
+                f"{attempts}; the #690 branch act budget counts dispatches, "
+                f"not promotions)")
         actions.append(Action(
             claim_id=cid, action=classify_action(c), score=score, skill=None,
             tier=action_tier(c), attempts=attempts, cost=action_cost(c),

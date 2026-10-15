@@ -6,6 +6,10 @@ off-policy controller's recording face, issue-667 design).
 Three append-only, hash-only ledgers under runs/:
 
   runs/step-ledger.jsonl       step-record/1       one row per tool call
+                              step-record/2       one row per subagent
+                                                  completion (#690 — the
+                                                  settlement grain, carries
+                                                  claim_ref + step_id)
   runs/evidence-credit.jsonl   evidence-item/1     evidence citing its
                               credit-amendment/1   producing step + the
                                                    escrow lifecycle
@@ -25,9 +29,14 @@ CONFIRMED credit by construction. Revocation walks back to the
 PRODUCING step's evidence; the verifier act that confirmed is never the
 revoke target.
 
-ZERO DECISION POSTURE (shadow telemetry): pure append + fail-open
-reads; no dispatch, gate, settlement, or promotion face imports this
-module (the 396 freeze-wall posture). Event time rides the events —
+ZERO DECISION POSTURE, as recorded by #670 (shadow telemetry): pure
+append + fail-open reads; no dispatch, gate, settlement, or promotion
+face imports this module (the 396 freeze-wall posture). #690 GRADUATES
+exactly one seam: the completion-grain step-record/2 rows (the settle
+face's own rows, hash-only like the rest) plus ``read_step_grains`` are
+consumed by rlvr.step_grain — the step grain is the settlement grain.
+step-record/1 (the per-tool-call shadow rows) stays append-only shadow
+telemetry under its original posture. Event time rides the events —
 the replay of a session's amendment stream is a pure function of its
 evidence items and byte-identical to the recorded file.
 """
@@ -41,6 +50,7 @@ from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
 
 STEP_SCHEMA = "step-record/1"
+STEP_SCHEMA_V2 = "step-record/2"
 EVIDENCE_SCHEMA = "evidence-item/1"
 AMENDMENT_SCHEMA = "credit-amendment/1"
 INTERVENTION_SCHEMA = "intervention/1"
@@ -142,6 +152,58 @@ def record_step(ws, row: dict) -> dict | None:
 
 def read_steps(ws) -> list[dict]:
     return _read(STEP_LEDGER_REL, ws)
+
+
+# ------------------------------------ the completion grain (#690, step-record/2)
+
+_STEP_V2_KEYS = frozenset({
+    "schema", "ts", "session_id", "step_id", "claim_ref",
+    "tool_calls", "call_ids", "first_ts", "last_ts", "duration_ms"})
+
+
+def build_step_grain_row(*, session_id: str, claim_ref: str, step_id: str,
+                         call_ids, first_ts: str = "", last_ts: str = "",
+                         duration_ms=None,
+                         ts: str | None = None) -> dict:
+    """The completion-grain step-record/2 builder (#690): ONE row per
+    subagent completion, aggregating the session's per-tool-call rows.
+    ``call_ids`` are step-record/1 call_id hashes (hash-only preserved —
+    no content-bearing field exists in the whitelist); ``claim_ref`` rides
+    via the dispatch-launch mapping (rlvr.step_grain.settle_step)."""
+    ids = [str(c) for c in (call_ids or [])]
+    row = {
+        "schema": STEP_SCHEMA_V2,
+        "ts": ts or utc_now_z(),
+        "session_id": str(session_id or ""),
+        "step_id": str(step_id or ""),
+        "claim_ref": str(claim_ref or ""),
+        "tool_calls": len(ids),
+        "call_ids": ids,
+        "first_ts": str(first_ts or ""),
+        "last_ts": str(last_ts or ""),
+        "duration_ms": (float(duration_ms)
+                        if isinstance(duration_ms, (int, float)) else None),
+    }
+    assert set(row) <= _STEP_V2_KEYS
+    return row
+
+
+def record_step_grain(ws, row: dict) -> dict | None:
+    """Append one step-record/2 row. The v2 whitelist is re-enforced here —
+    a caller cannot smuggle a raw-content key into the ledger."""
+    clean = {k: row[k] for k in _STEP_V2_KEYS if k in row}
+    return _append(STEP_LEDGER_REL, clean, ws)
+
+
+def read_step_grains(ws, session_id: str | None = None) -> list[dict]:
+    """The completion-grain read face: every step-record/2 row (oldest
+    first), optionally scoped to one session."""
+    rows = [r for r in _read(STEP_LEDGER_REL, ws)
+            if r.get("schema") == STEP_SCHEMA_V2]
+    if session_id is None:
+        return rows
+    return [r for r in rows
+            if str(r.get("session_id") or "") == str(session_id)]
 
 
 # --------------------------------------------- the evidence-credit ledger

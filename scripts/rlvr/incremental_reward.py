@@ -106,7 +106,8 @@ def verify_credit(verdict: str) -> float:
 def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
                   s_hash: str = "", propensity: float | None = None,
                   action_type: str = "dispatch",
-                  variant: str = "") -> dict | None:
+                  variant: str = "",
+                  branch_budget: dict | None = None) -> dict | None:
     """Stash the launch-side state at dispatch time — the settle face
     reads it to close the transition. Fail-open telemetry: never raises
     into the dispatch path. #550: action_type scopes the stash (a verify
@@ -114,7 +115,12 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
     (verify | redteam) rides the doc for the row's provenance. 1-F2:
     every launch stamps a fresh ``attempt_id`` (returned with the
     doc) so a settle that outlived a re-dispatch is refused instead of
-    banking the newer launch's state (append_transition's guard)."""
+    banking the newer launch's state (append_transition's guard).
+    #690: the dispatch envelope's branch_budget ({wall_s, retries} — the
+    act budget, parsed since #539 with zero consumers) rides the stash so
+    the settle face can price a wall_s overrun into attributed-waste and
+    the barrier can name the budget it is enforcing. Absent/empty keeps
+    the doc shape byte-identical."""
     try:
         ws = Path(ws)
         p = _launch_path(ws, claim, action_type)
@@ -131,6 +137,9 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             **({"variant": str(variant)} if variant else {}),
             **({"propensity": float(propensity)}
                if propensity is not None else {}),
+            **({"branch_budget": {str(k): v for k, v in
+                                  dict(branch_budget).items()}}
+               if branch_budget else {}),
         }
         p.write_text(json.dumps(doc), encoding="utf-8")
         return doc

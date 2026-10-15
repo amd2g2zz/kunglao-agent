@@ -554,6 +554,11 @@ def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
     paths = _min_paths(ws)
     assert pre_check(payload, paths) == 0, capsys.readouterr().err
     _seed_live_heartbeat(ws)
+    # #690: the sync barrier — settle the approval point's step first
+    # (the real loop: the dispatched worker completes -> SubagentStop
+    # settles -> the re-dispatch attempt reaches the plan gate).
+    from rlvr import step_grain as _sg690
+    assert _sg690.settle_step(ws, 'sess-test') is not None
     rc = pre_check(_dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
         '"tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
@@ -787,6 +792,8 @@ REJECT_NAMES = [
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
     'granularity',  # issue 241: claim granularity discipline
     'methodfamily',  # #432: method-family vocabulary gate
+    'stepsettled',  # #690: settle->update->decide sync barrier
+    'branchbudget',  # #690: the branch act budget (retries)
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -812,6 +819,8 @@ REJECT_FIX_KEYWORDS = {
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
     'granularity': 'claim_granularity.py',  # issue 241: the mint entrypoint
     'methodfamily': 'method_families.yaml',  # #432: the registry path
+    'stepsettled': 'SubagentStop',  # #690: the settle face that lifts the barrier
+    'branchbudget': 'branch_budget',  # #690: the exhausted budget names itself
 }
 
 

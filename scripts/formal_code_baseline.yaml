@@ -10,15 +10,15 @@ files:
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 41
-  hooks/round_closure.py: 9
+  hooks/round_closure.py: 11
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
   hooks/user_signal_capture.py: 3
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 49
-  hooks/worker_budget_gates.py: 117
-  hooks/worker_budget_sinks.py: 107
+  hooks/worker_budget_gates.py: 122
+  hooks/worker_budget_sinks.py: 114
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -159,7 +159,7 @@ files:
   scripts/lane_spec.py: 2
   scripts/lessons_telemetry.py: 4
   scripts/lint_facts.py: 44
-  scripts/liveness_policy.py: 28
+  scripts/liveness_policy.py: 30
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
@@ -191,7 +191,7 @@ files:
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
   scripts/premise_gate.py: 3
-  scripts/priority_ratio.py: 111
+  scripts/priority_ratio.py: 112
   scripts/progress_report.py: 9
   scripts/progress_timeline.py: 7
   scripts/provider_health.py: 4
@@ -221,7 +221,7 @@ files:
   scripts/rlvr/compose.py: 17
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 13
+  scripts/rlvr/incremental_reward.py: 15
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/meta_arms.py: 8
@@ -233,6 +233,8 @@ files:
   scripts/rlvr/reward.py: 8
   scripts/rlvr/scalar.py: 22
   scripts/rlvr/state.py: 21
+  scripts/rlvr/step_grain.py: 8
+  scripts/rlvr/step_ledger.py: 5
   scripts/rlvr/strategy_store.py: 17
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15

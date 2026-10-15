@@ -322,6 +322,71 @@ def check_promotion_attempts(reg_path: Path, claim_id: str | None) -> tuple[bool
     return (True, f'promotion_attempts={pa}')
 
 
+# ---------- #690: the step grain — sync barrier + branch act budget ----------
+
+def _step_grain():
+    """rlvr.step_grain (the #690 settlement-grain module) — lazy import
+    (hooks/ precedes scripts/ on the hook sys.path; the hygiene authority
+    scopes the membership). Missing module = broken install, not a
+    degraded mode (#444 posture: hooks/ and scripts/ ship together)."""
+    from _path_hygiene import ensure_scripts_path
+    ensure_scripts_path()
+    from rlvr import step_grain
+    return step_grain
+
+
+def check_step_settled(paths: dict) -> tuple[bool, str]:
+    """#690 settle->update->decide sync barrier: REJECT while a prior
+    step (dispatch-launch stash) is unsettled — zero dispatches issued
+    against an open step. A stale pending step (SubagentStop never fired)
+    ADMITS via the fail-open line inside barrier_verdict (ONE warn); the
+    gate face itself never crashes the battery."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')
+    try:
+        ok, msg = _step_grain().barrier_verdict(Path(ws))
+    except Exception as exc:  # noqa: BLE001 — fail-open, never the verdict
+        warn('gate_error:step_settled', f'{type(exc).__name__}: {exc}')
+        return (True, '')
+    return (ok, msg)
+
+
+def check_branch_budget(paths: dict, claim_id: str | None,
+                        budget: dict) -> tuple[bool, str]:
+    """#690: branch_budget.retries is the branch ACT budget — once the
+    claim's independent dispatch_count reaches it, the next dispatch is
+    REJECTED (the hard constraint the parsed-but-unconsumed envelope
+    field was always meant to be). No budget dict / no claim / a
+    malformed retries value -> unconstrained (v1 envelopes stay
+    first-class via the envelope_v2_defaults back-fill)."""
+    if not budget or not claim_id:
+        return (True, '')
+    retries = budget.get('retries')
+    if isinstance(retries, bool):
+        return (True, '')
+    try:
+        retries_n = int(retries)
+    except (TypeError, ValueError):
+        return (True, '')  # malformed budget dim — unconstrained (fail-open)
+    if retries_n <= 0:
+        return (True, '')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')
+    try:
+        count = _step_grain().dispatch_count(Path(ws), claim_id)
+    except Exception as exc:  # noqa: BLE001 — fail-open read
+        warn('gate_error:branch_budget', f'{type(exc).__name__}: {exc}')
+        return (True, '')
+    if count >= retries_n:
+        return (False, f'branch_budget.retries={retries_n} exhausted for '
+                       f'{claim_id} (dispatch_count={count}) — the branch '
+                       f'act budget is spent; stop re-dispatching this '
+                       f'branch and mint a finer claim instead (#690)')
+    return (True, f'dispatch_count={count}/{retries_n}')
+
+
 # ---------- #604: MAX_RETRIES circuit breaker for silent worker failures ----------
 # Distinct from MAX_PROMOTION_ATTEMPTS (#520): #520 only counts PROVEN
 # promotion attempts on a claim. #604 counts WORKER-level silent-failure

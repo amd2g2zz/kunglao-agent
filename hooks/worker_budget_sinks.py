@@ -39,6 +39,8 @@ from worker_budget_gates import (
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
+    check_step_settled,  # #690: settle->update->decide sync barrier
+    check_branch_budget,  # #690: branch_budget.retries hard constraint
     register_worker, remove_worker,
     stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
@@ -111,6 +113,27 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'Run uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
             '(answer the 3 questions), record the next method, then re-dispatch '
             '- or mark the claim DEFERRED / supersede it.'
+        ),
+    },
+    'stepsettled': {
+        'additionalContext': (
+            'the #690 sync barrier: a prior step is unsettled - the last '
+            'dispatched worker has not completed (SubagentStop has not '
+            'settled its step). Fix: WAIT for the active worker to stop '
+            '(its SubagentStop settles the step and lifts the barrier), '
+            'then re-dispatch. If the worker is gone (crash/kill) the '
+            'barrier self-admits after the stale TTL '
+            '(liveness_policy.STEP_SETTLE_TTL_MINUTES) with a warn.'
+        ),
+    },
+    'branchbudget': {
+        'additionalContext': (
+            'the #690 branch act budget: branch_budget.retries is exhausted '
+            '(dispatch_count reached the envelope budget). Fix: STOP '
+            're-dispatching this branch - mint a FINE-GRAINED split claim '
+            'for the remaining sub-goal (claim_granularity / mint_split_claims) '
+            'and dispatch that instead; a stale budget needs a fresh envelope '
+            'with a larger branch_budget only after the failure analysis.'
         ),
     },
     'tools': {
@@ -765,7 +788,24 @@ def pre_check(payload: dict, paths: dict) -> int:
     # dispatch).
     verifier_remediation = _is_verifier_remediation_dispatch(
         paths.get('workspace'), cid, payload, prompt)
+    # #690: the v2 action tuple — branch_budget ({wall_s, retries}, the
+    # branch ACT budget) normalized through the ONE consumer face
+    # (envelope_v2_defaults): a v1 envelope back-fills to {} — the budget
+    # dims below treat absence as unconstrained, never as zero.
+    _budget = {}
+    try:
+        _pm = load_hooks_lib().parse_dispatch_json(prompt)
+        if isinstance(_pm, tuple) and len(_pm) == 4:
+            _budget = (load_hooks_lib().envelope_v2_defaults(_pm[3] or {})
+                       .get('branch_budget') or {})
+    except Exception:  # noqa: BLE001 - budget parse is advisory, fail-open
+        _budget = {}
     checks = [
+        # #690: the settle->update->decide sync barrier FIRST — zero
+        # dispatches issued while a prior step is unsettled (the grain
+        # fix's dispatch bound; the fail-open stale line lives inside
+        # barrier_verdict).
+        ('stepsettled', check_step_settled(paths)),
         ('workers', check_workers_lt_3(paths)),
         # issue #427: the #604 silent-failure circuit breaker graduates
         # from latent (built, never called by any enforcement path) to
@@ -781,6 +821,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('max_retries', check_max_retries(paths.get('workspace'),
                                           agent_name, cid)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
+        # #690: the branch act budget — the claim's independent
+        # dispatch_count vs the envelope's branch_budget.retries (NOT
+        # promotion_attempts: the dispatch counter the issue measured
+        # pinned at 0 across 7 live dispatches).
+        ('branchbudget', check_branch_budget(paths, cid, _budget)),
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
         ('deadline', check_deadline(paths['state'])),
@@ -940,6 +985,12 @@ def pre_check(payload: dict, paths: dict) -> int:
     # anchor stamp (single writer); a later REJECT in the chain rolls it
     # back (dispatch_gate -> reopen_claim_no_worker).
     _flip_claim_in_progress(paths, cid)
+    # #690: open the step at the approval point — (a) the launch stash
+    # (the settle face's claim mapping + the phi_before state; the
+    # branch_budget rides it for the wall_s pricing) and (b) the claim's
+    # independent dispatch_count accrual. Fail-open telemetry: never
+    # flips an already-approved dispatch.
+    _open_step(paths, cid, _budget, mf_value)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -974,6 +1025,31 @@ def _flip_claim_in_progress(paths: dict, cid: str | None) -> bool:
         return False
     except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
         return False
+
+
+def _open_step(paths: dict, cid: str | None, budget: dict,
+               method_family: str | None) -> None:
+    """#690: the approval-point step opener — record_launch stashes the
+    dispatch's phi_before + branch_budget (the settle face maps the
+    SubagentStop back to THIS claim through it) and bump_dispatch_count
+    accrues the claim's independent dispatch counter (register field the
+    rank feed surfaces). Fail-open with a stderr WARN: an approved
+    dispatch is never flipped by telemetry (the settle face degrades to
+    a no-stash warn, and the orphan sweep still sees nothing to eat)."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws or not cid:
+        return
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        from rlvr import incremental_reward as _ir690
+        from rlvr import step_grain as _sg690
+        _ir690.record_launch(ws, cid, method_family or 'dispatch',
+                             branch_budget=budget or None)
+        _sg690.bump_dispatch_count(ws, cid)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        print(f'[kunglao-agent] step-open WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
 def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:

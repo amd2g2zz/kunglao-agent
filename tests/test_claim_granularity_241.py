@@ -545,6 +545,11 @@ def test_pre_check_battery_rejects_granularity(tmp_path, capsys):
     assert sinks.pre_check(_payload(_dispatch_prompt()), paths) == 0, \
         capsys.readouterr().err
     _seed_live_heartbeat(ws)
+    # #690: settle the approval point's step first (the real loop: the
+    # worker completes -> SubagentStop settles -> the re-dispatch reaches
+    # the granularity gate instead of the sync barrier).
+    from rlvr import step_grain as _sg690
+    _sg690.settle_step(ws, 'sess-test')
     anchor_ts = json.loads(
         (ws / 'runs' / '.dispatch-anchor-C001.jsonl')
         .read_text(encoding='utf-8').splitlines()[-1])['ts']

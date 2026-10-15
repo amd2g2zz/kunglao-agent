@@ -257,7 +257,7 @@ files:
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 26
+    r1: 28
   scripts/log_setup.py:
     r1: 1
   scripts/loop_holds.py:
@@ -313,7 +313,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 56
+    r1: 57
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -389,6 +389,10 @@ files:
     r1: 1
   scripts/rlvr/state.py:
     r1: 1
+  scripts/rlvr/step_grain.py:
+    r1: 6
+  scripts/rlvr/step_ledger.py:
+    r1: 3
   scripts/rlvr/strategy_store.py:
     r1: 9
   scripts/rlvr/triples.py:
@@ -608,6 +612,8 @@ files:
   tests/test_challenge_ledger_909.py:
     r1: 1
   tests/test_changelog.py:
+    r1: 1
+  tests/test_claim_granularity_241.py:
     r1: 1
   tests/test_classification_collapse_581.py:
     r1: 1
@@ -1195,6 +1201,8 @@ files:
     r1: 2
   tests/test_plan_drift_unverified.py:
     r1: 1
+  tests/test_plan_first_ownership_239.py:
+    r1: 4
   tests/test_plan_stages_822.py:
     r1: 1
   tests/test_plugin_manifest.py:
@@ -1405,6 +1413,8 @@ files:
     r1: 4
   tests/test_stale_workspace_gate_748.py:
     r1: 1
+  tests/test_stalled_remedy_full_cycle_249.py:
+    r1: 2
   tests/test_state_anchor.py:
     r1: 6
   tests/test_state_anchor_hyp_pointers_528.py:
@@ -1427,6 +1437,8 @@ files:
     r1: 10
   tests/test_statusline_v2_142.py:
     r1: 9
+  tests/test_step_grain_690.py:
+    r1: 1
   tests/test_strategy_compose_431.py:
     r1: 4
   tests/test_structural_check.py:
@@ -1590,7 +1602,7 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 48
+    r1: 53
     r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7

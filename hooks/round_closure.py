@@ -19,6 +19,15 @@ distillation capability the closure also scans the report surface for
 shelf-miss signals (marker / unknown-format probe) and stamps the
 trigger state the orchestrator's tick consumes.
 
+Issue #690 makes the closure the SETTLEMENT POINT (step := one subagent
+completion): the first kernel face settles the pending step — the
+session's tool-call rows aggregate into one step-record/2 row, the
+transition closes via incremental_reward.append_transition (the
+production caller that did not exist before), and a branch_budget.wall_s
+overrun lands in attributed-waste — BEFORE compose decides, so the
+strategy object always sees post-settlement state (settle -> update ->
+decide). No pending step (a non-worker subagent stop) writes nothing.
+
 The closure ALSO carries the RL digest face (round-closure visibility):
 one ``{"systemMessage": "RL: lead=..."}`` line on stdout — the Claude
 Code user-facing hook message field — so the operator's scrolling
@@ -82,16 +91,26 @@ def process_event(payload: dict) -> int:
                 detail=json.dumps(detail, ensure_ascii=False))
     except Exception as exc:  # noqa: BLE001 — recorder, never blocks
         warn("round_closure", f"{type(exc).__name__}: {exc}")
-    _kernel_faces(ws)
+    _kernel_faces(ws, session_id=str(payload.get("session_id") or ""))
     return 0
 
 
-def _kernel_faces(ws: Path) -> None:
-    """The production round-closure kernel faces (closure kernel + RL digest).
+def _kernel_faces(ws: Path, session_id: str = "") -> None:
+    """The production round-closure kernel faces (step settlement + closure kernel + RL digest).
 
     Stop(worker) IS the round-closure event (#429 §6), so this hook now
     hosts what until now fired only from eval_loop_runner:
 
+      - #690 step settlement (FIRST face — settle -> update -> decide):
+        the pending step settles here — session tool-call rows aggregate
+        into one step-record/2 row (claim_ref via the dispatch-launch
+        mapping), the transition closes via
+        incremental_reward.append_transition (the production caller),
+        and a branch_budget.wall_s overrun lands in attributed-waste.
+        Compose below therefore always reads post-settlement state, and
+        the dispatch-gate barrier (worker_budget_gates.check_step_settled)
+        lifts exactly when this face consumed the stash. No pending step
+        = a non-worker subagent stop = nothing written, nothing warned.
       - W6: the T2 unblocking-value priority queue builds AND drains
         here (verification_ladder.round_close + drain_t2_queue) — a
         production round consumes its queue head, not just the eval
@@ -124,6 +143,15 @@ def _kernel_faces(ws: Path) -> None:
     Fail-open double cage: each face is wrapped separately — a kernel
     failure is one rate-limited warn and never disturbs the subagent's
     own stop path."""
+    # #690: the step settlement — SubagentStop IS the step boundary, and
+    # it runs FIRST so every decision face below sees post-settlement
+    # state (settle -> update -> decide). Silent when no step is pending.
+    try:
+        with scripts_on_path():
+            from rlvr import step_grain
+            step_grain.settle_step(ws, session_id)
+    except Exception as exc:  # noqa: BLE001 — settle face, never blocks
+        warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
     try:
         with scripts_on_path():
             import priority_ratio  # the round axis (machine-independent)
