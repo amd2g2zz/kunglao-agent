@@ -285,6 +285,7 @@ EMIT_ACTIONS = [
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
+    "recipe_deviation",   # #695 declared tool-chain recipe != the gate's own arm draw (recorded decision, never a reject; registered/unregistered + reason ride detail)
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face

@@ -134,6 +134,46 @@ CITED_DELIVERABLE_SUFFIXES = frozenset({".md", ".txt", ".yaml", ".yml"})
 FACT_ID_CITE_RE = re.compile(r"\bF\d{3}\b")
 DEMOTION_CITED_OVER_CAP = "cited_over_cap"
 
+# --- settlement fairness: the sorted observation face -----------------------
+#
+# The banked ladder receipt stays the ladder value; cost enters ONLY the
+# r_sorted companion (r_sorted = r_ladder - LAMBDA * cost), an
+# ordering/observation field for downstream consumers. The offline spike
+# measured the cost term as tie-breaking power alone (Spearman 0.929
+# against the ladder ordering) — so it prices the receipt never: same
+# output at higher cost ranks lower on r_sorted, settles identically on
+# reward. LAMBDA is a documented policy constant, not a fitted parameter
+# (the state.py precedent). Cost is the caller's normalized units —
+# token/hour scale constants live with the transition ledger
+# (rlvr.incremental_reward COST_TOKENS_DIV / COST_SECONDS_DIV).
+SORT_COST_LAMBDA = 1.0
+
+# The branch_budget hard constraint's settlement face: overrun is waste
+# in the SAME unit as the ladder (1.0 = one full-credit artifact). Wall
+# overrun normalizes at the transition ledger's hour scale (one wasted
+# wall-hour = one waste unit); each retry over the declared budget books
+# one waste unit. Both dimensions are measured facts — a budget without
+# a usage (or the reverse) cannot overrun and books nothing.
+BUDGET_RETRY_WASTE_UNIT = 1.0
+# cross-linked by comment, not import (the dead_letter.DLQ_ATTEMPTS
+# precedent): rlvr.incremental_reward.COST_SECONDS_DIV is the same
+# hour scale — one value per repo, restated here only because the
+# scalar engine's import allowlist stays intra-package-rlvr minimal.
+BUDGET_WALL_DIV = 3_600.0
+
+# outcome_class vocabulary — the act-outcome taxonomy the strategy
+# learning faces book against. BLOCKED is the environment refusing the
+# act (the measured noise source: infra outcomes dominating clean
+# strategy failures); TIMEOUT is right-censored (the end was never
+# observed); everything else is the strategy's own outcome. Conservative
+# membership: only BLOCKED classifies infra — a crashed or failed act
+# still carries strategy signal, a refused act carries none.
+OUTCOME_STRATEGY = "strategy"
+OUTCOME_INFRA = "infra"
+OUTCOME_CENSORED = "censored"
+INFRA_OUTCOMES = frozenset({"BLOCKED"})
+CENSORED_OUTCOMES = frozenset({"TIMEOUT"})
+
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
 TIER_BRONZE = "BRONZE"
@@ -439,6 +479,82 @@ def _artifact_credit(artifact: dict) -> tuple[float, str | None]:
     return 0.0, None
 
 
+def classify_outcome(o_status: str) -> str:
+    """The outcome_class of one act outcome: censored (TIMEOUT — the end
+    was never observed), infra (BLOCKED — the environment refused the
+    act; no strategy signal), strategy (everything else). Pure; the
+    strategy-learning faces book against this, never raw status words."""
+    s = str(o_status or "").strip().upper()
+    if s in CENSORED_OUTCOMES:
+        return OUTCOME_CENSORED
+    if s in INFRA_OUTCOMES:
+        return OUTCOME_INFRA
+    return OUTCOME_STRATEGY
+
+
+def budget_overrun(branch_budget, usage) -> float:
+    """The branch_budget hard constraint's settlement face: attributed
+    waste from exceeding a declared budget. Wall overrun normalizes at
+    the transition ledger's hour scale (one wasted wall-hour = one waste
+    unit, same unit as the ladder); each retry over the declared budget
+    books one waste unit. Both dimensions must be measured — a budget
+    without a usage (or the reverse) books nothing (the honest gap).
+    Non-mapping inputs book nothing. Never raises."""
+    if not isinstance(branch_budget, dict) or not isinstance(usage, dict):
+        return 0.0
+    waste = 0.0
+    cap = branch_budget.get("wall_s")
+    used = usage.get("wall_s")
+    if isinstance(cap, (int, float)) and not isinstance(cap, bool) \
+            and isinstance(used, (int, float)) and not isinstance(used, bool):
+        if used > cap:
+            waste += (float(used) - float(cap)) / BUDGET_WALL_DIV
+    retries_cap = branch_budget.get("retries")
+    retries_used = usage.get("retries")
+    if isinstance(retries_cap, (int, float)) \
+            and not isinstance(retries_cap, bool) \
+            and isinstance(retries_used, (int, float)) \
+            and not isinstance(retries_used, bool):
+        if retries_used > retries_cap:
+            waste += (float(retries_used) - float(retries_cap)) \
+                * BUDGET_RETRY_WASTE_UNIT
+    return waste
+
+
+def _credit_row(d: dict, credited_by: dict, demoted_by: dict,
+                waste_by: dict, overrun_by: dict) -> dict | None:
+    """One dispatch's round-credit row: the cited cap (deterministic
+    id-sort selection — the first CITED_CAP_DEFAULT cited artifacts
+    keep FULL, the excess joins the demotion face under the named
+    reason), ONE trace total per demotion CLASS present, waste
+    subtracted, and the additive-when-present fairness seams
+    (r_sorted from a carried cost; budget_overrun when the dispatch
+    overran its branch_budget). None when the dispatch id is empty."""
+    did = str(d.get("dispatch_id") or "")
+    if not did:
+        return None
+    full_sorted = sorted(credited_by[did])
+    credited = full_sorted[:CITED_CAP_DEFAULT]
+    over_cap = full_sorted[CITED_CAP_DEFAULT:]
+    demoted = demoted_by[did] + [
+        {"id": aid, "reason": DEMOTION_CITED_OVER_CAP}
+        for aid in over_cap]
+    trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
+    r = float(len(credited)) + trace_total - waste_by[did]
+    row = {"dispatch_id": did,
+           "round": d.get("round"),  # ordering info ONLY
+           "credited": credited,
+           "demoted": demoted,
+           "waste": waste_by[did],
+           "r": r}
+    cost = d.get("cost")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        row["r_sorted"] = round(r - SORT_COST_LAMBDA * float(cost), 6)
+    if did in overrun_by:
+        row["budget_overrun"] = round(overrun_by[did], 6)
+    return row
+
+
 def round_credit(dispatches: list[dict], artifacts: list[dict],
                  waste: list[dict] | None = None) -> dict:
     """Pure round-credit core: per-dispatch
@@ -456,7 +572,15 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
     WHY the credit is low. The cap (issue 438) bounds the cited FULL
     face per row at CITED_CAP_DEFAULT (deterministic id-sort selection);
     the excess demotes under ``cited_over_cap`` and stays rescue-eligible
-    through the late-cite amendment path."""
+    through the late-cite amendment path.
+
+    Settlement-fairness seams (additive-when-present, byte-identical
+    when absent): a dispatch dict may carry ``cost`` (caller-normalized
+    units) — the row then gains ``r_sorted = r - SORT_COST_LAMBDA *
+    cost``, the ordering/observation face (the banked ``r`` never
+    moves); a dispatch dict may carry ``branch_budget`` + ``usage`` —
+    an overrun books attributed waste (``budget_overrun`` on the row,
+    folded into ``waste`` and subtracted from ``r``)."""
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or []) if d.get("dispatch_id")]
     known = set(dispatch_ids)
@@ -484,33 +608,21 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
             waste_by[wid] += 1.0
         else:
             unattributed_waste += 1.0
-    rows = []
+    # the branch_budget hard constraint: an overrun is ATTRIBUTED waste
+    # (the dispatch id is known by construction) — new dict, credited/
+    # demoted_by stay untouched (the immutability posture).
+    overrun_by: dict[str, float] = {}
     for d in (dispatches or []):
         did = str(d.get("dispatch_id") or "")
-        if not did:
+        if not did or did not in waste_by:
             continue
-        # issue 438 per-dispatch cited cap: deterministic id-sort
-        # selection — the first CITED_CAP_DEFAULT cited artifacts keep
-        # FULL, the excess joins the demotion face under the named
-        # reason (class semantics, same audit shape as the uncited
-        # demotion). New lists throughout — credited_by/demoted_by are
-        # never mutated here.
-        full_sorted = sorted(credited_by[did])
-        credited = full_sorted[:CITED_CAP_DEFAULT]
-        over_cap = full_sorted[CITED_CAP_DEFAULT:]
-        demoted = demoted_by[did] + [
-            {"id": aid, "reason": DEMOTION_CITED_OVER_CAP}
-            for aid in over_cap]
-        # ONE trace total per demotion CLASS present (a class demotion,
-        # never a per-unit price — the farming gradient dies at any N)
-        trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
-        rows.append({"dispatch_id": did,
-                     "round": d.get("round"),  # ordering info ONLY
-                     "credited": credited,
-                     "demoted": demoted,
-                     "waste": waste_by[did],
-                     "r": float(len(credited)) + trace_total
-                     - waste_by[did]})
+        over = budget_overrun(d.get("branch_budget"), d.get("usage"))
+        if over > 0:
+            waste_by[did] += over
+            overrun_by[did] = over
+    rows = [row for d in (dispatches or [])
+            if (row := _credit_row(d, credited_by, demoted_by,
+                                   waste_by, overrun_by)) is not None]
     return {"rows": rows, "untraced": untraced,
             "unattributed_waste": unattributed_waste}
 
@@ -582,6 +694,14 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
+        # additive-when-present fairness seams: the sorted observation
+        # face (never the banked reward) and the budget-overrun audit
+        # trail ride the settlement only when the dispatch carried the
+        # inputs — legacy rows stay byte-identical.
+        if "r_sorted" in row:
+            settlement["r_sorted"] = row["r_sorted"]
+        if "budget_overrun" in row:
+            settlement["budget_overrun"] = row["budget_overrun"]
         prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
         late_cited = prior_late + [
             aid for aid in row["credited"]

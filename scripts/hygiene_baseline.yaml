@@ -160,7 +160,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 119
+    r1: 120
     r2: 1
   scripts/exogenous.py:
     r1: 2
@@ -315,7 +315,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 59
+    r1: 55
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -386,7 +386,9 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 39
+    r1: 47
+  scripts/rlvr/recipe_arms.py:
+    r1: 8
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
@@ -1273,6 +1275,8 @@ files:
     r1: 5
   tests/test_recall_quality_814.py:
     r1: 1
+  tests/test_recipe_arms_695.py:
+    r1: 11
   tests/test_reconcile_workers.py:
     r1: 6
   tests/test_record_event_concurrent.py:
