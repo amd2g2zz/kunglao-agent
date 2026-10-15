@@ -171,7 +171,7 @@ files:
   - src: scripts/action_space.py
     dest: .claude/scripts/action_space.py
     kind: scaffold
-    sha256: 07ea5e7ce9a2aa01c77db6f230bfea9c514b34a95e972a4221a309effac8b489
+    sha256: 5ccf3cc3182e71adb8ffe539373c8bdf73c21a4beb78e146846f70dfdc044855
   - src: scripts/active_intervention.py
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
@@ -660,6 +660,10 @@ files:
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
     sha256: c2c18f80e8321d950662dfdb1db97643afdef000ed52794ed132fdbf7f792660
+  - src: scripts/intelligent_scheduling.py
+    dest: .claude/scripts/intelligent_scheduling.py
+    kind: scaffold
+    sha256: 781a3a38242b9941566b62a16f99452536da9e684b751bb6fe0e764268d99c4a
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
@@ -1056,6 +1060,10 @@ files:
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
     sha256: 96b3b410be5559d45e347a259b485f8fba717502d413f0426fe4dd112835f879
+  - src: scripts/scheduling_selection.py
+    dest: .claude/scripts/scheduling_selection.py
+    kind: scaffold
+    sha256: 24531516c2ea64c1ac20888ead66e6b0d58262a0f0c0b44bf54f0f99a7c73d1f
   - src: scripts/script_harvest.py
     dest: .claude/scripts/script_harvest.py
     kind: scaffold
@@ -1991,7 +1999,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3f532264a7305509c01f8c38ff8705b72eb96477cbb686d53bccc301eb84d319
+    sha256: 9d5d4ec9ae6c25aeba9954364b9de30d8738e9108cfcdb016cd078b6de21c85c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
