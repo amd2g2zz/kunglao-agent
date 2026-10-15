@@ -30,6 +30,7 @@ MANIFEST_AGENTS = {
     "pefile-signature.md", "go-symbols.md",
     "verdict-scorer.md", "kunglao-init-worker.md",
     "web-re-worker.md",  # issue #760 web RE specialist
+    "kunglao-settler.md",  # issue-687 blind settlement subagent
 }
 ROUTER_SUBS = ["decide", "tick", "verify", "record", "health"]
 

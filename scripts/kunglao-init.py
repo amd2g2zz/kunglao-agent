@@ -1920,6 +1920,8 @@ ROLE_DISPATCH: dict[str, str] = {
         "attack-test a claim before it is promoted to PROVEN",
     "verdict-scorer":
         "score verdict.json against task_spec primary_questions",
+    "kunglao-settler":
+        "blind step settlement from raw artifacts (never producer narrative)",
     "web-re-worker":
         "web/browser JS claims (unpack, deobfuscate, signed parameters)",
     "ghidra-light":

@@ -78,6 +78,7 @@ tool means you have left the orchestrator role — hand the work to an agent.
 | `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
 | `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis (both the claim layer… | attack-test a claim before it is promoted to PROVEN |
 | `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `kunglao-settler` | BLIND SETTLEMENT SUBAGENT — the independent settler that turns raw step artifacts into… | blind step settlement from raw artifacts (never producer narrative) |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
 | `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
 | `go-symbols` | Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go) | Go symbol recovery when die.json reports language=Go |
