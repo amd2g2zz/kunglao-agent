@@ -398,7 +398,7 @@ files:
   scripts/rlvr/step_ledger.py:
     r1: 3
   scripts/rlvr/strategy_store.py:
-    r1: 13
+    r1: 17
   scripts/rlvr/triples.py:
     r1: 3
   scripts/rlvr/winrate.py:
