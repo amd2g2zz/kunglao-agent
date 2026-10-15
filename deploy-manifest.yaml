@@ -507,7 +507,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 1a7cfd35b7223e0a8d654a14c4fc7993d757e61ee94523937909c76ccb4d94be
+    sha256: b5aec4cc900f5b4aab64b79cd6532d02935b4d7e31f2bbc5576193041310b74f
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -1323,7 +1323,11 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: a14973536291f82e4065955721541392bda3864eab3863ee7d300a72da8f65ba
+    sha256: 715fe1244eca1244775e761dc320b6e8e60a0445a53a604d22ef4db2999e0fbc
+  - src: scripts/rlvr/recipe_arms.py
+    dest: .claude/scripts/rlvr/recipe_arms.py
+    kind: scaffold
+    sha256: 577e6579e55f1fbc588b9b22af9bf9148834f8abe4f7f02ce96c711466f88ba9
   - src: scripts/rlvr/refutation_fold.py
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
@@ -1379,11 +1383,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: aae820731c15a56d3e417db044be4f9658f9753d5c7948914a1278874c038ac3
+    sha256: e86e35894fcac1e4b661b9889fa3f041488192730772aaa7208b2dcaea8713f0
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: b039b8c59ae39a9f68df990f9cc17863c10ae0a8eb97d9011d4a71926fe5dd46
+    sha256: 53b8b7baa08eb02fdf9ef1a4f4671a57e62008dcba37a2f207c09d7933fce745
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
