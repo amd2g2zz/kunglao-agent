@@ -90,11 +90,33 @@ map):
   data-driven) and decays under honest verification streaks. Reads the
   transition ledger plus the keyed posterior store, so a second
   workspace with the same signature inherits the raised density.
+
+- ``rlvr.constants_ref`` — the reference hash constant tables (MD5 /
+  SHA-1 / SHA-256 / SM3 IV + round constants, standard definitions
+  cross-checked against hashlib): the mechanical constant-set diff
+  ``classify`` that separates a reference table from a MUTATED
+  variant while still identifying its family.
+
+- ``rlvr.invariants`` — the invariant-pruning operator: feasibility
+  check of a candidate's predictions against observed facts on disk
+  (output length, loop bounds, alignment) BEFORE an attempt is spent;
+  inconclusive (unpredicted) dimensions never reject.
+
+- ``rlvr.hypotheses`` — layer-scoped hypotheses + CEGAR-shaped
+  counterexample refinement: ``refine_on_mismatch`` localizes a
+  recorded mismatch to the family / primitive / composition layer and
+  names the re-search sub-space; ``mint_hypothesis`` registers
+  hypotheses at their falsifiable layer; ``layer_death_cells`` keys
+  termination accounting (kind, family, layer); ``covering_matrix``
+  wires the t-way covering machinery into the search side.
 """
 from __future__ import annotations
 
 from . import compose
+from . import constants_ref
 from . import feature_prior
+from . import hypotheses
+from . import invariants
 from . import ledger
 from . import liveness
 from . import obstacles
@@ -286,8 +308,11 @@ from .termination import (
 __all__ = [
     # modules
     "compose",
+    "constants_ref",
     "expansion",
     "feature_prior",
+    "hypotheses",
+    "invariants",
     "ledger",
     "liveness",
     "obstacles",
