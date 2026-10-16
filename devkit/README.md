@@ -113,6 +113,16 @@ uv run python -m pytest tests/test_devkit_*.py
 - devkit/githooks/ 里的 hook 模板**必须** 含 `__KUNGLAO_DEVKIT_ROOT__` 占位符
   (不允许 hardcode 路径 — installer 才会 stamp)
 
+## 调试与日志分析工具优先级
+
+debug 和日志分析**优先使用 GitNexus 与 MotherDuck MCP(DuckDB)**进行分析;
+未安装时先安装再分析,不要徒手 grep 大体量日志:
+
+```bash
+claude mcp add --scope user duckdb --transport stdio -- \
+  uvx mcp-server-motherduck --db-path :memory: --read-write --allow-switch-databases
+```
+
 ## 见
 
 - `devkit/docs/quality_gates.md` — 质量门框架定义
