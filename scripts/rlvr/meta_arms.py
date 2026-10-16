@@ -109,7 +109,7 @@ def mc_propensity(rows: list[dict], chosen: str, families: list[str],
                     and str(r.get("method_family")) == fam):
                 s += float(r.get("credit"))
                 t += 1
-        # issue 731 audit fix: the log may carry signed credit_amendment
+        # the log may carry signed credit_amendment
         # rows — floor the Beta parameters at the +1.0 prior so a
         # clawback stream can never drive them ≤ 0 (betavariate would
         # raise, and the fail-open caller would silently drop the OPE

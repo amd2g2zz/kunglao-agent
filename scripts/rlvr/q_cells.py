@@ -203,8 +203,8 @@ OBSERVATION_BAND_CEIL = 0.05
 # signal — a signed clawback would poison the schedule).
 CREDIT_KIND_STEP = "step"
 CREDIT_KIND_STEP_CALIBRATION = "step_calibration"
-#: issue 731: a ledger correction rides the SAME signed-delta semantics as
-#: the issue 712 residual — the two kinds share one definition so the fold,
+#: a ledger correction rides the SAME signed-delta semantics as
+#: the step-residual semantics — the two kinds share one definition so the fold,
 #: the EMA exclusion, the append boundary and the mass read cannot drift.
 CREDIT_KIND_CREDIT_AMENDMENT = "credit_amendment"
 SIGNED_CREDIT_KINDS = (CREDIT_KIND_STEP_CALIBRATION,
@@ -1126,8 +1126,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # above already refused every other home).
     if failure_delta_out is not None:
         row["failure_delta"] = failure_delta_out
-    # issue 731: the amendment's audit reason — emitted ONLY when set (the
-    # issue 705/issue 695 emission discipline: absent = byte-identical row).
+    # the amendment audit reason — emitted ONLY when set (the
+    # the established emission discipline: absent = byte-identical row).
     if reason:
         row["reason"] = str(reason)
     appended = _cl.append(ws, "experience", row)
@@ -1267,7 +1267,7 @@ def _bank_matched(ws, did: str, match: dict, credit, *,
     the shared result dict (the #712 faces' common tail: same keys
     observe_settlement returns, so callers — strategy store, case-
     posterior leg — read one shape). ``reason`` rides the row only when
-    set (the issue 731 amendment audit face)."""
+    set (the amendment audit face)."""
     out = append_observation(ws, str(match.get("signature_hash")),
                              str(match.get("method_family")), credit,
                              source=("credit-amendment"
@@ -1293,7 +1293,7 @@ def _bank_matched(ws, did: str, match: dict, credit, *,
 
 
 def _match_banked_row(ws, dispatch_id: str) -> dict | None:
-    """issue 731: the LATEST banked row (settlement or amendment source)
+    """The LATEST banked row (settlement or amendment source)
     carrying this identity — the prune-safe identity fallback. A
     pruned dispatch row never orphans a correction: the banked row's
     own signature/method_family/arm_key ARE the cell address."""
@@ -1313,9 +1313,9 @@ def _match_banked_row(ws, dispatch_id: str) -> dict | None:
 
 
 def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
-    """issue 731: ``(success, failure, n_rows)`` the fold has banked for this
+    """(success, failure, n_rows) — the fold has banked the fold has banked for this
     identity — the amendment's operand, read from the SAME append-only
-    log the fold consumes (issue 712 posture: what actually banked, never a
+    log the fold consumes (the residual posture: what actually banked, never a
     parallel tally that could drift). Solve rows contribute their
     tiebroken credit (a band-valued row is the information option:
     zero mass, existence only); verification rows are inadmissible to
@@ -1363,7 +1363,7 @@ def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
 
 
 def _mass_targets(credit) -> tuple[float, float]:
-    """The band-aware mass endpoint of one ladder value (the issue 712
+    """The band-aware mass endpoint of one ladder value (the step-residual
     target half, single-sourced for the amendment face): clamp01, and a
     band-valued value is the information option — (0, 0). Both halves
     are rounded to 6 dp — the SAME grid the banked read and the delta
@@ -1378,9 +1378,9 @@ def _mass_targets(credit) -> tuple[float, float]:
 
 def amend_settlement(ws, dispatch_id: str, target_credit,
                      *, reason: str | None = None) -> dict:
-    """issue 731: the ledger-correction face — move a dispatch's banked mass
+    """The ledger-correction face — move a dispatch's banked mass
     to the corrected ladder value with ONE signed ``credit_amendment``
-    row (same verbatim semantics as the issue 712 residual; rows carry
+    row (same verbatim semantics as the residual semantics; rows carry
     ``source: "credit-amendment"`` so settlement-keyed ad-hoc readers —
     the e2e repeat-failure feed, the proposal priors — stay blind).
 
@@ -1389,7 +1389,7 @@ def amend_settlement(ws, dispatch_id: str, target_credit,
     zero-rounded delta appends NOTHING — idempotent by construction, a
     re-run converges because the amendment row itself enters the next
     read. Identity, strongest-first: the pending dispatch row (the
-    issue 712 face), else the latest banked row's own signature (a pruned
+    pending-dispatch face), else the latest banked row's own signature (a pruned
     dispatch row never orphans a correction); neither → the honest
     gap. Fail-open: telemetry never breaks settlement."""
     did = str(dispatch_id or "")

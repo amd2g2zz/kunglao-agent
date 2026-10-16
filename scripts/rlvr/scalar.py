@@ -639,7 +639,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     "unattributed_waste", "banked", "amended"} — ``banked`` lists the
     dispatch ids whose FIRST settlement rode this pass (the learning
     clock's tick); replays and the late-cite amendment path report
-    none. ``amended`` (issue 731) lists the dispatch ids whose bank was
+    none. ``amended`` lists the dispatch ids whose bank was
     corrected to a moved ledger value or whose missed first bank was
     repaired — the learning signal tracking the ledger."""
     ws = Path(ws)
@@ -735,7 +735,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
-        # issue 731: the bank tracks the LEDGER, not the first write.
+        # the bank tracks the LEDGER, not the first write.
         # Every already-settled dispatch reconciles (replays included,
         # so a bank that failed on pass 1 is repaired whatever the
         # ledger says); the repair/amendment NEVER reports into
@@ -750,7 +750,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # leg keys on exactly this set, so a replay or late-cite
             # amendment additively reports none
             "banked": banked,
-            # issue 731: the dispatches whose bank was corrected or repaired
+            # the dispatches whose bank was corrected or repaired
             # on this pass (the learning signal tracking the ledger)
             "amended": amended}
 
@@ -783,7 +783,7 @@ def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
 
 
 def _reconcile_q_cell_bank(ws, row: dict) -> bool:
-    """issue 731: the bank tracks the LEDGER, not the first write. Two faces
+    """The bank tracks the LEDGER, not the first write. Two faces
     behind one guard: a bank that never landed (no settlement-source
     rows) gets the full first bank via the q-cell faces DIRECTLY —
     never ``_bank_q_cell_credit``, whose strategy-store and L1 legs

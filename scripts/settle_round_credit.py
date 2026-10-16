@@ -420,7 +420,7 @@ def _round_credit_pass(ws: Path, dispatches: list[dict], *,
             # the first-settled dispatch ids (the case-posterior leg's
             # key set; run() consumes it and reports the count)
             "banked": [str(d) for d in (res.get("banked") or [])],
-            # issue 731: the corrected/repaired dispatch ids (run() consumes
+            # the corrected/repaired dispatch ids (run() consumes
             # it and reports the count)
             "amended": [str(d) for d in (res.get("amended") or [])]}
 
