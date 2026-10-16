@@ -1487,7 +1487,9 @@ def _read_jsonl(path: Path) -> list[dict]:
         return []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except OSError as exc:
+        warn("qcell_log_read",
+             f"{type(exc).__name__}: {exc} — log reads as empty")
         return []
     return [r for r in iter_jsonl(text.splitlines())
             if isinstance(r, dict)]

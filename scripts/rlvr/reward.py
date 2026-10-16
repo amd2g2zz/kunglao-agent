@@ -325,14 +325,20 @@ def _lesson_frontmatter(path: Path) -> dict:
     own parsing posture)."""
     try:
         parts = path.read_text(encoding="utf-8", errors="replace").split("---", 2)
-    except OSError:
+    except OSError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("lesson_read",
+             f"{type(exc).__name__}: {exc} — lesson reads as empty")
         return {}
     if len(parts) < 3:
         return {}
     try:
         meta = yaml.safe_load(parts[1])
         return meta if isinstance(meta, dict) else {}
-    except yaml.YAMLError:
+    except yaml.YAMLError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("lesson_frontmatter",
+             f"{type(exc).__name__}: {exc} — frontmatter reads as empty")
         return {}
 
 

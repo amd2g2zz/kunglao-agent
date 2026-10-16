@@ -95,7 +95,10 @@ def _parse_ts(value) -> datetime | None:
             continue
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
+    except ValueError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("worker_death_ts_parse",
+             f"{type(exc).__name__}: {exc!r} — ts reads as None")
         return None
 
 
@@ -151,7 +154,10 @@ def dispatch_anchor(ws: Path, root: Path, claim: dict) -> tuple[datetime | None,
                 ts = _parse_ts(json.loads(p.read_text(encoding="utf-8")).get("dispatch_ts"))
                 if ts is not None:
                     return ts, "dispatch_context"
-        except (OSError, ValueError, json.JSONDecodeError):
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            from kunglao_log import warn  # noqa: PLC0415 — canonical face
+            warn("worker_death_dispatch_context",
+                 f"{type(exc).__name__}: {exc} — context skipped")
             continue
     for field, kind in (("dispatched_at", "claim_dispatched_at"),
                         ("created_at", "claim_created_at")):

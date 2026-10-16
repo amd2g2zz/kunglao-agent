@@ -132,7 +132,10 @@ class JSONLStore:
         try:
             text = self.path.read_text(encoding="utf-8",
                                        errors="replace")
-        except OSError:
+        except OSError as exc:
+            from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+            warn("l1_value_log_read",
+                 f"{type(exc).__name__}: {exc} — log reads as empty")
             return []
         return [row for row in iter_jsonl(text.splitlines())
                 if isinstance(row, dict)]

@@ -1388,7 +1388,10 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
         return {}
     try:
         data = yaml.safe_load(index_path.read_text(encoding='utf-8')) or {}
-    except yaml.YAMLError:
+    except yaml.YAMLError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("tool_index_read",
+             f"{type(exc).__name__}: {exc} — curated keys reset")
         _CURATED_TRIGGER_KEYS = frozenset()
         return {}
     out: dict[str, str] = {}

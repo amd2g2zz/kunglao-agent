@@ -345,7 +345,9 @@ def dispatch_count(ws, claim: str) -> int:
             if str(c.get("id") or "") == str(claim):
                 try:
                     return int(c.get("dispatch_count") or 0)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError) as exc:
+                    warn("step_grain_dispatch_count",
+                         f"{type(exc).__name__}: {exc} — count reads as 0")
                     return 0
         return 0
     except Exception as exc:  # noqa: BLE001 — fail-open read
