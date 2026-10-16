@@ -528,7 +528,12 @@ class PosteriorStrategyStore:
         fp = str(state_fingerprint)
         return sum(1 for row in rows
                    if isinstance(row, dict)
-                   and str(row.get("signature_hash") or "") == fp)
+                   and str(row.get("signature_hash") or "") == fp
+                   # a credit_amendment row corrects an
+                   # existing observation — it is not a new one, and the
+                   # n_min evidence gate must not count it.
+                   and str(row.get("credit_kind") or "")
+                   != "credit_amendment")
 
     # ------------------------------------------------------------ internals
 

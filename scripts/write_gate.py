@@ -184,7 +184,10 @@ def _register_worker_id(ws: Path, claim_id: str) -> str | None:
         return None
     try:
         text = reg.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except OSError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("write_gate_register_read",
+             f"{type(exc).__name__}: {exc} — worker_id reads as None")
         return None
     for m in _CLAIM_BLOCK_RE.finditer(text):
         if m.group(1).strip().strip("\"'") == claim_id:

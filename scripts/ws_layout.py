@@ -44,10 +44,20 @@ from pathlib import Path
 ANALYSIS_STATE = "analysis_state.txt"
 
 
+def _is_flag(arg) -> bool:
+    """A dash-leading arg is an OPTION, not a path — `--help` as
+    a workspace arg once created a literal `--help/` workspace (RC1
+    live evidence)."""
+    return isinstance(arg, str) and arg.startswith("-")
+
+
 def resolve_quiet(arg: str | None, *, sentinel: str | None = None) -> Path:
     """Silent family: arg wins; else the manifest workspace_dir sibling
-    holding the sentinel; else cwd (pre-#450 fallback, byte-identical)."""
-    if arg:
+    holding the sentinel; else cwd (pre-#450 fallback, byte-identical).
+    A flag-looking arg degrades to the no-arg probe — the
+    contract here is silence, so a `--help` is treated as absent rather
+    than resolved into a flag-named path."""
+    if arg and not _is_flag(arg):
         return Path(arg)
     # function-level on purpose: keep the consumers' module import graph
     # unchanged (env_manifest reconfigures stdout at import; the former
@@ -80,7 +90,16 @@ def resolve_payload_ws(payload: dict) -> Path | None:
 def resolve_strict(arg: str | None) -> Path:
     """#228 family: arg wins (resolved); else probe cwd then the manifest
     workspace_dir sibling for the claim register or the state file; nothing
-    found → stderr guidance + exit 2 (never guess a workspace)."""
+    found → stderr guidance + exit 2 (never guess a workspace). A
+    flag-looking arg is refused LOUDLY under the same exit
+    discipline — `heartbeat_touch --help` once silently created a
+    `--help/` workspace; an option is never a path."""
+    if arg and _is_flag(arg):
+        print(f"ERROR: {arg!r} looks like a flag, not a workspace path; "
+              f"pass the workspace explicitly: "
+              f"python {Path(sys.argv[0]).name} <workspace>",
+              file=sys.stderr)
+        sys.exit(2)
     if arg:
         return Path(arg).resolve()
     import env_manifest  # (same scripts/ dir; lazy — see resolve_quiet)

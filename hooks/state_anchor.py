@@ -172,7 +172,10 @@ def _register_open_ids(ws: Path) -> list:
         return []
     try:
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+    except OSError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("register_open_ids_read",
+             f"{type(exc).__name__}: {exc} — open ids read as empty")
         return []
     out, cur_id, cur_status = [], None, None
     for line in lines:
@@ -217,7 +220,10 @@ def _count_facts(ws: Path) -> int:
     try:
         return sum(1 for p in fdir.glob("F*.md")
                    if p.is_file() and p.name.upper().startswith("F"))
-    except OSError:
+    except OSError as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("anchor_fact_count",
+             f"{type(exc).__name__}: {exc} — count reads as 0")
         return 0
 
 

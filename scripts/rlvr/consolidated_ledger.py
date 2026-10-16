@@ -238,7 +238,9 @@ def _read_rows(p: Path) -> list[dict]:
         return []
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except OSError as exc:
+        warn("ledger_rows_read",
+             f"{type(exc).__name__}: {exc} — rows read as empty")
         return []
     return [row for row in iter_jsonl(text.splitlines())
             if isinstance(row, dict)]

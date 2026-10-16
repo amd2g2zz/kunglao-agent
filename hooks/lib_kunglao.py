@@ -441,7 +441,10 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
         return False
     try:
         state = json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("activation_state_read",
+             f"{type(exc).__name__}: {exc} — reads as NOT active")
         return False
     expires = state.get("expires_at", "")
     try:

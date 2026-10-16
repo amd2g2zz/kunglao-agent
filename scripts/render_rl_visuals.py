@@ -526,10 +526,8 @@ def render_rl_loop():
         return img
 
     ab0 = ((5.0, 2.0), (2.5, 2.5), (1.5, 3.0))
-    ab1 = ((5.0, 2.0), (2.0, 3.0), (1.2, 3.2))
     ab2 = ((6.0, 2.0), (2.0, 3.0), (1.0, 3.4))
     for i in range(18):
-        drop = min(1.0, max(0.0, (i - 10) / 5.0))
         prog = [0.32] if i < 8 else [0.32, 0.33]
         tallies = [(3, 1), (1, 1 + (1 if i >= 10 else 0)), (0, 2)]
         frames.append(scene(

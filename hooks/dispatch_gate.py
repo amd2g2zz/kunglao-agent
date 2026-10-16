@@ -162,7 +162,10 @@ def _kunglao_active(ws: Path) -> bool:
         return False
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("dispatch_gate_activation_read",
+             f"{type(exc).__name__}: {exc} — reads as NOT active")
         return False
     # expiry check first — a stale activation must not fire
     expires = state.get("expires_at")
