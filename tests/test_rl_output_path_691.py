@@ -214,6 +214,17 @@ def _rank_claims():
     return [_c('C-1', 'q1'), _c('C-2', 'q2')]
 
 
+def _armed_case_doc(case_id, pq):
+    """The issue-678 arming shape (all five fields present). An unarmed
+    doc is readable but not runnable, so the observation legs never
+    observe against it."""
+    return {'id': case_id, 'target_pq': pq, 'channel': 'probe',
+            'hypothesis_ref': 'H-001',
+            'update_map': {'red_up': ['H-002']},
+            'expected': {'evidence_refs': ['E-001']},
+            'mutations': [{'kind': 'omit', 'target': 'E-001'}]}
+
+
 def test_case_posterior_moves_claim_rank_after_settlement(tmp_path):
     """#691 T4: two open claims each linked to an oracle case; the rank
     runs on the cold Beta(1,1) priors (no runs/posteriors.yaml yet —
@@ -228,18 +239,28 @@ def test_case_posterior_moves_claim_rank_after_settlement(tmp_path):
     (ws / 'runs').mkdir(parents=True)
     (ws / 'oracle' / 'cases').mkdir(parents=True)
     claims = _rank_claims()
+    # _K DISTINCT settled claims per side: a claim settles ONCE, so _K
+    # observations on a question means _K claims answering it. Re-banking
+    # one claim _K times would count a single Bernoulli event _K times —
+    # the double-count the pair-level dedup exists to prevent.
+    sides = {
+        'q1': {'pass': [f'C-p1-{i}' for i in range(_K)],
+               'fail': [f'C-f1-{i}' for i in range(_K)]},
+        'q2': {'pass': [f'C-p2-{i}' for i in range(_K)],
+               'fail': [f'C-f2-{i}' for i in range(_K)]},
+    }
     register = {'claims': [
         *claims,
-        {'id': 'C-p1', 'status': 'PROVEN', 'answers_question': 'q1'},
-        {'id': 'C-f1', 'status': 'REFUTED', 'answers_question': 'q1'},
-        {'id': 'C-p2', 'status': 'PROVEN', 'answers_question': 'q2'},
-        {'id': 'C-f2', 'status': 'REFUTED', 'answers_question': 'q2'},
+        *[{'id': cid, 'status': 'PROVEN', 'answers_question': q}
+          for q, s in sides.items() for cid in s['pass']],
+        *[{'id': cid, 'status': 'REFUTED', 'answers_question': q}
+          for q, s in sides.items() for cid in s['fail']],
     ]}
     (ws / 'claim-register.yaml').write_text(
         yaml.safe_dump(register, allow_unicode=True), encoding='utf-8')
     for case_id, pq in (('case-1', 'q1'), ('case-2', 'q2')):
         (ws / 'oracle' / 'cases' / f'{case_id}.yaml').write_text(
-            yaml.safe_dump({'id': case_id, 'target_pq': pq}),
+            yaml.safe_dump(_armed_case_doc(case_id, pq)),
             encoding='utf-8')
 
     deps = {'depends_on': {}, 'competitor_groups': {}}
@@ -258,12 +279,11 @@ def test_case_posterior_moves_claim_rank_after_settlement(tmp_path):
     # drag the leader's case down (+1 beta per REFUTED settlement),
     # boost the trailer's case up (+1 alpha per PROVEN settlement)
     leader_q, trailer_q = ('q1', 'q2') if before[0] == 'C-1' else ('q2', 'q1')
-    drag = 'C-f1' if leader_q == 'q1' else 'C-f2'
-    boost = 'C-p2' if trailer_q == 'q2' else 'C-p1'
-    for _ in range(_K):
-        failed = record_case_settlements(ws, [drag])
+    for cid in sides[leader_q]['fail']:
+        failed = record_case_settlements(ws, [cid])
         assert failed['cases_failed'] == 1, failed
-        passed = record_case_settlements(ws, [boost])
+    for cid in sides[trailer_q]['pass']:
+        passed = record_case_settlements(ws, [cid])
         assert passed['cases_passed'] == 1, passed
 
     # the ledger the settlement generated carries the moved posteriors

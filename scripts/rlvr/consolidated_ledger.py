@@ -96,9 +96,18 @@ SWITCHED: tuple[str, ...] = ("experience",)
 
 #: family -> every registered stamp (liveness reports all of them; a dead
 #: schema reads 0 — visible, never silently absent)
+#: schemas born IN the consolidated file — no legacy rel to derive them
+#: from (the case-observation rows). Registered so ``liveness()``
+#: pre-seeds them at 0: a schema whose writer dies must read DEAD, never
+#: be absent (an unregistered stamp is invisible).
+NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
+    "experience": ("case-observation/1",),
+}
+
 REGISTERED: dict[str, tuple[str, ...]] = {
-    family: tuple(dict.fromkeys(s for schemas in rels.values()
-                                for s in schemas))
+    family: tuple(dict.fromkeys(
+        list(s for schemas in rels.values() for s in schemas)
+        + list(NATIVE_SCHEMAS.get(family, ()))))
     for family, rels in LEGACY.items()
 }
 
