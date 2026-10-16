@@ -102,18 +102,19 @@ def test_worker_death_ts_format_probe_stays_silent(warn_spy):
 
 # ---------- the guard faces -------------------------------------------------
 
-def test_write_gate_register_unreadable_warns(tmp_path, warn_spy):
+def test_write_gate_register_unreadable_warns(tmp_path, warn_spy, monkeypatch):
     import write_gate
     ws = tmp_path
-    reg = ws / "claim-register.yaml"
-    reg.write_text("claims: []", encoding="utf-8")
-    reg.chmod(0o000)                                # a real I/O refusal
-    try:
-        out = write_gate._register_worker_id(ws, "C-1")
-        assert out is None                          # posture unchanged
-        assert warn_spy and warn_spy[0][0] == "write_gate_register_read"
-    finally:
-        reg.chmod(0o644)
+    (ws / "claim-register.yaml").write_text("claims: []",
+                                            encoding="utf-8")
+
+    def _refuse(self, *a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("pathlib.Path.read_text", _refuse)
+    out = write_gate._register_worker_id(ws, "C-1")
+    assert out is None                          # posture unchanged
+    assert warn_spy and warn_spy[0][0] == "write_gate_register_read"
 
 
 def test_write_guard_status_first_corrupt_warns(tmp_path, warn_spy):
@@ -137,28 +138,30 @@ def test_qcell_read_missing_log_is_silent_cold_start(tmp_path, warn_spy):
     assert warn_spy == []
 
 
-def test_qcell_read_unreadable_log_warns(tmp_path, warn_spy):
+def test_qcell_read_unreadable_log_warns(tmp_path, warn_spy, monkeypatch):
     from rlvr import q_cells as qc
     p = tmp_path / "log.jsonl"
-    p.write_text("{}", encoding="utf-8")
-    p.chmod(0o000)                                  # exists, unreadable
-    try:
-        assert qc._read_jsonl(p) == []
-        assert warn_spy and warn_spy[0][0] == "qcell_log_read"
-    finally:
-        p.chmod(0o644)
+    p.write_text("{}", encoding="utf-8")            # exists...
+
+    def _refuse(self, *a, **k):
+        raise PermissionError(13, "Permission denied")  # ...unreadable
+
+    monkeypatch.setattr("pathlib.Path.read_text", _refuse)
+    assert qc._read_jsonl(p) == []
+    assert warn_spy and warn_spy[0][0] == "qcell_log_read"
 
 
-def test_consolidated_ledger_unreadable_warns(tmp_path, warn_spy):
+def test_consolidated_ledger_unreadable_warns(tmp_path, warn_spy, monkeypatch):
     from rlvr import consolidated_ledger as cl
     p = tmp_path / "experience.jsonl"
-    p.write_text("{}", encoding="utf-8")
-    p.chmod(0o000)                                  # exists, unreadable
-    try:
-        assert cl._read_rows(p) == []
-        assert warn_spy and warn_spy[0][0] == "ledger_rows_read"
-    finally:
-        p.chmod(0o644)
+    p.write_text("{}", encoding="utf-8")            # exists...
+
+    def _refuse(self, *a, **k):
+        raise PermissionError(13, "Permission denied")  # ...unreadable
+
+    monkeypatch.setattr("pathlib.Path.read_text", _refuse)
+    assert cl._read_rows(p) == []
+    assert warn_spy and warn_spy[0][0] == "ledger_rows_read"
 
 
 # ---------- the inner-counter precedent -------------------------------------
