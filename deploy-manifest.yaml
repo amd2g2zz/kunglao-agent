@@ -7,7 +7,7 @@ files:
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 5f3be6a60a09737219c7d25ec217ddf10457eaff64f60280c61ff55835f1c472
+    sha256: 7ac7f2b8ec8fe27ab6c75adbea601d9eb6b0494c0f5a57c21bb97a82f04d099d
   - src: hooks/compact_continuity.py
     dest: .claude/hooks/compact_continuity.py
     kind: hook
@@ -511,7 +511,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: f0cd49eeb3996a5c6c3cc1d4f4720d3f5ef435ac03b3cc550625754233674f5e
+    sha256: 317a0de8b476850c580bac82ddaba43ee43d52c4e3e27a8f55e53ec63fc49b2b
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold

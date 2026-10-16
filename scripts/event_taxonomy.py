@@ -336,6 +336,7 @@ EMIT_ACTIONS = [
     "warn",               # the centralized warn()'s ledger face (one row per dedupe window, actor=telemetry)
     "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
+    "write_escalated",  # bash_fact_guard repeat-block ladder crossing (cap-and-escalate; carries file + rules + streak so the orchestrator can reroute)
     "write_guard_waiver_used",  # #820 waiver consumption audit face
     "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]
