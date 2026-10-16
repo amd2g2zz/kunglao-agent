@@ -1207,7 +1207,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: a00f02241157d8318c23111ff64828807dc6729996b46f2654529c5d3106f6e5
+    sha256: 0c252c67b8faa6a58484ea8ab49dc2c20c1769313e36527709d7aee6fde76a1e
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
