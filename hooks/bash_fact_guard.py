@@ -191,16 +191,21 @@ def evaluate(payload: dict) -> dict | None:
 
 def _load_block_state(runs_dir: Path) -> dict:
     """{rel: {rule: streak}} from the last blocked writes. Fail-open: any
-    read/shape problem degrades to an empty ladder."""
+    read/shape problem degrades to an empty ladder (with one trace — the
+    canonical face — on the exists-but-unreadable class; a MISSING ladder
+    is the routine cold start and stays silent)."""
+    p = runs_dir / BLOCK_STATE_NAME
+    if not p.is_file():
+        return {}
     try:
-        p = runs_dir / BLOCK_STATE_NAME
-        if p.is_file():
-            data = json.loads(p.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return {str(k): (v if isinstance(v, dict) else {})
-                        for k, v in data.items()}
-    except (OSError, ValueError):
-        pass
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): (v if isinstance(v, dict) else {})
+                    for k, v in data.items()}
+    except (OSError, ValueError) as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("block_state_read",
+             f"{type(exc).__name__}: {exc} — ladder reads as empty")
     return {}
 
 

@@ -7,7 +7,7 @@ files:
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 7ac7f2b8ec8fe27ab6c75adbea601d9eb6b0494c0f5a57c21bb97a82f04d099d
+    sha256: 9badd29d600f22d39d11b54f07062a7a70a5e5de6549597971808961829e1135
   - src: hooks/compact_continuity.py
     dest: .claude/hooks/compact_continuity.py
     kind: hook
