@@ -203,6 +203,12 @@ OBSERVATION_BAND_CEIL = 0.05
 # signal — a signed clawback would poison the schedule).
 CREDIT_KIND_STEP = "step"
 CREDIT_KIND_STEP_CALIBRATION = "step_calibration"
+#: a ledger correction rides the SAME signed-delta semantics as
+#: the step-residual semantics — the two kinds share one definition so the fold,
+#: the EMA exclusion, the append boundary and the mass read cannot drift.
+CREDIT_KIND_CREDIT_AMENDMENT = "credit_amendment"
+SIGNED_CREDIT_KINDS = (CREDIT_KIND_STEP_CALIBRATION,
+                       CREDIT_KIND_CREDIT_AMENDMENT)
 
 
 
@@ -473,7 +479,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         # (it takes this row's γ weight) but is NOT an outcome — it
         # never feeds the adaptive EMA (a signed clawback would drag the
         # schedule's γ off its declared range).
-        if str(row.get("credit_kind") or "") != CREDIT_KIND_STEP_CALIBRATION:
+        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
             schedule.observe(_credit_of(row))
     weights = [1.0] * n
     w = 1.0
@@ -490,7 +496,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         if cell is None:
             cell = CellCounts(key[0], key[1])
             cells[key] = cell
-        if str(row.get("credit_kind") or "") == CREDIT_KIND_STEP_CALIBRATION:
+        if str(row.get("credit_kind") or "") in SIGNED_CREDIT_KINDS:
             # #712 signed mass deltas: the claim-terminal residual adds
             # Δsuccess/Δfailure VERBATIM (both may be negative — the
             # clawback face), so the cumulative mass lands on the
@@ -1001,7 +1007,7 @@ def _coerce_credit(credit, credit_kind, failure_delta):
     failure_delta is legal ONLY on a calibration row (ONE warn, else
     dropped). Returns ``(credit, failure_delta)``; invalid input drops
     to None."""
-    is_calibration = str(credit_kind or "") == CREDIT_KIND_STEP_CALIBRATION
+    is_calibration = str(credit_kind or "") in SIGNED_CREDIT_KINDS
     credit_out = None
     if credit is not None:
         if isinstance(credit, bool) or not isinstance(credit, (int, float)):
@@ -1045,7 +1051,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        recipe_id: str | None = None,
                        recipe_propensity: float | None = None,
                        recipe_source: str | None = None,
-                       failure_delta: float | None = None) -> dict:
+                       failure_delta: float | None = None,
+                       reason: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1119,6 +1126,10 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # above already refused every other home).
     if failure_delta_out is not None:
         row["failure_delta"] = failure_delta_out
+    # the amendment audit reason — emitted ONLY when set (the
+    # the established emission discipline: absent = byte-identical row).
+    if reason:
+        row["reason"] = str(reason)
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
 
@@ -1250,21 +1261,26 @@ def observe_settlement(ws, dispatch_id: str, credit,
 
 
 def _bank_matched(ws, did: str, match: dict, credit, *,
-                  kind: str, failure_delta: float | None = None) -> dict:
+                  kind: str, failure_delta: float | None = None,
+                  reason: str | None = None) -> dict:
     """Append one credit row into the matched dispatch's cell and shape
     the shared result dict (the #712 faces' common tail: same keys
     observe_settlement returns, so callers — strategy store, case-
-    posterior leg — read one shape)."""
+    posterior leg — read one shape). ``reason`` rides the row only when
+    set (the amendment audit face)."""
     out = append_observation(ws, str(match.get("signature_hash")),
                              str(match.get("method_family")), credit,
-                             source="settlement",
+                             source=("credit-amendment"
+                                     if kind == CREDIT_KIND_CREDIT_AMENDMENT
+                                     else "settlement"),
                              claim=match.get("claim"),
                              agent=match.get("agent"),
                              dispatch_id=did,
                              fingerprint=match.get("fingerprint"),
                              arm_key_col=match.get("arm_key"),
                              credit_kind=kind,
-                             failure_delta=failure_delta)
+                             failure_delta=failure_delta,
+                             reason=reason)
     return {"appended": out["appended"], "matched": True,
             "reason": None if out["appended"] else "write-failed",
             "dispatch_id": did,
@@ -1274,6 +1290,144 @@ def _bank_matched(ws, did: str, match: dict, credit, *,
             "method_family": match.get("method_family"),
             "arm_key": match.get("arm_key"),
             "fingerprint": match.get("fingerprint")}
+
+
+def _match_banked_row(ws, dispatch_id: str) -> dict | None:
+    """The LATEST banked row (settlement or amendment source)
+    carrying this identity — the prune-safe identity fallback. A
+    pruned dispatch row never orphans a correction: the banked row's
+    own signature/method_family/arm_key ARE the cell address."""
+    did = str(dispatch_id or "")
+    for row in reversed(JSONLQStore(ws).observations()):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("source") or "") not in ("settlement",
+                                                "credit-amendment"):
+            continue
+        if row.get("credit") is None:
+            continue
+        if did and (str(row.get("claim") or "") == did
+                    or str(row.get("dispatch_id") or "") == did):
+            return row
+    return None
+
+
+def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
+    """(success, failure, n_rows) — the fold has banked the fold has banked for this
+    identity — the amendment's operand, read from the SAME append-only
+    log the fold consumes (the residual posture: what actually banked, never a
+    parallel tally that could drift). Solve rows contribute their
+    tiebroken credit (a band-valued row is the information option:
+    zero mass, existence only); verification rows are inadmissible to
+    the posterior (the fold skips them — so does this read); signed
+    kinds contribute verbatim; step rows are NOT included
+    (``step_credit_totals`` owns that leg — sum them at the call
+    site). **None = the log could not be read** — callers must treat
+    None as "skip this pass" (an empty read and an unreadable read are
+    different facts; conflating them would fire a full-target
+    over-amendment)."""
+    did = str(dispatch_id or "")
+    s = f = 0.0
+    n = 0
+    try:
+        for row in JSONLQStore(ws).observations():
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("source") or "") not in ("settlement",
+                                                    "credit-amendment"):
+                continue
+            if not (did and (str(row.get("claim") or "") == did
+                             or str(row.get("dispatch_id") or "") == did)):
+                continue
+            c = _credit_of(row)
+            if c is None:
+                continue
+            if str(row.get("credit_kind") or "") == CREDIT_KIND_STEP:
+                continue          # step mass: step_credit_totals owns it
+            if not _admits_to_posterior(row):
+                continue          # verification: never banked, never read
+            n += 1
+            if str(row.get("credit_kind") or "") in SIGNED_CREDIT_KINDS:
+                s += c
+                f += _failure_delta_of(row)
+                continue
+            if 0.0 < c <= OBSERVATION_BAND_CEIL:
+                continue          # the information option — no mass
+            t = tiebroken_credit(c, row.get("phi_delta"))
+            s += t
+            f += 1.0 - t
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cells.banked_mass", f"{type(exc).__name__}: {exc}")
+        return None
+    return round(s, 6), round(f, 6), n
+
+
+def _mass_targets(credit) -> tuple[float, float]:
+    """The band-aware mass endpoint of one ladder value (the step-residual
+    target half, single-sourced for the amendment face): clamp01, and a
+    band-valued value is the information option — (0, 0). Both halves
+    are rounded to 6 dp — the SAME grid the banked read and the delta
+    rounding live on; an unrounded target could sit on a 6-dp half
+    point and the delta would oscillate ±1e-6 forever (the review's
+    non-idempotence finding)."""
+    settled = round(max(0.0, min(1.0, float(credit))), 6)
+    if 0.0 < settled <= OBSERVATION_BAND_CEIL:
+        return 0.0, 0.0
+    return settled, round(1.0 - settled, 6)
+
+
+def amend_settlement(ws, dispatch_id: str, target_credit,
+                     *, reason: str | None = None) -> dict:
+    """The ledger-correction face — move a dispatch's banked mass
+    to the corrected ladder value with ONE signed ``credit_amendment``
+    row (same verbatim semantics as the residual semantics; rows carry
+    ``source: "credit-amendment"`` so settlement-keyed ad-hoc readers —
+    the e2e repeat-failure feed, the proposal priors — stay blind).
+
+    The operand is the fold's full mass view (``banked_mass`` +
+    ``step_credit_totals``); the delta is rounded to 6 dp and a
+    zero-rounded delta appends NOTHING — idempotent by construction, a
+    re-run converges because the amendment row itself enters the next
+    read. Identity, strongest-first: the pending dispatch row (the
+    pending-dispatch face), else the latest banked row's own signature (a pruned
+    dispatch row never orphans a correction); neither → the honest
+    gap. Fail-open: telemetry never breaks settlement."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_CREDIT_AMENDMENT
+    try:
+        t_s, t_f = _mass_targets(target_credit)
+        step_sum, step_n = step_credit_totals(ws, did)
+        mass = banked_mass(ws, did)
+        if mass is None:
+            return {"appended": False, "matched": False,
+                    "reason": "log-unreadable", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        s_eff, f_eff, _n = mass
+        s_eff += step_sum
+        f_eff += float(step_n) - step_sum
+        d_s = round(t_s - s_eff, 6)
+        d_f = round(t_f - f_eff, 6)
+        if d_s == 0.0 and d_f == 0.0:
+            return {"appended": False, "matched": True,
+                    "reason": "already-current", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        match = _match_pending_dispatch(ws, did) \
+            or _match_banked_row(ws, did)
+        if match is None:
+            warn("q_cells.amend_settlement",
+                 f"no row carries {did!r} — amendment not banked (the "
+                 f"honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        return _bank_matched(ws, did, match, d_s, kind=kind,
+                             failure_delta=d_f, reason=reason)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.amend_settlement", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
 
 
 def observe_step_credit(ws, dispatch_id: str, credit, *,

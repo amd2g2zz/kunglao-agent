@@ -636,9 +636,12 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     and record/settle dedupe (no ledger churn). ROUND_CREDIT is
     polarity-none: it feeds no Beta prior and the scalar feed reads
     episode scalars only. Returns {"settled", "untraced",
-    "unattributed_waste", "banked"} — ``banked`` lists the dispatch ids
-    whose FIRST settlement rode this pass (the learning clock's tick);
-    replays and the late-cite amendment path report none."""
+    "unattributed_waste", "banked", "amended"} — ``banked`` lists the
+    dispatch ids whose FIRST settlement rode this pass (the learning
+    clock's tick); replays and the late-cite amendment path report
+    none. ``amended`` lists the dispatch ids whose bank was
+    corrected to a moved ledger value or whose missed first bank was
+    repaired — the learning signal tracking the ledger."""
     ws = Path(ws)
     # issue-678 T3: the creator backfill rides the SAME pass — a
     # creator-less artifact whose claim_id names a dispatch in THIS
@@ -650,6 +653,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
+    amended: list[str] = []
     ts = now or _now()
     for row in doc["rows"]:
         rid = f"{KIND_ROUND_CREDIT}/{row['dispatch_id']}"
@@ -731,13 +735,24 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
+        # the bank tracks the LEDGER, not the first write.
+        # Every already-settled dispatch reconciles (replays included,
+        # so a bank that failed on pass 1 is repaired whatever the
+        # ledger says); the repair/amendment NEVER reports into
+        # `banked` — the case-posterior leg keys on that set.
+        if existing and existing.get("settlement") is not None:
+            if _reconcile_q_cell_bank(ws, row):
+                amended.append(str(row["dispatch_id"]))
     return {"settled": settled_n, "untraced": doc["untraced"],
             "unattributed_waste": doc["unattributed_waste"],
             # the dispatches whose FIRST settlement rode this pass (the
             # learning clock's tick) — the case-posterior observation
             # leg keys on exactly this set, so a replay or late-cite
             # amendment additively reports none
-            "banked": banked}
+            "banked": banked,
+            # the dispatches whose bank was corrected or repaired
+            # on this pass (the learning signal tracking the ledger)
+            "amended": amended}
 
 
 def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
@@ -765,6 +780,44 @@ def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
         target_s, target_f = settled, 1.0 - settled
     return (round(target_s - float(step_sum), 6),
             round(target_f - (int(step_n) - float(step_sum)), 6))
+
+
+def _reconcile_q_cell_bank(ws, row: dict) -> bool:
+    """The bank tracks the LEDGER, not the first write. Two faces
+    behind one guard: a bank that never landed (no settlement-source
+    rows) gets the full first bank via the q-cell faces DIRECTLY —
+    never ``_bank_q_cell_credit``, whose strategy-store and L1 legs
+    must not double-write; a banked dispatch whose ledger value moved
+    gets ONE signed ``credit_amendment`` row. Fail-open telemetry: a
+    reconcile failure is one rate-limited WARN, never a settlement
+    break."""
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        did = str(row["dispatch_id"])
+        mass = _qc.banked_mass(ws, did)
+        if mass is None:
+            # an unreadable log is not an empty one — amending against a
+            # fabricated (0, 0) read would fire a full-target overshoot
+            warn("q_cell_reconcile", f"{did}: log unreadable — skipped")
+            return False
+        _s, _f, n_rows = mass
+        if n_rows == 0:
+            step_sum, step_n = _qc.step_credit_totals(ws, did)
+            if step_n == 0:
+                bank = _qc.observe_settlement(ws, did, row["r"])
+            else:
+                d_s, d_f = _calibration_delta(
+                    row["r"], step_sum, step_n,
+                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                bank = _qc.observe_step_calibration(
+                    ws, did, d_s, failure_delta=d_f)
+            return bool((bank or {}).get("appended"))
+        bank = _qc.amend_settlement(ws, did, row["r"],
+                                    reason="ledger-amendment")
+        return bool(bank.get("appended"))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("q_cell_reconcile", f"{type(exc).__name__}: {exc}")
+        return False
 
 
 def _bank_q_cell_credit(ws, row: dict) -> dict | None:

@@ -1079,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: d4a2eed62bdd6a66c7eb79c4ba6d407119696958bf91f5069fb0bbabc3b200ab
+    sha256: 452dd60cdb83680aef24e746a4f6477b0b119fc9d8213995624f4080d8089554
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1251,7 +1251,7 @@ files:
   - src: scripts/ws_layout.py
     dest: .claude/scripts/ws_layout.py
     kind: scaffold
-    sha256: ac0e31417467dda128b0fcd2550ebf7f878c869783d0b8f8af561fa58cf4dbcf
+    sha256: ab1aa5752bd7532899afe4fcd86906d4fe7d931b36ff07919ad5f9d13355415c
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
@@ -1323,7 +1323,7 @@ files:
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: 113e35cd8a8430fb6bcf1fcb0ead6cb1fa94c83e2583a5e6d5d0adbc1154a0b4
+    sha256: d7853f9b70933b04e6998040fa96daddd7328a7393439fefa6953b6fe44b4259
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1347,7 +1347,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: c0690afd6a459c3ca85e9bfbc0d412d3c8c7267c8891eb772216e0042c55a67a
+    sha256: 86e12b5782e436f6f03167b8855545bf9b74e41ed20e58ecb4e448fc9ea599c1
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 6b148996db38b559b3e48a4e97c18eb9d5592e035ca07cc83dfd7be62cde69f8
+    sha256: 2da55b31970c6497455a5c6242f98991e14ac1a1e5461b689b016d873e5ac583
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -1391,7 +1391,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 5c09a4b800f0513d6f6a3ca7f2af762f491904572e21ce957c0c6bc4cdf65943
+    sha256: 69eed6947a5faaf02086853af75a74f76743c09075bebf8484cb3f944c7862c7
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold

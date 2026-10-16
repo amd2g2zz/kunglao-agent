@@ -15,7 +15,8 @@ activation face (a corrupt state silently sleeps every gate).
    value is UNCHANGED (the fail-open posture stays; only the silence
    ends).
 2. The cold-start split: where a MISSING file is the routine case (the
-   q-cell log, the consolidated ledger, the status-first state) the
+   q-cell log, the consolidated ledger, the status-first state, the
+   challenge active-round) the
    FileNotFoundError branch stays SILENT and only the exists-but-
    unreadable class warns — a fresh workspace must not spam.
 3. `_parse_signoff` is reclassified NOT-A-TARGET (its `{}` is plain

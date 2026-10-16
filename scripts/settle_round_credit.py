@@ -419,7 +419,10 @@ def _round_credit_pass(ws: Path, dispatches: list[dict], *,
             "unattributed_waste": res.get("unattributed_waste", 0),
             # the first-settled dispatch ids (the case-posterior leg's
             # key set; run() consumes it and reports the count)
-            "banked": [str(d) for d in (res.get("banked") or [])]}
+            "banked": [str(d) for d in (res.get("banked") or [])],
+            # the corrected/repaired dispatch ids (run() consumes
+            # it and reports the count)
+            "amended": [str(d) for d in (res.get("amended") or [])]}
 
 
 def _pending_tier_rows(ws: Path) -> int:
@@ -478,8 +481,10 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     if dispatches:
         out = _round_credit_pass(ws, dispatches, dry_run=dry_run)
         banked = [str(d) for d in (out.pop("banked", None) or [])]
+        amended = [str(d) for d in (out.pop("amended", None) or [])]
         if not dry_run:
             out["banked"] = len(banked)
+            out["amended"] = len(amended)
             # Fresh leg first, so the attribution stays meaningful: the
             # fresh run reports what THIS pass's bank list observed and
             # the amendment reports the back-fill. Both dedup against
