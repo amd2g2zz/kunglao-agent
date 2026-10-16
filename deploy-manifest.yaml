@@ -1251,7 +1251,7 @@ files:
   - src: scripts/ws_layout.py
     dest: .claude/scripts/ws_layout.py
     kind: scaffold
-    sha256: ac0e31417467dda128b0fcd2550ebf7f878c869783d0b8f8af561fa58cf4dbcf
+    sha256: 2dc16595a79f505dbe3c320fbeb0a95c904534f786202045392539ec3b6a16f0
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
