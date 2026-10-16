@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 """tests/test_credit_amendment_731.py — the learning signal tracks the
-ledger (issue #731).
+ledger (issue 731).
 
 `scalar.settle_round_credit` banks a dispatch's ladder credit into the
 Q-cell store ONCE — at the first settlement. Every later correction of
-the ledger value (the #433 late-cite amendment, evidence repair that
+the ledger value (the issue 433 late-cite amendment, evidence repair that
 shifts `r`) refined the LEDGER only: the posterior carried the old
 wrong credit forever, and a bank that failed on the first pass stayed
 failed.
 
 The fix, pinned here:
 
-  1. a `credit_amendment` SIGNED kind rides the #712 verbatim-delta
+  1. a `credit_amendment` SIGNED kind rides the issue 712 verbatim-delta
      fold branch (no band, no tiebreak, no γ-EMA feeding, admitted to
      the posterior);
   2. `amend_settlement` moves banked mass to a target exactly once and
@@ -139,7 +139,7 @@ def test_amendment_excluded_from_gamma_ema(tmp_path):
 
 
 def test_amendment_admitted_to_posterior(tmp_path):
-    """Unlike #705 verification rows, a correction is outcome data: it
+    """Unlike issue 705 verification rows, a correction is outcome data: it
     moves the posterior while the verification row beside it stays
     inert (that is the whole point of the correction)."""
     ws = _ws(tmp_path)
@@ -294,7 +294,7 @@ def test_amend_identity_fallback_through_the_banked_row(tmp_path):
 def test_amend_accounts_step_mass(tmp_path):
     """The operand is the fold's full mass view: step rows + settlement
     rows. A corrected target lands the CUMULATIVE mass on the target —
-    the #712 endpoint contract, now correction-safe. (The fixture rides
+    the issue 712 endpoint contract, now correction-safe. (The fixture rides
     the production residual path — a raw observe_settlement beside
     steps would be the unphysical state the bank never writes.)"""
     from rlvr import scalar as scalar_mod

@@ -1079,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: 9e40865467dd55a81b4090fbafc0a64dad904e276f2909f19ad04a4f374a98d6
+    sha256: 1677cf97b6022f8f02a9f9f1624731f0dfb6fbc87358e7770234e1882aa7dd20
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1323,7 +1323,7 @@ files:
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: fce7ca5d4b0a0deae01cd42d5dc25c6a80fd4cea29b22ce5aa1b1a6457261de1
+    sha256: 6f320d4a8d395a5e21b1903e00739583928a436c2a5cb560813d46f8a3dcbfd8
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1347,7 +1347,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: ccb8d251746aec32a8beded2eae258b2df4abc72e7662b222efd0fad8069ac57
+    sha256: e661d76dd67aae2a576bd29a297587b93cb769ec084ebe588df54c305e8d5234
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 2a080e92dff757477fac91e3657d00e8cc3c51b38b03f9b0515128bef0c5a0ed
+    sha256: 85977da6d94056c968eafbd39005e4428cd6de59f378e1cf1a9af63b78b37167
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -1391,7 +1391,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 1651ca6c0af47525f98ec9b17d2ac1a7c44f241f05021b80663f10addd8ed3cf
+    sha256: 3d8dd1b8f2dc5ffb454d1383a4696bee723c2be195a703bdd59345e6a56ec1db
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
