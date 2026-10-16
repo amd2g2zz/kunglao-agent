@@ -859,7 +859,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 2331518bc931f007a1843d0705650b57c17f3a5e3c7979e45fb7fd9078bc96ab
+    sha256: 21df9915ebfefa51e7ccade3ef183f7fd4d26967ef767587bfaf5684b9cbc3d6
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -1079,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: f553994c3b7e07f7a0bbd051831ff02a97a38f138b839ece687a5e5eda1e552e
+    sha256: d4a2eed62bdd6a66c7eb79c4ba6d407119696958bf91f5069fb0bbabc3b200ab
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1419,7 +1419,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 81b5c9b4653ef204b7bee4919cc57daa1ea7458f604edf9e91114e645f1a3dbc
+    sha256: d10a3970bde89e7b443409416d45eec18bdc82d2713539d87b0bffa3d73c562d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

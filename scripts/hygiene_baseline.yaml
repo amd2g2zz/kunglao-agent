@@ -299,7 +299,7 @@ files:
   scripts/oracle_case_admission.py:
     r1: 10
   scripts/oracle_runner.py:
-    r1: 51
+    r1: 50
   scripts/outcome_capture.py:
     r1: 13
   scripts/pkg_detect.py:

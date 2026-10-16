@@ -92,23 +92,27 @@ CASE_FAIL_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 
 
 # the oracle-arm arming fields: a case doc carrying ALL five (non-empty)
-# is ARMED — a complete, deliberate question-linkage. Arming is NOT
-# runner-loadability (the loader's `expected` shape differs; tracked as
-# its own defect). A thinner doc is readable but not armed. The armed
-# count is what makes the live silent gap LOUD: without oracle/cases/
-# no case posterior ever moved — invisibly.
+# is ARMED — a complete, deliberate question-linkage. `expected` reads
+# the runner's ONE shape law (expected_shape_error), so arming implies
+# shape-level parity with the runner; full loadability additionally
+# resolves the evidence refs against the workspace. A thinner
+# doc is readable but not armed. The armed count is what makes the live
+# silent gap LOUD: without oracle/cases/ no case posterior ever moved —
+# invisibly.
 CASE_ARMING_FIELDS = ("channel", "hypothesis_ref", "update_map",
                       "expected", "mutations")
 
 
 def _arming_field_present(doc: dict, field: str) -> bool:
-    """One arming field non-empty: ``expected`` must carry a non-empty
-    ``evidence_refs`` list; mappings/lists must be non-empty; scalars
-    must be non-blank strings."""
+    """One arming field non-empty: ``expected`` must carry the runner's
+    canonical entry list (ONE shape law — the executor owns it, see
+    ``oracle_runner.expected_shape_error``); mappings/lists must be
+    non-empty; scalars must be non-blank strings."""
     value = doc.get(field)
     if field == "expected":
-        return (isinstance(value, dict)
-                and bool(value.get("evidence_refs")))
+        from oracle_runner import expected_shape_error  # the one law
+
+        return expected_shape_error(value) is None
     if isinstance(value, (dict, list)):
         return bool(value)
     return bool(str(value or "").strip())
@@ -171,12 +175,11 @@ def _cases_by_pq(ws: Path, *, armed_only: bool) -> dict[str, list[str]]:
     loader: a case retired out of the acceptance net must not keep
     collecting observations.
 
-    NOTE — arming is NOT runner-loadability. The arming shape and the
-    runner's ``load_cases`` shape disagree on ``expected`` (mapping with
-    ``evidence_refs`` vs a non-empty list of entries), so a doc can be
-    armed-but-not-loadable or loadable-but-not-armed. That mismatch is a
-    pre-existing defect in the arming definition, tracked separately; the
-    observation legs key on the ARMING definition, not on loadability.
+    NOTE — the arming gate and the loader share ONE `expected` shape
+    law (oracle_runner.expected_shape_error), so arming implies
+    shape-level parity with the runner. Full loadability additionally
+    resolves the evidence refs against the workspace — that half
+    remains the loader's alone.
 
     Deterministic file order; duplicate case ids collapse (the pair is
     the unit, so a second doc claiming the same id is the same case); a

@@ -215,13 +215,13 @@ def _rank_claims():
 
 
 def _armed_case_doc(case_id, pq):
-    """The issue-678 arming shape (all five fields present). An unarmed
-    doc is readable but not runnable, so the observation legs never
-    observe against it."""
+    """All five arming fields present, `expected` in the runner's
+    canonical entry-list shape (the ONE shape law)."""
     return {'id': case_id, 'target_pq': pq, 'channel': 'probe',
             'hypothesis_ref': 'H-001',
             'update_map': {'red_up': ['H-002']},
-            'expected': {'evidence_refs': ['E-001']},
+            'expected': [{'field': 'probe', 'value': 'observed',
+                          'evidence_refs': ['E-001']}],
             'mutations': [{'kind': 'omit', 'target': 'E-001'}]}
 
 

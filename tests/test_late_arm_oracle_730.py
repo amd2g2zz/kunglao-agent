@@ -100,7 +100,8 @@ def _register(ws: Path, claims: list[dict]) -> None:
 
 
 def _armed_case(ws: Path, cid: str, pq: str) -> None:
-    """All five arming fields filled — the issue-678 T5 armed shape."""
+    """All five arming fields filled; `expected` in the runner's
+    canonical entry-list shape (the ONE shape law)."""
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True, exist_ok=True)
     (cdir / f"{cid}.yaml").write_text(yaml.safe_dump({
@@ -109,7 +110,8 @@ def _armed_case(ws: Path, cid: str, pq: str) -> None:
         "target_pq": pq,
         "hypothesis_ref": "H-001",
         "update_map": {"red_up": ["H-002"]},
-        "expected": {"evidence_refs": ["E-001"]},
+        "expected": [{"field": "probe", "value": "observed",
+                      "evidence_refs": ["E-001"]}],
         "mutations": [{"kind": "omit", "target": "E-001"}],
     }), encoding="utf-8")
 
@@ -289,9 +291,9 @@ def test_amendment_never_observes_an_unarmed_case(tmp_path):
     of a placeholder.
 
     (The FRESH leg keeps the link it has always had — ``target_pq``
-    alone — which its own suite pins. Only the amendment is armed-only.
-    Arming is NOT runner-loadability: the loader's ``expected`` shape
-    differs, tracked as its own defect.)"""
+    alone — which its own suite pins. Only the amendment is armed-only;
+    arming's ``expected`` requirement is the runner's ONE shape law, so
+    arming implies shape-level parity with the runner.)"""
     ws = _ws(tmp_path)
     _register(ws, [{"id": "C-005", "status": "PROVEN",
                     "answers_question": "q2"}])

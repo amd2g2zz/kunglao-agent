@@ -351,7 +351,8 @@ def _armed_case(ws: Path, cid: str, pq: str) -> None:
         "target_pq": pq,
         "hypothesis_ref": "H-001",
         "update_map": {"red_up": ["H-002"]},
-        "expected": {"evidence_refs": ["E-001"]},
+        "expected": [{"field": "probe", "value": "observed",
+                      "evidence_refs": ["E-001"]}],
         "mutations": [{"kind": "omit", "target": "E-001"}],
     }), encoding="utf-8")
 
