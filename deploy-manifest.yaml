@@ -1079,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: 5317882f6f29aa2fa490636cddcd3573c0b1686e620f37f1766097841e96148c
+    sha256: f553994c3b7e07f7a0bbd051831ff02a97a38f138b839ece687a5e5eda1e552e
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1275,7 +1275,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: e9e0bffeb3eedef565cce780f46e15dd471e1619783317e84a6ad7a7cf9d00de
+    sha256: 68f4b40ace0295bcd10ab255a5ffc2512684e751f740b5d53e776d88e255f898
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1419,7 +1419,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 36913e87aa987c27a2d7bad1137c6ed099212e0c445c61faeecdbb1671b28f85
+    sha256: 81b5c9b4653ef204b7bee4919cc57daa1ea7458f604edf9e91114e645f1a3dbc
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
