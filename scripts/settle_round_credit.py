@@ -145,12 +145,6 @@ def armed_case_ids(ws: Path) -> set[str]:
 CASE_OBS_SCHEMA = "case-observation/1"
 
 
-def _utc_now() -> str:
-    from harness_common import utc_now_z  # the one timestamp source
-
-    return utc_now_z()
-
-
 def _empty_obs() -> dict:
     return {"case_observations": 0, "cases_passed": 0, "cases_failed": 0}
 
@@ -291,6 +285,7 @@ def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
             return out
         import posteriors as po  # the posterior-ledger leaf
         from rlvr import consolidated_ledger as cl
+        from harness_common import utc_now_z  # the one timestamp source
 
         led = po.PosteriorLedger.load(ws)
         for cid, _claim, passed in entries:
@@ -298,7 +293,7 @@ def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
             cp.update(passed)
             led.cases[cid] = cp
         led.save(ws)
-        ts = _utc_now()
+        ts = utc_now_z()
         landed = sum(
             1 for cid, claim, passed in entries
             if cl.append(ws, "experience", {
