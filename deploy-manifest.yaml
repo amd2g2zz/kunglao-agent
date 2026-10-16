@@ -991,7 +991,7 @@ files:
   - src: scripts/render_rl_visuals.py
     dest: .claude/scripts/render_rl_visuals.py
     kind: scaffold
-    sha256: 90217c0ea82dec74b5db247669fd3e1c8f20cde59076d31fe68a894e7c977b82
+    sha256: 8cc913578094b36b3a7d68cd207057ecf5a55a2a099451101517fbb8531c1f85
   - src: scripts/replay_equivalence.py
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
