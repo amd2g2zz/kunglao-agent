@@ -147,6 +147,7 @@ def armed_case_ids(ws: Path) -> set[str]:
 
 
 CASE_OBS_SCHEMA = "case-observation/1"
+CASE_AMEND_SCHEMA = "case-amendment/1"
 
 
 def _empty_obs() -> dict:
@@ -225,6 +226,104 @@ def _observed_pairs(ws: Path) -> set[tuple[str, str]]:
         claim = str(row.get("claim_id") or "").strip()
         if cid and claim:
             out.add((cid, claim))
+    return out
+
+
+def _effective_pair_outcomes(
+        ws: Path) -> dict[tuple[str, str], tuple[bool, bool | None]]:
+    """Per-pair ``(original_passed, effective_passed)`` folded from the
+    experience ledger — BOTH stamps in one scan (the ``case-`` prefix
+    reads case-observation and case-amendment rows together). The last
+    amendment wins: every amendment row brings its pair to its
+    ``to_passed``, so the fold is the pair's truth. A pair with no
+    amendment reads its original observation."""
+    from rlvr import consolidated_ledger as cl
+
+    eff: dict[tuple[str, str], tuple[bool, bool | None]] = {}
+    for row in cl.read(ws, "experience", schema_prefix="case-"):
+        cid = str(row.get("case_id") or "").strip()
+        claim = str(row.get("claim_id") or "").strip()
+        if not cid or not claim:
+            continue
+        key = (cid, claim)
+        schema = str(row.get("schema") or "")
+        if schema == CASE_OBS_SCHEMA:
+            eff[key] = (bool(row.get("passed")), None)
+        elif schema == CASE_AMEND_SCHEMA:
+            orig, _cur = eff.get(key, (False, None))
+            eff[key] = (orig, bool(row.get("to_passed")))
+    return eff
+
+
+def reconcile_case_settlements(ws: Path) -> dict:
+    """The pair-amendment face: when a claim's CURRENT decisive register
+    status disagrees with the outcome already observed for its
+    (case, claim) pair, apply the ±1 flip to the case posterior
+    (belief-first, floored at the Beta(1,1) support — a desynced ledger
+    can never push the posterior outside it) and append ONE
+    ``case-amendment/1`` audit row. Idempotence lives in the fold: once
+    the row lands the effective outcome equals the target and every
+    re-run is a read-scan no-op. Honest gaps write nothing: a
+    non-decisive terminal, a removed claim, a retired case, an
+    unobserved pair. Telemetry never raises into the pass."""
+    out: dict = {"case_amendments": 0, "case_amendments_error": None}
+    try:
+        import posteriors as po
+        from rlvr import consolidated_ledger as cl
+        from harness_common import utc_now_z
+
+        status_map: dict[str, bool] = {}
+        for claim in _register_claims(ws):
+            cid = str(claim.get("id") or "").strip()
+            status = str(claim.get("status") or "").upper()
+            if status in CASE_PASS_STATUSES:
+                status_map[cid] = True
+            elif status in CASE_FAIL_STATUSES:
+                status_map[cid] = False
+        known_cases = {c for ids in
+                       _cases_by_pq(ws, armed_only=False).values()
+                       for c in ids}
+        entries = []
+        for (cid, claim), (orig, amended) in _effective_pair_outcomes(
+                ws).items():
+            effective = orig if amended is None else amended
+            target = status_map.get(claim)
+            if target is None or target == effective or cid not in (
+                    known_cases):
+                continue
+            entries.append((cid, claim, effective, target))
+        if not entries:
+            return out
+        led = po.PosteriorLedger.load(ws)
+        ts = utc_now_z()
+        landed = 0
+        for cid, claim, eff, target in entries:
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            d_a = 1 if target else -1
+            d_b = -1 if target else 1
+            new_a = max(po._ALPHA0, cp.alpha + d_a)
+            new_b = max(po._BETA0, cp.beta + d_b)
+            if new_a != cp.alpha + d_a or new_b != cp.beta + d_b:
+                warn("case_amendment_floor",
+                     f"{cid}: posterior desync — floored at the "
+                     f"Beta(1,1) support")
+            applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
+            cp.alpha, cp.beta = new_a, new_b
+            led.cases[cid] = cp
+            ok = cl.append(ws, "experience", {
+                "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
+                "claim_id": claim, "from_passed": bool(eff),
+                "to_passed": bool(target), "d_alpha": applied_a,
+                "d_beta": applied_b, "source": "reconcile"})
+            landed += 1 if ok else 0
+        led.save(ws)
+        out["case_amendments"] = landed
+        if landed != len(entries):
+            out["case_amendments_error"] = (
+                f"{len(entries) - landed} amendment row(s) refused — "
+                f"the flip re-fires next pass (belief-first asymmetry)")
+    except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
+        out["case_amendments_error"] = f"{type(exc).__name__}: {exc}"
     return out
 
 
@@ -493,6 +592,10 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             # to the amendment and report the fresh leg as a no-op.
             fresh = record_case_settlements(ws, banked)
             late = amend_case_settlements(ws)
+            # the pair-amendment leg rides LAST: it reconciles pairs
+            # against the register's current truth, after both
+            # observation legs had their byte-identical say
+            amended = reconcile_case_settlements(ws)
             out["case_observations"] = (
                 fresh["case_observations"] + late["case_observations"])
             out["cases_passed"] = (
@@ -500,9 +603,12 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             out["cases_failed"] = (
                 fresh["cases_failed"] + late["cases_failed"])
             out["case_observations_late_arm"] = late["case_observations"]
+            out["case_amendments"] = amended.get("case_amendments") or 0
             errs = [leg["case_observations_error"]
                     for leg in (fresh, late)
                     if leg.get("case_observations_error")]
+            if amended.get("case_amendments_error"):
+                errs.insert(0, amended["case_amendments_error"])
             if errs:
                 out["case_observations_error"] = " | ".join(errs)
     else:

@@ -1079,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: 452dd60cdb83680aef24e746a4f6477b0b119fc9d8213995624f4080d8089554
+    sha256: 2054f056e284d8c5f4e453264c5b2434c70a01c9a34cedb467a3e9cbfcf2a08c
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1275,7 +1275,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: f1a59f76816ca062de8ca8b8da81aafa7eea011b533219e0b62d6b6ea58f27a7
+    sha256: e444c166af8b6f844a5d4546ad45721ac1b8e52495c6adaca27861474ef16d1e
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold

@@ -101,7 +101,7 @@ SWITCHED: tuple[str, ...] = ("experience",)
 #: pre-seeds them at 0: a schema whose writer dies must read DEAD, never
 #: be absent (an unregistered stamp is invisible).
 NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
-    "experience": ("case-observation/1",),
+    "experience": ("case-observation/1", "case-amendment/1"),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
