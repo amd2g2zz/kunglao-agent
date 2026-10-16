@@ -1497,6 +1497,8 @@ files:
     r2: 1
   tests/test_step_level_credit_712.py:
     r1: 3
+  tests/test_stop_sanction_736.py:
+    r1: 1
   tests/test_strategy_compose_431.py:
     r1: 4
   tests/test_structural_check.py:

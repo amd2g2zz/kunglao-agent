@@ -15,7 +15,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 8ac8b20b3f00a492ca97152b94cbb629d80e2b9d4e9701f6f749c9d0db7b2cca
+    sha256: 965094488b8cbe6b9364012ae974dd23e4e2fcf5b1a782cc382b010fd8e169ab
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -511,7 +511,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: b5aec4cc900f5b4aab64b79cd6532d02935b4d7e31f2bbc5576193041310b74f
+    sha256: f0cd49eeb3996a5c6c3cc1d4f4720d3f5ef435ac03b3cc550625754233674f5e
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -1419,7 +1419,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: d10a3970bde89e7b443409416d45eec18bdc82d2713539d87b0bffa3d73c562d
+    sha256: ec1c86cf2fd317103d023f510188dc6b3e39e9e1bfa520f3e36240254dcee62d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

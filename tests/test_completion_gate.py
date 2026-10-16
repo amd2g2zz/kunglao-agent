@@ -358,6 +358,19 @@ def _activated_state(ws: Path):
                      user_override={}, expires_minutes=30)
 
 
+def _seal_release_path(ws: Path, adj: dict, tmp_path: Path) -> None:
+    """Mint a valid gate seal for ws (store aimed at this test's tmp home):
+    the second-stop release now requires a sealed record."""
+    mod = _load_hook_module()
+    home = tmp_path / "sanction-home"
+    home.mkdir(exist_ok=True)
+    key = home / "kunglao-sanction.key"
+    key.write_text("c" * 64, encoding="utf-8")
+    mod.SANCTION_KEY_PATH = key
+    mod.SANCTION_STORE_DIR = home / "sanctions"
+    assert mod._sanction_mint(ws, adj) is True
+
+
 def _run_hook(ws: Path, stop_hook_active=False):
     """Invoke hooks/completion_gate.py::main with a synthetic Stop payload."""
     mod = _load_hook_module()
@@ -421,6 +434,7 @@ def test_stop_stop_hook_active_passthrough(tmp_path):
         "second_stop": True, "last_decision": "PASS"}}
     _write_oracle_yaml(ws, "task-oracle.yaml", oracle)
     _activated_state(ws)
+    _seal_release_path(ws, oracle["adjudication"]["stop_hook_active"], tmp_path)
     rc, out = _hook_stdout(ws, stop_hook_active=True)
     assert rc == 0
     assert out.strip() == ""

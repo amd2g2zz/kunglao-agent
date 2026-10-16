@@ -32,6 +32,19 @@ def _load_hook():
     return mod
 
 
+def _seal_release_path(ws, adj: dict, tmp_path) -> None:
+    """Mint a valid gate seal for ws (store aimed at this test's tmp home):
+    the second-stop release now requires a sealed record."""
+    mod = _load_hook()
+    home = tmp_path / "sanction-home"
+    home.mkdir(exist_ok=True)
+    key = home / "kunglao-sanction.key"
+    key.write_text("c" * 64, encoding="utf-8")
+    mod.SANCTION_KEY_PATH = key
+    mod.SANCTION_STORE_DIR = home / "sanctions"
+    assert mod._sanction_mint(ws, adj) is True
+
+
 def test_task_spec_template_declares_calibration_requirement():
     """Batch 1 acceptance: task_spec template must declare calibration
     (confidence + falsifier) so the delivery gate can enforce it."""
@@ -85,6 +98,7 @@ def test_second_stop_pass_requires_oracle_second_stop_marker(tmp_path):
     (ws / "task-oracle.yaml").write_text(
         yaml.safe_dump(oracle, sort_keys=False), encoding="utf-8"
     )
+    _seal_release_path(ws, oracle["adjudication"]["stop_hook_active"], tmp_path)
     payload = {"cwd": str(ws), "workspace": str(ws), "stop_hook_active": True}
     rc = _load_hook().process_event(payload)
     assert rc == 0, f"oracle-sanctioned second stop must pass, got {rc}"

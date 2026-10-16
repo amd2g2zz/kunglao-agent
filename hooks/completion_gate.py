@@ -32,10 +32,19 @@ Activation gating: current fail-open / fail-closed boundaries (post
     would-be-PASS interception pattern as exit 4; the queue names the
     claims, writing notes/<claim-id>.md clears it on the next Stop.
     Fail-open double-cage: missing/corrupt/malformed queue = pass-through)
-  - stop_hook_active=true (second stop) → BLOCK unless task-oracle.yaml
-    records adjudication.stop_hook_active = {second_stop: true,
-    last_decision: PASS} (#147/#199: an unsanctioned second stop must not
-    silently pass; only that sanctioned-PASS record passes)
+  - stop_hook_active=true (second stop) → BLOCK unless the gate's OWN
+    sealed sanction verifies. The oracle's adjudication block is
+    agent-writable advisory evidence: its `second_stop` flag only ARMS the
+    second-stop face, and its decision text is never read for release.
+    The release key is an HMAC-sealed record in the shim-owned store
+    outside the workspace, bound to a decision the GATE derived:
+    minted by the gate ONLY at a first stop whose judge verdict is PASS
+    (a judge-blocked stop mints nothing — a block written before or
+    between stops can never carry a seal), or minted by the operator CLI
+    — the HUMAN-ONLY trust-root face for closing with items open, whose
+    use is logged loudly. Any mismatch/absence keeps blocking, with the
+    repair path in the reason (#147/#199: an unsanctioned second stop
+    must not silently pass; only that sanctioned-PASS record passes)
   - any exception → pass-through (FAIL_OPEN: a completion-gate failure must
     never deadlock the session — unreadable oracle / judge errors fail open)
 
@@ -52,15 +61,20 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
         print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
               file=sys.stderr)
 import hashlib
+import hmac
 import json
+import os
+import secrets
 import sys
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -93,6 +107,19 @@ except Exception:  # noqa: BLE001 — fail-open literal fallback (partial deploy
 # #831: ledger-anchored second-stop sanction event type (ledger CONTRACT line
 # format identical to rollup._append_ledger: json.dumps ensure_ascii=False).
 SECOND_STOP_EVENT = "second_stop_pass"
+# The second-stop release key is the gate's OWN sealed sanction, never the
+# agent-writable oracle block: the record is written OUTSIDE the workspace
+# tree and HMAC-bound to the block bytes frozen at the first stop that saw
+# it. Mirrors the review-gate seal posture: the key is pinned at a fixed
+# path outside the workspace (no env override face), verification uses
+# hmac.compare_digest, and the record carries a versioned schema stamp.
+# Both paths resolve the key through ONE helper (_sanction_keyfile) so mint
+# and verify can never split onto different keys.
+SANCTION_SCHEMA = "stop-sanction/1"
+SANCTION_KEY_PATH = Path(
+    os.path.expanduser("~/.claude/kunglao-sanction.key"))
+SANCTION_STORE_DIR = Path(os.path.expanduser("~/.claude/kunglao/sanctions"))
+_SANCTION_KEY_MIN = 32
 
 
 def _json_safe(obj):
@@ -182,6 +209,150 @@ def _secondstop_anchor(ws: Path, adj: dict) -> tuple[bool, str | None]:
     return True, None
 
 
+# ---------- the gate-owned sealed sanction (the second-stop release key) ----------
+
+def _sanction_keyfile() -> Path:
+    """ONE key resolution point shared by mint and verify — a split
+    resolution would let a record be minted under one key and checked
+    under another. Resolved once at import from the invoking process's
+    environment; the hook process is harness-spawned, the same trust
+    posture as the review-gate key."""
+    return SANCTION_KEY_PATH
+
+
+def _ws_fingerprint(ws: Path) -> str:
+    """Opaque workspace identity: sha256 over the resolved absolute path.
+    Hashed so the store's file names never leak workspace locations; the
+    resolved path also makes symlinked cwd spellings of one workspace
+    fingerprint identically."""
+    return hashlib.sha256(
+        str(Path(ws).resolve()).encode("utf-8")).hexdigest()
+
+
+def _sanction_sign(key: bytes, ws_fp: str, origin: str, decision: str,
+                   record_sha: str, minted_ts: int) -> str:
+    """HMAC over the full record identity (schema + workspace + sealing
+    face + decision + frozen block sha + mint time), NUL-joined like the
+    review-gate seal."""
+    payload = "\0".join([SANCTION_SCHEMA, ws_fp, origin, decision,
+                         record_sha, str(minted_ts)])
+    return hmac.new(key, payload.encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+
+
+def _sanction_record_path(ws: Path) -> Path:
+    return SANCTION_STORE_DIR / (_ws_fingerprint(ws) + ".json")
+
+
+def _sanction_mint(ws: Path, adj: dict, decision: str = "PASS",
+                   origin: str = "gate") -> bool:
+    """Seal the adjudication state into the gate-owned store: a versioned
+    record binding the workspace, the sealing face, the decision and the
+    block's canonical sha at mint time. `decision` is asserted by the
+    CALLER — the gate passes its own judge verdict, the operator CLI
+    passes the human-asserted decision — and is never read out of the
+    agent-authored block. Best-effort by design — a missing/short key or
+    an unwritable store returns False (never raises); sealing never moves
+    the first-stop verdict, and the second stop's verify is the
+    fail-closed face that will then block with the operator repair path."""
+    decision = str(decision or "").strip()
+    if not decision:
+        return False
+    try:
+        key = _sanction_keyfile().read_bytes().strip()
+    except OSError:
+        return False
+    if len(key) < _SANCTION_KEY_MIN:
+        return False
+    fp = _ws_fingerprint(ws)
+    record_sha = _secondstop_record_sha(adj)
+    minted_ts = int(time.time())
+    record = {
+        "schema": SANCTION_SCHEMA,
+        "ws_fingerprint": fp,
+        "origin": origin,
+        "decision": decision,
+        "record_sha256": record_sha,
+        "minted_ts": minted_ts,
+    }
+    record["hmac"] = _sanction_sign(key, fp, origin, decision, record_sha,
+                                    minted_ts)
+    try:
+        SANCTION_STORE_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(SANCTION_STORE_DIR, 0o700)
+        _sanction_record_path(ws).write_text(
+            json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
+def _sanction_verify(ws: Path, adj: dict) -> tuple[bool, str | None]:
+    """The second-stop release pre-check. The gate's OWN seal must exist,
+    verify under hmac.compare_digest, match the on-disk adjudication block
+    exactly (a post-mint edit of task-oracle.yaml is detected as tamper),
+    and carry the required PASS decision. Any absence or mismatch blocks —
+    blocking is the safe direction for a completion gate — and the reason
+    carries the operator repair path. Never raises."""
+    fp = _ws_fingerprint(ws)
+    try:
+        raw = _sanction_record_path(ws).read_text(encoding="utf-8")
+        record = json.loads(raw)
+    except OSError:
+        return False, ("second-stop sanction is not sealed by the gate - "
+                       "the oracle's adjudication block is advisory only "
+                       "and cannot release a stop; the operator must seal "
+                       "it (python hooks/completion_gate.py mint-sanction "
+                       "<workspace> PASS) or the gate seals it at the next "
+                       "first stop that sees the block")
+    except ValueError:
+        return False, ("sealed sanction record is corrupt/unreadable - "
+                       "refusing release")
+    if not isinstance(record, dict) or record.get("schema") != SANCTION_SCHEMA:
+        return False, ("sealed sanction record carries an unknown schema - "
+                       "refusing release")
+    if record.get("ws_fingerprint") != fp:
+        return False, ("sealed sanction record belongs to a different "
+                       "workspace - refusing release")
+    try:
+        key = _sanction_keyfile().read_bytes().strip()
+    except OSError:
+        return False, ("sanction key file is missing - the operator must "
+                       "provision it (python hooks/completion_gate.py "
+                       "sanction-key-init); blocking closed")
+    if len(key) < _SANCTION_KEY_MIN:
+        return False, ("sanction key is too short - refusing release")
+    expect = _sanction_sign(key, fp, str(record.get("origin") or ""),
+                            str(record.get("decision") or ""),
+                            str(record.get("record_sha256") or ""),
+                            record.get("minted_ts"))
+    if not hmac.compare_digest(str(record.get("hmac") or ""), expect):
+        return False, ("sealed sanction HMAC invalid (forged or altered "
+                       "record) - refusing release")
+    if str(record.get("record_sha256") or "") != _secondstop_record_sha(adj):
+        return False, ("task-oracle.yaml's adjudication block was altered "
+                       "after the sanction was sealed (record sha mismatch)"
+                       " - tamper detected, refusing release")
+    if str(record.get("decision") or "") != "PASS":
+        return False, ("sealed sanction decision is not the required PASS "
+                       "verdict - refusing release")
+    return True, None
+
+
+def _first_stop_seal(ws: Path, oracle: dict) -> None:
+    """Seal the gate's OWN PASS verdict at a first stop. Called ONLY where
+    the judge has already returned 0 — a judge-blocked stop mints nothing,
+    so a block the agent wrote before or between the stops can never carry
+    a gate seal. The block's `second_stop` flag arms the second-stop face;
+    its decision text is advisory and never read here. Best-effort: called
+    inside a guarded block; never moves the first-stop verdict."""
+    if not isinstance(oracle, dict):
+        return
+    adj = (oracle.get("adjudication") or {}).get("stop_hook_active")
+    if isinstance(adj, dict) and adj.get("second_stop"):
+        _sanction_mint(ws, adj)
+
+
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -246,8 +417,7 @@ def process_event(payload: dict) -> int:
             if isinstance(oracle_early, dict):
                 adj = (oracle_early.get("adjudication") or {}).get(
                     "stop_hook_active") or {}
-                if (isinstance(adj, dict) and adj.get("second_stop")
-                        and adj.get("last_decision") == "PASS"):
+                if isinstance(adj, dict) and adj.get("second_stop"):
                     try:
                         allow, why = _secondstop_anchor(ws_early, adj)
                     except Exception as exc:  # noqa: BLE001 — #47: an anchor
@@ -257,9 +427,25 @@ def process_event(payload: dict) -> int:
                         allow = False
                         why = (f"second-stop sanction anchor failed - "
                                f"{type(exc).__name__}: {exc} (#47)")
-                    if allow:
+                    # The block's `second_stop` flag is only the arming
+                    # marker for this face; its decision text is advisory
+                    # and never read for release. The oracle block alone is
+                    # never the release key: the gate's OWN sealed sanction
+                    # must verify too. A seal failure blocks even when the
+                    # ledger anchor allows, and the seal reason
+                    # (tamper/absence/forgery) is surfaced first — it names
+                    # the release-blocking defect.
+                    try:
+                        sealed, seal_why = _sanction_verify(ws_early, adj)
+                    except Exception as exc:  # noqa: BLE001 — a verify crash
+                        # must never release; name the cause and block.
+                        sealed, seal_why = False, (
+                            f"sealed sanction verification failed - "
+                            f"{type(exc).__name__}: {exc}")
+                    if allow and sealed:
                         return 0
-                    reason = why
+                    reason = why or seal_why
+                    warn("second_stop_sanction_refused", reason)
                     print(json.dumps({"decision": "block", "reason": reason},
                                      ensure_ascii=False))
                     return 1
@@ -327,6 +513,16 @@ def process_event(payload: dict) -> int:
                          ensure_ascii=False))
         return 3
     if code == 0:
+        # Seal the gate's OWN PASS verdict — here and ONLY here: a stop the
+        # judge blocked mints nothing, so an agent-authored block written
+        # before or between the stops can never carry a seal (the seal's
+        # provenance is the judge's verdict, not the block's presence).
+        # Best-effort (never moves the first-stop verdict); the second
+        # stop's verify is the fail-closed face.
+        try:
+            _first_stop_seal(ws, oracle)
+        except Exception as exc:  # noqa: BLE001 — sealing never moves the verdict
+            warn("sanction_seal", f"{type(exc).__name__}: {exc}")
         # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
         # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;
         # mid-run Blocks are never caused by notes), refuse closure while the
@@ -407,6 +603,95 @@ def process_event(payload: dict) -> int:
     return code
 
 
+def _cli(args: list[str]) -> int:
+    """Operator faces for the sealed sanction.
+
+    HUMAN-ONLY: the operator (human) is the trust root of this face. It is
+    the ONLY way to release a second stop while items remain open, and its
+    every use is logged loudly (stderr warn + an operator-sanctioned
+    deferral ledger event). Invoking it from agent flow is a violation of
+    the review-gate posture — stated convention backed by deliberate key
+    exfiltration being the only bypass (the seal key is user-readable, so
+    same-user mechanical enforcement is impossible; the convention is the
+    control). Provision the key, mint a sealed record for a workspace.
+    Refuses loudly on anything it cannot verify; exit 0 = done, 2 =
+    refused."""
+    if args[0] == "sanction-key-init":
+        path = _sanction_keyfile()
+        if path.exists():
+            print(f"key already present: {path}")
+            return 0
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(secrets.token_bytes(32).hex(), encoding="utf-8")
+            os.chmod(path, 0o600)
+        except OSError as exc:
+            print(f"key-init FAIL: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 2
+        print(f"key written: {path} (mode 0600)")
+        return 0
+    if args[0] == "mint-sanction":
+        if len(args) < 3:
+            print("usage: mint-sanction <workspace> <decision>\n"
+                  "  HUMAN-ONLY operator face — the trust root for closing "
+                  "a run with items open. Every use is logged as an "
+                  "operator-sanctioned deferral. Agent flow must never "
+                  "invoke it.", file=sys.stderr)
+            return 2
+        ws, decision = Path(args[1]), str(args[2]).strip()
+        oracle_path = ws / ORACLE_FILE
+        try:
+            import yaml
+            oracle = yaml.safe_load(
+                oracle_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 — refuse with the cause
+            print(f"mint FAIL: cannot read {oracle_path} "
+                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
+            return 2
+        adj = {}
+        if isinstance(oracle, dict):
+            adj = (oracle.get("adjudication") or {}).get(
+                "stop_hook_active") or {}
+        if not (isinstance(adj, dict) and adj.get("second_stop")):
+            print("mint FAIL: the oracle records no armed second-stop "
+                  "adjudication block (adjudication.stop_hook_active with "
+                  "second_stop: true) — the block text itself is advisory "
+                  "and is not sealed as a decision",
+                  file=sys.stderr)
+            return 2
+        block_text = str(adj.get("last_decision") or "").strip()
+        if block_text and block_text != decision:
+            print(f"mint FAIL: requested decision {decision!r} contradicts "
+                  f"the oracle's recorded {block_text!r}",
+                  file=sys.stderr)
+            return 2
+        if not _sanction_mint(ws, adj, decision=decision,
+                              origin="operator"):
+            print("mint FAIL: no usable sanction key (provision it with "
+                  "sanction-key-init) or the sanction store is unwritable",
+                  file=sys.stderr)
+            return 2
+        # The operator deferral is loud: one rate-limited stderr warn and a
+        # distinct unified-log event naming the operator-sanctioned
+        # deferral, so an agent-flow invocation is at least visible.
+        warn("mint_sanction_operator",
+             f"operator-sanctioned deferral sealed: decision={decision!r} "
+             f"for {ws} (HUMAN-ONLY face)")
+        try:
+            import kunglao_log
+            kunglao_log.emit(ws, actor="operator",
+                             action="operator_sanction_deferral",
+                             detail=(f"mint-sanction sealed decision="
+                                     f"{decision!r} (HUMAN-ONLY face)"))
+        except Exception as exc:  # noqa: BLE001 — logging never breaks mint
+            warn("mint_sanction_event", f"{type(exc).__name__}: {exc}")
+        print(f"mint OK: {_sanction_record_path(ws)}")
+        return 0
+    print(f"unknown command: {args[0]}", file=sys.stderr)
+    return 1
+
+
 def main(stdin_stream=None) -> int:
     """Stop entry. Reads JSON payload from stdin (or stdin_stream for tests).
     FAIL_OPEN: unparseable stdin or any processing error → exit 0, empty
@@ -424,4 +709,9 @@ def main(stdin_stream=None) -> int:
 
 
 if __name__ == "__main__":
+    # Stop-hook face reads the payload on stdin with NO argv; the operator
+    # faces are argv-dispatched so a wired hook command can never trip them.
+    if len(sys.argv) > 1 and sys.argv[1] in ("mint-sanction",
+                                             "sanction-key-init"):
+        sys.exit(_cli(sys.argv[1:]))
     sys.exit(main())
