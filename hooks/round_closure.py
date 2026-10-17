@@ -87,8 +87,9 @@ def _worker_outcome(ws, pending) -> str:
         last = load_hooks_lib().parse_worker_status(text)
         if last in ("blocked", "failed", "error"):
             return last
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("round_closure_worker_outcome",
+             f"{type(exc).__name__}: {exc} — settling as completed")
     return "completed"
 
 
