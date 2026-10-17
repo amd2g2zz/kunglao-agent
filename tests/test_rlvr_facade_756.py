@@ -11,15 +11,22 @@ from __future__ import annotations
 
 import ast
 import importlib
-import sys
 from pathlib import Path
 
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-for p in (str(ROOT), str(SCRIPTS)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+
+
+@pytest.fixture(autouse=True)
+def _facade_path(monkeypatch):
+    """Scripts+root on sys.path for THIS test only — a leaked insert
+    reorders resolution for every later module in the worker (the
+    #671 hygiene's exact shadow: test_env_manifest's bare-name imports
+    died on a partial heartbeat_touch)."""
+    monkeypatch.syspath_prepend(str(ROOT))
+    monkeypatch.syspath_prepend(str(SCRIPTS))
 
 
 def _external_consumers() -> dict[str, set[str]]:
