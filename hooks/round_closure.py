@@ -78,24 +78,48 @@ def process_event(payload: dict) -> int:
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0
+    receipt = _kernel_faces(ws, session_id=str(payload.get("session_id")
+                                                   or "")) or {}
     detail = {
         "session_id": payload.get("session_id"),
         "transcript": payload.get("transcript_path"),
         "source": "SubagentStop",
     }
+    # the completion row closes the dispatch loop (Face 4 of the
+    # progress-coupling card): a WORKER stop carries claim/duration/exit
+    # + the attempt binding; a non-worker stop stays silent (the
+    # designed posture — only real dispatch completions emit).
+    # the closure-row contract: ONE row per SubagentStop —
+    # the between-turns wake topology reads it (tracker: the wake face).
+    # A WORKER stop's row is
+    # ENRICHED with the dispatch-loop binding (claim/duration/exit/
+    # attempt); a non-worker stop's row stays plain, exactly as before.
+    if receipt:
+        detail.update({
+            "claim": receipt.get("claim"),
+            "attempt_id": receipt.get("attempt_id"),
+            "step_id": receipt.get("step_id"),
+            "outcome": receipt.get("outcome"),
+            "exit": receipt.get("exit"),
+        })
     try:
         with scripts_on_path():
             import kunglao_log
+            # conditionally-keyed: a plain (non-worker) row keeps its
+            # exact pre-change key set — the explicit nulls would be a
+            # row-shape drift for the wake-topology consumers
+            telemetry = ({"claim": receipt.get("claim"),
+                          "duration_ms": receipt.get("duration_ms"),
+                          "exit": receipt.get("exit")} if receipt else {})
             kunglao_log.emit_lifecycle(
-                ws, CLOSURE_ACTOR, "completed",
+                ws, CLOSURE_ACTOR, "completed", **telemetry,
                 detail=json.dumps(detail, ensure_ascii=False))
     except Exception as exc:  # noqa: BLE001 — recorder, never blocks
         warn("round_closure", f"{type(exc).__name__}: {exc}")
-    _kernel_faces(ws, session_id=str(payload.get("session_id") or ""))
     return 0
 
 
-def _kernel_faces(ws: Path, session_id: str = "") -> None:
+def _kernel_faces(ws: Path, session_id: str = "") -> dict | None:
     """The production round-closure kernel faces (step settlement + closure kernel + RL digest).
 
     Stop(worker) IS the round-closure event (#429 §6), so this hook now
@@ -111,6 +135,10 @@ def _kernel_faces(ws: Path, session_id: str = "") -> None:
         the dispatch-gate barrier (worker_budget_gates.check_step_settled)
         lifts exactly when this face consumed the stash. No pending step
         = a non-worker subagent stop = nothing written, nothing warned.
+
+      Returns the settle receipt (the additive Face-4 telemetry keys:
+      claim/attempt_id/wall_s/outcome/duration_ms/exit) or None — a
+      non-worker stop settles nothing.
       - W6: the T2 unblocking-value priority queue builds AND drains
         here (verification_ladder.round_close + drain_t2_queue) — a
         production round consumes its queue head, not just the eval
@@ -146,10 +174,11 @@ def _kernel_faces(ws: Path, session_id: str = "") -> None:
     # #690: the step settlement — SubagentStop IS the step boundary, and
     # it runs FIRST so every decision face below sees post-settlement
     # state (settle -> update -> decide). Silent when no step is pending.
+    receipt = None
     try:
         with scripts_on_path():
             from rlvr import step_grain
-            step_grain.settle_step(ws, session_id)
+            receipt = step_grain.settle_step(ws, session_id)
     except Exception as exc:  # noqa: BLE001 — settle face, never blocks
         warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
     try:
@@ -199,6 +228,7 @@ def _kernel_faces(ws: Path, session_id: str = "") -> None:
     except Exception as exc:  # noqa: BLE001 — capability, never blocks
         warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
 
+    return receipt if isinstance(receipt, dict) else None
 
 def main_with_payload(payload: dict) -> int:
     return process_event(payload)

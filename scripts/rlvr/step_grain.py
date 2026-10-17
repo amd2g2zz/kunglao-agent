@@ -321,9 +321,17 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         except Exception as exc:  # noqa: BLE001 — credit face, never the settle
             warn("rlvr.step_grain.settle_step.credit",
                  f"{type(exc).__name__}: {exc}")
+        # the completion-row telemetry keys: the settle receipt needs the
+        # claim/duration/outcome/attempt binding without a second scan
         return dict(step_row, transition=transition, waste=waste,
                     step_credit=step_credit_value,
-                    credit_banked=credit_banked)
+                    credit_banked=credit_banked,
+                    claim=pending["claim"],
+                    attempt_id=pending.get("attempt_id"),
+                    wall_s=actual_s,
+                    outcome=outcome,
+                    duration_ms=agg["duration_ms"],
+                    exit=0 if outcome == "completed" else 1)
     except Exception as exc:  # noqa: BLE001 — settle never breaks the stop
         warn("rlvr.step_grain.settle_step", f"{type(exc).__name__}: {exc}")
         return None

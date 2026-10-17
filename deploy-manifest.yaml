@@ -51,7 +51,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 5f84fe4aa19e08c6ec4ea0a8430f669f4d0320e089e003d61299457957568310
+    sha256: 3f7d8cbe665cb37f91aef9a99ac6fb58535750d8f372cd55d701545e6ff79d0f
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -1383,7 +1383,7 @@ files:
   - src: scripts/rlvr/step_grain.py
     dest: .claude/scripts/rlvr/step_grain.py
     kind: scaffold
-    sha256: d0331ad5965f633dabb61e9ebf30506ded1b6118b16162c639e517a3a882c5a6
+    sha256: e31df8e02fb2f25435bed0c87b38aa35350ef14e1ef366e56ffafa44d508054b
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
