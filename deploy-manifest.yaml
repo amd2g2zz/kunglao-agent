@@ -803,7 +803,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: 3932f57ed74ac121da5a01c50543fd7b86851bcbff38e443a9ef594cd69d284b
+    sha256: 9dd0d7bcee69c7ecafdd4994b64f3bb260b1abb588d57d3bea43bad014ba939f
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold

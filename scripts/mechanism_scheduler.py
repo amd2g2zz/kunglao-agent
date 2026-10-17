@@ -121,10 +121,14 @@ from harness_common import utc_now_z as utc_now  # #863 Family F: single source 
 # state (one dotfile, two sections: mechanisms + event-bus offset)
 # ---------------------------------------------------------------------------
 
+def _read_json(p: Path):
+    """The module's JSON read face (the Family-K parse shape)."""
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def _read_state(ws: Path) -> dict:
     try:
-        data = json.loads(
-            (Path(ws) / STATE_REL).read_text(encoding="utf-8"))
+        data = _read_json(Path(ws) / STATE_REL)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
@@ -436,8 +440,7 @@ def is_parked(ws: Path, *, events: set | None = None) -> bool:
         if cadence_advisor.active_workers(ws):
             return False
         try:
-            prev = json.loads((ws / NOOP_STATE_REL).read_text(
-                encoding="utf-8"))
+            prev = _read_json(ws / NOOP_STATE_REL)
         except (OSError, ValueError):
             return False  # cold start: the first pass never parks
         if not isinstance(prev, dict):
