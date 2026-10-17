@@ -203,6 +203,33 @@ def test_revoke_claim_no_rows_is_noop(tmp_path):
     assert marl.read_negatives() == neg_before
 
 
+def test_revoke_claim_removes_the_broadcast(tmp_path):
+    ws = _ws(tmp_path)
+    _usage(ws, "C-003")
+    _facts_index(ws, "C-003", "PROVEN")
+    crystallize.crystallize_settlement(
+        ws, claim="C-003", step_id="step-1", outcome="completed",
+        step_credit=0.8)
+    assert len([r for r in strategy_store.load_rows()
+                if r.get("claim") == "C-003"]) == 1
+    out = crystallize.revoke_claim(ws, "C-003")
+    assert out["broadcasts_removed"] == 1
+    assert [r for r in strategy_store.load_rows()
+            if r.get("claim") == "C-003"] == []
+
+
+def test_worker_outcome_reads_retry_suffixed_log(tmp_path):
+    sys.path.insert(0, str(ROOT / "hooks"))
+    import round_closure as rc
+    ws = _ws(tmp_path)
+    runs = ws / "runs"
+    (runs / "worker-status-C-011.md").write_text(
+        "status: done\n", encoding="utf-8")
+    (runs / "worker-status-C-011-2.md").write_text(
+        "status: blocked\n", encoding="utf-8")
+    assert rc._worker_outcome(ws, {"claim": "C-011"}) == "blocked"
+
+
 def test_legacy_rows_without_provenance_still_read(tmp_path):
     ws = _ws(tmp_path)
     legacy = {"schema": marl.NEG_SCHEMA, "ts": "2026-10-17T00:00:00Z",

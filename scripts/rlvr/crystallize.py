@@ -19,7 +19,6 @@ atomic rewrite, not a tombstone.
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -29,12 +28,16 @@ if __package__ in (None, ""):
 from kunglao_log import warn
 
 #: the dispatch-failure vocabulary — a step settling here declares its
-#: method a dead end for this structural class.
+#: method a dead end for this structural class. Mirrors the hooks-side
+#: DISPATCH_FAILURE_STATUSES (worker_budget_sinks) — the same three
+#: words, owned per tree (a scripts→hooks import would wire the wrong
+#: direction).
 FAIL_OUTCOMES = frozenset({"blocked", "failed", "error"})
 
 #: the register's decisive failure statuses — a claim the amendment flow
 #: flipped to one of these never re-broadcasts, whatever the facts index
-#: still says (the resurrection wall).
+#: still says (the resurrection wall). Same set as the pair-amendment
+#: face's CASE_FAIL_STATUSES in settle_round_credit.
 REGISTER_FAIL = frozenset({"REFUTED", "NEGATIVE"})
 
 
@@ -159,7 +162,8 @@ def _rewrite_without(path: Path, drop) -> int:
     surviving canonical rows keep their exact bytes — the file-level
     shape normalizes (blank separators drop, the final newline lands).
     Returns the removed count; a zero-removal rewrite never touches the
-    file."""
+    file. The write rides the canonical atomic face (writer-unique tmp,
+    failed writes unlink their tmp, parents created)."""
     try:
         import json
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -189,12 +193,9 @@ def _rewrite_without(path: Path, drop) -> int:
                      f"{type(exc).__name__}: {exc}")
                 return 0
             return removed
-        import uuid
-        tmp = path.with_name(
-            f"{path.name}.revoke-{os.getpid()}-{uuid.uuid4().hex[:8]}")
         try:
-            tmp.write_text("\n".join(kept) + "\n", encoding="utf-8")
-            os.replace(tmp, path)
+            from _common import atomic_write_text  # noqa: PLC0415 — lazy
+            atomic_write_text(path, "\n".join(kept) + "\n", unique=True)
         except OSError as exc:
             warn("crystallize.rewrite", f"{type(exc).__name__}: {exc}")
             return 0

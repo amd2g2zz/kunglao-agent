@@ -72,21 +72,42 @@ def _resolve_workspace(payload: dict) -> Path | None:
     return None
 
 
+#: the settle-vocabulary mirror of rlvr.crystallize.FAIL_OUTCOMES /
+#: worker_budget_sinks.DISPATCH_FAILURE_STATUSES — owned per tree (a
+#: hooks→scripts import at module level would re-bind by ambient
+#: sys.path order).
+_FAILURE_OUTCOMES = frozenset({"blocked", "failed", "error"})
+
+
 def _worker_outcome(ws, pending) -> str:
     """The settled step's outcome from the worker's OWN status log (the
     last ``status:`` token, the single parse point in the hooks lib),
     mapped onto the settle vocabulary: done -> completed; the dispatch
-    failure words ride as-is. Fail-open: no pending step, an unreadable
-    log, or an unknown token settles as completed."""
+    failure words ride as-is. Retried workers reopen suffixed logs
+    (``worker-status-<claim>-<suffix>.md``) — the newest hit wins.
+    Fail-open: no pending step, an unreadable log, or an unknown token
+    settles as completed."""
     if not pending:
         return "completed"
     try:
         claim = str(pending.get("claim") or "")
-        text = (ws / "runs" / f"worker-status-{claim}.md").read_text(
-            encoding="utf-8", errors="replace")
-        last = load_hooks_lib().parse_worker_status(text)
-        if last in ("blocked", "failed", "error"):
-            return last
+        # the exact log plus its retry-suffixed reopens
+        # (worker-status-<claim>-<suffix>.md); NEWEST log wins — a
+        # retry's reopened log is the worker's final word.
+        runs = ws / "runs"
+        candidates = [runs / f"worker-status-{claim}.md"]
+        candidates.extend(runs.glob(f"worker-status-{claim}-*.md"))
+        candidates = sorted(
+            (p for p in candidates if p.is_file()),
+            key=lambda p: p.stat().st_mtime, reverse=True)
+        for path in candidates:
+            last = load_hooks_lib().parse_worker_status(
+                path.read_text(encoding="utf-8", errors="replace"))
+            if last is None:
+                continue
+            if last in _FAILURE_OUTCOMES:
+                return last
+            break   # the newest token decides, even when done
     except Exception as exc:
         warn("round_closure_worker_outcome",
              f"{type(exc).__name__}: {exc} — settling as completed")

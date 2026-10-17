@@ -51,7 +51,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: ff2775972d1288985fecc4bbd9dcd400b6b79edcce55ccc9399d65ca1ee94fc5
+    sha256: d8c3bf7939a58bfb6eb533363031cdbf4847bcc030a0a6b48f1a4ff4b7997b72
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -1283,7 +1283,7 @@ files:
   - src: scripts/rlvr/crystallize.py
     dest: .claude/scripts/rlvr/crystallize.py
     kind: scaffold
-    sha256: 587b993918f8514f54592460bda0d9f97bf55968b6c24eb91546e3b03026ff02
+    sha256: 9e1f12f7534280b610073d7d23875590bcd638700411895492cf410171e95eee
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
