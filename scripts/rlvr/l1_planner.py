@@ -338,8 +338,45 @@ def candidate(action_kind, claim, cost, *, prior: float = 1.0,
     return Candidate(kind, cid, cost, float(prior), value_hint, detail)
 
 
+def _admit(doc: dict, cands: list, best: str,
+           budget: float | None) -> list[str]:
+    """The policy's output cardinality: one-or-more, budget-bounded.
+    Greedy in sampled-ratio order, skip-if-no-fit; park (ratio 0 by
+    ruling) sorts to the floor and always fits (cost 0). No budget ->
+    today's single-winner shape. Honest edge: with no park offered and
+    nothing fitting, the fallback returns the best-ranked action
+    (over budget) rather than nothing — the caller's own offering
+    decides, never a fabricated one."""
+    if budget is None:
+        return [best]
+    # the boundary wall, same discipline as candidate(): bools are not
+    # numbers, NaN compares False against everything (a NaN budget
+    # would silently admit unbounded), infinity is not a budget.
+    if isinstance(budget, bool) \
+            or not isinstance(budget, (int, float)) \
+            or budget != budget \
+            or budget in (float("inf"), float("-inf")) \
+            or budget < 0:
+        raise ValueError(
+            f"budget must be a finite number >= 0: {budget!r}")
+    admitted, spent = [], 0.0
+    for c in sorted(cands, key=lambda c: (-doc[c.key]["ratio"], c.key)):
+        if c.action_kind != "park" and doc[c.key]["ratio"] <= 0.0:
+            continue
+        if spent + c.cost > float(budget) + 1e-12:
+            continue
+        admitted.append(c.key)
+        spent += c.cost
+    if not admitted:
+        park = next((c.key for c in cands if c.action_kind == "park"),
+                    None)
+        admitted = [park] if park else [best]
+    return admitted
+
+
 def plan(ws, candidates, *, store=None, rng: random.Random | None = None,
-         state_signature=None, gamma=None, fold_view=None) -> dict:
+         state_signature=None, gamma=None, fold_view=None,
+         budget: float | None = None) -> dict:
     """The planning algorithm: for every candidate, one DTS draw from
     its (state, action_kind) cell (or the known value_hint), then the
     argmax of value / cost. Pure in (fold, candidates, rng): the same
@@ -348,7 +385,14 @@ def plan(ws, candidates, *, store=None, rng: random.Random | None = None,
     fast). No candidate carries a positive ratio -> park (the
     do-nothing baseline) or the first candidate — never a fabricated
     winner. ``fold_view`` lets a caller reuse ONE fold across many
-    plans (the advisory face's per-claim loop); None folds the store."""
+    plans (the advisory face's per-claim loop); None folds the store.
+
+    ``budget`` changes the output cardinality:
+    one-or-more actions, admitted greedily in sampled-ratio order while
+    the budget lasts (skip-if-no-fit; park is the cost-0 floor). The
+    receipt carries ``admitted`` (the key list, head = chosen). Without
+    a budget the single-winner shape is byte-preserved. The choice is
+    still pure in (fold, candidates, rng, budget)."""
     cands = list(candidates or ())
     if not cands:
         raise ValueError("candidates is empty")
@@ -400,10 +444,12 @@ def plan(ws, candidates, *, store=None, rng: random.Random | None = None,
         park = next((c.key for c in cands if c.action_kind == "park"),
                     order[0])
         best = park
+    admitted = _admit(doc, cands, best, budget)
     return {
         "schema": SCHEMA,
         "state_signature": sig,
-        "chosen": dict(doc[best], key=best),
+        "chosen": dict(doc[admitted[0]], key=admitted[0]),
+        "admitted": admitted,
         "candidates": {k: doc[k] for k in order},
     }
 
