@@ -21,6 +21,7 @@ All fixtures are SYNTHETIC (privacy rule).
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -223,10 +224,14 @@ def test_worker_outcome_reads_retry_suffixed_log(tmp_path):
     import round_closure as rc
     ws = _ws(tmp_path)
     runs = ws / "runs"
-    (runs / "worker-status-C-011.md").write_text(
-        "status: done\n", encoding="utf-8")
-    (runs / "worker-status-C-011-2.md").write_text(
-        "status: blocked\n", encoding="utf-8")
+    # explicit mtimes: CI filesystems can land both writes in one mtime
+    # tick, and "newest wins" must not depend on that granularity
+    old = runs / "worker-status-C-011.md"
+    old.write_text("status: done\n", encoding="utf-8")
+    os.utime(old, (1_000_000, 1_000_000))
+    new = runs / "worker-status-C-011-2.md"
+    new.write_text("status: blocked\n", encoding="utf-8")
+    os.utime(new, (2_000_000, 2_000_000))
     assert rc._worker_outcome(ws, {"claim": "C-011"}) == "blocked"
 
 
