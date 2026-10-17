@@ -3,11 +3,11 @@ files:
   - src: hooks/_path_hygiene.py
     dest: .claude/hooks/_path_hygiene.py
     kind: hook
-    sha256: b0c12258c3ccee259ff486e50838a41e2cbea02ee2c6aa97d8ccb20ea660aa7e
+    sha256: ae53e0027d7153751f49056fed253bca65c7b872bedcda1339cad8f0571f16f6
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 5f3be6a60a09737219c7d25ec217ddf10457eaff64f60280c61ff55835f1c472
+    sha256: 9badd29d600f22d39d11b54f07062a7a70a5e5de6549597971808961829e1135
   - src: hooks/compact_continuity.py
     dest: .claude/hooks/compact_continuity.py
     kind: hook
@@ -15,7 +15,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 8ac8b20b3f00a492ca97152b94cbb629d80e2b9d4e9701f6f749c9d0db7b2cca
+    sha256: 965094488b8cbe6b9364012ae974dd23e4e2fcf5b1a782cc382b010fd8e169ab
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 9fd5f7dc8b285ccce31be5739377edd1254496673d55e9fb900940522df229d1
+    sha256: 76c735395b244dd5ef4e7ea2036bf1a3f8546b8b539166341fb4156a06be5c2f
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -35,11 +35,11 @@ files:
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
-    sha256: b4ed563f8f9040ef62abce442340e3fc030f9945a581ff5c9e7553187af6dc37
+    sha256: 51a1f006dc7b091f8bda7e3398bb2a76a0f3f18e75a04ec32d14cbe9ee856307
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: 0bcd39b6f00b3b0618ec79afed863bd5bc273f6829bb7ffe9a6a38349a22d995
+    sha256: d5449cb379a07f855430852dc64a5a89032542ea68ea4847e550908f5f120c25
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -51,11 +51,11 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 9b1231f9f65bc49039c49751ec5d4e354527ae226aa10fa34685f6c4cef9d1e7
+    sha256: d8c3bf7939a58bfb6eb533363031cdbf4847bcc030a0a6b48f1a4ff4b7997b72
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
-    sha256: 6058ea0c3d95e82e36e456fa94f4f5a8abfb4e26c3c356201e0262572ed7ba2f
+    sha256: d954c93a93ba5f3b8c7d466d4d4980ee7394c9a86b0bc5f822516e13a36c6aab
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -63,11 +63,11 @@ files:
   - src: hooks/state_anchor.py
     dest: .claude/hooks/state_anchor.py
     kind: hook
-    sha256: 5ee5160a19064beb20311682c8a5c610671a872b81c9b424f7d5889714b11d0d
+    sha256: e94425dcf7065cf9871b29869b174c21a6b8f97743826314522b9c96e080db33
   - src: hooks/step_record_capture.py
     dest: .claude/hooks/step_record_capture.py
     kind: hook
-    sha256: 2fc9bdeea12017e34b8aadf5bdcfefc4b26eefc3c7845baa72f9d0132969b590
+    sha256: 45f6cd86e3c1af755b45c1d06bf773dd35a3da53d19bad074381829f66c9f41c
   - src: hooks/user_signal_capture.py
     dest: .claude/hooks/user_signal_capture.py
     kind: hook
@@ -83,15 +83,15 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: c89f2e02aad45861d71e247481e85a6ea468541349330a713c43c8d7166e0b7e
+    sha256: aea0313f3d55625f7fbfbc58678a7e276a35da80eeac07d94546efbde4d9287b
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: ea5bbe6607716a2eaa9ce02b6fd02de8934c779f11ac80da5b5c947d9059aa83
+    sha256: 43a03498d5b7d27d89d4150d44e6b9da07a7687841d5f2ca5c75b92ce13b19b2
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: d93163378be37e55a4dba3f03f2faa34f31e7cad23cdd5eacdbba1a4260c0910
+    sha256: 452b2486b05a875c31ca8ad2d21a0edeabae81bc3c0db9d53cab6d59bec30881
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -103,7 +103,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: a058f0d37999c0ff91f0b84013e18771b8a73ffcf274169bf6fa4b5fc93ebf74
+    sha256: e2add04b795154fe933737c48d4f44efded79884e9da50b4dcb8a97b7701b7ed
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -124,6 +124,10 @@ files:
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
     sha256: c9730df32c474e7ba15e0ca3399e55b4311f0d95c444dfeb3cdebf8ea6f4e227
+  - src: agents/kunglao-settler.md
+    dest: .claude/agents/kunglao-settler.md
+    kind: agent
+    sha256: ae3907b4fd64d6cafd5cc67c1cf885add84c1d2b334dedcfc01cd40f62e97450
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -143,7 +147,7 @@ files:
   - src: scripts/_boot.py
     dest: .claude/scripts/_boot.py
     kind: scaffold
-    sha256: cdcd12b131132de58eb3d62b769f9f94b224f5b7827babebdaaea42bf80231e1
+    sha256: 15b421d3102c0530eac6e5777c072e94481cb2219e0671dbf0a24d6667b3ded3
   - src: scripts/_common.py
     dest: .claude/scripts/_common.py
     kind: scaffold
@@ -167,7 +171,7 @@ files:
   - src: scripts/action_space.py
     dest: .claude/scripts/action_space.py
     kind: scaffold
-    sha256: b71bab891e5d9d275a6c83b012b8b7c4a50cd1f801138d5d154845529777a694
+    sha256: 5ccf3cc3182e71adb8ffe539373c8bdf73c21a4beb78e146846f70dfdc044855
   - src: scripts/active_intervention.py
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
@@ -247,7 +251,7 @@ files:
   - src: scripts/cadence_advisor.py
     dest: .claude/scripts/cadence_advisor.py
     kind: scaffold
-    sha256: 6fa6190c20ce5aa912fe220dc1a9188cb37ccac2bb26becdd55770559219c50a
+    sha256: 94753dc755da5c1f493d1d8bab51e404e067e10de0a2a409ee321b3d3b198a5e
   - src: scripts/calibration_face.py
     dest: .claude/scripts/calibration_face.py
     kind: scaffold
@@ -267,7 +271,7 @@ files:
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
-    sha256: db3cab92466247918b6c9c5078c844e9839da968b9fce979da5497969b43ecc8
+    sha256: 5bcf1c70d4ecd2eea380eda1624bf69d34b2d823d0b1a7306227437ae5423f8a
   - src: scripts/check_global_rule_subset.py
     dest: .claude/scripts/check_global_rule_subset.py
     kind: scaffold
@@ -296,6 +300,10 @@ files:
     dest: .claude/scripts/compute_priors.py
     kind: scaffold
     sha256: 60edf961e8cc89b47b0180d39b5525cf2c195511cc044360fb86537616d7d36e
+  - src: scripts/consolidate_ledgers.py
+    dest: .claude/scripts/consolidate_ledgers.py
+    kind: scaffold
+    sha256: 81c055c31d1c2465f16f6a4cb301152cf06907a8c8fcc9ea8362c3387107b93d
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -323,7 +331,7 @@ files:
   - src: scripts/dead_letter.py
     dest: .claude/scripts/dead_letter.py
     kind: scaffold
-    sha256: 8ccfb5928017e0c550f57df4a365233ff150c398c2a74a569cdc713e27b0476f
+    sha256: 065aa47ab06288dddb57739aa44a184e95b682ba4635e147cf303a968de4d631
   - src: scripts/decision_lint.py
     dest: .claude/scripts/decision_lint.py
     kind: scaffold
@@ -332,6 +340,10 @@ files:
     dest: .claude/scripts/decision_pending.py
     kind: scaffold
     sha256: c172f0f91ca4db7515ff8425b010baa45580b9af4c24268716bf560f9d1fa70a
+  - src: scripts/decision_view.py
+    dest: .claude/scripts/decision_view.py
+    kind: scaffold
+    sha256: 60623f33b4d3cef2f0c5dc3fbe255672fe1de1c6ac57add192d04060b8881122
   - src: scripts/dep_surface_gate.py
     dest: .claude/scripts/dep_surface_gate.py
     kind: scaffold
@@ -447,19 +459,19 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: e9c7f26df08efc4d3d7aa07c1454e929cc8585451af98a81d4ab46172e7132ae
+    sha256: f128c891003bb15b52864bab86b0391b6e1c43e26a75c76c7a09a5f207bc3e97
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: fd83c8a9b62c245ddb20a6e248fd89a91d3ce9f139026185b0789a454d7dd1c3
+    sha256: 78fc48a231561f3b2cfa29c9d897661e74a3b6c9987a655a1f2ce015645e2201
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: cc8b16b8587f8f14b776fc3768322c93108ded54d05e25b1763e0a21e29e027c
+    sha256: 247a2372177ec64fa04610abf70b8e36ea4d58662947e02f006e0e594ae5cc23
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
-    sha256: fd2d0b6108f8fb766b3b1c337f7488a6989a401a0c7517587811ddced1c8c5a1
+    sha256: cfdb134cfa7e8312f3d2da83cb72fd555ae4e49c6e60ce4a43e9fbfc77ab9624
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -495,11 +507,11 @@ files:
   - src: scripts/eval_toolflex.py
     dest: .claude/scripts/eval_toolflex.py
     kind: scaffold
-    sha256: a077d7425a44e931e142d16603d18bdc6fe457481d820225ed1607c567c31cb4
+    sha256: 2455a5c5edfe09b8ad78caf9e9ad269b77e832349bcb6a738fb4ca450ad1f7c5
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 51c10ef8eb0321e6ef1e16789abf2d29c8af5466165fee16be4fdabcaa784bb3
+    sha256: 317a0de8b476850c580bac82ddaba43ee43d52c4e3e27a8f55e53ec63fc49b2b
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -519,7 +531,7 @@ files:
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
-    sha256: d86c55b27a133d3866b9b83b0124bd8f546db52921f136d925f3e990d06b5f47
+    sha256: 1f4cb467d2be02a69c266fec34d07023d60ee56289e72694e0a2144851776f22
   - src: scripts/fact_contradiction_gate.py
     dest: .claude/scripts/fact_contradiction_gate.py
     kind: scaffold
@@ -559,11 +571,11 @@ files:
   - src: scripts/gate_telemetry.py
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
-    sha256: 3686389ae72c4b1e3cb9689b3b2e56f429d21b92981b388ff5afffee8ca7a3c8
+    sha256: 1da043603da9016b6976e36f689a278af603af1a89e7217fd1ee8cff5a98ed74
   - src: scripts/goal_operationalization.py
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
-    sha256: c86cfa266c7d526479e73317f9d73c4e54231125a7e7378578c708a288ed81d5
+    sha256: a5c2db641e10f7e94523f91af9e29a64d86479d1e9f0c5c8cfa16d6e6ff94f21
   - src: scripts/guardian_kpi.py
     dest: .claude/scripts/guardian_kpi.py
     kind: scaffold
@@ -579,11 +591,11 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 9ca6a33891acaeef8f17d3d6b4d08eb6a42967208b5b01d3232bb79f02ff1aa2
+    sha256: 7ffe9ae583310e9c175beff56eba3c8782e46145ccd1879c4bdf3386ac631e63
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 208bfd803c38795ea7f36a29d938e0d3a2d7a1ddabf0f1c3662225494b159761
+    sha256: 5a59a592190effe56a8c431983f41e764eaa7fe08acd91a01549874c1ae48f48
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -591,7 +603,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: c2b842d974a63661f81019404bd255c6d5b93bbefa4f27a7798fc8025a220929
+    sha256: 0c8bba6f4f2dd8e9d6df026442b44b09ace318592b37ed0f376284b7c63a35c1
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -599,7 +611,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: e1479a28c561b66ec27b3afb3ca26323859b371d7f8b0a20cb3864b4d54a0d8b
+    sha256: 3b9dcccc2d5604adc9b01a1833735b9b04652bcdf0eaee771c1636206c1fe17f
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
@@ -652,6 +664,10 @@ files:
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
     sha256: c2c18f80e8321d950662dfdb1db97643afdef000ed52794ed132fdbf7f792660
+  - src: scripts/intelligent_scheduling.py
+    dest: .claude/scripts/intelligent_scheduling.py
+    kind: scaffold
+    sha256: 781a3a38242b9941566b62a16f99452536da9e684b751bb6fe0e764268d99c4a
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
@@ -675,7 +691,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 5b061541498cda4ef76214cae3e14cdb796362cc994738bfbeb374209bfe1540
+    sha256: cd11840f104ee32a1ad46db4c8a74928c44b96e2d12a1bae6233789c563fd424
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -723,7 +739,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: f612cb79c0990d6418b0326a92890f3ee970e262907f17489102f4b0241cfda1
+    sha256: 68c69f46ea8f3777fcbca2dbc47bf19407860be73b0992faa206746d91ab0069
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -751,7 +767,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 7aa0aaf7e313a14dc173435441a76c402a91de9c8d1c259af609b42830b9f16a
+    sha256: 41a446d5bdb5c4600cdb0de1983a37c8cbb3adb6df8a5d2599df738776f085fd
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -767,7 +783,7 @@ files:
   - src: scripts/loop_scheduler.py
     dest: .claude/scripts/loop_scheduler.py
     kind: scaffold
-    sha256: 0768519c6f8ad9e667813121f1d3e32e2ebd563e11aba048accdb4d4fb19fd64
+    sha256: cb44c6023916b399b8a74389f1c61f5b1e49d43708cdf983ff256cb35508773e
   - src: scripts/loop_state.py
     dest: .claude/scripts/loop_state.py
     kind: scaffold
@@ -787,11 +803,11 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: aca00d7f0fc11a6e45f0c4d39a4e630220cfa7ec227ac1623ecae56df5147343
+    sha256: 9dd0d7bcee69c7ecafdd4994b64f3bb260b1abb588d57d3bea43bad014ba939f
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold
-    sha256: 3143ff9fcb1776fa16b6d3daccc67794fa382c56cc8008a9fd2854c7d85796ed
+    sha256: c60b00f49d58ba49fd71799b0c0c8733ad2cb36fab57f186590a18daa3fc33bc
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
@@ -835,7 +851,7 @@ files:
   - src: scripts/oracle_cadence.py
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold
-    sha256: ab1ace868ef9ee789a3779a9def31409e86680976e9b2a3a1d63a30bbcfa755c
+    sha256: 24620328b1c3195e311f39bd449220a53211fce7872005f9092e9b2c06c0d224
   - src: scripts/oracle_case_admission.py
     dest: .claude/scripts/oracle_case_admission.py
     kind: scaffold
@@ -843,7 +859,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 2331518bc931f007a1843d0705650b57c17f3a5e3c7979e45fb7fd9078bc96ab
+    sha256: 21df9915ebfefa51e7ccade3ef183f7fd4d26967ef767587bfaf5684b9cbc3d6
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -855,7 +871,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: a19713fd442966d448d54764f21f6e20348f031cf6c5f4a781eee7fa3c96d92f
+    sha256: 760826d8c07d2e7b29dcaba48530d1ee6219641eaf84971b3488f0f26acc2abc
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
@@ -868,6 +884,10 @@ files:
     dest: .claude/scripts/plan_stages.py
     kind: scaffold
     sha256: e9081d9ff7870af16a733eb18b5d8ee62037065ff5e2c12ca3fa0d4810905b36
+  - src: scripts/planning_actions.py
+    dest: .claude/scripts/planning_actions.py
+    kind: scaffold
+    sha256: 6b1208d5b2414bf40819e4a78bf553144a761073080498aa98b6ac9cb1ade194
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
@@ -891,7 +911,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 7f1b7f399378f0bcf91a9bc2aee9a97ed59000b3eb8e12a95943e5173ba0b917
+    sha256: 52233cb7a349badc0127e264bdc60ef2f6d569e6d08260d391d3f0298c5cc4c5
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -915,7 +935,7 @@ files:
   - src: scripts/rank_face.py
     dest: .claude/scripts/rank_face.py
     kind: scaffold
-    sha256: e7359314580bfc057f2eeffc0d63bc2a4778786b8a0c347c08ac327ff60f24f3
+    sha256: a3559d095def91c6c194589c259d83df2a7ac214b4bd1ac3947c5436a05f20a7
   - src: scripts/re_pin_references.py
     dest: .claude/scripts/re_pin_references.py
     kind: scaffold
@@ -971,7 +991,7 @@ files:
   - src: scripts/render_rl_visuals.py
     dest: .claude/scripts/render_rl_visuals.py
     kind: scaffold
-    sha256: 90217c0ea82dec74b5db247669fd3e1c8f20cde59076d31fe68a894e7c977b82
+    sha256: 8cc913578094b36b3a7d68cd207057ecf5a55a2a099451101517fbb8531c1f85
   - src: scripts/replay_equivalence.py
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
@@ -1027,7 +1047,7 @@ files:
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: cbaae755263abec55a214fefa363a8eb01b7ad67f6641b93765303df3c1d0ee5
+    sha256: d8712da5a7185cd11e997e0019b40d397bd1bb4371803858395354625292d277
   - src: scripts/rotation_induction.py
     dest: .claude/scripts/rotation_induction.py
     kind: scaffold
@@ -1043,7 +1063,11 @@ files:
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
-    sha256: d6ed12c3573255af5121d4c12c7ee0be55f0915a6a490c94e7b4ae3350bbbe1c
+    sha256: 96b3b410be5559d45e347a259b485f8fba717502d413f0426fe4dd112835f879
+  - src: scripts/scheduling_selection.py
+    dest: .claude/scripts/scheduling_selection.py
+    kind: scaffold
+    sha256: 24531516c2ea64c1ac20888ead66e6b0d58262a0f0c0b44bf54f0f99a7c73d1f
   - src: scripts/script_harvest.py
     dest: .claude/scripts/script_harvest.py
     kind: scaffold
@@ -1055,7 +1079,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: ae9f04d4183712c0acce01bc6b288ee799df9d9f7970fe754cd845e7f0127141
+    sha256: 7f2058740f20fe0b553a0ea76ce991f61b128c004dcb4319435be7f90c206fa8
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1083,7 +1107,7 @@ files:
   - src: scripts/status_defs.py
     dest: .claude/scripts/status_defs.py
     kind: scaffold
-    sha256: 071678326104c6940db95f654f74720abae79527e73037a7c26404397ce05168
+    sha256: 48252be36bcae396f2b8d95e69a1ef02f6689b9401c27db7a0e4c3e54ad29c71
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
@@ -1119,7 +1143,7 @@ files:
   - src: scripts/template_version.py
     dest: .claude/scripts/template_version.py
     kind: scaffold
-    sha256: 4adfe1b1619125bec0fce2a1062e7c0a98b1455a3e703464ed281f45995549b9
+    sha256: fc9cebed2a3a10eb8f6fa80881810c57195880cb6d4d4b55f50c1ce9348eb858
   - src: scripts/terminal_settlement.py
     dest: .claude/scripts/terminal_settlement.py
     kind: scaffold
@@ -1155,7 +1179,7 @@ files:
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
-    sha256: 41f944315879189c31f3cdf3fe48a608ad078c7ab9e6ba772537665848742008
+    sha256: a3f51425b937554448b1648feb0449f3d31d2b7ac90259d04b219fc62bf7d9ce
   - src: scripts/toolchain_negotiation.py
     dest: .claude/scripts/toolchain_negotiation.py
     kind: scaffold
@@ -1183,7 +1207,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: a00f02241157d8318c23111ff64828807dc6729996b46f2654529c5d3106f6e5
+    sha256: 0c252c67b8faa6a58484ea8ab49dc2c20c1769313e36527709d7aee6fde76a1e
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1207,19 +1231,19 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: 205dea9239e7d6d17441653d91f62afc4830061a3579ceaadaec7bd3495a340d
+    sha256: e783916feac0da859b267dbb31e86d6faf76bd20c9e328e306cfff9fc346e937
   - src: scripts/worker_death.py
     dest: .claude/scripts/worker_death.py
     kind: scaffold
-    sha256: f173a35fbf6048233b1e8cbf069c1f244c4258923a7c5972b89f7541eb0b10cc
+    sha256: e4a69e28f7e0f332211217a815cd45e8940fef11dae61612f491d150dd183fc8
   - src: scripts/workguard.py
     dest: .claude/scripts/workguard.py
     kind: scaffold
-    sha256: 43bf0508b96a9ff306589f9694855d59297f6333f406f288b789c88ddd693f96
+    sha256: a9c3ad6acb2a664c339a43d9c6e058377e120e45a5d65b96d93cd44529bde456
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
-    sha256: f7360042be0ed7554e8aac2ca706192b573500d2d9c7145b78b1c40e81d1e3b5
+    sha256: 695154f257d18be2c680da3eca4af0d3bc5c845f23cb691ef43d6a321af47e37
   - src: scripts/write_guard_unlock.py
     dest: .claude/scripts/write_guard_unlock.py
     kind: scaffold
@@ -1227,11 +1251,11 @@ files:
   - src: scripts/ws_layout.py
     dest: .claude/scripts/ws_layout.py
     kind: scaffold
-    sha256: ac0e31417467dda128b0fcd2550ebf7f878c869783d0b8f8af561fa58cf4dbcf
+    sha256: ab1aa5752bd7532899afe4fcd86906d4fe7d931b36ff07919ad5f9d13355415c
   - src: scripts/ws_yaml.py
     dest: .claude/scripts/ws_yaml.py
     kind: scaffold
-    sha256: 8a97cf37bf9a946f69a3d698781ba458185e005effa8614253330d688ddf0b0a
+    sha256: 77a220ee2be5685093c2c9483d35fe16800df3eeb1e6ad6f02e8eff8c7eda750
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
@@ -1239,15 +1263,31 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 8d38a7652601c72d34dd0b1cb1ec2901319f4801efcefe8996c6a8667d24ef54
+    sha256: 9b6d1cd4aa00d458ec3c45fcb9b3ae3676cb037a8955051e9edd8cf34c04138d
+  - src: scripts/rlvr/belief.py
+    dest: .claude/scripts/rlvr/belief.py
+    kind: scaffold
+    sha256: b20d87ae82506b2959b4cb8e467a0110934e45a13e962f7312bd29f11bc194c6
   - src: scripts/rlvr/censored_review.py
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
-    sha256: 4737c41bc9058b4153fc79890a1f26a88b8180a6df27fadcfd7f0d2561b20b00
+    sha256: b012e5ef640137ff4f5e83f62046855535f85e5a3a1c12aad5296b5be4b7cd86
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
     sha256: 30e0753991520b1b585730dffa9c069b67ef09907764523c115779a196cf932a
+  - src: scripts/rlvr/consolidated_ledger.py
+    dest: .claude/scripts/rlvr/consolidated_ledger.py
+    kind: scaffold
+    sha256: e444c166af8b6f844a5d4546ad45721ac1b8e52495c6adaca27861474ef16d1e
+  - src: scripts/rlvr/constants_ref.py
+    dest: .claude/scripts/rlvr/constants_ref.py
+    kind: scaffold
+    sha256: 970805af141d43eac677c90bbb14eb9b53ade77388f3dd4b973d23b0e339b611
+  - src: scripts/rlvr/crystallize.py
+    dest: .claude/scripts/rlvr/crystallize.py
+    kind: scaffold
+    sha256: 9e1f12f7534280b610073d7d23875590bcd638700411895492cf410171e95eee
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1256,10 +1296,26 @@ files:
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
     sha256: 23887f05635995e1e317007d6b903a8154ec66e2c65399ee49abcb694c419f53
+  - src: scripts/rlvr/hypotheses.py
+    dest: .claude/scripts/rlvr/hypotheses.py
+    kind: scaffold
+    sha256: 5b329883ab4e2b1ff33f7e8f8b31dd2c208281fb22322ea0ea71159269bf2865
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: d834ec49498c481b18ce82287dd71cbe074a3d25705a058eeb1b0060b1864a46
+    sha256: cbd29e9f88f861715a558f84051da7f62a2827da853917161aab5dbf58ed56b9
+  - src: scripts/rlvr/invariants.py
+    dest: .claude/scripts/rlvr/invariants.py
+    kind: scaffold
+    sha256: dfc7ca96290d80980fbfc6e1ed4acb60800c128fbcb193246f0824bdf45446dd
+  - src: scripts/rlvr/l1_planner.py
+    dest: .claude/scripts/rlvr/l1_planner.py
+    kind: scaffold
+    sha256: becdf5710a6af61fc0a8cfa9eed1595b5e2ee10fd79026b88282c3352e99a16f
+  - src: scripts/rlvr/l1_value.py
+    dest: .claude/scripts/rlvr/l1_value.py
+    kind: scaffold
+    sha256: c12758a8a0a172a0962c6f76cbbc4b40a7d496f931263558e37e586096435c56
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
@@ -1268,10 +1324,14 @@ files:
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
     sha256: 54099382e65a94c8b8ac06283d5ec7e3906bc7cc06fb64c4ced1674a5b99d400
+  - src: scripts/rlvr/marl.py
+    dest: .claude/scripts/rlvr/marl.py
+    kind: scaffold
+    sha256: 49f98f6ef12d8d862ee907634f7108bc0675f9d5a23f8b53575c890f258afeb6
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: 113e35cd8a8430fb6bcf1fcb0ead6cb1fa94c83e2583a5e6d5d0adbc1154a0b4
+    sha256: d7853f9b70933b04e6998040fa96daddd7328a7393439fefa6953b6fe44b4259
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1295,7 +1355,11 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 59d1060d4be7e8afba22c4cf4b13206132e81a953efaff0cddad752dcf3b1d2b
+    sha256: 86e12b5782e436f6f03167b8855545bf9b74e41ed20e58ecb4e448fc9ea599c1
+  - src: scripts/rlvr/recipe_arms.py
+    dest: .claude/scripts/rlvr/recipe_arms.py
+    kind: scaffold
+    sha256: 577e6579e55f1fbc588b9b22af9bf9148834f8abe4f7f02ce96c711466f88ba9
   - src: scripts/rlvr/refutation_fold.py
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
@@ -1303,23 +1367,39 @@ files:
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
-    sha256: 87ac54b74ef73add6905bb4d0c29b35880088fa882782050e0fa87c2b30bed05
+    sha256: d1a0571767861d5a9f6edeb232a9b0f080d75beeddca2d6be4549d450f5deb13
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 1cf21caa43ce1de1e23d382f7aa31fd65315cd96d28360e468f2d7f722735afa
+    sha256: 2da55b31970c6497455a5c6242f98991e14ac1a1e5461b689b016d873e5ac583
+  - src: scripts/rlvr/settlement_scorer.py
+    dest: .claude/scripts/rlvr/settlement_scorer.py
+    kind: scaffold
+    sha256: cbc0efb71f07bedfb44170d69ebbd61056bb8f0bf6d59cc7230b41ab93319da7
+  - src: scripts/rlvr/source_reliability.py
+    dest: .claude/scripts/rlvr/source_reliability.py
+    kind: scaffold
+    sha256: 916da5feee133ce36d0b70a7bc8351117145e59433aef23ab81b916811228059
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: ac252ee765a55bfabe458e96ae1350e49360d83c36d73e812e8abd10081da792
+    sha256: dae6987c881ef2aa9dde32734cde1601438176d144ea78d98c37303480fa3b0b
+  - src: scripts/rlvr/step_credit.py
+    dest: .claude/scripts/rlvr/step_credit.py
+    kind: scaffold
+    sha256: 56d441f78ca1c93d23af8f8a87fee5acac8b2aa8019c16d25da77e611d6f00ac
+  - src: scripts/rlvr/step_grain.py
+    dest: .claude/scripts/rlvr/step_grain.py
+    kind: scaffold
+    sha256: 3945597dd7c571eb1a56434a4e4307def7fe078f3309d532311fad5ee3f21319
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
-    sha256: af6b23f2bae04e282dffa0816be42cdd96712d0c6f138f7f893cbb345718dc8f
+    sha256: 3a7660681053f3c0fa0bb7104c4799e2f42debf641a9aba900d1e9dbec72ee53
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: a4a471577c6158f267236cd36bfa0e8dd7d236cbc99754889fab3e34e13dac1b
+    sha256: 69eed6947a5faaf02086853af75a74f76743c09075bebf8484cb3f944c7862c7
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1343,15 +1423,15 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 3c0ffba3b91863c4f7f5e9dca9adcd568aa5f2f363cfabb1ed58d8c4b124cd25
+    sha256: f474c27b0efefe443ac0941e49e9b26f877da6516dde9297bbacec82ec7c282c
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 2ff706bcd31eadcdbf1bd21097b05a20b8bf0523c7a85698ec5aa8bc944fbcaf
+    sha256: 68dd0f429e2e6e3ac59fa6827fdd8adf32534c02b8b67ecc002f8a63c226713f
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 02113eb1596e821e9ea421accb7285db8ddae08ca13c8fdc93128603ac284bed
+    sha256: 8b15ad2f7d45d021488f7d407a77788b323cfda1cd1f527e704b3129b3ef196d
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
@@ -1907,7 +1987,7 @@ files:
   - src: templates/state/goal-operationalization.yaml
     dest: .claude/templates/state/goal-operationalization.yaml
     kind: asset
-    sha256: 794ea0e6b2485235c26814da116951d218252b279780ba351ed22a9bea974d3f
+    sha256: bd4d41c1de0469448e4c6e1db7f127154a193a3f2613b57360fc36505757e716
   - src: templates/state/task-oracle.yaml
     dest: .claude/templates/state/task-oracle.yaml
     kind: asset
@@ -1935,7 +2015,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 6fa430b6778853b6653340dec86b2277a3fcf0307e357861fd7da67b49b85c35
+    sha256: b145183d7e5a82dc48cb0b952c4e3568828c37ddd0f1e77ad9aa42f752aa769a
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

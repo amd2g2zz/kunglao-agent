@@ -45,6 +45,12 @@ TASKS = ROOT / "eval" / "v1" / "tasks" / "smoke"
 import eval_control_arm as ca
 import eval_dataset as ds
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 def _task_dir(task_id: str) -> Path:
     hits = sorted(TASKS.glob(f"*/{task_id}")) or sorted(TASKS.glob(task_id))

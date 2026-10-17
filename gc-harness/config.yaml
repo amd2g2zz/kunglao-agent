@@ -11,6 +11,20 @@ worktree:
   merged_days: 7
   abandoned_days: 14
 
+# code leg — surfaces that keep a module/symbol alive (dispatch-surface
+# liveness). Case-folded substring match over the declared files/globs.
+code:
+  surfaces:
+    - scripts/mechanisms.yaml
+    - deploy-manifest.yaml
+    - tools/_INDEX.ext.yaml
+    - scripts/README.md
+    - agents/*.md
+    - skills/**
+    - hooks/*.py
+    - tests/**
+    - gc-harness/**
+
 budget:
   max_new_spec: 1
   max_new_test: 5

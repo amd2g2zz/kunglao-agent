@@ -80,6 +80,9 @@ sys.path.insert(0, str(SCRIPTS))
 # 2026-10-10 regen (v0.1.6-rc1 release identity): the open-marker version
 # line only (kunglao:frame:v0.1.6 -> v0.1.6-rc1); every frame body byte
 # unchanged per fixture (diff-guarded regen, same sentinel renderer).
+# 2026-10-15 regen (issue 687 blind settlement): one Roles roster row
+# (kunglao-settler) joined the derived table per fixture — no other byte
+# changed (diff-guarded regen, same sentinel renderer).
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

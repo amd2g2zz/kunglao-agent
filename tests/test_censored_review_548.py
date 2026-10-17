@@ -311,3 +311,32 @@ def test_find_transition_files_requires_runs_component(tmp_path):
     (stray / "transitions.jsonl").write_text("", encoding="utf-8")
     found = cr.find_transition_files([tmp_path])
     assert found == [hits / "runs" / "transitions.jsonl"]
+
+
+def test_experience_file_scanned_and_archive_skipped(tmp_path):
+    """#721: the consolidated experience file is a scanned ledger —
+    transition rows only (the q-cell row is not a ledger row AND not
+    'malformed'), and runs/archive/ is skipped (its rows already live in
+    the consolidated file — scanning it would double count)."""
+    ws = tmp_path / "ws-exp"
+    runs = ws / "runs"
+    runs.mkdir(parents=True)
+    row = _row("C-1", "web-re", "TIMEOUT", facts=1)
+    row["schema"] = "transition/1"
+    obs = {"schema": "q-cell-obs/1", "ts": "2026-10-07T00:00:00Z",
+           "credit": 1.0, "source": "settlement"}
+    (runs / "experience.jsonl").write_text(
+        json.dumps(row) + "\n" + json.dumps(obs) + "\n", encoding="utf-8")
+    (runs / "archive").mkdir()
+    (runs / "archive" / "transitions.jsonl").write_text(
+        json.dumps(row) + "\n", encoding="utf-8")
+    nested = runs / "archive" / "2026-q1"
+    nested.mkdir()
+    (nested / "transitions.jsonl").write_text(
+        json.dumps(row) + "\n", encoding="utf-8")  # nested archive too
+    found = cr.find_transition_files([ws])
+    assert [f.name for f in found] == ["experience.jsonl"]
+    rows, stats = cr.read_ledger(found)
+    assert len(rows) == 1                   # the q-cell row is not a row
+    assert stats["skipped_malformed"] == 0  # ...and not "malformed" either
+    assert stats["rows_total"] == 1

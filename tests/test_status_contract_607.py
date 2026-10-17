@@ -27,8 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 # hooks/lib_kunglao.py is loaded BY PATH under a unique name (repo-established
-# pattern) — a bare sys.path insert of hooks/ makes the name ambiguous with
-# scripts/lib_kunglao.py and breaks other suites' import order.
+# pattern) — a bare sys.path insert of hooks/ made the name ambiguous with
+# the since-deleted scripts/lib_kunglao.py and broke other suites' order.
 _PROTOCOL_NAME = "lib_kunglao_hooks_607"
 
 

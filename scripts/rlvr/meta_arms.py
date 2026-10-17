@@ -109,7 +109,12 @@ def mc_propensity(rows: list[dict], chosen: str, families: list[str],
                     and str(r.get("method_family")) == fam):
                 s += float(r.get("credit"))
                 t += 1
-        params[fam] = (s + 1.0, t - s + 1.0)
+        # the log may carry signed credit_amendment
+        # rows — floor the Beta parameters at the +1.0 prior so a
+        # clawback stream can never drive them ≤ 0 (betavariate would
+        # raise, and the fail-open caller would silently drop the OPE
+        # propensity).
+        params[fam] = (max(s, 0.0) + 1.0, max(t - s, 0.0) + 1.0)
     wins = 0
     for _ in range(draws):
         best_v, best_f = -1.0, None

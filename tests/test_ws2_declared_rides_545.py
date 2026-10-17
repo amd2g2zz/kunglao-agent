@@ -37,6 +37,7 @@ for p in (str(ROOT), str(SCRIPTS)):
         sys.path.insert(0, p)
 
 from e2e import checkpoints, llm_faces, model  # noqa: E402
+from rlvr import incremental_reward as ir  # noqa: E402 — #721 read face
 from rlvr import q_cells  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
 
@@ -107,9 +108,8 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
         llm_faces.ActRecord(claim="C-004", mode="auto",
                             outcome="DISPATCHED", detail={}),
         set(), {"acts": []})
-    trans = [json.loads(line) for line in
-             (ws / "runs" / "transitions.jsonl")
-             .read_text(encoding="utf-8").splitlines() if line.strip()]
+    trans = [r for r in ir.read_transitions(ws)
+             if r.get("dispatch_id") == "C-004"]
     assert trans and trans[-1].get("propensity") == 1.0, \
         "the transition row banks the declared propensity (DR-OPE record)"
     rows = strategy_store.load_rows(ws=None)

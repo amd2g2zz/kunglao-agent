@@ -194,3 +194,19 @@ RENEW_MARGIN_LOW_MINUTES = 10
 # re-settle PQ states (mission_ledger.update is un-gated and idempotent).
 # Named _MIN per the #754 precedent — NEW in #8, not a surveyed constant.
 MISSION_SETTLE_MIN = 30
+
+# ---------------------------------------------------------------------------
+# Step-settle staleness (#690): the sync-barrier fail-open line
+# ---------------------------------------------------------------------------
+
+# scripts/rlvr/step_grain.py (barrier_verdict): the settle->update->decide
+# barrier blocks a new dispatch while a prior step (dispatch-launch stash)
+# is unsettled; a pending step older than this means the SubagentStop never
+# fired (crashed/killed subagent) — the barrier ADMITS with ONE warn instead
+# of deadlocking the loop forever (fail-open+warn posture; the orphan sweep
+# still catches the stash at end of run). 120 = 4x the 30-min hook-activation
+# TTL (a live step settles at SubagentStop, minutes-scale) x the DEAD-worker
+# 2x multiplier — generous enough that a slow worker mid-settle never gets
+# its barrier waived, short enough that a dead branch recovers within one
+# operator coffee. NEW in #690, not a surveyed constant.
+STEP_SETTLE_TTL_MINUTES = 120

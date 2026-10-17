@@ -664,6 +664,9 @@ def build_unit(family: str, unit_id: str, seed: int) -> dict:
             "metrics": ["ttc_seconds", "dispatch_count",
                         "pass_at_k_contribution", "converged"],
             "thresholds": {"min_pair_ratio": 1.0},
+            # #681: the graded artifact's contract path (answer document
+            # at the workspace root) — the e2e resolver's declaration
+            "candidate": "answer.txt",
         },
         "ground_truth": {"file": "ground_truth.json",
                          "space_bits": SPACE_BITS},

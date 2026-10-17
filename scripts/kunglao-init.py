@@ -133,6 +133,9 @@ import sys
 _WARN_LAST: dict[str, str] = {}
 
 
+# the boot-order warn twin: kunglao_log.warn is canonical, but this
+# module runs before that import lands — the shape is deliberate,
+# the rate-limit state is NOT shared with the canonical face.
 def warn(op: str, reason: str) -> None:
     if _WARN_LAST.get(op) == reason:
         return
@@ -1920,6 +1923,8 @@ ROLE_DISPATCH: dict[str, str] = {
         "attack-test a claim before it is promoted to PROVEN",
     "verdict-scorer":
         "score verdict.json against task_spec primary_questions",
+    "kunglao-settler":
+        "blind step settlement from raw artifacts (never producer narrative)",
     "web-re-worker":
         "web/browser JS claims (unpack, deobfuscate, signed parameters)",
     "ghidra-light":
@@ -3649,6 +3654,10 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 "deliverables": [],
                 "acceptance": [],
                 "not_done": [],
+                "constraint_witness": {
+                    "schema": "constraint-witness/1",
+                    "witnesses": {},
+                },
                 "diff_vs_verbatim": "",
                 "generalization": "required",
                 "declared_ts": utc_now_z(),

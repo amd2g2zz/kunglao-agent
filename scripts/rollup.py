@@ -317,28 +317,46 @@ def _outcome_rows_summary(workspace: Path, claim_id: str) -> str:
         for r in rows if r.get("checker") or r.get("result"))
 
 
+def _q_cell_obs_rows(workspace: Path) -> list[dict]:
+    """#721 q-cell observation rows: the consolidated runs/experience.jsonl
+    (stamp-filtered) plus the legacy runs/q-cell-log.jsonl archive during
+    the compat window. A partial deploy without the rlvr core degrades to
+    the legacy path read (the except body IS the fallback)."""
+    try:
+        from rlvr import q_cells  # noqa: PLC0415 — partial-deploy lifeline
+        return q_cells.JSONLQStore(workspace).observations()
+    except ImportError:
+        log = workspace / "runs" / "q-cell-log.jsonl"
+        if not log.is_file():
+            return []
+        try:
+            lines = log.read_text(encoding="utf-8",
+                                  errors="replace").splitlines()
+        except OSError:
+            return []
+        out: list[dict] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+        return out
+
+
 def _dispatch_method_family(workspace: Path, claim_id: str) -> str:
     """The claim's latest declared dispatch method_family.
 
-    Source: the dispatch observation rows (source=dispatch) in
-    runs/q-cell-log.jsonl — q_cells writes one per approval ALLOW tail;
-    '' when none is readable. Tolerant read, latest row wins."""
-    log = workspace / "runs" / "q-cell-log.jsonl"
-    if not log.is_file():
-        return ""
-    try:
-        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return ""
+    Source: the dispatch observation rows (source=dispatch) — q_cells
+    writes one per approval ALLOW tail; #721: read through the q-cells
+    face (consolidated experience file + legacy archive); '' when none
+    is readable. Tolerant read, latest row wins."""
     family = ""
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in _q_cell_obs_rows(workspace):
         if not isinstance(row, dict) or row.get("source") != "dispatch":
             continue
         if str(row.get("claim") or "") != claim_id:

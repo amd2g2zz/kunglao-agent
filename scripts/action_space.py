@@ -12,7 +12,19 @@ measuring nothing". This module is the vocabulary:
   - operator level (the worker's hands): observe / trace / hook / emulate /
     derive / verify / search / ask / plan_segment;
   - orchestration level (the loop's teeth): dispatch / verify / deepen /
-    replan / osint / expand;
+  - orchestration level (the loop's teeth): dispatch / verify / deepen /
+    osint / expand / distill, plus the scheduling five (sleep / wake_on /
+    probe / close_loop / none — the wake decision itself is an action: the
+    fixed cron becomes a chosen, attributable alternative with a logging
+    seat);
+  - policy level (the claim economy): mint_arm / split_claim / supersede /
+    park / rewire_deps / replan — the candidate-set controls. Mint / split /
+    supersede / park / rewire predate the tier as mechanisms fired by
+    detectors (claim_granularity, hypothesis_bridge, infeasible_proposal,
+    the stale-plan nag); the tier makes them CHOOSABLE actions carrying
+    propensity, settleable and revocable against their producing step
+    (scripts/planning_actions.py — the evidence-credit discipline applied
+    to candidate-set changes);
   - strategic level (the route choice): FIGHT (push through: dispatch
     against the obstacle) / BYPASS (defer: DEFERRED + wake_condition, the
     negative-exit machinery — referenced, never rebuilt) / INVEST (build
@@ -54,6 +66,7 @@ import yaml
 
 OPERATOR = "operator"
 ORCHESTRATION = "orchestration"
+POLICY = "policy"
 STRATEGIC = "strategic"
 
 
@@ -111,6 +124,17 @@ class ActionSpec:
                     observation vs reproduction vs verification).
     consumer      — who dispatches/holds the action.
     references    — existing machinery the action REUSES (no new semantics).
+    settleable    — the action changes the claim economy's candidate set, so
+                    it rides the escrow/revoke discipline (scripts/
+                    planning_actions.py): recorded with its producing step_ref
+                    and propensity, revocable against that step. False for
+                    every non-planning action (default).
+    scheduling    — the action lives in the WAKE-decision vocabulary (the
+                    scheduling five at the orchestration level). The tag is
+                    what makes the scheduling set registry-derived instead of
+                    a hand-kept parallel list; the decision recorder
+                    (scripts/intelligent_scheduling.py) selects from exactly
+                    the flagged subset. False for every other action.
     """
 
     name: str
@@ -121,15 +145,20 @@ class ActionSpec:
     consumer: str
     delta_estimator: DeltaEstimator
     references: tuple[str, ...] = field(default_factory=tuple)
+    settleable: bool = False
+    scheduling: bool = False
 
 
 def _spec(name: str, level: str, cost: float, precondition: str,
           proof_power: str, consumer: str,
-          references: tuple[str, ...] = ()) -> ActionSpec:
+          references: tuple[str, ...] = (),
+          settleable: bool = False,
+          scheduling: bool = False) -> ActionSpec:
     return ActionSpec(name=f"{level}.{name}", level=level, cost=float(cost),
                       precondition=precondition, proof_power=proof_power,
                       consumer=consumer, delta_estimator=_est(f"delta_v/{level}.{name}"),
-                      references=references)
+                      references=references, settleable=settleable,
+                      scheduling=scheduling)
 
 
 # ---- the registry --------------------------------------------------------------
@@ -185,9 +214,12 @@ _register(
           "authority — an operator ruling settles what evidence cannot",
           "orchestrator (escalation ladder)"),
     _spec("plan_segment", OPERATOR, 1,
-          ">=2 open claims on the dispatch frontier sharing a route",
-          "none (organizational) — sequencing, never evidence",
-          "orchestrator"),
+          "a worker plan with >= 2 enumerated step groups sharing a route "
+          "(the plan-first contract: planning is the worker's first act — "
+          "plan_segment sequences the worker's OWN steps)",
+          "none (organizational) — sequencing, never evidence and never a "
+          "candidate-set change (that is the policy tier)",
+          "worker (plan authorship)"),
     # ---- orchestration level: the loop's teeth ----
     _spec("dispatch", ORCHESTRATION, 3,
           "claim OPEN + promotion_attempts<3 + every depends_on parent "
@@ -205,11 +237,6 @@ _register(
           "target/attack-surface ladder",
           "capability settlement — a PROVEN obstacle means 'really can't'",
           "orchestrator"),
-    _spec("replan", ORCHESTRATION, 4,
-          "plan-drift detected (severe drift auto-integrates; warning "
-          "saturates) or the frontier is stale",
-          "none (organizational) — replanning never manufactures evidence",
-          "orchestrator"),
     _spec("osint", ORCHESTRATION, 4,
           "an external-facing surface (web target / public artifact) and a "
           "sanctioned lane",
@@ -221,6 +248,133 @@ _register(
           "+ sub claims)",
           "inherits the sub-claims' proof power",
           "orchestrator"),
+    _spec("distill", ORCHESTRATION, 5,
+          "the shelf has no viable candidate for the task at hand OR the "
+          "policy decides proactive capability acquisition (a costed choice, "
+          "never a trigger rule — the budget ledger is the hard cap)",
+          "capability acquisition — lands tool candidates on the run-local "
+          "shelf after anchored-sample oracle satisfaction; web/re-library "
+          "sources record URL+date, never directly PROVEN",
+          "orchestrator",
+          references=("scripts/online_distill.py "
+                      "(budgeted act: scan/land via budget_allows/"
+                      "reserve_act — reused, not rebuilt)",
+                      "runs/distill-budget.json (per-run act + hop caps: "
+                      "the restraint ruling lives as BUDGET)")),
+    # ---- the scheduling five (the wake decision is an action) ----
+    # The fixed cron used to BE the schedule: no alternative was chosen, no
+    # propensity was logged, nothing was evaluable off-policy. These five
+    # make the wake decision a first-class choice — the interval constants
+    # become day-one priors and every decision is recorded with its
+    # propensity (scripts/intelligent_scheduling.py). The cron path itself
+    # is DEMOTED to an armed watchdog (event-first, polling as fallback),
+    # never deleted.
+    _spec("sleep", ORCHESTRATION, 1,
+          "a live loop with no higher-priority wake pending — schedule the "
+          "next timer wake at the chosen interval",
+          "none (temporal) — choosing WHEN to look cannot prove anything; "
+          "the wake itself re-enters the normal decision faces",
+          "orchestrator (wake decision)",
+          references=("cadence_advisor (interval priors + advice surface)",),
+          scheduling=True),
+    _spec("wake_on", ORCHESTRATION, 1,
+          "an event predicate the topology already delivers (dispatch "
+          "return / worker completion / oracle result / user signal) — wait "
+          "on the event instead of polling for it",
+          "none (temporal) — event-first wakes change WHEN the loop runs, "
+          "never what it concludes",
+          "orchestrator (wake decision)",
+          references=("loop_watchdog (missed-event predicate)",),
+          scheduling=True),
+    _spec("probe", ORCHESTRATION, 2,
+          "an active worker whose liveness is undecided — ask for status "
+          "(the smart-ping channel) instead of waiting for the next tick",
+          "observation — a probe reads liveness, it never settles a claim "
+          "(worker_death owns the record)",
+          "orchestrator (wake decision)",
+          references=("slot_monitor verdicts", "the smart-ping protocol"),
+          scheduling=True),
+    _spec("close_loop", ORCHESTRATION, 1,
+          "convergence reached and the completion oracle closed — stop "
+          "waking (the guarded teardown criteria)",
+          "none (terminal) — an intentional close, never a silent stop",
+          "orchestrator (wake decision)",
+          references=("heartbeat_off guarded teardown",),
+          scheduling=True),
+    _spec("none", ORCHESTRATION, 0,
+          "always available — do nothing at this decision point: the null "
+          "action, cost 0 and value 0, the baseline every timer action is "
+          "measured against",
+          "none (the null intervention) — recorded with its own propensity "
+          "so inaction is off-policy evaluable too",
+          "orchestrator (wake decision)",
+          references=("the null-action baseline protocol "
+                      "(scripts/intelligent_scheduling.py)",),
+          scheduling=True),
+    # ---- policy level: the claim economy's candidate-set controls ----
+    # Every entry is settleable: it changes WHICH claims the policy can
+    # choose from, so it rides the escrow/revoke attribution discipline
+    # (scripts/planning_actions.py — recorded against the producing step
+    # with its propensity, revocable against that step). The mechanisms
+    # referenced below predate the tier; the tier makes them CHOOSABLE.
+    _spec("mint_arm", POLICY, 3,
+          "an unsettled question with competitor candidates (hypothesis "
+          "family pending or a situational unknown): mint a new OPEN "
+          "hypothesis-arm claim into the register",
+          "none (construction) — an arm is a candidate, never evidence; "
+          "it enters the TS rank pool OPEN",
+          "orchestrator (policy tier)",
+          references=("scripts/hypothesis_bridge.mint_family_arms "
+                      "(arm minting — reused)",),
+          settleable=True),
+    _spec("split_claim", POLICY, 4,
+          "a monolithic claim: plan exceeds GRANULARITY_MAX_STEPS or spans "
+          ">=2 mechanism domains (claim_granularity --check verdict)",
+          "none (construction) — the split parent SUPERSEDES into domain "
+          "sub-claims; proof power inherits from the sub-claims",
+          "orchestrator (policy tier)",
+          references=("scripts/claim_granularity.mint_split_claims "
+                      "(the granularity fan-out — reused)",),
+          settleable=True),
+    _spec("supersede", POLICY, 4,
+          "successor claims ready to carry a predecessor's whole scope "
+          "(settle lineage: winner names the superseded, or a split/"
+          "hypothesis replacement)",
+          "none (replacement) — the successors carry the evidence; "
+          "supersede moves scope between candidates",
+          "orchestrator (policy tier)",
+          references=("SUPERSEDED + superseded_by replacement semantics "
+                      "(issue-59 lineage — reused)",),
+          settleable=True),
+    _spec("park", POLICY, 2,
+          "a claim blocked on an external wake predicate: DEFERRED with a "
+          "non-empty wake_condition, revivable through the wake face",
+          "none (suspension) — a parked claim exits the frontier "
+          "revocably, never terminally",
+          "orchestrator (policy tier)",
+          references=("scripts/infeasible_proposal.py file_proposal/wake "
+                      "(DEFERRED + wake_condition machinery — reused, not "
+                      "rebuilt)",),
+          settleable=True),
+    _spec("rewire_deps", POLICY, 2,
+          "a depends_on edge that no longer reflects the claim DAG "
+          "(settled parent, obsolete blocker, or a re-scoped successor "
+          "chain)",
+          "none (topology) — dependency edges order dispatch, never "
+          "evidence",
+          "orchestrator (policy tier)",
+          references=("_scriptlib.ensure_dep_edge / claim_deps.yaml "
+                      "(the dep-edge machinery — reused)",),
+          settleable=True),
+    _spec("replan", POLICY, 4,
+          "plan-drift detected (severe drift auto-integrates; warning "
+          "saturates) or the frontier is stale — re-derive global_plan "
+          "against the current claim economy",
+          "none (organizational) — replanning never manufactures evidence; "
+          "the stale_plan_on_new_evidence detector is this action's "
+          "trigger, never a substitute for taking it",
+          "orchestrator (policy tier)",
+          settleable=True),
     # ---- strategic level: the route choice (the 2026-09-20 ruling) ----
     _spec("fight", STRATEGIC, 12,
           "obstacle identified + the capability-disproof ladder walkable "
@@ -250,7 +404,7 @@ _register(
           references=("rule 14 tool creation", "tools/_INDEX.yaml registration")),
 )
 
-assert len(ACTIONS) == 18, "the vocabulary is exactly 9 + 6 + 3"
+assert len(ACTIONS) == 29, "the vocabulary is exactly 9 + 11 + 6 + 3"
 
 
 def actions_of(level: str) -> list[ActionSpec]:
@@ -261,6 +415,39 @@ def actions_of(level: str) -> list[ActionSpec]:
 def get(name: str) -> ActionSpec:
     """Namespaced lookup ("operator.trace"); KeyError on unknown."""
     return ACTIONS[name]
+
+
+# ---- distill actuation seam (issue-719) ------------------------------------
+# The policy's `distill` choice lands here and actuates through
+# online_distill's EXISTING budget guards — the action entry above names
+# the same machinery in its references. One call reserves ONE budgeted
+# act (the receipt carries the attempt id the scan/land faces fill);
+# refusal is explicit (None + online_distill.refuse_reason). The
+# reactive shelf-miss path (checkpoints._maybe_distill) keeps its own
+# entry to the same guards — this seam ADDS a policy face, it never
+# gates the marker path. Full orchestrator wiring of scan/land for a
+# proactive act is documented in
+# openspec/changes/issue-719-distill-action/design.md (D3).
+
+
+def actuate_distill(ws: Path, token: str, *,
+                    source_file: str | None = None,
+                    sample_hint: str | None = None) -> dict | None:
+    """Reserve ONE budgeted distillation act for a policy-chosen token.
+
+    Delegates to online_distill.reserve_act (the budget-ledger critical
+    section: per-run cap, duplicate-token refusal, fail-closed corrupt
+    ledger, never-loosen clamp). Returns the engine receipt dict or
+    None when the budget refuses — the caller records the refusal row
+    with online_distill.refuse_reason(ws, token).
+
+    This is the budget linkage only: the reserved act's scan/retrieve/
+    oracle/land halves stay on the engine's existing faces (the e2e
+    tick step for reactive acts; the orchestrator for proactive ones).
+    """
+    from online_distill import reserve_act  # lazy — keeps the engine import off module load
+    return reserve_act(ws, token, source_file=source_file,
+                       sample_hint=sample_hint)
 
 
 # ---- claim-category table (moved VERBATIM from priority_ratio) ----------------

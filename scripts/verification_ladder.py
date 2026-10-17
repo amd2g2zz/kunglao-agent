@@ -64,6 +64,7 @@ the unified log when a batch fires).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -461,16 +462,37 @@ def drain_t2_queue(ws, *, budget: int | None = None,
 
 def round_close(ws, *, now: datetime | None = None) -> dict:
     """The round-closure face: build + persist the T2 priority queue and
-    emit the registered event. Fail-open: a workspace without a register
-    records nothing and never breaks the closure."""
+    emit the registered event — GATED on the queue's input signature
+    (unchanged inputs persist and emit nothing; see the gate comment
+    below). Fail-open: a workspace without a register records nothing
+    and never breaks the closure. NOTE: on the skip path the persisted
+    file's time projections (ts/age_min) freeze between input changes —
+    the only runtime consumer re-builds and never reads the file."""
     ws = Path(ws)
     built = build_t2_queue(ws, now=now)
     if not built.get("built"):
         return {"built": False, "reason": built.get("reason", "not-built")}
     stalled = sum(1 for e in built["queue"] if e["stalled"])
+    # The progress-coupling gate: the queue's INPUT signature covers
+    # (claim_id, status, stalled, priority) per entry and deliberately
+    # EXCLUDES the time projections (age_min, reason, ts) — those move
+    # with the clock and made every SubagentStop rebuild content-new,
+    # which is how one session burned ~500 rebuilds for 36 dispatches.
+    # Same signature → the persisted queue is still true: persist and
+    # emit nothing. A stall-floor crossing or a register change changes
+    # the shape and rebuilds.
+    shape = [[e["claim_id"], e["status"], e["stalled"], e["priority"]]
+             for e in built["queue"]]
+    sig = hashlib.sha1(json.dumps(shape, sort_keys=True).encode(
+        "utf-8")).hexdigest()
+    if _persisted_sig(ws) == sig:
+        return {"built": True, "queued": len(built["queue"]),
+                "stalled": stalled, "unchanged": True,
+                "path": str(ws / T2_QUEUE_REL)}
     doc = {"schema": T2_QUEUE_SCHEMA,
            "ts": built.get("ts"),
            "stall_min": built.get("stall_min"),
+           "sig": sig,
            "queue": built["queue"]}
     ok = _persist_queue(ws, doc)
     try:
@@ -486,6 +508,18 @@ def round_close(ws, *, now: datetime | None = None) -> dict:
         warn("t2_emit", f"{type(exc).__name__}: {exc}")
     return {"built": True, "queued": len(built["queue"]),
             "stalled": stalled, "path": str(ws / T2_QUEUE_REL)}
+
+
+def _persisted_sig(ws: Path) -> str:
+    """The input signature stored with the last persisted queue — empty
+    when absent/unreadable (the first build always persists)."""
+    try:
+        doc = json.loads(
+            (ws / T2_QUEUE_REL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    sig = doc.get("sig") if isinstance(doc, dict) else None
+    return str(sig) if sig else ""
 
 
 # ===========================================================================

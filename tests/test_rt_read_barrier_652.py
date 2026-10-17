@@ -50,6 +50,10 @@ def _ws(tmp_path) -> Path:
     (ws / "runs" / "verification-C-1.md").write_text("verdict: verified\n", encoding="utf-8")
     (ws / "runs" / "worker-status-w1.md").write_text("status: in-progress\n", encoding="utf-8")
     (ws / "runs" / "C-1-verify-note.md").write_text("passes\n", encoding="utf-8")
+    (ws / "runs" / "method-family-log.jsonl").write_text(
+        '{"sentinel": "LEARN_POISON_FAMILY"}\n', encoding="utf-8")
+    (ws / "runs" / "q-cell-log.jsonl").write_text(
+        '{"sentinel": "LEARN_POISON_QCELL"}\n', encoding="utf-8")
     (ws / "evidence").mkdir()
     (ws / "evidence" / "replay-C-1.json").write_text('{"claim_id": "C-1"}', encoding="utf-8")
     (ws / "evidence" / "verdict.json").write_text('{"verdict": "PASS"}', encoding="utf-8")
@@ -292,3 +296,190 @@ def test_marker_family_matches_the_canonical_verifier_markers():
         ("the barrier's identity family must intersect the canonical "
          "VERIFIER_AGENT_MARKERS (a renamed agent must not silently "
          "de-blind the act)")
+
+
+# ---------- issue-687: the settler family rides the same barrier ----------
+
+def test_settler_read_of_maker_and_learning_faces_rejected(tmp_path):
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl",
+                "runs/experience.jsonl",  # #721: the consolidated feed
+                "notes/n.md", "runs/worker-status-w1.md",
+                "runs/verification-C-1.md", "runs/C-1-verify-note.md",
+                "facts/F001.md", "evidence/verdict.json"):
+        rc, err, _ctx = mod.evaluate(
+            _payload(ws, "Read", {"file_path": str(ws / rel)},
+                     agent_type="kunglao-settler"))
+        assert rc == 2, f"a settler act must be denied {rel}"
+        assert "REJECT rt_read_barrier" in err
+
+
+def test_learning_faces_denied_to_rt_acts_too(tmp_path):
+    """The two learning logs joined the shared deny face: an RT act is
+    blinded from arm identity/values as well. #721: their consolidated
+    home (runs/experience.jsonl) rides the same wall."""
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    for rel in ("runs/method-family-log.jsonl", "runs/q-cell-log.jsonl",
+                "runs/experience.jsonl"):
+        rc, _err, _ctx = mod.evaluate(
+            _payload(ws, "Read", {"file_path": str(ws / rel)},
+                     agent_type=_RT))
+        assert rc == 2, f"{rel} must be denied for an RT act"
+
+
+def test_learning_faces_denied_on_bash_and_pattern_faces(tmp_path):
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash",
+                 {"command": "cat runs/method-family-log.jsonl"},
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "Bash path tokens ride the same deny face"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash",
+                 {"command": "tail -n 5 runs/experience.jsonl"},  # #721
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "the consolidated feed is a Bash-denied path token"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Glob",
+                 {"path": str(ws / "evidence"),
+                  "pattern": "*/q-cell-log.jsonl"},
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "a pattern naming a learning face is the same read"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Glob",
+                 {"path": str(ws / "runs"),
+                  "pattern": "*experience.jsonl"},  # #721
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "a pattern naming the consolidated feed is denied too"
+
+
+def test_settler_working_face_and_worker_untouched(tmp_path):
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    rc, err, ctx = mod.evaluate(
+        _payload(ws, "Read",
+                 {"file_path": str(ws / "evidence" / "replay-C-1.json")},
+                 agent_type="kunglao-settler"))
+    assert (rc, err, ctx) == (0, "", None), \
+        "raw evidence is the settler's working face"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Read", {"file_path": str(ws / "facts" / "F001.md")},
+                 agent_type="kunglao-worker"))
+    assert rc == 0, "the maker keeps its own fact"
+
+
+def test_settler_session_arms_from_dispatch_envelope(tmp_path):
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    envelope = json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": "C-1", "tier": 1, "agent": "kunglao-settler"}})
+    rc = mod.main_face_user_prompt(
+        {"cwd": str(ws), "session_id": "sess-settle-1", "prompt": envelope})
+    assert rc == 0, "arming is a recorder — it never blocks a prompt"
+    rc, err, _ctx = mod.evaluate(
+        _payload(ws, "Read",
+                 {"file_path": str(ws / "runs" / "q-cell-log.jsonl")},
+                 session="sess-settle-1"))
+    assert rc == 2, "the armed settler session rides the deny list"
+    assert "REJECT rt_read_barrier" in err
+    # a worker envelope never arms
+    rc = mod.main_face_user_prompt(
+        {"cwd": str(ws), "session_id": "sess-w2",
+         "prompt": json.dumps({"kunglao_dispatch": {
+             "version": 1, "claim": "C-1", "tier": 1,
+             "agent": "kunglao-worker"}})})
+    assert rc == 0
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Read", {"file_path": str(ws / "facts" / "F001.md")},
+                 session="sess-w2"))
+    assert rc == 0
+
+
+def test_settler_identity_family_registered():
+    mod = _load_hook()
+    assert "kunglao-settler" in mod.SETTLER_AGENT_MARKERS
+    assert mod.blind_act_class({"agent_type": "kunglao-settler"}) == "settler"
+    assert mod.blind_act_class({"agent_type": "kunglao-redteam"}) == "redteam"
+    assert mod.blind_act_class({"agent_type": "kunglao-worker"}) is None
+    assert mod.blind_act_class({}) is None
+
+
+# ---------- issue-687 hardening: aliases, arms, own status ---------------
+
+def test_case_variant_aliases_still_denied(tmp_path):
+    """Case aliases route around NOTHING: the dev filesystem is
+    case-insensitive, so every path/token comparison is folded."""
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    for rel in ("Runs/Method-Family-Log.Jsonl", "Notes/n.md",
+                "Facts/F001.md", "Runs/Worker-Status-W1.MD"):
+        for actor in (_RT, "kunglao-settler"):
+            rc, err, _ctx = mod.evaluate(
+                _payload(ws, "Read", {"file_path": str(ws / rel)},
+                         agent_type=actor))
+            assert rc == 2, f"{actor} must be denied the alias {rel}"
+            assert "REJECT rt_read_barrier" in err
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash", {"command": "cat Notes/n.md"},
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "Bash path tokens are case-folded too"
+
+
+def test_armed_session_with_blank_agent_stays_blind(tmp_path):
+    """Arming only RESTRICTS: a legacy or hand-edited arm row without a
+    recognizable agent still rides the deny list (the family merely
+    selects the reject message)."""
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    mod.arm_session(ws, "sess-legacy", claim="C-1", agent="")
+    rc, err, _ctx = mod.evaluate(
+        _payload(ws, "Read", {"file_path": str(ws / "notes" / "n.md")},
+                 session="sess-legacy"))
+    assert rc == 2, "an armed session is blind by construction"
+    assert "REJECT rt_read_barrier" in err
+
+
+def test_own_status_face_is_exempt_only_for_its_own_actor(tmp_path):
+    """A blind act's OWN liveness file is its one exempt worker-status
+    face (narrative-free by construction); every foreign status — any
+    family — stays denied, and a Bash command mixing own + foreign
+    tokens still denies."""
+    mod = _load_hook()
+    ws = _ws(tmp_path)
+    own = ws / "runs" / "worker-status-kunglao-settler-1.md"
+    own.write_text("plan\n", encoding="utf-8")
+    rt_own = ws / "runs" / "worker-status-kunglao-redteam-1.md"
+    rt_own.write_text("plan\n", encoding="utf-8")
+    other = ws / "runs" / "worker-status-w1.md"
+    # own liveness file: targeted Read + Bash append allowed
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Read", {"file_path": str(own)},
+                 agent_type="kunglao-settler"))
+    assert rc == 0
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash",
+                 {"command": "echo 'status: in-progress' >> "
+                             "runs/worker-status-kunglao-settler-1.md"},
+                 agent_type="kunglao-settler"))
+    assert rc == 0, "an act may append to its OWN status line"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Read", {"file_path": str(rt_own)},
+                 agent_type="kunglao-redteam"))
+    assert rc == 0, "the red-team's own status face is exempt too"
+    # foreign statuses stay closed
+    for target, actor in ((rt_own, "kunglao-settler"),
+                          (other, "kunglao-redteam"),
+                          (own, "kunglao-redteam")):
+        rc, _e, _c = mod.evaluate(
+            _payload(ws, "Read", {"file_path": str(target)},
+                     agent_type=actor))
+        assert rc == 2, f"{actor} must not read {target.name}"
+    rc, _e, _c = mod.evaluate(
+        _payload(ws, "Bash",
+                 {"command": "cat runs/worker-status-kunglao-settler-1.md "
+                             "runs/worker-status-w1.md"},
+                 agent_type="kunglao-settler"))
+    assert rc == 2, "one foreign token and the whole command denies"

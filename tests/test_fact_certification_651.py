@@ -36,6 +36,10 @@ from e2e import checkpoints, llm_faces, model  # noqa: E402
 from test_e2e_runner import (  # noqa: E402
     ANCHORS, DERIVE_PY, FakeClock, ScriptedRunner, TASK_YAML)
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 def _ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
@@ -176,7 +180,10 @@ def test_fact_face_junk_file_counts_toward_presence_only(tmp_path) -> None:
     (ws / "facts" / "F001-decrypt-key.md").write_text(
         "junk prose mentioning C-005\n", encoding="utf-8")
     face = state.fact_face(ws)
-    assert face == {"count": 1, "verified": 0}
+    # RE-MINT AUDIT (issue-678 D-678.5): fact_face grew the graded
+    # ``weighted_fraction`` column; a malformed file carries ZERO
+    # graded weight (the #651 farm wall holds — junk never lifts Φ).
+    assert face == {"count": 1, "verified": 0, "weighted_fraction": 0.0}
 
 
 # ---------------------------------------------------- _facts_citing ----
@@ -288,9 +295,7 @@ def _run_settle(ctx, ws, claim: str = "C-005") -> dict:
                                 detail={"duration_ms": 1000},
                                 mode="dispatch")
     checkpoints._settle_dispatch_outcome(ctx, claim, act, attempt_id="")
-    rows = [json.loads(line) for line in
-            (ws / "runs" / "transitions.jsonl")
-            .read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = ir.read_transitions(str(ws))   # #721: the read face
     assert rows, "the transition row must land"
     return rows[-1]
 

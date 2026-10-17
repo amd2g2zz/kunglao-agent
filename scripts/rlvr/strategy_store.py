@@ -181,13 +181,27 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                      dispatch_id: str | None = None, arm_key: str | None
                      = None, feature_key: str | None = None,
                      fingerprint: str | None = None,
+                     agent_type: str | None = None,
+                     claim: str | None = None,
+                     credit_kind: str | None = None,
+                     outcome_class: str = "",
                      ts: str | None = None) -> dict:
     """Build and append one ``posterior-store/1`` row (the settlement
     hook's face): schema stamp, ts, workspace identity, feature key
     (ws-derived defaults), the 4-dim arm key, the settled credit, the
     censoring flag, the fact signal, the OPE propensity, and the Φ
     tiebreaker — one field, no new machinery (the #548 verdict's fix
-    rides the row). Delegates to ``append_row`` (filter + fail-open)."""
+    rides the row). Delegates to ``append_row`` (filter + fail-open).
+
+    #705 MARL: ``agent_type`` rides the row (the agent-conditioned
+    store), ``claim`` carries the claim ID for the solution-broadcast
+    face, and ``credit_kind`` marks solve vs verification. All three
+    absent → the row is byte-identical to pre-#705.
+
+    #689 settlement fairness: ``outcome_class`` (strategy|infra|censored
+    — the rlvr.scalar.classify_outcome vocabulary) rides the row
+    additively: warm_pools excludes infra rows, an environment refusal
+    is not strategy evidence."""
     from harness_common import utc_now_z  # noqa: PLC0415
     row = {
         "schema": STORE_SCHEMA,
@@ -211,7 +225,15 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                       if isinstance(phi_delta, (int, float))
                       and not isinstance(phi_delta, bool) else None),
         "provenance": {"dispatch_id": str(dispatch_id or "")},
+        **({"outcome_class": str(outcome_class)} if outcome_class else {}),
     }
+    # #705 MARL: the three agent-credit columns are emitted ONLY when
+    # present — a caller that passes none writes the exact pre-#705 row
+    # (no keys at all, not even nulls).
+    for key, val in (("agent_type", agent_type), ("claim", claim),
+                     ("credit_kind", credit_kind)):
+        if val:
+            row[key] = str(val)
     return append_row(row)
 
 
@@ -243,17 +265,28 @@ def warm_pools(ws, families) -> dict:
     face; the #548 tiebreaker rides the credit). NEVER full weight,
     NEVER a local-cell write. Returns {family → FeaturePool} (the
     sampler's duck type) — families without pool rows are absent (a
-    zero-mass pool is a no-op at the anchor)."""
+    zero-mass pool is a no-op at the anchor).
+
+    #705 agent-level credit: rows carrying ``credit_kind:
+    "verification"`` are EXCLUDED — verification confirms existing
+    knowledge, it never produces it, so a family whose only cross-task
+    evidence is verification credit warms from nothing. Absent
+    credit_kind is the solve path (bit-identical)."""
     rows = load_rows(ws=ws)
     if not rows:
         return {}
     wanted = set(families)
     acc: dict[str, list[float]] = {}
     from rlvr import meta_arms as _ma  # noqa: PLC0415 — the temper
+    from rlvr.scalar import OUTCOME_INFRA  # noqa: PLC0415 — the class vocab
     for r in rows:
+        if str(r.get("credit_kind") or "solve") == "verification":
+            continue          # #705: verification is inadmissible to the prior
         fam = str(r.get("method_family") or "")
         if fam not in wanted:
             continue
+        if str(r.get("outcome_class") or "") == OUTCOME_INFRA:
+            continue  # an environment refusal is not strategy evidence
         c = r.get("credit")
         if isinstance(c, bool) or not isinstance(c, (int, float)):
             continue  # pending/unknown rows carry no outcome
@@ -313,20 +346,63 @@ class PosteriorStrategyStore:
         candidate set — the live store write (the settlement bank keys
         its row with the dispatch's own arm key) is only half a wire
         without this read face, and the warm pools need a candidate set
-        to ride or they never reach the draw."""
-        prior = self._proposal_prior()
+        to ride or they never reach the draw. #691: delegates to
+        ``method_sample`` — ONE draw implementation behind two faces (the
+        advisory lead string and the full reconciliation receipt), so
+        the lead the orchestrator reads and the gate's own draw can
+        never disagree on the same state."""
+        receipt = self.method_sample(state_fingerprint)
+        return str(receipt["family"]) if receipt else None
+
+    def method_sample(self, state_fingerprint: str) -> dict | None:
+        """#691: the full draw receipt behind ``method_lead`` — the SAME
+        prior chain (measured history → the explicit intake llm-prior →
+        the cross-task store), the SAME ``q_cells_seed_state`` seed, the
+        SAME sampler kwargs, plus the additive ``prior_source`` label
+        (history | llm_prior | store) so receipts distinguish a prior
+        the workspace earned from one it was TOLD. None = no candidates
+        anywhere — the honest cold gap, never a fabricated draw."""
+        prior, source = self.proposal_prior_labeled()
         if not prior:
             prior = self._store_prior()
+            source = "store" if prior else source
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
         kwargs: dict = {}
         kwargs.update(self._feature_prior_kwargs())
         kwargs.update(self._warm_pool_kwargs(prior.keys()))
+        kwargs.update(self._negative_pool_kwargs(prior.keys()))
         kwargs.update(self._termination_kwargs(prior.keys()))
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
-        return str(receipt["family"])
+        receipt["prior_source"] = source
+        return receipt
+
+    def proposal_prior_labeled(self) -> tuple[dict[str, float], str]:
+        """#691 T3 — ``_proposal_prior``'s labeled face: (prior, source),
+        source ∈ {``history``, ``llm_prior``, ``none``}. ``history`` is
+        the workspace's measured declaration shares (the prior it
+        earned); ``llm_prior`` is the explicit runs/llm-prior.json
+        intake doc when no history exists (the prior it was TOLD) —
+        retired tokens filtered by the same registry wall as every other
+        prior face, share-normalized like any candidate set. Fail-open:
+        the #544 tolerant read face maps a missing/corrupt intake doc to
+        empty silently (never a raise); only an unexpected failure at
+        THIS seam warns (one rate-limited warn, error class only) and
+        the chain continues empty."""
+        prior = self._proposal_prior()
+        if prior:
+            return prior, "history"
+        try:
+            from rlvr import priors as _priors  # noqa: PLC0415 — lazy
+            seeded = _priors.intake_prior_weights(self.ws)
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.llm_prior",
+                 f"{type(exc).__name__}: {exc} (fail-open: no llm prior)")
+            seeded = {}
+        prior = _share(_registered_only(seeded or {}))
+        return (prior, "llm_prior") if prior else ({}, "none")
 
     def _store_prior(self) -> dict[str, float]:
         """The cross-task fallback candidate channel: families the keyed
@@ -374,6 +450,23 @@ class PosteriorStrategyStore:
             return {"warm_pools": pools} if pools else {}
         except Exception as exc:  # noqa: BLE001 — fail-open at the seam
             warn("strategy_store.warm_pools",
+                 f"{type(exc).__name__}: {exc}")
+            return {}
+
+    def _negative_pool_kwargs(self, families=None) -> dict:
+        """#705 wiring (class-level negative knowledge): thread this
+        workspace's CLASS dead ends into call site 2 — without this the
+        transfer protocol would be write-only (recorded, never consulted
+        at planning entry). Fail-open: any failure yields {} (the sampler
+        stays negative-knowledge-blind, the pre-change draw)."""
+        try:
+            fams = families if families is not None \
+                else self._proposal_prior().keys()
+            from rlvr import marl as _marl  # noqa: PLC0415 — lazy
+            pools = _marl.negative_pools(self.ws, fams)
+            return {"negative_pools": pools} if pools else {}
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.negative_pools",
                  f"{type(exc).__name__}: {exc}")
             return {}
 
@@ -435,7 +528,12 @@ class PosteriorStrategyStore:
         fp = str(state_fingerprint)
         return sum(1 for row in rows
                    if isinstance(row, dict)
-                   and str(row.get("signature_hash") or "") == fp)
+                   and str(row.get("signature_hash") or "") == fp
+                   # a credit_amendment row corrects an
+                   # existing observation — it is not a new one, and the
+                   # n_min evidence gate must not count it.
+                   and str(row.get("credit_kind") or "")
+                   != "credit_amendment")
 
     # ------------------------------------------------------------ internals
 
@@ -500,6 +598,54 @@ def _row_outcome(row: dict) -> float:
     except (TypeError, ValueError):
         return 0.5
     return max(0.0, min(1.0, reward))
+
+
+def reconcile_declaration(ws, declared: str | None) -> dict:
+    """#691 — the dispatch-gate reconciliation view for ONE declared
+    method family: the gate's OWN sampler draw (the same face
+    ``method_lead`` renders, recomputed at dispatch time — anti-spoof:
+    nothing the envelope says can move it) plus the DECLARED family's
+    draw probability under it.
+
+    Returns ``{"sampled_family", "propensity", "prior_source",
+    "deviates"}`` — or the all-None gap view on every miss: no workspace,
+    no declaration, no proposal material (the honest cold gap), or any
+    failure (ONE rate-limited warn carrying the error class only).
+    Fail-open by design: telemetry never turns an ALLOW into anything
+    else. ``propensity`` is the sampler's draw probability of the
+    DECLARED family (0.0 when it is not a candidate at all — the draw
+    could never have chosen it; the honest number, not a gap)."""
+    gap = {"sampled_family": None, "propensity": None,
+           "prior_source": None, "deviates": False}
+    if not ws or not declared:
+        return gap
+    try:
+        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
+        store = PosteriorStrategyStore(ws)
+        fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
+        receipt = store.method_sample(fp)
+        if receipt is None:
+            return gap
+        sampled = str(receipt.get("family") or "").strip() or None
+        weights: dict[str, float] = {}
+        for fam, cand in (receipt.get("candidates") or {}).items():
+            try:
+                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
+            except (TypeError, ValueError):
+                weights[str(fam)] = 0.0
+        total = sum(weights.values())
+        propensity = (round(weights.get(str(declared), 0.0) / total, 6)
+                      if total > 0.0 else None)
+        return {
+            "sampled_family": sampled,
+            "propensity": propensity,
+            "prior_source": receipt.get("prior_source"),
+            "deviates": bool(sampled) and str(declared) != sampled,
+        }
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn("strategy_store.reconcile_declaration",
+             f"{type(exc).__name__}: {exc}")
+        return gap
 
 
 def load_store(ws) -> "PosteriorStrategyStore":

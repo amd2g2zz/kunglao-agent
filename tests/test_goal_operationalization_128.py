@@ -67,6 +67,21 @@ def _doc(**over):
             "decrypting only the captured batch does not count as done",
             "decryption depending on a live target process does not count as done",
         ],
+        "constraint_witness": {
+            "schema": go.WITNESS_SCHEMA,
+            "witnesses": {
+                "an emulator harness running once does not count as done": {
+                    "none": "an emulator run leaves no separable artifact "
+                            "at settlement",
+                },
+                "decrypting only the captured batch does not count as done":
+                    {"none": "held-out ciphertext coverage is priced by "
+                             "the fresh-input acceptance",
+                             },
+                "decryption depending on a live target process does not "
+                "count as done": {"check": "test ! -e live-target.pid"},
+            },
+        },
         "diff_vs_verbatim": [
             "adds: the verbatim 'get the key' is operationalized as an "
             "offline decrypt acceptance check",
@@ -104,6 +119,20 @@ def _sim_doc(**over):
             "replaying a captured request does not count as done",
             "a request hardcoded to the captured parameter set does not count as done",
         ],
+        "constraint_witness": {
+            "schema": go.WITNESS_SCHEMA,
+            "witnesses": {
+                "replaying a captured request does not count as done": {
+                    "none": "replay artifacts are not separable from the "
+                            "delivered client at settlement",
+                },
+                "a request hardcoded to the captured parameter set does "
+                "not count as done": {
+                    "none": "parameter hardcoding is priced by the "
+                            "fresh-input acceptance",
+                },
+            },
+        },
         "diff_vs_verbatim": [
             "adds: 'talk to the endpoint' is operationalized as constructing "
             "requests for never-captured inputs, not replaying them",
@@ -346,6 +375,9 @@ def test_post_dispatch_appends_and_other_edits_are_rescope_records():
     grown = _stamped()
     grown["not_done"] = grown["not_done"] + [
         "passing the recorded checker with a replayed transcript does not count as done"]
+    grown["constraint_witness"]["witnesses"][
+        "passing the recorded checker with a replayed transcript does not "
+        "count as done"] = {"check": "test ! -e replayed.transcript"}
     rep = go.validate(grown)
     assert rep["errors"] == [], rep
     assert any("not_done" in r for r in rep["rescopes"]), rep

@@ -379,12 +379,12 @@ class TestStateSignatureProbeFace:
     def test_pf_segment_sits_before_the_reserved_tail(self, tmp_path):
         _write_die(tmp_path, 4.2)
         sig = rlvr_state.signature_str(rlvr_state.snapshot(tmp_path))
-        assert sig.endswith("|pf=die:usable,die:verdict=clean,ent:mid|sd=-")
+        assert sig.endswith("|pf=die:usable,die:verdict=clean,ent:mid|bf=-|sd=-")
         assert sig.startswith("state-sig/2|")
 
     def test_bare_signature_keeps_the_absent_idiom(self, tmp_path):
         sig = rlvr_state.signature_str(rlvr_state.snapshot(tmp_path))
-        assert "|pf=-|sd=-" in sig
+        assert "|pf=-|bf=-|sd=-" in sig
 
     def test_structurally_identical_probes_differ_split_the_key(self, tmp_path
                                                                 ):
@@ -421,8 +421,10 @@ class TestStateSignatureProbeFace:
             rlvr_state.snapshot(tmp_path))
 
     def test_replay_of_a_legacy_snapshot_document_is_stable(self):
-        """Recorded pre-bump snapshot docs (no probe key) re-sign to
-        their recorded string — the append-only streams never re-key."""
+        """A legacy state doc (no probe/belief keys) re-signs
+        deterministically to the current canonical form (absent dims
+        read '-') — recorded stream rows keep their recorded hash: the
+        append-only streams never re-key."""
         legacy_state = {"schema": "state-sig/2",
                         "facts": {"count": 0, "verified": 0, "bucket": 0},
                         "claims": {"pattern": ""},
@@ -433,7 +435,7 @@ class TestStateSignatureProbeFace:
                                       "kinds": ""},
                         "sides": {}}
         assert rlvr_state.signature_str(legacy_state) == (
-            "state-sig/2|fc=0|fv=0|cp=-|bg=0|ch=-|ph=-|ob=-|pf=-|sd=-")
+            "state-sig/2|fc=0|fv=0|cp=-|bg=0|ch=-|ph=-|ob=-|pf=-|bf=-|sd=-")
 
 
 # ---------------------------------------------------------------------------

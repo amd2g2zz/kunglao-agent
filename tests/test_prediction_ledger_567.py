@@ -54,11 +54,10 @@ def _ledger_rows(ws: Path) -> list[dict]:
 
 
 def _transitions(ws: Path) -> list[dict]:
-    p = ws / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()
-            if l.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    from rlvr import incremental_reward as _ir  # noqa: PLC0415
+    return _ir.read_transitions(ws)
 
 
 def _age_row(ws: Path, pred_id: str, hours: float) -> None:

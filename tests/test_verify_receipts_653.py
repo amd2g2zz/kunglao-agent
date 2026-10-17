@@ -22,7 +22,6 @@ orchestrator-narration channel is the named residual).
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -37,6 +36,10 @@ from e2e import checkpoints, llm_faces, model  # noqa: E402
 from rlvr import prediction_ledger as pl  # noqa: E402
 from test_e2e_runner import (  # noqa: E402
     ANCHORS, DERIVE_PY, FakeClock, ScriptedRunner, TASK_YAML)
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
 
 SHA = "a" * 64
 
@@ -94,11 +97,10 @@ def _register_pending(ws, claim: str = "C-005") -> None:
 
 
 def _rows(ws: Path) -> list[dict]:
-    p = Path(ws) / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(line) for line in
-            p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    from rlvr import incremental_reward as _ir  # noqa: PLC0415
+    return _ir.read_transitions(ws)
 
 
 # ------------------------------------------------- the landing gate ----

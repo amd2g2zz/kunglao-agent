@@ -70,7 +70,8 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
 
   flip potential (diagnostic, feeds["case_flip_potential"]) — the
   conservative P(cflip) reading: 0.5 at cold start, decayed by the claim's
-  promotion_attempts (historical settlements), floored to
+  total attempt mass (attempts_of = max(dispatch_count,
+  promotion_attempts) — dispatch churn decays it too), floored to
   FLIP_POTENTIAL_FALLBACK = 0.3 when the action has no oracle case / PQ
   linkage. It rides Action.feeds; it does NOT enter the score.
 
@@ -97,11 +98,12 @@ from kunglao_log import warn  # canonical warn: ONE implementation (process-wide
 import argparse
 import hashlib
 import json
+import math
 import random
 import re
 import sys
 from typing import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -272,7 +274,7 @@ class Action:
         # feed STATES legitimately differ while scores do not.
         return {"claim_id": self.claim_id, "action": self.action,
                 "score": round(self.score, 3), "skill": self.skill,
-                "weight": round(self.weight, 3)}
+                "weight": round(self.weight, 3), "tier": self.tier}
 
 
 def is_open(claim: dict) -> bool:
@@ -320,8 +322,30 @@ def _int_flag(value) -> tuple[int, bool]:
 
 
 def attempts_of(claim: dict) -> int:
-    """promotion_attempts → int; unparseable → 0 (#103)."""
+    """Total attempt mass at a claim: max(dispatch_count,
+    promotion_attempts). Every dispatch accrues dispatch_count; a failed
+    dispatch ALSO strikes promotion_attempts — max counts the attempt
+    once, never double-counting a failure. Legacy registers without the
+    dispatch_count field read the strikes alone (pre-wiring behavior).
+    Feeds the flip-potential decay and Action.attempts — the churn
+    visibility the strike counter alone never had (a claim dispatched
+    7x with zero failures read 0)."""
+    return max(dispatch_count_of(claim), strikes_of(claim))
+
+
+def strikes_of(claim: dict) -> int:
+    """promotion_attempts → int; the DLQ failure-STRIKE face (dirty
+    tolerance, same guard as attempts_of). The candidate filter and the
+    must-ask lane key on THIS — dispatch churn alone never evicts a
+    claim from the frontier."""
     return _int_flag(claim.get("promotion_attempts", 0))[0]
+
+
+def dispatch_count_of(claim: dict) -> int:
+    """dispatch_count → int; every dispatch accrues here (dirty
+    tolerance, same guard as attempts_of). Absent field → 0 (legacy
+    register)."""
+    return _int_flag(claim.get("dispatch_count", 0))[0]
 
 
 def action_tier(claim: dict) -> int:
@@ -780,9 +804,51 @@ def _evidence_digest(evidence: EvidenceView) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _view_stats(actions: list) -> dict:
+    """The additive decision-view payload keys — pure functions of the
+    ranked actions (no workspace, no clock, no randomness), so same-seed
+    payload replay stays byte-identical including these keys:
+
+      k         — the ranked candidate count;
+      propensity — the top-ranked arm's share of the total score mass
+                   (6dp). The rank-time "how dominant was the pick"
+                  readout for the view; NOT the dispatch-receipt MC
+                  propensity (that one stays on the envelope, a
+                  different layer). Null when the ranking is empty or a
+                  multi-candidate score mass cannot be normalized;
+      entropy   — Shannon entropy in BITS of the normalized score
+                  distribution over the k candidates (6dp); 0.0 when the
+                  choice is fully determined (a single candidate),
+                  null when a multi-candidate mass cannot be
+                  normalized (zero total score);
+      tiers     — {claim_id: tier} over the ranked candidates, the same
+                  claim-keyed shape feeds/scores already use.
+
+    Negative scores (reachable only through a negative worth override)
+    clamp at zero before normalizing, so the shares always form a
+    simplex."""
+    k = len(actions)
+    tiers = {a.claim_id: a.tier for a in actions}
+    if k == 0:
+        return {"entropy": None, "propensity": None, "k": 0, "tiers": tiers}
+    if k == 1:
+        return {"entropy": 0.0, "propensity": 1.0, "k": 1, "tiers": tiers}
+    scores = [max(a.score, 0.0) for a in actions]
+    total = sum(scores)
+    if total <= 0:
+        return {"entropy": None, "propensity": None, "k": k, "tiers": tiers}
+    shares = [s / total for s in scores]
+    # 0.0 - sum(...) (not -sum(...)): the all-p=1 edge would otherwise
+    # yield a signed -0.0 that serializes as "-0.0" in the payload.
+    entropy = round(0.0 - sum(p * math.log2(p) for p in shares if p > 0), 6)
+    return {"entropy": entropy, "propensity": round(shares[0], 6),
+            "k": k, "tiers": tiers}
+
+
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
                      rng_base: int, actions: list[Action],
-                     round_no: int | None) -> None:
+                     round_no: int | None,
+                     planner: dict | None = None) -> None:
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
     per-claim Thompson feeds + the input fingerprint (claims hash,
     evidence-view digest, rng base draw, #251 round). Given the seed inputs,
@@ -806,7 +872,22 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
 
     The real writer reports a failed write by returning False instead of
     raising (kunglao_log.emit never raises), so the health bit keys off
-    BOTH shapes: a payload/build crash and a plain write failure."""
+    BOTH shapes: a payload/build crash and a plain write failure.
+
+    The payload additionally carries the four additive decision-view keys
+    (entropy of the score distribution in bits, the top arm's score share,
+    the candidate count k, and the per-claim tier map — see _view_stats).
+    They are pure functions of the ranked actions, computed here at the
+    decision point, and stay OUTSIDE input_fingerprint: the fingerprint
+    covers ranking inputs, these are outputs, so the replay hash and the
+    frozen-sampling observability stay byte-identical.
+
+    #718 additive planner block: when the L1 planner's advisory factors
+    moved any candidate this run (the value store is non-empty and at
+    least one claim is knowledge-solved), the per-claim factors ride the
+    payload under ``planner`` — an OUTPUT key (same convention as the
+    view keys), so an all-empty run emits the pre-#718 payload
+    byte-identically."""
     try:
         claims_hash = hashlib.sha256(json.dumps(
             claims, sort_keys=True, ensure_ascii=False, default=repr)
@@ -824,7 +905,11 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "feeds": {a.claim_id: dict(a.feeds) for a in actions},
             "scores": {a.claim_id: a.score for a in actions},
             "ranked_order": [a.claim_id for a in actions],
+            "tiers": {a.claim_id: a.tier for a in actions},
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
+            **_view_stats(actions),
+            # additive-when-present (#718): no factors -> no key at all
+            **({"planner": dict(planner)} if planner else {}),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                             arm=(actions[0].claim_id if actions else None),
@@ -893,7 +978,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         cid = c.get("id")
         if not cid or not is_open(c):
             continue
-        if attempts_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
+        if strikes_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
             continue
         parents = depends_on.get(cid, []) or []
         if any(p not in terminal and p not in superseded for p in parents):
@@ -958,7 +1043,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             "thompson_sample": thompson_state,
             "case_flip_potential": (
                 f"P(flip)={round(fp, 3)} (base {FLIP_POTENTIAL_BASE} decayed "
-                f"by promotion_attempts={attempts_of(c)})"
+                f"by attempts={attempts_of(c)} [dispatches="
+                f"{dispatch_count_of(c)}, failure_strikes="
+                f"{strikes_of(c)}])"
                 + ("" if linked else
                    f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
             "downstream": (
@@ -968,16 +1055,60 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         }
         # #103: attempts conversion is per-claim guarded; a dirty raw value
         # scores as 0 and surfaces here as a feed diagnostic instead of
-        # freezing the whole DECIDE run in conservative BLOCKED.
-        attempts, attempts_dirty = _int_flag(c.get("promotion_attempts", 0))
+        # freezing the whole DECIDE run in conservative BLOCKED. The
+        # Action.attempts face reads the total attempt mass (attempts_of).
+        attempts_dirty = _int_flag(c.get("promotion_attempts", 0))[1]
+        dc_dirty = _int_flag(c.get("dispatch_count", 0))[1]
         if attempts_dirty:
             feeds["A"] = (f"promotion_attempts={c.get('promotion_attempts')!r} "
                           "unparseable -> treated as 0 (#103)")
+        if dc_dirty:
+            feeds["A"] = (f"dispatch_count={c.get('dispatch_count')!r} "
+                          "unparseable -> treated as 0 (#103)")
+        dc, _dc_dirty = _int_flag(c.get("dispatch_count", 0))
+        if dc > 0:
+            feeds["dispatch_count"] = (
+                f"dispatch_count={dc} (independent of promotion_attempts="
+                f"{attempts_of(c)}; the #690 branch act budget counts dispatches, "
+                f"not promotions)")
         actions.append(Action(
             claim_id=cid, action=classify_action(c), score=score, skill=None,
-            tier=action_tier(c), attempts=attempts, cost=action_cost(c),
+            tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
             weight=weight, feeds=feeds,
         ))
+    # #718 additive L1 planner signal: while the value store is empty
+    # `advisory_factors` returns {} and nothing here runs (the ranking
+    # above stays byte-identical — the frozen-capture contract). Once
+    # learned, a claim whose dispatch the planner does not endorse (its
+    # verified answer already exists — reuse dominates its ratio) is
+    # dragged by the dispatch SHARE; exact-1.0 claims keep their score
+    # and their feeds untouched. Fail-open: a broken planner never
+    # touches the ranking result.
+    planner_block: dict | None = None
+    if evidence.ws is not None:
+        factors: dict = {}
+        try:
+            from rlvr import l1_planner as _l1p  # noqa: PLC0415 — lazy
+            factors = _l1p.advisory_factors(
+                evidence.ws, [(a.claim_id, a.cost) for a in actions],
+                rng=random.Random(f"l1rank/{base}"))
+        except Exception as exc:  # noqa: BLE001 — the rank never breaks
+            warn("priority_ratio.planner",
+                 f"{type(exc).__name__}: {exc}")
+        moves = {cid: f for cid, f in factors.items() if 0.0 < f < 1.0}
+        if moves:
+            planner_block = {cid: round(f, 6) for cid, f in moves.items()}
+            actions = [
+                replace(a, score=round(a.score * moves[a.claim_id], 6),
+                        feeds=dict(
+                            a.feeds,
+                            planner=f"l1 dispatch share={round(moves[a.claim_id], 6)} "
+                                    f"(the planner does not endorse this "
+                                    f"dispatch: a knowledge-solved claim is "
+                                    f"reused unless a re-attempt's value/cost "
+                                    f"beats the replay's)"))
+                if a.claim_id in moves else a
+                for a in actions]
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
     # The emit below reads actions[0] as the event's arm — valid only
@@ -989,7 +1120,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # surface, nothing to log to (bare-EvidenceView calls stay pure).
     if evidence.ws is not None:
         _emit_rank_feeds(evidence.ws, claims, evidence, base, actions,
-                         round_no=round_no)
+                         round_no=round_no, planner=planner_block)
     return actions
 
 

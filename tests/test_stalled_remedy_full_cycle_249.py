@@ -181,6 +181,10 @@ def test_full_cycle_stalled_remedy_breaks_flatline(ws, tmp_path):
     # ---- S4: remedy-declared dispatch of the stuck claim -> admitted ---
     rc = _run_pre_check(ws, "C-001", marked=True)
     assert rc == 0, "S4: channel A — the prescribed remedy is admitted"
+    # #690: the remedy worker completes -> SubagentStop settles its step
+    # (otherwise the sync barrier — a FEATURE, not a stall — blocks S6).
+    from rlvr import step_grain as _sg690
+    _sg690.settle_step(ws, "sess-test")
 
     # ---- S5: real ladder walk + real mint (issue-234 machinery) --------
     ladder = {
@@ -222,6 +226,7 @@ def test_full_cycle_stalled_remedy_breaks_flatline(ws, tmp_path):
     assert rc == 0, \
         "S6: channel B — the split's sub-claim dispatch is admitted " \
         "(depends_on -> stuck C-001 is the provenance pin)"
+    _sg690.settle_step(ws, "sess-test")  # #690: worker completes again
 
     # ---- S6b: round-2 HIGH exploit shape stays REJECT -------------------
     # The reviewer's exploit: self-append a fresh unrelated OPEN claim

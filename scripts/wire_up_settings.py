@@ -4,10 +4,11 @@
 Issue #445 (2026-08-18): the WRITER that used to live here moved to
 hook_activation.register_hooks (THE canonical registration entry, with the
 post-write layer self-check). This module keeps the REGISTRY
-  1. the REGISTRY (WIRE_UP_HOOK_FILES, HOOK_DEPLOYMENT_TARGETS,
+  1. the REGISTRY (WIRE_UP_HOOK_WIRING — the (event, matcher, file) rows
+     WIRE_UP_HOOK_FILES derives from — plus HOOK_DEPLOYMENT_TARGETS,
      hook_deployment_targets, derive_hook_subset) — the data source every
-     checker/writer derives from (#372/#381/#410 contracts). It is not a
-     registration entry; moving it would churn four importers for zero
+     checker/writer derives from (#372/#381/#410/#683 contracts). It is not
+     a registration entry; moving it would churn four importers for zero
      convergence.
 
 Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
@@ -49,6 +50,52 @@ except NameError as exc:
 from collections.abc import Iterable
 from pathlib import Path
 
+# #683: the MCP host-channel matcher — part of the WIRING rows below, so it
+# lives HERE (the registry's home) with one definition; hook_activation
+# re-exports it for its historical consumers (#601).
+ORCHESTRATOR_MCP_MATCHER = (
+    "mcp__ghidra__.*|mcp__x64dbg__.*|mcp__frida__.*")
+
+# #683: THE wiring table — (event, matcher, hook file) rows, the single
+# source BOTH the deployed writer (hook_activation._DEPLOYED_WIRING) and
+# this registry's file set consume. Pre-#683 the row table lived in
+# hook_activation while WIRE_UP_HOOK_FILES was a hand-kept second list;
+# step_record_capture.py + cost_input_capture.py sat in the rows only, so
+# the canonical register_hooks never wrote them and the self-check stayed
+# GREEN (its expected set was the smaller list — a missing hook was
+# invisible by construction).
+WIRE_UP_HOOK_WIRING = (
+    # (event, matcher, hook_file)
+    ("PreToolUse", "Agent", "env_check_gate.py"),
+    ("PreToolUse", "Agent", "worker_budget.py"),
+    ("PreToolUse", "Agent", "dispatch_gate.py"),
+    ("PreToolUse", "Agent", "recall_inject.py"),
+    ("PreToolUse", "Bash", "heartbeat_touch.py"),
+    ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
+    ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
+    ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
+    ("PreToolUse", "Bash", "write_guard.py"),  # #516 register Bash face
+    ("PreToolUse", "Read|Glob|Grep|Bash|Agent", "rt_read_barrier.py"),
+    ("PreToolUse", "Edit|Write|MultiEdit", "evidence_pin_guard.py"),
+    ("PreToolUse", "Bash", "evidence_pin_guard.py"),  # mutation idioms
+    ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
+    ("PostToolUse", "Agent", "worker_pulse.py"),
+    ("PostToolUse", "Agent", "state_anchor.py"),
+    ("PostToolUse", "Bash", "violation_capture.py"),
+    ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
+    ("PostToolUse", "Edit|Write|MultiEdit|Agent",
+     "cost_input_capture.py"),  # #873 cost input capture
+    ("PostToolUse", "Bash|Read|Glob|Grep|Edit|Write|MultiEdit|mcp__",
+     "step_record_capture.py"),  # the shadow step ledger (#670/#683)
+    ("Stop", "", "completion_gate.py"),
+    ("Stop", "", "workguard_gate.py"),        # issue 434 WORKGUARD
+    ("SubagentStop", "", "round_closure.py"),      # issue 434 closure feed
+    ("SessionStart", "", "session_start.py"),      # issue 434 constitution
+    ("PreCompact", "", "compact_continuity.py"),   # issue 434 continuity
+    ("UserPromptSubmit", "", "user_signal_capture.py"),  # issue 434 observation
+    ("UserPromptSubmit", "", "rt_read_barrier.py"),      # RT arming face
+)
+
 # #372: THE hook registry — every consumer derives from this frozenset.
 # Pre-#372 env_check.py mirrored the list by hand and drifted (6 vs the 8
 # files wire_up_settings actually registers — recall_inject/completion_gate
@@ -57,27 +104,9 @@ from pathlib import Path
 # pins the set-equality so drift is loud. Deliberate narrow subsets
 # (hooks_selfcheck.KONG_HOOK_FILES, external_kicker.KUNGLAO_HOOK_ENTRIES)
 # pin their file sets to this registry via derive_hook_subset() below (#381).
-WIRE_UP_HOOK_FILES = frozenset({
-    "env_check_gate.py",       # PreToolUse/Agent — hard environment gate (#233)
-    "worker_budget.py",        # Pre+PostToolUse/Agent — budget/tier enforcement
-    "dispatch_gate.py",        # PreToolUse/Agent — dispatch contract gate
-    "recall_inject.py",        # PreToolUse/Agent — runtime knowledge recall (#268)
-    "heartbeat_touch.py",      # PreToolUse/Bash — liveness refresh on any tool use
-    "worker_pulse.py",         # PostToolUse/Agent — completion pulse
-    "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
-    "completion_gate.py",      # Stop — code-owned completion gate (#55)
-    "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
-    "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
-    "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
-    "bash_fact_guard.py",      # PostToolUse/Bash — facts-write lint recorder (#809)
-    "workguard_gate.py",       # Stop — WORKGUARD: turn-exit actionable-set gate (issue 434)
-    "round_closure.py",        # SubagentStop — round-closure lifecycle feed (issue 434)
-    "session_start.py",        # SessionStart — arm + constitution injection (issue 434)
-    "compact_continuity.py",   # PreCompact — strategy continuity note (issue 434)
-    "user_signal_capture.py",  # UserPromptSubmit — operator observation + signal capture (issue 434)
-    "rt_read_barrier.py",      # PreToolUse Read|Glob|Grep|Bash + UserPromptSubmit — RT read barrier
-    "evidence_pin_guard.py",   # PreToolUse Write|Edit|MultiEdit + Bash — evidence sha-pin freeze
-})
+# #683: derived from WIRE_UP_HOOK_WIRING — the file set can no longer drift
+# from the row table (it WAS the drift: two files in the rows, not here).
+WIRE_UP_HOOK_FILES = frozenset(f for _, _, f in WIRE_UP_HOOK_WIRING)
 
 # #675: hooks registered on MORE THAN ONE event slot by
 # hook_activation.register_hooks (worker_budget rides both

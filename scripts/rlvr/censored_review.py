@@ -10,7 +10,8 @@ wall time ALONE — if timed-out acts had already moved the state forward
 the slow-but-correct routes the hard tasks need.
 
 The review face over one or more run directories (each scanned
-recursively for `runs/transitions.jsonl`):
+recursively for `runs/transitions.jsonl` — and, since #721, the
+consolidated `runs/experience.jsonl`; migration archives are skipped):
 
   per method family (the row's `a` field), settlement rows
   (`r_settle` present) fall into:
@@ -79,6 +80,8 @@ SCHEMA = "censored-review/1"
 SCOPE = "rlvr.censored_review"
 
 TRANSITIONS_NAME = "transitions.jsonl"   # matched only inside a runs/ dir
+EXPERIENCE_NAME = "experience.jsonl"     # #721: the consolidated live ledger
+LEDGER_NAMES = (TRANSITIONS_NAME, EXPERIENCE_NAME)
 AUDIT_REL = ("logs", "e2e-audit.jsonl")  # sibling of the transitions file
 
 SUCCESS_STATUS = "DISPATCHED"   # the producer's binary-success word
@@ -290,11 +293,23 @@ def _km_face(audit_paths: list[Path]) -> dict[str, dict]:
 
 # ---- the ledger scan ---------------------------------------------------------
 
+def _is_transition_row(row: object) -> bool:
+    """#721: transition rows inside the consolidated experience file
+    carry the transition/1 stamp; an unstamped row is accepted (the
+    pre-stamp archive shape — never silently dropped)."""
+    if not isinstance(row, dict):
+        return False
+    stamp = str(row.get("schema") or "")
+    return not stamp or stamp.startswith("transition")
+
+
 def find_transition_files(run_dirs: list[str | Path]) -> list[Path]:
-    """Every transitions.jsonl under a `runs` path component within the
-    given run directories (the `find <dirs> -name transitions.jsonl
-    -path '*/runs/*'` face, stdlib-only). Deterministic order; a missing
-    run dir warns loudly and contributes nothing."""
+    """Every transitions.jsonl (or #721 experience.jsonl) under a `runs`
+    path component within the given run directories (the `find <dirs>
+    -name transitions.jsonl -path '*/runs/*'` face, stdlib-only).
+    Deterministic order; a missing run dir warns loudly and contributes
+    nothing. Migration archives (runs/archive/) are skipped — their rows
+    live in the consolidated file after the migration."""
     found: list[Path] = []
     for raw in run_dirs:
         root = Path(raw)
@@ -304,19 +319,30 @@ def find_transition_files(run_dirs: list[str | Path]) -> list[Path]:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames.sort()
             for name in sorted(filenames):
-                if name != TRANSITIONS_NAME:
+                if name not in LEDGER_NAMES:
                     continue
                 candidate = Path(dirpath) / name
                 # the -path '*/runs/*' contract: only under a runs dir
-                if "runs" in candidate.parent.parts:
-                    found.append(candidate)
+                if "runs" not in candidate.parent.parts:
+                    continue
+                # skip the #721 migration archive (rows are already in
+                # the consolidated file — scanning it would double count);
+                # ANY 'archive' component under the runs dir qualifies
+                # (a nested runs/archive/<sub>/ copy would double count
+                # under a direct-child-only rule)
+                parts = candidate.parts
+                if "archive" in parts[parts.index("runs"):]:
+                    continue
+                found.append(candidate)
     return sorted(found, key=str)
 
 
 def read_ledger(paths: list[Path]) -> tuple[list[dict], dict]:
-    """Read every transitions.jsonl into (settlement + pending rows,
-    stats). Malformed lines are skipped AND counted — never silently
-    dropped."""
+    """Read every transitions.jsonl / #721 experience.jsonl into
+    (settlement + pending rows, stats). Malformed lines are skipped AND
+    counted — never silently dropped. In the consolidated file only
+    transition-stamped rows are ledger rows (other schemas belong to
+    other consumers — skipped without inflating the malformed count)."""
     rows: list[dict] = []
     stats = {"files_scanned": len(paths), "rows_total": 0,
              "rows_settlement": 0, "rows_non_settlement": 0,
@@ -336,6 +362,8 @@ def read_ledger(paths: list[Path]) -> tuple[list[dict], dict]:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 stats["skipped_malformed"] += 1
+                continue
+            if path.name == EXPERIENCE_NAME and not _is_transition_row(row):
                 continue
             kind = _classify(row)
             if kind is None:

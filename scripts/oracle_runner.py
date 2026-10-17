@@ -306,23 +306,63 @@ def _resolve_evidence_ref(ws: Path, case_path: Path, cid: str,
 
 # ------------------------------------------------------------ case loading
 
-def _parse_expected(ws: Path, case_path: Path, cid: str, raw) -> list[dict]:
+EXPECTED_TOP_LEVEL_FAULT = "needs a non-empty `expected` list"
+
+
+def expected_shape_error(raw) -> str | None:
+    """The canonical `expected` shape law — ONE definition for every
+    consumer of oracle case docs.
+
+    The shape is the runner's (the executor owns the contract): a
+    non-empty list of mappings, each carrying a non-empty string
+    `field` and a `value`, where every entry is either an explicit
+    `pending-observation` or anchors its expectation with at least one
+    `evidence_refs` entry. Returns the first shape fault as a message,
+    or None when well-formed.
+
+    The posterior legs' arming gate reads this same law. History: it
+    used to accept a DIFFERENT shape here (a mapping with
+    `evidence_refs`), so a doc could be armed-but-not-loadable or
+    loadable-but-not-armed — two definitions of "a real case" is the
+    drift this one-law extraction exists to kill.
+
+    Raise-formatting contract (kept byte-identical to the
+    pre-extraction parse): the top-level fault (the module constant)
+    raises as `{case}: case {cid!r} {fault}`; every entry-level fault
+    raises as `{case}: {fault}`."""
     if not isinstance(raw, list) or not raw:
-        raise OracleCaseError(
-            f"{case_path.name}: case {cid!r} needs a non-empty `expected` list")
-    out: list[dict] = []
+        return EXPECTED_TOP_LEVEL_FAULT
     for i, e in enumerate(raw):
         if not isinstance(e, dict):
-            raise OracleCaseError(
-                f"{case_path.name}: expected entry #{i} is "
-                f"{type(e).__name__}; expected a mapping")
+            return (f"expected entry #{i} is {type(e).__name__}; "
+                    f"expected a mapping")
         field = e.get("field")
         if not isinstance(field, str) or not field:
-            raise OracleCaseError(
-                f"{case_path.name}: expected entry #{i} lacks a `field` name")
+            return f"expected entry #{i} lacks a `field` name"
         if "value" not in e:
+            return f"expected entry {field!r} lacks a `value`"
+        refs = e.get("evidence_refs")
+        if bool(e.get("pending-observation")):
+            continue
+        if not isinstance(refs, list) or not refs:
+            return (f"expected entry {field!r} lacks evidence_refs and a "
+                    f"pending-observation marker — refusing to bless an "
+                    f"invented value (#108 half C: every expected entry "
+                    f"carries a byte-anchored fact reference or an "
+                    f"explicit pending-observation marker)")
+    return None
+
+
+def _parse_expected(ws: Path, case_path: Path, cid: str, raw) -> list[dict]:
+    fault = expected_shape_error(raw)
+    if fault is not None:
+        if fault == EXPECTED_TOP_LEVEL_FAULT:
             raise OracleCaseError(
-                f"{case_path.name}: expected entry {field!r} lacks a `value`")
+                f"{case_path.name}: case {cid!r} {fault}")
+        raise OracleCaseError(f"{case_path.name}: {fault}")
+    out: list[dict] = []
+    for e in raw:
+        field = e["field"]
         refs = e.get("evidence_refs")
         pending = bool(e.get("pending-observation"))
         if pending:
@@ -330,15 +370,6 @@ def _parse_expected(ws: Path, case_path: Path, cid: str, raw) -> list[dict]:
                         "evidence_refs": [str(r) for r in (refs or [])],
                         "pending": True})
             continue
-        # #108 half C: no byte-anchored fact reference and no pending marker
-        # -> the value is invented. Refuse (lint-style), never bless.
-        if not isinstance(refs, list) or not refs:
-            raise OracleCaseError(
-                f"{case_path.name}: expected entry {field!r} lacks "
-                f"evidence_refs and a pending-observation marker — refusing "
-                f"to bless an invented value (#108 half C: every expected "
-                f"entry carries a byte-anchored fact reference or an "
-                f"explicit pending-observation marker)")
         str_refs = [str(r) for r in refs]
         # #126: presence is not resolution — every non-pending ref must
         # name an existing fact-pipeline artifact, or the case is refused.

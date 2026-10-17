@@ -39,6 +39,12 @@ import eval_targets as tg  # noqa: E402
 import eval_loop_runner as lr  # noqa: E402
 import eval_control_arm as ca  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 def _all_registered_families() -> set[str]:
     families = set(tg.FAMILIES) | set(ntg.FAMILIES)

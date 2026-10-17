@@ -126,6 +126,20 @@ def _anchor_rows(ws: Path) -> list[dict]:
     return rows
 
 
+def _seal(ws: Path, adj: dict, tmp_path: Path) -> None:
+    """Mint a valid gate seal for ws (store aimed at this test's tmp home):
+    the release path now requires a sealed record, so the sanctioned-pass
+    pins run sealed."""
+    mod = _load_shim()
+    home = tmp_path / "sanction-home"
+    home.mkdir(exist_ok=True)
+    key = home / "kunglao-sanction.key"
+    key.write_text("c" * 64, encoding="utf-8")
+    mod.SANCTION_KEY_PATH = key
+    mod.SANCTION_STORE_DIR = home / "sanctions"
+    assert mod._sanction_mint(ws, adj) is True
+
+
 # ---------------------------------------------------------------------------
 # B1 — the crash point: _secondstop_record_sha with a datetime value
 # ---------------------------------------------------------------------------
@@ -188,6 +202,7 @@ def test_unquoted_timestamp_sanctioned_pass_anchors(tmp_path):
     adj = yaml.safe_load((ws / "task-oracle.yaml").read_text(
         encoding="utf-8"))["adjudication"]["stop_hook_active"]
     assert isinstance(adj["last_decision_at"], datetime), adj
+    _seal(ws, adj, tmp_path)
     rc, out = _run(ws)
     # sanctioned PASS goes through — no block JSON, no generic reason
     assert rc == 0, out
@@ -259,6 +274,7 @@ def test_quoted_timestamp_still_passes_and_anchors(tmp_path):
     adj = yaml.safe_load((ws / "task-oracle.yaml").read_text(
         encoding="utf-8"))["adjudication"]["stop_hook_active"]
     assert isinstance(adj["last_decision_at"], str)
+    _seal(ws, adj, tmp_path)
     rc, out = _run(ws)
     assert rc == 0, out
     rows = _anchor_rows(ws)
@@ -268,6 +284,9 @@ def test_quoted_timestamp_still_passes_and_anchors(tmp_path):
 
 def test_missing_last_decision_at_still_passes(tmp_path):
     ws = _mk_ws_raw(tmp_path, MISSING_TS_ORACLE)
+    adj = yaml.safe_load((ws / "task-oracle.yaml").read_text(
+        encoding="utf-8"))["adjudication"]["stop_hook_active"]
+    _seal(ws, adj, tmp_path)
     rc, out = _run(ws)
     assert rc == 0, out
     assert len(_anchor_rows(ws)) == 1

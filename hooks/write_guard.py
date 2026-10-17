@@ -133,7 +133,11 @@ def _load_status_first_state(ws: Path) -> dict:
     path = ws / STATUS_FIRST_STATE
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
+        return {}                       # no state yet: the honest empty
+    except (OSError, ValueError) as exc:
+        warn("write_guard_status_first_read",
+             f"{type(exc).__name__}: {exc} — state reads as empty")
         return {}
     if not isinstance(data, dict):
         return {}

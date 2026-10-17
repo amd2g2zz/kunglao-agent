@@ -44,7 +44,8 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 # lib_kunglao by path under the repo's unique-name convention (bare
-# `import lib_kunglao` is ambiguous: scripts/lib_kunglao.py shares it).
+# `import lib_kunglao` was ambiguous while scripts/lib_kunglao.py — the
+# deleted namesake — still existed).
 _PROTOCOL_NAME = "lib_kunglao_hooks"
 
 
@@ -539,8 +540,21 @@ _STRICT_WS_MODULES = ("heartbeat_tick", "hooks_selfcheck", "heartbeat_touch",
 
 
 def _import_ws_module(name):
-    import importlib
-    return importlib.import_module(name)
+    """Load the SCRIPTS-side module by explicit path under a unique
+    name — a bare import resolves by sys.path ORDER, and a hook-context
+    test that leaves hooks/ inserted hands back the wrong same-named
+    twin (hooks/heartbeat_touch.py has no _resolve_ws)."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / f"{name}.py"
+    unique = f"env_manifest_by_path_{name}"
+    if unique in sys.modules:
+        return sys.modules[unique]
+    spec = importlib.util.spec_from_file_location(unique, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[unique] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def test_ws_quiet_shapes_default_layout(tmp_path, monkeypatch):

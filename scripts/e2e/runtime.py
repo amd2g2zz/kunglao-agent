@@ -125,24 +125,36 @@ def resume_plan(evidence_dir: Path) -> dict[str, str]:
 
 
 def _prior_claim_ids(ws: Path) -> set:
-    """Prior sanctioned claim set from the transition ledger
-    (runs/transitions.jsonl, the dispatch_id column — incremental_reward's
-    append-only row contract). 1-F10 prior state. loop-state.json is
-    deliberately NOT consulted: the same audit's 1-F6 shows it is
-    machine-global, not a workspace-sanctioned claim set."""
-    p = Path(ws) / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return set()
+    """Prior sanctioned claim set from the transition ledger (the
+    dispatch_id column — incremental_reward's append-only row contract).
+    1-F10 prior state. loop-state.json is deliberately NOT consulted:
+    the same audit's 1-F6 shows it is machine-global, not a
+    workspace-sanctioned claim set.
+
+    #721: rides the consolidated read face (runs/experience.jsonl plus
+    the legacy runs/transitions.jsonl archive during the compat window)
+    — the wipe guard must never silently empty because the ledger moved.
+    A partial deploy without the rlvr core degrades to the legacy path."""
+    rows: list[dict] = []
+    try:
+        from rlvr import incremental_reward as _ir  # noqa: PLC0415
+        rows = _ir.read_transitions(ws)
+    except ImportError:
+        p = Path(ws) / "runs" / "transitions.jsonl"
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8",
+                                    errors="replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue  # a torn ledger line is not wipe evidence
+                if isinstance(row, dict):
+                    rows.append(row)
     out: set = set()
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue  # a torn ledger line is not wipe evidence
+    for row in rows:
         cid = str((row or {}).get("dispatch_id") or "").strip()
         if cid:
             out.add(cid)

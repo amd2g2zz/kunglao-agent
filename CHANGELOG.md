@@ -6,6 +6,90 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.6-rc2] - 2026-10-17
+
+Release candidate two: the RL loop closure wave — the learning
+substrate's write faces, the planner, and the progress-coupling
+governance. The known-issues list ships in the GitHub Release notes.
+
+### Added
+
+- **The MARL architecture (#705)**: agent-conditioned Q (the arm key's
+  agent dimension, transfer via the leave-one-out anchor), class-level
+  negative knowledge, the method-only solution broadcast, and solve-vs-
+  verification credit decomposition.
+- **The decision view contract (#688)**: the six-face model layer and
+  the rank_feeds selection keys (entropy band, propensity, k, tiers).
+- **The harness ablation protocol (#694)**: pre-registered H0/H1/H2
+  arms with the per-arm cumulative store mode.
+- **Tool-chain recipe arms (#695)**: the learned tool-choice substrate
+  (recording, arms, credit).
+- **Settlement fairness (#689)**: cost observation, dispatch counting,
+  attributed budget waste, and the infra outcome class.
+- **Distillation as a policy action (#719)**: the orchestration.distill
+  arm with the budgeted actuation seam.
+- **Step-level ladder credit (#712)**: dense reward banked at step
+  boundaries, reconciled at claim-terminal.
+- **Source reliability (#715)**: the learned Beta over invalidation
+  patterns with the step-credit discount.
+- **The L1 planner (#718)**: the value function, the planning
+  algorithm, and the rollout return's consumer.
+- **Intelligent scheduling (#685)**: the wake decision as a recorded
+  action.
+- **Ledger consolidation (#721)**: 12+ JSONL stores cut to the 4-file
+  lifecycle shape.
+- **The late-arm oracle amendment (#730)** and the ONE shape law for
+  oracle-case `expected` (#733).
+- **The case posterior tracks the register (#742)**: pair-keyed
+  outcome amendments fold both stamps, last-amendment-wins.
+- **The planning tier (#684)**: claim-economy changes become
+  settleable actions.
+- **The RL output path (#691)**: propensity, sampler reconciliation,
+  and deviation logging.
+- **The constraint witness (#692)**: not_done rows bind mechanical
+  checks.
+- **The scheduler liveness triad (#682)**: zombie workers, tick
+  pollution, and the deadlock wall.
+- **The reward channel's trusted data source (#678)**: Phi
+  non-degeneracy.
+- **The learning signal tracks the ledger (#731)**: signed credit
+  amendments with pass reconciliation.
+- **The blind settler (#687)**: settlement is not blind — the
+  barrier's second family.
+- **The step grain (#690)**: settlement at subagent completion —
+  settle, update, decide, in order.
+- **The entropy operators (#693)**: invariant pruning, layer-scoped
+  refinement, and the reference constant table.
+
+### Fixed
+
+- Flags are not workspace paths — the strict resolver refuses them
+  loudly (#739).
+- The code_gc leg — the rot sweep speaks before it deletes (#735).
+- The silent coercion sites speak — 16 reads gain the governed trace
+  (#430).
+- The stop sanction is hook-owned and HMAC-sealed — the self-writable
+  adjudication stops being the release key (#736).
+- The Bash-channel facts guard converges — scope, severity partition,
+  structured detail, escalation (#741).
+- The four progress-coupling faces (#740): the round-close runs on
+  input change; the stale-plan face acts or suppresses; dispatch
+  telemetry closes the loop; the tick parks on zero work.
+- The scheduled_tasks schema war — tasks[] and jobs[] coexist (#679).
+- The tier contract — envelope tier derived from action_tier with the
+  eta writer (#680).
+- The checker-completion ruling and the candidate resolution contract
+  (#681).
+- The hook registry is single-sourced with durable REJECT telemetry
+  (#683).
+- Template hygiene — deployed version, ORPHAN filter, header
+  preservation (#674, #676, #677).
+
+### Changed
+
+- Prefer GitNexus and MotherDuck MCP for debug and log analysis
+  (#738).
+
 ## [0.1.6-rc1] - 2026-10-10
 
 Release candidate: feature-complete for v0.1.6. The known-issues list

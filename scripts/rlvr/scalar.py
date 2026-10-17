@@ -53,6 +53,7 @@ machine signals — no model-call path, no judgment slots (U3 extended).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np  # issue 420: ordered-float reductions only (see _seq_sum)
@@ -118,7 +119,60 @@ DEMOTION_REFUTED_INFORMATION = "refuted_with_replay_evidence"
 # the reward-rules.yaml promotion is a declared follow-up, not this
 # change.
 CITED_CAP_DEFAULT = 2
+
+# --- the deliverable-citation producer (issue 678, T2) ---------------------
+#
+# ``cited_ids`` had NO production caller: ``cited_by_deliverable`` was
+# permanently False and the deliverable half of the issue-433 citation
+# relation was dead (only the claim-provenance leg ever fired). The
+# producer scans the deliverable-facing document trees (notes/ results
+# layer, analyses/ long-form, runs/deliverables/) for ``F<NNN>`` fact-id
+# mentions. Content reads only, tolerant: an unreadable file contributes
+# no citations and never raises (the question_claims precedent).
+CITED_DELIVERABLE_RELS = ("notes", "analyses", "runs/deliverables")
+CITED_DELIVERABLE_SUFFIXES = frozenset({".md", ".txt", ".yaml", ".yml"})
+FACT_ID_CITE_RE = re.compile(r"\bF\d{3}\b")
 DEMOTION_CITED_OVER_CAP = "cited_over_cap"
+
+# --- settlement fairness: the sorted observation face -----------------------
+#
+# The banked ladder receipt stays the ladder value; cost enters ONLY the
+# r_sorted companion (r_sorted = r_ladder - LAMBDA * cost), an
+# ordering/observation field for downstream consumers. The offline spike
+# measured the cost term as tie-breaking power alone (Spearman 0.929
+# against the ladder ordering) — so it prices the receipt never: same
+# output at higher cost ranks lower on r_sorted, settles identically on
+# reward. LAMBDA is a documented policy constant, not a fitted parameter
+# (the state.py precedent). Cost is the caller's normalized units —
+# token/hour scale constants live with the transition ledger
+# (rlvr.incremental_reward COST_TOKENS_DIV / COST_SECONDS_DIV).
+SORT_COST_LAMBDA = 1.0
+
+# The branch_budget hard constraint's settlement face: overrun is waste
+# in the SAME unit as the ladder (1.0 = one full-credit artifact). Wall
+# overrun normalizes at the transition ledger's hour scale (one wasted
+# wall-hour = one waste unit); each retry over the declared budget books
+# one waste unit. Both dimensions are measured facts — a budget without
+# a usage (or the reverse) cannot overrun and books nothing.
+BUDGET_RETRY_WASTE_UNIT = 1.0
+# cross-linked by comment, not import (the dead_letter.DLQ_ATTEMPTS
+# precedent): rlvr.incremental_reward.COST_SECONDS_DIV is the same
+# hour scale — one value per repo, restated here only because the
+# scalar engine's import allowlist stays intra-package-rlvr minimal.
+BUDGET_WALL_DIV = 3_600.0
+
+# outcome_class vocabulary — the act-outcome taxonomy the strategy
+# learning faces book against. BLOCKED is the environment refusing the
+# act (the measured noise source: infra outcomes dominating clean
+# strategy failures); TIMEOUT is right-censored (the end was never
+# observed); everything else is the strategy's own outcome. Conservative
+# membership: only BLOCKED classifies infra — a crashed or failed act
+# still carries strategy signal, a refused act carries none.
+OUTCOME_STRATEGY = "strategy"
+OUTCOME_INFRA = "infra"
+OUTCOME_CENSORED = "censored"
+INFRA_OUTCOMES = frozenset({"BLOCKED"})
+CENSORED_OUTCOMES = frozenset({"TIMEOUT"})
 
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
@@ -425,6 +479,82 @@ def _artifact_credit(artifact: dict) -> tuple[float, str | None]:
     return 0.0, None
 
 
+def classify_outcome(o_status: str) -> str:
+    """The outcome_class of one act outcome: censored (TIMEOUT — the end
+    was never observed), infra (BLOCKED — the environment refused the
+    act; no strategy signal), strategy (everything else). Pure; the
+    strategy-learning faces book against this, never raw status words."""
+    s = str(o_status or "").strip().upper()
+    if s in CENSORED_OUTCOMES:
+        return OUTCOME_CENSORED
+    if s in INFRA_OUTCOMES:
+        return OUTCOME_INFRA
+    return OUTCOME_STRATEGY
+
+
+def budget_overrun(branch_budget, usage) -> float:
+    """The branch_budget hard constraint's settlement face: attributed
+    waste from exceeding a declared budget. Wall overrun normalizes at
+    the transition ledger's hour scale (one wasted wall-hour = one waste
+    unit, same unit as the ladder); each retry over the declared budget
+    books one waste unit. Both dimensions must be measured — a budget
+    without a usage (or the reverse) books nothing (the honest gap).
+    Non-mapping inputs book nothing. Never raises."""
+    if not isinstance(branch_budget, dict) or not isinstance(usage, dict):
+        return 0.0
+    waste = 0.0
+    cap = branch_budget.get("wall_s")
+    used = usage.get("wall_s")
+    if isinstance(cap, (int, float)) and not isinstance(cap, bool) \
+            and isinstance(used, (int, float)) and not isinstance(used, bool):
+        if used > cap:
+            waste += (float(used) - float(cap)) / BUDGET_WALL_DIV
+    retries_cap = branch_budget.get("retries")
+    retries_used = usage.get("retries")
+    if isinstance(retries_cap, (int, float)) \
+            and not isinstance(retries_cap, bool) \
+            and isinstance(retries_used, (int, float)) \
+            and not isinstance(retries_used, bool):
+        if retries_used > retries_cap:
+            waste += (float(retries_used) - float(retries_cap)) \
+                * BUDGET_RETRY_WASTE_UNIT
+    return waste
+
+
+def _credit_row(d: dict, credited_by: dict, demoted_by: dict,
+                waste_by: dict, overrun_by: dict) -> dict | None:
+    """One dispatch's round-credit row: the cited cap (deterministic
+    id-sort selection — the first CITED_CAP_DEFAULT cited artifacts
+    keep FULL, the excess joins the demotion face under the named
+    reason), ONE trace total per demotion CLASS present, waste
+    subtracted, and the additive-when-present fairness seams
+    (r_sorted from a carried cost; budget_overrun when the dispatch
+    overran its branch_budget). None when the dispatch id is empty."""
+    did = str(d.get("dispatch_id") or "")
+    if not did:
+        return None
+    full_sorted = sorted(credited_by[did])
+    credited = full_sorted[:CITED_CAP_DEFAULT]
+    over_cap = full_sorted[CITED_CAP_DEFAULT:]
+    demoted = demoted_by[did] + [
+        {"id": aid, "reason": DEMOTION_CITED_OVER_CAP}
+        for aid in over_cap]
+    trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
+    r = float(len(credited)) + trace_total - waste_by[did]
+    row = {"dispatch_id": did,
+           "round": d.get("round"),  # ordering info ONLY
+           "credited": credited,
+           "demoted": demoted,
+           "waste": waste_by[did],
+           "r": r}
+    cost = d.get("cost")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        row["r_sorted"] = round(r - SORT_COST_LAMBDA * float(cost), 6)
+    if did in overrun_by:
+        row["budget_overrun"] = round(overrun_by[did], 6)
+    return row
+
+
 def round_credit(dispatches: list[dict], artifacts: list[dict],
                  waste: list[dict] | None = None) -> dict:
     """Pure round-credit core: per-dispatch
@@ -442,7 +572,15 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
     WHY the credit is low. The cap (issue 438) bounds the cited FULL
     face per row at CITED_CAP_DEFAULT (deterministic id-sort selection);
     the excess demotes under ``cited_over_cap`` and stays rescue-eligible
-    through the late-cite amendment path."""
+    through the late-cite amendment path.
+
+    Settlement-fairness seams (additive-when-present, byte-identical
+    when absent): a dispatch dict may carry ``cost`` (caller-normalized
+    units) — the row then gains ``r_sorted = r - SORT_COST_LAMBDA *
+    cost``, the ordering/observation face (the banked ``r`` never
+    moves); a dispatch dict may carry ``branch_budget`` + ``usage`` —
+    an overrun books attributed waste (``budget_overrun`` on the row,
+    folded into ``waste`` and subtracted from ``r``)."""
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or []) if d.get("dispatch_id")]
     known = set(dispatch_ids)
@@ -470,33 +608,21 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
             waste_by[wid] += 1.0
         else:
             unattributed_waste += 1.0
-    rows = []
+    # the branch_budget hard constraint: an overrun is ATTRIBUTED waste
+    # (the dispatch id is known by construction) — new dict, credited/
+    # demoted_by stay untouched (the immutability posture).
+    overrun_by: dict[str, float] = {}
     for d in (dispatches or []):
         did = str(d.get("dispatch_id") or "")
-        if not did:
+        if not did or did not in waste_by:
             continue
-        # issue 438 per-dispatch cited cap: deterministic id-sort
-        # selection — the first CITED_CAP_DEFAULT cited artifacts keep
-        # FULL, the excess joins the demotion face under the named
-        # reason (class semantics, same audit shape as the uncited
-        # demotion). New lists throughout — credited_by/demoted_by are
-        # never mutated here.
-        full_sorted = sorted(credited_by[did])
-        credited = full_sorted[:CITED_CAP_DEFAULT]
-        over_cap = full_sorted[CITED_CAP_DEFAULT:]
-        demoted = demoted_by[did] + [
-            {"id": aid, "reason": DEMOTION_CITED_OVER_CAP}
-            for aid in over_cap]
-        # ONE trace total per demotion CLASS present (a class demotion,
-        # never a per-unit price — the farming gradient dies at any N)
-        trace_total = TRACE_CANONICAL * len({e["reason"] for e in demoted})
-        rows.append({"dispatch_id": did,
-                     "round": d.get("round"),  # ordering info ONLY
-                     "credited": credited,
-                     "demoted": demoted,
-                     "waste": waste_by[did],
-                     "r": float(len(credited)) + trace_total
-                     - waste_by[did]})
+        over = budget_overrun(d.get("branch_budget"), d.get("usage"))
+        if over > 0:
+            waste_by[did] += over
+            overrun_by[did] = over
+    rows = [row for d in (dispatches or [])
+            if (row := _credit_row(d, credited_by, demoted_by,
+                                   waste_by, overrun_by)) is not None]
     return {"rows": rows, "untraced": untraced,
             "unattributed_waste": unattributed_waste}
 
@@ -510,13 +636,24 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     and record/settle dedupe (no ledger churn). ROUND_CREDIT is
     polarity-none: it feeds no Beta prior and the scalar feed reads
     episode scalars only. Returns {"settled", "untraced",
-    "unattributed_waste", "banked"} — ``banked`` lists the dispatch ids
-    whose FIRST settlement rode this pass (the learning clock's tick);
-    replays and the late-cite amendment path report none."""
+    "unattributed_waste", "banked", "amended"} — ``banked`` lists the
+    dispatch ids whose FIRST settlement rode this pass (the learning
+    clock's tick); replays and the late-cite amendment path report
+    none. ``amended`` lists the dispatch ids whose bank was
+    corrected to a moved ledger value or whose missed first bank was
+    repaired — the learning signal tracking the ledger."""
     ws = Path(ws)
+    # issue-678 T3: the creator backfill rides the SAME pass — a
+    # creator-less artifact whose claim_id names a dispatch in THIS
+    # settlement attributes to that claim (new dicts; the pure core
+    # below sees the backfilled rows, never the originals)
+    dispatch_ids = [str(d.get("dispatch_id") or "")
+                    for d in (dispatches or [])]
+    artifacts = backfill_artifact_creators(artifacts, dispatch_ids)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
+    amended: list[str] = []
     ts = now or _now()
     for row in doc["rows"]:
         rid = f"{KIND_ROUND_CREDIT}/{row['dispatch_id']}"
@@ -561,6 +698,14 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
+        # additive-when-present fairness seams: the sorted observation
+        # face (never the banked reward) and the budget-overrun audit
+        # trail ride the settlement only when the dispatch carried the
+        # inputs — legacy rows stay byte-identical.
+        if "r_sorted" in row:
+            settlement["r_sorted"] = row["r_sorted"]
+        if "budget_overrun" in row:
+            settlement["budget_overrun"] = row["budget_overrun"]
         prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
         late_cited = prior_late + [
             aid for aid in row["credited"]
@@ -581,20 +726,101 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # observation log has no retraction face, so re-banking would
             # double-count the round.
             if not (existing and existing.get("settlement") is not None):
-                _bank_q_cell_credit(ws, row)
+                bank = _bank_q_cell_credit(ws, row)
+                # #718: the same first-settlement tick banks the L1
+                # rollout return — the claim-terminal learning target the
+                # orchestration layer consumes (fail-open, lazy import;
+                # the L2 bank above is never affected by this leg)
+                _bank_l1_rollout_return(ws, row, bank)
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
+        # the bank tracks the LEDGER, not the first write.
+        # Every already-settled dispatch reconciles (replays included,
+        # so a bank that failed on pass 1 is repaired whatever the
+        # ledger says); the repair/amendment NEVER reports into
+        # `banked` — the case-posterior leg keys on that set.
+        if existing and existing.get("settlement") is not None:
+            if _reconcile_q_cell_bank(ws, row):
+                amended.append(str(row["dispatch_id"]))
     return {"settled": settled_n, "untraced": doc["untraced"],
             "unattributed_waste": doc["unattributed_waste"],
             # the dispatches whose FIRST settlement rode this pass (the
             # learning clock's tick) — the case-posterior observation
             # leg keys on exactly this set, so a replay or late-cite
             # amendment additively reports none
-            "banked": banked}
+            "banked": banked,
+            # the dispatches whose bank was corrected or repaired
+            # on this pass (the learning signal tracking the ledger)
+            "amended": amended}
 
 
-def _bank_q_cell_credit(ws, row: dict) -> None:
+def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
+                       *, band_ceil: float) -> tuple[float, float]:
+    """#712 the claim-terminal residual — the pure
+    ``calibration = ladder_credit − Σ(step_credit)`` of issue #712 A,
+    extended to BOTH Beta dimensions: ``(Δsuccess, Δfailure)`` landing
+    the cumulative mass on the step-less endpoint the legacy fold would
+    have banked for this ladder value.
+
+    Success target = clamp01(r) — the legacy rail clamp — band-aware
+    (D-678.4a: a TRACE-band ladder settled MASSLESS before, so the
+    target is (0, 0) and the step rows wash out completely);
+    failure target = 1 − L (the same legacy endpoint's failure mass).
+    Over-credit (Σstep > L) yields a negative Δsuccess — the clawback;
+    under-credit a positive top-up. ``step_sum``/``step_n`` arrive as
+    the fold's MASS view (q_cells.step_credit_totals excludes
+    band-valued information-option rows, which banked no mass — the
+    operand can never claw back mass that was never banked). Pure:
+    same inputs, same deltas."""
+    settled = clamp_credit(ladder_credit)      # the legacy [0,1] rail
+    if 0.0 < settled <= band_ceil:             # the information option
+        target_s, target_f = 0.0, 0.0
+    else:
+        target_s, target_f = settled, 1.0 - settled
+    return (round(target_s - float(step_sum), 6),
+            round(target_f - (int(step_n) - float(step_sum)), 6))
+
+
+def _reconcile_q_cell_bank(ws, row: dict) -> bool:
+    """The bank tracks the LEDGER, not the first write. Two faces
+    behind one guard: a bank that never landed (no settlement-source
+    rows) gets the full first bank via the q-cell faces DIRECTLY —
+    never ``_bank_q_cell_credit``, whose strategy-store and L1 legs
+    must not double-write; a banked dispatch whose ledger value moved
+    gets ONE signed ``credit_amendment`` row. Fail-open telemetry: a
+    reconcile failure is one rate-limited WARN, never a settlement
+    break."""
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        did = str(row["dispatch_id"])
+        mass = _qc.banked_mass(ws, did)
+        if mass is None:
+            # an unreadable log is not an empty one — amending against a
+            # fabricated (0, 0) read would fire a full-target overshoot
+            warn("q_cell_reconcile", f"{did}: log unreadable — skipped")
+            return False
+        _s, _f, n_rows = mass
+        if n_rows == 0:
+            step_sum, step_n = _qc.step_credit_totals(ws, did)
+            if step_n == 0:
+                bank = _qc.observe_settlement(ws, did, row["r"])
+            else:
+                d_s, d_f = _calibration_delta(
+                    row["r"], step_sum, step_n,
+                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                bank = _qc.observe_step_calibration(
+                    ws, did, d_s, failure_delta=d_f)
+            return bool((bank or {}).get("appended"))
+        bank = _qc.amend_settlement(ws, did, row["r"],
+                                    reason="ledger-amendment")
+        return bool(bank.get("appended"))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("q_cell_reconcile", f"{type(exc).__name__}: {exc}")
+        return False
+
+
+def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     """Issue 462 W5: bank one settled round credit into the matching Q
     cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
     The bank result carries the matched row's ``arm_key``/``fingerprint``
@@ -603,14 +829,55 @@ def _bank_q_cell_credit(ws, row: dict) -> None:
     store's write face exists for exactly this call and had no live
     caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
-    covers the ledger receipt; the Q bank is the learning feed)."""
+    covers the ledger receipt; the Q bank is the learning feed). Returns
+    the bank dict (None on failure) so the caller can thread the matched
+    dispatch signature into the L1 rollout-return bank (#718) without a
+    second match scan.
+
+    #712 branch: when step credit already banked for this dispatch
+    (``step_credit_totals`` — n > 0) the terminal bank is the RESIDUAL,
+    not the raw ladder — one signed ``observe_step_calibration`` row so
+    cumulative success lands on the ladder value (over-credit clawed
+    back, under-credit topped up) and cumulative failure on 1 − L.
+    n == 0 keeps the legacy observe_settlement face byte-identically
+    (the backward-compatibility acceptance: claims that settled before
+    this change work unchanged)."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        bank = _qc.observe_settlement(ws, str(row["dispatch_id"]), row["r"])
+        did = str(row["dispatch_id"])
+        step_sum, step_n = _qc.step_credit_totals(ws, did)
+        if step_n == 0:
+            bank = _qc.observe_settlement(ws, did, row["r"])
+        else:
+            delta_success, delta_failure = _calibration_delta(
+                row["r"], step_sum, step_n,
+                band_ceil=_qc.OBSERVATION_BAND_CEIL)
+            bank = _qc.observe_step_calibration(
+                ws, did, delta_success, failure_delta=delta_failure)
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
-        return
+        return None
     _bank_strategy_store_row(ws, row, bank)
+    return bank
+
+
+def _bank_l1_rollout_return(ws, row: dict, bank: dict | None) -> None:
+    """#718: at the claim-terminal first settlement, compute and store
+    the rollout return (rlvr.l1_value — the discounted SUM of the
+    claim's transition rewards plus the terminal ladder credit, #716
+    semantics). The dispatch-time state signature rides the L2 bank
+    result (the matched dispatch row's recorded state — the state the
+    action was chosen in); no signature is the honest gap (no row, ONE
+    warn inside the callee). Fail-open: the L1 leg is telemetry — a
+    broken value store never breaks settlement, and the row's ladder
+    credit is unchanged by anything this face does."""
+    try:
+        from rlvr import l1_value as _l1  # noqa: PLC0415
+        _l1.record_terminal_return(
+            ws, str(row["dispatch_id"]), row["r"],
+            signature=(bank or {}).get("signature_hash"))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("l1_rollout_return", f"{type(exc).__name__}: {exc}")
 
 
 def _bank_strategy_store_row(ws, row: dict, bank: dict) -> None:
@@ -763,6 +1030,82 @@ def question_claims(ws) -> set[str]:
     return out
 
 
+def cited_ids_from_deliverables(ws) -> set[str]:
+    """<ws> deliverable trees -> every ``F<NNN>`` fact id named by a
+    deliverable document — THE producer the issue-433 deliverable
+    citation face never had (issue 678 T2: no production caller ever
+    passed ``cited_ids``, so ``cited_by_deliverable`` was permanently
+    False). Scans notes/, analyses/, runs/deliverables/ recursively for
+    text/yaml files. Tolerant: an unreadable file contributes no
+    citations and never raises; an absent tree is an empty set (the
+    honest absence, same posture as question_claims)."""
+    ws = Path(ws)
+    out: set[str] = set()
+    for rel in CITED_DELIVERABLE_RELS:
+        root = ws / rel
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() \
+                    or path.suffix.lower() not in CITED_DELIVERABLE_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            out |= set(FACT_ID_CITE_RE.findall(text))
+    return out
+
+
+def backfill_artifact_creators(artifacts: list[dict],
+                               dispatch_ids) -> list[dict]:
+    """Issue-678 T3 — the creator backfill (settlement path only).
+
+    A creator-less artifact whose ``claim_id`` names a dispatch in THIS
+    settlement attributes to that claim (the claim id IS the dispatch
+    identity the settlement face keys on — the CLI assembles dispatch
+    rows from terminal claims, so the two ids coincide by construction).
+    Launch stashes were considered as the attribution source and
+    REJECTED: ``append_transition`` consumes the stash on settle, so the
+    namespace is empty exactly when the old (pre-#648) facts need
+    backfilling; the claim id is the same identity, durable in the
+    register. A creator-less artifact with no path stays untraced and is
+    explicitly marked ``creditable: false`` — the named non-creditable
+    face the issue asks for, auditable instead of silent. New dicts
+    throughout (immutability): rows WITH a creator pass through
+    unchanged."""
+    known = {str(d).strip() for d in (dispatch_ids or [])}
+    out: list[dict] = []
+    for a in (artifacts or []):
+        creator = str(a.get("creator") or "").strip()
+        if creator:
+            out.append(a)
+            continue
+        claim_id = str(a.get("claim_id") or "").strip()
+        if claim_id and claim_id in known:
+            out.append({**a, "creator": claim_id, "creditable": True})
+        else:
+            out.append({**a, "creditable": False})
+    return out
+
+
+def _deliverable_cited(fid: str, cited: set[str]) -> bool:
+    """The deliverable citation match: exact id membership first (the
+    explicit ``cited_ids`` face — a caller may pass slugged ids), then
+    the BARE-token leg the producer needs: fact ids carry slugs
+    (``F008-decrypt-key`` — the ``<FNNN>-<slug>`` grammar) while a
+    deliverable document names the bare token ``F008`` (the ``\\b``
+    boundary treats the hyphen separator as non-word, so the scan
+    extracts exactly the bare id). Match on the artifact id's own
+    ``F<NNN>`` token — a bare id (legacy grammar) matches itself."""
+    if not fid or not cited:
+        return False
+    if fid in cited:
+        return True
+    token = FACT_ID_CITE_RE.search(fid)
+    return bool(token) and token.group(0) in cited
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -772,14 +1115,20 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     channels, trace_id is mission-stable so it attributes to the mission,
     not the dispatch). Status/verify_status are the oracle faces;
     ``cited_by_deliverable`` comes from the deliverable citation face
-    (cited_ids — the ids the deliverable document names) and
+    (cited_ids — the ids the deliverable document names; issue 678 T2:
+    ``cited_ids=None`` — the default every production caller uses — now
+    INVOKES the producer ``cited_ids_from_deliverables`` instead of
+    meaning "no citations"; an explicit set keeps its exact meaning) and
     ``answers_question`` from the claim-provenance face (claim_id
     resolving to a question-bearing claim — the used-toward-stage leg of
     the issue-433 citation relation; see question_claims). Tolerant read:
     unparseable or extension-layer-incomplete files are skipped (they are
     not credit artifacts; lint_facts owns their loudness)."""
     import yaml
-    cited = {str(c) for c in (cited_ids or [])}
+    if cited_ids is None:
+        cited = cited_ids_from_deliverables(ws)
+    else:
+        cited = {str(c) for c in cited_ids}
     question_bearing = question_claims(ws)
     out: list[dict] = []
     facts_dir = Path(ws) / "facts"
@@ -806,7 +1155,8 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
                     "claim_id": claim_id or None,
                     "answers_question": bool(claim_id)
                     and claim_id in question_bearing,
-                    "cited_by_deliverable": fid in cited,
+                    "cited_by_deliverable": _deliverable_cited(fid,
+                                                               cited),
                     "oracle_backed_refutation": str(
                         meta.get("status") or "").strip().upper()
                         in _REFUTATION_STATUSES})
@@ -972,6 +1322,7 @@ def resolvable_registry(ws) -> set:
 def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
                                 oracle_verdict,
                                 has_reproducible_evidence: bool,
+                                extra_resolvable=(),
                                 now=None) -> dict:
     """Validate + settle a trajectory segment (settlement v3). Fail-closed:
     an invalid verdict doc writes NOTHING. Re-application with changed
@@ -980,12 +1331,20 @@ def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
     and the audit chain ('where did this score come from') stays
     answerable. Prior settlement lineage (v1 band/reward/rule_id) is
     carried forward so hard-currency provenance survives; ``reward`` and
-    ``tier`` carry the v3 authoritative scalar."""
+    ``tier`` carry the v3 authoritative scalar. ``extra_resolvable`` is
+    an additive id set the CALLER already vouched for (the blind
+    settler's input-doc artifact paths ride here so a verdict citing
+    what it actually saw resolves); default empty keeps the citation
+    registry exactly the workspace-derived set."""
     ws = Path(ws)
-    validation = validate_verdict_doc(verdict_doc,
-                                      resolvable_registry(ws),
-                                      oracle_verdict,
-                                      has_reproducible_evidence)
+    if isinstance(extra_resolvable, str):
+        extra_resolvable = (extra_resolvable,)  # never iterate a bare str
+    validation = validate_verdict_doc(
+        verdict_doc,
+        resolvable_registry(ws)
+        | {str(i) for i in (extra_resolvable or ())},
+        oracle_verdict,
+        has_reproducible_evidence)
     if not validation["ok"]:
         return {"settled": False, "reason": "validation failed",
                 "validation": validation}

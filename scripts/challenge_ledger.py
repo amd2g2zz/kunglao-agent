@@ -106,7 +106,12 @@ def _read_active_round(ws: Path, claim: str) -> int:
     p = _active_round_path(ws, claim)
     try:
         return int(p.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
+    except FileNotFoundError:
+        return 0                       # no round yet: the honest zero
+    except (OSError, ValueError) as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("challenge_active_round_read",
+             f"{type(exc).__name__}: {exc} — active round reads as 0")
         return 0
 
 

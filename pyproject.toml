@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kunglao-agent"
-version = "0.1.6-rc1"
+version = "0.1.6-rc2"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -99,6 +99,11 @@ max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501", "F841", "PT011", "B011", "PT018"]
+# the rlvr facade: every `from . import` line is the bare-import
+# reachability contract (a bare `import rlvr` must reach every
+# submodule) — the exported surface itself is guarded by
+# tests/test_rlvr_facade_756.py, not by ruff
+"scripts/rlvr/__init__.py" = ["F401"]
 # eval/v1 artifacts: findings are by-design (F821 placeholders in reference
 # fragments, minified obfuscated bundles, unused import in the toolflex
 # checker) — excluded from the ruff surface rather than rewritten

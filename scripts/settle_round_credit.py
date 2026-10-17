@@ -35,6 +35,17 @@ any wall-clock distance (the first-settlement guard is the clock) and
 fail-open (a broken leg is a counted error field or a rate-limited warn,
 never a crash and never a fabricated row).
 
+The case-observation leg runs TWICE per pass, on one invariant: every
+(armed case, decisive-terminal claim linked to its target_pq) pair is
+observed EXACTLY ONCE, whatever the arming order. The fresh leg
+(``record_case_settlements``) covers claims settling now; the late-arm
+amendment (``amend_case_settlements``) sweeps claims that settled BEFORE
+their case was armed — the live ordering, in which the fresh leg alone
+leaves ``runs/posteriors.yaml`` uncreated forever. Each observation is
+an auditable ``case-observation/1`` row in the consolidated experience
+ledger, and those rows ARE the amendment's dedup record (no separate
+bookkeeping to drift).
+
 Usage:
   python settle_round_credit.py <workspace> [--json]
 Exit codes: 0 ok (including nothing-to-do) / 2 usage / 3 not a workspace.
@@ -80,30 +91,348 @@ CASE_PASS_STATUSES = frozenset({"PROVEN", "VERIFIED"})
 CASE_FAIL_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 
 
-def _linked_case_ids(ws: Path, pq: str) -> list[str]:
-    """Oracle case ids whose ``target_pq`` is ``pq`` — the
-    answers_question <-> target_pq linkage the ranker and the failure
-    gate both key on. Deterministic file order; a broken case doc is
-    skipped (an unreadable case is not evidence)."""
+# the oracle-arm arming fields: a case doc carrying ALL five (non-empty)
+# is ARMED — a complete, deliberate question-linkage. `expected` reads
+# the runner's ONE shape law (expected_shape_error), so arming implies
+# shape-level parity with the runner; full loadability additionally
+# resolves the evidence refs against the workspace. A thinner
+# doc is readable but not armed. The armed count is what makes the live
+# silent gap LOUD: without oracle/cases/ no case posterior ever moved —
+# invisibly.
+CASE_ARMING_FIELDS = ("channel", "hypothesis_ref", "update_map",
+                      "expected", "mutations")
+
+
+def _arming_field_present(doc: dict, field: str) -> bool:
+    """One arming field non-empty: ``expected`` must carry the runner's
+    canonical entry list (ONE shape law — the executor owns it, see
+    ``oracle_runner.expected_shape_error``); mappings/lists must be
+    non-empty; scalars must be non-blank strings."""
+    value = doc.get(field)
+    if field == "expected":
+        from oracle_runner import expected_shape_error  # the one law
+
+        return expected_shape_error(value) is None
+    if isinstance(value, (dict, list)):
+        return bool(value)
+    return bool(str(value or "").strip())
+
+
+def armed_case_ids(ws: Path) -> set[str]:
+    """Case ids whose oracle/cases/*.yaml doc is ARMED (every field in
+    CASE_ARMING_FIELDS present and non-empty). Deterministic file order;
+    a broken or non-mapping case doc is skipped (an unreadable case is
+    never armed). Fail-open: never raises into the tick."""
     import yaml
 
-    cdir = ws / "oracle" / "cases"
+    cdir = Path(ws) / "oracle" / "cases"
     if not cdir.is_dir():
-        return []
-    out: list[str] = []
+        return set()
+    out: set[str] = set()
     for path in sorted(cdir.glob("*.yaml")):
         try:
             doc = yaml.safe_load(
                 path.read_text(encoding="utf-8", errors="replace")) or {}
         except (OSError, yaml.YAMLError):
             continue
-        if not isinstance(doc, dict) \
-                or str(doc.get("target_pq") or "").strip() != pq:
+        if not isinstance(doc, dict):
+            continue
+        if not all(_arming_field_present(doc, f)
+                   for f in CASE_ARMING_FIELDS):
             continue
         cid = str(doc.get("id") or path.stem).strip()
         if cid:
-            out.append(cid)
+            out.add(cid)
     return out
+
+
+CASE_OBS_SCHEMA = "case-observation/1"
+CASE_AMEND_SCHEMA = "case-amendment/1"
+
+
+def _empty_obs() -> dict:
+    return {"case_observations": 0, "cases_passed": 0, "cases_failed": 0}
+
+
+def _cases_by_pq(ws: Path, *, armed_only: bool) -> dict[str, list[str]]:
+    """Case ids grouped by ``target_pq`` — ONE scan per observation leg,
+    the answers_question <-> target_pq link index.
+
+    ``armed_only`` is the one axis the two legs differ on, and the
+    difference is deliberate:
+
+    - the AMENDMENT back-fills claims that settled before their case
+      existed, so it must only write cases that are complete, deliberate
+      question-linkages. ``armed_only`` requires every field of
+      CASE_ARMING_FIELDS (the same five the acceptance net arms on): a
+      stub doc with a bare ``target_pq`` is not a hypothesis anybody
+      committed to, and observing against it would move a posterior on
+      the strength of a placeholder.
+    - the FRESH leg keeps the link it has always had (``target_pq``
+      alone). Tightening it is a behaviour change with its own blast
+      radius and is NOT part of this change.
+
+    Retired cases are skipped by BOTH legs, mirroring the runner's
+    loader: a case retired out of the acceptance net must not keep
+    collecting observations.
+
+    NOTE — the arming gate and the loader share ONE `expected` shape
+    law (oracle_runner.expected_shape_error), so arming implies
+    shape-level parity with the runner. Full loadability additionally
+    resolves the evidence refs against the workspace — that half
+    remains the loader's alone.
+
+    Deterministic file order; duplicate case ids collapse (the pair is
+    the unit, so a second doc claiming the same id is the same case); a
+    broken or non-mapping doc is skipped."""
+    import yaml
+
+    cdir = Path(ws) / "oracle" / "cases"
+    out: dict[str, list[str]] = {}
+    if not cdir.is_dir():
+        return out
+    for path in sorted(cdir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(
+                path.read_text(encoding="utf-8", errors="replace")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if str(doc.get("status") or "").strip().lower() == "retired":
+            continue
+        if armed_only and not all(_arming_field_present(doc, f)
+                                  for f in CASE_ARMING_FIELDS):
+            continue
+        pq = str(doc.get("target_pq") or "").strip()
+        cid = str(doc.get("id") or path.stem).strip()
+        if pq and cid and cid not in out.setdefault(pq, []):
+            out[pq].append(cid)
+    return out
+
+
+def _observed_pairs(ws: Path) -> set[tuple[str, str]]:
+    """The (case_id, claim_id) pairs already observed — read back from
+    the consolidated experience ledger, whose ``case-observation/1`` rows
+    ARE the dedup record. Making the record explicit is what lets an
+    observation depend on the PAIR rather than on which pass happened to
+    be running when the case was armed."""
+    from rlvr import consolidated_ledger as cl
+
+    out: set[tuple[str, str]] = set()
+    for row in cl.read(ws, "experience",
+                       schema_prefix=CASE_OBS_SCHEMA.split("/")[0]):
+        cid = str(row.get("case_id") or "").strip()
+        claim = str(row.get("claim_id") or "").strip()
+        if cid and claim:
+            out.add((cid, claim))
+    return out
+
+
+def _effective_pair_outcomes(
+        ws: Path) -> dict[tuple[str, str], tuple[bool, bool | None]]:
+    """Per-pair ``(original_passed, effective_passed)`` folded from the
+    experience ledger — BOTH stamps in one scan (the ``case-`` prefix
+    reads case-observation and case-amendment rows together). The last
+    amendment wins: every amendment row brings its pair to its
+    ``to_passed``, so the fold is the pair's truth. A pair with no
+    amendment reads its original observation."""
+    from rlvr import consolidated_ledger as cl
+
+    eff: dict[tuple[str, str], tuple[bool, bool | None]] = {}
+    for row in cl.read(ws, "experience", schema_prefix="case-"):
+        cid = str(row.get("case_id") or "").strip()
+        claim = str(row.get("claim_id") or "").strip()
+        if not cid or not claim:
+            continue
+        key = (cid, claim)
+        schema = str(row.get("schema") or "")
+        if schema == CASE_OBS_SCHEMA:
+            eff[key] = (bool(row.get("passed")), None)
+        elif schema == CASE_AMEND_SCHEMA:
+            orig, _cur = eff.get(key, (False, None))
+            eff[key] = (orig, bool(row.get("to_passed")))
+    return eff
+
+
+def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
+    """The flipped claim's derived discriminants die with the settlement
+    they were derived from; the next real settlement re-derives from the
+    corrected truth. Fail-open: a store failure never undoes the flip."""
+    try:
+        from rlvr import crystallize as _cz  # noqa: PLC0415 — lazy
+        removed = _cz.revoke_claim(ws, claim)
+        if (removed.get("negatives_removed")
+                or removed.get("broadcasts_removed")):
+            revoked.append(claim)
+    except Exception as exc:  # noqa: BLE001 — never the flip
+        warn("case_amendment_revoke",
+             f"{claim}: {type(exc).__name__}: {exc}")
+
+
+def reconcile_case_settlements(ws: Path) -> dict:
+    """The pair-amendment face: when a claim's CURRENT decisive register
+    status disagrees with the outcome already observed for its
+    (case, claim) pair, apply the ±1 flip to the case posterior
+    (belief-first, floored at the Beta(1,1) support — a desynced ledger
+    can never push the posterior outside it) and append ONE
+    ``case-amendment/1`` audit row. Idempotence lives in the fold: once
+    the row lands the effective outcome equals the target and every
+    re-run is a read-scan no-op. Honest gaps write nothing: a
+    non-decisive terminal, a removed claim, a retired case, an
+    unobserved pair. Telemetry never raises into the pass."""
+    out: dict = {"case_amendments": 0, "case_amendments_error": None}
+    try:
+        import posteriors as po
+        from rlvr import consolidated_ledger as cl
+        from harness_common import utc_now_z
+
+        status_map: dict[str, bool] = {}
+        for claim in _register_claims(ws):
+            cid = str(claim.get("id") or "").strip()
+            status = str(claim.get("status") or "").upper()
+            if status in CASE_PASS_STATUSES:
+                status_map[cid] = True
+            elif status in CASE_FAIL_STATUSES:
+                status_map[cid] = False
+        known_cases = {c for ids in
+                       _cases_by_pq(ws, armed_only=False).values()
+                       for c in ids}
+        entries = []
+        for (cid, claim), (orig, amended) in _effective_pair_outcomes(
+                ws).items():
+            effective = orig if amended is None else amended
+            target = status_map.get(claim)
+            if target is None or target == effective or cid not in (
+                    known_cases):
+                continue
+            entries.append((cid, claim, effective, target))
+        if not entries:
+            return out
+        led = po.PosteriorLedger.load(ws)
+        ts = utc_now_z()
+        landed = 0
+        revoked_claims: list[str] = []
+        for cid, claim, eff, target in entries:
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            d_a = 1 if target else -1
+            d_b = -1 if target else 1
+            new_a = max(po._ALPHA0, cp.alpha + d_a)
+            new_b = max(po._BETA0, cp.beta + d_b)
+            if new_a != cp.alpha + d_a or new_b != cp.beta + d_b:
+                warn("case_amendment_floor",
+                     f"{cid}: posterior desync — floored at the "
+                     f"Beta(1,1) support")
+            applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
+            cp.alpha, cp.beta = new_a, new_b
+            led.cases[cid] = cp
+            ok = cl.append(ws, "experience", {
+                "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
+                "claim_id": claim, "from_passed": bool(eff),
+                "to_passed": bool(target), "d_alpha": applied_a,
+                "d_beta": applied_b, "source": "reconcile"})
+            landed += 1 if ok else 0
+            if ok:
+                _revoke_derived_rows(ws, str(claim), revoked_claims)
+        led.save(ws)
+        out["case_amendments"] = landed
+        out["revoked_claims"] = revoked_claims
+        if landed != len(entries):
+            out["case_amendments_error"] = (
+                f"{len(entries) - landed} amendment row(s) refused — "
+                f"the flip re-fires next pass (belief-first asymmetry)")
+    except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
+        out["case_amendments_error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def _observation_entries(claims: list[dict], index: dict[str, list[str]],
+                         seen: set[tuple[str, str]]
+                         ) -> list[tuple[str, str, bool]]:
+    """Decisive claims -> (case, claim, passed) entries, skipping every
+    pair already in ``seen`` — which this EXTENDS as it builds, so a
+    duplicate case id, a duplicate claim, or a second leg arriving at the
+    same pair all collapse. The pair is the unit of observation; nothing
+    downstream re-checks it."""
+    entries: list[tuple[str, str, bool]] = []
+    for claim in claims:
+        status = str(claim.get("status") or "").upper()
+        if status in CASE_PASS_STATUSES:
+            passed = True
+        elif status in CASE_FAIL_STATUSES:
+            passed = False
+        else:
+            continue
+        pq = str(claim.get("answers_question") or "").strip()
+        claim_id = str(claim.get("id") or "").strip()
+        if not pq or not claim_id:
+            continue
+        for cid in index.get(pq, ()):
+            key = (cid, claim_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append((cid, claim_id, passed))
+    return entries
+
+
+def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
+                             source: str) -> dict:
+    """The one observation face: the closed-form posterior update for
+    every entry, then one auditable ``case-observation/1`` row per entry.
+
+    The BELIEF is written first, deliberately — the two failure windows
+    are not equally bad. Rows-without-the-posterior would leave the pair
+    reading as observed forever while the belief never moved: a
+    permanent, SILENT gap. Belief-first fails the other way: if the rows
+    never land the pair is never marked seen, so every following pass
+    re-observes it and the posterior keeps moving.
+
+    That second failure is NOT self-healing even when the write does
+    recover: the retried row lands and marks the pair seen, but the
+    belief update from the failed pass is already banked — one Bernoulli
+    event moves the posterior twice. And for as long as the rows stay
+    refused, EVERY following pass re-observes, so the posterior keeps
+    moving while ``case_observations`` (which counts rows that actually
+    landed) reads lower than the posterior's mass. The error field is
+    what makes that divergence loud, and on a shortfall it is set on
+    EVERY pass rather than once. ``cases_passed``/``cases_failed`` count
+    the entries the pass attempted, not the rows that landed.
+
+    Both failures are counted; neither raises."""
+    out = _empty_obs()
+    try:
+        if not entries:
+            return out
+        import posteriors as po  # the posterior-ledger leaf
+        from rlvr import consolidated_ledger as cl
+        from harness_common import utc_now_z  # the one timestamp source
+
+        led = po.PosteriorLedger.load(ws)
+        for cid, _claim, passed in entries:
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            cp.update(passed)
+            led.cases[cid] = cp
+        led.save(ws)
+        ts = utc_now_z()
+        landed = sum(
+            1 for cid, claim, passed in entries
+            if cl.append(ws, "experience", {
+                "schema": CASE_OBS_SCHEMA, "ts": ts, "case_id": cid,
+                "claim_id": claim, "passed": bool(passed),
+                "source": source}))
+        passed_n = sum(1 for _, _, ok in entries if ok)
+        out["case_observations"] = landed
+        out["cases_passed"] = passed_n
+        out["cases_failed"] = len(entries) - passed_n
+        if landed != len(entries):
+            out["case_observations_error"] = (
+                f"{len(entries) - landed} observation row(s) refused")
+        return out
+    except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
+        warn("case_settlements", f"{type(exc).__name__}: {exc}")
+        out["case_observations_error"] = f"{type(exc).__name__}: {exc}"
+        return out
 
 
 def record_case_settlements(ws: Path, banked: list[str]) -> dict:
@@ -117,46 +446,61 @@ def record_case_settlements(ws: Path, banked: list[str]) -> dict:
     claim settling PROVEN/VERIFIED (the credit ladder's admission
     vocabulary) passes; NEGATIVE/REFUTED fails; every other terminal
     status records nothing, the same posture the runner's recorder holds.
-    A claim without answers_question, or a question no case targets,
+    A claim without answers_question, or a question no case doc targets,
     writes nothing — the honest cold start, never a fabricated bucket.
-    Idempotent at any wall-clock distance: only the freshly banked
-    dispatches are observed, so re-runs add nothing. Fail-open: the
-    breakage is a counted error field, never a pass break."""
-    out = {"case_observations": 0, "cases_passed": 0, "cases_failed": 0}
+    This leg links on ``target_pq`` alone and does NOT filter on arming;
+    only the amendment does (see below).
+
+    ``banked`` is the FIRST-settlement set (the settle path's clock), so
+    in production each claim reaches this leg at most once. The pair-level
+    dedup still applies: a retry pass banking a claim an earlier amendment
+    already observed must NOT observe it again. Fail-open: the breakage is
+    a counted error field, never a pass break.
+
+    The ARMING-ORDER gap this leg cannot reach (a case armed after its
+    claims settled is unreachable from here) is
+    ``amend_case_settlements``'s job."""
     try:
-        outcomes = {str(c["id"]): (
-                        str(c.get("status") or "").upper(),
-                        str(c.get("answers_question") or "").strip())
-                    for c in _register_claims(ws)}
-        entries: list[tuple[str, bool]] = []  # (case_id, passed)
-        for did in banked:
-            status, pq = outcomes.get(str(did), ("", ""))
-            if status in CASE_PASS_STATUSES:
-                passed = True
-            elif status in CASE_FAIL_STATUSES:
-                passed = False
-            else:
-                continue
-            if not pq:
-                continue
-            entries.extend((cid, passed)
-                           for cid in _linked_case_ids(ws, pq))
-        if not entries:
-            return out
-        import posteriors as po  # the posterior-ledger leaf
-        led = po.PosteriorLedger.load(ws)
-        for cid, passed in entries:
-            cp = led.cases.get(cid) or po.CasePosterior(cid)
-            cp.update(passed)
-            led.cases[cid] = cp
-        led.save(ws)
-        passed_n = sum(1 for _, ok in entries if ok)
-        out["case_observations"] = len(entries)
-        out["cases_passed"] = passed_n
-        out["cases_failed"] = len(entries) - passed_n
-        return out
+        by_id = {str(c.get("id")): c for c in _register_claims(ws)}
+        claim_set = [by_id[str(d)] for d in banked if str(d) in by_id]
+        entries = _observation_entries(
+            claim_set, _cases_by_pq(ws, armed_only=False),
+            _observed_pairs(ws))
+        return _apply_case_observations(ws, entries, source="fresh")
     except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
         warn("case_settlements", f"{type(exc).__name__}: {exc}")
+        out = _empty_obs()
+        out["case_observations_error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+
+def amend_case_settlements(ws: Path) -> dict:
+    """The late-arm amendment: sweep EVERY decisive-terminal claim against
+    the ARMED cases and observe each un-observed pair.
+
+    ``record_case_settlements`` keys on ``banked`` — the dispatches whose
+    first settlement rode the current pass. That guard bought idempotency
+    at the cost of ARMING ORDER: a case armed after its claims settled can
+    never observe them (their ids never re-enter ``banked``), so
+    ``runs/posteriors.yaml`` is never created in the live ordering and the
+    ranker prices every claim from the wide Beta(1,1) prior forever. The
+    late-arm ordering is the COMMON one — you learn what to ask after the
+    first claims land.
+
+    Idempotent at any wall-clock distance: the dedup set is read from the
+    ledger's own ``case-observation/1`` rows, so a re-run is a no-op and
+    the belief stays reconcilable with the evidence that produced it.
+    Fail-open: a counted error field, never a pass break."""
+    try:
+        index = _cases_by_pq(ws, armed_only=True)
+        if not index:
+            return _empty_obs()
+        entries = _observation_entries(
+            _register_claims(ws), index, _observed_pairs(ws))
+        return _apply_case_observations(ws, entries, source="late-arm")
+    except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
+        warn("case_settlements", f"{type(exc).__name__}: {exc}")
+        out = _empty_obs()
         out["case_observations_error"] = f"{type(exc).__name__}: {exc}"
         return out
 
@@ -167,11 +511,16 @@ def _round_credit_pass(ws: Path, dispatches: list[dict], *,
     per dispatch. Telemetry posture: any failure inside degrades to an
     error field, never a crash (the tick must not die)."""
     try:
-        from rlvr.scalar import fact_artifacts
+        from rlvr.scalar import backfill_artifact_creators, fact_artifacts
         artifacts = fact_artifacts(ws)
         if dry_run:
             from rlvr.scalar import round_credit
-            doc = round_credit(dispatches, artifacts, [])
+            # the SAME backfill the settle path applies, so the dry-run
+            # grade matches what a real pass would settle (issue-678 T3)
+            dispatch_ids = [str(d.get("dispatch_id") or "")
+                            for d in dispatches]
+            graded = backfill_artifact_creators(artifacts, dispatch_ids)
+            doc = round_credit(dispatches, graded, [])
             return {"settled": 0, "rounds": len(dispatches),
                     "artifacts": len(artifacts), "dry_run": True,
                     "would_settle": len(doc.get("rows") or []),
@@ -188,7 +537,10 @@ def _round_credit_pass(ws: Path, dispatches: list[dict], *,
             "unattributed_waste": res.get("unattributed_waste", 0),
             # the first-settled dispatch ids (the case-posterior leg's
             # key set; run() consumes it and reports the count)
-            "banked": [str(d) for d in (res.get("banked") or [])]}
+            "banked": [str(d) for d in (res.get("banked") or [])],
+            # the corrected/repaired dispatch ids (run() consumes
+            # it and reports the count)
+            "amended": [str(d) for d in (res.get("amended") or [])]}
 
 
 def _pending_tier_rows(ws: Path) -> int:
@@ -234,18 +586,54 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     claims = terminal_claims(ws)
     dispatches = [{"dispatch_id": cid, "round": i + 1}
                   for i, cid in enumerate(claims)]
+    # issue-678 T5: the armed-case count rides EVERY pass (dry included)
+    # — zero armed cases is the silent gap that kept
+    # runs/posteriors.yaml from ever existing, now loud
+    armed = armed_case_ids(ws)
+    if not armed:
+        warn("settle_round_credit.run",
+             "no armed oracle cases (oracle/cases/*.yaml missing or "
+             "lacking the arming fields channel/hypothesis_ref/"
+             "update_map/expected.evidence_refs/mutations) — case "
+             "posteriors never move (issue-678 T5)")
     if dispatches:
         out = _round_credit_pass(ws, dispatches, dry_run=dry_run)
         banked = [str(d) for d in (out.pop("banked", None) or [])]
+        amended = [str(d) for d in (out.pop("amended", None) or [])]
         if not dry_run:
-            # the case-posterior leg keys on the dispatches this pass
-            # FIRST-settled (the bank list): replays and amendments
-            # observe nothing, so re-runs stay byte-identical no-ops
             out["banked"] = len(banked)
-            out.update(record_case_settlements(ws, banked))
+            out["amended"] = len(amended)
+            # Fresh leg first, so the attribution stays meaningful: the
+            # fresh run reports what THIS pass's bank list observed and
+            # the amendment reports the back-fill. Both dedup against
+            # the ledger, so the reverse order would still be
+            # double-count safe — it would just credit every observation
+            # to the amendment and report the fresh leg as a no-op.
+            fresh = record_case_settlements(ws, banked)
+            late = amend_case_settlements(ws)
+            # the pair-amendment leg rides LAST: it reconciles pairs
+            # against the register's current truth, after both
+            # observation legs had their byte-identical say
+            amended = reconcile_case_settlements(ws)
+            out["case_observations"] = (
+                fresh["case_observations"] + late["case_observations"])
+            out["cases_passed"] = (
+                fresh["cases_passed"] + late["cases_passed"])
+            out["cases_failed"] = (
+                fresh["cases_failed"] + late["cases_failed"])
+            out["case_observations_late_arm"] = late["case_observations"]
+            out["case_amendments"] = amended.get("case_amendments") or 0
+            errs = [leg["case_observations_error"]
+                    for leg in (fresh, late)
+                    if leg.get("case_observations_error")]
+            if amended.get("case_amendments_error"):
+                errs.insert(0, amended["case_amendments_error"])
+            if errs:
+                out["case_observations_error"] = " | ".join(errs)
     else:
         out = {"settled": 0, "rounds": 0,
                "reason": "no terminal claims - nothing to settle"}
+    out["cases_armed"] = len(armed)
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:

@@ -6,8 +6,9 @@ across hooks/ (census on dev 2b7f946; the issue filed 11, a later sweep
 said 32 — the actual count governs) never cleaned up. Harmless for the
 short-lived hook subprocess of production; in a long pytest session every
 entry persists, and each insert(0) can REORDER resolution of ambiguous
-names (hooks/ and scripts/ both ship lib_kunglao.py) — the observed
-`ImportError: cannot import name scan_active_workers` cascade.
+names (hooks/ and scripts/ both shipped lib_kunglao.py until the
+scripts side was deleted) — the observed `ImportError: cannot
+import name scan_active_workers` cascade.
 
 Two failure halves, two APIs (design D1):
 
@@ -134,10 +135,11 @@ def ensure_scripts_path() -> None:
 
 def collision_order_inverted(path: list[str] | None = None) -> bool:
     """#770 regression probe: is any hooks/ dir ranked above any scripts/
-    dir? Under that ordering the three shared-name twins
-    (completion_gate / heartbeat_touch / lib_kunglao) resolve to their
-    hooks side on a bare import — the exact shadow the ini ordering exists
-    to prevent. Pure predicate over a path list; no mutation."""
+    dir? Under that ordering the shared-name twins
+    (completion_gate / heartbeat_touch / lib_kunglao — the scripts
+    lib_kunglao side since deleted) resolve to their hooks side on a
+    bare import — the exact shadow the ini ordering exists to prevent.
+    Pure predicate over a path list; no mutation."""
     entries = sys.path if path is None else path
     hooks_rank = [i for i, p in enumerate(entries)
                   if p and Path(p).name == "hooks"]

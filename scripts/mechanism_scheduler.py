@@ -50,8 +50,10 @@ Usage:
   python mechanism_scheduler.py --check [--registry PATH]   # schema gate
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import json
 import os
 import sys
@@ -119,10 +121,14 @@ from harness_common import utc_now_z as utc_now  # #863 Family F: single source 
 # state (one dotfile, two sections: mechanisms + event-bus offset)
 # ---------------------------------------------------------------------------
 
+def _read_json(p: Path):
+    """The module's JSON read face (the Family-K parse shape)."""
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def _read_state(ws: Path) -> dict:
     try:
-        data = json.loads(
-            (Path(ws) / STATE_REL).read_text(encoding="utf-8"))
+        data = _read_json(Path(ws) / STATE_REL)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
@@ -278,12 +284,17 @@ def validate_registry(path: Path | None = None) -> dict:
 # ledger event bus (byte-offset incremental read)
 # ---------------------------------------------------------------------------
 
-def read_new_events(ws: Path) -> dict:
+def read_new_events(ws: Path, *, commit: bool = True) -> dict:
     """Consume the ledger tail incrementally: read only the bytes after the
     persisted offset of the latest day file, advance past COMPLETE lines
     (a partial trailing line stays for the next pass), and map actions to
     wake classes. Mirrors the #883 reader's bounded-window convention: the
     first read of a ledger starts at a 64KB tail, not the big bang.
+
+    commit=False is a PEEK: the identical read (same classes / counts /
+    new-row face) without the offset advance — the park evaluation's
+    non-consuming read, so a parked check can never steal a wake from the
+    real scheduling pass that follows it.
 
     Fail-open everywhere: a broken ledger returns an empty class set and
     never breaks the scheduling pass."""
@@ -333,7 +344,9 @@ def read_new_events(ws: Path) -> dict:
         cls = EVENT_CLASS_MAP.get(str(row.get("action") or ""))
         if cls:
             counts[cls] = counts.get(cls, 0) + 1
-    _update_state(ws, events={"file": latest.name, "offset": offset + consumed})
+    if commit:
+        _update_state(ws, events={"file": latest.name,
+                                  "offset": offset + consumed})
     return {"classes": sorted(counts), "counts": counts, "new": new}
 
 
@@ -390,6 +403,63 @@ def _gate_policy_due(ws: Path, events: set) -> bool:
         return False
 
 
+# The persisted noop-hash state — the no-progress breaker's own file. The
+# park reuses the breaker's fingerprint persistence as its UNCHANGED
+# signal; the breaker stays the sole owner of the write side.
+NOOP_STATE_REL = Path("runs") / ".heartbeat-noop.json"
+
+
+def is_parked(ws: Path, *, events: set | None = None) -> bool:
+    """The zero-work park conjunction (ALL must hold — a single miss lifts
+    the park, and any evaluation trouble fails open to candidacy, i.e.
+    returns False and the machinery runs):
+
+      - zero dispatchable actions: the think seat's zero-LLM proxy count
+        (its None/undecidable verdict never parks);
+      - zero fresh active workers: the cadence advisor's canonical parser
+        with its freshness cut (a zombie status tail is not load);
+      - no fresh wake-class bus rows this pass (`events`; when not given,
+        the bus is peeked WITHOUT committing the read offset, so the park
+        evaluation can never steal a wake from the real pass);
+      - state fingerprint unchanged since the persisted noop hash (the
+        breaker's own equality input, reused read-only); a missing/corrupt
+        persisted hash is a cold start and never parks — the first pass
+        always runs.
+
+    Zero subprocess by construction; the park is a cheap read-only gate."""
+    try:
+        ws = Path(ws)
+        if events is None:
+            events = set(read_new_events(ws, commit=False)["classes"])
+        if events:
+            return False
+        import think_seat
+        if think_seat.dispatchable_count(ws) != 0:
+            return False
+        import cadence_advisor
+        if cadence_advisor.active_workers(ws):
+            return False
+        try:
+            prev = _read_json(ws / NOOP_STATE_REL)
+        except (OSError, ValueError):
+            return False  # cold start: the first pass never parks
+        if not isinstance(prev, dict):
+            return False
+        import heartbeat_tick
+        return prev.get("hash") == heartbeat_tick.state_fingerprint(ws)
+    except Exception as exc:  # noqa: BLE001 — a failed park never parks
+        warn("is_parked", f"{type(exc).__name__}: {exc}")
+        return False
+
+
+def _gate_parked(ws: Path, events: set) -> bool:
+    """The zero-work park gate: DUE UNLESS the workspace is parked — a
+    mechanism carrying this gate physically cannot run while the park
+    conjunction holds (is_parked), on any host that walks the registry.
+    Fail-open to candidacy: a crashed evaluation runs the mechanism."""
+    return not is_parked(ws, events=events)
+
+
 def _gate_long_round(ws: Path, events: set) -> bool:
     """The verification ladder's T1 trigger (issue 429 §1): the round is
     LONG when the coalesced verified-write count crosses the round-turn
@@ -410,6 +480,7 @@ GATES = {
     "loop_unregistered": _gate_loop_unregistered,
     "session_dead": _gate_session_dead,
     "policy_due": _gate_policy_due,
+    "parked": _gate_parked,
 }
 
 

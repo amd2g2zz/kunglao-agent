@@ -73,7 +73,9 @@ for a constant γ this is exactly the γ^age weight.
 
 ## Recording face (the sampler's data spine)
 
-``runs/q-cell-log.jsonl`` — append-only rows
+``runs/experience.jsonl`` (the consolidated WHAT-HAPPENED file, #721;
+``runs/q-cell-log.jsonl`` remains readable — and migration-archived —
+during the compat window) — append-only rows
 {schema: q-cell-obs/1, ts, source: dispatch|settlement, signature_hash,
 method_family, claim, agent, credit}. Dispatch rows carry credit=None
 (pending — structural cell mass, never posterior mass); settlement rows
@@ -123,6 +125,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import random
 import re
 import sys
@@ -141,10 +144,13 @@ if __package__ in (None, ""):
 from kunglao_log import iter_jsonl, warn
 
 from rlvr import state as ssig  # the package face (issue 420 Phase 2)
+from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
-OBS_REL = "runs/q-cell-log.jsonl"
+OBS_REL = "runs/q-cell-log.jsonl"  # legacy rel (pre-#721 archive)
+# #721: the consolidated experience rel (the live observation home)
+EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
 CELLS_SCHEMA = "q-cell-table/1"
@@ -171,6 +177,39 @@ SHRINK_CAP = 8.0
 # Policy constant (NOT fitted); rows without a phi_delta field are
 # bit-identical to the pre-change fold (the determinism wall).
 PHI_TIEBREAK_WEIGHT = 0.25
+
+# issue-678 D-678.4a — the TRACE observation band: a settled credit in
+# (0, OBSERVATION_BAND_CEIL] is the reward ladder's INFORMATION option
+# (trace canonical 0.01 — refuted-with-replay / uncited-verified), not
+# a verdict. The fold previously banked it as (1 − credit) FAILURE
+# mass, so a 0.01 credit trained 0.99 failure against method families
+# that produced verified work (the live un-training defect: 4 of 5
+# failure units landed on successes). Such rows stay in the observation
+# log and in the decay/schedule chain — they add NEITHER success nor
+# failure mass. A genuine 0.0 remains a failure observation (nothing
+# was produced). Mirrors scalar.OUTPUT_RAILS TRACE range top —
+# dependency-light redeclaration, the TERMINAL_FACT_STATUSES precedent.
+OBSERVATION_BAND_CEIL = 0.05
+
+# #712 step-level ladder credit — the two step-boundary credit kinds that
+# ride the #705 credit_kind column. "step" is an admissible DENSE
+# observation (folds exactly like solve credit: (c, 1-c) — provisional
+# mass that moves per SubagentStop, the fix for the 10-step-rollout-
+# one-signal defect). "step_calibration" is the claim-terminal residual
+# row carrying SIGNED mass deltas (credit = Δsuccess = ladder − Σstep,
+# failure_delta = Δfailure): the fold applies both verbatim (no [0,1]
+# clamp, no observation band, no Φ tiebreak) and never feeds them to the
+# adaptive γ EMA (a residual is bookkeeping, not an outcome regime
+# signal — a signed clawback would poison the schedule).
+CREDIT_KIND_STEP = "step"
+CREDIT_KIND_STEP_CALIBRATION = "step_calibration"
+#: a ledger correction rides the SAME signed-delta semantics as
+#: the step-residual semantics — the two kinds share one definition so the fold,
+#: the EMA exclusion, the append boundary and the mass read cannot drift.
+CREDIT_KIND_CREDIT_AMENDMENT = "credit_amendment"
+SIGNED_CREDIT_KINDS = (CREDIT_KIND_STEP_CALIBRATION,
+                       CREDIT_KIND_CREDIT_AMENDMENT)
+
 
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
@@ -243,21 +282,18 @@ class InMemoryStore:
 
 
 class JSONLQStore:
-    """The default day-one store: runs/q-cell-log.jsonl (tolerant)."""
+    """The default day-one store: the consolidated runs/experience.jsonl
+    (#721) with the legacy runs/q-cell-log.jsonl riding the compat
+    window. The stamp filter keeps the file's other schemas out — only
+    q-cell-obs rows ever enter the fold."""
 
     def __init__(self, root):
-        self.path = Path(root) / OBS_REL
+        self.root = Path(root)
+        self.path = self.root / OBS_REL  # legacy rel (kept for callers)
 
     def observations(self) -> list[dict]:
-        if not self.path.is_file():
-            return []
-        try:
-            text = self.path.read_text(encoding="utf-8",
-                                       errors="replace")
-        except OSError:
-            return []
-        return [row for row in iter_jsonl(text.splitlines())
-                if isinstance(row, dict)]
+        return _cl.read(self.root, "experience",
+                        schema_prefix="q-cell-obs")
 
 
 def default_store(ws) -> QCellStore:
@@ -339,6 +375,23 @@ def _phi_delta_of(row: dict) -> float:
     return float(pd)
 
 
+def _failure_delta_of(row: dict) -> float:
+    """A #712 calibration row's signed Δfailure mass; absent or
+    non-numeric -> 0.0 (success-only residual, fail-open)."""
+    fd = row.get("failure_delta")
+    if isinstance(fd, bool) or not isinstance(fd, (int, float)):
+        return 0.0
+    return float(fd)
+
+
+def _admits_to_posterior(row: dict) -> bool:
+    """#705 agent-level credit: verification credit CONFIRMS existing
+    knowledge — it is recorded (the audit trail) but is inadmissible to
+    the Beta posterior (success, failure AND n_pending). Absent or any
+    other credit_kind is the solve path (bit-identical to pre-#705)."""
+    return str(row.get("credit_kind") or "solve") != "verification"
+
+
 def tiebroken_credit(credit: float, phi_delta) -> float:
     """The #548 tiebreaker on the credit read: clamp01(credit +
     PHI_TIEBREAK_WEIGHT · phi_delta). phi_delta=0/None is bit-identical
@@ -394,15 +447,40 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     #548 tiebreaker: a row's effective credit runs through
     ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
     [0,1] clamp; rows without phi_delta are bit-identical to the
-    pre-change fold."""
+    pre-change fold.
+
+    issue-678 D-678.4a (TRACE observation band): a SETTLED credit in
+    (0, OBSERVATION_BAND_CEIL] adds no cell mass — success and failure
+    stay put (the information option is an observation, never a
+    verdict); a genuine 0.0 still trains failure. The band keys on the
+    raw settled credit; the tiebreaker only refines admissible rows.
+
+    #705 agent-level credit: rows carrying
+    ``credit_kind: "verification"`` are inadmissible — they contribute
+    to neither success, failure, nor n_pending (verification confirms
+    knowledge, it never produces it). Absent credit_kind is the solve
+    path, bit-identical.
+
+    #712 step-level credit: ``credit_kind: "step"`` rows are admissible
+    dense observations (folded exactly like solve credit — (c, 1-c) per
+    SubagentStop); ``credit_kind: "step_calibration"`` rows are the
+    claim-terminal residual — signed Δsuccess (row ``credit``) and
+    Δfailure (row ``failure_delta``) applied verbatim after the γ weight,
+    outside the band and the tiebreak, and excluded from the γ EMA."""
     schedule = _resolve_schedule(gamma)
     rows = [r for r in store.observations()
-            if isinstance(r, dict) and _credit_of(r) is not None]
+            if isinstance(r, dict) and _credit_of(r) is not None
+            and _admits_to_posterior(r)]
     n = len(rows)
     gammas = [0.0] * n
     for i, row in enumerate(rows):
         gammas[i] = schedule.gamma()
-        schedule.observe(_credit_of(row))
+        # #712: a step_calibration residual occupies a stream position
+        # (it takes this row's γ weight) but is NOT an outcome — it
+        # never feeds the adaptive EMA (a signed clawback would drag the
+        # schedule's γ off its declared range).
+        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
+            schedule.observe(_credit_of(row))
     weights = [1.0] * n
     w = 1.0
     for i in range(n - 2, -1, -1):
@@ -410,8 +488,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         weights[i] = w
     cells: dict[tuple[str, str], CellCounts] = {}
     for i, row in enumerate(rows):
-        credit = tiebroken_credit(_credit_of(row),
-                                  row.get("phi_delta"))
+        raw_credit = _credit_of(row)
         weight = weights[i]
         key = (str(row.get("signature_hash") or ""),
                _action_key_of(row))
@@ -419,6 +496,27 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         if cell is None:
             cell = CellCounts(key[0], key[1])
             cells[key] = cell
+        if str(row.get("credit_kind") or "") in SIGNED_CREDIT_KINDS:
+            # #712 signed mass deltas: the claim-terminal residual adds
+            # Δsuccess/Δfailure VERBATIM (both may be negative — the
+            # clawback face), so the cumulative mass lands on the
+            # step-less endpoint. No band, no tiebreak, no clamp: a
+            # residual is bookkeeping over what the steps banked.
+            cells[key] = CellCounts(
+                key[0], key[1],
+                success=cell.success + weight * raw_credit,
+                failure=cell.failure + weight * _failure_delta_of(row),
+                n_pending=cell.n_pending)
+            continue
+        if 0.0 < raw_credit <= OBSERVATION_BAND_CEIL:
+            # issue-678 D-678.4a: the TRACE information option is an
+            # OBSERVATION, not a verdict — the cell records the row's
+            # existence (zero mass) and the schedule/decay chain above
+            # already consumed it; the band keys on the SETTLED credit,
+            # never the tiebroken one (phi_delta refines admissible
+            # rows, it never promotes an information option)
+            continue
+        credit = tiebroken_credit(raw_credit, row.get("phi_delta"))
         cells[key] = CellCounts(
             key[0], key[1],
             success=cell.success + weight * credit,
@@ -427,6 +525,8 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     for row in store.observations():
         if not isinstance(row, dict) or _credit_of(row) is not None:
             continue
+        if not _admits_to_posterior(row):
+            continue          # #705: verification rows are never pending
         key = (str(row.get("signature_hash") or ""),
                _action_key_of(row))
         cell = cells.get(key) or CellCounts(key[0], key[1])
@@ -443,7 +543,8 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
 def cell_posterior(fold_view: Fold, signature_hash: str,
                    family: str, *,
                    feature_pool=None, warm_pool=None,
-                   arm_key: str | None = None) -> tuple[float, float]:
+                   arm_key: str | None = None,
+                   negative_pool=None) -> tuple[float, float]:
     """The SHRUNK Beta posterior used for sampling — (alpha, beta).
 
     Anchor = the family's global aggregate LEAVE-ONE-OUT (this cell's
@@ -456,6 +557,23 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     family key (old logs — the dual-write tolerance) POOLS into the
     local mass, and the leave-one-out anchor subtracts BOTH, so a
     key-addressed read never self-echoes its own family-grain history.
+
+    #705 MARL: a 5-dim agent-conditioned key (…|agent) reads its OWN
+    cell as local mass and does NOT pool the same-arm 4-dim cell into
+    local — every peer's mass (other agents, the untyped pool) stays in
+    the leave-one-out anchor, so knowledge transfers through the
+    warm-start prior, never through forced pooling. The anchor is
+    family_aggregate − local, so a cold agent cell inherits its peers
+    by construction.
+
+    ``negative_pool`` (#705, class-level dead ends): a duck-typed pool
+    whose FAILURE mass is added to the anchor face under the SAME single
+    SHRINK_CAP as every other anchor source. The guaranteed effect is a
+    HIGHER β — the borrowed anchor is a failure pseudo-count, never a
+    deletion — but the mean does NOT always fall: the anchor's own mean
+    is (BASE_ALPHA + s_anchor)/(BASE_ALPHA + BASE_BETA + n_anchor), so a
+    cell whose failures already sit below that mean can see a slight
+    lift. Absent/None is bit-identical to the pre-change kernel.
 
     ``feature_pool`` (#460 Part B, predict-before-try) and ``warm_pool``
     (#545, the cross-task posterior store) are optional duck-typed
@@ -471,7 +589,11 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
         (signature_hash, arm_key or family),
         CellCounts(signature_hash, family))
     s_local, f_local = cell.success, cell.failure
-    if arm_key and arm_key != family:
+    # #539/#545 legacy tolerance: a 4-dim key pools the bare family cell
+    # into local (and the leave-one-out anchor subtracts both). A 5-dim
+    # agent key skips this — the same-arm mass stays ANCHOR (prior),
+    # never this agent's own evidence.
+    if arm_key and arm_key != family and not _is_agent_key(arm_key):
         legacy = fold_view.cells.get((signature_hash, family))
         if legacy is not None:
             s_local += legacy.success
@@ -485,6 +607,9 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     if warm_pool is not None:
         s_anchor += float(warm_pool.success)
         f_anchor += float(warm_pool.failure)
+    if negative_pool is not None:
+        s_anchor += float(negative_pool.success)
+        f_anchor += float(negative_pool.failure)
     n_anchor = s_anchor + f_anchor
     if n_anchor <= 0.0:
         return (BASE_ALPHA + s_local, BASE_BETA + f_local)
@@ -600,7 +725,8 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                          feature_table=None,
                          death: Mapping | None = None,
                          warm_pools: Mapping | None = None,
-                         arm_context: Mapping | None = None) -> dict:
+                         arm_context: Mapping | None = None,
+                         negative_pools: Mapping | None = None) -> dict:
     """DTS call site 2 — sample ONE method family for envelope synthesis.
 
     sampling ∝ P_LLM(proposal) ⊗ Q (#429 §8 day-one ruling): per-family
@@ -644,7 +770,15 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
     start is traceable, 逐句可归因. ``arm_context`` (recipe/verif/tier —
     the dispatch meta) keys the per-candidate cell read at the 4-dim
     arm_key; candidates carry an additive ``arm_key`` receipt field.
-    Both None (default) = the pre-#545 sampler, byte-identical."""
+    Both None (default) = the pre-#545 sampler, byte-identical.
+
+    #705 MARL: ``arm_context`` may carry an ``agent_type`` (the 5th arm
+    key dim) so each worker type samples from its OWN cell, and
+    ``negative_pools`` ({family → duck-typed pool} of CLASS-LEVEL dead
+    ends, rlvr.marl.negative_pools) adds failure mass to the anchor
+    face under the same SHRINK_CAP — candidates with contributing
+    negative rows carry an additive ``negative_knowledge`` receipt
+    block. Both absent = the pre-#705 sampler, byte-identical."""
     sig = _coerce_signature(state_signature)
     prior = _normalize_prior(candidates_with_llm_prior)
     schedule = _resolve_schedule(gamma)
@@ -665,12 +799,14 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                              or "facts_snapshot"),
                          str(arm_context.get("verification_mode")
                              or "none"),
-                         arm_context.get("tier", 0))
+                         arm_context.get("tier", 0),
+                         arm_context.get("agent_type"))
         warm = (warm_pools or {}).get(family)
+        neg = (negative_pools or {}).get(family)
         alpha, beta = cell_posterior(
             fold_view, sig, family,
             feature_pool=pools.get(family) if pools else None,
-            warm_pool=warm, arm_key=ak)
+            warm_pool=warm, arm_key=ak, negative_pool=neg)
         child = random.Random(f"qcell/{base}/{family}")
         theta = child.betavariate(alpha, beta)
         multiplier, death_doc = _death_multiplier(death, family)
@@ -702,6 +838,13 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
                 "success": round(warm.success, 9),
                 "failure": round(warm.failure, 9),
                 "rows": warm.rows,
+            }
+        if neg is not None and neg.rows > 0:
+            # additive block — #705 class-level dead end, traceable
+            cand["negative_knowledge"] = {
+                "success": round(neg.success, 9),
+                "failure": round(neg.failure, 9),
+                "rows": neg.rows,
             }
         cand_doc[family] = cand
     # numpy adoption (issue 420 Phase 2, README rule 1): the sampling
@@ -788,15 +931,110 @@ def _append_row(path: Path, row: dict) -> bool:
 
 
 def arm_key(method_family: str, context_recipe: str,
-            verification_mode: str, tier) -> str:
+            verification_mode: str, tier, agent_type: str | None = None
+            ) -> str:
     """#539 WS1: the 4-dim arm key (family|recipe|verif|tier) — the
     anti-explosion compromise: tool_sequence/budget/control ride as
-    feature columns, never as key dimensions. Tier buckets to int."""
+    feature columns, never as key dimensions. Tier buckets to int.
+
+    #705 MARL: a NON-EMPTY ``agent_type`` appends a fifth segment
+    (family|recipe|verif|tier|agent) so each worker type addresses its
+    OWN Beta cell. A falsy agent type produces the exact pre-#705
+    4-dim string — the determinism wall (test_action_space_539 pins it;
+    every golden that pins an arm key stays byte-identical)."""
     try:
         t = int(tier)
     except (TypeError, ValueError):
         t = 0
-    return f"{method_family}|{context_recipe}|{verification_mode}|{t}"
+    base = f"{method_family}|{context_recipe}|{verification_mode}|{t}"
+    agent = str(agent_type).strip() if agent_type is not None else ""
+    return f"{base}|{agent}" if agent else base
+
+
+def agent_of_action(action_key: str) -> str | None:
+    """#705 MARL: the AGENT part of a consumed action key — the fifth
+    segment of a 5-dim key, or None for a legacy 4-dim/family key."""
+    parts = str(action_key or "").split("|")
+    return parts[4] if len(parts) >= 5 and parts[4] else None
+
+
+def _is_agent_key(action_key: str) -> bool:
+    """True for a 5-dim agent-conditioned key (the #705 local-mass
+    carve-out: a 5-dim read never pools a same-arm 4-dim cell into
+    local — sharing rides the anchor, never forced pooling)."""
+    return len(str(action_key or "").split("|")) >= 5
+
+
+def _recipe_cols(recipe_id, recipe_propensity,
+                 recipe_source) -> tuple[str | None, float | None,
+                                         str | None]:
+    """#695 boundary validation for the recipe triple — non-string ids,
+    NaN / out-of-[0,1] propensities and foreign sources degrade to null
+    with one warn each, never a raise (the #691 usage-row boundary
+    semantics)."""
+    rid_out, rprop_out, rsrc_out = None, None, None
+    if isinstance(recipe_id, str) and recipe_id.strip():
+        rid_out = recipe_id.strip()
+    elif recipe_id is not None:
+        warn("q_cells.append", f"non-string recipe_id dropped: {recipe_id!r}")
+    if recipe_propensity is not None:
+        if isinstance(recipe_propensity, bool) \
+                or not isinstance(recipe_propensity, (int, float)):
+            warn("q_cells.append",
+                 f"non-numeric recipe_propensity dropped: "
+                 f"{recipe_propensity!r}")
+        else:
+            v = float(recipe_propensity)
+            if v == v and 0.0 <= v <= 1.0:   # finite + in-range (NaN fails)
+                rprop_out = round(v, 6)
+            else:
+                warn("q_cells.append",
+                     f"out-of-range recipe_propensity dropped: "
+                     f"{recipe_propensity!r}")
+    if recipe_source is not None:
+        s = str(recipe_source).strip()
+        if s in ("sampled", "declared", "none"):
+            rsrc_out = s
+        else:
+            warn("q_cells.append",
+                 f"foreign recipe_source dropped: {recipe_source!r}")
+    return rid_out, rprop_out, rsrc_out
+def _coerce_credit(credit, credit_kind, failure_delta):
+    """The append boundary's #712 credit validation: verdict credits
+    clamp into [0,1] (the #429 §4 rail — the boundary never trusts
+    input), a "step_calibration" credit is taken SIGNED with finite-only
+    validation (the clawback's job is to be negative), and
+    failure_delta is legal ONLY on a calibration row (ONE warn, else
+    dropped). Returns ``(credit, failure_delta)``; invalid input drops
+    to None."""
+    is_calibration = str(credit_kind or "") in SIGNED_CREDIT_KINDS
+    credit_out = None
+    if credit is not None:
+        if isinstance(credit, bool) or not isinstance(credit, (int, float)):
+            warn("q_cells.append", f"non-numeric credit dropped: {credit!r}")
+        elif is_calibration:
+            if not math.isfinite(float(credit)):
+                warn("q_cells.append",
+                     f"non-finite calibration credit dropped: {credit!r}")
+            else:
+                credit_out = float(credit)
+        else:
+            credit_out = max(0.0, min(1.0, float(credit)))
+    failure_delta_out = None
+    if failure_delta is not None:
+        if not is_calibration:
+            warn("q_cells.append",
+                 "failure_delta outside a calibration row dropped")
+        elif isinstance(failure_delta, bool) or not isinstance(
+                failure_delta, (int, float)):
+            warn("q_cells.append",
+                 f"non-numeric failure_delta dropped: {failure_delta!r}")
+        elif not math.isfinite(float(failure_delta)):
+            warn("q_cells.append",
+                 f"non-finite failure_delta dropped: {failure_delta!r}")
+        else:
+            failure_delta_out = float(failure_delta)
+    return credit_out, failure_delta_out
 
 
 def append_observation(ws, signature_hash: str, method_family: str,
@@ -808,18 +1046,41 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        fingerprint: str | None = None,
                        arm_key_col: str | None = None,
                        action_type: str | None = None,
-                       phi_delta: float | None = None) -> dict:
+                       phi_delta: float | None = None,
+                       credit_kind: str | None = None,
+                       recipe_id: str | None = None,
+                       recipe_propensity: float | None = None,
+                       recipe_source: str | None = None,
+                       failure_delta: float | None = None,
+                       reason: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
     Fail-open: an unwritable log is one rate-limited warn, never an
-    exception into the producer."""
-    credit_out = None
-    if credit is not None:
-        if isinstance(credit, bool) or not isinstance(credit, (int, float)):
-            warn("q_cells.append", f"non-numeric credit dropped: {credit!r}")
-        else:
-            credit_out = max(0.0, min(1.0, float(credit)))
+    exception into the producer.
+
+    #705 agent-level credit: ``credit_kind`` ("solve" | "verification")
+    rides the row so the fold can apply the admission rule. Absent or
+    "solve" is the pre-#705 path (the row carries no kind column).
+
+    #695 recipe arms: the dispatch-time recipe triple rides the row as
+    ``recipe_id`` / ``recipe_propensity`` / ``recipe_source`` (closed
+    vocab sampled|declared|none). The three keys are emitted TOGETHER
+    (explicit nulls inside) and ONLY when the view carries a recipe —
+    every pre-#695 writer (``observe()``, the reindex faces) stays
+    byte-identical. The boundary validates: non-string ids, NaN /
+    out-of-[0,1] propensities and foreign sources degrade to null with
+    one warn, never a raise.
+
+    #712 step-level credit: a ``credit_kind`` of "step" keeps the normal
+    [0,1] clamp (a dense step credit is still a bounded observation);
+    "step_calibration" takes the credit SIGNED (the claim-terminal
+    residual claws back mass — negative is its job) with finite-only
+    validation, and may carry ``failure_delta`` (the signed Δfailure the
+    fold applies verbatim). failure_delta outside a calibration row is
+    dropped with ONE warn — the column has exactly one legal home."""
+    credit_out, failure_delta_out = _coerce_credit(
+        credit, credit_kind, failure_delta)
     phi_out = None
     if phi_delta is not None:
         if isinstance(phi_delta, bool) or not isinstance(phi_delta,
@@ -828,6 +1089,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                  f"non-numeric phi_delta dropped: {phi_delta!r}")
         else:
             phi_out = round(float(phi_delta), 6)
+    rid_out, rprop_out, rsrc_out = _recipe_cols(
+        recipe_id, recipe_propensity, recipe_source)
     row = {
         "schema": OBS_SCHEMA,
         "ts": ts or _now(),
@@ -847,7 +1110,27 @@ def append_observation(ws, signature_hash: str, method_family: str,
         "action_type": action_type,
         "phi_delta": phi_out,
     }
-    appended = _append_row(Path(ws) / OBS_REL, row)
+    # #705 agent-level credit: the column is emitted ONLY for
+    # "verification" — the solve path's row stays byte-identical to
+    # pre-#705 (no key at all, not even a null).
+    if credit_kind:
+        row["credit_kind"] = str(credit_kind)
+    # #695: the recipe triple rides TOGETHER, only when the view names
+    # a recipe (the none-gap row — no recipe_id — stays byte-identical
+    # to pre-#695; review-1: source "none" must NOT trip the gate).
+    if rid_out is not None:
+        row["recipe_id"] = rid_out
+        row["recipe_propensity"] = rprop_out
+        row["recipe_source"] = rsrc_out
+    # #712: the signed Δfailure rides only a calibration row (the guard
+    # above already refused every other home).
+    if failure_delta_out is not None:
+        row["failure_delta"] = failure_delta_out
+    # the amendment audit reason — emitted ONLY when set (the
+    # the established emission discipline: absent = byte-identical row).
+    if reason:
+        row["reason"] = str(reason)
+    appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
 
 
@@ -860,8 +1143,28 @@ def observe(ws, signature_hash: str, method_family: str,
                               source="settlement")
 
 
+def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
+    """The LATEST pending dispatch row carrying this identity (claim id
+    or explicit dispatch_id) — the ONE match face shared by the #462 W5
+    settlement bank, the #712 step-credit bank and its claim-terminal
+    calibration. Pending means source=dispatch + credit=None (banked rows
+    carry a numeric credit and can never be re-matched). None = the
+    honest gap — no row, never a fabricated bucket."""
+    did = str(dispatch_id or "")
+    for row in reversed(JSONLQStore(ws).observations()):
+        if not isinstance(row, dict) \
+                or str(row.get("source") or "") != "dispatch" \
+                or row.get("credit") is not None:
+            continue
+        if did and (str(row.get("claim") or "") == did
+                    or str(row.get("dispatch_id") or "") == did):
+            return row
+    return None
+
+
 def observe_settlement(ws, dispatch_id: str, credit,
-                       *, phi_delta: float | None = None) -> dict:
+                       *, phi_delta: float | None = None,
+                       credit_kind: str = "solve") -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -889,25 +1192,33 @@ def observe_settlement(ws, dispatch_id: str, credit,
     ``phi_delta`` threads to the row (the #548 tiebreaker raw
     material). The result carries ``arm_key``/``fingerprint`` so the
     cross-task store's write face (rlvr.strategy_store) can key its row
-    without a second scan."""
+    without a second scan.
+
+    #705 agent-level credit: ``credit_kind`` decomposes the settlement
+    into "solve" (produced new evidence — the DEFAULT, bit-identical to
+    the pre-#705 path) and "verification" (confirmed existing knowledge
+    — the row is still recorded for the audit trail but the fold marks
+    it inadmissible, so the Beta posterior never moves). The result
+    carries ``beta_updated: bool`` reporting the decomposition.
+
+    #695 recipe arms: the matched dispatch row's recipe triple
+    (``recipe_id``/``recipe_propensity``/``recipe_source``) rides the
+    settlement row and the result — the credit banks against the
+    DISPATCH-RECORDED recipe (ITT via the #678 trusted chain); no
+    worker narrative is ever read here (the #881 ``steps:`` pattern
+    stays dead)."""
     did = str(dispatch_id or "")
+    kind = "verification" if str(credit_kind or "").strip() == \
+        "verification" else "solve"
     try:
-        match = None
-        for row in reversed(JSONLQStore(ws).observations()):
-            if not isinstance(row, dict) \
-                    or str(row.get("source") or "") != "dispatch" \
-                    or row.get("credit") is not None:
-                continue
-            if did and (str(row.get("claim") or "") == did
-                        or str(row.get("dispatch_id") or "") == did):
-                match = row
-                break
+        match = _match_pending_dispatch(ws, did)
         if match is None:
             warn("q_cells.observe_settlement",
                  f"no pending dispatch row for {did!r} — credit not "
                  f"banked (the honest gap)")
             return {"appended": False, "matched": False,
-                    "reason": "unmatched", "dispatch_id": did}
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
         out = append_observation(ws, str(match.get("signature_hash")),
                                  str(match.get("method_family")), credit,
                                  source="settlement",
@@ -916,19 +1227,313 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  dispatch_id=did,
                                  fingerprint=match.get("fingerprint"),
                                  arm_key_col=match.get("arm_key"),
-                                 phi_delta=phi_delta)
+                                 phi_delta=phi_delta,
+                                 # the solve path emits NO kind column —
+                                 # the default row stays byte-identical
+                                 # to pre-#705; only verification marks.
+                                 credit_kind=(kind if kind == "verification"
+                                              else None),
+                                 # #695: credit banks against the
+                                 # DISPATCH-RECORDED recipe (ITT) —
+                                 # the triple rides the settlement row
+                                 recipe_id=match.get("recipe_id"),
+                                 recipe_propensity=match.get(
+                                     "recipe_propensity"),
+                                 recipe_source=match.get("recipe_source"))
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
+                "credit_kind": kind,
+                "beta_updated": bool(out["appended"] and kind == "solve"),
                 "signature_hash": match.get("signature_hash"),
                 "method_family": match.get("method_family"),
                 "arm_key": match.get("arm_key"),
-                "fingerprint": match.get("fingerprint")}
+                "fingerprint": match.get("fingerprint"),
+                "recipe_id": match.get("recipe_id"),
+                "recipe_propensity": match.get("recipe_propensity"),
+                "recipe_source": match.get("recipe_source")}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.observe_settlement", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "matched": False,
                 "reason": f"error:{type(exc).__name__}",
-                "dispatch_id": did}
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def _bank_matched(ws, did: str, match: dict, credit, *,
+                  kind: str, failure_delta: float | None = None,
+                  reason: str | None = None) -> dict:
+    """Append one credit row into the matched dispatch's cell and shape
+    the shared result dict (the #712 faces' common tail: same keys
+    observe_settlement returns, so callers — strategy store, case-
+    posterior leg — read one shape). ``reason`` rides the row only when
+    set (the amendment audit face)."""
+    out = append_observation(ws, str(match.get("signature_hash")),
+                             str(match.get("method_family")), credit,
+                             source=("credit-amendment"
+                                     if kind == CREDIT_KIND_CREDIT_AMENDMENT
+                                     else "settlement"),
+                             claim=match.get("claim"),
+                             agent=match.get("agent"),
+                             dispatch_id=did,
+                             fingerprint=match.get("fingerprint"),
+                             arm_key_col=match.get("arm_key"),
+                             credit_kind=kind,
+                             failure_delta=failure_delta,
+                             reason=reason)
+    return {"appended": out["appended"], "matched": True,
+            "reason": None if out["appended"] else "write-failed",
+            "dispatch_id": did,
+            "credit_kind": kind,
+            "beta_updated": bool(out["appended"]),
+            "signature_hash": match.get("signature_hash"),
+            "method_family": match.get("method_family"),
+            "arm_key": match.get("arm_key"),
+            "fingerprint": match.get("fingerprint")}
+
+
+def _match_banked_row(ws, dispatch_id: str) -> dict | None:
+    """The LATEST banked row (settlement or amendment source)
+    carrying this identity — the prune-safe identity fallback. A
+    pruned dispatch row never orphans a correction: the banked row's
+    own signature/method_family/arm_key ARE the cell address."""
+    did = str(dispatch_id or "")
+    for row in reversed(JSONLQStore(ws).observations()):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("source") or "") not in ("settlement",
+                                                "credit-amendment"):
+            continue
+        if row.get("credit") is None:
+            continue
+        if did and (str(row.get("claim") or "") == did
+                    or str(row.get("dispatch_id") or "") == did):
+            return row
+    return None
+
+
+def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
+    """(success, failure, n_rows) — the fold has banked the fold has banked for this
+    identity — the amendment's operand, read from the SAME append-only
+    log the fold consumes (the residual posture: what actually banked, never a
+    parallel tally that could drift). Solve rows contribute their
+    tiebroken credit (a band-valued row is the information option:
+    zero mass, existence only); verification rows are inadmissible to
+    the posterior (the fold skips them — so does this read); signed
+    kinds contribute verbatim; step rows are NOT included
+    (``step_credit_totals`` owns that leg — sum them at the call
+    site). **None = the log could not be read** — callers must treat
+    None as "skip this pass" (an empty read and an unreadable read are
+    different facts; conflating them would fire a full-target
+    over-amendment)."""
+    did = str(dispatch_id or "")
+    s = f = 0.0
+    n = 0
+    try:
+        for row in JSONLQStore(ws).observations():
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("source") or "") not in ("settlement",
+                                                    "credit-amendment"):
+                continue
+            if not (did and (str(row.get("claim") or "") == did
+                             or str(row.get("dispatch_id") or "") == did)):
+                continue
+            c = _credit_of(row)
+            if c is None:
+                continue
+            if str(row.get("credit_kind") or "") == CREDIT_KIND_STEP:
+                continue          # step mass: step_credit_totals owns it
+            if not _admits_to_posterior(row):
+                continue          # verification: never banked, never read
+            n += 1
+            if str(row.get("credit_kind") or "") in SIGNED_CREDIT_KINDS:
+                s += c
+                f += _failure_delta_of(row)
+                continue
+            if 0.0 < c <= OBSERVATION_BAND_CEIL:
+                continue          # the information option — no mass
+            t = tiebroken_credit(c, row.get("phi_delta"))
+            s += t
+            f += 1.0 - t
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cells.banked_mass", f"{type(exc).__name__}: {exc}")
+        return None
+    return round(s, 6), round(f, 6), n
+
+
+def _mass_targets(credit) -> tuple[float, float]:
+    """The band-aware mass endpoint of one ladder value (the step-residual
+    target half, single-sourced for the amendment face): clamp01, and a
+    band-valued value is the information option — (0, 0). Both halves
+    are rounded to 6 dp — the SAME grid the banked read and the delta
+    rounding live on; an unrounded target could sit on a 6-dp half
+    point and the delta would oscillate ±1e-6 forever (the review's
+    non-idempotence finding)."""
+    settled = round(max(0.0, min(1.0, float(credit))), 6)
+    if 0.0 < settled <= OBSERVATION_BAND_CEIL:
+        return 0.0, 0.0
+    return settled, round(1.0 - settled, 6)
+
+
+def amend_settlement(ws, dispatch_id: str, target_credit,
+                     *, reason: str | None = None) -> dict:
+    """The ledger-correction face — move a dispatch's banked mass
+    to the corrected ladder value with ONE signed ``credit_amendment``
+    row (same verbatim semantics as the residual semantics; rows carry
+    ``source: "credit-amendment"`` so settlement-keyed ad-hoc readers —
+    the e2e repeat-failure feed, the proposal priors — stay blind).
+
+    The operand is the fold's full mass view (``banked_mass`` +
+    ``step_credit_totals``); the delta is rounded to 6 dp and a
+    zero-rounded delta appends NOTHING — idempotent by construction, a
+    re-run converges because the amendment row itself enters the next
+    read. Identity, strongest-first: the pending dispatch row (the
+    pending-dispatch face), else the latest banked row's own signature (a pruned
+    dispatch row never orphans a correction); neither → the honest
+    gap. Fail-open: telemetry never breaks settlement."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_CREDIT_AMENDMENT
+    try:
+        t_s, t_f = _mass_targets(target_credit)
+        step_sum, step_n = step_credit_totals(ws, did)
+        mass = banked_mass(ws, did)
+        if mass is None:
+            return {"appended": False, "matched": False,
+                    "reason": "log-unreadable", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        s_eff, f_eff, _n = mass
+        s_eff += step_sum
+        f_eff += float(step_n) - step_sum
+        d_s = round(t_s - s_eff, 6)
+        d_f = round(t_f - f_eff, 6)
+        if d_s == 0.0 and d_f == 0.0:
+            return {"appended": False, "matched": True,
+                    "reason": "already-current", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        match = _match_pending_dispatch(ws, did) \
+            or _match_banked_row(ws, did)
+        if match is None:
+            warn("q_cells.amend_settlement",
+                 f"no row carries {did!r} — amendment not banked (the "
+                 f"honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        return _bank_matched(ws, did, match, d_s, kind=kind,
+                             failure_delta=d_f, reason=reason)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.amend_settlement", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def observe_step_credit(ws, dispatch_id: str, credit, *,
+                        step_ref: str | None = None) -> dict:
+    """#712: bank ONE step-boundary credit — the dense signal that moves
+    the Q-cell Beta at SubagentStop, BEFORE claim-terminal.
+
+    Matches the claim's pending dispatch row through the shared face
+    (the honest gap when none exists) and appends a settlement-source
+    row marked ``credit_kind: "step"``: the fold admits it exactly like
+    solve credit ((c, 1−c) per step), and the claim-terminal calibration
+    sums exactly these rows (``step_credit_totals``) to price its
+    residual. The credit here is rlvr.step_credit's evidence-quality
+    score (already in [0,1]); ``step_ref`` (the producing step_record/2
+    step_id) rides only the returned receipt — the append-only log stays
+    one optional column richer per kind, never content-bearing.
+    Fail-open: telemetry never breaks the settle that called it."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_STEP
+    try:
+        match = _match_pending_dispatch(ws, did)
+        if match is None:
+            warn("q_cells.observe_step_credit",
+                 f"no pending dispatch row for {did!r} — step credit not "
+                 f"banked (the honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        out = _bank_matched(ws, did, match, credit, kind=kind)
+        if step_ref:
+            out["step_ref"] = str(step_ref)
+        return out
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.observe_step_credit", f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def observe_step_calibration(ws, dispatch_id: str, credit, *,
+                             failure_delta: float = 0.0) -> dict:
+    """#712: bank the claim-terminal RESIDUAL — ONE signed mass-delta row
+    that corrects the cumulative Beta into the step-less endpoint:
+    ``credit`` = Δsuccess = ladder_credit − Σ(step_credit) (negative =
+    over-credit clawback, positive = under-credit top-up) and
+    ``failure_delta`` = Δfailure so the failure mass also lands on
+    (1 − ladder) after the provisional step rows. Claims with no step
+    credit never reach this face — scalar._bank_q_cell_credit keeps them
+    on observe_settlement (byte-identical legacy rows). Fail-open."""
+    did = str(dispatch_id or "")
+    kind = CREDIT_KIND_STEP_CALIBRATION
+    try:
+        match = _match_pending_dispatch(ws, did)
+        if match is None:
+            warn("q_cells.observe_step_calibration",
+                 f"no pending dispatch row for {did!r} — calibration not "
+                 f"banked (the honest gap)")
+            return {"appended": False, "matched": False,
+                    "reason": "unmatched", "dispatch_id": did,
+                    "credit_kind": kind, "beta_updated": False}
+        return _bank_matched(ws, did, match, credit, kind=kind,
+                             failure_delta=failure_delta)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("q_cells.observe_step_calibration",
+             f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "matched": False,
+                "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": did,
+                "credit_kind": kind, "beta_updated": False}
+
+
+def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
+    """#712: (Σ credit, n rows) over the step rows whose credit actually
+    became FOLD MASS for this identity — the claim-terminal
+    calibration's operand, read from the SAME append-only log the fold
+    consumes (what actually banked, never a parallel tally that could
+    drift). Mirrors the fold's admission EXACTLY: credit == 0.0 is a
+    failure observation (mass (0, 1)); credit in
+    (0, OBSERVATION_BAND_CEIL] is the D-678.4a information option — NO
+    mass, so it counts in NEITHER the sum nor the count (clawing it
+    back would subtract mass that was never banked — the #712 review's
+    band-interaction finding); above the band a full observation.
+    Fail-open: an unreadable log reports (0.0, 0) so the settlement
+    takes the legacy face rather than a fabricated correction."""
+    did = str(dispatch_id or "")
+    total, count = 0.0, 0
+    try:
+        for row in JSONLQStore(ws).observations():
+            if not isinstance(row, dict) \
+                    or str(row.get("credit_kind") or "") != CREDIT_KIND_STEP:
+                continue
+            if not (did and (str(row.get("claim") or "") == did
+                             or str(row.get("dispatch_id") or "") == did)):
+                continue
+            credit = _credit_of(row)
+            if credit is None:
+                continue
+            if 0.0 < credit <= OBSERVATION_BAND_CEIL:
+                continue          # information option — zero mass, no operand
+            total += credit
+            count += 1
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cells.step_credit_totals", f"{type(exc).__name__}: {exc}")
+        return 0.0, 0
+    return round(total, 6), count
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:
@@ -947,6 +1552,29 @@ def declared_family(envelope_meta, prompt_text: str) -> str | None:
     return None
 
 
+#: the #695 recipe-view gap — the honest none (explicit nulls; the
+#: dispatch row stays byte-identical to pre-#695 on any miss).
+_RECIPE_GAP = {"recipe_id": None, "propensity": None, "source": "none",
+               "sampled_recipe": None, "deviates": False,
+               "registered": None, "reason": None}
+
+
+def _recipe_view(ws, family: str, meta: dict, prompt: str | None,
+                 agent: str | None, claim: str | None) -> dict:
+    """#695: the recipe-arms view at the ALLOW tail (lazy import — the
+    decision faces stay import-clean). Fail-open to the none gap with
+    one rate-limited warn: a recipe failure never breaks the dispatch
+    observation itself."""
+    try:
+        from rlvr import recipe_arms as _ra695  # noqa: PLC0415 — lazy
+        return _ra695.record_dispatch_recipe(
+            ws, family=family, envelope_meta=meta, prompt=prompt,
+            agent=agent, claim=claim)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn("q_cells.recipe_view", f"{type(exc).__name__}: {exc}")
+        return dict(_RECIPE_GAP)
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
@@ -958,7 +1586,13 @@ def record_dispatch_observation(ws, prompt: str, *,
     The signature is computed HERE (the hook must stay state_signature-
     free per the #396 freeze). Undeclared families are the honest gap:
     no row, never a fabricated bucket (the #432 gate is the enforcement
-    face that makes declaration mandatory). Fail-open throughout."""
+    face that makes declaration mandatory). Fail-open throughout.
+
+    #695: the row also carries the recipe triple ({recipe_id,
+    recipe_propensity, recipe_source: sampled|declared|none} — see
+    rlvr.recipe_arms.record_dispatch_recipe) and the result gains the
+    additive ``recipe`` view; the deviation event fires inside the
+    recipe face, never here."""
     try:
         family = declared_family(envelope_meta, prompt or "")
         if not family:
@@ -966,20 +1600,31 @@ def record_dispatch_observation(ws, prompt: str, *,
                     "family": None, "signature_hash": None}
         sig = ssig.signature_hash(ssig.snapshot(ws))
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
-        # (v1 back-fill defaults keep legacy shapes identical)
+        # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
+        # an envelope-declared agent_type appends the 5th dim so the
+        # dispatch opens the AGENT's own cell.
         meta = envelope_meta if isinstance(envelope_meta, dict) else {}
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
         tier = meta.get("tier", 0)
+        # #695 recipe arms: the dispatch-time recipe view (envelope
+        # declaration reconciled against the gate's own arm sampler —
+        # rlvr.recipe_arms, fail-open to the none gap on any miss)
+        view = _recipe_view(ws, family, meta, prompt, agent, claim)
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
                                  arm_key_col=arm_key(family, recipe,
-                                                     verif, tier),
+                                                     verif, tier,
+                                                     meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
-                                                 or "dispatch"))
+                                                 or "dispatch"),
+                                 recipe_id=view.get("recipe_id"),
+                                 recipe_propensity=view.get("propensity"),
+                                 recipe_source=view.get("source"))
         return {"appended": out["appended"], "reason": None,
-                "family": family, "signature_hash": sig}
+                "family": family, "signature_hash": sig,
+                "recipe": view}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.record_dispatch",
              f"{type(exc).__name__}: {exc}")
@@ -996,7 +1641,9 @@ def _read_jsonl(path: Path) -> list[dict]:
         return []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except OSError as exc:
+        warn("qcell_log_read",
+             f"{type(exc).__name__}: {exc} — log reads as empty")
         return []
     return [r for r in iter_jsonl(text.splitlines())
             if isinstance(r, dict)]
@@ -1085,9 +1732,16 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    for p in sorted(root.rglob(OBS_REL)):
+    for p in (sorted(root.rglob(OBS_REL))
+              + sorted(root.rglob(EXPERIENCE_REL))):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
+        if p.name == Path(EXPERIENCE_REL).name:
+            # #721: the consolidated file is multi-schema — only
+            # q-cell-obs rows are face-1 rows; the legacy group above
+            # precedes this one (archive history predates the file)
+            rows = [r for r in rows
+                    if str(r.get("schema") or "").startswith("q-cell-obs")]
         rows_scanned += len(rows)
         face1_rows.extend(rows)
     fold_view = fold(InMemoryStore(face1_rows), gamma=schedule)

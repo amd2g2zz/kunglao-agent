@@ -162,7 +162,10 @@ def _kunglao_active(ws: Path) -> bool:
         return False
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as exc:
+        from kunglao_log import warn  # noqa: PLC0415 — the canonical face
+        warn("dispatch_gate_activation_read",
+             f"{type(exc).__name__}: {exc} — reads as NOT active")
         return False
     # expiry check first — a stale activation must not fire
     expires = state.get("expires_at")
@@ -1801,6 +1804,20 @@ def main() -> int:
             _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
         except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
             warn("undo_dispatch_anchor", f"{type(exc).__name__}: {exc}")
+        # #690 review HIGH: cancel the step this rejected attempt opened
+        # at the approval point (worker_budget._open_step) — the launch
+        # stash is consumed (the settle->update->decide barrier lifts at
+        # once instead of riding out the stale TTL, and no phantom settle
+        # banks a dispatch that never ran) and the dispatch_count bump is
+        # rolled back (the branch retries budget is not charged). Fail-open:
+        # never changes the verdict.
+        try:
+            from _path_hygiene import ensure_scripts_path as _esp690
+            _esp690()
+            from rlvr import step_grain as _sg690
+            _sg690.cancel_step_open(_ATTEMPT["ws"], _ATTEMPT["cid"])
+        except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
+            warn("cancel_step_open", f"{type(exc).__name__}: {exc}")
     return rc
 
 
@@ -1986,6 +2003,18 @@ def _main_inner() -> int:
     except Exception as exc:  # noqa: BLE001 — a signal never blocks dispatch
         print(f"dispatch_gate: signal-stream append failed ({exc!r})",
               file=sys.stderr, flush=True)
+    # dispatch churn counter: the ALLOW tail is the one face every real
+    # dispatch passes, so claim dispatch_count accrues HERE (independent
+    # of the DLQ failure strikes — those land at completion). Fail-open:
+    # a register hiccup never blocks the dispatch.
+    if claim_id:
+        try:
+            with scripts_on_path():  # scoped membership
+                import dead_letter as _dl
+            _dl.record_dispatch_count(Path(ws), claim_id)
+        except Exception as exc:  # noqa: BLE001 — a counter never blocks
+            print(f"dispatch_gate: dispatch-count increment failed "
+                  f"({exc!r})", file=sys.stderr, flush=True)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

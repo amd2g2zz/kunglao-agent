@@ -52,6 +52,12 @@ import eval_dataset as ds
 import eval_toolflex as tf
 import eval_tf_shadow as sh
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 ROOT = Path(__file__).resolve().parents[1]
 TF_DIR = ROOT / "eval" / "v1" / "tasks" / "toolflex"
 SCHEMA_PATH = ROOT / "schemas" / "eval-task-v1.json"

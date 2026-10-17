@@ -15,13 +15,15 @@ Encodes the runbook (.claude/e2e-runbook-source.md) exactly:
   C7  promotion (register_proven_gate), verdict, CONVERGED,
       completion_gate, settlement rows
   ORACLE  replay checker from the REPO tree (finding #3), VERDICT PASS +
-      min_pair_ratio 1.0 = the run's final verdict
+      min_pair_ratio 1.0 + the constraint-witness leg (verdict = witness
+      AND outcome) = the run's final verdict
 
 No silent degradation: every step's outcome lands in structured
 evidence; the first failure stops the pipeline (recorded, never retried).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -30,7 +32,7 @@ import time
 import uuid
 from pathlib import Path
 
-from e2e import audit, evidence, llm_faces, model
+from e2e import audit, constraint_witness, evidence, llm_faces, model
 from e2e.runtime import (  # noqa: F401 — re-exported seams (patch points)
     IMPORT_ERRORS, RunContext, budget_ok as _guard_budget,
     family_of, new_run_id, parse_decision as _decide,
@@ -198,6 +200,24 @@ def build_goal_op_doc(anchors: dict[str, str]) -> dict:
             "parameters asserted without a fact file + evidence pointer "
             "do not count as done",
         ],
+        "constraint_witness": {
+            "schema": "constraint-witness/1",
+            "witnesses": {
+                "a re-implementation matching only the two __main__ probe "
+                "strings does not count as done": {
+                    "none": "probe-string matching leaves no separable "
+                            "runtime artifact at replay; the 12 fresh "
+                            "checker probes price this at the outcome "
+                            "layer",
+                },
+                "parameters asserted without a fact file + evidence "
+                "pointer do not count as done": {
+                    "none": "fact-file presence is gated by the "
+                            "promotion register, not separable from the "
+                            "candidate at oracle time",
+                },
+            },
+        },
         "diff_vs_verbatim": [
             "analysis material is the constructed eval target "
             "(target/derive.py), not a live binary sample",
@@ -2610,15 +2630,20 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
     text lines — no JSON on stdout, review F1); the observed replay pair
     ratio is derived from the evidence FILE the checker writes
     (faces.replay matched/count). Acceptance = VERDICT PASS + rc 0 +
-    observed ratio >= the task's required min_pair_ratio; a missing or
+    observed ratio >= the task's required min_pair_ratio + the declared
+    constraint-witness block evaluating clean (verdict = witness AND
+    outcome; an undeclared workspace warns and fails open); a missing or
     unreadable evidence file FAILs (the checker always writes it — no
     vacuous pass)."""
+    candidate_events: list[dict] = []
     candidate = model.resolve_candidate(
-        ctx.ws, Path(ctx.state.task_dir) / "task.yaml")
+        ctx.ws, Path(ctx.state.task_dir) / "task.yaml",
+        events=candidate_events)
     if not candidate.is_file():
         return _record(ctx, "ORACLE", "oracle", model.BLOCKED, None, None,
                        0, {"stop_class": "no-candidate",
-                           "expected": str(candidate)},
+                           "expected": str(candidate),
+                           "candidate_events": candidate_events},
                        [candidate])
     checker = model.resolve_checker(
         ctx.repo, family_of(Path(ctx.state.task_dir)), ctx.state.unit)
@@ -2635,6 +2660,7 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
         "verdict": verdict, "metrics": parsed["metrics"],
         "failures": parsed["failures"],
         "checker": str(checker), "candidate": str(candidate),
+        "candidate_events": candidate_events,
         "eval_evidence": parsed["evidence_path"],
         "eval_evidence_note": "repo-local, gitignored, never committed",
     }
@@ -2675,6 +2701,17 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
     if violations:
         status = model.FAIL
     detail["contamination_violations"] = violations
+    # the constraint-witness leg: verdict = witness AND outcome. A row
+    # whose declared check trips turns the oracle RED even with a green
+    # outcome; an undeclared workspace fails open with a warning (the
+    # hard refusal lives at intake + the dispatch gate).
+    witness = constraint_witness.evaluate(
+        Path(ctx.ws), ctx.repo,
+        run=lambda cmd, cwd: ctx.cmd(
+            cmd, cwd=cwd,
+            timeout=constraint_witness.WITNESS_TIMEOUT_S)[0])
+    detail["constraint_witness"] = witness
+    status = constraint_witness.joint(status, witness["status"])
     return _record(ctx, "ORACLE", "oracle", status, out.rc, out, ms,
                    detail, [candidate, checker])
 
@@ -2682,6 +2719,96 @@ def checkpoint_oracle(ctx: RunContext) -> model.CheckpointResult:
 # ---------------------------------------------------------------------------
 # driver
 # ---------------------------------------------------------------------------
+
+#: #681: the monotone delivery file — always points at the run's current
+#: best candidate while one exists (ws-relative path + digest).
+DELIVERABLE_BEST_SO_FAR_REL = ("runs", "deliverable-best-so-far.json")
+
+#: #681: the DISTINCT final label when the pipeline's own stages never
+#: reached ALL-PASS but the unit's independent checker PASSes the
+#: delivered candidate — completion is the checker's call (D-681.1), and
+#: the blocked stage stays visible in the checkpoint table.
+CHECKER_PASS_STATUS = "checker-PASS"
+
+
+def _resolve_best_so_far(ctx: RunContext) -> Path | None:
+    """The run's current candidate at the unit's contract path, or None
+    (typed events ride the ORACLE evidence, not this hand-off)."""
+    try:
+        candidate = model.resolve_candidate(
+            ctx.ws, Path(ctx.state.task_dir) / "task.yaml")
+    except Exception as exc:  # noqa: BLE001 — fail-open hand-off
+        kunglao_log.warn("e2e.best_so_far",
+                         f"{type(exc).__name__}: {exc}")
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _deliver_best_so_far(ctx: RunContext, final_status: str) -> None:
+    """#681 T2: monotone delivery — while a candidate exists at the
+    unit's contract path, runs/deliverable-best-so-far.json points at it
+    (ws-relative + sha256). Written on EVERY finalize, whatever the
+    label; never deleted when a later resume finds nothing (monotone: a
+    delivered artifact is not retracted). Fail-open: any error warns
+    once and costs the file, never the report."""
+    try:
+        candidate = _resolve_best_so_far(ctx)
+        if candidate is None:
+            return
+        payload = {
+            "schema": "e2e-deliverable/1",
+            "run_id": ctx.state.run_id,
+            "unit": ctx.state.unit,
+            "family": ctx.state.family,
+            "final_status": final_status,
+            "candidate_rel": str(candidate.relative_to(Path(ctx.ws))),
+            "candidate_sha256": hashlib.sha256(
+                candidate.read_bytes()).hexdigest(),
+            "recorded_ts": model.utc_now(),
+        }
+        out = Path(ctx.ws) / Path(*DELIVERABLE_BEST_SO_FAR_REL)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — delivery never breaks finalize
+        kunglao_log.warn("e2e.deliver_best_so_far",
+                         f"{type(exc).__name__}: {exc}")
+
+
+def _checker_completion_ruling(ctx: RunContext,
+                               results: list[model.CheckpointResult],
+                               final_status: str, exit_code: int
+                               ) -> tuple[str, int]:
+    """#681 / D-681.1: completion IS the independent checker's PASS.
+
+    Scope: the delivery-starved labels — BLOCKED and PARTIAL. When the
+    run stopped short of ALL-PASS on one of those AND a best-so-far
+    candidate exists, the ORACLE step runs NOW (T4: ORACLE-on-partial /
+    -blocked — the stage loop's early break must not starve the
+    delivery judgment) unless it already ran this session. An ORACLE
+    PASS upgrades the label to the distinct checker-PASS + exit 0;
+    anything else keeps the pipeline's own label and code. A checkpoint
+    FAIL stays FAIL by design (a fabricated success there would launder
+    a real defect — the candidate still reaches the operator through
+    the delivery file). Fail-open: a raising checker warns once and
+    never loses the report."""
+    if final_status not in ("BLOCKED", "PARTIAL"):
+        return final_status, exit_code
+    try:
+        if _resolve_best_so_far(ctx) is None:
+            return final_status, exit_code  # nothing delivered to judge
+        oracle = next((r for r in results if r.checkpoint == "ORACLE"),
+                      None)
+        if oracle is None:
+            oracle = checkpoint_oracle(ctx)  # evidence + audit row land
+            results.append(oracle)
+        if oracle.status == model.PASS:
+            return CHECKER_PASS_STATUS, model.EXIT_OK
+    except Exception as exc:  # noqa: BLE001 — the ruling never loses the report
+        kunglao_log.warn("e2e.checker_completion_ruling",
+                         f"{type(exc).__name__}: {exc}")
+    return final_status, exit_code
 
 
 def _resume_hygiene(plan, state) -> None:
@@ -2762,6 +2889,12 @@ def run_pipeline(args: model.PipelineArgs, cmd_runner=None, clock=None,
         state.budget_consumed_seconds = max(
             state.budget_consumed_seconds,
             clock.monotonic() - state.started_monotonic)
+        # #681: the checker is the completion oracle (D-681.1) — the
+        # ruling may append the ORACLE result; the monotone hand-off
+        # delivers the best-so-far candidate whatever the label is.
+        status, code = _checker_completion_ruling(
+            ctx, results, status, code)
+        _deliver_best_so_far(ctx, status)
         final_verdict = _final_verdict_of(evidence_dir)
         _harvest_scripts(ctx)  # #477: once per finalize; cages itself
         report = evidence.build_report(

@@ -73,6 +73,9 @@ _WARN_LAST: dict[str, str] = {}
 _DEGRADED: dict[str, str] = {}
 
 
+# the boot-order warn twin: kunglao_log.warn is canonical, but this
+# module runs before that import lands — the shape is deliberate,
+# the rate-limit state is NOT shared with the canonical face.
 def warn(op: str, reason: str) -> None:
     if _WARN_LAST.get(op) == reason:
         return
@@ -499,13 +502,44 @@ def main(argv: list[str] | None = None) -> int:
     # scheduler is recorded and NEVER fails the tick. Sits where the old
     # hand-wired advisory block sat — before the report write and before the
     # cockpit sample + snapshot, so both still reflect the post-retro lag.
+    # The zero-work park posture: when the parked conjunction holds (zero
+    # dispatchable actions, zero fresh active workers, no fresh wake-class
+    # bus rows, state fingerprint unchanged since the persisted noop hash;
+    # a cold start never parks), the machinery pass AND the settlement/
+    # cockpit block are skipped — the tick budget stays with the analysis
+    # instead of re-proving a quiet workspace every interval. The liveness
+    # core above, the watchdog verdict and the noop breaker below stay
+    # armed on every parked pass; the breaker (not the park) owns the stop
+    # verdict, so a parked chain escalates exactly as an idle chain always
+    # did. The park never lengthens cadence past the activation TTL — it
+    # is the cadence advisor's quiet branch at its ceiling, nothing more.
+    # Fail-open: a crashed park evaluation degrades to NOT-parked (the
+    # machinery runs), and action_taken names the park (an empty field is
+    # the idle fault).
+    parked = False
     try:
-        payload = _run_mechanisms(ws, runner=run)
-    except Exception as exc:  # noqa: BLE001 — a crashed scheduler never fails the tick
-        payload = {"mechanisms": {"error": [f"scheduler unavailable: {exc}"],
-                                  "ran": [], "skipped": [], "dropped": []}}
-    report["mechanisms"] = payload.pop("mechanisms")
-    report.update(payload)
+        import mechanism_scheduler as _ms
+        parked = _ms.is_parked(ws)
+    except Exception as exc:  # noqa: BLE001 — a failed park never parks
+        warn("park_evaluation", f"{type(exc).__name__}: {exc}")
+    if parked:
+        report["mechanisms"] = {"ran": [], "skipped": [], "dropped": [],
+                                "events_seen": [], "parked": True}
+        report["parked"] = {
+            "reason": ("dispatchable=0 active=0 events=0 "
+                       "fingerprint=unchanged"),
+            "wake": []}
+        report["action_taken"] = (
+            "PARK zero-work idle posture — no dispatchable action, no "
+            "active worker, no fresh event; machinery skipped this pass")
+    else:
+        try:
+            payload = _run_mechanisms(ws, runner=run)
+        except Exception as exc:  # noqa: BLE001 — a crashed scheduler never fails the tick
+            payload = {"mechanisms": {"error": [f"scheduler unavailable: {exc}"],
+                                      "ran": [], "skipped": [], "dropped": []}}
+        report["mechanisms"] = payload.pop("mechanisms")
+        report.update(payload)
     # H1a (autoresearch thin-base): the tick's forensics faces ride the
     # ledger event bus. `events_seen` = the wake classes this pass consumed
     # (settlement/stall/plan_review); no event -> the faces are skipped and
@@ -615,20 +649,23 @@ def main(argv: list[str] | None = None) -> int:
     # (H1a: the old `settlement_hosted` flag only proved ledger EXISTENCE —
     # true every tick — and gated nothing anymore; the snapshot face moved
     # to the real event gate `tick_events` above.)
-    try:
-        if (ws / "runs" / "mission_ledger.yaml").exists():
-            import mission_ledger as _ml
-            _ml.update(ws)
-            if _mission_history_due(ws):
-                _ml.value_m(ws)
-            from tuition_curve import cockpit_summary
-            kunglao_log.emit(
-                Path(ws), actor="heartbeat_tick",
-                action="cockpit_sample",
-                detail=json.dumps(cockpit_summary(ws),
-                                  ensure_ascii=False))
-    except Exception as exc:  # noqa: BLE001 — cockpit 采样永不打断 tick
-        warn("cockpit_sample", f"{type(exc).__name__}: {exc}")
+    # Parked passes skip the block with the machinery (the park/preserved
+    # split) — a quiet workspace re-proves nothing.
+    if not parked:
+        try:
+            if (ws / "runs" / "mission_ledger.yaml").exists():
+                import mission_ledger as _ml
+                _ml.update(ws)
+                if _mission_history_due(ws):
+                    _ml.value_m(ws)
+                from tuition_curve import cockpit_summary
+                kunglao_log.emit(
+                    Path(ws), actor="heartbeat_tick",
+                    action="cockpit_sample",
+                    detail=json.dumps(cockpit_summary(ws),
+                                      ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001 — cockpit 采样永不打断 tick
+            warn("cockpit_sample", f"{type(exc).__name__}: {exc}")
 
     # step 11b (#142 follow-up, dual-use display): the SAME entropy-honesty
     # values the statusline renders ride the tick report. Computed AFTER the

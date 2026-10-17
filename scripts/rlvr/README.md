@@ -30,6 +30,12 @@ package surface; execution is **phase-gated**:
 scripts/rlvr/
 ├── __init__.py          # THE one import point + one export map
 ├── ledger.py            # rollout_ledger (U1) — append-only settlement ledger
+├── consolidated_ledger.py  # #721 the 4-file consolidation core —
+│                        #   experience/settlement/telemetry under runs/ +
+│                        #   knowledge under the guarded root; append()
+│                        #   (flock, stamp-refusing) / read() (legacy-first,
+│                        #   stamp filter) / liveness() / migrate()
+│                        #   (append-only, bytes-archived, idempotent)
 ├── reward.py            # reward_settlement (U2/U3) — band/reward engine
 ├── scalar.py            # scalar_settlement — tiers, tuples, Normal-Gamma,
 │                        #   round credit, trajectory validator
@@ -190,6 +196,19 @@ never an obstacle claim.
 | `main()` | `rlvr.termination` (CLI `report` subcommand — offline diagnostic; live faces are library calls consumed by the sampler hosts) |
 | `_death_multiplier()` | `rlvr.q_cells` (the sampler-side duck-typed verdict application: weight x multiplier, additive receipt block, malformed -> 1.0 fail-open; the sampler never imports the termination/obstacles faces — the import wall) |
 
+### l1_value + l1_planner — the L1 layer (the orchestration learner)
+
+| face | home |
+|------|------|
+| `compute_rollout_return()`, `ROLLOUT_GAMMA` | `rlvr.l1_value` (the return: `R(τ) = Σ γ^t·r_t` — the discounted SUM, terminal-dominated; γ=1.0 shipped, the exact telescope; never the mean) |
+| `record_terminal_return()`, `record_observation()` | `rlvr.l1_value` (the `l1-value-obs/1` append face; called from `scalar.settle_round_credit`'s first-settlement tick; no dispatch-time signature -> no row, ONE warn) |
+| `fold()`, `ValueFold`, `ValueCounts`, `cell_posterior()`, `sample_value()`, `seed_state()` | `rlvr.l1_value` (the (state_signature, action_kind) Beta cells + the q_cells DTS machinery mirrored; the #428 adaptive schedule imported; `seed_state` = f(store, round)) |
+| `value_table()`, `main()` | `rlvr.l1_value` (CLI `--table` — the offline cell table; the live faces are library calls) |
+| `candidate()`, `Candidate`, `plan()`, `plan_for_claim()` | `rlvr.l1_planner` (the policy: one DTS draw per candidate, argmax value/cost — park is the 0-ratio baseline; reuse joins on solved knowledge; no trigger rules exist) |
+| `knowledge_query()` | `rlvr.l1_planner` (register / facts index / cross-task store, each fail-open; `answer_strength` = the answer faces only — lifecycle is not an answer) |
+| `advisory_factors()` | `rlvr.l1_planner` (the rank path's additive consumption: {} while the value store is empty — byte identity — else the dispatch share per claim) |
+| `ACTION_KINDS`, `VALUE_SCALE`, `REUSE_COST`, `PARK_COST` | `rlvr.l1_planner` / `rlvr.l1_value` (the closed action vocabulary + documented policy constants — never runtime-tuned) |
+
 ### liveness — from `scripts/heartbeat.py` (continuity core) + `scripts/liveness_policy.py` (constants)
 
 | current face | final home |
@@ -199,6 +218,38 @@ never an obstacle claim.
 | `gap_alarm()`, `newest_sidecar_ts()`, `append_tick_log()`, `heartbeat_log_path()` | `rlvr.liveness` (the #830 durable sidecar faces) |
 | `heartbeat_register()`, `heartbeat_check()`, `heartbeat_off()`, `mark_loop_registered()` | stay CLI faces of the heartbeat script adapter; the package provides the judgment core they call |
 | `liveness_policy.*` constants (`STALE_MINUTES`, `CONTINUITY_WINDOW_*`, `TICK_INTERVAL_DEFAULT_MIN`, ...) | `scripts/liveness_policy.py` stays THE constant source (the #597 adjudication); `rlvr.liveness` re-exports, never redefines |
+
+
+## The compact index (modules the face map above doesn't cover)
+
+The face map above covers the consolidation wave's homes. Every other
+module carries its full contract in its own docstring — this index is
+the one-line pointer (name — the docstring's opening line):
+
+- `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
+- `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+- `constants_ref` — rlvr.constants_ref — the reference hash constant tables (entropy
+- `crystallize` — crystallize.py — the settlement writes knowledge back.
+- `expansion` — rlvr/expansion.py — the discovery-layer operator (issue #546, WS4 /
+- `hypotheses` — rlvr.hypotheses — layer-scoped hypotheses + counterexample refinement
+- `incremental_reward` — rlvr/incremental_reward.py — potential-based per-act reward + the
+- `invariants` — rlvr.invariants — the invariant-pruning operator (entropy reduction).
+- `marl` — marl.py — the MARL knowledge-transfer protocol (#705).
+- `meta_arms` — meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms,
+- `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
+- `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
+- `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
+- `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
+- `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
+- `source_reliability` — rlvr/source_reliability.py — the learned source-reliability Betas.
+- `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
+- `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
+- `step_ledger` — rlvr/step_ledger.py — the shadow experience substrate (the online
+- `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
+- `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
+
+New modules: add the file, add the `from . import` line in
+`__init__.py` (the facade test enforces it), add one row here.
 
 ## The determinism wall (settlement settlement receipts)
 

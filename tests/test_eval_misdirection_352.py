@@ -59,6 +59,12 @@ sys.path.insert(0, str(SCRIPTS))
 import eval_dataset as ds  # noqa: E402
 import eval_misdirection as md  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 EXPECTED_TASK_IDS = {
     "m1-fileperm-v1", "m1-net403-v1", "m1-execperm-v1",
     "m2-session-v1", "m2-request-v1", "m2-timer-v1",

@@ -9,7 +9,13 @@ progressed while the files never caught up")
 
 6 drift types detected:
   1. ORPHAN_CLAIM: claim in claim-register.yaml but NOT in global_plan.txt
-     (mid-iteration discovery not logged in plan)
+     (mid-iteration discovery not logged in plan). Terminal-status claims
+     are exempt: the rendered plan face carries the open thread only, so a
+     terminal claim is structurally unrepresentable there — flagging it
+     re-fired after every re-render and blocked dispatch forever. An
+     unlogged frontier item is by definition not terminal, and the
+     remaining classes (UNVERIFIED_EVIDENCE, STALE_NEXT_STEP) keep
+     auditing the terminal claims themselves.
   2. STALE_PLAN_ENTRY: global_plan.txt lists claim that no longer exists
      in claim-register.yaml (abandoned/decomposed, not removed)
   3. MISSING_DEP_LINK: claim has parent_claim but claim_deps.yaml doesn't
@@ -69,6 +75,7 @@ warn = make_warn("plan_drift_detector")
 import gate_telemetry as _gt
 from status_defs import TERMINAL
 from _common import atomic_write_text
+from dual_gate import MAX_REPLANS as STALE_WARN_MAX_REPLANS
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
 
 import argparse
@@ -513,17 +520,25 @@ def _print_stale_plan_warns(warns: list) -> None:
         print(f"    ... and {len(warns) - 5} more")
 
 
-def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
+def _emit_stale_plan_warns(workspace: Path, warns: list, sig: str = "",
+                           act: str = "replan") -> None:
     """#459 observability: class-7 WARN face -> unified event log, one event
     per item (claim carries the warn's claim_id so a tail can filter). The
     warn is observe-only on stdout and never changes the exit code — neither
-    may the emit (fail-open, kunglao_record posture)."""
+    may the emit (fail-open, kunglao_record posture). Called only by the
+    stale-warn gate below on an escalate round: detail names the ACT taken
+    (the replan remedy recorded) so the taxonomy entry stays the decision
+    record, not a per-evaluation heartbeat."""
     for w in warns:
         try:
             from kunglao_log import emit
             emit(workspace, actor="orchestrator",
                  action="stale_plan_on_new_evidence",
-                 claim=w.get("claim_id"), detail=w.get("fix"))
+                 claim=w.get("claim_id"),
+                 detail=json.dumps({
+                     "act": act, "suppressed": False, "sig": sig,
+                     "items": _stale_warn_items(warns), "fix": w.get("fix"),
+                 }, ensure_ascii=False, sort_keys=True))
         except Exception as exc:
             warn("_emit_stale_plan_warns", f"{type(exc).__name__}: {exc}")
 
@@ -737,6 +752,254 @@ def plan_repair_tick(workspace: Path, drifts: list) -> dict | None:
         return None
 
 
+# --- the stale-plan warn gate: escalate once, then suppress ----------------
+#
+# The class-7 warn is evaluated on EVERY dispatch attempt by two hook faces
+# (dispatch gate --auto, worker budget warn-only); emitted unconditionally
+# it was a treadmill — one stale claim warned 43 times in 5h with zero
+# escalations and zero suppressions, because nothing read it back. The gate
+# gives the warn an episode state (same posture as plan_repair_tick):
+#
+#   - signature = sha1 over [sorted (kind, claim_id) items + plan_version];
+#     the plan_version leg is global_plan.txt's mtime_ns, so the act's own
+#     mechanical re-render is a signature change (a re-derived plan re-arms
+#     the warn once, and only once);
+#   - first sight of a signature -> ESCALATE once: the act face records the
+#     replan remedy and re-derives the plan from the timeline projection;
+#   - unchanged signature -> SUPPRESS-record at the plan-repair window
+#     cadence (same action word, detail carries suppressed=true), never
+#     per-evaluation;
+#   - the replan leg is bounded per warn set at the dual-gate replan limit;
+#     at the cap the escalation goes to the operator lane (the
+#     signal_gate_escalate reason=replan_limit precedent) instead of a
+#     further mechanical replan;
+#   - liveness: the face emits the detector_eval / detector_fired pair —
+#     one eval per warn-bearing evaluation, one fire per escalation;
+#     suppressions are evals-only.
+
+STALE_WARN_STATE_FILE = "runs/plan-drift-warn-state.json"
+STALE_WARN_WINDOW_ROUNDS = PLAN_REPAIR_WINDOW_ROUNDS  # one cadence, one source
+STALE_WARN_DETECTOR = "stale_plan_on_new_evidence"
+
+
+def _stale_warn_items(warns: list) -> list:
+    """Canonical warn-set items: 'kind:claim_id', sorted + deduped. kind is
+    'failure' (an analyses/ record) or 'obstacle-register' (the promoted
+    obstacle lane — the only claim_id the finder ever spells that way)."""
+    items = []
+    for w in warns:
+        kind = ("obstacle-register"
+                if w.get("claim_id") == "claim-register" else "failure")
+        items.append(f"{kind}:{w.get('claim_id')}")
+    return sorted(set(items))
+
+
+def _stale_warn_signature(items: list, plan_version: str) -> str:
+    """sha1 over the sorted items plus the plan version (mtime_ns str)."""
+    payload = "\n".join([*items, f"plan_version={plan_version}"])
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def _read_warn_state(state_path: Path) -> dict | None:
+    """Fresh-or-heal read: absent -> None (fresh episode); corrupt -> None
+    with one stderr annotation — the gate degrades to escalate-once rather
+    than wedging on an unreadable episode (fail-open, the plan-repair
+    posture)."""
+    if not state_path.exists():
+        return None
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        warn("stale_warn_state_read",
+             f"{type(exc).__name__}: {exc} — gate degrades to "
+             f"escalate-once (fail-open)")
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def _write_warn_state(state_path: Path, state: dict) -> None:
+    """Fail-open state write — the same atomic tmp+replace posture as the
+    plan-repair state writer (telemetry never breaks the check)."""
+    try:
+        atomic_write_text(
+            state_path,
+            json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError as exc:
+        warn("stale_warn_state_write",
+             f"{type(exc).__name__}: {exc!r} — state write skipped")
+
+
+def _detector_liveness_emit(workspace: Path, word: str, detail: dict) -> None:
+    """Fail-open liveness face (the unified-log pair the liveness read
+    face counts; actor = the detector's module)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="plan_drift_detector", action=word,
+             detail=json.dumps(detail, ensure_ascii=False, sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort
+        warn("_detector_liveness_emit", f"{type(exc).__name__}: {exc}")
+
+
+def _stale_warn_act(workspace: Path, items: list, sig: str) -> None:
+    """The escalate leg's act face: attribute the replan, record the
+    verdict when a stage model exists, re-derive the plan face from the
+    timeline projection. Every leg is fail-open and every payload is
+    mechanical: the replacement stage skeleton is carried forward verbatim
+    and the plan is the projection re-render — nothing model-authored
+    executes here (a detection face proposes mechanically; it never
+    authors plan content)."""
+    ws = Path(workspace)
+    try:
+        (ws / "runs").mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        warn("_stale_warn_act",
+             f"runs dir mkdir skipped: {type(exc).__name__}: {exc}")
+    reason = "stale-plan-on-new-evidence: " + ",".join(items)
+    try:
+        import planning_actions
+        # the registry's canonical, level-namespaced action name
+        planning_actions.record(ws, "policy.replan",
+                                step_ref=f"stale-plan-warn:{sig[:16]}",
+                                detail=reason)
+    except Exception as exc:  # noqa: BLE001 — attribution is fail-open
+        warn("_stale_warn_act",
+             f"attribution skipped: {type(exc).__name__}: {exc}")
+    try:
+        import plan_stages
+        stages = plan_stages.load(ws).get("stages") or []
+        if stages:
+            plan_stages.review(ws, "replan", "", reason=reason,
+                               new_stages=stages)
+    except Exception as exc:  # noqa: BLE001 — the verdict leg is fail-open
+        warn("_stale_warn_act",
+             f"stage review skipped: {type(exc).__name__}: {exc}")
+    try:
+        import timeline_face
+        timeline_face.render_and_write(ws)
+    except Exception as exc:  # noqa: BLE001 — the re-derive is fail-open
+        warn("_stale_warn_act",
+             f"re-derive skipped: {type(exc).__name__}: {exc}")
+
+
+def _stale_warn_suppress(ws: Path, state_path: Path, state: dict,
+                         sig: str, items: list) -> str:
+    """The unchanged-signature tick: advance the round counter, record at
+    the window cadence (same action word, suppressed=true — cadence, not
+    silence, and never per-evaluation)."""
+    rounds = int(state.get("rounds") or 0) + 1
+    state = {**state, "rounds": rounds, "updated": utc_now()}
+    if rounds % STALE_WARN_WINDOW_ROUNDS == 0:
+        _emit_stale_plan_warns_face(ws, None, {
+            "suppressed": True, "sig": sig, "rounds": rounds,
+            "items": items, "window": STALE_WARN_WINDOW_ROUNDS})
+        warn("stale_plan_suppressed",
+             f"the stale-plan warn signature persisted for {rounds} "
+             f"evaluation round(s) (window={STALE_WARN_WINDOW_ROUNDS}) "
+             f"- the escalate face already ran for this signature")
+    _write_warn_state(state_path, state)
+    return "suppress"
+
+
+def _emit_stale_plan_warns_face(workspace: Path, claim, detail: dict) -> None:
+    """Fail-open single-row emit for the gate faces (kunglao_record
+    posture)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator",
+             action="stale_plan_on_new_evidence", claim=claim,
+             detail=json.dumps(detail, ensure_ascii=False, sort_keys=True))
+    except Exception as exc:
+        warn("_emit_stale_plan_warns_face", f"{type(exc).__name__}: {exc}")
+
+
+def _stale_warn_gate(workspace: Path, warns: list, plan_path) -> str:
+    """One evaluation of the class-7 face. Returns the stdout decision:
+    'escalate' prints the observe-only block, 'suppress'/'quiet' print
+    nothing there (the ledger faces above carry the record)."""
+    ws = Path(workspace)
+    if not warns:
+        return "quiet"
+    items = _stale_warn_items(warns)
+    try:
+        plan_version = (str(plan_path.stat().st_mtime_ns)
+                        if plan_path else "")
+    except OSError:
+        plan_version = ""
+    sig = _stale_warn_signature(items, plan_version)
+    _detector_liveness_emit(ws, "detector_eval",
+                            {"detector": STALE_WARN_DETECTOR,
+                             "sig": sig, "items": items})
+    state_path = ws / STALE_WARN_STATE_FILE
+    state = _read_warn_state(state_path)
+    if state is not None and state.get("sig") == sig:
+        return _stale_warn_suppress(ws, state_path, state, sig, items)
+    same_items = bool(state) and (state.get("items") or []) == items
+    replans = int(state.get("replans") or 0) if same_items else 0
+    if same_items and replans >= STALE_WARN_MAX_REPLANS:
+        if state.get("escalated"):
+            return _stale_warn_suppress(
+                ws, state_path,
+                {**state, "sig": sig, "plan_version": plan_version},
+                sig, items)
+        # the operator lane (the dual-gate replan-limit face): no further
+        # mechanical replan — a human decides
+        try:
+            from kunglao_log import emit
+            emit(ws, actor="plan_drift_detector",
+                 action="signal_gate_escalate",
+                 detail=json.dumps(
+                     {"reason": "replan_limit",
+                      "detector": STALE_WARN_DETECTOR, "sig": sig,
+                      "items": items, "replans": replans},
+                     ensure_ascii=False, sort_keys=True))
+        except Exception as exc:  # noqa: BLE001 — observability is best-effort
+            warn("_stale_warn_gate", f"{type(exc).__name__}: {exc}")
+        _emit_stale_plan_warns_face(ws, None, {
+            "act": "operator-escalation", "suppressed": False, "sig": sig,
+            "items": items, "replans": replans})
+        _detector_liveness_emit(ws, "detector_fired",
+                                {"detector": STALE_WARN_DETECTOR,
+                                 "act": "operator-escalation", "sig": sig,
+                                 "items": items})
+        now = utc_now()
+        _write_warn_state(state_path, {**state, "sig": sig,
+                                       "items": items,
+                                       "plan_version": plan_version,
+                                       "rounds": 1, "replans": replans,
+                                       "escalated": True,
+                                       "act": "operator-escalation",
+                                       "updated": now})
+        return "escalate"
+    # first sight of this signature: the act face runs, the warn becomes a
+    # decision record
+    _stale_warn_act(ws, items, sig)
+    _emit_stale_plan_warns(ws, warns, sig)
+    _detector_liveness_emit(ws, "detector_fired",
+                            {"detector": STALE_WARN_DETECTOR,
+                             "act": "replan", "sig": sig, "items": items})
+    now = utc_now()
+    _write_warn_state(state_path, {"status": "open", "sig": sig,
+                                   "items": items,
+                                   "plan_version": plan_version,
+                                   "rounds": 1, "replans": replans + 1,
+                                   "escalated": False, "act": "replan",
+                                   "opened": now, "updated": now})
+    return "escalate"
+
+
+def stale_warn_gate(workspace: Path, warns: list, plan_path) -> str:
+    """Fail-open wrapper: a gate crash never breaks check() — it degrades
+    to the pre-gate observe face (the warn block still prints) with one
+    annotated stderr trace."""
+    try:
+        return _stale_warn_gate(workspace, warns, plan_path)
+    except Exception as exc:  # noqa: BLE001 — the gate must never break
+        # the detector (annotated fail-open, silent-except ratchet form)
+        warn("stale_warn_gate_skipped",
+             f"{type(exc).__name__}: {exc!r} — gate degrades to escalate")
+        return "escalate"
+
+
 @_gt.telemetry('plan_drift_detector')
 def check(workspace: Path, active_only: bool = False) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
@@ -776,7 +1039,14 @@ def check(workspace: Path, active_only: bool = False) -> int:
     if plan_refers_to_register:
         for c in claims:
             cid = c.get("id")
-            if cid and plan_path and cid not in plan_ids:
+            # Terminal claims never appear in a rendered plan face (the
+            # renderer filters them out by construction), so their absence
+            # is not drift — without this exemption the same ORPHAN rows
+            # returned after every re-render and gated dispatch forever.
+            # The frontier classes still cover every non-terminal claim.
+            if cid and plan_path and cid not in plan_ids \
+                    and str(c.get("status") or "").upper() \
+                    not in TERMINAL_STATUSES:
                 drifts.append({
                     "type": "ORPHAN_CLAIM",
                     "claim_id": cid,
@@ -871,13 +1141,16 @@ def check(workspace: Path, active_only: bool = False) -> int:
     # #497: stale-plan-on-new-evidence — WARN-level by design (observe-first):
     # collected here, printed below, NEVER counted toward the exit codes.
     stale_plan_warns = find_stale_plan_on_new_evidence(workspace, plan_path, claims)
-    # #459: the class-7 WARN also reaches the unified event log (the Orient
-    # layer should not have to re-derive mtimes to see the drift).
-    _emit_stale_plan_warns(workspace, stale_plan_warns)
+    # the stale-warn gate: escalate-once-then-suppress for the class-7 warn
+    # (the treadmill fix); the escalate leg carries the mechanical replan
+    # act and owns the ledger emission — the per-evaluation unconditional
+    # emit is gone.
+    stale_decision = stale_warn_gate(workspace, stale_plan_warns, plan_path)
 
     if not drifts:
         print("OK: no plan drift detected")
-        _print_stale_plan_warns(stale_plan_warns)
+        if stale_decision == "escalate":
+            _print_stale_plan_warns(stale_plan_warns)
         plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
         return 0
 
@@ -892,7 +1165,8 @@ def check(workspace: Path, active_only: bool = False) -> int:
             print(f"    - {d['claim_id']}: {d['fix']}")
         if len(items) > 5:
             print(f"    ... and {len(items) - 5} more")
-    _print_stale_plan_warns(stale_plan_warns)
+    if stale_decision == "escalate":
+        _print_stale_plan_warns(stale_plan_warns)
     plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
     _emit_verdict(workspace, drifts, 2 if len(drifts) >= 3 else 1)  # issue 293 verdict
     # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
@@ -922,7 +1196,20 @@ def check_auto(workspace: Path, active_only: bool = False) -> int:
       - check_auto() prints ONE summary line classifying the severity
         ("DRIFT_AUTO: ok / warn-only / blocked") so the operator tail
         can grep for it; it does NOT suppress the underlying report.
+      - The classification scan runs BEFORE check(): the stale-warn
+        gate's escalate leg may remedy the warn inside check() (the
+        mechanical re-render clears the mtime warn), and the
+        classification must judge the warn state the dispatch attempt
+        walked in with, not the post-act state.
     """
+    try:
+        warns = find_stale_plan_on_new_evidence(
+            workspace,
+            _first_existing_plan(workspace),
+            _load_yaml(workspace / "claim-register.yaml").get("claims", []) or [],
+        )
+    except Exception:
+        warns = []
     drifts_rc = check(workspace, active_only=active_only)
     # check() prints to stdout; we add one classification line below.
     if drifts_rc == 0:
@@ -932,18 +1219,11 @@ def check_auto(workspace: Path, active_only: bool = False) -> int:
         # If we already saw WARN output above we are in the WARN-only path.
         # Cheap heuristic: a WARN-only run prints "WARN" to stdout.
         # check() already consumed stdout; we cannot read what it wrote.
-        # Instead, peek at the workspace ourselves for evidence-newer-than-plan
-        # signals and surface the WARN-only classification here. This is the
-        # SAME mtime comparison check() runs — duplicated here only to
-        # decide the auto exit code, not to print anything new.
-        try:
-            warns = find_stale_plan_on_new_evidence(
-                workspace,
-                _first_existing_plan(workspace),
-                _load_yaml(workspace / "claim-register.yaml").get("claims", []) or [],
-            )
-        except Exception:
-            warns = []
+        # Instead, we scanned the workspace ourselves (before check()) for
+        # evidence-newer-than-plan signals and surface the WARN-only
+        # classification here. This is the SAME mtime comparison check()
+        # runs — duplicated only to decide the auto exit code, not to
+        # print anything new.
         if warns:
             print("DRIFT_AUTO: warn-only (STALE_PLAN_ON_NEW_EVIDENCE) -> SATURATED")
             return 3

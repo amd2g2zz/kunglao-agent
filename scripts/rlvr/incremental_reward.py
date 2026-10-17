@@ -13,7 +13,12 @@ change, no sampling change, no critic.
 Reward form (design doc docs/design/external-smdp-phase-b.md §2):
 
     r_t = ALPHA * [Φ(s') - Φ(s)] - LAMBDA * cost_t
-    Φ(s) = W_FACTS * verified_facts_fraction + W_ORACLE * oracle_green_rate
+    Φ(s) = W_FACTS * graded_fact_fraction + W_ORACLE * oracle_green_rate
+
+(the facts term is fact_face's graded ``weighted_fraction`` since
+issue-678 D-678.5 — certified 1.0 / present 0.5 / draft 0.25; the
+binary verified-count it replaced made Φ degenerate in live
+workspaces)
 
 Φ is a potential function — potential-based shaping (Ng, Harada & Russell
 1999) preserves the optimal-policy order, so layering it over the
@@ -23,22 +28,35 @@ coefficients are DOCUMENTED POLICY CONSTANTS (the state.py precedent:
 most three; ALPHA/LAMBDA ride at 1.0 until the offline comparison says
 otherwise.
 
-The transition ledger is append-only runs/transitions.jsonl — the s'
-face the 2026-09-27 quadruple-rejection pin denied; the 2026-10-06
-ruling (external SMDP, transition recording authorized) overturns that
-pin (see scripts/rlvr/triples.py's docstring pin block for the citation).
+The transition ledger is append-only — runs/transitions.jsonl through
+v0.1.6, runs/experience.jsonl since #721 (the consolidated
+WHAT-HAPPENED file: transitions + q-cell observations + step records —
+one logical experience, one physical file). Rows carry the
+``transition/1`` stamp so the multi-schema file stays attributable;
+the legacy path stays readable during the compat window and is archived
+(bytes intact) by the one-time migration. The ledger is the s' face the
+2026-09-27 quadruple-rejection pin denied; the 2026-10-06 ruling
+(external SMDP, transition recording authorized) overturns that pin
+(see scripts/rlvr/triples.py's docstring pin block for the citation).
 """
 from __future__ import annotations
 
 import json
+import re
 import uuid
 
 from _common import utc_now_z
 from pathlib import Path
 
 from rlvr.state import fact_face, _oracle_status_progress
+from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
-TRANSITIONS_REL = "runs/transitions.jsonl"
+# #721: the row stamp inside runs/experience.jsonl (the legacy
+# runs/transitions.jsonl rel lives in the consolidated_ledger LEGACY
+# registry — the single source). Transition rows carried no stamp
+# through v0.1.6; a multi-schema file makes the stamp mandatory
+# (attribution + per-schema liveness).
+TRANSITION_SCHEMA = "transition/1"
 LAUNCH_REL = "runs/dispatch-launch-{claim}.json"
 # #550: action-type-scoped stashes — a verify/red-team act keeps its own
 # stash so it never clobbers a pending dispatch stash for the same claim
@@ -48,6 +66,11 @@ LAUNCH_REL_TYPED = "runs/dispatch-launch-{claim}--{action_type}.json"
 # schema stamp is what append_transition's wall checks the doc against
 # (a foreign schema or a status-bearing envelope is never launch state).
 LAUNCH_SCHEMA = "dispatch-launch/1"
+# #690 review CRITICAL: claim/action_type are formatted into the stash
+# FILENAME, so both must be single path tokens — starts alnum, then
+# alnum / '.' / '_' / '-', bounded length. Traversal payloads
+# (``/``, ``..``, absolute paths) never match.
+_STASH_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 # ---- policy constants (design doc §2; NOT fitted) ------------------------
 ALPHA = 1.0          # potential-difference weight
@@ -61,12 +84,17 @@ COST_SECONDS_DIV = 3_600.0   # normalize: 1 wall hour = 1 cost unit
 def potential(ws) -> float:
     """Φ(s) ∈ [0, 1]: verified-facts fraction + oracle green rate,
     renormalized over PRESENT dims (a missing organ drops its dim —
-    the honest-absence doctrine, state.py precedent)."""
+    the honest-absence doctrine, state.py precedent). The facts term
+    reads fact_face's GRADED ``weighted_fraction`` (issue-678 D-678.5:
+    certified terminal 1.0 / present non-terminal 0.5 / draft 0.25), so
+    partially-verified workspaces produce INTERMEDIATE potentials — the
+    binary verified-count made Φ degenerate ({0.0, 1.0} in live
+    workspaces) and the transition ledger recorded no partial progress."""
     ws = Path(ws)
     parts: list[tuple[float, float]] = []  # (weight, value)
     ff = fact_face(ws)
     if ff["count"] > 0:
-        parts.append((W_FACTS, ff["verified"] / ff["count"]))
+        parts.append((W_FACTS, float(ff.get("weighted_fraction", 0.0))))
     oracle = _oracle_status_progress(ws)
     if oracle is not None:
         passed, total = oracle
@@ -88,10 +116,35 @@ def incremental_reward(phi_before: float, phi_after: float, *,
 def _launch_path(ws: Path, claim: str, action_type: str) -> Path:
     """The stash path for one action type: ""/"dispatch" keeps the
     legacy untyped filename (in-flight workspaces keep working); any
-    other type lands the scoped sibling (#550)."""
+    other type lands the scoped sibling (#550).
+
+    #690 review CRITICAL wall: the claim and action_type are formatted
+    into the FILENAME, so a worker-writable stash doc (or a malformed
+    envelope) carrying ``/`` / ``..`` would resolve outside runs/ and
+    the settle's unlink would delete an arbitrary workspace file
+    (reproduced: claim ``x/../../victim-important`` + a planted
+    intermediate dir deleted ws/victim-important.json). Both components
+    must be single safe path tokens or the path is refused (ValueError
+    -> the callers' fail-open warn + None)."""
+    for name, value in (("claim", claim), ("action_type", action_type)):
+        if value in ("", None):
+            continue
+        if not _STASH_TOKEN_RE.match(str(value)):
+            raise ValueError(
+                f"unsafe launch-stash {name} {value!r}: not a single "
+                f"path token (#690 — stash paths never leave runs/)")
     if action_type in ("", "dispatch"):
         return ws / LAUNCH_REL.format(claim=claim)
     return ws / LAUNCH_REL_TYPED.format(claim=claim, action_type=action_type)
+
+
+def _safe_stash_token(value) -> bool:
+    """One launch-stash path component is safe iff it is a single token:
+    starts alnum, then alnum / ``.`` / ``_`` / ``-`` only (no separators,
+    no dot-dot, no leading dot), bounded length. Claims (C-NN) and
+    action types (dispatch / verify / redteam / prediction-settle) all
+    pass; traversal payloads never do."""
+    return bool(_STASH_TOKEN_RE.match(str(value or "")))
 
 
 def verify_credit(verdict: str) -> float:
@@ -106,7 +159,8 @@ def verify_credit(verdict: str) -> float:
 def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
                   s_hash: str = "", propensity: float | None = None,
                   action_type: str = "dispatch",
-                  variant: str = "") -> dict | None:
+                  variant: str = "",
+                  branch_budget: dict | None = None) -> dict | None:
     """Stash the launch-side state at dispatch time — the settle face
     reads it to close the transition. Fail-open telemetry: never raises
     into the dispatch path. #550: action_type scopes the stash (a verify
@@ -114,7 +168,12 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
     (verify | redteam) rides the doc for the row's provenance. 1-F2:
     every launch stamps a fresh ``attempt_id`` (returned with the
     doc) so a settle that outlived a re-dispatch is refused instead of
-    banking the newer launch's state (append_transition's guard)."""
+    banking the newer launch's state (append_transition's guard).
+    #690: the dispatch envelope's branch_budget ({wall_s, retries} — the
+    act budget, parsed since #539 with zero consumers) rides the stash so
+    the settle face can price a wall_s overrun into attributed-waste and
+    the barrier can name the budget it is enforcing. Absent/empty keeps
+    the doc shape byte-identical."""
     try:
         ws = Path(ws)
         p = _launch_path(ws, claim, action_type)
@@ -131,10 +190,13 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             **({"variant": str(variant)} if variant else {}),
             **({"propensity": float(propensity)}
                if propensity is not None else {}),
+            **({"branch_budget": {str(k): v for k, v in
+                                  dict(branch_budget).items()}}
+               if branch_budget else {}),
         }
         p.write_text(json.dumps(doc), encoding="utf-8")
         return doc
-    except OSError as exc:  # telemetry, never the producer — but loud (#275)
+    except (OSError, ValueError) as exc:  # telemetry, never the producer
         from kunglao_log import warn  # noqa: PLC0415
         warn("incremental_reward.record_launch",
              f"{type(exc).__name__}: {exc}")
@@ -173,7 +235,11 @@ def append_transition(ws, claim: str, outcome: str, *,
     orchestrator PARKED envelope with a wake plan parked in this
     namespace); the settle is refused with ONE warn and the file is
     LEFT INTACT (consuming it would delete the wake plan). Legacy
-    schema-less stashes carry neither field and settle unchanged."""
+    schema-less stashes carry neither field and settle unchanged.
+    Issue-678 T4: every row carries the explicit ``phi_delta``
+    (= s_prime_phi − phi_before) plus ``claim_ref``/``action_key``
+    copied from the launch stash — additive columns, self-attributing
+    provenance for the tiebreaker feed."""
     try:
         ws = Path(ws)
         launch_p = _launch_path(ws, claim, action_type)
@@ -211,6 +277,7 @@ def append_transition(ws, claim: str, outcome: str, *,
             float(launch.get("phi", 0.0)), phi_after,
             tokens=tokens, seconds=seconds)
         row = {
+            "schema": TRANSITION_SCHEMA,
             "ts": utc_now_z(),
             "dispatch_id": str(claim),
             "action_type": str(launch.get("action_type")
@@ -226,6 +293,14 @@ def append_transition(ws, claim: str, outcome: str, *,
                      if absorbed_from_disk else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
+            # issue-678 T4: the EXPLICIT Φ movement (the #548 tiebreaker
+            # raw material was previously only derivable by subtraction)
+            # plus the launch stash's claim/action provenance — the row
+            # is self-attributing without re-reading the (consumed) stash
+            "phi_delta": round(phi_after
+                               - float(launch.get("phi", 0.0)), 6),
+            "claim_ref": str(launch.get("claim") or claim),
+            "action_key": str(launch.get("a") or ""),
             "r_incr": r_incr,
             "r_settle": (round(float(r_settle), 6)
                          if r_settle is not None else None),
@@ -235,10 +310,10 @@ def append_transition(ws, claim: str, outcome: str, *,
             **({"propensity": launch["propensity"]}
                if launch.get("propensity") is not None else {}),
         }
-        out = ws / TRANSITIONS_REL
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        if not _cl.append(ws, "experience", row):
+            # append-only refusal (ONE warn already emitted by the core):
+            # the row never banked — the stash stays for a later settle
+            return None
         launch_p.unlink(missing_ok=True)  # stash consumed
         return row
     except (OSError, ValueError, TypeError) as exc:  # loud telemetry (#275)
@@ -325,18 +400,8 @@ def sweep_orphan_launches(ws) -> list[dict]:
 
 
 def read_transitions(ws) -> list[dict]:
-    """The ledger read face: all rows, oldest first; absent = []."""
-    p = Path(ws) / TRANSITIONS_REL
-    if not p.is_file():
-        return []
-    rows = []
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return rows
+    """The ledger read face: all transition rows, oldest first; absent =
+    []. #721: backed by the consolidated experience file, with the
+    legacy archive (runs/transitions.jsonl) riding the compat window —
+    archive rows come first, they predate the live file."""
+    return _cl.read(ws, "experience", schema_prefix="transition")

@@ -20,7 +20,6 @@ Pinned:
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -39,11 +38,9 @@ def _ws(tmp_path: Path) -> Path:
 
 
 def _rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "transitions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()
-            if l.strip()]
+    # #721: the production read face — the consolidated experience file
+    # plus the legacy archive (never a direct path read)
+    return ir.read_transitions(ws)
 
 
 # ------------------------------------------------------ 1. stash scoping

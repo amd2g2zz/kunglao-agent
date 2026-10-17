@@ -100,12 +100,14 @@ ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import (priority_ratio as _ratio_rank,
                                 posterior_seed_state as _posterior_seed_state,
-                                EvidenceView as _EvidenceView)
+                                EvidenceView as _EvidenceView,
+                                action_tier as _action_tier)  # #680 tier contract
     from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if the scorer moves
     _PRIORITY_AVAILABLE = False
+    _action_tier = None  # #680: tiercons gate skips when the scorer is gone
 
 # ---------- issue #310: specialist trigger table (imports route_capability) ----------
 try:

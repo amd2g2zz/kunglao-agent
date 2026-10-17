@@ -268,6 +268,7 @@ EMIT_ACTIONS = [
     "must_stop",
     "observation",        # #157 oracle_runner per-case result row (id/status + #146 forensics summary class) — the reward signal's event face
     "operator_observation",  # issue 434 UserPromptSubmit operator-intent observation row (pure recording)
+    "operator_sanction_deferral",  # the completion-gate operator CLI's human-only deferral seal face (loud, mint-sanction)
     "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
     "oracle_probe_t1",    # issue 429 §1 T1 ladder rung: mid-round oracle probe batch fired on a long round (verification_ladder)
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
@@ -285,6 +286,7 @@ EMIT_ACTIONS = [
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
+    "recipe_deviation",   # #695 declared tool-chain recipe != the gate's own arm draw (recorded decision, never a reject; registered/unregistered + reason ride detail)
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
@@ -297,6 +299,7 @@ EMIT_ACTIONS = [
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
     "rt_read_blocked",    # rt_read_barrier: maker-face read refused for a red-team act
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
+    "sample_deviation",   # #691 the declaration-vs-sampler deviation record: declared family != the gate's own draw (recorded decision, never a reject; reason rides detail)
     "script_harvested",   # #477 per-script classification (landed/archived)
     "siblings_minted",    # issue 293 target_ladder strategy-sibling fan-out mint face
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
@@ -333,6 +336,7 @@ EMIT_ACTIONS = [
     "warn",               # the centralized warn()'s ledger face (one row per dedupe window, actor=telemetry)
     "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
+    "write_escalated",  # bash_fact_guard repeat-block ladder crossing (cap-and-escalate; carries file + rules + streak so the orchestrator can reroute)
     "write_guard_waiver_used",  # #820 waiver consumption audit face
     "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]

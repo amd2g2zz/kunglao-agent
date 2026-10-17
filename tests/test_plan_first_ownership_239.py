@@ -92,6 +92,14 @@ def _seed_live_heartbeat(ws: Path) -> None:
     }), encoding='utf-8')
 
 
+def _settle_step(ws: Path) -> None:
+    """#690: settle the approval point's step — the real loop shape (the
+    dispatched worker completes -> SubagentStop settles -> the next
+    dispatch attempt reaches its intended gate, not the sync barrier)."""
+    from rlvr import step_grain
+    step_grain.settle_step(ws, 'sess-test')
+
+
 # ---------- 1. FIRST dispatch: no pre-existing plan required ----------
 
 def test_first_dispatch_passes_without_any_plan(tmp_path):
@@ -149,6 +157,7 @@ def test_redispatch_e2e_replay_full_lifecycle(tmp_path, capsys):
     assert sinks.pre_check(payload, paths) == 0, capsys.readouterr().err
     assert _anchor_log(ws).exists(), 'first dispatch must stamp its anchor'
     _seed_live_heartbeat(ws)  # lifecycle linkage created the state file
+    _settle_step(ws)  # #690: worker completes before the re-dispatch
     rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
     captured = capsys.readouterr()
     assert rc == 2, captured.err
@@ -193,6 +202,7 @@ def test_ghostwritten_plan_does_not_satisfy_redispatch(tmp_path, capsys):
     assert sinks.pre_check(_payload(_dispatch_prompt()), paths) == 0, \
         capsys.readouterr().err
     _seed_live_heartbeat(ws)  # lifecycle linkage created the state file
+    _settle_step(ws)  # #690: worker completes before the re-dispatch
     plan = ws / 'runs' / 'plan-C001-strings.md'
     plan.write_text('goal: decode strings\nsteps: dump\nfallback: xxd\n',
                     encoding='utf-8')
@@ -218,6 +228,7 @@ def test_worker_authored_plan_satisfies_redispatch(tmp_path, capsys):
     assert sinks.pre_check(_payload(_dispatch_prompt()), paths) == 0, \
         capsys.readouterr().err
     _seed_live_heartbeat(ws)  # lifecycle linkage created the state file
+    _settle_step(ws)  # #690: worker completes before the re-dispatch
     anchor_ts = json.loads(
         _anchor_log(ws).read_text(encoding='utf-8').splitlines()[-1])['ts']
     plan = ws / 'runs' / 'plan-C001-strings.md'

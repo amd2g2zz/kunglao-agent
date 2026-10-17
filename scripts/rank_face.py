@@ -190,6 +190,30 @@ def latest_rank(ws, now: datetime | None = None) -> dict:
             "stale": True}
 
 
+def latest_payload(ws, now: datetime | None = None) -> dict:
+    """The latest rank_feeds run as data: ``{"payload", "ts", "age_s",
+    "stale"}`` where ``payload`` is the row's full parsed detail document
+    (feeds / scores / ranked_order / input_fingerprint plus the additive
+    decision keys entropy / propensity / k / tiers when present). No run
+    at all -> ``payload: {}`` with stale True; an unreadable detail is the
+    same absent payload (fault evidence stays the row's existence, never
+    an exception). The decision-view reader, so the view model consumes
+    THE event this module owns instead of re-scanning the tail."""
+    now = now or datetime.now(timezone.utc)
+    for row in reversed(_tail_rows(ws)):
+        if row.get("action") != RANK_ACTION:
+            continue
+        ts = row.get("ts")
+        ts_epoch = _epoch(ts)
+        age_s = (round(max(0.0, now.timestamp() - ts_epoch), 1)
+                 if ts_epoch is not None else None)
+        return {"payload": _payload(row),
+                "ts": ts if isinstance(ts, str) else None,
+                "age_s": age_s,
+                "stale": age_s is None or age_s > RANK_STALE_MINUTES * 60}
+    return {"payload": {}, "ts": None, "age_s": None, "stale": True}
+
+
 def face(ws, now: datetime | None = None) -> dict:
     """THE single-source face: ``{"rank", "rank_log"}``.
 

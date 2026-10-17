@@ -554,6 +554,11 @@ def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
     paths = _min_paths(ws)
     assert pre_check(payload, paths) == 0, capsys.readouterr().err
     _seed_live_heartbeat(ws)
+    # #690: the sync barrier — settle the approval point's step first
+    # (the real loop: the dispatched worker completes -> SubagentStop
+    # settles -> the re-dispatch attempt reaches the plan gate).
+    from rlvr import step_grain as _sg690
+    assert _sg690.settle_step(ws, 'sess-test') is not None
     rc = pre_check(_dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
         '"tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
@@ -782,11 +787,14 @@ def test_check_tool_first_bool_face_is_documented_constant():
 
 REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
+    'tiercons',  # #680: envelope tier == action_tier(claim)
     'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'zerooutput',
     'plan',
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
     'granularity',  # issue 241: claim granularity discipline
     'methodfamily',  # #432: method-family vocabulary gate
+    'stepsettled',  # #690: settle->update->decide sync barrier
+    'branchbudget',  # #690: the branch act budget (retries)
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -798,6 +806,7 @@ REJECT_FIX_KEYWORDS = {
     'hostchan': 'connect_remote',
     'deadline': 'deadline_ts',
     'tier': 'evidence_tier',
+    'tiercons': 'action_tier',  # #680: the derived-tier mechanism
     'selfcap': 'time_budget_minutes',
     'heartbeat': 'heartbeat-on',
     'drift': 'plan_drift_detector',
@@ -812,6 +821,8 @@ REJECT_FIX_KEYWORDS = {
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
     'granularity': 'claim_granularity.py',  # issue 241: the mint entrypoint
     'methodfamily': 'method_families.yaml',  # #432: the registry path
+    'stepsettled': 'SubagentStop',  # #690: the settle face that lifts the barrier
+    'branchbudget': 'branch_budget',  # #690: the exhausted budget names itself
 }
 
 
@@ -866,7 +877,10 @@ def _healthy_ws(tmp_path) -> Path:
         f'deadline_ts: {int(time.time()) + 3600}\n', encoding='utf-8')
     _write_register(ws / 'claim-register.yaml', [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
-         'evidence_tier_attempted': 1},
+         # #680: eta=0 so action_tier=min(0+1,3)=1 matches the default
+         # tier-1 envelope (the old eta=1 default is exactly the mismatch
+         # the tiercons gate now rejects).
+         'evidence_tier_attempted': 0},
     ])
     (ws / 'claim_deps.yaml').write_text('deps: {}\n', encoding='utf-8')
     _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'allowed'})
@@ -976,10 +990,15 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('deadline', 'deadline_ts',
                       lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
 
-    # 6 tier — tier-2 dispatch while an open claim lacks tier-1 evidence
+    # 6 tier — tier-2 dispatch whose ENVELOPE matches the target's
+    # action_tier (C-001 eta=1 -> 2) but ANOTHER open claim lags at eta=0:
+    # the breadth-first ladder invariant (the #680 shape — envelope tier
+    # mismatching the target's action_tier — is tiercons's job now).
     ws = _healthy_ws(tmp_path / 'tier')
     _write_register(ws / 'claim-register.yaml', [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1},
+        {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 0}])
     scenarios.append(('tier', 'evidence_tier',
                       lambda ws=ws: wb.pre_check(
@@ -1018,12 +1037,15 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
                           _paths_for(ws))))
 
     # 11 devreason — priority deviation without a reasoning field
+    # (#680: etas=0 so action_tier=1 matches the tier-1 envelope; the
+    # deviated flag is forced by the check_priority monkeypatch above, so
+    # the register's ranking shape is irrelevant here).
     ws = _healthy_ws(tmp_path / 'devreason')
     _write_register(ws / 'claim-register.yaml', [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
-         'evidence_tier_attempted': 3},
+         'evidence_tier_attempted': 0},
         {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
-         'evidence_tier_attempted': 1},
+         'evidence_tier_attempted': 0},
     ])
     env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test", "method_family": "static-decompile"}}\nfacts-snapshot: 1 facts'
     scenarios.append(('devreason', 'agent-reasoning',
@@ -1035,7 +1057,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     ws = _healthy_ws(tmp_path / 'agenttype')
     _write_register(ws / 'claim-register.yaml', [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
-         'evidence_tier_attempted': 1,
+         'evidence_tier_attempted': 0,  # #680: matches the tier-1 envelope
          'statement': 'decompile and disassemble the main function'}])
     payload = _budget_payload()
     payload['tool_input']['name'] = 'kunglao-worker'
@@ -1222,14 +1244,20 @@ def test_host_forbidden_mixed_list_reports_every_offender():
 def test_pre_check_mcp_vm_channel_dispatch_passes(tmp_path, capsys):
     """(a) at the hook level: a concrete VM-channel T3 dispatch passes
     every pre_check gate on a healthy workspace (tier-3 needs every open
-    claim at evidence_tier_attempted >= 2)."""
+    claim at evidence_tier_attempted >= 2). #680: the prompt envelope
+    carries tier=3 — matching action_tier(C-001)=min(2+1,3)=3 (the old
+    fixture declared tier=1 in the prompt and parked the T3 shape in the
+    deprecated desc channel; the tiercons gate now flags that mismatch)."""
     ws = _healthy_ws(tmp_path)
     _write_register(ws / 'claim-register.yaml', [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 2},
     ])
     payload = _budget_payload(
-        desc='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 3, "tools": ["mcp__x64dbg__connect_remote", "mcp__x64dbg__read_memory"]}}\nstrings')
+        prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 3, '
+               '"tools": ["mcp__x64dbg__connect_remote", "mcp__x64dbg__read_memory"], '
+               '"agent": "w-test", "method_family": "static-decompile"}}\n'
+               'strings\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _paths_for(ws))
     assert rc == 0, capsys.readouterr().err
 

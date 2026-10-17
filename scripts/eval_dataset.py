@@ -261,6 +261,18 @@ def _validate_scaffold(task: dict, errors: list[str]) -> None:
                       "(the #236 control arm's execution surface)")
 
 
+def _validate_candidate_decl(checker: dict, errors: list[str]) -> None:
+    """#681 D-681.2: a declared checker.candidate must be a non-empty
+    string — a typed non-string silently fell through
+    resolve_candidate's isinstance check into the default fallback."""
+    candidate = checker.get("candidate")
+    if candidate is not None and (
+            not isinstance(candidate, str) or not candidate.strip()):
+        errors.append(
+            f"checker.candidate must be a non-empty string when declared, "
+            f"got {candidate!r}")
+
+
 def _validate_checker(task: dict, errors: list[str]) -> None:
     checker = task.get("checker")
     if not isinstance(checker, dict):
@@ -298,6 +310,7 @@ def _validate_checker(task: dict, errors: list[str]) -> None:
                           "replay face is armed")
     if not checker.get("entrypoint"):
         errors.append("checker.entrypoint missing (the mechanical checker shim)")
+    _validate_candidate_decl(checker, errors)
 
 
 def _validate_truth_and_contamination(task: dict, errors: list[str]) -> None:

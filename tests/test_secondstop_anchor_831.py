@@ -65,6 +65,20 @@ def _run(ws: Path) -> tuple[int, str]:
     return rc, buf.getvalue()
 
 
+def _seal(ws: Path, adj: dict, tmp_path: Path) -> None:
+    """Mint a valid gate seal for ws (store aimed at this test's tmp home):
+    since the seal became the release key, every release-path pin here runs
+    with a properly sealed record."""
+    mod = _load_shim()
+    home = tmp_path / "sanction-home"
+    home.mkdir(exist_ok=True)
+    key = home / "kunglao-sanction.key"
+    key.write_text("c" * 64, encoding="utf-8")
+    mod.SANCTION_KEY_PATH = key
+    mod.SANCTION_STORE_DIR = home / "sanctions"
+    assert mod._sanction_mint(ws, adj) is True
+
+
 def _anchor_rows(ws: Path) -> list[dict]:
     p = ws / ".convergence_ledger.jsonl"
     if not p.exists():
@@ -95,6 +109,7 @@ def test_first_sanctioned_pass_anchors(tmp_path):
            "last_decision_at": "2026-08-31T02:55:00Z"}
     ws = _mk_ws(tmp_path, {"task_text": "x",
                            "adjudication": {"stop_hook_active": adj}})
+    _seal(ws, adj, tmp_path)
     rc, out = _run(ws)
     assert rc == 0, out
     rows = _anchor_rows(ws)
@@ -107,6 +122,7 @@ def test_repeat_pass_no_duplicate_anchor(tmp_path):
     adj = {"second_stop": True, "last_decision": "PASS"}
     ws = _mk_ws(tmp_path, {"task_text": "x",
                            "adjudication": {"stop_hook_active": adj}})
+    _seal(ws, adj, tmp_path)
     rc1, _ = _run(ws)
     rc2, _ = _run(ws)
     assert rc1 == 0 and rc2 == 0
@@ -117,6 +133,7 @@ def test_backdated_rewrite_blocks(tmp_path):
     adj0 = {"second_stop": True, "last_decision": "PASS"}
     ws = _mk_ws(tmp_path, {"task_text": "x",
                            "adjudication": {"stop_hook_active": adj0}})
+    _seal(ws, adj0, tmp_path)
     assert _run(ws)[0] == 0
     # 攻击：锚定后回填 last_decision_at（#831 现场形态）
     ws_oracle = ws / "task-oracle.yaml"

@@ -181,7 +181,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     cockpit_signal: "runs/env-state.json (liveness-subset env snapshot, #475)"
@@ -214,7 +214,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     argv: ["stale"]   # #630: feedback.py takes the subcommand positional; the
@@ -230,7 +230,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
@@ -247,7 +247,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
@@ -279,7 +279,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
@@ -313,22 +313,23 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: medium
     depth: session
     cockpit_signal: "runs/.think-*.md artifacts + tick action_taken THINK face"
     owner: scripts/think_seat.py
     description: >
       #759 H1 / #711 E1: the waiting period gets a cognitive action instead
-      of an idle action_taken. The seat self-arbitrates waiting internally
-      (no cheap external gate); idle != EMPTY.
+      of an idle action_taken. The seat self-arbitrates waiting internally;
+      the parked gate skips the seat entirely while the zero-work park
+      conjunction holds (nothing to think about yet).
 
   - name: premise_expiry
     entry: scripts/premise_gate.py
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     cockpit_signal: "blockers/*.md INVALIDATED(stale) history lines + runs/.env-reprobe-pending.json + runs/.premise-expiry.json tick counter"
@@ -368,7 +369,7 @@ mechanisms:
     channel: tick
     trigger:
       type: tick
-      gate: always
+      gate: parked
     cost_class: cheap
     depth: workspace
     argv: ["--json"]
