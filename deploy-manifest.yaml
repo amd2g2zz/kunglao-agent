@@ -871,7 +871,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: 5aa139e1bc72b41bea5a039210ed71e759bf8d536be244cecb2c7d8f66c724e8
+    sha256: bf640e2180304bb15fba3506d671b02349276622ddfe415ee0ee6794ced22c2b
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold

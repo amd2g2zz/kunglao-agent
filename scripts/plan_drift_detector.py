@@ -809,9 +809,10 @@ def _read_warn_state(state_path: Path) -> dict | None:
         return None
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        print("[kunglao-agent] stale-plan warn state unreadable - gate "
-              "degrades to escalate-once (fail-open)", file=sys.stderr)
+    except (OSError, ValueError) as exc:
+        warn("stale_warn_state_read",
+             f"{type(exc).__name__}: {exc} — gate degrades to "
+             f"escalate-once (fail-open)")
         return None
     return state if isinstance(state, dict) else None
 
@@ -824,8 +825,8 @@ def _write_warn_state(state_path: Path, state: dict) -> None:
             state_path,
             json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n")
     except OSError as exc:
-        print(f"[kunglao-agent] stale-plan warn state write skipped: {exc!r}",
-              file=sys.stderr)
+        warn("stale_warn_state_write",
+             f"{type(exc).__name__}: {exc!r} — state write skipped")
 
 
 def _detector_liveness_emit(workspace: Path, word: str, detail: dict) -> None:
@@ -850,8 +851,9 @@ def _stale_warn_act(workspace: Path, items: list, sig: str) -> None:
     ws = Path(workspace)
     try:
         (ws / "runs").mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_stale_warn_act",
+             f"runs dir mkdir skipped: {type(exc).__name__}: {exc}")
     reason = "stale-plan-on-new-evidence: " + ",".join(items)
     try:
         import planning_actions
