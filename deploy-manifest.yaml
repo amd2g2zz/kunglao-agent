@@ -1263,7 +1263,11 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: a039df9b6d6fd6a970dea7baa256958a8ea41a838370d743f3a24e640b122458
+    sha256: 9b6d1cd4aa00d458ec3c45fcb9b3ae3676cb037a8955051e9edd8cf34c04138d
+  - src: scripts/rlvr/belief.py
+    dest: .claude/scripts/rlvr/belief.py
+    kind: scaffold
+    sha256: b20d87ae82506b2959b4cb8e467a0110934e45a13e962f7312bd29f11bc194c6
   - src: scripts/rlvr/censored_review.py
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
@@ -1307,7 +1311,7 @@ files:
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
-    sha256: 1957266638ed95fe1dc0898e29d28a21d3fb851fab71f836d7734a6f611e8928
+    sha256: 3f2e27be1350e86ca13c38f5d9394c28d7107a130546baeaf967edd5ea03592b
   - src: scripts/rlvr/l1_value.py
     dest: .claude/scripts/rlvr/l1_value.py
     kind: scaffold
@@ -1379,7 +1383,7 @@ files:
   - src: scripts/rlvr/state.py
     dest: .claude/scripts/rlvr/state.py
     kind: scaffold
-    sha256: 3c1ae39ef54898cec301fb4eae404ea83b07aa60cf25477b7fe6c9ad8e4c3502
+    sha256: dae6987c881ef2aa9dde32734cde1601438176d144ea78d98c37303480fa3b0b
   - src: scripts/rlvr/step_credit.py
     dest: .claude/scripts/rlvr/step_credit.py
     kind: scaffold
@@ -1387,7 +1391,7 @@ files:
   - src: scripts/rlvr/step_grain.py
     dest: .claude/scripts/rlvr/step_grain.py
     kind: scaffold
-    sha256: 99f8d2a07c469fc5c8d51758e9b09174a120282b95f1bf5c0bf84054be0ef9ad
+    sha256: 3945597dd7c571eb1a56434a4e4307def7fe078f3309d532311fad5ee3f21319
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold

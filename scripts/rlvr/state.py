@@ -73,10 +73,10 @@ Canonical forms (pure, order-stable):
                  pf=<tokens|->|sd=-``
   signature_hash sha256(signature_str)[:12] — the short table key
 
-state-sig/2 is the nine-segment form: the ob= segment (issue 461
-Phase 1 attribution face) and the pf= segment (the epistemic probe
-tokens) insert BEFORE the reserved sides tail, so sides never re-keys
-and future dims need no further version bump; historical rows keep
+state-sig/2's tail inserts BEFORE the reserved sides tail (ob=
+attribution, pf= epistemic probes, bf= the declared-unknown
+belief dim), so sides never re-keys and future dims need no
+further version bump; historical rows keep
 their own tag in the append-only streams (a recorded row re-signs to
 its recorded string — a legacy state doc without the probe key reads
 pf=-).
@@ -494,6 +494,16 @@ def probe_face(ws) -> list[str]:
 
 # ---------- canonical snapshot + signature -------------------------------
 
+def _belief_declared_unknown(ws) -> bool:
+    """The belief dim: does any claim's current belief declare
+    unknowns? Lazy + fail-open (the belief face's own posture)."""
+    try:
+        from rlvr import belief as _belief  # noqa: PLC0415 — lazy
+        return _belief.declared_unknown_present(ws)
+    except Exception:  # noqa: BLE001 — an absent belief keeps the dim at -
+        return False
+
+
 def snapshot(ws) -> dict:
     """The canonical state document (discretized; sides reserved empty).
     Pure read — never raises on a bare workspace. The budget doc carries
@@ -516,6 +526,7 @@ def snapshot(ws) -> dict:
         "phase": phase(ws),
         "obstacles": obstacle_face(ws),
         "probe": {"tokens": probe_face(ws)},
+        "belief": {"declared_unknown": _belief_declared_unknown(ws)},
         "sides": {},  # RESERVED: v0.2 side-trajectory tree (owner pin)
     }
 
@@ -534,6 +545,8 @@ def signature_str(snap: dict) -> str:
     kinds = (snap.get("obstacles") or {}).get("kinds") or "-"
     tokens = (snap.get("probe") or {}).get("tokens") or []
     probe_part = ",".join(str(t) for t in sorted(tokens)) or "-"
+    belief = snap.get("belief") or {}
+    belief_part = "u" if belief.get("declared_unknown") else "-"
     return (f"{SCHEMA}|fc={facts.get('bucket', 0)}"
             f"|fv={facts.get('verified', 0)}"
             f"|cp={pattern}"
@@ -542,6 +555,7 @@ def signature_str(snap: dict) -> str:
             f"|ph={phase_part}"
             f"|ob={kinds}"
             f"|pf={probe_part}"
+            f"|bf={belief_part}"
             f"|sd=-")
 
 

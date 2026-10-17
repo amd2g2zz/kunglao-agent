@@ -307,12 +307,14 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         # undoes the settled step (the row + transition already landed).
         step_credit_value = None
         credit_banked = False
+        evidence_items: list = []
         try:
             from rlvr import q_cells as _qc  # noqa: PLC0415
             from rlvr import step_credit as _sc  # noqa: PLC0415
             items = _sc.evidence_in_window(
                 ws, claim=str(pending["claim"]),
                 since_ts=since_ts, until=now_dt)
+            evidence_items = items
             step_credit_value = _sc.step_credit(items)
             bank = _qc.observe_step_credit(
                 ws, pending["claim"], step_credit_value,
@@ -336,12 +338,26 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         except Exception as exc:  # noqa: BLE001 — never the settle
             warn("rlvr.step_grain.settle_step.crystallize",
                  f"{type(exc).__name__}: {exc}")
+        # the belief row — the step's own observation record (what it
+        # SAW, what it declared unknown) lands with the same fail-open
+        # posture: the decision state's b, priced by later components.
+        belief_receipt = None
+        try:
+            from rlvr import belief as _belief  # noqa: PLC0415
+            belief_receipt = _belief.record_belief(
+                ws, claim=str(pending["claim"]),
+                step_ref=step_row["step_id"],
+                evidence=evidence_items)
+        except Exception as exc:  # noqa: BLE001 — never the settle
+            warn("rlvr.step_grain.settle_step.belief",
+                 f"{type(exc).__name__}: {exc}")
         # the completion-row telemetry keys: the settle receipt needs the
         # claim/duration/outcome/attempt binding without a second scan
         return dict(step_row, transition=transition, waste=waste,
                     step_credit=step_credit_value,
                     credit_banked=credit_banked,
                     crystallized=crystallized,
+                    belief=belief_receipt,
                     claim=pending["claim"],
                     attempt_id=pending.get("attempt_id"),
                     wall_s=actual_s,

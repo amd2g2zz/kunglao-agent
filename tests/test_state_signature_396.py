@@ -357,7 +357,7 @@ class TestSnapshotAndSignature:
     def test_signature_str_byte_pinned(self, tmp_path):
         sig = ssig.signature_str(ssig.snapshot(self._full_ws(tmp_path)))
         assert sig == ("state-sig/2|fc=2|fv=4|cp=OPEN=1|PROVEN=1"
-                       "|bg=1|ch=2/4|ph=VERIFY|ob=-|pf=-|sd=-")
+                       "|bg=1|ch=2/4|ph=VERIFY|ob=-|pf=-|bf=-|sd=-")
 
     def test_signature_deterministic_and_order_stable(self, tmp_path):
         ws = self._full_ws(tmp_path)
@@ -377,7 +377,7 @@ class TestSnapshotAndSignature:
     def test_cold_workspace_signature(self, tmp_path):
         sig = ssig.signature_str(ssig.snapshot(tmp_path))
         assert sig == ("state-sig/2|fc=0|fv=0|cp=-|bg=0|ch=-|ph=-|ob=-"
-                       "|pf=-|sd=-")
+                       "|pf=-|bf=-|sd=-")
 
 
 # ---------- obstacle face (issue 461 attribution-in-state) ----------

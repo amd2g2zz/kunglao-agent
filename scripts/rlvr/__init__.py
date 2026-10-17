@@ -16,6 +16,7 @@ detail is each module's own docstring.
 from . import censored_review
 from . import compose
 from . import consolidated_ledger
+from . import belief
 from . import constants_ref
 from . import crystallize
 from . import expansion
@@ -52,6 +53,7 @@ from . import verification_debt
 from . import winrate
 
 __all__ = [
+    "belief",
     "censored_review",
     "compose",
     "consolidated_ledger",

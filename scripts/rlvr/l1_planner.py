@@ -211,10 +211,20 @@ def _cross_task_face(ws: Path, claim: str) -> list[dict]:
     return out
 
 
+def _belief_face(ws: Path, claim: str) -> list[dict]:
+    """The belief face (rlvr.belief): the claim's observation record —
+    audit only (no strength: the belief is state, never graded
+    knowledge; it cannot win the best-face max)."""
+    from rlvr import belief as _belief  # noqa: PLC0415 — lazy
+    face = _belief.belief_face(ws, claim)
+    return [face] if face else []
+
+
 def knowledge_query(ws, claim) -> dict:
     """What does the substrate already know about this claim? Reads the
-    three faces (register / facts index / cross-task store), each
-    individually fail-open; the reported strength is the MAX over the
+    four faces (register / facts index / cross-task store / belief),
+    each individually fail-open; the reported strength is the MAX over
+    the
     contributing faces (ties: register > facts_index > cross_task —
     the caller-visible precedence), and every contributing row rides
     ``faces`` for audit. ``answer_strength`` narrows the strength to
@@ -229,19 +239,23 @@ def knowledge_query(ws, claim) -> dict:
     if not cid:
         return out
     ws = Path(ws)
-    for face_fn in (_register_face, _facts_face, _cross_task_face):
+    for face_fn in (_register_face, _facts_face, _cross_task_face,
+                    _belief_face):
         try:
             out["faces"].extend(face_fn(ws, cid))
         except Exception as exc:  # noqa: BLE001 — one face never the query
             warn("l1_planner.knowledge_query",
                  f"{face_fn.__name__}: {type(exc).__name__}: {exc}")
-    if out["faces"]:
-        best = max(out["faces"], key=lambda f: f.get("strength") or 0.0)
+    # audit faces (strength 0 — the belief) never claim knowledge:
+    # solved requires a face with POSITIVE graded strength.
+    known = [f for f in out["faces"] if (f.get("strength") or 0.0) > 0.0]
+    if known:
+        best = max(known, key=lambda f: f.get("strength") or 0.0)
         out.update({"solved": True,
                     "strength": float(best.get("strength") or 0.0),
                     "status": best.get("status"),
                     "source": best.get("source")})
-        answers = [f for f in out["faces"]
+        answers = [f for f in known
                    if f.get("source") in _ANSWER_SOURCES]
         if answers:
             out["answer_strength"] = float(max(

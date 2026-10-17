@@ -218,6 +218,7 @@ K_RESIDUAL_PINS = {
     # rlvr.marl/strategy_store; the one residual load is the revocation
     # rewrite's raw-line parse (needs the original bytes to preserve).
     "rlvr/crystallize": (1, 0),
+    "rlvr/belief": (0, 0),
 }
 
 
