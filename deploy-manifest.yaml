@@ -871,7 +871,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: ef720839212b12cb4796993c14e5ae1bc291ca3f927a6f0e90fae16e9189ee53
+    sha256: 5aa139e1bc72b41bea5a039210ed71e759bf8d536be244cecb2c7d8f66c724e8
   - src: scripts/plan_epistemics.py
     dest: .claude/scripts/plan_epistemics.py
     kind: scaffold
@@ -1419,7 +1419,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 02853c64131587def47aa5b09aaffe299043e13b183fcdc760976db786dcfffb
+    sha256: 5aad3ae79ced66889eb7e9acff0f42739d02d65cabb4b1de702e3e15d2c5bad8
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

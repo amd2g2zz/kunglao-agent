@@ -305,7 +305,7 @@ files:
   scripts/pkg_detect.py:
     r1: 8
   scripts/plan_drift_detector.py:
-    r1: 15
+    r1: 14
   scripts/plan_epistemics.py:
     r1: 1
   scripts/plan_reviser.py:
