@@ -892,10 +892,10 @@ def _stale_warn_suppress(ws: Path, state_path: Path, state: dict,
         _emit_stale_plan_warns_face(ws, None, {
             "suppressed": True, "sig": sig, "rounds": rounds,
             "items": items, "window": STALE_WARN_WINDOW_ROUNDS})
-        print(f"STALE_PLAN_WARN_SUPPRESSED: the stale-plan warn signature "
-              f"persisted for {rounds} evaluation round(s) "
-              f"(window={STALE_WARN_WINDOW_ROUNDS}) - the escalate face "
-              f"already ran for this signature", file=sys.stderr)
+        warn("stale_plan_suppressed",
+             f"the stale-plan warn signature persisted for {rounds} "
+             f"evaluation round(s) (window={STALE_WARN_WINDOW_ROUNDS}) "
+             f"- the escalate face already ran for this signature")
     _write_warn_state(state_path, state)
     return "suppress"
 
@@ -995,8 +995,8 @@ def stale_warn_gate(workspace: Path, warns: list, plan_path) -> str:
         return _stale_warn_gate(workspace, warns, plan_path)
     except Exception as exc:  # noqa: BLE001 — the gate must never break
         # the detector (annotated fail-open, silent-except ratchet form)
-        print(f"[kunglao-agent] stale-plan warn gate skipped: {exc!r}",
-              file=sys.stderr)
+        warn("stale_warn_gate_skipped",
+             f"{type(exc).__name__}: {exc!r} — gate degrades to escalate")
         return "escalate"
 
 
