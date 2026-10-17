@@ -59,7 +59,7 @@ def test_manifest_and_pyproject_are_0_1():
     # The pin is the UPCOMING release's candidate identity — dev declares its
     # own release identity (owner ruling 2026-09-27); the RC cycle carries the
     # rc suffix until the final bump.
-    assert expected == "0.1.6-rc1", f"pyproject version is {expected}, expected 0.1.6-rc1"
+    assert expected == "0.1.6-rc2", f"pyproject version is {expected}, expected 0.1.6-rc2"
 
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == expected, \
