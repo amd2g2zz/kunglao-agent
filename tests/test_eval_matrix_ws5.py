@@ -55,6 +55,12 @@ for p in (SCRIPTS,):
 import eval_matrix_report as mr  # noqa: E402
 import eval_matrix_runner as mx  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 REAL_CONFIG = ROOT / "docs" / "design" / "ws5-five-arms.yaml"
 SPLIT = ROOT / "eval" / "v1" / "split.yaml"
 

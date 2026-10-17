@@ -28,6 +28,10 @@ from e2e import checkpoints, llm_faces, model  # noqa: E402
 from test_e2e_runner import (ANCHORS, DERIVE_PY, FakeClock,  # noqa: E402
                              ScriptedRunner, TASK_YAML)
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 @pytest.fixture()
 def stub_repo(tmp_path):

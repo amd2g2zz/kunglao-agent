@@ -43,6 +43,12 @@ import eval_chain as ch  # noqa: E402
 import eval_chain_mint as mint_mod  # noqa: E402
 import eval_chain_grader  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 NODE_AVAILABLE = shutil.which("node") is not None
 GO_AVAILABLE = shutil.which("go") is not None
 

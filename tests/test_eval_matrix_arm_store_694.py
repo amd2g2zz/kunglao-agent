@@ -43,6 +43,12 @@ for p in (SCRIPTS,):
 
 import eval_matrix_runner as mx  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 # ---- helpers --------------------------------------------------------------
 

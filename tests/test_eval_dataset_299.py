@@ -39,6 +39,10 @@ import yaml
 import eval_dataset
 import eval_targets
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "eval-task-v1.json"
 EVAL_V1 = ROOT / "eval" / "v1"

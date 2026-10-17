@@ -48,6 +48,12 @@ import eval_dataset as ds
 import eval_native_targets as ntg
 import eval_targets as tg
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "eval-task-v1.json"
 RELEASE = ROOT / "eval" / "v1" / "tasks" / "release"

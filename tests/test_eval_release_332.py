@@ -40,6 +40,10 @@ sys.path.insert(0, str(SCRIPTS))
 import eval_dataset as ds  # noqa: E402
 import eval_targets as tg  # noqa: E402
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 # task-id -> (family, seed, rung, target file)
 UNITS = {
     "web-pack-sign-l0-v1": ("web-pack-sign", 33210, "l0", "web_sign_bundle.js"),

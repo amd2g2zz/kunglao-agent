@@ -32,6 +32,12 @@ import eval_dataset as ds  # noqa: E402
 import eval_loop_runner as elr  # noqa: E402
 from ws_yaml import canonical_dump  # noqa: E402
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 SMOKE_DIR = ROOT / "eval" / "v1" / "tasks" / "smoke"
 
 

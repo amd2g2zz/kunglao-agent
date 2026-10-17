@@ -25,6 +25,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 ROOT = Path(__file__).resolve().parents[1]
 LINT = ROOT / "scripts" / "eval_split_lint.py"
 SPLIT = ROOT / "eval" / "v1" / "split.yaml"

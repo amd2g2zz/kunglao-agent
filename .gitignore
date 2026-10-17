@@ -118,3 +118,6 @@ scripts/rlvr/patterns/posterior-store.jsonl
 # results cache are per-run scratch, never committed.
 /mutants/
 /.mutmut-cache
+
+# eval corpus: local-only material (owner ruling) — never tracked
+/eval/

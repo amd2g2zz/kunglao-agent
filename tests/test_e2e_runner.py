@@ -35,6 +35,10 @@ if str(SCRIPTS) not in sys.path:
 
 from e2e import checkpoints, evidence, llm_faces, model  # noqa: E402
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 
 # ---------------------------------------------------------------------------
 # fixtures: a tiny stub repo (task unit + fake scripts) — no real kunglao

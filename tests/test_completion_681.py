@@ -40,6 +40,10 @@ if str(SCRIPTS) not in sys.path:
 import eval_contract as ec  # noqa: E402
 from e2e import checkpoints, llm_faces, model  # noqa: E402
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 REPO = Path(__file__).resolve().parents[1]
 
 

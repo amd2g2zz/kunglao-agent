@@ -37,6 +37,10 @@ from rlvr import prediction_ledger as pl  # noqa: E402
 from test_e2e_runner import (  # noqa: E402
     ANCHORS, DERIVE_PY, FakeClock, ScriptedRunner, TASK_YAML)
 
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "eval" / "v1").is_dir(),
+    reason="the eval corpus is local-only material (never tracked)")
+
 SHA = "a" * 64
 
 
