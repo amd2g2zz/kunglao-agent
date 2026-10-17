@@ -43,8 +43,9 @@ from _factories import stamp_current  # noqa: E402
 # name every scripts-side consumer uses ("lib_kunglao_hooks") — the
 # external_kicker.should_kick / state_anchor._load_drift_lib precedent.
 # Bare `import lib_kunglao` is ambiguous under pytest (pythonpath = . hooks
-# scripts ... — hooks first) because scripts/lib_kunglao.py (drift lib) shares
-# the name; by-path + unique name is the repo's established safe pattern.
+# scripts ... — hooks first); scripts/lib_kunglao.py (the old drift-lib
+# namesake) is deleted, and by-path + unique name remains the repo's
+# established safe pattern.
 _PROTOCOL_NAME = "lib_kunglao_hooks"
 CANONICAL_REL = Path("hooks") / "lib_kunglao.py"
 

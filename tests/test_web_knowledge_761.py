@@ -507,9 +507,10 @@ _spec_lk = _ilu.spec_from_file_location(
     "kunglao_hooks_lib_test", ROOT / "hooks" / "lib_kunglao.py")
 lk = _ilu.module_from_spec(_spec_lk)
 _spec_lk.loader.exec_module(lk)
-# load by explicit file path: a same-named scripts/lib_kunglao.py (drift
-# lib) may already occupy sys.modules from earlier-collected test modules,
-# and `sys.modules` caching would hand back the WRONG grammar module.
+# load by explicit file path: the deleted same-named scripts/lib_kunglao.py
+# (drift lib) once occupied sys.modules from earlier-collected test
+# modules, and `sys.modules` caching would hand back the WRONG grammar
+# module — by-path stays the safe shape.
 
 class TestJ4ParseFeedback:
     def test_parse_verdict_whitelist_last_wins(self) -> None:

@@ -38,6 +38,9 @@ import sys
 _WARN_LAST: dict[str, str] = {}
 
 
+# the boot-order warn twin: kunglao_log.warn is canonical, but this
+# module runs before that import lands — the shape is deliberate,
+# the rate-limit state is NOT shared with the canonical face.
 def warn(op: str, reason: str) -> None:
     if _WARN_LAST.get(op) == reason:
         return

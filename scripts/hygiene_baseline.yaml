@@ -365,8 +365,6 @@ files:
     r1: 7
   scripts/rho_verifier.py:
     r1: 7
-  scripts/rlvr/__init__.py:
-    r1: 1
   scripts/rlvr/censored_review.py:
     r1: 6
   scripts/rlvr/compose.py:

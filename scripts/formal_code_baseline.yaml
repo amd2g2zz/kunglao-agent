@@ -220,7 +220,6 @@ files:
   scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
   scripts/rho_verifier.py: 9
-  scripts/rlvr/__init__.py: 32
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/compose.py: 17
   scripts/rlvr/consolidated_ledger.py: 6

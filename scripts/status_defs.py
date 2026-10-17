@@ -23,10 +23,10 @@ TERMINAL (8 values):
     NOTE: the pre-change scripts were split 5-value (convergence_check /
     priority / priority_ratio / failure_analysis_gate / kunglao_record /
     progress_report: no STALE) vs 6-value (stale_blocker_prune /
-    plan_drift_detector: +STALE). Unified here to 6 values — the ONLY
-    behavioral change of this refactor: STALE claims are now terminal in
-    the former 5-value consumers (they were treated as open, i.e.
-    dispatchable, before).
+    plan_drift_detector: +STALE). The unification made STALE terminal
+    in the former 5-value consumers (they had treated it as open, i.e.
+    dispatchable); SUPERSEDED (#59) and DEAD (#36) then grew the set
+    to its current 8.
 
 PARTIAL_STATUSES:
     {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}

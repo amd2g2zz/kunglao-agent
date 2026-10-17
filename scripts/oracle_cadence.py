@@ -71,7 +71,6 @@ from pathlib import Path
 
 import kunglao_log
 from kunglao_log import iter_jsonl  # #863 Family K single source
-from outcome_capture import read_outcome_rows  # tolerant OUTCOME-row read
 
 # #132 event faces (registered in event_taxonomy.EMIT_ACTIONS; the emit_gate
 # forward net requires the production literal in scripts/*.py — kept as
@@ -308,6 +307,8 @@ def missing_intent_face(ws) -> dict:
     except Exception:  # noqa: BLE001 — a census never raises
         intended = set()
     unintended: list[str] = []
+    from outcome_capture import read_outcome_rows  # lazy: the read is
+    # one census's need — the module init stays decoupled
     for row in read_outcome_rows(ws):
         cid = row.get("claim_id")
         if cid and cid not in intended and cid not in unintended:

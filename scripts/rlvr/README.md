@@ -219,6 +219,38 @@ never an obstacle claim.
 | `heartbeat_register()`, `heartbeat_check()`, `heartbeat_off()`, `mark_loop_registered()` | stay CLI faces of the heartbeat script adapter; the package provides the judgment core they call |
 | `liveness_policy.*` constants (`STALE_MINUTES`, `CONTINUITY_WINDOW_*`, `TICK_INTERVAL_DEFAULT_MIN`, ...) | `scripts/liveness_policy.py` stays THE constant source (the #597 adjudication); `rlvr.liveness` re-exports, never redefines |
 
+
+## The compact index (modules the face map above doesn't cover)
+
+The face map above covers the consolidation wave's homes. Every other
+module carries its full contract in its own docstring — this index is
+the one-line pointer (name — the docstring's opening line):
+
+- `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
+- `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+- `constants_ref` — rlvr.constants_ref — the reference hash constant tables (entropy
+- `crystallize` — crystallize.py — the settlement writes knowledge back.
+- `expansion` — rlvr/expansion.py — the discovery-layer operator (issue #546, WS4 /
+- `hypotheses` — rlvr.hypotheses — layer-scoped hypotheses + counterexample refinement
+- `incremental_reward` — rlvr/incremental_reward.py — potential-based per-act reward + the
+- `invariants` — rlvr.invariants — the invariant-pruning operator (entropy reduction).
+- `marl` — marl.py — the MARL knowledge-transfer protocol (#705).
+- `meta_arms` — meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms,
+- `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
+- `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
+- `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
+- `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
+- `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
+- `source_reliability` — rlvr/source_reliability.py — the learned source-reliability Betas.
+- `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
+- `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
+- `step_ledger` — rlvr/step_ledger.py — the shadow experience substrate (the online
+- `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
+- `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
+
+New modules: add the file, add the `from . import` line in
+`__init__.py` (the facade test enforces it), add one row here.
+
 ## The determinism wall (settlement settlement receipts)
 
 The settlement determinism axiom is preserved verbatim: float sums run

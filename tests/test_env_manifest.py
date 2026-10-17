@@ -44,7 +44,8 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 # lib_kunglao by path under the repo's unique-name convention (bare
-# `import lib_kunglao` is ambiguous: scripts/lib_kunglao.py shares it).
+# `import lib_kunglao` was ambiguous while scripts/lib_kunglao.py — the
+# deleted namesake — still existed).
 _PROTOCOL_NAME = "lib_kunglao_hooks"
 
 

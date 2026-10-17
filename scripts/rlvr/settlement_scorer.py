@@ -6,6 +6,14 @@ credit, so settlement over the producer's own output is a
 reward-hacking surface. This module is the settlement subagent's only
 door in — three mechanical properties:
 
+SHIPPING STATUS: the barrier family is complete and its dispatch
+surface exists (the settler agent + the read-barrier markers), but no
+production writer builds a ``settler_input`` doc yet — the direct
+``settle_step`` path (step grain at the SubagentStop boundary) is what
+runs today. The open writer gap is the module's own recorded design
+decision; until a writer lands, this door is armed and unbolted, not
+walked through.
+
 1. THE BLIND INPUT CONTRACT. ``settler_input`` builds from a WHITELIST
    (raw step artifacts as path + sha256, the claim/question, the rules
    table as path + sha256). Producer narrative (notes/, worker-status,
