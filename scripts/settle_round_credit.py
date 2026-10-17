@@ -255,6 +255,21 @@ def _effective_pair_outcomes(
     return eff
 
 
+def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
+    """The flipped claim's derived discriminants die with the settlement
+    they were derived from; the next real settlement re-derives from the
+    corrected truth. Fail-open: a store failure never undoes the flip."""
+    try:
+        from rlvr import crystallize as _cz  # noqa: PLC0415 — lazy
+        removed = _cz.revoke_claim(ws, claim)
+        if (removed.get("negatives_removed")
+                or removed.get("broadcasts_removed")):
+            revoked.append(claim)
+    except Exception as exc:  # noqa: BLE001 — never the flip
+        warn("case_amendment_revoke",
+             f"{claim}: {type(exc).__name__}: {exc}")
+
+
 def reconcile_case_settlements(ws: Path) -> dict:
     """The pair-amendment face: when a claim's CURRENT decisive register
     status disagrees with the outcome already observed for its
@@ -297,6 +312,7 @@ def reconcile_case_settlements(ws: Path) -> dict:
         led = po.PosteriorLedger.load(ws)
         ts = utc_now_z()
         landed = 0
+        revoked_claims: list[str] = []
         for cid, claim, eff, target in entries:
             cp = led.cases.get(cid) or po.CasePosterior(cid)
             d_a = 1 if target else -1
@@ -316,8 +332,11 @@ def reconcile_case_settlements(ws: Path) -> dict:
                 "to_passed": bool(target), "d_alpha": applied_a,
                 "d_beta": applied_b, "source": "reconcile"})
             landed += 1 if ok else 0
+            if ok:
+                _revoke_derived_rows(ws, str(claim), revoked_claims)
         led.save(ws)
         out["case_amendments"] = landed
+        out["revoked_claims"] = revoked_claims
         if landed != len(entries):
             out["case_amendments_error"] = (
                 f"{len(entries) - landed} amendment row(s) refused — "

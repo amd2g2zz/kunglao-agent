@@ -388,7 +388,7 @@ files:
   scripts/rlvr/liveness.py:
     r1: 18
   scripts/rlvr/marl.py:
-    r1: 2
+    r1: 1
   scripts/rlvr/meta_arms.py:
     r1: 6
   scripts/rlvr/policy_compare.py:

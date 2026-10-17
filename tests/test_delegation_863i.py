@@ -214,12 +214,17 @@ K_RESIDUAL_PINS = {
     "infeasible_signal": (2, 2),
     "mechanism_scheduler": (3, 0),
     "external_kicker": (2, 0),
+    # the crystallization write-back: read faces delegate through
+    # rlvr.marl/strategy_store; the one residual load is the revocation
+    # rewrite's raw-line parse (needs the original bytes to preserve).
+    "rlvr/crystallize": (1, 0),
 }
 
 
 @pytest.mark.parametrize(
     "name",
-    tuple(sorted(set(K_RESIDUAL_PINS) - {"kunglao_log", "heartbeat"})))
+    tuple(sorted(set(K_RESIDUAL_PINS) - {"kunglao_log", "heartbeat",
+                                         "rlvr/crystallize"})))
 def test_family_k_files_delegate_to_iter_jsonl(name: str):
     src = (SCRIPTS / f"{name}.py").read_text(encoding="utf-8")
     assert "from kunglao_log import iter_jsonl" in src, (
@@ -230,6 +235,17 @@ def test_family_k_files_delegate_to_iter_jsonl(name: str):
         hb = (SCRIPTS / "heartbeat.py").read_text(encoding="utf-8")
         assert "from rlvr.liveness import" in hb, (
             "heartbeat adapter must consume the delegated core")
+
+
+def test_family_k_crystallize_delegates_all_reads():
+    """The write-back's READ faces consume the pinned modules' tolerant
+    readers (rlvr.marl / rlvr.strategy_store) — no direct JSONL parse;
+    its single residual load is the revocation rewrite's raw-line scan
+    (pinned (1, 0) above), which needs the original bytes to preserve."""
+    src = (SCRIPTS / "rlvr" / "crystallize.py").read_text(encoding="utf-8")
+    assert "iter_jsonl" not in src
+    assert "read_negatives" in src and "load_rows" in src
+    assert src.count("json.loads") == 1
 
 
 @pytest.mark.parametrize("name", K_ZERO_FILES)

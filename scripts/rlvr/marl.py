@@ -127,9 +127,18 @@ def _tool_chain_token(tool_chain) -> str | None:
         return None
 
 
+def read_negatives() -> list[dict]:
+    """The public tolerant read face — schema-filtered rows, oldest
+    first, missing file → []. The write-back dedupe and the revocation
+    scan read through here so they never re-implement the parse."""
+    return _read_neg_rows()
+
+
 def record_negative(ws, *, method_family: str,
                     agent_type: str | None = None,
-                    tool_chain=None, features=None) -> dict:
+                    tool_chain=None, features=None,
+                    claim_ref: str | None = None,
+                    step_ref: str | None = None) -> dict:
     """Append one CLASS-level negative observation: this structural class
     + this approach = low success. The class rides the row (never
     re-derived at read time, so a later workspace of the same class
@@ -137,8 +146,10 @@ def record_negative(ws, *, method_family: str,
     features for THIS workspace (the dispatch face holds them in hand) —
     production callers omit it and the class derives from ``ws``; the
     read face derives the same way, so record and read agree by
-    construction. Fail-open: an unwritable store yields no row and never
-    raises."""
+    construction. ``claim_ref`` / ``step_ref`` attribute the row to its
+    producing claim and step when the caller knows them (only-when-
+    present keys — a legacy row and an attributed row share the schema).
+    Fail-open: an unwritable store yields no row and never raises."""
     from harness_common import utc_now_z  # noqa: PLC0415 — lazy
     cls = signature_class(ws, features=features)
     row = {
@@ -150,6 +161,9 @@ def record_negative(ws, *, method_family: str,
         "tool_chain": _tool_chain_token(tool_chain),
         "fails": 1,
     }
+    for key, val in (("claim_ref", claim_ref), ("step_ref", step_ref)):
+        if val:
+            row[key] = str(val)
     appended = q_cells._append_row(neg_store_path(), row)
     return {"appended": bool(appended), "reason": None if appended
             else "write-failed", "signature_class": cls, "row": row}
@@ -206,7 +220,8 @@ def broadcast_solution(ws, *, method_family: str, credit,
                        answer: str | None = None,
                        arm_key: str | None = None,
                        feature_key: str | None = None,
-                       fingerprint: str | None = None) -> dict:
+                       fingerprint: str | None = None,
+                       dispatch_id: str | None = None) -> dict:
     """The SOLUTION BROADCAST face: a PROVEN claim's METHOD enters the
     shared posterior store so other agents can warm-start from it.
 
@@ -216,20 +231,21 @@ def broadcast_solution(ws, *, method_family: str, credit,
     cannot leak the answer even if a careless caller passes it. Other
     agents may use the broadcast as a prior but MUST still verify
     (verification credit ≠ solve credit — only solve credit updates the
-    Beta).
+    Beta). ``dispatch_id`` rides the row's provenance as the producing
+    step when the caller knows it.
 
     Delegates to the existing guarded store write face
     (``strategy_store.append_store_row``): the holdout filter precedes
     the append and a store failure is fail-open telemetry, never a raise
     into the producer. ``answer`` is intentionally unused."""
-    del answer  # #705: method-only — the answer never rides the row
+    del answer  # method-only — the answer never rides the row
     try:
         from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy
         return _ss.append_store_row(
             ws, method_family=method_family, status="proven",
             credit=credit, arm_key=arm_key, feature_key=feature_key,
             fingerprint=fingerprint, agent_type=agent_type,
-            claim=claim)
+            claim=claim, dispatch_id=dispatch_id)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("marl.broadcast_solution", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "reason": f"error:{type(exc).__name__}"}

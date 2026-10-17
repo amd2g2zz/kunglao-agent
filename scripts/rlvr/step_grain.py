@@ -321,11 +321,27 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         except Exception as exc:  # noqa: BLE001 — credit face, never the settle
             warn("rlvr.step_grain.settle_step.credit",
                  f"{type(exc).__name__}: {exc}")
+        # the crystallization write-back — the settled step is the
+        # freshest view of (claim, method, outcome, credit), so the
+        # derived discriminants (the class dead end / the method
+        # broadcast) land here, deduped per step. Fail-open inside its
+        # own cage: a store failure never undoes the settled step.
+        crystallized = None
+        try:
+            from rlvr import crystallize as _cz  # noqa: PLC0415
+            crystallized = _cz.crystallize_settlement(
+                ws, claim=str(pending["claim"]),
+                step_id=step_row["step_id"], outcome=str(outcome or ""),
+                step_credit=step_credit_value)
+        except Exception as exc:  # noqa: BLE001 — never the settle
+            warn("rlvr.step_grain.settle_step.crystallize",
+                 f"{type(exc).__name__}: {exc}")
         # the completion-row telemetry keys: the settle receipt needs the
         # claim/duration/outcome/attempt binding without a second scan
         return dict(step_row, transition=transition, waste=waste,
                     step_credit=step_credit_value,
                     credit_banked=credit_banked,
+                    crystallized=crystallized,
                     claim=pending["claim"],
                     attempt_id=pending.get("attempt_id"),
                     wall_s=actual_s,
