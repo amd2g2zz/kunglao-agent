@@ -14,7 +14,8 @@ rules — failure patterns are state features inside ``s``, and solved
 knowledge is a candidate action's value, not a veto).
 
     candidate        {action_kind ∈ dispatch / park / split / verify /
-                     reuse, claim, cost, prior, value_hint}. The closed
+                     reuse / distill, claim, cost, prior, value_hint}.
+                     The closed
                      vocabulary is l1_value.ACTION_KINDS; a bad kind is
                      a caller bug (fail fast).
     value            theta ~ Beta(cell posterior of (s, action_kind))
@@ -91,6 +92,11 @@ ACTION_KINDS = lv.ACTION_KINDS
 VALUE_SCALE = 2.0
 REUSE_COST = 0.1
 PARK_COST = 0.0
+#: acquisition is the expensive arm — the price the vocabulary
+#: carries until the executor card wires distill-kind returns (a cold
+#: cell with no executor can never learn; joining the live per-claim
+#: set before that would be permanent rank noise, not exploration).
+DISTILL_COST = 1.5
 
 #: the knowledge-strength ladder (documented; the substrate's graded
 #: value, never sampled): a verified/certified answer is the full

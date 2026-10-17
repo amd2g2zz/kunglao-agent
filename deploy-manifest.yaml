@@ -1311,11 +1311,11 @@ files:
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
-    sha256: 3f2e27be1350e86ca13c38f5d9394c28d7107a130546baeaf967edd5ea03592b
+    sha256: 2773866441049828f0122d6ec5a053af92a44e28bb476f3cfed529cc9c3b6e3c
   - src: scripts/rlvr/l1_value.py
     dest: .claude/scripts/rlvr/l1_value.py
     kind: scaffold
-    sha256: dd6870f4a7d1fb68aed59bdfd25a05d4e9399e90b85c6fe7101bce141d838d19
+    sha256: c12758a8a0a172a0962c6f76cbbc4b40a7d496f931263558e37e586096435c56
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold

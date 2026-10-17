@@ -497,9 +497,11 @@ def test_l1_seed_state_moves_with_the_store(tmp_path):
 
 
 def test_action_vocabulary_is_the_ruling_list():
-    """The L1 action space is exactly the owner ruling's five actions."""
+    """The L1 action space: the owner ruling's five actions plus the
+    acquisition arm — priced in the vocabulary, joining the live
+    per-claim sets when the executor card lands."""
     assert lv.ACTION_KINDS == ("dispatch", "park", "split", "verify",
-                               "reuse")
+                               "reuse", "distill")
     assert lp.ACTION_KINDS == lv.ACTION_KINDS
     # park is the do-nothing baseline: zero cost, zero value, never a
     # cheapness winner

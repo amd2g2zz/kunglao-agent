@@ -27,7 +27,8 @@ closure, mirroring the q_cells (L2) machinery one level up:
              keyed **(state_signature, action_kind)** — the canonical
              state (rlvr.state, the same signature the L2 cells key on)
              × the L1 action vocabulary (dispatch / park / split /
-             verify / reuse: the owner ruling's list).
+             verify / reuse / distill: the owner ruling's list plus
+             the acquisition arm).
 
   fold       the q_cells DTS pattern: rows in append order, each
              decayed once per LATER row at THAT row's event-time γ (the
@@ -98,10 +99,13 @@ BASE_BETA = 1.0
 # ADR-001 governance procedure (replay evidence + pins).
 ROLLOUT_GAMMA = 1.0
 
-# The L1 action vocabulary (owner ruling 2026-10-16): the closed list of
-# WHAT the planner may choose. A new action is one edit here plus its
-# cost model at the caller — never an ad-hoc string.
-ACTION_KINDS = ("dispatch", "park", "split", "verify", "reuse")
+# The L1 action vocabulary: the closed list of WHAT the planner may
+# choose — the owner ruling's five actions plus the acquisition arm
+# (distill, whose worth is a cell value, never a trigger). A new
+# action is one edit here plus its cost model at the caller — never an
+# ad-hoc string.
+ACTION_KINDS = ("dispatch", "park", "split", "verify", "reuse",
+                "distill")
 
 
 class L1Store(Protocol):
