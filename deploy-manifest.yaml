@@ -595,7 +595,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 208bfd803c38795ea7f36a29d938e0d3a2d7a1ddabf0f1c3662225494b159761
+    sha256: 76ce308d0655abd3347e2f74b018424968012631823277f090c202874ad4d471
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -803,7 +803,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: aca00d7f0fc11a6e45f0c4d39a4e630220cfa7ec227ac1623ecae56df5147343
+    sha256: 3932f57ed74ac121da5a01c50543fd7b86851bcbff38e443a9ef594cd69d284b
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold
@@ -1419,11 +1419,11 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 5aad3ae79ced66889eb7e9acff0f42739d02d65cabb4b1de702e3e15d2c5bad8
+    sha256: 53a9236208921d75147859a9169e204a22c18af8ccedaa750d3eddfc62992758
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 02113eb1596e821e9ea421accb7285db8ddae08ca13c8fdc93128603ac284bed
+    sha256: 8b15ad2f7d45d021488f7d407a77788b323cfda1cd1f527e704b3129b3ef196d
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
