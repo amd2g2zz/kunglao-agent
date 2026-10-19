@@ -14,11 +14,11 @@ Usage:
 
 Behaviour:
 - Installs ONLY devkit-owned hooks (those in `devkit/githooks/`). The
-  product's `.claude/git-hooks/pre-commit` template is NOT touched —
-  dev hooks and product review hooks coexist on different names if both
-  are present, or `pre-commit.devkit` vs `pre-commit.kunglao-review` if
-  same name. (We default to `pre-commit` since the product review gate
-  lives in `.claude/git-hooks/` and is a separate concept.)
+  installed pre-commit is the SINGLE resident entry: it runs the
+  devkit quality gates and then CHAINS the product review-gate
+  evidence check (stamped absolute keyfile; fail-closed). Uninstall
+  therefore removes BOTH faces — restore review-only enforcement with
+  `kunglao-init --install-git-hooks` if needed.
 - Per-hook backups of any pre-existing `.git/hooks/<name>` are written
   to `.git/hooks/<name>.bak-<UTC-ts>` before overwriting.
 - Cross-platform: pure Python; works on Windows / Linux / macOS.
@@ -55,6 +55,7 @@ DEVKIT_ROOT = Path(__file__).resolve().parent
 GITHOOKS_SRC = DEVKIT_ROOT / "githooks"
 PLACEHOLDER = "__KUNGLAO_DEVKIT_ROOT__"
 DEVKIT_HOOK_MARKER = "# devkit-installed:"
+REVIEW_KEY_MARKER = "# devkit-review-key:"
 
 
 def _find_git_dir(start: Path) -> Path | None:
@@ -70,6 +71,13 @@ def _find_git_dir(start: Path) -> Path | None:
                 if target.startswith("gitdir:"):
                     real = Path(target.split(":", 1)[1].strip())
                     if real.is_dir():
+                        # Worktree gitdirs live at <common>/.git/worktrees/
+                        # <name>; git executes hooks ONLY from the common
+                        # dir, so resolve there (unexpected layouts fall
+                        # back to the raw gitdir).
+                        if (real.parent.name == "worktrees"
+                                and real.parent.parent.is_dir()):
+                            return real.parent.parent
                         return real
             except OSError:
                 pass
@@ -104,7 +112,7 @@ def _stamp_hook(template: str, devkit_root: Path) -> str:
     return template.replace(PLACEHOLDER, str(devkit_root).replace("\\", "/"))
 
 
-def _install_one(src: Path, dst: Path, devkit_root: Path,
+def _install_one(src: Path, dst: Path, devkit_root: Path, review_key: Path,
                  dry_run: bool = False) -> str:
     """Install one hook. Returns a status string for logging."""
     template = src.read_text(encoding="utf-8")
@@ -131,6 +139,10 @@ def _install_one(src: Path, dst: Path, devkit_root: Path,
         dst.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         with dst.open("a", encoding="utf-8", newline="") as f:
             f.write(f"\n{DEVKIT_HOOK_MARKER} {devkit_root}\n")
+            # The absolute review-key stamp closes the fake-$HOME hole:
+            # review_gate.check must never resolve the key from the
+            # committing process's environment.
+            f.write(f"{REVIEW_KEY_MARKER} {review_key}\n")
 
     msg = f"  installed: {dst.name}"
     if backup is not None:
@@ -169,14 +181,21 @@ def cmd_install(args: argparse.Namespace) -> int:
     hooks_dir = _git_hooks_dir(git_dir)
 
     print(f"install_git_hooks: devkit={DEVKIT_ROOT} hooks={hooks_dir}")
+    if ".worktrees" in DEVKIT_ROOT.parts:
+        print("install_git_hooks: WARNING devkit lives in a worktree — the "
+              "stamp dies with that worktree; reinstall from the main "
+              "checkout after merging.", file=sys.stderr)
+    review_key = Path(args.review_key).expanduser().resolve()
     for src in sources:
         dst = hooks_dir / src.name
-        msg = _install_one(src, dst, DEVKIT_ROOT, dry_run=args.dry_run)
+        msg = _install_one(src, dst, DEVKIT_ROOT, review_key,
+                           dry_run=args.dry_run)
         print(msg)
 
     print()
-    print("Hooks installed. The devkit/pre-commit runs Gates 1/3/4 on every")
-    print("commit. To also run Gate 2 (full pytest, ~3min), set env:")
+    print("Hooks installed. The devkit/pre-commit runs Gates 1,3-10 then")
+    print("chains the review-gate evidence check on every commit.")
+    print("To also run Gate 2 (full pytest, ~3min), set env:")
     print("  export KUNGLAO_DEV_GATE2=1")
     print()
     print("Uninstall: uv run python devkit/install_git_hooks.py --uninstall")
@@ -224,6 +243,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="remove devkit hooks")
     p.add_argument("--dry-run", action="store_true",
                    help="preview changes without writing")
+    p.add_argument("--review-key",
+                   default=str(Path.home() / ".claude" / "kunglao-review.key"),
+                   help="absolute review-key path stamped into the hook")
     args = p.parse_args(argv)
 
     if args.uninstall:

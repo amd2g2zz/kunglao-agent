@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # devkit/githooks/pre-commit — Kunglao development quality-gate runner (#463)
 #
-# Runs the devkit quality gates on EVERY commit. Catches regressions
-# and broken imports BEFORE they reach the repo. NOT the product's review
-# gate (.claude/git-hooks/pre-commit — that one is for product review
-# evidence; this one is for developer-side quality enforcement).
+# Runs the devkit quality gates on EVERY commit, then CHAINS the
+# product review-gate evidence check — ONE resident pre-commit entry
+# enforcing both the developer quality face and the review-evidence
+# face (owner directive 2026-10-19: the developer gate is resident).
 #
 # Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability)
 # + 5 (Subagent Review, #462) + 6 (Agents Contract, #492)
@@ -27,10 +27,11 @@
 #   Uninstall: devkit/install_git_hooks.py --uninstall
 #
 # Cross-platform: this hook is bash-only because git itself ships bash, and
-# git's hook runner invokes /bin/sh regardless of platform. The hook body
-# only calls `python` (not `.venv/...`) — the deployer MUST stamp the
-# absolute devkit path so `python devkit/quality_gates.py` works from the
-# cwd-agnostic hook context.
+# git's hook runner invokes /bin/sh regardless of platform. All python goes
+# through `uv run --project` (uv-only discipline: bare python on PATH is
+# unreliable on real machines — stray venvs shadow the interpreter). The
+# deployer stamps the absolute devkit path so the cwd-agnostic hook context
+# resolves the skill root.
 
 # be defensive: any uninitialised var / pipefail failure = reject commit
 set -euo pipefail
@@ -53,12 +54,10 @@ if ! grep -qF "# devkit-installed:" "$0" 2>/dev/null; then
   exit 1
 fi
 
-command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || {
-  echo "devkit/pre-commit BLOCKED: python not on PATH"
+command -v uv >/dev/null 2>&1 || {
+  echo "devkit/pre-commit BLOCKED: uv not found — https://docs.astral.sh/uv/"
   exit 1
 }
-PY="$(command -v python)"
-[ -x "$PY" ] || PY="$(command -v python3)"
 
 # Extract the devkit root from the marker line appended by the installer.
 # The marker is `# devkit-installed: <path>` — appended at the END of
@@ -70,21 +69,58 @@ PY="$(command -v python)"
 # A regex anchor (`^# devkit-installed: `) would also work but
 # requires `grep -E` (no -F); tail -n1 + prefix-strip is simpler and
 # keeps the hook POSIX-portable.
-devkit_root="$(tail -n1 "$0" | sed 's/^# devkit-installed: //')"
+devkit_root="$(grep '^# devkit-installed: ' "$0" | tail -n1 | sed 's/^# devkit-installed: //')"
+review_key="$(grep '^# devkit-review-key: ' "$0" | tail -n1 | sed 's/^# devkit-review-key: //')"
+if [ -z "$devkit_root" ] || [ -z "$review_key" ] || [ ! -f "$review_key" ]; then
+  echo "devkit/pre-commit BLOCKED: install stamps missing or review key gone."
+  echo "  Re-install: uv run python devkit/install_git_hooks.py"
+  exit 1
+fi
+skill_root="$(dirname "$devkit_root")"
+repo="$(git rev-parse --show-toplevel)" || exit 1
+
+# Gates judge the COMMITTING tree with its own tracked devkit when it
+# has one (repo semantics — REPO_ROOT resolves to this tree), falling
+# back to the stamped devkit for workspace installs where devkit/ is
+# not part of the tree.
+if [ -f "$repo/devkit/quality_gates.py" ]; then
+  gates_qg="$repo/devkit/quality_gates.py"
+else
+  gates_qg="$devkit_root/quality_gates.py"
+fi
 
 # Quick set (registry minus Gate 2). Fast (<10s on a warm cache).
-"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 6 7 8 9 10 --quiet || {
+uv run --project "$skill_root" python "$gates_qg" \
+  1 3 4 5 6 7 8 9 10 --quiet || {
   echo "devkit/pre-commit BLOCKED: quality gate(s) failed (see output above)."
-  echo "  Verbose re-run: $PY $devkit_root/quality_gates.py <same gates as above, without --quiet>"
+  echo "  Verbose re-run: uv run --project \"$skill_root\" python \"$gates_qg\" 1 3 4 5 6 7 8 9 10"
   exit 1
 }
 
 # Gate 2 (full pytest) — opt-in only. ~3min on warm cache.
 if [ "${KUNGLAO_DEV_GATE2:-0}" = "1" ]; then
-  "$PY" -m pytest -q || {
+  uv run --project "$skill_root" python -m pytest -q || {
     echo "devkit/pre-commit BLOCKED: Gate 2 (pytest) failed."
     exit 1
   }
 fi
+
+# Chain: the product review gate — evidence check on the same commit,
+# fail-closed (missing/stale/forged evidence blocks, exactly as the
+# standalone review hook did when it was the entry point). The CHECKER
+# runs from the stamped skill root (trusted tooling), not the tree.
+branch="$(git rev-parse --abbrev-ref HEAD)" || exit 1
+if [ "$branch" = "HEAD" ]; then
+  echo "devkit/pre-commit BLOCKED: detached HEAD has no review-evidence context."
+  exit 1
+fi
+out="$repo/.review-gate/$(printf '%s' "$branch" | tr '/' '-').json"
+uv run --project "$skill_root" "$skill_root/scripts/review_gate.py" \
+  check "$repo" "$out" "$branch" "$review_key" || {
+  echo "devkit/pre-commit BLOCKED: review gate evidence check failed."
+  echo "  Re-mint: stage -> uv run python scripts/review_gate.py mint <repo> \\"
+  echo "    ~/.claude/kunglao-review.key <branch> '<evidence-glob>' <reviewer-id>"
+  exit 1
+}
 
 exit 0
