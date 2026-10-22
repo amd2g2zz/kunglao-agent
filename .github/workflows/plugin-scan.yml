@@ -20,7 +20,7 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           "$HOME/.local/bin/uv" run --no-project python devkit/supply_gate.py
-      - uses: hashgraph-online/ai-plugin-scanner-action@d777b580805f6fadb19a03f84daf0974c53c6d38 # v1.2.786
+      - uses: hashgraph-online/ai-plugin-scanner-action@d7cf6e5bffd3a40be801e038c9705e1e67086c18 # v1.2.793
         with:
           plugin_dir: "."
           min_score: 80
