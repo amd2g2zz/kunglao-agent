@@ -228,7 +228,6 @@ files:
   scripts/rho_verifier.py: 11
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/compose.py: 17
-  scripts/rlvr/consolidated_ledger.py: 6
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 34

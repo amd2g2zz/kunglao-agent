@@ -262,21 +262,39 @@ def record_attributed_waste(ws, *, claim_ref: str, step_id: str,
 
 def settle_step(ws, session_id: str, outcome: str = "completed",
                 now: datetime | None = None,
-                agent_id: str | None = None) -> dict | None:
-    """THE production step settlement (#690): the SubagentStop face.
+                agent_id: str | None = None,
+                blind: bool = False) -> dict | None:
+    """The step settlement (#690): the SubagentStop face.
+
+    ISSUE-802 SHIPPING STATUS: the MECHANICAL bookkeeping (the step-record/2
+    aggregate, the transition close, the attributed-waste pricing) is
+    hash-only and stays at the stop boundary in every mode. The
+    JUDGMENT legs — the step-level evidence-window credit, the
+    crystallization write-back, the belief row — read the producer's
+    surfaces (facts/ frontmatter) and are the UNBLINDED settlement:
+    they now run ONLY here, behind this signature's ``blind=False``
+    default (the explicit eval face) — the production stop face passes
+    ``blind=True`` (hooks/round_closure) and the credit instead arrives
+    through the blind settler (rlvr.settlement_wire.settle_parked, the
+    scalar.validate_verdict_doc stack + the claims_store mint). Eval
+    opt-in is the env gate KUNGLAO_EVAL_SETTLE (rlvr.settlement_wire.
+    eval_settle_enabled — the single source); blind=True skips the
+    judgment legs entirely and reports ``step_credit=None`` /
+    ``credit_banked=False`` / ``blind=True`` so a receipt can never be
+    mistaken for a blind-mode credit.
 
     settle -> update -> decide, in order: the pending step's claim is
     resolved from the dispatch-launch stash (the mapping), the session's
     tool-call rows aggregate into ONE step-record/2 row, the transition
     closes via append_transition (Φ(s') read at settle; the stash is
     consumed there), a branch_budget.wall_s overrun lands in
-    attributed-waste, and — #712 — the step's evidence window scores a
-    step credit banked into the Q-cell at this boundary (the returned
-    dict carries ``step_credit`` / ``credit_banked``; the ledger row
-    whitelist is untouched). Returns the step row (transition, waste and
-    credit receipt attached) or None — no pending step (silent:
-    SubagentStop also fires for non-worker subagents) or a refusal
-    (fail-open, ONE warn)."""
+    attributed-waste, and — eval face only — the step's evidence
+    window scores a step credit banked into the Q-cell at this boundary
+    (the returned dict carries ``step_credit`` / ``credit_banked``; the
+    ledger row whitelist is untouched). Returns the step row
+    (transition, waste and credit receipt attached) or None — no pending
+    step (silent: SubagentStop also fires for non-worker subagents) or a
+    refusal (fail-open, ONE warn)."""
     try:
         pending = pending_step(ws)
         if pending is None:
@@ -328,49 +346,61 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         step_credit_value = None
         credit_banked = False
         evidence_items: list = []
-        try:
-            from rlvr import q_cells as _qc  # noqa: PLC0415
-            from rlvr import step_credit as _sc  # noqa: PLC0415
-            items = _sc.evidence_in_window(
-                ws, claim=str(pending["claim"]),
-                since_ts=since_ts, until=now_dt)
-            evidence_items = items
-            step_credit_value = _sc.step_credit(items)
-            bank = _qc.observe_step_credit(
-                ws, pending["claim"], step_credit_value,
-                step_ref=step_row["step_id"])
-            credit_banked = bool(bank.get("appended"))
-        except Exception as exc:  # noqa: BLE001 — credit face, never the settle
-            warn("rlvr.step_grain.settle_step.credit",
-                 f"{type(exc).__name__}: {exc}")
+        # issue-802: blind mode is the production face — the unblinded
+        # judgment (producer-surface reads) stays eval-only, and the
+        # derived legs (crystallize / belief) ride the same gate: their
+        # inputs are the step credit and its evidence window. The env
+        # opt-back-in lives at the CALL SITE (round_closure picks the
+        # mode via rlvr.settlement_wire.eval_settle_enabled — the gate's
+        # single source); this signature's blind flag is the switch.
+        if not blind:
+            try:
+                from rlvr import q_cells as _qc  # noqa: PLC0415
+                from rlvr import step_credit as _sc  # noqa: PLC0415
+                items = _sc.evidence_in_window(
+                    ws, claim=str(pending["claim"]),
+                    since_ts=since_ts, until=now_dt)
+                evidence_items = items
+                step_credit_value = _sc.step_credit(items)
+                bank = _qc.observe_step_credit(
+                    ws, pending["claim"], step_credit_value,
+                    step_ref=step_row["step_id"])
+                credit_banked = bool(bank.get("appended"))
+            except Exception as exc:  # noqa: BLE001 — credit face, never
+                warn("rlvr.step_grain.settle_step.credit",
+                     f"{type(exc).__name__}: {exc}")
         # the crystallization write-back — the settled step is the
         # freshest view of (claim, method, outcome, credit), so the
         # derived discriminants (the class dead end / the method
         # broadcast) land here, deduped per step. Fail-open inside its
         # own cage: a store failure never undoes the settled step.
+        # issue-802: rides the eval gate — its input is the step credit.
         crystallized = None
-        try:
-            from rlvr import crystallize as _cz  # noqa: PLC0415
-            crystallized = _cz.crystallize_settlement(
-                ws, claim=str(pending["claim"]),
-                step_id=step_row["step_id"], outcome=str(outcome or ""),
-                step_credit=step_credit_value)
-        except Exception as exc:  # noqa: BLE001 — never the settle
-            warn("rlvr.step_grain.settle_step.crystallize",
-                 f"{type(exc).__name__}: {exc}")
+        if not blind:
+            try:
+                from rlvr import crystallize as _cz  # noqa: PLC0415
+                crystallized = _cz.crystallize_settlement(
+                    ws, claim=str(pending["claim"]),
+                    step_id=step_row["step_id"], outcome=str(outcome or ""),
+                    step_credit=step_credit_value)
+            except Exception as exc:  # noqa: BLE001 — never the settle
+                warn("rlvr.step_grain.settle_step.crystallize",
+                     f"{type(exc).__name__}: {exc}")
         # the belief row — the step's own observation record (what it
         # SAW, what it declared unknown) lands with the same fail-open
         # posture: the decision state's b, priced by later components.
+        # issue-802: rides the eval gate — its input is the evidence window.
         belief_receipt = None
-        try:
-            from rlvr import belief as _belief  # noqa: PLC0415
-            belief_receipt = _belief.record_belief(
-                ws, claim=str(pending["claim"]),
-                step_ref=step_row["step_id"],
-                evidence=evidence_items)
-        except Exception as exc:  # noqa: BLE001 — never the settle
-            warn("rlvr.step_grain.settle_step.belief",
-                 f"{type(exc).__name__}: {exc}")
+        if not blind:
+            try:
+                from rlvr import belief as _belief  # noqa: PLC0415
+                belief_receipt = _belief.record_belief(
+                    ws, claim=str(pending["claim"]),
+                    step_ref=step_row["step_id"],
+                    evidence=evidence_items)
+            except Exception as exc:  # noqa: BLE001 — never the settle
+                warn("rlvr.step_grain.settle_step.belief",
+                     f"{type(exc).__name__}: {exc}")
         # the completion-row telemetry keys: the settle receipt needs the
         # claim/duration/outcome/attempt binding without a second scan
         return dict(step_row, transition=transition, waste=waste,
@@ -378,6 +408,7 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
                     credit_banked=credit_banked,
                     crystallized=crystallized,
                     belief=belief_receipt,
+                    blind=bool(blind),
                     claim=pending["claim"],
                     attempt_id=pending.get("attempt_id"),
                     wall_s=actual_s,

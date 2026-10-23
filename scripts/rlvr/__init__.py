@@ -43,6 +43,7 @@ from . import refutation_fold
 from . import reward
 from . import scalar
 from . import settlement_scorer
+from . import settlement_wire
 from . import signal_guard
 from . import source_reliability
 from . import state
@@ -83,6 +84,7 @@ __all__ = [
     "recipe_arms",
     "refutation_fold",
     "scalar",
+    "settlement_wire",
     "source_reliability",
     "state",
     "step_credit",
