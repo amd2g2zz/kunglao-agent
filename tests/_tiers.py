@@ -95,7 +95,7 @@ FAST_MODULES = frozenset({
     "test_resume_hypotheses_528", "test_resume_prompt", "test_retirement_gate_861", "test_retract_claim",
     "test_rho_checkpoint", "test_rho_verifier_823p2", "test_roi_settlement_49", "test_route_capability_providers",
     "test_rpc_skeleton_template", "test_sanction_datetime_47", "test_scan_waiting_902", "test_script_discipline",
-    "test_secondstop_anchor_831", "test_self_cap_smoke", "test_selfcheck_stamps_536", "test_session_start_notice_25",
+    "test_seal_799", "test_secondstop_anchor_831", "test_self_cap_smoke", "test_selfcheck_stamps_536", "test_session_start_notice_25",
     "test_settle_by_need", "test_settlement_pq_257",
     "test_shared_lib_guard_292", "test_shared_primitives_292",
     "test_skill_invocation", "test_skill_md_contract_537", "test_skill_subcommand_ux", "test_source_reliability_715", "test_specialist_contract_expansion",

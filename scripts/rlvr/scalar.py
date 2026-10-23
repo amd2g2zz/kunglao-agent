@@ -822,7 +822,9 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
         if n_rows == 0:
             step_sum, step_n = _qc.step_credit_totals(ws, did)
             if step_n == 0:
-                bank = _qc.observe_settlement(ws, did, row["r"])
+                bank = _qc.observe_settlement(
+                    ws, did, row["r"], reward=float(row["r"]),
+                    confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
             else:
                 d_s, d_f = _calibration_delta(
                     row["r"], step_sum, step_n,
@@ -865,7 +867,9 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
         did = _real_did(ws, str(row["dispatch_id"]))
         step_sum, step_n = _qc.step_credit_totals(ws, did)
         if step_n == 0:
-            bank = _qc.observe_settlement(ws, did, row["r"])
+            bank = _qc.observe_settlement(
+                ws, did, row["r"], reward=float(row["r"]),
+                confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
         else:
             delta_success, delta_failure = _calibration_delta(
                 row["r"], step_sum, step_n,

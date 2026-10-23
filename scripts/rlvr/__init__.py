@@ -27,6 +27,7 @@ from . import invariants
 from . import l1_planner
 from . import l1_value
 from . import ledger
+from . import learning_seal
 from . import liveness
 from . import marl
 from . import meta_arms
@@ -41,6 +42,7 @@ from . import refutation_fold
 from . import reward
 from . import scalar
 from . import settlement_scorer
+from . import signal_guard
 from . import source_reliability
 from . import state
 from . import step_credit
@@ -67,6 +69,7 @@ __all__ = [
     "l1_planner",
     "l1_value",
     "ledger",
+    "learning_seal",
     "marl",
     "meta_arms",
     "obstacles",

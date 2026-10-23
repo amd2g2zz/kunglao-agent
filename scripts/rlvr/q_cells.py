@@ -144,6 +144,7 @@ if __package__ in (None, ""):
 from kunglao_log import iter_jsonl, warn
 
 from rlvr import state as ssig  # the package face (issue 420 Phase 2)
+from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
 SCHEMA_TAG = "q-cells/1"
@@ -468,7 +469,9 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     Δfailure (row ``failure_delta``) applied verbatim after the γ weight,
     outside the band and the tiebreak, and excluded from the γ EMA."""
     schedule = _resolve_schedule(gamma)
-    rows = [r for r in store.observations()
+    # #799: the learner refuses unsealed/forged rows fail-closed (armed)
+    obs = _seal.trusted_rows(store.observations(), op="q_cells.fold")
+    rows = [r for r in obs
             if isinstance(r, dict) and _credit_of(r) is not None
             and _admits_to_posterior(r)]
     n = len(rows)
@@ -522,7 +525,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
             success=cell.success + weight * credit,
             failure=cell.failure + weight * (1.0 - credit),
             n_pending=cell.n_pending)
-    for row in store.observations():
+    for row in obs:
         if not isinstance(row, dict) or _credit_of(row) is not None:
             continue
         if not _admits_to_posterior(row):
@@ -1052,7 +1055,9 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        recipe_propensity: float | None = None,
                        recipe_source: str | None = None,
                        failure_delta: float | None = None,
-                       reason: str | None = None) -> dict:
+                       reason: str | None = None,
+                       reward: float | None = None,
+                       confidence_band: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1130,6 +1135,15 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # the established emission discipline: absent = byte-identical row).
     if reason:
         row["reason"] = str(reason)
+    # #799 R2b: the event-stream documentation columns — the settlement
+    # line names WHAT reward banked and at WHICH band (production: both
+    # had zero presence in the stream). Absent when not supplied = the
+    # byte-identical legacy row (the additive-column discipline).
+    if reward is not None:
+        row["reward"] = round(float(reward), 6)
+    if confidence_band:
+        row["confidence_band"] = str(confidence_band)
+    row = _seal.sign_row(row)  # #799: every q-cell row seals at write
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
 
@@ -1151,7 +1165,9 @@ def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
     carry a numeric credit and can never be re-matched). None = the
     honest gap — no row, never a fabricated bucket."""
     did = str(dispatch_id or "")
-    for row in reversed(JSONLQStore(ws).observations()):
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.match_pending")
+    for row in reversed(rows):
         if not isinstance(row, dict) \
                 or str(row.get("source") or "") != "dispatch" \
                 or row.get("credit") is not None:
@@ -1164,7 +1180,9 @@ def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
 
 def observe_settlement(ws, dispatch_id: str, credit,
                        *, phi_delta: float | None = None,
-                       credit_kind: str = "solve") -> dict:
+                       credit_kind: str = "solve",
+                       reward: float | None = None,
+                       confidence_band: str | None = None) -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -1206,7 +1224,13 @@ def observe_settlement(ws, dispatch_id: str, credit,
     settlement row and the result — the credit banks against the
     DISPATCH-RECORDED recipe (ITT via the #678 trusted chain); no
     worker narrative is ever read here (the #881 ``steps:`` pattern
-    stays dead)."""
+    stays dead).
+
+    #799 R2b: the optional ``reward`` / ``confidence_band`` columns ride
+    the sealed settlement row when the caller supplies them — the event
+    stream self-documents what reward banked and at which band (both had
+    zero presence in the stream); absent when not supplied (the
+    byte-identical legacy row)."""
     did = str(dispatch_id or "")
     kind = "verification" if str(credit_kind or "").strip() == \
         "verification" else "solve"
@@ -1239,7 +1263,13 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  recipe_id=match.get("recipe_id"),
                                  recipe_propensity=match.get(
                                      "recipe_propensity"),
-                                 recipe_source=match.get("recipe_source"))
+                                 recipe_source=match.get("recipe_source"),
+                                 # #799 R2b: the settlement line carries
+                                 # the reward + confidence band (absent
+                                 # when not supplied — legacy rows
+                                 # byte-identical).
+                                 reward=reward,
+                                 confidence_band=confidence_band)
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -1260,14 +1290,45 @@ def observe_settlement(ws, dispatch_id: str, credit,
                 "credit_kind": kind, "beta_updated": False}
 
 
+def _step_ceiling(did: str, credit, evidence_seal) -> float:
+    """#799 pin: when armed, a step credit above the unverified floor
+    banks at the floor unless the caller carries a VALID sealed evidence
+    doc (``kind: step-evidence`` naming this dispatch and credit) —
+    worker-typed PROVEN alone can no longer settle 1.0. Unarmed = the
+    legacy face byte-identically."""
+    from rlvr import step_credit as _sc  # noqa: PLC0415
+    floor = _sc.CREDIT_BY_CLASS[_sc.UNVERIFIED]
+    if credit is None:
+        return credit
+    credit = max(0.0, min(1.0, float(credit)))
+    if not _seal.armed() or credit <= floor:
+        return credit
+    ok, why = ((False, "no evidence seal") if evidence_seal is None
+               else _seal.verify_row(evidence_seal))
+    if ok and str(evidence_seal.get("kind") or "") == "step-evidence" \
+            and str(evidence_seal.get("dispatch_id") or "") == did \
+            and abs(float(evidence_seal.get("credit") or -1.0)
+                    - credit) <= 1e-9:
+        return credit
+    warn("q_cells.step_ceiling",
+         f"step credit {credit} for {did!r} demoted to the unverified "
+         f"floor {floor} ({why or 'invalid evidence seal'}) — worker-"
+         f"typed status alone cannot settle 1.0 (#799)")
+    return floor
+
+
 def _bank_matched(ws, did: str, match: dict, credit, *,
                   kind: str, failure_delta: float | None = None,
-                  reason: str | None = None) -> dict:
+                  reason: str | None = None,
+                  evidence_seal: dict | None = None) -> dict:
     """Append one credit row into the matched dispatch's cell and shape
     the shared result dict (the #712 faces' common tail: same keys
     observe_settlement returns, so callers — strategy store, case-
     posterior leg — read one shape). ``reason`` rides the row only when
-    set (the amendment audit face)."""
+    set (the amendment audit face). #799: step rows pass the ceiling —
+    above-floor credit needs a valid evidence seal when armed."""
+    if kind == CREDIT_KIND_STEP:
+        credit = _step_ceiling(did, credit, evidence_seal)
     out = append_observation(ws, str(match.get("signature_hash")),
                              str(match.get("method_family")), credit,
                              source=("credit-amendment"
@@ -1298,7 +1359,9 @@ def _match_banked_row(ws, dispatch_id: str) -> dict | None:
     pruned dispatch row never orphans a correction: the banked row's
     own signature/method_family/arm_key ARE the cell address."""
     did = str(dispatch_id or "")
-    for row in reversed(JSONLQStore(ws).observations()):
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.match_banked")
+    for row in reversed(rows):
         if not isinstance(row, dict):
             continue
         if str(row.get("source") or "") not in ("settlement",
@@ -1330,7 +1393,8 @@ def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
     s = f = 0.0
     n = 0
     try:
-        for row in JSONLQStore(ws).observations():
+        for row in _seal.trusted_rows(JSONLQStore(ws).observations(),
+                                      op="q_cells.banked_mass"):
             if not isinstance(row, dict):
                 continue
             if str(row.get("source") or "") not in ("settlement",
@@ -1431,7 +1495,8 @@ def amend_settlement(ws, dispatch_id: str, target_credit,
 
 
 def _bridge_admit(ws, did: str, family: str, credit, *,
-                  kind: str) -> dict:
+                  kind: str,
+                  evidence_seal: dict | None = None) -> dict:
     """The pool-bridge fallback admission (the learning→decision
     bridge's credit face). The matched dispatch identity is gone (no
     pending row), but the method-family usage log resolved the
@@ -1442,6 +1507,8 @@ def _bridge_admit(ws, did: str, family: str, credit, *,
     face); ``credit_kind`` stays the caller's. Fail-open telemetry,
     same shape as the matched bank."""
     key = arm_key(family, "facts_snapshot", "none", 0)
+    if kind == CREDIT_KIND_STEP:
+        credit = _step_ceiling(did, credit, evidence_seal)
     out = append_observation(ws, _current_sig(ws), family, credit,
                              source="settlement", claim=did,
                              dispatch_id=did,
@@ -1461,7 +1528,8 @@ def _bridge_admit(ws, did: str, family: str, credit, *,
 
 def observe_step_credit(ws, dispatch_id: str, credit, *,
                         step_ref: str | None = None,
-                        method_family: str | None = None) -> dict:
+                        method_family: str | None = None,
+                        evidence_seal: dict | None = None) -> dict:
     """#712: bank ONE step-boundary credit — the dense signal that moves
     the Q-cell Beta at SubagentStop, BEFORE claim-terminal.
 
@@ -1491,14 +1559,16 @@ def observe_step_credit(ws, dispatch_id: str, credit, *,
         if match is None:
             fam = str(method_family or "").strip()
             if fam:
-                return _bridge_admit(ws, did, fam, credit, kind=kind)
+                return _bridge_admit(ws, did, fam, credit, kind=kind,
+                                     evidence_seal=evidence_seal)
             warn("q_cells.observe_step_credit",
                  f"no pending dispatch row for {did!r} — step credit not "
                  f"banked (the honest gap)")
             return {"appended": False, "matched": False,
                     "reason": "unmatched", "dispatch_id": did,
                     "credit_kind": kind, "beta_updated": False}
-        out = _bank_matched(ws, did, match, credit, kind=kind)
+        out = _bank_matched(ws, did, match, credit, kind=kind,
+                            evidence_seal=evidence_seal)
         if step_ref:
             out["step_ref"] = str(step_ref)
         return out
@@ -1558,7 +1628,8 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
     did = str(dispatch_id or "")
     total, count = 0.0, 0
     try:
-        for row in JSONLQStore(ws).observations():
+        for row in _seal.trusted_rows(JSONLQStore(ws).observations(),
+                                      op="q_cells.step_totals"):
             if not isinstance(row, dict) \
                     or str(row.get("credit_kind") or "") != CREDIT_KIND_STEP:
                 continue

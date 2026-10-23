@@ -228,9 +228,10 @@ files:
   scripts/rlvr/consolidated_ledger.py: 6
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 23
+  scripts/rlvr/incremental_reward.py: 34
   scripts/rlvr/l1_planner.py: 2
   scripts/rlvr/l1_value.py: 5
+  scripts/rlvr/learning_seal.py: 10
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/marl.py: 2
@@ -239,17 +240,17 @@ files:
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 133
+  scripts/rlvr/q_cells.py: 141
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/reward.py: 8
-  scripts/rlvr/scalar.py: 35
+  scripts/rlvr/scalar.py: 37
   scripts/rlvr/settlement_scorer.py: 2
   scripts/rlvr/signal_guard.py: 1
   scripts/rlvr/state.py: 24
   scripts/rlvr/step_credit.py: 5
   scripts/rlvr/step_grain.py: 20
   scripts/rlvr/step_ledger.py: 15
-  scripts/rlvr/strategy_store.py: 31
+  scripts/rlvr/strategy_store.py: 32
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14
