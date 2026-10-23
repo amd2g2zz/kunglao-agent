@@ -1578,6 +1578,109 @@ def _pq_dispatched_before(ws: Path, qid: str,
     return False
 
 
+def _supply_admission(ws: Path, claim_id: str, payload: dict,
+                      trace_id: str | None = None,
+                      verifier_remediation: bool = False) -> int | None:
+    """Supply admission (teeth): a claim cannot reach dispatch without
+    >= 1 OPEN hypothesis linked to it carrying >= 1 non-empty candidate.
+    The supply floor that makes the exploration layer un-ignorable —
+    claim birth stubs it (scripts/hypothesis_bridge.py ensure_claim_stub
+    via the mint/split paths); this face refuses what was born without
+    one (the production shape: real workspaces holding claims with zero
+    H-* files).
+
+    Linkage faces (the sanctioned claim-binding vocabulary):
+      - a hypotheses/<H-ID>.md whose claim_id == the dispatched claim; or
+      - the register row's hypothesis_ref -> an OPEN family hypothesis
+        (the arm-bridge shape: an arm claim IS a hypothesis candidate,
+        the family names the parent).
+
+    Teeth scope (owner task directive alongside the logs-panel findings;
+    the design-phase panel's Phase-1 advisory is superseded for THIS
+    face — the pricing card brings the incentive layer, the supply floor
+    is structural): store READABLE + no linked open hypothesis -> REJECT
+    with guidance naming the one-command fix. The rejection rides the
+    HARD evidence class (a charter face: the competing-explanations
+    requirement is evidence protocol, not input formatting — the
+    gate-layering authority's format demotion keeps the PQ-neighborhood
+    face advisory; THIS face is the floor under it). Fail-open (the
+    outage tiering) retained ONLY for an unreadable carrier: a
+    hypothesis-store outage WARNs + traces hypothesis_supply_fail_open
+    and proceeds — a broken store must not brick a mission (the
+    self-health shape).
+
+    Sleeping faces: hypotheses/ carrier absent (a pre-carrier workspace —
+    same arming shape as the PQ face's task_spec guard), claim not found
+    in the register (not this face's contract), and verifier-remediation
+    dispatches (the D2 honest trust path must never be blocked on
+    supply)."""
+    if verifier_remediation:
+        return None
+    hyp_dir = ws / "hypotheses"
+    if not hyp_dir.is_dir():
+        return None  # pre-carrier workspace — not scaffolded yet
+    try:
+        with scripts_on_path():  # scoped membership
+            import hypothesis_store as hs
+        hyps = hs.HypothesisStore(hyp_dir).list_all()
+    except Exception as exc:  # noqa: BLE001 — outage tiering: carrier down
+        print(
+            f"dispatch_gate: WARN hypothesis-supply fail-open — "
+            f"hypothesis carrier unreadable ({type(exc).__name__}), supply "
+            f"admission not enforced for {claim_id}",
+            file=sys.stderr, flush=True,
+        )
+        _emit_trace(ws, "hypothesis_supply_fail_open", claim_id,
+                    f"reason=carrier_read_failed; "
+                    f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+        return None
+    try:
+        reg = (yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8"))
+            or {})
+    except Exception:  # noqa: BLE001 — unreadable register: claim unknown
+        return None  # not this face's contract (other faces own it)
+    row = next((c for c in (reg.get("claims") or [])
+                if isinstance(c, dict)
+                and str(c.get("id") or "") == claim_id), None)
+    if row is None:
+        return None
+
+    def _live(h) -> bool:
+        return (getattr(h, "status", "") == "open"
+                and any(str(c).strip() for c in (h.candidates or [])))
+
+    linked = any(h.claim_id == claim_id and _live(h) for h in hyps)
+    if not linked:
+        # the arm-bridge shape: the arm claim IS the candidate (its
+        # minted row carries the arm_key/statement), so the register's
+        # hypothesis_ref face counts the family hypothesis on OPEN alone —
+        # a drained scaffold (candidates=[]) is the lint-clean state.
+        ref = str(row.get("hypothesis_ref") or "").strip()
+        if ref:
+            linked = any(h.id == ref and h.status == "open" for h in hyps)
+    if linked:
+        return None
+    # the REJECT face reaches the unified log like top1/capability.
+    _emit_trace(ws, "hypothesis_supply_reject", claim_id,
+                f"linked_open=0; hyps={len(hyps)}", exit_code=2,
+                trace_id=trace_id)
+    return _reject_with_guidance(
+        "hypothesis_supply",
+        f"{claim_id} carries no OPEN hypothesis — the claim cannot reach "
+        f"dispatch without >= 1 linked open hypothesis holding a real "
+        f"candidate (the supply floor: the exploration layer was built "
+        f"and wired but never fed; a claim with zero rival explanations "
+        f"is how edge findings get chased as major ones).",
+        f"file the birth stub: `python scripts/hypothesis_bridge.py "
+        f"--ensure-stub {ws} {claim_id}` (or mint the family arms via "
+        f"`hypothesis_bridge.py --mint`), then re-dispatch. The stub "
+        f"carries the claim's stated mechanism as H1 — name the rival(s) "
+        f"and the discriminating observation before the first dispatch "
+        f"into the PQ neighborhood.",
+        issue="794", ws=ws, gate_class="evidence")
+
+
 def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
                           trace_id: str | None = None) -> int | None:
     """#109: PQ-neighborhood first-dispatch admission (framework-rigidity
@@ -2003,7 +2106,12 @@ def _main_inner() -> int:
     # remediation; the B1o blocker must allow it, not reject it (the honest
     # path was structurally absent and self-minting became the only exit).
     # Observed, fail-open: the trace row lands in the unified log.
-    if _is_verifier_remediation_dispatch(ws, claim_id, payload, prompt_text):
+    # D2: resolve ONCE — the drift pass-through and the supply face
+    # share the same verifier-remediation exemption (the honest trust
+    # path must never be blocked on supply).
+    verifier_remediation = _is_verifier_remediation_dispatch(
+        ws, claim_id, payload, prompt_text)
+    if verifier_remediation:
         _pt_agent = _resolve_dispatch_agent(payload, prompt_text) or "?"
         _emit_trace(ws, "drift_verifier_passthrough", claim_id,
                     f"verifier dispatch allowed through the drift gate "
@@ -2012,6 +2120,15 @@ def _main_inner() -> int:
         rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
         if rc is not None:
             return rc
+
+    # Supply admission (the floor UNDER the PQ first-dispatch face): the
+    # claim must carry >= 1 linked OPEN hypothesis before it reaches
+    # dispatch. Teeth on the readable-carrier case; fail-open on carrier
+    # outages; asleep for pre-carrier workspaces and verifier dispatches.
+    rc = _supply_admission(ws, claim_id, payload, trace_id=trace_id,
+                           verifier_remediation=verifier_remediation)
+    if rc is not None:
+        return rc
 
     # #109 hypothesis admission — same enforcement layer as must-stop/top1
     # (activated main flow, REJECT-capable). Protocol completeness precedes

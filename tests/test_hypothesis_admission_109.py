@@ -64,6 +64,17 @@ def _write_hyp(ws: Path, hyp_id: str, *, candidates: list[str],
     return p
 
 
+def _write_supply_stub(ws: Path) -> Path:
+    """Satisfy the claim-birth supply floor (the dispatch-gate face UNDER
+    this file's PQ face). Tests here pin the PQ-neighborhood contract,
+    not supply — the stub is claim-linked WITHOUT a pq marker beyond the
+    claim_id map (its one candidate counts toward the PQ face exactly
+    like any claim-linked open hypothesis)."""
+    return _write_hyp(ws, "H-STUB", candidates=["stated mechanism"],
+                      claim_id="C-1", group="stub-C-1",
+                      body_marker=None)
+
+
 def _mk_ws(root: Path, *, pq_ids: tuple[str, ...] = ("q1",)) -> Path:
     """Activated single-claim workspace: C-1 answers q1, q1 is a primary
     question, hypotheses/ NOT yet written (caller adds what it needs)."""
@@ -138,6 +149,7 @@ class TestFirstDispatchAdmission:
         + repair path ride the tool result; no rc=2 context re-read)."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, (
@@ -169,6 +181,7 @@ class TestFirstDispatchAdmission:
         the one story being chased (#109 problem statement)."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
@@ -179,6 +192,7 @@ class TestFirstDispatchAdmission:
         competitor field — they cannot satisfy the admission."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC", "ChaCha20"],
                    status="refuted")
         r = _run_gate(root, ws, _PROMPT)
@@ -192,6 +206,7 @@ class TestFirstDispatchAdmission:
         never fires — a blocked dispatch declares no intent."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         prompt = _PROMPT + "\nuncertainty: which mac the header uses"
         r = _run_gate(root, ws, prompt)
@@ -212,6 +227,7 @@ class TestAdmissionSatisfied:
     def test_three_candidates_on_one_scaffold_pass(self, tmp_path) -> None:
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001",
                    candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         r = _run_gate(root, ws, _PROMPT)
@@ -225,6 +241,7 @@ class TestAdmissionSatisfied:
         holding one candidate each also clear the bar."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         _write_hyp(ws, "H-002", candidates=["custom-rolling-mac"])
         _write_hyp(ws, "H-003", candidates=["truncated-digest"])
@@ -249,6 +266,7 @@ class TestAdmissionSatisfied:
         """`pq:q1` (colon variant) binds like the seeder's `pq-q1`."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"], group="pq:q1")
         _write_hyp(ws, "H-002", candidates=["ChaCha20"], group="pq:q1")
         _write_hyp(ws, "H-003", candidates=["custom-rolling-mac"],
@@ -302,6 +320,7 @@ class TestAdmissionSatisfied:
         import sys as _sys
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         scripts = str(REPO_ROOT / "scripts")
         if scripts not in _sys.path:
@@ -324,6 +343,7 @@ class TestSecondDispatchUnrestricted:
         association, #105 producer) shows q1 was already dispatched."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001",
                    candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         first = _PROMPT + "\nuncertainty: which mac the header uses"

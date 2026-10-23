@@ -246,6 +246,62 @@ def ensure_family(ws: Path, *, marker: str, group: str | None = None,
     _emit(ws, "family_ensured", f"{hyp.id} {marker}")
     return hyp
 
+# ---------------------------------------------------------------------------
+# Claim-birth stubs (the supply discipline)
+# ---------------------------------------------------------------------------
+
+CLAIM_STUB_MARKER_FMT = "claim-stub:{claim_id}"
+STUB_CANDIDATE_MAX = 160
+
+
+def ensure_claim_stub(ws: Path, *, claim_id: str, statement: str,
+                      qid: str | None = None) -> Hypothesis:
+    """Claim birth = hypothesis birth — the idempotent birth stub.
+
+    Every code-level claim mint path (split fan-out, obstacle promotion,
+    arm mints) files ONE OPEN hypothesis linked to the newborn claim, so
+    the exploration layer can never stay empty while claims flow (the
+    production shape this card closes: real workspaces holding claims
+    with zero H-* files). The stub carries the claim's stated mechanism
+    as its first candidate — H1 as written; rivals are what the PQ
+    first-dispatch admission face then forces the orchestrator to name
+    before the first dispatch into the neighborhood.
+
+    Binding: claim_id == the newborn claim (the supply face's linkage);
+    body carries the `claim-stub:<claim_id>` idempotency marker AND, when
+    the claim answers a primary question, the `pq:<qid>` marker so the
+    PQ admission face sees the stub too. Idempotent by marker: a re-mint
+    never files a second stub (marker-not-text, the split-mint rule).
+    """
+    ws = Path(ws)
+    store = HypothesisStore(ws / "hypotheses")
+    marker = CLAIM_STUB_MARKER_FMT.format(claim_id=claim_id)
+    existing = find_hypothesis_by_marker(store, marker)
+    if existing is not None:
+        return existing
+    candidate = " ".join(str(statement or "").split())[:STUB_CANDIDATE_MAX]
+    if not candidate:
+        candidate = f"{claim_id} as stated"
+    hyp_id = _next_hypothesis_id(store)
+    body_lines = [marker]
+    if (qid or "").strip():
+        body_lines.append(PQ_BODY_MARKER_FMT.format(qid=str(qid).strip()))
+    body_lines.append(
+        f"Birth stub for {claim_id} (#794 supply): H1 is the claim's "
+        f"stated mechanism — name the rival(s) and the discriminating "
+        f"observation BEFORE the first dispatch.")
+    hyp = Hypothesis(
+        id=hyp_id,
+        claim_id=str(claim_id),
+        competitor_group=family_group(hyp_id),
+        candidates=[candidate],
+        status="open",
+        body="\n".join(body_lines) + "\n",
+    )
+    store.create(hyp)
+    _emit(ws, "family_ensured", f"{hyp.id} {marker}")
+    return hyp
+
 
 # ---------------------------------------------------------------------------
 # Arms as claims (the normal mint path — no parallel register)
@@ -851,6 +907,28 @@ def _cmd_mint(a: argparse.Namespace, ws: Path) -> int:
     return 0
 
 
+def _cmd_ensure_stub(a: argparse.Namespace, ws: Path) -> int:
+    """The admission guidance's one-command fix — file the birth stub
+    for a claim (statement from the register; idempotent)."""
+    from _scriptlib import find_claim as _find_claim, load_register
+    claims, _p = load_register(ws)
+    claim = _find_claim(claims, a.ensure_stub)
+    if claim is None:
+        print(f"REFUSED: claim {a.ensure_stub} not found")
+        return 1
+    hyp = ensure_claim_stub(ws, claim_id=a.ensure_stub,
+                            statement=str(claim.get("statement") or ""),
+                            qid=str(claim.get("answers_question") or "")
+                            or None)
+    if a.json:
+        _as_json({"ensured": hyp.id, "claim_id": hyp.claim_id,
+                  "candidates": hyp.candidates})
+    else:
+        print(f"ENSURED {hyp.id} <- {hyp.claim_id} "
+              f"candidates={hyp.candidates}")
+    return 0
+
+
 def _cmd_sweep(a: argparse.Namespace, ws: Path) -> int:
     r = mint_pending_candidates(ws)
     if a.json:
@@ -894,6 +972,9 @@ def main(argv: list[str] | None = None) -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--mint", nargs=2, metavar=("H-ID", "CANDIDATES"),
                    help="mint comma-separated candidates as arms of H-ID")
+    g.add_argument("--ensure-stub", metavar="CLAIM-ID",
+                   help="#794: file the claim-birth hypothesis stub "
+                        "(idempotent; statement from the register)")
     g.add_argument("--sweep", action="store_true",
                    help="pay all parked candidate strings into the economy")
     g.add_argument("--sync", action="store_true",
@@ -905,6 +986,8 @@ def main(argv: list[str] | None = None) -> int:
     ws = a.workspace
     if a.mint:
         return _cmd_mint(a, ws)
+    if a.ensure_stub:
+        return _cmd_ensure_stub(a, ws)
     if a.sweep:
         return _cmd_sweep(a, ws)
     if a.sync:
