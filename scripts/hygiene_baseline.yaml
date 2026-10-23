@@ -58,6 +58,8 @@ files:
     r1: 2
   scripts/claim_expiry.py:
     r1: 2
+  scripts/claims_store.py:
+    r1: 5
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
@@ -653,6 +655,8 @@ files:
     r1: 1
   tests/test_claim_granularity_241.py:
     r1: 1
+  tests/test_claims_store_800.py:
+    r1: 4
   tests/test_classification_collapse_581.py:
     r1: 1
   tests/test_claudemd_conditional_919.py:

@@ -268,13 +268,13 @@ def test_breaker_freezes_on_degenerate_bridge_traffic(tmp_path):
         yaml.safe_dump(ws_claims), encoding="utf-8")
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True, exist_ok=True)
-    (logs / "kunglao-2026-10-19.jsonl").write_text("", encoding="utf-8")
     out2 = src.run(ws)
     assert out2.get("signal_frozen") is True, out2
     assert out2.get("pool_bridged") == 0, "the frozen pass bridges nothing"
-    rows = [json.loads(ln) for ln in
-            (logs / "kunglao-2026-10-19.jsonl")
-            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # the blocker lands on the CURRENT UTC day file — glob the day files,
+    # never a hardcoded calendar date (kunglao_log._day_file owns naming)
+    rows = [json.loads(ln) for p in sorted(logs.glob("kunglao-*.jsonl"))
+            for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert any(r.get("action") == "signal_degenerate" for r in rows)
 
 

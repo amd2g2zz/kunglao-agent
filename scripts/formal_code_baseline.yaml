@@ -4,12 +4,12 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 215
+  hooks/dispatch_gate.py: 214
   hooks/env_check_gate.py: 30
   hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
-  hooks/recall_inject.py: 41
+  hooks/recall_inject.py: 36
   hooks/round_closure.py: 14
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
@@ -20,7 +20,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 51
   hooks/worker_budget_gates.py: 129
-  hooks/worker_budget_sinks.py: 135
+  hooks/worker_budget_sinks.py: 133
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -57,6 +57,7 @@ files:
   scripts/check_global_rule_subset.py: 1
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
+  scripts/claims_store.py: 11
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2

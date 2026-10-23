@@ -165,8 +165,11 @@ def _append_provenance(ws, row: dict) -> None:
         base = {"schema": PROVENANCE_SCHEMA, "ts": _utc_now_z()}
         with p.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({**base, **row}, ensure_ascii=False) + "\n")
-    except OSError:
-        pass  # provenance never blocks the transition face
+    except OSError as exc:
+        # provenance never blocks the transition face — but never silently
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"provenance append failed ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
 
 
 # ------------------------------------------------------------- the mutator
@@ -243,8 +246,10 @@ def _journal_save(ws, journal: dict | None) -> None:
     if journal is None:
         try:
             p.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"[kunglao-agent] claims_store WARN (fail-open): "
+                  f"journal clear failed ({type(exc).__name__}: {exc})",
+                  file=sys.stderr)
         return
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(journal, ensure_ascii=False), encoding="utf-8")
@@ -452,8 +457,10 @@ def _txn_rollback(ws, journal: dict) -> None:
             if not journal.get("stash_existed"):
                 try:
                     (Path(ws) / journal["stash_path"]).unlink(missing_ok=True)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    print(f"[kunglao-agent] claims_store WARN (fail-open): "
+                          f"stash rollback unlink failed "
+                          f"({type(exc).__name__}: {exc})", file=sys.stderr)
 
 
 def abort_dispatch(ws, claim: str, actor: str = "") -> TransitionResult:

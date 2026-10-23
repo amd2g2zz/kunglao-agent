@@ -1849,7 +1849,7 @@ def main() -> int:
             import claims_store as _cstore800
             if rc == 2:
                 _cstore800.abort_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"],
-                                          actor="dispatch_gate")
+                                          actor="hook:dispatch_gate")
             elif rc == 0:
                 _cstore800.confirm_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"])
         except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
