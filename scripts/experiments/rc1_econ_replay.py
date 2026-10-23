@@ -154,8 +154,15 @@ def detector_accounting(ledger_paths: list[Path] | None) -> dict | None:
                 try:
                     det = str((json.loads(row.get("detail") or "{}")
                                ).get("detector") or "unknown")
-                except ValueError:
-                    det = "unknown"
+                except ValueError as exc:
+                    # #275: a corrupt detail row is skipped WITH a trace
+                    # (rate-limited canonical warn), not silently
+                    # default-attributed — "unknown" would pollute the
+                    # per-detector accounting this face exists for.
+                    warn("rc1_econ_replay",
+                         f"ledger row detail unparsable ({exc}); row "
+                         f"skipped for detector attribution")
+                    continue
                 bucket = evals if action == DETECTOR_EVAL_WORD else fires
                 bucket[det] = bucket.get(det, 0) + 1
     total_evals = sum(evals.values())
@@ -205,6 +212,10 @@ if __name__ == "__main__":
     try:
         from _boot import force_utf8  # entry UTF-8 boot (_boot)
         force_utf8()
-    except ImportError:  # stdlib face stays runnable without the skill boot
-        pass
+    except ImportError as exc:  # stdlib face stays runnable without the
+        # skill boot — but the degradation is traced, never silent (#275).
+        warn("rc1_econ_replay",
+             f"_boot unavailable ({exc}); stdlib face runs without the "
+             f"entry UTF-8 boot")
+        sys.stderr.flush()
     sys.exit(main())
