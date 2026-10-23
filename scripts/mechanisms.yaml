@@ -160,6 +160,25 @@ mechanisms:
       session_is_dead (heartbeat missing or both last_tick_ts + activity_ts
       stale). Out-of-session by definition — host=os, never tick-dispatched.
 
+  - name: wake_gate
+    entry: scripts/heartbeat_tick.py
+    channel: os
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: os
+    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + rc3/0 from --wake-gate"
+    owner: scripts/heartbeat_tick.py
+    description: >
+      The pre-LLM wake gate (#801 Face 1): the OS scheduler (cron/schtasks)
+      runs heartbeat_tick.py <ws> --origin cron --wake-gate DIRECTLY — zero
+      LLM. A quiet verdict (watchdog silent, no wake-class bus events, park
+      below expiry) exits 0 and injects NOTHING (idle burn 750k tok/h -> 0);
+      a wake verdict exits 3 and the wrapper injects the loop prompt.
+      Out-of-session like dead_session_kicker — declared here so the
+      cockpit answer stays complete; never tick-dispatched.
+
   - name: decide_cli
     entry: scripts/kunglao-decide.py
     channel: cli

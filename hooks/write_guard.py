@@ -60,6 +60,8 @@ import shutil
 import sys
 import tempfile
 import time
+
+import gate_policy  # #801 Face 2: the gate-layering authority (hooks/)
 from pathlib import Path
 
 from _path_hygiene import ensure_on_path, ensure_scripts_path, load_hooks_lib  # noqa: E402  # #671 authority
@@ -461,7 +463,7 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
             violations.append(
                 f"supersedes[?] adjudication crashed "
-                f"({type(exc).__name__}: {exc}); fail-closed.")
+                f"({type(exc).__name__}: {exc}) [self-health: demoted, #801]")
     if carrier == CARRIER_BLOCKER:
         # #340 scope A: blocker v2 schema + env-attribution evidence gate.
         # The #538 README stub is not a blocker record (the same explicit
@@ -482,7 +484,7 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             except Exception as exc:  # noqa: BLE001 — crash = fail closed
                 violations.append(
                     f"blocker[?] adjudication crashed "
-                    f"({type(exc).__name__}: {exc}); fail-closed.")
+                    f"({type(exc).__name__}: {exc}) [self-health: demoted, #801]")
     if carrier == CARRIER_REGISTER:
         # #516: single-writer enforcement — the register post-image must be
         # a canonical safe_dump round-trip (ws_yaml.py's own rendering,
@@ -511,7 +513,7 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
             violations.append(
                 f"register-writer: adjudication crashed "
-                f"({type(exc).__name__}: {exc}); fail-closed.")
+                f"({type(exc).__name__}: {exc}) [self-health: demoted, #801]")
     if carrier == CARRIER_REGISTER:
         # #819: evidence-gated ->PROVEN. Evidence lives in runs/*.md of the
         # REAL workspace (not the shadow — this tool call does not write
@@ -544,7 +546,7 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         except Exception as exc:  # noqa: BLE001 — gate crash = fail closed
             violations.append(
                 f"proven-gate: adjudication crashed "
-                f"({type(exc).__name__}: {exc}); fail-closed.")
+                f"({type(exc).__name__}: {exc}) [self-health: demoted, #801]")
     # #341: runtime-state fact gate — a dynamic-source fact about a volatile
     # subject (key/token/session/nonce/cookie) must carry the four runtime
     # fields (temporal_scope/subject_slot/value_fingerprint/captured_at).
@@ -564,7 +566,7 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
             violations.append(
                 f"runtime-fact[?] adjudication crashed "
-                f"({type(exc).__name__}: {exc}); fail-closed.")
+                f"({type(exc).__name__}: {exc}) [self-health: demoted, #801]")
     # #820: an active per-file waiver (runs/write-guard-waivers.yaml, written
     # by scripts/write_guard_unlock.py unlock) exempts the TARGET's own lint
     # violations for migration-mode rewrites. Only lint-leg violations are
@@ -746,14 +748,34 @@ def main() -> int:
         try:
             shadow = build_shadow(ws, target, text, Path(tmp))
             violations = adjudicate(ws, shadow, carrier, rel)
-        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
-            detail = (f"write_guard: BLOCK — adjudication crashed "
-                      f"({type(exc).__name__}: {exc}); fail-closed.")
+        except Exception as exc:  # noqa: BLE001 — #801: self-health demotes
+            # THE 51job FATAL shape, pinned dead: the harness's own gate
+            # crashing (ModuleNotFoundError family) used to BLOCK the write
+            # — self-health stopping the mission. Demoted: WARN + telemetry
+            # sidecar (self_health class) + the write proceeds.
+            detail = (f"write_guard: WARN — adjudication crashed "
+                      f"({type(exc).__name__}: {exc}) [self-health: "
+                      f"demoted, #801 — proceeding WITHOUT the verdict]")
             print(detail, file=sys.stderr)
-            _emit_block(ws, payload, rel.as_posix(), detail)
-            _dbg(f"exit BLOCK rc=2 — adjudication crashed "
+            gate_policy.warn_sidecar(ws, "write_guard", "self_health",
+                                     detail, exit_code=0)
+            _dbg(f"exit ALLOW rc=0 — adjudication crashed (demoted): "
                  f"({type(exc).__name__}: {exc})")
-            return RC_BLOCK
+            return RC_ALLOW
+    # #801 Face 2 layering: crash-arm entries ("adjudication crashed",
+    # self-health class) demote to WARN + sidecar and never block; only
+    # real content/format violations (corruption class) keep their teeth.
+    _health = [v for v in violations if "adjudication crashed" in v]
+    _hard = [v for v in violations if "adjudication crashed" not in v]
+    if _health and not _hard:
+        detail = ("write_guard: WARN — self-health leg(s) crashed, "
+                  "demoted (no block, #801):\n  - " + "\n  - ".join(_health))
+        print(detail, file=sys.stderr)
+        gate_policy.warn_sidecar(ws, "write_guard", "self_health",
+                                 detail, exit_code=0)
+        _dbg("exit ALLOW rc=0 — self-health legs only (demoted)")
+        return RC_ALLOW
+    violations = _hard
     if violations:
         # #820: surface the repair surface — this write is blocked only by
         # its own violations; other files' violations are audit info (the
