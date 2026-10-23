@@ -649,8 +649,33 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     rollouts, not on the round-credit set, so it runs even when no
     terminal claim is currently dispatchable-visible."""
     claims = terminal_claims(ws)
-    dispatches = [{"dispatch_id": cid, "round": i + 1}
-                  for i, cid in enumerate(claims)]
+    # #800 R2: the credit pass stays CLAIM-grained (the #433 ladder's
+    # artifact attribution joins the facts' creator=C-NN field; the
+    # bridge's family map is claim-keyed), but a terminal claim with
+    # NO dispatch-ledger row is a pre-#800 workspace — unsupported
+    # (no-backcompat ruling 2026-09-01): loud gap, excluded from the
+    # pass. The REAL dispatch id enters at the q-cell bank seam
+    # (scalar._bank_q_cell_credit resolves it from the ledger).
+    dispatches = []
+    off_ledger = 0
+    for cid in claims:
+        _led = None
+        try:
+            import claims_store as _cstore8
+            _led = _cstore8.latest_committed_dispatch(ws, cid)
+        except Exception as _did_exc:  # noqa: BLE001 — fail-open read
+            warn("settle_round_credit.dispatch_id",
+                 f"ledger read failed for {cid} "
+                 f"({type(_did_exc).__name__}: {_did_exc})")
+        if _led is None:
+            off_ledger += 1
+            warn("settle_round_credit.off_ledger",
+                 f"terminal claim {cid} has no dispatch-ledger row "
+                 f"(pre-#800 workspace — unsupported per the "
+                 f"no-backcompat ruling); banking skipped")
+            continue
+        dispatches.append({"dispatch_id": cid,
+                           "round": len(dispatches) + 1})
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept
     # runs/posteriors.yaml from ever existing, now loud
@@ -711,6 +736,17 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
                 out["pool_bridged"] = bridge["pool_bridged"]
                 if bridge.get("pool_bridge_error"):
                     out["pool_bridge_error"] = bridge["pool_bridge_error"]
+                # #800 R2 amendment 4: the missing-rollout audit — a
+                # committed dispatch whose claim went terminal without
+                # banking a settlement is LOUD (the production C-005
+                # silent lie). Fail-open: never blocks the tick.
+                try:
+                    import claims_store as _cstore8
+                    out["missing_rollouts"] = len(
+                        _cstore8.audit_missing_rollouts(ws))
+                except Exception as _mr_exc:  # noqa: BLE001 — fail-open
+                    warn("settle_round_credit.missing_rollout_audit",
+                         f"{type(_mr_exc).__name__}: {_mr_exc}")
                 out["case_observations"] = (
                     fresh["case_observations"] + late["case_observations"])
                 out["cases_passed"] = (
@@ -730,6 +766,8 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
         out = {"settled": 0, "rounds": 0,
                "reason": "no terminal claims - nothing to settle"}
     out["cases_armed"] = len(armed)
+    if off_ledger:
+        out["off_ledger"] = off_ledger
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:

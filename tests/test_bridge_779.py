@@ -45,6 +45,13 @@ def _ws(tmp_path, claims, name="ws"):
     (ws / "facts").mkdir()
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}), encoding="utf-8")
+    # #800 R2: mint real dispatch ids — settle resolves the REAL id
+    # from the dispatch ledger (pre-#800 fixtures settle nothing).
+    # pending=False: this suite pins the STARVED bridge face (the
+    # bank never matched, the claim-level admission feeds the pool).
+    from _dispatch_fixture import mint_dispatches
+
+    mint_dispatches(ws, claims, family=FAM, pending=False)
     return ws
 
 
@@ -143,14 +150,20 @@ def test_bridge_skips_when_step_records_exist(tmp_path):
 def test_bridge_skips_when_terminal_mass_already_banked(tmp_path):
     """A matched terminal bank already fed the pool (the #462 W5 solve
     row): bridging again would double-count ONE observation."""
+    import claims_store
     import settle_round_credit as src
     from rlvr import q_cells
 
     ws = _ws(tmp_path, [_claim("C-1")])
     _fact(ws, "F-1", "C-1")
     _usage_row(ws, "C-1", FAM)
+    # #800 R2: the pending row carries the REAL dispatch id (the
+    # claim-alias shape is gone) — the bank matches under the one key
+    did = claims_store.latest_committed_dispatch(
+        ws, "C-1")["dispatch_id"]
     q_cells.record_dispatch_observation(
-        ws, "envelope", envelope_meta={"method_family": FAM}, claim="C-1")
+        ws, "envelope", envelope_meta={"method_family": FAM},
+        claim="C-1", dispatch_id=did)
     out = src.run(ws)
     credit = _terminal_credit(ws, "C-1")
     steps = [r for r in _qcell_rows(ws)
@@ -268,13 +281,13 @@ def test_breaker_freezes_on_degenerate_bridge_traffic(tmp_path):
         yaml.safe_dump(ws_claims), encoding="utf-8")
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True, exist_ok=True)
-    (logs / "kunglao-2026-10-19.jsonl").write_text("", encoding="utf-8")
     out2 = src.run(ws)
     assert out2.get("signal_frozen") is True, out2
     assert out2.get("pool_bridged") == 0, "the frozen pass bridges nothing"
-    rows = [json.loads(ln) for ln in
-            (logs / "kunglao-2026-10-19.jsonl")
-            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # the blocker lands on the CURRENT UTC day file — glob the day files,
+    # never a hardcoded calendar date (kunglao_log._day_file owns naming)
+    rows = [json.loads(ln) for p in sorted(logs.glob("kunglao-*.jsonl"))
+            for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert any(r.get("action") == "signal_degenerate" for r in rows)
 
 

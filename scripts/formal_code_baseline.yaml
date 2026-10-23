@@ -4,12 +4,12 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 215
+  hooks/dispatch_gate.py: 214
   hooks/env_check_gate.py: 30
   hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
-  hooks/recall_inject.py: 41
+  hooks/recall_inject.py: 36
   hooks/round_closure.py: 14
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
@@ -57,6 +57,7 @@ files:
   scripts/check_global_rule_subset.py: 1
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
+  scripts/claims_store.py: 20
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2
@@ -114,7 +115,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 162
+  scripts/event_taxonomy.py: 163
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
   scripts/external_kicker.py: 41
@@ -241,7 +242,7 @@ files:
   scripts/rlvr/q_cells.py: 133
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/reward.py: 8
-  scripts/rlvr/scalar.py: 32
+  scripts/rlvr/scalar.py: 35
   scripts/rlvr/settlement_scorer.py: 2
   scripts/rlvr/signal_guard.py: 1
   scripts/rlvr/state.py: 24
@@ -260,7 +261,7 @@ files:
   scripts/runtime_facts.py: 3
   scripts/scalar_settlement.py: 2
   scripts/script_harvest.py: 5
-  scripts/settle_round_credit.py: 4
+  scripts/settle_round_credit.py: 9
   scripts/shell_defaults.py: 4
   scripts/signals_stream.py: 3
   scripts/silent_except_lint.py: 1

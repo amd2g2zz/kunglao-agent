@@ -389,7 +389,7 @@ One workspace per engagement — scaffolded by init; hooks are wired at workspac
 <workspace>/
 ├── bins/<sha256>        # the sample (gitignored)
 ├── task_spec.yaml       # goal / verification logic / constraints
-├── claim-register.yaml  # claims C-NN with status
+├── claim-register.yaml  # claims C-NN with status (semantic writes owned by scripts/claims_store.py, #800)
 ├── facts/               # byte-anchored facts F-NNN.md + _INDEX.md
 ├── evidence/            # raw artifacts + _index.json (path + sha256)
 ├── runs/                # ledgers, worker status, heartbeat

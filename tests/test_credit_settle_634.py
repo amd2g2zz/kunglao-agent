@@ -19,7 +19,20 @@ def _ws(tmp_path, claims):
     (ws / "facts").mkdir()
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}), encoding="utf-8")
+    # #800 R2: ledger rows (pre-#800 fixtures settle nothing)
+    from _dispatch_fixture import mint_dispatches
+
+    mint_dispatches(ws, claims, family="static-symbolic", pending=False)
     return ws
+
+
+def _did(ws, cid):
+    """#800 R2: the claim's REAL dispatch id from the ledger (the
+    claim-alias key is gone)."""
+    import claims_store
+
+    return str(claims_store.latest_committed_dispatch(
+        ws, cid)["dispatch_id"])
 
 
 def test_no_terminal_claims_is_a_quiet_noop(tmp_path):
@@ -35,13 +48,14 @@ def test_settlement_banks_the_pending_dispatch_row(tmp_path):
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     q_cells.record_dispatch_observation(
         ws, "dispatch envelope",
-        envelope_meta={"method_family": "static-symbolic"}, claim="C-9")
+        envelope_meta={"method_family": "static-symbolic"}, claim="C-9",
+        dispatch_id=_did(ws, "C-9"))
     out = src.run(ws)
     assert out["settled"] == 1 and out["rounds"] == 1
     rows = q_cells.JSONLQStore(ws).observations()
     banked = [r for r in rows if r.get("source") == "settlement"]
     assert len(banked) == 1
-    assert banked[0]["dispatch_id"] == "C-9"
+    assert banked[0]["dispatch_id"] == _did(ws, "C-9")
     assert banked[0]["credit"] is not None
 
 
@@ -51,7 +65,8 @@ def test_idempotent_second_pass_appends_nothing(tmp_path):
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     q_cells.record_dispatch_observation(
         ws, "dispatch envelope",
-        envelope_meta={"method_family": "static-symbolic"}, claim="C-9")
+        envelope_meta={"method_family": "static-symbolic"}, claim="C-9",
+        dispatch_id=_did(ws, "C-9"))
     src.run(ws)
     n1 = len(q_cells.JSONLQStore(ws).observations())
     src.run(ws)
@@ -65,7 +80,8 @@ def test_dry_run_never_writes(tmp_path):
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     q_cells.record_dispatch_observation(
         ws, "dispatch envelope",
-        envelope_meta={"method_family": "static-symbolic"}, claim="C-9")
+        envelope_meta={"method_family": "static-symbolic"}, claim="C-9",
+        dispatch_id=_did(ws, "C-9"))
     out = src.run(ws, dry_run=True)
     assert out["dry_run"] is True and out["would_settle"] == 1
     rows = q_cells.JSONLQStore(ws).observations()
@@ -90,11 +106,13 @@ def _case_ws(tmp_path, claims, cases=(), name="ws"):
             (cdir / f"{case_id}.yaml").write_text(
                 yaml.safe_dump({"id": case_id, "target_pq": target_pq}),
                 encoding="utf-8")
+    from _dispatch_fixture import mint_dispatches
+    mint_dispatches(ws, claims, family="static-symbolic", pending=False)
     for c in claims:
         q_cells.record_dispatch_observation(
             ws, "dispatch envelope",
             envelope_meta={"method_family": "static-symbolic"},
-            claim=str(c["id"]))
+            claim=str(c["id"]), dispatch_id=_did(ws, str(c["id"])))
     return ws
 
 
@@ -112,7 +130,7 @@ def test_bank_writes_the_cross_task_store_row(tmp_path):
     ws = _case_ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     src.run(ws)
     rows = [r for r in strategy_store.load_rows(ws=None)
-            if str((r.get("provenance") or {}).get("dispatch_id")) == "C-9"]
+            if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(rows) == 1, "the settled dispatch must key exactly one row"
     row = rows[0]
     assert row["method_family"] == "static-symbolic"
@@ -122,7 +140,7 @@ def test_bank_writes_the_cross_task_store_row(tmp_path):
     # the replay adds no second row (the first-settlement clock)
     src.run(ws)
     again = [r for r in strategy_store.load_rows(ws=None)
-             if str((r.get("provenance") or {}).get("dispatch_id")) == "C-9"]
+             if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(again) == 1
 
 

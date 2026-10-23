@@ -315,11 +315,11 @@ def test_rejected_dispatch_cancels_the_opened_step(tmp_path) -> None:
     assert p.exists()
 
 
-def test_dispatch_gate_undo_wires_the_step_cancel(tmp_path, monkeypatch) -> None:
-    """#690 review HIGH wiring: dispatch_gate's rc=2 undo path cancels
-    the opened step alongside the anchor undo + claim reopen — the seam
-    the reviewer found untested (approve -> later REJECT -> the barrier
-    froze until the stale TTL)."""
+def test_dispatch_gate_reject_unwinds_the_journalled_intent(tmp_path, monkeypatch) -> None:
+    """#690 review HIGH wiring, #800 mechanism: dispatch_gate's rc=2 face
+    unwinds the approval point's claims_store JOURNAL (the fail-open
+    heuristic undo is deleted) — approve through the store -> later
+    REJECT -> the barrier lifts and the retries budget is not charged."""
     import importlib.util
     hooks = ROOT / "hooks"
     spec = importlib.util.spec_from_file_location(
@@ -327,12 +327,16 @@ def test_dispatch_gate_undo_wires_the_step_cancel(tmp_path, monkeypatch) -> None
     dg = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(dg)
     ws = _ws(tmp_path)
-    ir.record_launch(ws, "C-5", "static-first")
-    sg.bump_dispatch_count(ws, "C-5")
+    import claims_store as cstore
+    cstore.begin_dispatch(ws, "C-5", actor="approval", tier=1, prompt="d",
+                          agent="w1", method_family="static-first")
+    cstore.commit_dispatch(ws, "C-5")
     assert sg.barrier_verdict(ws)[0] is False
     monkeypatch.setattr(dg, "_main_inner", lambda: 2)
     dg._ATTEMPT.clear()
     dg._ATTEMPT["ws"], dg._ATTEMPT["cid"] = ws, "C-5"
     assert dg.main() == 2
-    assert sg.barrier_verdict(ws)[0] is True
-    assert sg.dispatch_count(ws, "C-5") == 0
+    assert sg.barrier_verdict(ws)[0] is True, (
+        "the journal abort must lift the barrier at once")
+    assert sg.dispatch_count(ws, "C-5") == 0, (
+        "a never-dispatched attempt must not charge the retries budget")

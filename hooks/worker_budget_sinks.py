@@ -43,7 +43,6 @@ from worker_budget_gates import (
     check_step_settled,  # #690: settle->update->decide sync barrier
     check_branch_budget,  # #690: branch_budget.retries hard constraint
     register_worker, remove_worker,
-    stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
@@ -644,7 +643,8 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 
 def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
-                           agent_name: str) -> None:
+                           agent_name: str,
+                           dispatch_id: str | None = None) -> None:
     """#429 §4: record the (signature_hash, method_family) observation
     at the dispatch ALLOW tail — the Q-cell data spine for the TS
     envelope sampler (scripts/rlvr/q_cells.py).
@@ -666,7 +666,7 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
             meta = None
         _qc429.record_dispatch_observation(
             paths.get('workspace'), prompt, envelope_meta=meta,
-            claim=cid, agent=agent_name)
+            claim=cid, agent=agent_name, dispatch_id=dispatch_id)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('qcell_record', f'{type(exc).__name__}: {exc}')
 
@@ -674,7 +674,8 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
                         prompt: str = '',
-                        method_family: str | None = None) -> None:
+                        method_family: str | None = None,
+                        dispatch_id: str | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -711,7 +712,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
     # method_family declared on the envelope) — the sampler's data spine.
     # Fail-open inside; rejected dispatches above never reach this line.
-    _qcell_record_dispatch(paths, prompt, cid, agent_name)
+    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -1141,36 +1142,34 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #237 H1: the row carries the shared-resolver identity (row_agent), so
     # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
     # — the marker plan_drift_detector's D3 corroboration matches.
+    # #800 R2: the ONE dispatch id — minted at the approval point, it
+    # lands on the dispatch ledger (begin_dispatch), foreign-keys the
+    # q-cell pending row, and survives to settlement attribution
+    # (production 2026-10-21/22: rows were claim-alias keyed, the key
+    # NULL on 100% of settlement rows). Fail-open telemetry.
+    _did800 = None
+    try:
+        from _path_hygiene import ensure_scripts_path as _esp8
+        _esp8()
+        import claims_store as _cstore8
+        _did800 = _cstore8.mint_dispatch_id()
+    except Exception as exc:  # noqa: BLE001 — telemetry face, never the verdict
+        print(f'[kunglao-agent] dispatch-id mint WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
-                        method_family=mf_value)
-    # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
-    # approval point — it is what arms the plan-author gate on this claim's
-    # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
-    # Fail-open; after the lifecycle line the dispatch is already approved.
-    stamp_dispatch_anchor(paths, cid, prompt, agent_name)
-    # #624 local-fix: the claim flip lives at the SAME approval point as the
-    # anchor stamp (single writer); a later REJECT in the chain rolls it
-    # back (dispatch_gate -> reopen_claim_no_worker).
-    _flip_claim_in_progress(paths, cid)
-    # #680: the MISSING evidence_tier_attempted writer. check_tier_gate's
-    # ladder requires eta >= tier-1 for tier>=2 dispatches, but before this
-    # line NOTHING ever wrote eta — the ladder could never climb (C-007
-    # self-deadlock: declared tier=2, gate rejects on eta=0, nobody does
-    # tier-1 work to raise eta). Dispatch-time write = ATTEMPTED semantics
-    # (design D-680.1: the worker is being sent out to attempt this tier NOW;
-    # a settle-time write would let a silently-dead worker leave eta
-    # unclimbed and re-deadlock the next dispatch). Monotonic max(eta,
-    # tier) — a cheaper re-dispatch never lowers attempt history.
-    # Single-writer: canonical register write via ws_yaml renderer (same
-    # shape as _flip_claim_in_progress). Fail-open — the dispatch verdict
-    # is already decided at this point.
-    _write_eta_at_dispatch(paths, cid, tier)
-    # #690: open the step at the approval point — (a) the launch stash
-    # (the settle face's claim mapping + the phi_before state; the
-    # branch_budget rides it for the wall_s pricing) and (b) the claim's
-    # independent dispatch_count accrual. Fail-open telemetry: never
-    # flips an already-approved dispatch.
-    _open_step(paths, cid, _budget, mf_value)
+                        method_family=mf_value, dispatch_id=_did800)
+    # #800: the approval-point side effects are ONE claims_store
+    # transaction — intent journal first, then the steps (anchor nonce,
+    # launch stash, ONE atomic register rewrite carrying the #624 flip +
+    # the #680 eta raise + the #690 dispatch_count accrual). A later
+    # REJECT in the gate chain unwinds through the journal
+    # (dispatch_gate -> claims_store.abort_dispatch); a crash between
+    # steps is recovered on the next store open — no partial state, no
+    # fail-open saga. Fail-open here: the dispatch verdict is already
+    # decided at this line.
+    _claims_dispatch_txn(paths, cid=cid, prompt=prompt, agent=agent_name,
+                         tier=tier, method_family=mf_value, budget=_budget,
+                         actor=row_agent or worker_id)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -1181,93 +1180,31 @@ def pre_check(payload: dict, paths: dict) -> int:
     return 0
 
 
-def _flip_claim_in_progress(paths: dict, cid: str | None) -> bool:
-    """#624 local-fix: flip the dispatched claim OPEN -> IN_PROGRESS at the
-    approval point (status_defs: an in-flight claim is NOT dispatchable — no
-    auto writer existed, so the orchestrator had to patch it by hand and the
-    turn-exit gate fought the claim's own in-flight worker). Only OPEN flips
-    (PARK/terminal untouched); canonical register write via ws_yaml (the
-    single-writer renderer). Fail-open — never changes the dispatch verdict."""
-    ws = paths.get('workspace') if isinstance(paths, dict) else None
-    if not ws or not cid:
-        return False
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import ws_yaml as _wsy
-        p = Path(ws) / 'claim-register.yaml'
-        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        for c in (doc.get('claims') or []):
-            if c.get('id') == cid and str(c.get('status') or '').upper() == 'OPEN':
-                c['status'] = 'IN_PROGRESS'
-                p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
-                return True
-        return False
-    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
-        return False
-
-
-def _write_eta_at_dispatch(paths: dict, cid: str | None, tier: int) -> bool:
-    """#680: raise the dispatched claim's evidence_tier_attempted to
-    max(current_eta, tier) at the ALLOW tail (the tier-ladder writer that
-    never existed).
-
-    Dispatch-time = ATTEMPTED semantics (design D-680.1): the worker is
-    being sent out to attempt this tier now; the attempt history — not the
-    outcome — is what check_tier_gate prices. Monotonic (max) so a cheaper
-    re-dispatch can never erase deeper attempt history. Canonical register
-    write via ws_yaml renderer (single-writer, same shape as
-    _flip_claim_in_progress). Fail-open — never changes the dispatch
-    verdict; an absent register / unknown claim is a no-op."""
-    ws = paths.get('workspace') if isinstance(paths, dict) else None
-    if not ws or not cid or tier not in (1, 2, 3):
-        return False
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import ws_yaml as _wsy
-        p = Path(ws) / 'claim-register.yaml'
-        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        for c in (doc.get('claims') or []):
-            if c.get('id') != cid:
-                continue
-            try:
-                eta = int(c.get('evidence_tier_attempted', 0))
-            except (TypeError, ValueError):
-                eta = 0  # dirty value degrades to 0 (#103 tolerance) — max still climbs
-            new_eta = max(eta, int(tier))
-            if new_eta == eta:
-                return False  # nothing to raise (monotonic no-op)
-            c['evidence_tier_attempted'] = new_eta
-            p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
-            return True
-        return False
-    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
-        return False
-
-
-def _open_step(paths: dict, cid: str | None, budget: dict,
-               method_family: str | None) -> None:
-    """#690: the approval-point step opener — record_launch stashes the
-    dispatch's phi_before + branch_budget (the settle face maps the
-    SubagentStop back to THIS claim through it) and bump_dispatch_count
-    accrues the claim's independent dispatch counter (register field the
-    rank feed surfaces). Fail-open with a stderr WARN: an approved
-    dispatch is never flipped by telemetry (the settle face degrades to
-    a no-stash warn, and the orphan sweep still sees nothing to eat)."""
+def _claims_dispatch_txn(paths: dict, *, cid: str | None, prompt: str,
+                         agent: str, tier: int, method_family: str | None,
+                         budget: dict, actor: str,
+                         dispatch_id: str | None = None) -> None:
+    """#800: the approval-point dispatch transaction through the ONE
+    semantic owner (scripts/claims_store.py). begin (intent journal) ->
+    commit (anchor nonce + launch stash + ONE register rewrite: status
+    flip, eta raise, dispatch_count accrual). Fail-open with a stderr
+    WARN — never flips an already-approved dispatch verdict; a journalled
+    intent that never commits is recovered (rolled back) on the next
+    store open."""
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     if not ws or not cid:
         return
     try:
         from _path_hygiene import ensure_scripts_path
         ensure_scripts_path()
-        from rlvr import incremental_reward as _ir690
-        from rlvr import step_grain as _sg690
-        _ir690.record_launch(ws, cid, method_family or 'dispatch',
-                             branch_budget=budget or None)
-        _sg690.bump_dispatch_count(ws, cid)
-    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
-        print(f'[kunglao-agent] step-open WARN (fail-open): '
+        import claims_store as _cstore
+        _cstore.begin_dispatch(ws, cid, actor=actor, tier=tier, prompt=prompt,
+                               agent=agent, method_family=method_family,
+                               branch_budget=budget or None,
+                               dispatch_id=dispatch_id)
+        _cstore.commit_dispatch(ws, cid)
+    except Exception as exc:  # noqa: BLE001 — fail-open (verdict decided)
+        print(f'[kunglao-agent] claims-txn WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 

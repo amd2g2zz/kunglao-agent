@@ -63,10 +63,19 @@ def _ws(tmp_path: Path, claims: list[dict] | None = None) -> Path:
     return ws
 
 
-def _dispatch(ws: Path, claim: str) -> None:
-    qc.record_dispatch_observation(
-        ws, "dispatch envelope",
-        envelope_meta={"method_family": FAM}, claim=claim)
+def _dispatch(ws: Path, claim: str) -> str:
+    """#800 R2: dispatch through the REAL face — mint the ledger row
+    and stamp the pending observation with the dispatch id (a fixture
+    row without the id settles nothing under the no-backcompat
+    contract). Returns the dispatch_id."""
+    from _dispatch_fixture import mint_one
+
+    doc = yaml.safe_load((ws / "claim-register.yaml")
+                         .read_text(encoding="utf-8"))
+    row = next((c for c in (doc.get("claims") or [])
+                if str(c.get("id")) == claim),
+               {"id": claim, "status": "OPEN"})
+    return mint_one(ws, row, family=FAM)
 
 
 def _rows(ws: Path) -> list[dict]:

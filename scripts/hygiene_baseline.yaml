@@ -58,6 +58,8 @@ files:
     r1: 2
   scripts/claim_expiry.py:
     r1: 2
+  scripts/claims_store.py:
+    r1: 11
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
@@ -166,7 +168,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 123
+    r1: 124
     r2: 1
   scripts/exogenous.py:
     r1: 2
@@ -404,7 +406,7 @@ files:
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
-    r1: 6
+    r1: 8
   scripts/rlvr/settlement_scorer.py:
     r1: 2
   scripts/rlvr/signal_guard.py:
@@ -440,7 +442,7 @@ files:
   scripts/script_harvest.py:
     r1: 4
   scripts/settle_round_credit.py:
-    r1: 2
+    r1: 5
   scripts/shell_defaults.py:
     r1: 1
   scripts/slot_monitor.py:
@@ -517,6 +519,8 @@ files:
   scripts/ws_yaml.py:
     r1: 5
   scripts/zero_output_fingerprint.py:
+    r1: 1
+  tests/_dispatch_fixture.py:
     r1: 1
   tests/_factories.py:
     r1: 5
@@ -611,9 +615,9 @@ files:
   tests/test_bp_matrix_faces_546.py:
     r1: 1
   tests/test_bridge_779.py:
-    r1: 4
+    r1: 7
   tests/test_bridge_campaign_779.py:
-    r1: 4
+    r1: 5
   tests/test_budget_channel_862.py:
     r1: 5
   tests/test_builtin_skills_flag_25.py:
@@ -637,6 +641,8 @@ files:
     r2: 1
   tests/test_case_admission_301.py:
     r1: 10
+  tests/test_case_amendment_742.py:
+    r1: 1
   tests/test_case_bank_110.py:
     r1: 3
     r2: 1
@@ -652,6 +658,10 @@ files:
   tests/test_changelog.py:
     r1: 1
   tests/test_claim_granularity_241.py:
+    r1: 1
+  tests/test_claims_store_800.py:
+    r1: 4
+  tests/test_claims_store_800_rollout.py:
     r1: 1
   tests/test_classification_collapse_581.py:
     r1: 1
@@ -718,8 +728,10 @@ files:
     r1: 3
   tests/test_coverage_policy_564.py:
     r1: 5
-  tests/test_credit_settle_634.py:
+  tests/test_credit_amendment_731.py:
     r1: 1
+  tests/test_credit_settle_634.py:
+    r1: 3
   tests/test_crypto_algorithms.py:
     r1: 3
   tests/test_crypto_tool.py:
@@ -1120,7 +1132,7 @@ files:
   tests/test_l1_planner_718.py:
     r1: 3
   tests/test_late_arm_oracle_730.py:
-    r1: 1
+    r1: 2
   tests/test_launch_stash_integrity_654.py:
     r1: 2
   tests/test_ledger_consolidation_721.py:
@@ -1436,7 +1448,7 @@ files:
   tests/test_scalar_interval_390.py:
     r1: 1
   tests/test_scalar_settlement_379.py:
-    r1: 1
+    r1: 2
   tests/test_scan_proven_507.py:
     r1: 1
   tests/test_scan_waiting_902.py:
