@@ -1340,6 +1340,10 @@ files:
     dest: .claude/scripts/rlvr/invariants.py
     kind: scaffold
     sha256: dfc7ca96290d80980fbfc6e1ed4acb60800c128fbcb193246f0824bdf45446dd
+  - src: scripts/rlvr/key_freeze.py
+    dest: .claude/scripts/rlvr/key_freeze.py
+    kind: scaffold
+    sha256: 2180a46485cd17c5c80d31bdb8be46762513b07f3a8c444f3f334e4e7dbff9bf
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
@@ -1391,7 +1395,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: a82cd5600d1e7a4f503a5db770aeb29f9db23bf3bd582f30a6de31520b427adb
+    sha256: 68eafc266acc20d2600a944976647e1784d9594c91514499086fc49abb8bf47b
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
