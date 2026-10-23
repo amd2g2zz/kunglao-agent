@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+"""rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (issue-721).
 
 Twelve-plus JSONL ledgers fragmented ONE logical stream (what happened /
 how it closed / what was observed / what is known) across 12+ physical
@@ -19,14 +19,14 @@ Row contracts (unchanged, now enforced HERE):
   - append-only: no rewrite path exists in this module;
   - every row carries a ``<name>/N`` schema stamp — ``append`` REFUSES a
     stampless row (an unattributable row inside a multi-schema file is
-    the orphan-store bug class #721 exists to kill): ONE warn + False;
+    the orphan-store bug class issue-721 exists to kill): ONE warn + False;
   - flock single-writer: appends take ``.<stem>.lock`` in the file's own
     dir via the house lock-file pattern (POSIX fcntl; unlocked O_APPEND
     fallback where fcntl is unavailable — single writes stay atomic, CI
     is single-tenant);
   - identity ts lives on the rows — this module adds nothing to a row.
 
-Compat window (#721 migration): writers target the consolidated file;
+Compat window (issue-721 migration): writers target the consolidated file;
 readers ride ``read()`` — legacy archive rows first (chronology: the
 archive predates the live file), then the consolidated rows, with an
 optional stamp filter. After ``migrate()`` moves a legacy rel into
@@ -62,7 +62,7 @@ KNOWLEDGE_REL = CONSOLIDATED["knowledge"]
 #: keeps an UNSTAMPED legacy row only when a registered stamp of that
 #: rel matches the requested prefix (the pre-stamp transitions archive).
 #: Knowledge rels resolve under the guarded root except the historical
-#: ws-scoped runs/feature-table.jsonl (see the #721 follow-up card).
+#: ws-scoped runs/feature-table.jsonl (see the issue-721 follow-up card).
 LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
     "experience": {
         "runs/transitions.jsonl": ("transition/1",),
@@ -91,7 +91,7 @@ LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
 
 #: the families whose prose/writers/readers are SWITCHED in this change.
 #: Settlement/telemetry/knowledge are registered here for migration and
-#: liveness but switch in their follow-up cards (#721 tasks.md).
+#: liveness but switch in their follow-up cards (issue-721 tasks.md).
 SWITCHED: tuple[str, ...] = ("experience",)
 
 #: family -> every registered stamp (liveness reports all of them; a dead
@@ -102,6 +102,9 @@ SWITCHED: tuple[str, ...] = ("experience",)
 #: be absent (an unregistered stamp is invisible).
 NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
     "experience": ("case-observation/1", "case-amendment/1"),
+    # issue-802: the blind settlement wire row (the settler-identity
+    # liveness evidence) is born in the consolidated file
+    "settlement": ("settlement-wire/1",),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
@@ -220,7 +223,7 @@ def append(ws, family: str, row: dict) -> bool:
         warn("rlvr.consolidated_ledger.append",
              f"refused a row without a valid <name>/N schema stamp for "
              f"{family!r} (got {stamp!r}): stamps must be non-empty, "
-             f"whitespace-free strings — the #721 attribution contract")
+             f"whitespace-free strings — the issue-721 attribution contract")
         return False
     try:
         data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
@@ -369,7 +372,7 @@ def _existing_counts(target: Path) -> dict[str, int]:
 
 def migrate(ws, families=None, *, dry_run: bool = False,
             archive_dir: str = ARCHIVE_DIR_REL) -> dict:
-    """The one-time #721 migration, per rel: every legacy row is
+    """The one-time issue-721 migration, per rel: every legacy row is
     APPENDED into the family's consolidated file (values preserved; a
     missing stamp added per ``_stamp_row``), then the rel is MOVED into
     ``<ws>/runs/archive/`` — bytes intact, never deleted, and the live

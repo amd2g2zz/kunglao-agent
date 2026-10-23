@@ -76,6 +76,19 @@
     "contains": "task_terminal_settlement",
     "min": 1
    }
+  },
+  {
+   "id": "blind-settlement-wired",
+   "face": "production settlements carry settler-identity rows from the BLIND path (#802, wiring: rlvr.settlement_wire.settle_parked via hooks/round_closure blind face; producer: the parked blind-settlement-input/1 ruling consumed through scalar.validate_verdict_doc)",
+   "ledger": "runs/settlement.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "schema": "settlement-wire/1"
+    },
+    "field_nonempty": "identity",
+    "min": 1
+   }
   }
  ]
 }

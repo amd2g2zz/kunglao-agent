@@ -68,6 +68,14 @@ def _live_ws(tmp_path: Path) -> Path:
                     "chosen": "dispatch/C-001",
                     "posterior": {}, "ts": "2026-10-18T00:00:00Z"})
         + "\n", encoding="utf-8")
+    # issue-802: the live-workspace contract grew the
+    # blind-settlement-wired fingerprint — a settlement-wire/1 row
+    # carrying the settler identity (the blind face fired)
+    (ws / "runs" / "settlement.jsonl").write_text(
+        json.dumps({"schema": "settlement-wire/1",
+                    "ts": "2026-10-24T00:00:00Z", "claim": "C-001",
+                    "identity": "kunglao-settler", "settled": True})
+        + "\n", encoding="utf-8")
     cases = ws / "oracle" / "cases"
     cases.mkdir(parents=True)
     (cases / "case-001.yaml").write_text(

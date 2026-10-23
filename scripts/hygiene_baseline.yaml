@@ -379,8 +379,6 @@ files:
     r1: 6
   scripts/rlvr/compose.py:
     r1: 5
-  scripts/rlvr/consolidated_ledger.py:
-    r1: 4
   scripts/rlvr/expansion.py:
     r1: 2
   scripts/rlvr/feature_prior.py:

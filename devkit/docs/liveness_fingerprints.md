@@ -38,6 +38,19 @@ never moved; the sentinel now reads that shape RED. Synthetic fixtures
 for this face live in devkit/production_shapes/ and are replayed by
 devkit/production_replay_gate.py.
 
+## blind-settlement-wired (#802, 2026-10-24)
+
+Production settlements carry SETTLER-IDENTITY rows from the blind path:
+a `settlement-wire/1` row (runs/settlement.jsonl, non-empty `identity`)
+proves a ruling was consumed through the blind face
+(rlvr.settlement_wire.settle_parked — parked blind-settlement-input/1
+doc, sha re-check, scalar.validate_verdict_doc stack, claims_store
+mint). The unblinded settle_step judgment is eval-only
+(KUNGLAO_EVAL_SETTLE); a settlement event that did NOT settle still
+lands its row with `settled: false` — refusals are loud, never silent.
+Content-hash dedupe: the same event on an unchanged workspace appends
+once.
+
 ## Seeds (2026-10-18)
 
 rl-sampler-exit, rl-admission-consumed, rl-posterior-moved,
