@@ -660,8 +660,10 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             _led = _cstore8.latest_committed_dispatch(ws, cid)
             if _led and str(_led.get("dispatch_id") or "").strip():
                 did = str(_led["dispatch_id"])
-        except Exception:  # noqa: BLE001 — legacy alias fallback
-            pass
+        except Exception as _did_exc:  # noqa: BLE001 — legacy alias fallback
+            warn("settle_round_credit.dispatch_id",
+                 f"ledger resolve failed ({type(_did_exc).__name__}: "
+                 f"{_did_exc}) — settling under the claim alias")
         dispatches.append({"dispatch_id": did, "round": i + 1})
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept

@@ -1153,8 +1153,9 @@ def pre_check(payload: dict, paths: dict) -> int:
         _esp8()
         import claims_store as _cstore8
         _did800 = _cstore8.mint_dispatch_id()
-    except Exception:  # noqa: BLE001 — telemetry face, never the verdict
-        pass
+    except Exception as exc:  # noqa: BLE001 — telemetry face, never the verdict
+        print(f'[kunglao-agent] dispatch-id mint WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
                         method_family=mf_value, dispatch_id=_did800)
     # #800: the approval-point side effects are ONE claims_store
