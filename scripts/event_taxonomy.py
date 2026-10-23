@@ -190,6 +190,7 @@ EMIT_ACTIONS = [
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
     "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
+    "cockpit_ratio_alarm",  # #801 Face 3: machine:analysis ratio > 1 — harness out-competing the analysis
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
     "compact_continuity",  # issue 434 PreCompact strategy-continuity injection face
     "constitution_injected",  # issue 434 SessionStart constitution injection (once per session)
@@ -219,6 +220,7 @@ EMIT_ACTIONS = [
     "family_superseded",   # issue 252 family ledger sync: competing hypothesis superseded
     "family_sync_failed",  # issue 252 guarded sync failure WARN (claim_migrator post-settlement face)
     "gate_sample_failed",  # #773 W2: the gate's sampler draw hiccuped (fail-open cold gap)
+    "gate_warn",  # #801 Face 2: a format/self_health-class gate rejection DEMOTED to WARN (no block)
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
@@ -338,6 +340,7 @@ EMIT_ACTIONS = [
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
     "warn",               # the centralized warn()'s ledger face (one row per dedupe window, actor=telemetry)
+    "warn_breaker_tripped",  # #801 R2a: a warn family crossed the repetition bound — ownership action taken (circuit-break/escalate/downgrade)
     "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_escalated",  # bash_fact_guard repeat-block ladder crossing (cap-and-escalate; carries file + rules + streak so the orchestrator can reroute)

@@ -1337,11 +1337,25 @@ def write_snapshot(ws: Path, now: datetime.datetime | None = None) -> Path:
     tmp.replace(out)
     try:
         import kunglao_log
-        kunglao_log.emit(ws, "statusline_snapshot", "statusline_snapshot",
-                         detail=json.dumps(
-                             {"state": snap["state"], "schema": snap["schema"],
-                              "tick": snap["tick"], "codes": snap["probe_codes"]},
-                             ensure_ascii=False))
+        # #801 R2b: the LEDGER EVENT is value-gated (the snapshot FILE
+        # above stays fresh — display truth). The VALUE is the semantic
+        # state (state + probe codes + schema); tick changes alone are
+        # not a display-value change.
+        import incremental_telemetry
+        if incremental_telemetry.should_emit(
+                ws, "statusline_snapshot",
+                json.dumps({"state": snap["state"],
+                            "schema": snap["schema"],
+                            "codes": snap["probe_codes"]},
+                           sort_keys=True, ensure_ascii=False)):
+            kunglao_log.emit(ws, "statusline_snapshot",
+                             "statusline_snapshot",
+                             detail=json.dumps(
+                                 {"state": snap["state"],
+                                  "schema": snap["schema"],
+                                  "tick": snap["tick"],
+                                  "codes": snap["probe_codes"]},
+                                 ensure_ascii=False))
     except Exception as exc:  # noqa: BLE001 — logging never breaks the write
         warn("snapshot_emit", f"{type(exc).__name__}: {exc}")
     return out

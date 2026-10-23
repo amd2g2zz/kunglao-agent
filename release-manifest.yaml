@@ -31,6 +31,7 @@ assets:
   hooks:
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
+    - hooks/gate_policy.py   # #801 Face 2: gate-layering authority (five HARD classes + demotion + warn breaker)
     - hooks/env_check_gate.py
     - hooks/compact_continuity.py   # #434 PreCompact strategy continuity
     - hooks/heartbeat_touch.py

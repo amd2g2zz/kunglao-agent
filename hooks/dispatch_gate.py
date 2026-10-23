@@ -78,6 +78,18 @@ from pathlib import Path
 
 import yaml
 
+try:  # #801 Face 2: the gate-layering authority (hooks/, same directory)
+    import gate_policy
+except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
+    # subprocess-driver pattern (the same shape as the _path_hygiene
+    # bootstrap below). Self-bootstrap by path under the canonical name.
+    import importlib.util as _ilg
+    _gp_spec = _ilg.spec_from_file_location(
+        "gate_policy", Path(__file__).resolve().parent / "gate_policy.py")
+    gate_policy = _ilg.module_from_spec(_gp_spec)
+    sys.modules["gate_policy"] = gate_policy
+    _gp_spec.loader.exec_module(gate_policy)
+
 try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
     from _path_hygiene import load_hooks_lib, on_path, scripts_on_path  # #671 authority
 except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
@@ -404,12 +416,21 @@ STRATEGY_LOG_MAX = 200
 
 
 def _reject_with_guidance(name: str, msg: str, fix: str,
-                          issue: str = "496") -> int:
+                          issue: str = "496", ws: Path | None = None,
+                          gate_class: str = "format") -> int:
     """#496: REJECT with guidance — the exact structure worker_budget._reject
     and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
-    hookSpecificOutput.additionalContext carrying a concrete fix path +
-    exit 2 (block the Agent call). `issue` attributes the face to its own
-    issue (default keeps the four #496-era call sites byte-identical)."""
+    hookSpecificOutput.additionalContext carrying a concrete fix path.
+    `issue` attributes the face to its own issue (default keeps the four
+    #496-era call sites byte-identical).
+
+    #801 Face 2 layering: the rejection CLASS decides the verdict
+    (hooks/gate_policy). The default class is `format` — admission-discipline
+    rejections DEMOTE to WARN + telemetry sidecar (runs/gate-rejections.jsonl,
+    exit_code 0) and return rc 0: the fix path rides the tool result, so the
+    orchestrator corrects in-turn instead of burning a full context re-read
+    per rc=2 loop (#741 shape). Hard classes (execution_surface here) keep
+    exit 2 — pass gate_class= explicitly at such sites."""
     print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
     print(json.dumps({
         "hookSpecificOutput": {
@@ -420,6 +441,11 @@ def _reject_with_guidance(name: str, msg: str, fix: str,
             ),
         },
     }, ensure_ascii=False), flush=True)
+    if not gate_policy.should_block(gate_class):
+        # #801: demote() is the SINGLE entry — sidecar row + `gate_warn`
+        # ledger row + the R2a bounded-repetition counter all ride it.
+        return gate_policy.demote("dispatch_gate", gate_class, name, msg,
+                                  ws=ws)
     return 2
 
 
@@ -447,26 +473,25 @@ def _gate_error_reject(ws: Path | None, gate: str, claim_id: str | None,
             _emit_trace(ws, "capability_gate_error", claim_id,
                         f"reason=gate_error; exc={type(exc).__name__}: {exc}",
                         trace_id=trace_id)
-        try:
-            row = {
-                "ts": datetime.now(tz=timezone.utc).isoformat(
-                    timespec="seconds").replace("+00:00", "Z"),
-                "gate": gate,
-                "claim": claim_id,
-                "msg": msg,
-                "exit_code": 2,
-            }
-            ledger = ws / GATE_REJECTIONS_LOG
-            ledger.parent.mkdir(parents=True, exist_ok=True)
-            with open(ledger, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError as ledger_exc:
-            print(f"dispatch_gate: gate-rejections append failed "
-                  f"({ledger_exc!r})", file=sys.stderr, flush=True)
-    return _reject_with_guidance(
-        gate, msg,
-        f"{fix}\n(the gate error is fail-closed per the 2026-09-28 owner "
-        "ruling: a gate that cannot see must not wave the action through)")
+    # #801 Face 2: the gate-error face is SELF-HEALTH class — a crashed
+    # gate must never block the action (the 51job FATAL shape: a gate
+    # crash locked the claim-register and stopped the mission). This
+    # SUPERSEDES the 2026-09-28 fail-closed ruling for self-health per
+    # #801; the loud WARN + the sidecar row + the gate_error traces are
+    # the compensating observability.
+    print(f"REJECT {gate}: {msg}", file=sys.stderr, flush=True)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": _gate_verdict(
+                f"dispatch_gate: WARN {gate} (self-health demoted, #801). "
+                f"{msg}\n\nThe gate crashed — proceeding WITHOUT its "
+                f"verdict; fix:\n{fix}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return gate_policy.demote("dispatch_gate", "self_health", gate, msg,
+                              ws=ws)
 
 
 def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
@@ -585,7 +610,8 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
         return None
     # #459: the REJECT face reaches the unified log too (the excused side
     # already traces; a blocked deviation is the event the post-mortem needs)
-    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2,
+    _emit_trace(ws, "top1_reject", claim_id, msg,
+                exit_code=0,  # #801: format-class demotion — actual rc
                 trace_id=trace_id)
     # #603: a REJECT must be DURABLE, not trace-only. Pre-#603 this face
     # emitted a stderr/stdout trace and nothing else — an orchestrator
@@ -609,7 +635,9 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
             "gate": "top1",
             "claim": claim_id,
             "msg": msg,
-            "exit_code": 2,
+            # #801: format-class demotion — the face still rejects (loud
+            # REJECT + guidance), the actual call exit is 0.
+            "exit_code": 0,
         }
         ledger = ws / GATE_REJECTIONS_LOG
         ledger.parent.mkdir(parents=True, exist_ok=True)
@@ -662,7 +690,8 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
                 "mcp_prefix", reason,
                 "use only mcp__kunglao__* MCP tools in this workspace — "
                 "add new MCP namespaces to lib_kunglao.MCP_FORBIDDEN_PREFIXES "
-                "intentionally, never bypass via unknown prefixes.")
+                "intentionally, never bypass via unknown prefixes.",
+                gate_class="execution_surface")
     return None
 
 
@@ -814,7 +843,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
     # pivots must be visible in the event stream, not stderr-only)
     _emit_trace(ws, "capability_reject", claim_id,
                 f"validated={v['validated_families']} "
-                f"dispatch={v['dispatch_families']}", exit_code=2,
+                f"dispatch={v['dispatch_families']}",
+                exit_code=0,  # #801: format-class demotion — actual rc
                 trace_id=trace_id)
     return _reject_with_guidance(
         "capability",
@@ -1620,7 +1650,7 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
     # #459: the REJECT face reaches the unified log like top1/capability.
     _emit_trace(ws, "hypothesis_admission_reject", claim_id,
                 f"qid={qid}; candidates={len(candidates)}; arms={len(arms)}; "
-                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
+                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=0,  # #801: format-class demotion — the face still rejects, the call proceeds
                 trace_id=trace_id)
     return _reject_with_guidance(
         "hypothesis_admission",

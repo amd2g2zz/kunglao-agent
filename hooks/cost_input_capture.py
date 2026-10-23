@@ -38,6 +38,170 @@ COST_RE = re.compile(
     r"COST (?:WARNING|CRITICAL): session total ~\$([0-9]+(?:\.[0-9]+)?)")
 COST_EVENTS = "cost_events.jsonl"
 
+# #801 Face 3: the machine:analysis cockpit ratio — machine-overhead input
+# tokens (orchestrator transcript rows) over analysis-output tokens
+# (sidechain/worker rows). The rc1 death shape (harness out-competing the
+# analysis) becomes observable HOURS early: alarm at ratio > 1.
+COCKPIT_RATIO_REL = Path("runs") / ".cockpit-ratio.json"
+COCKPIT_RATIO_ALARM = 1.0
+RATIO_ALARM_ACTION = "cockpit_ratio_alarm"
+
+# #801 R2c: unactuated detector evaluations are BILLED CONSUMPTION. A
+# detector_eval row with no detector_fired for the same detector is
+# detection without action (the rc1 shapes: 62:1 and 142:1 eval:fire) —
+# it counts into the same consumption account the cockpit ratio reads.
+DETECTOR_EVAL_WORD = "detector_eval"
+DETECTOR_FIRED_WORD = "detector_fired"
+LEDGER_TAIL_BYTES = 65_536  # the #883 read budget (rank_face pattern)
+
+
+def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
+    """(machine_input, analysis_output) over a transcript JSONL. Machine
+    side: isSidechain-falsy rows' input tokens incl. cache reads; analysis
+    side: isSidechain-truthy rows' output tokens. Rows without usage are
+    skipped."""
+    machine = 0
+    analysis = 0
+    with Path(transcript_path).open("r", encoding="utf-8",
+                                    errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+                usage = (row.get("message") or {}).get("usage") or {}
+            except ValueError:
+                continue
+            if not isinstance(usage, dict):
+                continue
+            inp = int(usage.get("input_tokens") or 0) + \
+                int(usage.get("cache_read_input_tokens") or 0)
+            outp = int(usage.get("output_tokens") or 0)
+            if row.get("isSidechain"):
+                analysis += outp
+            else:
+                machine += inp
+    return machine, analysis
+
+
+def compute_ratio(transcript_path: str | Path) -> float:
+    """machine_input / analysis_output over a Claude Code transcript JSONL
+    (the rc1 arithmetic — see _fold_usage). Denominator floored at 1."""
+    machine, analysis = _fold_usage(transcript_path)
+    return machine / max(analysis, 1)
+
+
+def detector_consumption(ws: Path) -> dict | None:
+    """#801 R2c: the eval/fire consumption accounting over the workspace
+    ledger. Reads the NEWEST runs/logs/kunglao-*.jsonl (64KB tail, the
+    #883 read budget), counts detector_eval / detector_fired per detector
+    (the detail JSON's `detector` field), and reports unactuated =
+    sum(max(0, evals - fires)) — detection without action, billed to the
+    same consumption account the cockpit ratio reads. Returns None when
+    no readable ledger exists (fail-open: no block, no alarm)."""
+    log_dir = Path(ws) / "runs" / "logs"
+    files = sorted(log_dir.glob("kunglao-*.jsonl"))
+    if not files:
+        return None
+    path = files[-1]
+    try:
+        with path.open("rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - LEDGER_TAIL_BYTES))
+            tail = f.read().decode("utf-8", errors="replace")
+    except OSError as exc:
+        warn("detector_consumption", f"{type(exc).__name__}: {exc}")
+        return None
+    lines = tail.splitlines()
+    if size > LEDGER_TAIL_BYTES and lines:
+        lines = lines[1:]  # drop the possibly-truncated head line
+    evals: dict[str, int] = {}
+    fires: dict[str, int] = {}
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        action = row.get("action")
+        if action not in (DETECTOR_EVAL_WORD, DETECTOR_FIRED_WORD):
+            continue
+        try:
+            det_name = str((json.loads(row.get("detail") or "{}")
+                            ).get("detector") or "unknown")
+        except ValueError:
+            det_name = "unknown"
+        bucket = evals if action == DETECTOR_EVAL_WORD else fires
+        bucket[det_name] = bucket.get(det_name, 0) + 1
+    detectors = sorted(set(evals) | set(fires))
+    per_detector = {
+        d: {"detector_eval": evals.get(d, 0), "detector_fired":
+            fires.get(d, 0),
+            "unactuated": max(0, evals.get(d, 0) - fires.get(d, 0))}
+        for d in detectors}
+    total_evals = sum(evals.values())
+    total_fires = sum(fires.values())
+    return {
+        "detectors": per_detector,
+        "detector_eval": total_evals,
+        "detector_fired": total_fires,
+        "unactuated": sum(v["unactuated"] for v in per_detector.values()),
+    }
+
+
+def cockpit_ratio(ws: Path, transcript_path: str | Path) -> dict | None:
+    """Persist the live ratio face + alarm when ratio > 1 (fail-open).
+
+    Writes {ts, machine_input_tokens, analysis_output_tokens, ratio,
+    alarm[, detector]} to ws/runs/.cockpit-ratio.json; on alarm also emits
+    the registered `cockpit_ratio_alarm` ledger row. The `detector` block
+    (#801 R2c: eval/fire/unactuated consumption) rides when a readable
+    workspace ledger exists. Returns the face dict, or None on any
+    read/parse trouble (nothing written, nothing alarmed).
+    """
+    try:
+        machine, analysis = _fold_usage(transcript_path)
+        ratio = machine / max(analysis, 1)
+        face = {
+            "ts": datetime.now(timezone.utc).isoformat(
+                timespec="seconds").replace("+00:00", "Z"),
+            "machine_input_tokens": machine,
+            "analysis_output_tokens": analysis,
+            "ratio": ratio,
+            "alarm": ratio > COCKPIT_RATIO_ALARM,
+        }
+        det = detector_consumption(Path(ws))
+        if det is not None:
+            face["detector"] = det
+        (Path(ws) / COCKPIT_RATIO_REL).write_text(
+            json.dumps(face, ensure_ascii=False), encoding="utf-8")
+        if face["alarm"]:
+            warn("cockpit_ratio",
+                 f"machine:analysis ratio {ratio:.2f} > "
+                 f"{COCKPIT_RATIO_ALARM} — harness out-competing analysis")
+            try:
+                from _path_hygiene import ensure_scripts_path as _esp801
+                _esp801()
+                from kunglao_log import emit
+                emit(Path(ws), actor="hook:cost_input_capture",
+                     action=RATIO_ALARM_ACTION,
+                     detail=f"ratio={ratio:.4f}; "
+                            f"machine={machine}; analysis={analysis}")
+            except Exception as exc:  # noqa: BLE001 — telemetry fail-open
+                warn("cockpit_ratio_emit",
+                     f"{type(exc).__name__}: {exc}")
+        return face
+    except OSError as exc:
+        warn("cockpit_ratio", f"{type(exc).__name__}: {exc}")
+        return None
+    except Exception as exc:  # noqa: BLE001 — the face never breaks the hook
+        warn("cockpit_ratio", f"{type(exc).__name__}: {exc}")
+        return None
+
 
 def resolve_ws(payload: dict) -> Path | None:
     cwd = Path(payload.get("cwd") or ".")
@@ -57,6 +221,13 @@ def process_event(payload: dict) -> int:
     text = str(payload.get("tool_response") or "")
     amount = extract_amount(text)
     if amount is None:
+        # #801 Face 3: the cockpit-ratio face rides the same PostToolUse
+        # stream — a live machine:analysis sample per tool call when the
+        # payload carries the transcript. Fail-open, silent when absent.
+        tx = payload.get("transcript_path")
+        ws = resolve_ws(payload)
+        if tx and ws is not None:
+            cockpit_ratio(ws, tx)
         return 0
     ws = resolve_ws(payload)
     if ws is None:

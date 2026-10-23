@@ -3,9 +3,10 @@ files:
   hooks/bash_fact_guard.py: 3
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
-  hooks/cost_input_capture.py: 2
-  hooks/dispatch_gate.py: 214
+  hooks/cost_input_capture.py: 9
+  hooks/dispatch_gate.py: 225
   hooks/env_check_gate.py: 30
+  hooks/gate_policy.py: 11
   hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 57
   hooks/orchestrator_tool_guard.py: 24
@@ -23,7 +24,7 @@ files:
   hooks/worker_budget_sinks.py: 135
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
-  hooks/write_guard.py: 36
+  hooks/write_guard.py: 39
   scripts/_boot.py: 2
   scripts/_entry.py: 6
   scripts/_hooks_path.py: 5
@@ -115,9 +116,10 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 163
+  scripts/event_taxonomy.py: 166
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
+  scripts/experiments/rc1_econ_replay.py: 5
   scripts/external_kicker.py: 41
   scripts/failure_analysis_gate.py: 58
   scripts/feature_mining.py: 4
@@ -131,7 +133,7 @@ files:
   scripts/harness_common.py: 2
   scripts/heartbeat.py: 23
   scripts/heartbeat_loop_prompt.py: 13
-  scripts/heartbeat_tick.py: 61
+  scripts/heartbeat_tick.py: 67
   scripts/heartbeat_touch.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
@@ -139,6 +141,7 @@ files:
   scripts/hypothesis_bridge.py: 34
   scripts/hypothesis_seeder.py: 21
   scripts/hypothesis_store.py: 11
+  scripts/incremental_telemetry.py: 4
   scripts/infeasible_proposal.py: 2
   scripts/infeasible_signal.py: 6
   scripts/init_channel_default.py: 10
@@ -198,7 +201,7 @@ files:
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
   scripts/premise_gate.py: 3
-  scripts/priority_ratio.py: 114
+  scripts/priority_ratio.py: 117
   scripts/progress_report.py: 9
   scripts/progress_timeline.py: 7
   scripts/provider_health.py: 4
@@ -222,7 +225,7 @@ files:
   scripts/review_gate.py: 1
   scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
-  scripts/rho_verifier.py: 9
+  scripts/rho_verifier.py: 11
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/compose.py: 17
   scripts/rlvr/consolidated_ledger.py: 6
@@ -270,7 +273,7 @@ files:
   scripts/stale_blocker_prune.py: 1
   scripts/state_signature.py: 2
   scripts/status_defs.py: 4
-  scripts/statusline_snapshot.py: 102
+  scripts/statusline_snapshot.py: 103
   scripts/strategy_sections.py: 2
   scripts/structural_check.py: 2
   scripts/summary_discriminator.py: 4

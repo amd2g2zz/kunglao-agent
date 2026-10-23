@@ -314,11 +314,12 @@ class TestDispatchGateRejectEmit:
         ws = _top1_ws(root)
         r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
        '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws) if e.get("action") == "top1_reject"]
         assert any(e.get("claim") == "C-3" for e in rows), (
             f"unified log must carry the top1 REJECT trace; rows={_event_rows(ws)}")
-        assert all(e.get("exit") == 2 for e in rows), f"rows={rows}"
+        # #801: the trace carries the ACTUAL rc (format-class demotion).
+        assert all(e.get("exit") == 0 for e in rows), f"rows={rows}"
 
     def test_capability_reject_leaves_trace(self, tmp_path):
         """#459: the capability-card REJECT face must reach the unified log
@@ -329,13 +330,14 @@ class TestDispatchGateRejectEmit:
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
                       '"tier": 2, "tools": ["rev-xposed"]}}\n'
                       "hook the check via xposed")
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "capability_reject"]
         assert any(e.get("claim") == "C-1" for e in rows), (
             f"unified log must carry the capability REJECT trace; "
             f"rows={_event_rows(ws)}")
-        assert all(e.get("exit") == 2 for e in rows), f"rows={rows}"
+        # #801: the trace carries the ACTUAL rc (format-class demotion).
+        assert all(e.get("exit") == 0 for e in rows), f"rows={rows}"
 
 
 # ---------- ① plan_drift_detector class-7 WARN face ---------------------
@@ -596,8 +598,10 @@ class TestFailOpenEmit:
         (ws / "runs" / "logs").write_text("", encoding="utf-8")
         r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, '
        '"claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
-        assert r.returncode == 2, (
-            f"REJECT must not depend on the log write; rc={r.returncode}, "
+        # #801: demotion rc 0 — and the verdict must not depend on the log
+        # write either (both fail-open layers independent).
+        assert r.returncode == 0, (
+            f"demotion must not depend on the log write; rc={r.returncode}, "
             f"stderr={r.stderr!r}")
 
     def test_convergence_round_rc_survives_emit_crash(self, tmp, events,

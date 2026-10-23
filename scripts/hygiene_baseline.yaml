@@ -168,12 +168,14 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 124
+    r1: 127
     r2: 1
   scripts/exogenous.py:
     r1: 2
   scripts/experience_triples.py:
     r1: 1
+  scripts/experiments/rc1_econ_replay.py:
+    r1: 5
   scripts/external_kicker.py:
     r1: 34
   scripts/fact_contradiction_gate.py:
@@ -199,7 +201,7 @@ files:
   scripts/heartbeat_loop_prompt.py:
     r1: 6
   scripts/heartbeat_tick.py:
-    r1: 44
+    r1: 50
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/hook_activation.py:
@@ -214,6 +216,8 @@ files:
     r1: 13
   scripts/hypothesis_store.py:
     r1: 6
+  scripts/incremental_telemetry.py:
+    r1: 1
   scripts/infeasible_proposal.py:
     r1: 2
   scripts/infeasible_signal.py:
@@ -325,7 +329,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 57
+    r1: 60
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -370,7 +374,7 @@ files:
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
-    r1: 7
+    r1: 9
   scripts/rlvr/censored_review.py:
     r1: 6
   scripts/rlvr/compose.py:
@@ -456,7 +460,7 @@ files:
   scripts/status_defs.py:
     r1: 4
   scripts/statusline_snapshot.py:
-    r1: 47
+    r1: 48
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -756,8 +760,8 @@ files:
   tests/test_decision_surface_anchor.py:
     r1: 2
   tests/test_decision_teeth.py:
-    r1: 19
-    r2: 7
+    r1: 22
+    r2: 9
   tests/test_declaration_scan.py:
     r1: 2
     r2: 1
@@ -825,7 +829,7 @@ files:
   tests/test_dispatch_protocol.py:
     r1: 7
   tests/test_dispatch_tools_760.py:
-    r1: 7
+    r1: 12
   tests/test_distill_spine_478.py:
     r1: 1
   tests/test_distill_spine_478_pr2.py:
@@ -853,6 +857,9 @@ files:
   tests/test_e2e_runner.py:
     r1: 31
     r2: 5
+  tests/test_economics_801.py:
+    r1: 3
+    r2: 1
   tests/test_emit_gate_880.py:
     r1: 4
   tests/test_encoding_declarations.py:
@@ -914,7 +921,7 @@ files:
   tests/test_evals_schema.py:
     r1: 1
   tests/test_event_stream_adoption.py:
-    r1: 24
+    r1: 27
     r2: 1
   tests/test_event_wirings_434.py:
     r1: 2
@@ -946,7 +953,7 @@ files:
   tests/test_fail_closed_gates.py:
     r1: 13
   tests/test_failopen_emit.py:
-    r1: 4
+    r1: 8
   tests/test_failopen_tiering_103.py:
     r1: 1
   tests/test_failure_analysis_transducer.py:
@@ -978,7 +985,7 @@ files:
   tests/test_function_kg_530.py:
     r1: 1
   tests/test_gate_failclosed.py:
-    r1: 4
+    r1: 13
   tests/test_gate_layers_717.py:
     r1: 4
   tests/test_gate_power_473.py:
@@ -1043,7 +1050,7 @@ files:
   tests/test_hygiene_rc_record_only.py:
     r1: 2
   tests/test_hypothesis_admission_109.py:
-    r1: 9
+    r1: 12
   tests/test_hypothesis_contradiction_gate.py:
     r1: 2
   tests/test_hypothesis_loop_integration_111.py:
@@ -1133,6 +1140,8 @@ files:
     r1: 6
   tests/test_l1_planner_718.py:
     r1: 3
+  tests/test_lane_routing_208.py:
+    r1: 2
   tests/test_late_arm_oracle_730.py:
     r1: 2
   tests/test_launch_stash_integrity_654.py:
@@ -1161,6 +1170,8 @@ files:
     r1: 1
   tests/test_loader_delegation_863b.py:
     r1: 4
+  tests/test_logging_arch_406.py:
+    r1: 1
   tests/test_logging_coverage.py:
     r1: 8
   tests/test_logging_schema_818.py:
@@ -1341,6 +1352,8 @@ files:
     r1: 1
   tests/test_redteam_face_501.py:
     r1: 3
+  tests/test_redteam_lane_universal_355.py:
+    r1: 2
   tests/test_reference_index_build.py:
     r1: 2
   tests/test_reference_link_walk.py:
@@ -1548,7 +1561,7 @@ files:
   tests/test_subagent_attribution_779.py:
     r1: 2
   tests/test_subagent_injection.py:
-    r1: 15
+    r1: 16
   tests/test_subagent_review.py:
     r1: 2
   tests/test_subcommand_zeroarg_ux.py:
@@ -1624,12 +1637,12 @@ files:
   tests/test_tools_structure_340.py:
     r1: 5
   tests/test_top1_reject_603.py:
-    r1: 9
+    r1: 13
     r2: 2
   tests/test_trace_identity_879.py:
     r1: 3
   tests/test_trajectory_replay.py:
-    r1: 9
+    r1: 10
     r2: 2
   tests/test_ttl_warn_613.py:
     r1: 1
@@ -1703,7 +1716,7 @@ files:
   tests/test_web_labs_type_728.py:
     r1: 4
   tests/test_web_lane_verifier_342.py:
-    r1: 3
+    r1: 4
   tests/test_windowed_stalker_template.py:
     r1: 2
   tests/test_windows_reserved_names.py:
@@ -1768,7 +1781,7 @@ files:
   tests/test_ws_layout_delegation_863c.py:
     r1: 5
   tests/test_xml_injection_55.py:
-    r1: 15
+    r1: 17
     r2: 2
   tests/test_yara_tools.py:
     r1: 1

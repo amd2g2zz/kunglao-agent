@@ -277,8 +277,10 @@ class TestTrajectory2PlanStall:
                            input=payload, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=60,
                            cwd=str(REPO_ROOT))
-        assert r.returncode == 2, (
-            f"validated frida + dispatch xposed must REJECT; rc="
+        # #801: format-class demotion — capability switch verdict stays,
+        # the call proceeds rc 0.
+        assert r.returncode == 0, (
+            f"validated frida + dispatch xposed must REJECT (demoted); rc="
             f"{r.returncode}, stderr={r.stderr!r}")
         assert "REJECT capability" in r.stderr, f"stderr={r.stderr!r}"
         assert "frida" in r.stderr, (

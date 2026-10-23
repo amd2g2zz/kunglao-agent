@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 import kunglao_log
+import incremental_telemetry  # #801 R2b: the value-change gate for the detector_eval face
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 ENV_BACKEND = "KUNGLAO_RHO_BACKEND"
@@ -178,12 +179,19 @@ def sample_and_pair(ws, z=None, emit=True):
         # sampler whose pairs never settle is a loud DORMANT finding
         # (detector_liveness.liveness_report), never silence. Record-only:
         # nothing intercepts these rows (shadow contract preserved).
-        kunglao_log.emit(
-            Path(ws), actor="rho_verifier", action="detector_eval",
-            detail=json.dumps({"detector": "rho_sampler",
-                               "rho": out["rho"], "z": z,
-                               "backend": out["backend"]},
-                              ensure_ascii=False))
+        # #801 R2b: the eval row is VALUE-GATED — a dead rho (the 76x
+        # 0.0 shape) emits once and stays silent until the value moves;
+        # sampling itself keeps every checkpoint (test pins the split).
+        if incremental_telemetry.should_emit(
+                ws, "rho_sampler.detector_eval",
+                json.dumps({"rho": out["rho"], "z": z,
+                            "backend": out["backend"]}, sort_keys=True)):
+            kunglao_log.emit(
+                Path(ws), actor="rho_verifier", action="detector_eval",
+                detail=json.dumps({"detector": "rho_sampler",
+                                   "rho": out["rho"], "z": z,
+                                   "backend": out["backend"]},
+                                  ensure_ascii=False))
         # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
         # terminal anchor fired: mission complete/failed) is a transition, so it
         # earns a result digest; plain per-checkpoint sampling rows stay lean

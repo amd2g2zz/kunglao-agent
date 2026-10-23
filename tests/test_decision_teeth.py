@@ -165,14 +165,17 @@ def _event_rows(ws: Path) -> list[dict]:
 class TestTop1Enforcement:
     def test_dispatch_rank3_without_reasoning_rejected(self, tmp_path) -> None:
         """#496 AC: dispatching a non-top-1 claim (C-3) with no
-        `agent-reasoning:` prefix MUST REJECT (exit 2 + stderr + fix
-        guidance naming the marker). This is the mechanical tooth the
-        advisory-only audit (#310-era) never had on this hook face."""
+        `agent-reasoning:` prefix MUST REJECT (stderr + fix guidance
+        naming the marker). #801 SUPERSESSION: the rejection is
+        format-class — it DEMOTES to rc 0 (WARN + the guidance rides the
+        tool result, so the orchestrator corrects in-turn instead of
+        burning a ~120k re-read per rc=2 loop, the #741 shape). The tooth
+        is the verdict+guidance, not the block."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
         r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
-        assert r.returncode == 2, (
-            f"rank-3 dispatch without reasoning must REJECT; got rc="
+        assert r.returncode == 0, (
+            f"#801: format-class demotion must proceed rc=0; got rc="
             f"{r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}")
         assert "REJECT top1" in r.stderr, f"stderr={r.stderr!r}"
         assert "agent-reasoning" in r.stdout, (
@@ -357,9 +360,10 @@ class TestCapabilityGate:
         ws = _capability_ws(root)
         r = _run_gate(root, ws,
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 2, "tools": ["rev-xposed"]}}\nhook the check via xposed')
-        assert r.returncode == 2, (
-            f"validated frida + dispatch xposed must REJECT; rc="
-            f"{r.returncode}, stderr={r.stderr!r}")
+        # #801: format-class demotion — rc 0, guidance rides the result.
+        assert r.returncode == 0, (
+            f"validated frida + dispatch xposed must REJECT (demoted, "
+            f"#801); rc={r.returncode}, stderr={r.stderr!r}")
         assert "REJECT capability" in r.stderr, f"stderr={r.stderr!r}"
         assert "capability-disproof" in r.stdout, (
             f"fix guidance must teach the disproof marker; stdout={r.stdout!r}")
@@ -387,9 +391,11 @@ class TestCapabilityGate:
         ws = _capability_ws(root, with_obstacle_claim=True)
         r = _run_gate(root, ws,
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 2, "tools": ["rev-xposed"]}}\ntry xposed instead')
-        assert r.returncode == 2, (
-            f"obstacle claim must inherit the parent capability card; rc="
-            f"{r.returncode}, stderr={r.stderr!r}")
+        # #801: format-class demotion — the inheritance tooth is the
+        # verdict + guidance, unblocked (rc 0).
+        assert r.returncode == 0, (
+            f"obstacle claim must inherit the parent capability card "
+            f"(demoted, #801); rc={r.returncode}, stderr={r.stderr!r}")
         assert "REJECT capability" in r.stderr
 
     def test_obstacle_child_card_does_not_shadow_parent_card(self, tmp_path) -> None:
@@ -420,9 +426,11 @@ class TestCapabilityGate:
         })
         r = _run_gate(root, ws,
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-2", "tier": 2, "tools": ["rev-xposed"]}}\ntry xposed instead')
-        assert r.returncode == 2, (
+        # #801: format-class demotion — the union-semantics tooth is the
+        # verdict + the named family, unblocked (rc 0).
+        assert r.returncode == 0, (
             f"leak direction: the parent's frida card must survive the "
-            f"child's familyless card; rc={r.returncode}, "
+            f"child's familyless card (demoted, #801); rc={r.returncode}, "
             f"stderr={r.stderr!r}")
         assert "REJECT capability" in r.stderr, f"stderr={r.stderr!r}"
         assert "frida" in r.stderr, (
