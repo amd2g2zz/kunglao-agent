@@ -911,6 +911,12 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             # additive-when-present (#718): no factors -> no key at all
             **({"planner": dict(planner)} if planner else {}),
         }
+        # #801 R2b NOTE: rank_feeds stays PER-RUN (no value gate) — the
+        # #157 replay spine ("the ranking is exactly replayable from the
+        # event tail") and the #218 last-attempt health bit both pin the
+        # emit attempt itself; a suppressed identical ranking would erase
+        # the round-advance marker the replay needs. The R2b gate applies
+        # to the detector_eval and statusline faces only.
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                             arm=(actions[0].claim_id if actions else None),
                             detail=json.dumps(payload, sort_keys=True,
