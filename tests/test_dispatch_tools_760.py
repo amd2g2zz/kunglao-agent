@@ -91,8 +91,11 @@ class TestI1ToolsContract:
         ws = _minimal_ws(root)
         r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["pefile-signature"]}}\nsweep',
                       subagent_type="kunglao-worker")
-        assert r.returncode == 2, (
-            f"out-of-whitelist tool must REJECT; stderr={r.stderr!r}")
+        # #801: admission-discipline rejection -> format class, demoted
+        # rc 0 (verdict + whitelist guidance ride the tool result).
+        assert r.returncode == 0, (
+            f"out-of-whitelist tool must REJECT (demoted, #801); "
+            f"stderr={r.stderr!r}")
         assert "not in kunglao-worker allowedTools" in (r.stderr + r.stdout)
 
     def test_read_only_rack_missing_write_rejected(self, tmp_path) -> None:
@@ -102,7 +105,8 @@ class TestI1ToolsContract:
         _minimal_ws(root)
         r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Grep"]}}\nsweep',
                       subagent_type="kunglao-worker")
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, (  # #801: format-class demotion rc 0
+            f"stderr={r.stderr!r}")
         blob = r.stderr + r.stdout
         assert "missing write-capable tool" in blob
         assert "(§1c)" in blob or "1c" in blob
@@ -124,7 +128,7 @@ class TestI1ToolsContract:
         _minimal_ws(root)
         r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground work',
                       subagent_type="kunglao-worker")
-        assert r.returncode == 2
+        assert r.returncode == 0  # #801: format-class demotion rc 0
         assert "missing write-capable tool" in (r.stderr + r.stdout)
 
     def test_unknown_agent_name_passes_through(self, tmp_path) -> None:
@@ -154,7 +158,8 @@ class TestI1ToolsContract:
                   '"agent": "kunglao-worker"}}\n'
                   'decipher config blob')
         r = _run_gate(root, prompt)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, (  # #801: format-class demotion rc 0
+            f"stderr={r.stderr!r}")
         blob = r.stderr + r.stdout
         assert "not in kunglao-worker allowedTools" in blob
 
@@ -175,7 +180,7 @@ class TestI1ToolsContract:
         _minimal_ws(root)
         r = _run_gate(root, '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["Read", "Bash"]}}\nrun script',
                       subagent_type="kunglao-worker")
-        assert r.returncode == 2
+        assert r.returncode == 0  # #801: format-class demotion rc 0
         assert "missing write-capable tool" in (r.stderr + r.stdout)
 
 

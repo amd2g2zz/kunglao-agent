@@ -207,7 +207,7 @@ def test_dispatch_gate_reject_with_guidance_wrapped(capsys):
     rc = dg._reject_with_guidance(
         "top1", "synthetic top1 message",
         "add `agent-reasoning: <why>` to the dispatch prompt.")
-    assert rc == 2
+    assert rc == 0  # #801: format-class demotion (default class)
     captured = capsys.readouterr()
     assert "REJECT top1" in captured.err
     assert GATE_VERDICT[0] not in captured.err, "stderr stays untagged"
@@ -414,7 +414,8 @@ def test_top1_reject_end_to_end_wrapped(tmp_path):
         input=payload, capture_output=True, text=True, timeout=60,
         cwd=str(REPO_ROOT), errors="replace",
     )
-    assert r.returncode == 2, f"top-1 deviation must REJECT; stderr={r.stderr!r}"
+    # #801: format-class demotion — wrapped verdict still rides stdout.
+    assert r.returncode == 0, f"demoted rc0; stderr={r.stderr!r}"
     assert "REJECT top1" in r.stderr
     assert GATE_VERDICT[0] not in r.stderr
     ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]

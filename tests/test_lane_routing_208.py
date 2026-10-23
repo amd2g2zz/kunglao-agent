@@ -559,11 +559,13 @@ def test_hook_lane_enum_matches_lane_spec():
 @pytest.mark.parametrize("agent", MALWARE_ONLY_AGENTS)
 def test_malware_only_agent_refused_on_non_malware_lane(tmp_path, agent):
     """A malware-lane-only agent dispatched into an algorithm workspace is
-    REJECTed (rc=2) with a structured message naming agent + lane."""
+    REJECTed with a structured message naming agent + lane. #801
+    SUPERSESSION: lane-routing refusal is admission discipline (format
+    class) — DEMOTED rc 0; the corrective guidance rides the tool result."""
     ws = _write_lane_ws(tmp_path, "algorithm")
     r = _run_dispatch_gate(tmp_path, ws, agent)
-    assert r.returncode == 2, \
-        f"{agent} must be refused on lane=algorithm: {r.returncode}: {r.stdout}{r.stderr}"
+    assert r.returncode == 0, \
+        f"{agent} must be refused on lane=algorithm (demoted, #801): {r.returncode}: {r.stdout}{r.stderr}"
     assert "lane_routing" in r.stdout + r.stderr
     assert "algorithm" in r.stdout + r.stderr
     assert agent in r.stdout + r.stderr
@@ -594,5 +596,8 @@ def test_lane_gate_is_pre_activation(tmp_path):
     rack and MCP-prefix faces."""
     ws = _write_lane_ws(tmp_path, "data")
     r = _run_dispatch_gate(tmp_path, ws, "pefile-signature")
-    assert r.returncode == 2, \
-        "lane routing must not wait for hook activation"
+    # #801: the corridor still fires pre-activation — demoted rc 0, the
+    # REJECT verdict + guidance on stderr/stdout prove it ran.
+    assert r.returncode == 0, \
+        f"lane routing must not wait for hook activation: {r.stdout}{r.stderr}"
+    assert "REJECT lane_routing" in r.stdout + r.stderr

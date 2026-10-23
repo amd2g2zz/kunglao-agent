@@ -133,13 +133,15 @@ def _v1_envelope(claim: str, tools: list[str]) -> str:
 class TestFirstDispatchAdmission:
     def test_empty_candidates_first_dispatch_rejects(self, tmp_path) -> None:
         """Scaffold exists (candidates=[] per #412) -> first dispatch into
-        q1 REJECTs (exit 2) with the gate-verdict repair path naming q1."""
+        q1 REJECTS with the gate-verdict repair path naming q1. #801
+        SUPERSESSION: format-class rejection -> DEMOTED rc 0 (the verdict
+        + repair path ride the tool result; no rc=2 context re-read)."""
         root = tmp_path
         ws = _mk_ws(root)
         _write_hyp(ws, "H-001", candidates=[])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, (
-            f"first dispatch into an empty PQ neighborhood must REJECT; "
+        assert r.returncode == 0, (
+            f"#801 demotion: the REJECT face proceeds rc=0; "
             f"rc={r.returncode} stderr={r.stderr!r}")
         assert "REJECT hypothesis_admission" in r.stderr, f"stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission (#109)" in r.stdout, (
@@ -159,7 +161,7 @@ class TestFirstDispatchAdmission:
         ws = _mk_ws(root)
         assert not (ws / "hypotheses").exists()
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_single_candidate_still_rejects(self, tmp_path) -> None:
@@ -169,7 +171,7 @@ class TestFirstDispatchAdmission:
         ws = _mk_ws(root)
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_adjudicated_candidates_do_not_count(self, tmp_path) -> None:
@@ -180,7 +182,7 @@ class TestFirstDispatchAdmission:
         _write_hyp(ws, "H-001", candidates=["AES-CBC", "ChaCha20"],
                    status="refuted")
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_reject_leaves_trace_and_skips_intent_record(
@@ -193,12 +195,12 @@ class TestFirstDispatchAdmission:
         _write_hyp(ws, "H-001", candidates=[])
         prompt = _PROMPT + "\nuncertainty: which mac the header uses"
         r = _run_gate(root, ws, prompt)
-        assert r.returncode == 2
+        assert r.returncode == 0  # #801 demotion
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "hypothesis_admission_reject"]
         assert rows, f"reject trace missing; rows={_event_rows(ws)}"
         assert rows[0].get("claim") == "C-1"
-        assert rows[0].get("exit") == 2
+        assert rows[0].get("exit") == 0  # #801: the trace carries the ACTUAL rc
         assert "q1" in str(rows[0].get("detail"))
         assert _intent_rows(ws) == [], (
             "a REJECTed dispatch must not record a roi-intent row")
@@ -307,7 +309,8 @@ class TestAdmissionSatisfied:
         import hypothesis_bridge as hb
         hb.mint_family_arms(ws, "H-001", ["AES-CBC"])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, "one arm is not a competition"
+        assert r.returncode == 0, (  # #801 demotion: loud verdict, no block
+            "one arm is not a competition")
         assert "REJECT hypothesis_admission" in r.stderr, r.stderr
 
 
