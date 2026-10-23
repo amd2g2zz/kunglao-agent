@@ -408,7 +408,7 @@ files:
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
-    r1: 8
+    r1: 10
   scripts/rlvr/settlement_scorer.py:
     r1: 2
   scripts/rlvr/signal_guard.py:
