@@ -1,77 +1,81 @@
 {
-  "schema": "liveness-fingerprints/1",
-  "description": "Per system face, the ledger evidence that proves the face FIRED in a real run. A fingerprint that cannot pass on a live workspace means the face is decorative. Consumed by devkit/liveness_gate.py; the product-side zero-activity auditor derives from the same spec (devkit/docs/liveness_fingerprints.md).",
-  "fingerprints": [
-    {
-      "id": "rl-sampler-exit",
-      "face": "the sampled family reaches the dispatch decision (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl)",
-      "ledger": "runs/strategy-log.jsonl",
-      "check": {
-        "kind": "jsonl_count",
-        "all_of": {
-          "event": "dispatch",
-          "strategy": "sampled"
-        },
-        "min": 1
-      }
+ "schema": "liveness-fingerprints/1",
+ "description": "Per system face, the ledger evidence that proves the face FIRED in a real run. A fingerprint that cannot pass on a live workspace means the face is decorative. Consumed by devkit/liveness_gate.py; the product-side zero-activity auditor derives from the same spec (devkit/docs/liveness_fingerprints.md).",
+ "fingerprints": [
+  {
+   "id": "rl-sampler-exit",
+   "face": "the sampled family reaches the dispatch decision (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl)",
+   "ledger": "runs/strategy-log.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "event": "dispatch",
+     "strategy": "sampled"
     },
-    {
-      "id": "rl-admission-consumed",
-      "face": "a plan() admission receipt was consumed at dispatch (#760, wiring: #773 W3 — ledger plan-receipt/1)",
-      "ledger": "runs/plan-receipts.jsonl",
-      "check": {
-        "kind": "jsonl_count",
-        "field_nonempty": "admitted",
-        "min": 1
-      }
+    "min": 1
+   }
+  },
+  {
+   "id": "rl-admission-consumed",
+   "face": "a plan() admission receipt was consumed at dispatch (#760, wiring: #773 W3 — ledger plan-receipt/1)",
+   "ledger": "runs/plan-receipts.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "field_nonempty": "admitted",
+    "min": 1
+   }
+  },
+  {
+   "id": "policy-state-fresh",
+   "face": "the round close projected the policy-state surface — runs/policy-state.json, schema policy-state/1 (#769, producer: scripts/policy_state.run_face via hooks/round_closure; consumer: statusline_snapshot policy face)",
+   "ledger": "runs/policy-state.json",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "schema": "policy-state/1"
     },
-    {
-      "id": "policy-state-fresh",
-      "face": "the round close projected the policy-state surface — runs/policy-state.json, schema policy-state/1 (#769, producer: scripts/policy_state.run_face via hooks/round_closure; consumer: statusline_snapshot policy face)",
-      "ledger": "runs/policy-state.json",
-      "check": {
-        "kind": "jsonl_count",
-        "all_of": {
-          "schema": "policy-state/1"
-        },
-        "min": 1
-      }
+    "min": 1
+   }
+  },
+  {
+   "id": "rl-posterior-moved",
+   "face": "posterior store rows update after settle — keyed by ARM (#807: case-level movement — key-less rows, dispatch-pending structural mass, or credits with no arm attribution — no longer satisfies the sentinel; INV-003 is a FAMILY-level live signal)",
+   "ledger": "runs/posterior-store.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "schema": "posterior-store/1"
     },
-    {
-      "id": "rl-posterior-moved",
-      "face": "posterior store rows update after settle (#678)",
-      "ledger": "runs/posterior-store.jsonl",
-      "check": {
-        "kind": "jsonl_count",
-        "all_of": {
-          "schema": "posterior-store/1"
-        },
-        "min": 1
-      }
-    },
-    {
-      "id": "oracle-armed",
-      "face": "armed oracle cases exist — the reward source (#678 T5, wiring: #773 W1)",
-      "ledger": "oracle/cases/*.yaml",
-      "check": {
-        "kind": "file_glob_min",
-        "min": 1,
-        "content_any": [
-          "channel:",
-          "update_map",
-          "hypothesis_ref"
-        ]
-      }
-    },
-    {
-      "id": "settle-credit",
-      "face": "settlement credit flows at claim terminal",
-      "ledger": "runs/logs/latest",
-      "check": {
-        "kind": "jsonl_count",
-        "contains": "task_terminal_settlement",
-        "min": 1
-      }
-    }
-  ]
+    "any_nonempty": [
+     "arm_key",
+     "arm"
+    ],
+    "min": 1
+   }
+  },
+  {
+   "id": "oracle-armed",
+   "face": "armed oracle cases exist — the reward source (#678 T5, wiring: #773 W1)",
+   "ledger": "oracle/cases/*.yaml",
+   "check": {
+    "kind": "file_glob_min",
+    "min": 1,
+    "content_any": [
+     "channel:",
+     "update_map",
+     "hypothesis_ref"
+    ]
+   }
+  },
+  {
+   "id": "settle-credit",
+   "face": "settlement credit flows at claim terminal",
+   "ledger": "runs/logs/latest",
+   "check": {
+    "kind": "jsonl_count",
+    "contains": "task_terminal_settlement",
+    "min": 1
+   }
+  }
+ ]
 }

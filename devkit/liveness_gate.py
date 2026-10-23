@@ -75,6 +75,13 @@ def _count_jsonl(path: Path, check: dict) -> tuple[int, str]:
     all_of = check.get("all_of") or {}
     contains = check.get("contains")
     nonempty = check.get("field_nonempty")
+    # any_nonempty: the row qualifies when ANY named field is non-empty —
+    # a row family with several historically-equivalent key spellings
+    # (posterior-store/1 rows carry `arm` from the cross-task writer and
+    # `arm_key` from the workspace credit writer). #807: lets the
+    # rl-posterior-moved sentinel require a REAL arm attribution instead
+    # of passing on case-level (key-less) posterior rows.
+    any_nonempty = check.get("any_nonempty")
     hits = 0
     for rec in rows:
         if any(rec.get(k) != v for k, v in all_of.items()):
@@ -83,6 +90,9 @@ def _count_jsonl(path: Path, check: dict) -> tuple[int, str]:
                 rec, ensure_ascii=False):
             continue
         if nonempty is not None and not rec.get(nonempty):
+            continue
+        if any_nonempty is not None and not any(
+                rec.get(f) for f in any_nonempty):
             continue
         hits += 1
     return hits, f"{hits} matching row(s) of {len(rows)}"

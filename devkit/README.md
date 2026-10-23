@@ -10,6 +10,11 @@ devkit/
 ├── README.md                 ← 你在这里
 ├── quality_gates.py          ← 质量门 runner(门数 = GATES 注册表,勿在文档复制计数)
 ├── supply_gate.py            ← #767 供应门(声明的面必须可解析:in-tree 或 pinned git+URL@ref)
+├── liveness_gate.py          ← #772 活性门(ledger 证据;--smoke / --ledger 两模式)
+├── liveness_fingerprints.json ← 每系统面的活性指纹(#807:rl-posterior-moved 升为族级 arm 键)
+├── production_replay_gate.py ← Standard 12 生产形态回放门(#807;夹具加载器+断言运行器,注册面留给 #800/#801/#809)
+├── production_shapes/        ← 合成生产形态夹具(shape-only,严禁原始日志入仓)
+├── reports/                  ← 工具产出的证据报告(#807 测试清单/删除台账)
 ├── pass_rate_metric.py       ← CI metric 提取
 ├── install_git_hooks.py      ← 把 githooks/ 部署到 .git/hooks/
 ├── githooks/                 ← hook 模板(原样,带 __KUNGLAO_DEVKIT_ROOT__ 占位符)

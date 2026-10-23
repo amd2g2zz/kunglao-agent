@@ -1,0 +1,93 @@
+{
+ "schema": "production-shape/1",
+ "id": "android-2026-10-21-shape",
+ "synthetic": true,
+ "source": "SHAPE-ONLY distillation of a 2026-10 production run (logs-panel review archive; READ-ONLY reference). Zero user content: event counts, field names and ordering faces only.",
+ "shape": {
+  "events_total": 3002,
+  "action_counts": {
+   "statusline_snapshot": 1084,
+   "detector_eval": 315,
+   "rank_feeds": 272,
+   "cockpit_sample": 125,
+   "detector_fired": 124,
+   "warn": 117,
+   "rho_pair": 76,
+   "rho_checkpoint": 76,
+   "decision_snapshot": 76,
+   "renew": 75,
+   "dispatch": 71,
+   "mech_run": 49,
+   "converge": 45,
+   "mission_stall": 44,
+   "handroll_warn": 41,
+   "operator_observation": 38,
+   "user_signal": 38,
+   "retro_policy": 31,
+   "toolfirst_search": 24,
+   "priority_deviation": 22,
+   "intent_unparsed": 22,
+   "t2_queue_built": 21,
+   "lifecycle_completed": 21,
+   "write_blocked": 20,
+   "policy_state_projected": 16
+  },
+  "warn_families": {
+   "round_closure": 42,
+   "completion_gate": 29,
+   "compose": 21,
+   "q_cells": 11,
+   "strategy_store": 4,
+   "l1_value": 3,
+   "dispatch_gate": 3
+  },
+  "dispatches": 71,
+  "sampled_dispatches": 0,
+  "settled_rows": 12,
+  "settled_rows_with_arm": 0
+ },
+ "anchors": {
+  "801": "warn families round_closure/completion_gate/compose repeat with no per-family bound (circuit-breaker face, owned by #801)"
+ },
+ "events": [
+  {
+   "action": "dispatch",
+   "claim": "C-001",
+   "arm": null,
+   "strategy": "default"
+  },
+  {
+   "action": "claim_settled",
+   "claim": "C-001",
+   "actor": "reward_settlement",
+   "detail": "{\"settled\": 1}"
+  },
+  {
+   "action": "warn",
+   "actor": "q_cells",
+   "claim": null,
+   "detail": "q_cells: q_cells.observe_settlement: no pending dispatch row for 'C-001' — credit not banked (the honest gap)"
+  },
+  {
+   "action": "warn",
+   "actor": "round_closure",
+   "claim": null,
+   "detail": "round_closure WARN (fail-open)"
+  }
+ ],
+ "artifacts": {
+  "runs/posterior-store.jsonl": [
+   {
+    "schema": "posterior-store/1",
+    "arm_key": "",
+    "method_family": "",
+    "credit": 1.0,
+    "claim": "C-001",
+    "status": "round_credit"
+   }
+  ]
+ },
+ "expectations": {
+  "rl-posterior-moved": "FAIL"
+ }
+}
