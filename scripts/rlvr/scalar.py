@@ -782,6 +782,24 @@ def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
             round(target_f - (int(step_n) - float(step_sum)), 6))
 
 
+def _real_did(ws, did: str) -> str:
+    """#800 R2: resolve the REAL dispatch id from the dispatch ledger.
+    The settlement rows are claim-grained (the #433 ladder's artifact
+    attribution joins the facts' creator=C-NN); the q-cell bank is
+    rollout-grained (the ONE keyed ledger's identity). Soft face: no
+    ledger row keeps the row's own id — the claim-grained run() pass
+    already excludes off-ledger claims (no-backcompat), and non-claim
+    settlement kinds keep their identity untouched."""
+    try:
+        import claims_store as _cstore  # noqa: PLC0415 — lazy sibling
+        led = _cstore.latest_committed_dispatch(ws, did)
+        if led:
+            return str(led.get("dispatch_id") or did)
+    except Exception as exc:  # noqa: BLE001 — fail-open, never the bank
+        warn("q_cell_bank", f"dispatch-ledger resolve failed: {exc}")
+    return did
+
+
 def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     """The bank tracks the LEDGER, not the first write. Two faces
     behind one guard: a bank that never landed (no settlement-source
@@ -793,7 +811,7 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     break."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = str(row["dispatch_id"])
+        did = _real_did(ws, str(row["dispatch_id"]))
         mass = _qc.banked_mass(ws, did)
         if mass is None:
             # an unreadable log is not an empty one — amending against a
@@ -844,7 +862,7 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     this change work unchanged)."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = str(row["dispatch_id"])
+        did = _real_did(ws, str(row["dispatch_id"]))
         step_sum, step_n = _qc.step_credit_totals(ws, did)
         if step_n == 0:
             bank = _qc.observe_settlement(ws, did, row["r"])

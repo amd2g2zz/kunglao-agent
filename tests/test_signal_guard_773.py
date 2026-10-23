@@ -88,14 +88,12 @@ def test_freeze_varied_returns_false(tmp_path):
 
 def test_settle_freezes_on_degenerate_series(tmp_path):
     import settle_round_credit as src
+    from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "facts").mkdir()
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": [
-            {"id": "C-1", "status": "PROVEN",
-             "verification": {"method": "reproduction"}}]}),
-        encoding="utf-8")
+    mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
+                          "verification": {"method": "reproduction"}}])
     _seed_store(ws, [1.0] * 5)
     out = src.run(ws)
     assert out.get("signal_frozen") is True, out
@@ -104,14 +102,12 @@ def test_settle_freezes_on_degenerate_series(tmp_path):
 
 def test_settle_unfrozen_when_signal_varied(tmp_path):
     import settle_round_credit as src
+    from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "facts").mkdir()
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": [
-            {"id": "C-1", "status": "PROVEN",
-             "verification": {"method": "reproduction"}}]}),
-        encoding="utf-8")
+    mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
+                          "verification": {"method": "reproduction"}}])
     _seed_store(ws, [1.0, 0.3, 1.0])
     out = src.run(ws)
     assert out.get("signal_frozen") is None

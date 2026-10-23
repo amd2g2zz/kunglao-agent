@@ -139,10 +139,12 @@ land it on the append-only dispatch ledger
 (`runs/dispatch-ledger.jsonl`, schema `dispatch-ledger/1`; rows
 state=dispatched/committed/aborted). The q-cell pending dispatch row
 SHALL carry the dispatch_id as a foreign key; the settle face SHALL
-resolve the real dispatch id from the ledger. Legacy workspaces with
-no ledger row SHALL keep the claim-id alias byte-identically.
-(Production basis: arm/dispatch_id was NULL on 100% of settlement
-rows.)
+resolve the real dispatch id from the ledger. A terminal claim with
+NO ledger row is a pre-#800 workspace — unsupported per the
+no-backcompat ruling (2026-09-01): the settle face reports a loud
+off-ledger gap and skips banking (counted in `off_ledger`), never
+re-keys under the claim alias. (Production basis: arm/dispatch_id was
+NULL on 100% of settlement rows.)
 
 #### Scenario: mint, ledger, and foreign key
 
@@ -151,18 +153,20 @@ rows.)
   dispatch_id; the q-cell pending row matches by the real id;
   latest_committed_dispatch resolves it
 
-#### Scenario: legacy workspace untouched
+#### Scenario: off-ledger terminal claim is a loud unsupported gap
 
-- **WHEN** a workspace has no dispatch-ledger rows
-- **THEN** settlement keys by claim id exactly as before — no
-  unmatched gap, no false audit alarm
+- **WHEN** a terminal claim has no dispatch-ledger row
+- **THEN** the settle face warns off_ledger, banks nothing under an
+  alias, and reports the count; the audit treats the dispatch as
+  unbanked
 
 ### Requirement: Missing rollouts are loud with bounded repetition
 
 The settle tick SHALL run the missing-rollout audit: every COMMITTED
 dispatch whose claim is TERMINAL and that has NO banked settlement row
-(matched by real dispatch id OR legacy claim alias) is a gap emitting
-ONE `missing_rollout` event per gap. Repetition SHALL be bounded per
+matched by the REAL dispatch id (the pre-R2 claim alias is not
+consulted — no-backcompat ruling) is a gap emitting ONE
+`missing_rollout` event per gap. Repetition SHALL be bounded per
 plan Standard 11: each gap carries a per-dispatch occurrence count;
 the occurrence equal to MISSING_ROLLOUT_REPEAT_LIMIT escalates
 (escalated=true — ownership transfer); occurrences beyond the limit
@@ -178,10 +182,15 @@ warns taught that repetition is not escalation.)
 - **THEN** the audit reports the gap and exactly one missing_rollout
   event lands carrying claim + dispatch_id
 
-#### Scenario: banked under the legacy alias stays quiet
+#### Scenario: banked under the real dispatch id stays quiet
 
-- **WHEN** the settlement banked under the claim id (a pre-R2 row)
+- **WHEN** the settlement banked under the real dispatch id
 - **THEN** no gap is reported, no event fires
+
+#### Scenario: an alias-banked row does not quiet the audit
+
+- **WHEN** the settlement banked only under the pre-R2 claim id
+- **THEN** the gap stands and is loud (the ledger id is the one key)
 
 #### Scenario: in-flight dispatches owe nothing
 

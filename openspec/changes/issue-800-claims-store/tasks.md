@@ -45,4 +45,12 @@
 - [x] registration: event_taxonomy EMIT_ACTIONS gains missing_rollout
 - [x] original #800 pins updated to the amended settle contract
       (verification reference required)
+- [x] no-backcompat removal (owner ruling 2026-09-01, re-affirmed
+      2026-10-23): the settle claim-alias fallback and the audit's
+      alias-quiet face are DELETED — off-ledger terminal claims are a
+      loud unsupported gap (excluded from the pass, off_ledger count);
+      the REAL dispatch id enters at the scalar bank seam
+      (_bank_q_cell_credit/_reconcile resolve it from the ledger);
+      fixtures mint ledger rows (tests/_dispatch_fixture.py, pending
+      True/False = banked/starved shapes)
 - [ ] pins green; openspec validate green; gates; mint; CI green

@@ -59,7 +59,7 @@ files:
   scripts/claim_expiry.py:
     r1: 2
   scripts/claims_store.py:
-    r1: 10
+    r1: 11
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
@@ -406,7 +406,7 @@ files:
   scripts/rlvr/reward.py:
     r1: 3
   scripts/rlvr/scalar.py:
-    r1: 6
+    r1: 7
   scripts/rlvr/settlement_scorer.py:
     r1: 2
   scripts/rlvr/signal_guard.py:
@@ -442,7 +442,7 @@ files:
   scripts/script_harvest.py:
     r1: 4
   scripts/settle_round_credit.py:
-    r1: 4
+    r1: 5
   scripts/shell_defaults.py:
     r1: 1
   scripts/slot_monitor.py:
@@ -519,6 +519,8 @@ files:
   scripts/ws_yaml.py:
     r1: 5
   scripts/zero_output_fingerprint.py:
+    r1: 1
+  tests/_dispatch_fixture.py:
     r1: 1
   tests/_factories.py:
     r1: 5
@@ -613,7 +615,7 @@ files:
   tests/test_bp_matrix_faces_546.py:
     r1: 1
   tests/test_bridge_779.py:
-    r1: 4
+    r1: 7
   tests/test_bridge_campaign_779.py:
     r1: 4
   tests/test_budget_channel_862.py:
@@ -658,7 +660,7 @@ files:
   tests/test_claims_store_800.py:
     r1: 4
   tests/test_claims_store_800_rollout.py:
-    r1: 3
+    r1: 1
   tests/test_classification_collapse_581.py:
     r1: 1
   tests/test_claudemd_conditional_919.py:
@@ -724,6 +726,8 @@ files:
     r1: 3
   tests/test_coverage_policy_564.py:
     r1: 5
+  tests/test_credit_amendment_731.py:
+    r1: 1
   tests/test_credit_settle_634.py:
     r1: 1
   tests/test_crypto_algorithms.py:

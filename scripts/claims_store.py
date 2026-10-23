@@ -400,8 +400,9 @@ def _audit_state_save(ws, state: dict) -> None:
 
 def latest_committed_dispatch(ws, claim: str) -> dict | None:
     """The last COMMITTED ledger row for the claim — the settlement
-    face's dispatch-id resolver. Legacy workspaces (no ledger) return
-    None and the settle face keeps its claim-id alias byte-identically."""
+    face's dispatch-id resolver. None = no ledger row (a pre-#800
+    workspace: unsupported per the no-backcompat ruling; the settle
+    face reports it as a loud off-ledger gap, never an alias)."""
     latest = None
     for row in _iter_ledger_rows(ws):
         if (row.get("state") == "committed"
@@ -415,8 +416,9 @@ def audit_missing_rollouts(ws) -> list:
     C-005 (2026-10-21 android run): a dispatched claim went PROVEN
     with NO settlement row and NO warn — the silent lie. Rule: every
     COMMITTED dispatch whose claim is now TERMINAL must have a banked
-    settlement row (matched by the real dispatch id OR the legacy
-    claim alias); a gap emits ONE ``missing_rollout`` event (loud).
+    settlement row matched by the REAL dispatch id (the pre-R2
+    claim-id alias is not consulted — no-backcompat ruling); a gap
+    emits ONE ``missing_rollout`` event (loud).
     Fail-open telemetry: never raises into the settle tick."""
     gaps: list = []
     try:
@@ -439,16 +441,17 @@ def audit_missing_rollouts(ws) -> list:
             # returns None = log UNREADABLE (fail-open skip, never a
             # false alarm) and (s, f, n_rows) otherwise — n_rows is
             # the existence test (a band-valued solve row counts:
-            # zero mass, existence only).
+            # zero mass, existence only). The pre-R2 claim-id alias
+            # is NOT consulted (no-backcompat ruling: the ledger id
+            # is the one key).
             quiet = False
-            for dm in (d for d in (did, claim) if d):
+            if did:
                 try:
-                    bm = q_cells.banked_mass(ws, dm)
+                    bm = q_cells.banked_mass(ws, did)
                 except Exception:  # noqa: BLE001 — fail-open
                     bm = None
                 if bm is None or bm[2] > 0:
                     quiet = True
-                    break
             if quiet:
                 continue
             # Standard 11: count per dispatch, escalate once, degrade
