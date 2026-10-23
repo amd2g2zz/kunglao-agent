@@ -1,0 +1,12 @@
+{
+  "schema": "coverage-floor/1",
+  "floor": 57.0,
+  "min_floor": 70.0,
+  "measured_set": [
+    "scripts",
+    "hooks"
+  ],
+  "baseline_measured": 58.59,
+  "baseline_source": "uv run pytest -m 'not fast' -n 4 --cov=scripts --cov=hooks (6074 passed / 654 skipped / 18 env-failed) at the de-bloat tree; seed 57.0 = baseline minus cross-platform tolerance; raise-only from here; target 70.0 reached only with REAL tests",
+  "baseline_recorded": "2026-10-23"
+}
