@@ -1295,7 +1295,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: fd484322e0ffd619eeff9666f756af488af2b5ee35468bd242b43859e846c1b0
+    sha256: 39ca8e558176c31b2545ab031b5e612b253c6c948d325f16804d9ff3b12aab82
   - src: scripts/rlvr/belief.py
     dest: .claude/scripts/rlvr/belief.py
     kind: scaffold
@@ -1340,6 +1340,10 @@ files:
     dest: .claude/scripts/rlvr/invariants.py
     kind: scaffold
     sha256: dfc7ca96290d80980fbfc6e1ed4acb60800c128fbcb193246f0824bdf45446dd
+  - src: scripts/rlvr/key_freeze.py
+    dest: .claude/scripts/rlvr/key_freeze.py
+    kind: scaffold
+    sha256: 1c8712ad5600530825a49c98a7a1d6d5235d2b83002b4f3afce65b8d540da827
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
@@ -1391,7 +1395,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: a82cd5600d1e7a4f503a5db770aeb29f9db23bf3bd582f30a6de31520b427adb
+    sha256: 68eafc266acc20d2600a944976647e1784d9594c91514499086fc49abb8bf47b
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1463,7 +1467,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 6b1b3a4b606d4d23856eb1a1249ccf2c58dea4309cb8334155b6daaec6c9104e
+    sha256: 63332bbfa72a57f7b261d8dbc534fe8c62c373cc91c27acb29d57aae4fc4bf93
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold

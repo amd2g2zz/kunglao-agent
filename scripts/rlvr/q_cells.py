@@ -1688,6 +1688,24 @@ def _recipe_view(ws, family: str, meta: dict, prompt: str | None,
         return dict(_RECIPE_GAP)
 
 
+def _task_open_signature(ws) -> str:
+    """issue-797 key freeze: the task-open FROZEN signature when the task's
+    learning-key doc exists (one signature per task — the cell a
+    dispatch opens accumulates for the whole task instead of churning a
+    fresh hash per state change; the production 3-fingerprints/35-min
+    pathology dies by construction). Absent doc / any freeze-face
+    failure -> the fresh per-dispatch computation (the bit-identical
+    legacy face; fail-open, telemetry never breaks the ALLOW tail)."""
+    try:
+        from rlvr import key_freeze  # noqa: PLC0415 — lazy (import-clean)
+        frozen = key_freeze.task_signature(ws)
+    except Exception:  # noqa: BLE001 — fail-open by design
+        frozen = None
+    if frozen:
+        return str(frozen)
+    return ssig.signature_hash(ssig.snapshot(ws))
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
@@ -1712,7 +1730,7 @@ def record_dispatch_observation(ws, prompt: str, *,
         if not family:
             return {"appended": False, "reason": "undeclared",
                     "family": None, "signature_hash": None}
-        sig = ssig.signature_hash(ssig.snapshot(ws))
+        sig = _task_open_signature(ws)
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
         # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
         # an envelope-declared agent_type appends the 5th dim so the
