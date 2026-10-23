@@ -385,11 +385,14 @@ jobs:
       run: uv run python scripts/coverage_floor.py check --coverage-json coverage.json
 
     - name: Coverage floor ratchet monotone (#807 — floor may only move UP)
-      # PRs may not lower the ratchet vs the base branch. Shallow checkout,
-      # so fetch just the base ref and let the tool read its ratchet file.
+      # PRs may not lower the ratchet vs the base branch. Fetch the base
+      # ref WITH full history: a --depth=1 fetch would graft (shallow) the
+      # repo and break the mutation-baseline ancestry check in the
+      # quality-gates step below; the checkout already carries full
+      # history, so this fetch is near-free.
       if: github.event_name == 'pull_request' && needs.runner-probe.outputs.docs_only != 'true'
       run: |
-        git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
+        git fetch origin "${{ github.event.pull_request.base.ref }}"
         uv run python scripts/coverage_floor.py monotone --base-ref FETCH_HEAD
 
     - name: Upload coverage report (observation only, #463)
