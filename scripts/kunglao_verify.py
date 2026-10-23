@@ -80,29 +80,116 @@ _VALUE_PLACEHOLDERS = {"??", "?", "TBD", "TODO", "N/A", "NULL", "null", ""}
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
-def _parse_frontmatter(text: str) -> dict:
-    """Minimal frontmatter: line-by-line 'key: value' inside a '---' fence (quotes stripped). Returns {} on failure."""
+_BLOCK_START_RE = re.compile(
+    r"^(?P<key>[A-Za-z_][\w.-]*)\s*:\s*(?P<style>[|>])"
+    r"(?P<chomp>[+-])?(?P<hint>\d+)?\s*(?:#.*)?$")
+
+
+def _parse_frontmatter_ex(text: str) -> tuple[dict, list[str]]:
+    """Frontmatter with YAML block-scalar support. Returns
+    (fields, format_warnings).
+
+    The line-by-line `key: value` face stays the base; a `key: |` /
+    `key: >` starter (with optional chomping indicator and explicit
+    indentation hint) switches to block collection: the block's
+    indentation is taken from its first non-empty line, more-indented
+    lines are captured verbatim (de-indented), and the value is the
+    newline-joined (literal) or space-folded (folded) content. Any
+    normalization is FORMAT-ONLY: it lands in the warnings list (the
+    warn sidecar — recorded, never verdict-changing). The verifier's
+    rejection must key on the VALUE (semantic), never on the style the
+    value was written in.
+    """
     out: dict[str, str] = {}
+    warns: list[str] = []
     if not text.startswith("---"):
-        return out
+        return out, warns
     body = text.split("---", 2)
     if len(body) < 3:
-        return out
-    for line in body[1].splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or ":" not in line:
+        return out, warns
+    lines = body[1].splitlines()
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or ":" not in line:
+            i += 1
             continue
-        k, _, v = line.partition(":")
-        out[k.strip()] = v.strip().strip('"').strip("'")
-    return out
+        m = _BLOCK_START_RE.match(stripped)
+        if m is None:
+            k, _, v = line.partition(":")
+            out[k.strip()] = v.strip().strip('"').strip("'")
+            i += 1
+            continue
+        key = m.group("key").strip()
+        style = m.group("style")
+        chomp = m.group("chomp") or ""
+        hint = m.group("hint")
+        j = i + 1
+        block_indent = None
+        while j < n:
+            if lines[j].strip():
+                block_indent = len(lines[j]) - len(lines[j].lstrip())
+                break
+            j += 1
+        if block_indent is None:
+            # a block starter with no content line: empty value
+            out[key] = ""
+            i = j
+            continue
+        content: list[str] = []
+        while j < n:
+            ln = lines[j]
+            if ln.strip() and (len(ln) - len(ln.lstrip())) < block_indent:
+                break  # dedent ends the block
+            content.append(ln[block_indent:] if len(ln) >= block_indent
+                           else "")
+            j += 1
+        while content and not content[-1].strip():
+            content.pop()  # trailing blanks end at the dedent face
+        if style == "|":
+            value = "\n".join(content)
+            warns.append(f"{key}: literal block scalar normalized "
+                         f"(style/chomping are format-only)")
+        else:
+            folded: list[str] = []
+            for ln in content:
+                if not ln.strip():
+                    folded.append("\n")
+                elif folded and folded[-1] != "\n":
+                    folded.append(" " + ln)
+                else:
+                    folded.append(ln)
+            value = "".join(folded).strip()
+            warns.append(f"{key}: folded block scalar normalized "
+                         f"(fold heuristics are format-only)")
+        if chomp or hint:
+            warns.append(f"{key}: explicit chomping/indent hint "
+                         f"normalized (format-only)")
+        out[key] = value
+        i = j
+    return out, warns
+
+
+def _parse_frontmatter(text: str) -> dict:
+    """Minimal frontmatter: line-by-line 'key: value' inside a '---'
+    fence (quotes stripped), with block-scalar faces. Returns {} on
+    failure."""
+    return _parse_frontmatter_ex(text)[0]
 
 
 def load_fact(ws: Path, fact_id: str) -> dict | None:
-    """Read facts/<fact_id>.md frontmatter; missing file → None."""
+    """Read facts/<fact_id>.md frontmatter; missing file → None. A
+    block-scalar face lands its normalization in the warn sidecar
+    (`_format_warnings`) — recorded, never verdict-changing."""
     p = ws / "facts" / f"{fact_id}.md"
     if not p.exists():
         return None
-    fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
+    fm, warns = _parse_frontmatter_ex(
+        p.read_text(encoding="utf-8", errors="replace"))
+    if warns:
+        fm["_format_warnings"] = warns
     fm["_path"] = str(p)
     return fm
 
@@ -648,7 +735,11 @@ def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
     - otherwise (non-assignment-class, or bare hex/sha): whole-block
       sha256 comparison (original M3.2 behavior).
     actual_sha256 is always filled (verify-output schema contract).
+    Format-only normalization faces (block scalars) ride the fact's
+    `_format_warnings` warn sidecar into the result's `warnings` field —
+    recorded, never verdict-changing.
     """
+    warnings = list(fact.get("_format_warnings") or [])
     reproduce = str(fact.get("reproduce", ""))
     expected = str(fact.get("expected", ""))
     cwd = fixture.parent if fixture else None
@@ -657,7 +748,7 @@ def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
         return {"verdict": "FAIL",
                 "actual_sha256": hashlib.sha256(b"").hexdigest(),
                 "cmd": reproduce, "expected_sha256": _expected_hash(expected),
-                "detail": detail}
+                "detail": detail, "warnings": warnings}
     actual_sha256 = hashlib.sha256(stdout.rstrip()).hexdigest()
     exp_hash = _expected_hash(expected)
 
@@ -666,24 +757,29 @@ def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
         if assertions:
             ok, mismatches = compare_value_assertions(assertions, stdout)
             if ok:
+                det = (f"{len(assertions)} value assertion(s) match"
+                       + ("; " + "; ".join(warnings) if warnings else ""))
                 return {"verdict": "PASS", "actual_sha256": actual_sha256,
                         "cmd": reproduce, "expected_sha256": exp_hash,
-                        "detail": f"{len(assertions)} value assertion(s) match"}
+                        "detail": det, "warnings": warnings}
             mm = "; ".join(f"{f}: expected {e} got {a}" for f, e, a in mismatches)
             return {"verdict": "FAIL", "actual_sha256": actual_sha256,
                     "cmd": reproduce, "expected_sha256": exp_hash,
-                    "detail": f"value-assertion mismatch: {mm}"}
+                    "detail": f"value-assertion mismatch: {mm}",
+                    "warnings": warnings}
         # assignment-class without concrete assertions — the lint gate should
         # have caught it; belt-and-braces FAIL here too.
         return {"verdict": "FAIL", "actual_sha256": actual_sha256,
                 "cmd": reproduce, "expected_sha256": exp_hash,
-                "detail": "assignment-class expected lacks concrete value assertions"}
+                "detail": "assignment-class expected lacks concrete value assertions",
+                "warnings": warnings}
 
     verdict = "PASS" if actual_sha256 == exp_hash else "FAIL"
     detail = ("sha256 match" if verdict == "PASS"
               else f"sha256 mismatch: actual {actual_sha256} vs expected {exp_hash}")
     return {"verdict": verdict, "actual_sha256": actual_sha256, "cmd": reproduce,
-            "expected_sha256": exp_hash, "detail": detail}
+            "expected_sha256": exp_hash, "detail": detail,
+            "warnings": warnings}
 
 
 def anchor_check(verdict: dict) -> bool:

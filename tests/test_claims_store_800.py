@@ -111,6 +111,10 @@ def test_in_progress_not_dispatchable_624(tmp_path) -> None:
 
 def test_settle_transition_applies_with_provenance(tmp_path) -> None:
     ws = _ws(tmp_path, [{"id": "C-1", "status": "IN_PROGRESS"}])
+    # the 809 upgrade: the reference must resolve to a PASSED record
+    rec = ws / "runs" / "verification-C-1.md"
+    rec.write_text("---\nverifier-identity: v-l1\nverdict: verified\n"
+                   "---\n\nrecord body\n", encoding="utf-8")
     r = cs.apply(ws, "C-1", "settle_proven", actor="settler",
                  evidence="oracle 3/3",
                  verification="l1-verify-ok",

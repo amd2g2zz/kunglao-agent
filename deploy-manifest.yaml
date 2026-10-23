@@ -295,7 +295,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: 36521e408a36e6c20b4829f32c48b438bece3e891b60f5547c8ecf1d355f21d8
+    sha256: acb581d66f7f00829ec586432880876030c21b9b97e88e69404b850a12674250
   - src: scripts/claudemd_frame.py
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
@@ -527,7 +527,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 1ff72da12f01d9a73617137cf0270f16713dc8f608ae56d26870baed4b23f4a8
+    sha256: 1146d83cbc5599f5fa96959a9c31a5efc5f8c1da637e1a595c13290b586611f1
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -763,7 +763,7 @@ files:
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
-    sha256: 4b7866de92e554f05c90d07e31f8ea53b60def1180f40d7b125b879e1a6ec689
+    sha256: cf780716e120d6b06a8338279caadb4aaabcb376368c009145e655d4fad0386d
   - src: scripts/kunglao_wait.py
     dest: .claude/scripts/kunglao_wait.py
     kind: scaffold
@@ -871,7 +871,7 @@ files:
   - src: scripts/oracle_cadence.py
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold
-    sha256: 24620328b1c3195e311f39bd449220a53211fce7872005f9092e9b2c06c0d224
+    sha256: 1f3fd2227bd63a5f4f9cb381e22d1c70e737410a600cb67ae6b9999c1449c67c
   - src: scripts/oracle_case_admission.py
     dest: .claude/scripts/oracle_case_admission.py
     kind: scaffold
@@ -1240,6 +1240,10 @@ files:
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
     sha256: f6131a3dbfc65ff2a0641290aed8a3f13bfd917d6cb3fa4031af4d324d03d797
+  - src: scripts/verifier_integrity.py
+    dest: .claude/scripts/verifier_integrity.py
+    kind: scaffold
+    sha256: 4ef29821a56080e83385f6f18cfd4f6e47c1726dd59d14d1c5396197b399a5d5
   - src: scripts/verify_backlog_face.py
     dest: .claude/scripts/verify_backlog_face.py
     kind: scaffold

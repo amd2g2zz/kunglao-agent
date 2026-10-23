@@ -259,6 +259,26 @@ def apply(ws, claim: str, event: str, actor: str, *, evidence: str = "",
                                     "reason": reason})
             return TransitionResult(False, claim, event, from_status,
                                     None, reason=reason)
+        # verifier integrity: the reference must RESOLVE to
+        # a PASSED independent-verification record — "referenced
+        # something" is not trust, the record's own verdict face is.
+        # Fail-closed: a resolver fault refuses the mint.
+        try:
+            import verifier_integrity as _vi
+            v_ok, _word, v_detail = _vi.resolve_verification(
+                ws, claim, verification)
+        except Exception as exc:  # noqa: BLE001 — fail-closed by design
+            v_ok, v_detail = False, (f"resolver-fault "
+                                     f"{type(exc).__name__}: {exc}")
+        if not v_ok:
+            reason = f"verification-not-passed: {v_detail}"
+            _append_provenance(ws, {"claim": claim, "event": event,
+                                    "from": from_status, "to": None,
+                                    "actor": actor, "evidence": evidence,
+                                    "outcome": "refused",
+                                    "reason": reason})
+            return TransitionResult(False, claim, event, from_status,
+                                    None, reason=reason)
     target["status"] = edge
     if event == "park":
         target["wake_condition"] = wake_condition
@@ -500,7 +520,18 @@ def begin_dispatch(ws, claim: str, actor: str, *, tier: int = 0,
                    dispatch_id: str | None = None) -> TransitionResult:
     """Open the dispatch intent: journal BEFORE the first write. The
     journal carries the register's byte-exact before-image so the abort
-    and recovery faces restore it verbatim."""
+    and recovery faces restore it verbatim. Run-start face: the oracle
+    registration assertion fires here (before the first dispatch intent
+    of a run) — loud, bounded, fail-open telemetry; an unregistered
+    oracle client never blocks a dispatch, but it can never again
+    survive a whole run silently."""
+    try:
+        import oracle_cadence as _oc
+        _oc.assert_run_start(ws, claim=claim)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the dispatch
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"run-start oracle assertion failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
     stale = _journal_load(ws)
     if stale is not None:
         if stale.get("claim") == str(claim) and _pid_alive(stale.get("pid", 0)):

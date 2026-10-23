@@ -100,7 +100,9 @@ def test_settlement_never_mints_around_verification(tmp_path):
     """Amendment 2 (production: settlement 03:41:02 minted while the
     verifier REJECTed through 03:41:52): a decisive settle through the
     store REFUSES without a verification reference, and REFUSES when
-    the referenced verification postdates the mint."""
+    the referenced verification postdates the mint. The verifier-
+    integrity upgrade (issue 809) adds the third door: the reference
+    must RESOLVE to a PASSED record on disk."""
     ws = _ws(tmp_path, {"C-2": "IN_PROGRESS"})
     bare = claims_store.apply(ws, "C-2", "settle_proven",
                               "hook:dispatch_gate")
@@ -112,6 +114,18 @@ def test_settlement_never_mints_around_verification(tmp_path):
                               verification_ts="2999-01-01T00:00:00Z")
     assert not late.ok
     assert "settlement-precedes-verification" in late.reason
+    # a reference with no PASSED record behind it refuses at the
+    # resolution door (the 809 upgrade of the same pin)
+    unbacked = claims_store.apply(ws, "C-2", "settle_proven",
+                                  "hook:dispatch_gate",
+                                  verification="verify-1",
+                                  verification_ts="2000-01-01T00:00:00Z")
+    assert not unbacked.ok
+    assert "verification-not-passed" in unbacked.reason
+    # seed the passing record the reference resolves to
+    rec = ws / "runs" / "verification-C-2.md"
+    rec.write_text("---\nverifier-identity: v-l1\nverdict: verified\n"
+                   "---\n\nrecord body\n", encoding="utf-8")
     ok = claims_store.apply(ws, "C-2", "settle_proven",
                             "hook:dispatch_gate",
                             verification="verify-1",
@@ -121,7 +135,7 @@ def test_settlement_never_mints_around_verification(tmp_path):
     prov = [json.loads(ln) for ln in
             (ws / "runs" / "claims-provenance.jsonl")
             .read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len([r for r in prov if r.get("outcome") == "refused"]) == 2
+    assert len([r for r in prov if r.get("outcome") == "refused"]) == 3
 
 
 def test_negative_settlement_needs_no_verification(tmp_path):
@@ -140,6 +154,9 @@ def test_terminal_claims_are_idempotent(tmp_path):
     decisive settle on a terminal claim is refused and the register is
     unchanged."""
     ws = _ws(tmp_path, {"C-3": "IN_PROGRESS"})
+    rec = ws / "runs" / "verification-C-3.md"
+    rec.write_text("---\nverifier-identity: v-l1\nverdict: verified\n"
+                   "---\n\nrecord body\n", encoding="utf-8")
     first = claims_store.apply(ws, "C-3", "settle_proven",
                                "hook:dispatch_gate",
                                verification="verify-3",
