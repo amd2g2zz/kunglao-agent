@@ -1836,30 +1836,24 @@ def main() -> int:
     # an earlier hook in the chain (worker_budget) stamps on ITS approval
     # point, so any rc=2 from THIS gate rejects an attempt whose row may
     # already be on disk. Undo it (fresh-tail match) before exiting.
+    # #800: the approval point's side effects live in a claims_store
+    # journal — a REJECT unwinds through ONE journal-driven abort (the
+    # fail-open triple undo — undo_dispatch_anchor -> reopen_claim_no_worker
+    # -> cancel_step_open — is deleted), and an APPROVED dispatch confirms
+    # the journal so its work stands.
     rc = _main_inner()
-    if rc == 2 and _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
+    if _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
         try:
-            _lib = load_hooks_lib()
-            _lib.undo_dispatch_anchor(_ATTEMPT["ws"], _ATTEMPT["cid"])
-            # #624: roll back this rejected attempt's approval-point
-            # OPEN->IN_PROGRESS flip (no fresh worker exists for it).
-            _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
+            from _path_hygiene import ensure_scripts_path as _esp800
+            _esp800()
+            import claims_store as _cstore800
+            if rc == 2:
+                _cstore800.abort_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"],
+                                          actor="dispatch_gate")
+            elif rc == 0:
+                _cstore800.confirm_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"])
         except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
-            warn("undo_dispatch_anchor", f"{type(exc).__name__}: {exc}")
-        # #690 review HIGH: cancel the step this rejected attempt opened
-        # at the approval point (worker_budget._open_step) — the launch
-        # stash is consumed (the settle->update->decide barrier lifts at
-        # once instead of riding out the stale TTL, and no phantom settle
-        # banks a dispatch that never ran) and the dispatch_count bump is
-        # rolled back (the branch retries budget is not charged). Fail-open:
-        # never changes the verdict.
-        try:
-            from _path_hygiene import ensure_scripts_path as _esp690
-            _esp690()
-            from rlvr import step_grain as _sg690
-            _sg690.cancel_step_open(_ATTEMPT["ws"], _ATTEMPT["cid"])
-        except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
-            warn("cancel_step_open", f"{type(exc).__name__}: {exc}")
+            warn("claims_store_abort", f"{type(exc).__name__}: {exc}")
     return rc
 
 

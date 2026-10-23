@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 28faba1fa5b9f0b943a303fb5c3712b78d4d0a7cfd8bd0eab38b576f9db76b6f
+    sha256: bd50f79059828212a730a4faca6ce23786b8b608023b0c8c47149355cd4de6f1
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -91,7 +91,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 28199eeeb2ba269134cdd553ba1aee47c712254c5d3ff704094e6abd166ac949
+    sha256: 8e8f907c8d16217045a8f8e144fbbab3289653b0501d7e82fa60bd0499a96d9c
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -288,6 +288,10 @@ files:
     dest: .claude/scripts/claim_granularity.py
     kind: scaffold
     sha256: 86880e3a2d19fe5ceff3dd9d3c10615fdbbcb12678f8f8c5adca84c9763cd1d6
+  - src: scripts/claims_store.py
+    dest: .claude/scripts/claims_store.py
+    kind: scaffold
+    sha256: f5fa1b1762fc5bb907cc23d114e13244d9ff537305604c08ec5a9aa07c6ee47b
   - src: scripts/claudemd_frame.py
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
