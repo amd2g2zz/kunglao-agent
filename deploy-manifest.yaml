@@ -1295,7 +1295,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: fd484322e0ffd619eeff9666f756af488af2b5ee35468bd242b43859e846c1b0
+    sha256: 39ca8e558176c31b2545ab031b5e612b253c6c948d325f16804d9ff3b12aab82
   - src: scripts/rlvr/belief.py
     dest: .claude/scripts/rlvr/belief.py
     kind: scaffold

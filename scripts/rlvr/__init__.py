@@ -25,6 +25,7 @@ from . import hypotheses
 from . import incremental_reward
 from . import invariants
 from . import l1_planner
+from . import key_freeze
 from . import l1_value
 from . import ledger
 from . import learning_seal
@@ -67,6 +68,7 @@ __all__ = [
     "incremental_reward",
     "invariants",
     "l1_planner",
+    "key_freeze",
     "l1_value",
     "ledger",
     "learning_seal",
