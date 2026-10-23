@@ -139,8 +139,10 @@ def _mint_doc(ws) -> dict | None:
     from harness_common import utc_now_z  # noqa: PLC0415
     try:
         doc["ts"] = utc_now_z()
-    except Exception:  # noqa: BLE001 — clock-source outage: no ts
-        pass
+    except Exception as _exc:  # noqa: BLE001 — clock-source outage: no ts
+        print(f"[kunglao-agent] key_freeze WARN (fail-open): "
+              f"ts stamp failed ({type(_exc).__name__}: {_exc})",
+              file=sys.stderr)
     return doc if _save(ws, doc) else None
 
 
@@ -178,8 +180,10 @@ def _refuse_other_escape(family: str) -> None:
     try:  # single-source the token when the sibling is importable
         from method_families import OTHER  # noqa: PLC0415
         token = OTHER
-    except ImportError:
-        pass
+    except ImportError as _exc:
+        print(f"[kunglao-agent] key_freeze WARN (fail-open): "
+              f"optional import unavailable ({_exc}) — family check "
+              f"degrades to the token face", file=sys.stderr)
     if family == token or family.startswith(token):
         raise ValueError(
             f"other(...) escapes never freeze a learning key (the #797 "

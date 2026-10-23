@@ -1343,7 +1343,7 @@ files:
   - src: scripts/rlvr/key_freeze.py
     dest: .claude/scripts/rlvr/key_freeze.py
     kind: scaffold
-    sha256: 2180a46485cd17c5c80d31bdb8be46762513b07f3a8c444f3f334e4e7dbff9bf
+    sha256: 1c8712ad5600530825a49c98a7a1d6d5235d2b83002b4f3afce65b8d540da827
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
@@ -1467,7 +1467,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 6b1b3a4b606d4d23856eb1a1249ccf2c58dea4309cb8334155b6daaec6c9104e
+    sha256: 63332bbfa72a57f7b261d8dbc534fe8c62c373cc91c27acb29d57aae4fc4bf93
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
