@@ -181,6 +181,26 @@ def test_main_renders_selected_visual_to_out_dir(tmp_path: Path,
     assert "svg" in capsys.readouterr().out
 
 
+def test_main_full_run_renders_every_committed_asset(tmp_path: Path) -> None:
+    """The committed-assets contract: one run regenerates ALL the README
+    visuals into the out dir — every GIF re-opens with frames, the SVG
+    parses, every asset is within the byte budget (rc 0, no OVER
+    BUDGET flag)."""
+    rc = rr.main(["--out", str(tmp_path)])
+    assert rc == 0
+    for key, (filename, _renderer) in rr.RENDERERS.items():
+        path = tmp_path / filename
+        assert path.is_file(), key
+        assert path.stat().st_size <= rr.MAX_GIF_BYTES, key
+        if path.suffix == ".gif":
+            with rr.Image.open(path) as gif:
+                # the renderer holds identical tail frames; PIL's
+                # optimize+disposal pass collapses them on save, so the
+                # honest on-disk pin is a real multi-frame animation
+                assert gif.n_frames >= 2, key
+                assert gif.size == (rr.W, rr.H)
+
+
 def test_main_gif_budget_flag_surface(tmp_path: Path) -> None:
     # the OVER BUDGET guard: a budget breach returns rc 2 (rc face only —
     # the 2.5MB breach itself is not fabricated here)

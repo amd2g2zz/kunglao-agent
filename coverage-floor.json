@@ -1,6 +1,6 @@
 {
   "schema": "coverage-floor/1",
-  "floor": 57.0,
+  "floor": 59.0,
   "min_floor": 70.0,
   "measured_set": [
     "scripts",
@@ -8,5 +8,13 @@
   ],
   "baseline_measured": 58.59,
   "baseline_source": "uv run pytest -m 'not fast' -n 4 --cov=scripts --cov=hooks (6074 passed / 654 skipped / 18 env-failed) at the de-bloat tree; seed 57.0 = baseline minus cross-platform tolerance; raise-only from here; target 70.0 reached only with REAL tests",
-  "baseline_recorded": "2026-10-23"
+  "baseline_recorded": "2026-10-23",
+  "climb_log": [
+    {
+      "pr": "818-segment-1",
+      "floor": 59.0,
+      "measured_local": 62.01,
+      "note": "+2.0pt over the 57.0 seed; CI runs ~0.6pt below local, so 59.0 keeps ~2.4pt headroom; climb to 70 continues in follow-up segments (dispatch_gate/oracle_runner/eval cluster residuals + measured-leg re-pins of fast-guarded modules)"
+    }
+  ]
 }
