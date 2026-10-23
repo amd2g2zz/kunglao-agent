@@ -649,8 +649,20 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     rollouts, not on the round-credit set, so it runs even when no
     terminal claim is currently dispatchable-visible."""
     claims = terminal_claims(ws)
-    dispatches = [{"dispatch_id": cid, "round": i + 1}
-                  for i, cid in enumerate(claims)]
+    # #800 R2: settle under the REAL dispatch id when the ledger has
+    # one (stores project the ONE keyed ledger); legacy workspaces
+    # keep the claim-id alias byte-identically.
+    dispatches = []
+    for i, cid in enumerate(claims):
+        did = cid
+        try:
+            import claims_store as _cstore8
+            _led = _cstore8.latest_committed_dispatch(ws, cid)
+            if _led and str(_led.get("dispatch_id") or "").strip():
+                did = str(_led["dispatch_id"])
+        except Exception:  # noqa: BLE001 — legacy alias fallback
+            pass
+        dispatches.append({"dispatch_id": did, "round": i + 1})
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept
     # runs/posteriors.yaml from ever existing, now loud
@@ -711,6 +723,17 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
                 out["pool_bridged"] = bridge["pool_bridged"]
                 if bridge.get("pool_bridge_error"):
                     out["pool_bridge_error"] = bridge["pool_bridge_error"]
+                # #800 R2 amendment 4: the missing-rollout audit — a
+                # committed dispatch whose claim went terminal without
+                # banking a settlement is LOUD (the production C-005
+                # silent lie). Fail-open: never blocks the tick.
+                try:
+                    import claims_store as _cstore8
+                    out["missing_rollouts"] = len(
+                        _cstore8.audit_missing_rollouts(ws))
+                except Exception as _mr_exc:  # noqa: BLE001 — fail-open
+                    warn("settle_round_credit.missing_rollout_audit",
+                         f"{type(_mr_exc).__name__}: {_mr_exc}")
                 out["case_observations"] = (
                     fresh["case_observations"] + late["case_observations"])
                 out["cases_passed"] = (

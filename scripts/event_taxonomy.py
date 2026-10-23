@@ -263,6 +263,7 @@ EMIT_ACTIONS = [
     "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
     "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
     "mint_refused",       # issue 293 guarded-mint refusal face (hypothesis_bridge / target_ladder / claim_granularity)
+    "missing_rollout",    # #800 R2 dispatch-ledger gap face: committed dispatch + terminal claim, no banked settlement (production C-005 silent lie)
     "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",

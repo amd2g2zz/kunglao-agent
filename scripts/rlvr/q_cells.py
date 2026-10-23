@@ -1621,7 +1621,8 @@ def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
                                 agent: str | None = None,
-                                fingerprint: str | None = None) -> dict:
+                                fingerprint: str | None = None,
+                                dispatch_id: str | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
@@ -1656,6 +1657,7 @@ def record_dispatch_observation(ws, prompt: str, *,
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
+                                 dispatch_id=dispatch_id,
                                  arm_key_col=arm_key(family, recipe,
                                                      verif, tier,
                                                      meta.get("agent_type")),

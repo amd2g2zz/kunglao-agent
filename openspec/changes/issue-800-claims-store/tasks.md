@@ -23,3 +23,26 @@
 - [ ] quality_gates --quick ALL-PASS; belt fast-not-docs green
 - [ ] registration triple: README row + ext-scan + deploy_manifest --write
 - [ ] review-gate mint; CI green
+
+## 4. R2 amendments (production-log panel 2026-10-23) — RED first
+- [x] tests/test_claims_store_800_rollout.py keyed-ledger pin (mint ->
+      ledger dispatched/committed rows + q-cell pending-row FK +
+      latest_committed_dispatch) — confirmed RED
+- [x] verification-ordering pins (bare refused / postdating-ts refused
+      / ordered applies; decisive FAIL settlements exempt) — confirmed
+      RED
+- [x] terminal-idempotency pin (second decisive settle refused,
+      register unchanged) — confirmed RED
+- [x] missing-rollout pins (C-005 gap loud + one event; legacy-alias
+      banked quiet; in-flight quiet; repetition escalates at
+      MISSING_ROLLOUT_REPEAT_LIMIT then degrades to emit-silence) —
+      RED, the bounded pin lands with the bounded face
+- [x] faces: dispatch ledger + mint_dispatch_id + apply verification
+      guard + audit_missing_rollouts (bounded) in claims_store; FK
+      kwarg on q_cells.record_dispatch_observation; worker_budget
+      approval tail mints + threads the id; settle tick resolves the
+      real id and runs the audit tail (fail-open)
+- [x] registration: event_taxonomy EMIT_ACTIONS gains missing_rollout
+- [x] original #800 pins updated to the amended settle contract
+      (verification reference required)
+- [ ] pins green; openspec validate green; gates; mint; CI green

@@ -643,7 +643,8 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 
 def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
-                           agent_name: str) -> None:
+                           agent_name: str,
+                           dispatch_id: str | None = None) -> None:
     """#429 §4: record the (signature_hash, method_family) observation
     at the dispatch ALLOW tail — the Q-cell data spine for the TS
     envelope sampler (scripts/rlvr/q_cells.py).
@@ -665,7 +666,7 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
             meta = None
         _qc429.record_dispatch_observation(
             paths.get('workspace'), prompt, envelope_meta=meta,
-            claim=cid, agent=agent_name)
+            claim=cid, agent=agent_name, dispatch_id=dispatch_id)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('qcell_record', f'{type(exc).__name__}: {exc}')
 
@@ -673,7 +674,8 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
                         prompt: str = '',
-                        method_family: str | None = None) -> None:
+                        method_family: str | None = None,
+                        dispatch_id: str | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -710,7 +712,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
     # method_family declared on the envelope) — the sampler's data spine.
     # Fail-open inside; rejected dispatches above never reach this line.
-    _qcell_record_dispatch(paths, prompt, cid, agent_name)
+    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -1140,8 +1142,21 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #237 H1: the row carries the shared-resolver identity (row_agent), so
     # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
     # — the marker plan_drift_detector's D3 corroboration matches.
+    # #800 R2: the ONE dispatch id — minted at the approval point, it
+    # lands on the dispatch ledger (begin_dispatch), foreign-keys the
+    # q-cell pending row, and survives to settlement attribution
+    # (production 2026-10-21/22: rows were claim-alias keyed, the key
+    # NULL on 100% of settlement rows). Fail-open telemetry.
+    _did800 = None
+    try:
+        from _path_hygiene import ensure_scripts_path as _esp8
+        _esp8()
+        import claims_store as _cstore8
+        _did800 = _cstore8.mint_dispatch_id()
+    except Exception:  # noqa: BLE001 — telemetry face, never the verdict
+        pass
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
-                        method_family=mf_value)
+                        method_family=mf_value, dispatch_id=_did800)
     # #800: the approval-point side effects are ONE claims_store
     # transaction — intent journal first, then the steps (anchor nonce,
     # launch stash, ONE atomic register rewrite carrying the #624 flip +
@@ -1166,7 +1181,8 @@ def pre_check(payload: dict, paths: dict) -> int:
 
 def _claims_dispatch_txn(paths: dict, *, cid: str | None, prompt: str,
                          agent: str, tier: int, method_family: str | None,
-                         budget: dict, actor: str) -> None:
+                         budget: dict, actor: str,
+                         dispatch_id: str | None = None) -> None:
     """#800: the approval-point dispatch transaction through the ONE
     semantic owner (scripts/claims_store.py). begin (intent journal) ->
     commit (anchor nonce + launch stash + ONE register rewrite: status
@@ -1183,7 +1199,8 @@ def _claims_dispatch_txn(paths: dict, *, cid: str | None, prompt: str,
         import claims_store as _cstore
         _cstore.begin_dispatch(ws, cid, actor=actor, tier=tier, prompt=prompt,
                                agent=agent, method_family=method_family,
-                               branch_budget=budget or None)
+                               branch_budget=budget or None,
+                               dispatch_id=dispatch_id)
         _cstore.commit_dispatch(ws, cid)
     except Exception as exc:  # noqa: BLE001 — fail-open (verdict decided)
         print(f'[kunglao-agent] claims-txn WARN (fail-open): '

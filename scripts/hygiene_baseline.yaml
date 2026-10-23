@@ -59,7 +59,7 @@ files:
   scripts/claim_expiry.py:
     r1: 2
   scripts/claims_store.py:
-    r1: 5
+    r1: 10
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
@@ -168,7 +168,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 123
+    r1: 124
     r2: 1
   scripts/exogenous.py:
     r1: 2
@@ -442,7 +442,7 @@ files:
   scripts/script_harvest.py:
     r1: 4
   scripts/settle_round_credit.py:
-    r1: 2
+    r1: 4
   scripts/shell_defaults.py:
     r1: 1
   scripts/slot_monitor.py:
@@ -657,6 +657,8 @@ files:
     r1: 1
   tests/test_claims_store_800.py:
     r1: 4
+  tests/test_claims_store_800_rollout.py:
+    r1: 3
   tests/test_classification_collapse_581.py:
     r1: 1
   tests/test_claudemd_conditional_919.py:

@@ -20,7 +20,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 51
   hooks/worker_budget_gates.py: 129
-  hooks/worker_budget_sinks.py: 133
+  hooks/worker_budget_sinks.py: 135
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 36
@@ -57,7 +57,7 @@ files:
   scripts/check_global_rule_subset.py: 1
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
-  scripts/claims_store.py: 11
+  scripts/claims_store.py: 19
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2
@@ -115,7 +115,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 162
+  scripts/event_taxonomy.py: 163
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
   scripts/external_kicker.py: 41
@@ -261,7 +261,7 @@ files:
   scripts/runtime_facts.py: 3
   scripts/scalar_settlement.py: 2
   scripts/script_harvest.py: 5
-  scripts/settle_round_credit.py: 4
+  scripts/settle_round_credit.py: 6
   scripts/shell_defaults.py: 4
   scripts/signals_stream.py: 3
   scripts/silent_except_lint.py: 1

@@ -74,3 +74,124 @@ journal-driven abort and its rc=0 face confirms the journal.
 Every applied, refused, aborted, and recovered transition SHALL append
 one `claims-provenance/1` row (ts, claim, event, from, to, actor,
 outcome, reason, journal id).
+
+#### Scenario: applied and refused both leave rows
+
+- **WHEN** one transition applies and one is refused
+- **THEN** `runs/claims-provenance.jsonl` gains one row per face, each
+  carrying outcome (applied / refused), actor, and the journal id
+
+## ADDED Requirements
+
+<!-- R2 additions (production-log panel 2026-10-23): verification
+ordering, terminal idempotency, the dispatch-ledger keyed identity,
+bounded missing-rollout audit. -->
+
+### Requirement: Decisive success settlements reference their verification
+
+`apply(event=settle_proven|settle_verified)` SHALL require a non-empty
+`verification` reference and SHALL refuse when the referenced
+verification timestamp postdates the mint
+(`settlement-precedes-verification`). Each refusal SHALL land one
+provenance row. Decisive FAIL settlements (settle_refuted,
+settle_negative) claim nothing and are exempt. (Production basis: a
+PROVEN settlement minted 03:41:02 while the L1 verifier REJECTed 9/9
+through 03:41:52; the full verifier binding — calibration, oracle
+registration, parser — is card #809, gated on this merge.)
+
+#### Scenario: bare PROVEN mint refused
+
+- **WHEN** apply(settle_proven) carries no verification reference
+- **THEN** the transition is refused with reason
+  settlement-without-verification, one provenance row lands, the
+  register is unchanged
+
+#### Scenario: verification that postdates the mint refused
+
+- **WHEN** apply(settle_proven, verification=<ref>, verification_ts
+  later than the mint) runs
+- **THEN** the transition is refused with reason
+  settlement-precedes-verification, one provenance row lands
+
+#### Scenario: ordered verification applies
+
+- **WHEN** apply(settle_proven, verification=<ref>, verification_ts
+  earlier than the mint) runs
+- **THEN** the transition applies and the claim is PROVEN
+
+### Requirement: Terminal settlements are idempotent
+
+A decisive settlement on an already-terminal claim SHALL be refused by
+the matrix (terminal statuses carry no outgoing edges) and the
+register SHALL be unchanged. (Production basis: the same claim settled
+3x.)
+
+#### Scenario: double settle refused
+
+- **WHEN** apply(settle_proven) runs twice on the same claim
+- **THEN** the second is refused (illegal-transition), exactly one
+  applied provenance row exists, the register reads PROVEN
+
+### Requirement: The dispatch ledger is the one keyed identity
+
+Every dispatch SHALL mint ONE dispatch_id at the approval point and
+land it on the append-only dispatch ledger
+(`runs/dispatch-ledger.jsonl`, schema `dispatch-ledger/1`; rows
+state=dispatched/committed/aborted). The q-cell pending dispatch row
+SHALL carry the dispatch_id as a foreign key; the settle face SHALL
+resolve the real dispatch id from the ledger. Legacy workspaces with
+no ledger row SHALL keep the claim-id alias byte-identically.
+(Production basis: arm/dispatch_id was NULL on 100% of settlement
+rows.)
+
+#### Scenario: mint, ledger, and foreign key
+
+- **WHEN** a dispatch approves (begin→commit)
+- **THEN** the ledger carries dispatched+committed rows with the SAME
+  dispatch_id; the q-cell pending row matches by the real id;
+  latest_committed_dispatch resolves it
+
+#### Scenario: legacy workspace untouched
+
+- **WHEN** a workspace has no dispatch-ledger rows
+- **THEN** settlement keys by claim id exactly as before — no
+  unmatched gap, no false audit alarm
+
+### Requirement: Missing rollouts are loud with bounded repetition
+
+The settle tick SHALL run the missing-rollout audit: every COMMITTED
+dispatch whose claim is TERMINAL and that has NO banked settlement row
+(matched by real dispatch id OR legacy claim alias) is a gap emitting
+ONE `missing_rollout` event per gap. Repetition SHALL be bounded per
+plan Standard 11: each gap carries a per-dispatch occurrence count;
+the occurrence equal to MISSING_ROLLOUT_REPEAT_LIMIT escalates
+(escalated=true — ownership transfer); occurrences beyond the limit
+degrade to emit-silence while every pass still reports the gap in the
+audit's return. An unreadable q-cell store SHALL skip the claim
+fail-open (never a false alarm). (Production basis: C-005 dispatched
++ PROVEN with no settlement row and no warn; 540/593 verbatim-repeated
+warns taught that repetition is not escalation.)
+
+#### Scenario: the C-005 silent lie is loud
+
+- **WHEN** a committed dispatch's claim goes PROVEN with no banked row
+- **THEN** the audit reports the gap and exactly one missing_rollout
+  event lands carrying claim + dispatch_id
+
+#### Scenario: banked under the legacy alias stays quiet
+
+- **WHEN** the settlement banked under the claim id (a pre-R2 row)
+- **THEN** no gap is reported, no event fires
+
+#### Scenario: in-flight dispatches owe nothing
+
+- **WHEN** a committed dispatch's claim is still OPEN or IN_PROGRESS
+- **THEN** no gap, no event
+
+#### Scenario: repetition escalates then degrades
+
+- **WHEN** the same gap persists across MISSING_ROLLOUT_REPEAT_LIMIT+2
+  audit passes
+- **THEN** events fire for occurrences 1..LIMIT with occurrence LIMIT
+  marked escalated=true; no event fires beyond it; every pass still
+  reports the gap

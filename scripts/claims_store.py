@@ -61,6 +61,23 @@ PROVENANCE_SCHEMA = "claims-provenance/1"
 JOURNAL_REL = Path("runs") / ".claims-intent.json"
 JOURNAL_SCHEMA = "claims-intent/1"
 
+#: the durable dispatch ledger (#800 R2): every dispatch id is minted
+#: at the approval point and lands here FIRST — settlement rows,
+#: q-cell banks and attribution all foreign-key dispatch_id (stores are
+#: projections of ONE keyed ledger; production logs 2026-10-21/22
+#: showed the key NULL on 100% of rows, claim-alias everywhere).
+DISPATCH_LEDGER_REL = Path("runs") / "dispatch-ledger.jsonl"
+DISPATCH_LEDGER_SCHEMA = "dispatch-ledger/1"
+
+#: Standard 11 (bounded repetition + ownership transfer): a
+#: missing-rollout gap emits at most MISSING_ROLLOUT_REPEAT_LIMIT
+#: events — the occurrence AT the limit escalates (ownership
+#: transfer); beyond it the emit degrades to silence while the audit
+#: keeps reporting every pass. Repetition is not escalation (the
+#: production 392-warn lesson).
+MISSING_ROLLOUT_REPEAT_LIMIT = 3
+MISSING_ROLLOUT_AUDIT_REL = Path("runs") / ".missing-rollout-audit.json"
+
 #: a journal older than this (or with a dead owner pid) is recovered
 RECOVERY_WINDOW_S = 120.0
 
@@ -175,7 +192,9 @@ def _append_provenance(ws, row: dict) -> None:
 # ------------------------------------------------------------- the mutator
 
 def apply(ws, claim: str, event: str, actor: str, *, evidence: str = "",
-          wake_condition: str | None = None) -> TransitionResult:
+          wake_condition: str | None = None,
+          verification: str = "",
+          verification_ts: str | None = None) -> TransitionResult:
     """The single semantic mutator. Looks up (status, event) in the
     matrix; an undeclared pair is refused and recorded. PARK demands a
     wake_condition. The register rewrite is tmp+rename atomic."""
@@ -213,6 +232,33 @@ def apply(ws, claim: str, event: str, actor: str, *, evidence: str = "",
                                 "outcome": "refused", "reason": reason})
         return TransitionResult(False, claim, event, from_status, None,
                                 reason=reason)
+    if event in ("settle_proven", "settle_verified"):
+        # #800 R2 amendment 2 (production 2026-10-21: a PROVEN
+        # settlement minted 03:41:02 while the L1 verifier REJECTed 9/9
+        # through 03:41:52): a decisive success mint MUST reference its
+        # verification record, and the record must not postdate the
+        # mint — settlement never precedes or mints around verification.
+        if not str(verification or "").strip():
+            reason = ("settlement-without-verification: a decisive "
+                      "success settlement must reference its "
+                      "verification record")
+            _append_provenance(ws, {"claim": claim, "event": event,
+                                    "from": from_status, "to": None,
+                                    "actor": actor, "evidence": evidence,
+                                    "outcome": "refused",
+                                    "reason": reason})
+            return TransitionResult(False, claim, event, from_status,
+                                    None, reason=reason)
+        if verification_ts and str(verification_ts) > _utc_now_z():
+            reason = ("settlement-precedes-verification: verification "
+                      f"record {verification_ts} postdates the mint")
+            _append_provenance(ws, {"claim": claim, "event": event,
+                                    "from": from_status, "to": None,
+                                    "actor": actor, "evidence": evidence,
+                                    "outcome": "refused",
+                                    "reason": reason})
+            return TransitionResult(False, claim, event, from_status,
+                                    None, reason=reason)
     target["status"] = edge
     if event == "park":
         target["wake_condition"] = wake_condition
@@ -266,10 +312,189 @@ def _pid_alive(pid: int) -> bool:
         return True
 
 
+# ----------------------------------------------- the dispatch ledger (#800)
+
+def mint_dispatch_id() -> str:
+    """The ONE per-dispatch identity (#800 R2): minted at the approval
+    point, journaled, ledgered, foreign-keyed onto every downstream
+    row (q-cell pending row, settlement bank, attribution). Same shape
+    as the pre-R2 journal id."""
+    return uuid.uuid4().hex[:12]
+
+
+def _ledger_append(ws, dispatch_id: str, claim: str, state: str,
+                   *, actor: str = "") -> None:
+    """Append one dispatch-ledger row (append-only, the identity's
+    durable home). Fail-open telemetry with a stderr WARN — never
+    raises into the gate/tick caller."""
+    p = Path(ws) / DISPATCH_LEDGER_REL
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        row = {"schema": DISPATCH_LEDGER_SCHEMA, "ts": _utc_now_z(),
+               "dispatch_id": str(dispatch_id or ""),
+               "claim": str(claim), "state": str(state),
+               "actor": str(actor or "")}
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"dispatch-ledger append failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+
+
+def _iter_ledger_rows(ws) -> list:
+    """Every parseable ledger row (unreadable/blank/dirty lines skip —
+    the ledger is append-only and must never break a reader)."""
+    p = Path(ws) / DISPATCH_LEDGER_REL
+    if not p.is_file():
+        return []
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"dispatch-ledger read failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+        return []
+    out = []
+    for ln in text.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            row = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
+def _audit_state_load(ws) -> dict:
+    """The per-dispatch occurrence ledger (Standard 11's counter
+    face). Fail-open: an unreadable state counts from zero — the
+    bounded face degrades to a fresh count, never a crash."""
+    p = Path(ws) / MISSING_ROLLOUT_AUDIT_REL
+    if not p.is_file():
+        return {}
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _audit_state_save(ws, state: dict) -> None:
+    """Fail-open: the repetition ledger never breaks the audit tick."""
+    p = Path(ws) / MISSING_ROLLOUT_AUDIT_REL
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False),
+                       encoding="utf-8")
+        tmp.replace(p)
+    except OSError as exc:
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"missing-rollout audit-state save failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+
+
+def latest_committed_dispatch(ws, claim: str) -> dict | None:
+    """The last COMMITTED ledger row for the claim — the settlement
+    face's dispatch-id resolver. Legacy workspaces (no ledger) return
+    None and the settle face keeps its claim-id alias byte-identically."""
+    latest = None
+    for row in _iter_ledger_rows(ws):
+        if (row.get("state") == "committed"
+                and str(row.get("claim") or "") == str(claim)):
+            latest = row
+    return latest
+
+
+def audit_missing_rollouts(ws) -> list:
+    """#800 R2 amendment 4 — the missing-rollout audit. Production
+    C-005 (2026-10-21 android run): a dispatched claim went PROVEN
+    with NO settlement row and NO warn — the silent lie. Rule: every
+    COMMITTED dispatch whose claim is now TERMINAL must have a banked
+    settlement row (matched by the real dispatch id OR the legacy
+    claim alias); a gap emits ONE ``missing_rollout`` event (loud).
+    Fail-open telemetry: never raises into the settle tick."""
+    gaps: list = []
+    try:
+        from status_defs import TERMINAL
+        from rlvr import q_cells
+        doc = _load_register_doc(ws)
+        statuses = {str(c.get("id") or ""):
+                    str(c.get("status") or "").upper()
+                    for c in (doc.get("claims") or [])}
+        committed: dict = {}
+        for row in _iter_ledger_rows(ws):
+            if row.get("state") == "committed":
+                committed[str(row.get("claim") or "")] = row
+        state = _audit_state_load(ws)
+        for claim, row in committed.items():
+            if statuses.get(claim) not in TERMINAL:
+                continue  # in-flight: owes no settlement yet
+            did = str(row.get("dispatch_id") or "")
+            # banked presence via the public mass face: banked_mass
+            # returns None = log UNREADABLE (fail-open skip, never a
+            # false alarm) and (s, f, n_rows) otherwise — n_rows is
+            # the existence test (a band-valued solve row counts:
+            # zero mass, existence only).
+            quiet = False
+            for dm in (d for d in (did, claim) if d):
+                try:
+                    bm = q_cells.banked_mass(ws, dm)
+                except Exception:  # noqa: BLE001 — fail-open
+                    bm = None
+                if bm is None or bm[2] > 0:
+                    quiet = True
+                    break
+            if quiet:
+                continue
+            # Standard 11: count per dispatch, escalate once, degrade
+            key = did or f"claim:{claim}"
+            occurrence = int(state.get(key, 0)) + 1
+            state[key] = occurrence
+            gaps.append({"claim": claim, "dispatch_id": did,
+                         "reason": "committed-dispatch-never-banked",
+                         "occurrence": occurrence})
+            if occurrence > MISSING_ROLLOUT_REPEAT_LIMIT:
+                continue  # degraded: bounded silence post-escalation
+            try:
+                (Path(ws) / "runs" / "logs").mkdir(parents=True,
+                                                   exist_ok=True)
+                from kunglao_log import emit
+                emit(Path(ws), "orchestrator", "missing_rollout",
+                     claim=claim,
+                     detail=json.dumps(
+                         {"dispatch_id": did,
+                          "reason": "committed-dispatch-never-banked",
+                          "occurrence": occurrence,
+                          "escalated": occurrence ==
+                          MISSING_ROLLOUT_REPEAT_LIMIT,
+                          "evidence": "production C-005 shape "
+                                      "(2026-10-21 android run): "
+                                      "dispatched + PROVEN, no "
+                                      "settlement, no warn"},
+                         ensure_ascii=False))
+            except Exception as exc:  # noqa: BLE001 — loud face
+                print(f"[kunglao-agent] claims_store WARN "
+                      f"(fail-open): missing_rollout emit failed "
+                      f"({type(exc).__name__}: {exc})",
+                      file=sys.stderr)
+        _audit_state_save(ws, state)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the tick
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"missing-rollout audit failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+    return gaps
+
+
 def begin_dispatch(ws, claim: str, actor: str, *, tier: int = 0,
                    prompt: str = "", agent: str = "",
                    method_family: str | None = None,
-                   branch_budget: dict | None = None) -> TransitionResult:
+                   branch_budget: dict | None = None,
+                   dispatch_id: str | None = None) -> TransitionResult:
     """Open the dispatch intent: journal BEFORE the first write. The
     journal carries the register's byte-exact before-image so the abort
     and recovery faces restore it verbatim."""
@@ -284,7 +509,7 @@ def begin_dispatch(ws, claim: str, actor: str, *, tier: int = 0,
     before = reg_path.read_text(encoding="utf-8") if reg_path.is_file() else None
     journal = {
         "schema": JOURNAL_SCHEMA,
-        "id": uuid.uuid4().hex[:12],
+        "id": str(dispatch_id or "").strip() or uuid.uuid4().hex[:12],
         "kind": "dispatch",
         "claim": str(claim),
         "actor": actor,
@@ -303,6 +528,7 @@ def begin_dispatch(ws, claim: str, actor: str, *, tier: int = 0,
         "applied": [],
     }
     _journal_save(ws, journal)
+    _ledger_append(ws, journal["id"], claim, "dispatched", actor=actor)
     return TransitionResult(True, claim, "dispatch", None, None,
                             reason="intent-open", journal_id=journal["id"])
 
@@ -414,6 +640,8 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
                                     journal_id=journal["id"])
     journal["state"] = "committed"
     _journal_save(ws, journal)
+    _ledger_append(ws, journal["id"], claim, "committed",
+                   actor=journal.get("actor", ""))
     _append_provenance(ws, {"claim": claim, "event": "dispatch",
                             "from": "OPEN", "to": "IN_PROGRESS",
                             "actor": journal.get("actor", ""),
@@ -474,6 +702,8 @@ def abort_dispatch(ws, claim: str, actor: str = "") -> TransitionResult:
         else None
     _txn_rollback(ws, journal)
     _journal_save(ws, None)
+    _ledger_append(ws, str(journal.get("id") or ""), claim, "aborted",
+                   actor=actor)
     _append_provenance(ws, {"claim": claim, "event": "abort_dispatch",
                             "from": from_status, "to": "OPEN",
                             "actor": actor or journal.get("actor", ""),

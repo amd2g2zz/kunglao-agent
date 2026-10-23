@@ -112,7 +112,9 @@ def test_in_progress_not_dispatchable_624(tmp_path) -> None:
 def test_settle_transition_applies_with_provenance(tmp_path) -> None:
     ws = _ws(tmp_path, [{"id": "C-1", "status": "IN_PROGRESS"}])
     r = cs.apply(ws, "C-1", "settle_proven", actor="settler",
-                 evidence="oracle 3/3")
+                 evidence="oracle 3/3",
+                 verification="l1-verify-ok",
+                 verification_ts="2000-01-01T00:00:00Z")
     assert r.ok is True and r.to_status == "PROVEN"
     row = _prov(ws)[-1]
     assert row["outcome"] == "applied" and row["actor"] == "settler"

@@ -54,3 +54,33 @@ face. #623/#624/#690 are this one defect.
   tracked by plan row W3-1. Declared remainder for this card.
 - `scheduled_tasks.json` single owning key (#679): no scheduled-tasks
   writer exists under this card's owned files; follow-up named.
+
+## R2 amendments (2026-10-23 production-log panel; issue #800 comments)
+
+Four additions from the six-expert production-log autopsy (plan
+v016-final-program Rev 2, Standards 11-12):
+
+5. **The dispatch ledger — one keyed identity.** dispatch_id minted at
+   the approval point, ledgered (`dispatch-ledger/1`), foreign-keyed
+   onto the q-cell pending row; settle resolves the real id (legacy
+   alias fallback keeps pre-R2 workspaces byte-identical). Closes the
+   "arm/dispatch_id NULL on 100% of rows" finding.
+6. **Verification ordering.** settle_proven/settle_verified require a
+   verification reference that does not postdate the mint (production:
+   a PROVEN settlement minted while the L1 verifier rejected 9/9). The
+   full verifier binding (calibration/oracle/parser) stays #809.
+7. **Terminal idempotency.** The matrix refuses any second decisive
+   settle on a terminal claim (production: 3x re-settlement).
+8. **Missing-rollout audit, bounded.** Committed dispatch + terminal
+   claim + no banked row = one loud `missing_rollout` event with
+   per-dispatch occurrence counting; escalation at the repeat limit
+   then emit-silence (Standard 11). Production: the C-005 silent lie;
+   540/593 verbatim-repeated warns.
+
+Integration contract (consumers): worker_budget_sinks approval tail
+mints and threads dispatch_id; q_cells.record_dispatch_observation
+carries the FK column (opt-in kwarg, pre-R2 callers byte-identical);
+settle_round_credit.run resolves real ids and runs the audit tail
+(fail-open); kunglao_log/event_taxonomy register the missing_rollout
+emit face; strategy_store/l1_value are untouched this card — full
+settlement-row population is #804 (W3-1).
