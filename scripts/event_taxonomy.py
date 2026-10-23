@@ -336,6 +336,7 @@ EMIT_ACTIONS = [
     "user_signal",           # #868 UserPromptSubmit capture face
     "user_signal_processed", # #868 four-route processing result
     "uv_sync",            # #755 A7 install-venv sync face (WARN-only)
+    "verifier_calibration_broken",  # per-verifier BROKEN face: a verifier one-sided across the whole sample
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite

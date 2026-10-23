@@ -135,6 +135,75 @@ def _warn(ws: Path, reason: str, detail: str,
                      detail=f"reason={reason}: {detail}")
 
 
+# Standard 11 (bounded repetition + ownership transfer) for the run-start
+# registration face: occurrences count per workspace, the occurrence AT
+# the limit escalates (trust burned: escalated=true), beyond it the emit
+# degrades to bounded silence while the audit keeps counting.
+RUN_START_REPEAT_LIMIT = 3
+_RUN_START_AUDIT_REL = Path("runs") / ".oracle-runstart-audit.json"
+
+
+def _run_start_state_load(ws: Path) -> dict:
+    p = Path(ws) / _RUN_START_AUDIT_REL
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _run_start_state_save(ws: Path, state: dict) -> None:
+    p = Path(ws) / _RUN_START_AUDIT_REL
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False),
+                       encoding="utf-8")
+        tmp.replace(p)
+    except OSError as exc:
+        kunglao_log.warn("runstart-audit-save", f"{type(exc).__name__}: {exc}")
+
+
+def assert_run_start(ws, *, claim: str | None = None) -> dict:
+    """The run-start registration assertion: armed oracle cases with no
+    registered implementation-under-test is a LOUD incident before the
+    first dispatch (the production shape — a whole run of silent
+    `client_not_registered` — becomes impossible to miss), bounded by
+    the Standard 11 rule. Fail-open telemetry: never raises, never
+    blocks dispatch. Registered client or no armed cases -> silent."""
+    ws = Path(ws)
+    try:
+        if not _has_armed_cases(ws):
+            return {"checked": True, "registered": True,
+                    "reason": "no_armed_cases"}
+        if _registered_client(ws) is not None:
+            return {"checked": True, "registered": True,
+                    "reason": "registered"}
+        state = _run_start_state_load(ws)
+        occurrence = int(state.get("client_not_registered", 0)) + 1
+        state["client_not_registered"] = occurrence
+        _run_start_state_save(ws, state)
+        if occurrence <= RUN_START_REPEAT_LIMIT:
+            _warn(ws, "client_not_registered",
+                  json.dumps({"face": "run_start",
+                              "occurrence": occurrence,
+                              "escalated":
+                              occurrence == RUN_START_REPEAT_LIMIT,
+                              "remedy": "register the client at "
+                                        "<ws>/oracle/client.py before "
+                                        "the run spends its budget"},
+                             sort_keys=True, ensure_ascii=False),
+                  claim=claim)
+        return {"checked": True, "registered": False,
+                "reason": "client_not_registered",
+                "occurrence": occurrence}
+    except Exception as exc:  # noqa: BLE001 — fail-open telemetry
+        kunglao_log.warn("runstart-assert-fault",
+                         f"{type(exc).__name__}: {exc}")
+        return {"checked": False, "registered": True,
+                "reason": f"assert-fault {type(exc).__name__}"}
+
+
 def _infra_dead_report(ws: Path, cases_dir: Path, cases: list[dict],
                        client_path, error: str, *, reason: str,
                        claim: str | None = None) -> dict:
