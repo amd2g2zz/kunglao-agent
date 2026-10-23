@@ -107,6 +107,46 @@ def test_liveness_ledger_red_on_decorative_workspace(lg, tmp_path):
     assert rc == 1
 
 
+def test_posterior_sentinel_is_family_level(lg, tmp_path):
+    """INV-003 is a FAMILY-level signal (the liveness upgrade card).
+
+    The production-broadcast shape (both 2026-10 runs: settlement rows
+    with arm=NULL broadcast same-value mass to case cells) must NOT
+    satisfy rl-posterior-moved — key-less posterior movement is exactly
+    the decorative case the sentinel exists to catch. The same store
+    with ONE arm-keyed row passes: family attribution is the signal.
+    """
+    spec = next(f for f in lg.load_fingerprints()["fingerprints"]
+                if f["id"] == "rl-posterior-moved")
+
+    def _ws(name: str, rows: list[dict]) -> Path:
+        ws = tmp_path / name
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "posterior-store.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return ws
+
+    # case-level movement: rows exist but carry NO arm attribution
+    bare = _ws("bare", [
+        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
+         "credit": 1.0, "claim": "C-001"},
+        {"schema": "posterior-store/1", "arm": None, "state": "sig",
+         "gamma": 0.8, "outcome": 1, "alpha_add": 1, "beta_add": 0},
+    ])
+    ok, detail = lg.evaluate_fingerprint(bare, spec)
+    assert not ok, f"key-less rows satisfied the sentinel: {detail}"
+
+    # the identical store, one row arm-keyed: family-level movement
+    keyed = _ws("keyed", [
+        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
+         "credit": 1.0, "claim": "C-001"},
+        {"schema": "posterior-store/1", "arm_key": "static",
+         "method_family": "static", "credit": 1.0, "claim": "C-002"},
+    ])
+    ok, detail = lg.evaluate_fingerprint(keyed, spec)
+    assert ok, f"arm-keyed movement did not pass: {detail}"
+
+
 def test_liveness_missing_ledger_is_fail_not_skip(lg, tmp_path):
     ws = tmp_path / "empty-ws"
     ws.mkdir()

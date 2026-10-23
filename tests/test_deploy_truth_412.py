@@ -267,41 +267,6 @@ def test_component_table_green_ws_has_no_blockers(healthy_ws, no_rebuild):
     assert all(c["ok"] for c in comps.values())
 
 
-def test_selfcheck_writes_components_and_repairs(healthy_ws, no_rebuild,
-                                                 monkeypatch, capsys):
-    # simulate the #408 pending-forever trap: approval flag off
-    s = json.loads((healthy_ws / ".claude" / "settings.json")
-                   .read_text(encoding="utf-8"))
-    s["enableAllProjectMcpServers"] = False
-    (healthy_ws / ".claude" / "settings.json").write_text(
-        json.dumps(s), encoding="utf-8")
-    rc = hooks_selfcheck.main_with_ws(healthy_ws)
-    report = json.loads((healthy_ws / "runs" / ".hooks-selfcheck.json")
-                        .read_text(encoding="utf-8"))
-    assert "components" in report
-    assert report["components"]["mcp"]["ok"] is True, (
-        "the approval auto-repair must land before the table is written")
-    assert report["mcp_repairs"]["approval"]["changed"] is True
-    assert rc == 0
-    assert "components" in capsys.readouterr().out
-
-
-def test_default_exit_unchanged_by_components(healthy_ws, no_rebuild):
-    """Default rc stays the hooks face (zero tick-cadence behavior change):
-    a scheduler stall must NOT flip the default exit."""
-    _heartbeat(healthy_ws, tick_age_s=10_000)
-    assert hooks_selfcheck.main_with_ws(healthy_ws) == 0
-
-
-def test_strict_exit_fails_on_blocker(healthy_ws, no_rebuild):
-    (healthy_ws / "task-oracle.yaml").unlink()
-    assert hooks_selfcheck.main_with_ws(healthy_ws, strict=True) == 1
-
-
-def test_strict_exit_zero_when_green(healthy_ws, no_rebuild):
-    assert hooks_selfcheck.main_with_ws(healthy_ws, strict=True) == 0
-
-
 def test_blocker_shape_names_command_or_file(healthy_ws, no_rebuild):
     (healthy_ws / "task-oracle.yaml").unlink()
     _heartbeat(healthy_ws, tick_age_s=10_000)

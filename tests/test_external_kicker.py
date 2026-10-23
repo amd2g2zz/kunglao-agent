@@ -28,9 +28,7 @@ from external_kicker import (  # noqa: E402
     KICKER_PROMPT_FILE,
     KUNGLAO_HOOK_ENTRIES,
     acquire_kick_lock,
-    build_crontab_line,
     build_kick_command,
-    build_schtasks_command,
     ensure_project_hooks,
     has_fresh_workers,
     main,
@@ -278,26 +276,6 @@ def test_has_fresh_workers_no_runs_dir(tmp_path):
 
 def test_build_kick_command():
     assert build_kick_command("claude") == ["claude", "-p"]
-
-
-def test_build_schtasks_command(tmp_path):
-    py = str(tmp_path / "Python" / "python.exe")
-    kicker = str(tmp_path / "x" / "external_kicker.py")
-    ws = str(tmp_path / "ws")
-    args = build_schtasks_command("kunglao_kicker", 15, py, kicker, ws)
-    assert args[:3] == ["schtasks", "/create", "/tn"]
-    assert args[3] == "kunglao_kicker"
-    assert args[args.index("/sc") + 1] == "minute"
-    assert args[args.index("/mo") + 1] == "15"
-    tr = args[args.index("/tr") + 1]
-    assert py in tr
-    assert ws in tr
-    assert args[-1] == "/f"
-
-
-def test_build_crontab_line():
-    line = build_crontab_line(15, "python", "external_kicker.py", "ws")
-    assert line == "*/15 * * * * python external_kicker.py ws"
 
 
 # ---------- interval gate (D6) ----------

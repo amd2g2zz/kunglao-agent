@@ -1,0 +1,380 @@
+{
+  "schema": "test-inventory/1",
+  "issue": 807,
+  "generated_at": "2026-10-23T15:49:07+00:00",
+  "totals": {
+    "files": 744,
+    "test_functions": 10324
+  },
+  "classes": {
+    "dead_code_pin": {
+      "count": 16,
+      "items": [
+        {
+          "file": "tests/test_recall_inject.py",
+          "test": "test_go_signals_map_to_go_query",
+          "line": 89,
+          "detail": "dead subjects: queries_for_features"
+        },
+        {
+          "file": "tests/test_recall_inject.py",
+          "test": "test_t3_signals_map_to_vm_dynamic_queries",
+          "line": 95,
+          "detail": "dead subjects: queries_for_features"
+        },
+        {
+          "file": "tests/test_recall_inject.py",
+          "test": "test_disasm_tier2_maps_to_static_analysis_query",
+          "line": 101,
+          "detail": "dead subjects: queries_for_features"
+        },
+        {
+          "file": "tests/test_recall_inject.py",
+          "test": "test_default_tier1_maps_to_static_analysis_query",
+          "line": 109,
+          "detail": "dead subjects: queries_for_features"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_replay_observation_does_not_settle_algorithm_claim",
+          "line": 28,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_replay_observation_is_rerouted_to_input_contract",
+          "line": 35,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_reproduction_evidence_settles_algorithm_claim",
+          "line": 41,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_replay_observation_settles_input_contract_claim",
+          "line": 49,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_untyped_need_fails_closed",
+          "line": 56,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_settle_by_need.py",
+          "test": "test_unknown_evidence_class_fails_closed",
+          "line": 67,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_shared_primitives_292.py",
+          "test": "test_sbn_reproduction_settles_generation_side",
+          "line": 358,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_shared_primitives_292.py",
+          "test": "test_sbn_replay_rerouted_from_generation_side",
+          "line": 366,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_shared_primitives_292.py",
+          "test": "test_sbn_replay_settles_input_contract",
+          "line": 377,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_shared_primitives_292.py",
+          "test": "test_sbn_unknown_class_fails_closed",
+          "line": 385,
+          "detail": "dead subjects: settle_attempt"
+        },
+        {
+          "file": "tests/test_web_knowledge_761.py",
+          "test": "TestJ1RecallInjectDictionary.test_web_signals_extend_queries",
+          "line": 204,
+          "detail": "dead subjects: queries_for_features"
+        },
+        {
+          "file": "tests/test_web_knowledge_761.py",
+          "test": "TestJ1RecallInjectDictionary.test_non_web_claim_gets_no_web_query",
+          "line": 215,
+          "detail": "dead subjects: queries_for_features"
+        }
+      ]
+    },
+    "generated_golden": {
+      "count": 28,
+      "items": [
+        {
+          "file": "tests/test_dedup_319.py",
+          "test": "test_single_tracked_precommit_gate",
+          "line": 77,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_dedup_319.py",
+          "test": "test_no_reference_to_legacy_precommit_path",
+          "line": 93,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_deploy_closure_810.py",
+          "test": "test_data_assets_deployed",
+          "line": 41,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_deploy_closure_810.py",
+          "test": "test_completeness_report",
+          "line": 75,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        },
+        {
+          "file": "tests/test_deploy_closure_810.py",
+          "test": "test_activation_writes_env_incident_on_incomplete",
+          "line": 94,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        },
+        {
+          "file": "tests/test_deploy_inversion_783.py",
+          "test": "test_register_invokes_ws_local_when_copies_materialized",
+          "line": 29,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_deploy_lifecycle_783.py",
+          "test": "test_manifest_digest_matches_yaml_contract_and_is_order_stable",
+          "line": 148,
+          "detail": "pins regenerated artifact: deploy-manifest.yaml"
+        },
+        {
+          "file": "tests/test_deploy_lifecycle_783.py",
+          "test": "test_lifecycle_init_drift_upgrade_current",
+          "line": 391,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_deploy_local_783.py",
+          "test": "test_deploy_local_e2e",
+          "line": 28,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_ext_index.py",
+          "test": "TestShippedExtIndex.test_index_file_exists",
+          "line": 75,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_ext_index.py",
+          "test": "TestExtScan.test_check_detects_stale_index",
+          "line": 212,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_ext_index.py",
+          "test": "TestExtScan.test_check_non_utf8_tampered_index_exits_clean",
+          "line": 224,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_ext_index.py",
+          "test": "TestIndexToolNamesExt.test_fail_closed_on_broken_ext_yaml",
+          "line": 400,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_ext_index.py",
+          "test": "TestMcpWiring.test_committed_repo_index_stays_environment_free",
+          "line": 544,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_external_kicker.py",
+          "test": "test_ensure_project_hooks_preserves_other_matchers",
+          "line": 177,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_function_kg_530.py",
+          "test": "test_ext_index_no_longer_enumerates_function_kg",
+          "line": 48,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_harness_common_863g.py",
+          "test": "test_scan_target_excludes_sibling_worktrees_and_deployed_scaffolds",
+          "line": 186,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        },
+        {
+          "file": "tests/test_init_deploy_env.py",
+          "test": "test_l2_core_agents_deployed",
+          "line": 149,
+          "detail": "pins regenerated artifact: .claude/agents/"
+        },
+        {
+          "file": "tests/test_mcp_env_e2e.py",
+          "test": "test_mock_mcp_face_artifact_to_evidence_e2e",
+          "line": 85,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_statusline_assembly_212.py",
+          "test": "TestDeployedDataPlane.test_init_deploys_snapshot_script_with_manifest_sha",
+          "line": 234,
+          "detail": "pins regenerated artifact: deploy-manifest.yaml"
+        },
+        {
+          "file": "tests/test_statusline_assembly_212.py",
+          "test": "TestDeployedDataPlane.test_tick_invokes_the_deployed_copy",
+          "line": 263,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        },
+        {
+          "file": "tests/test_statusline_v2_142.py",
+          "test": "TestStatuslineRegistration142.test_deploy_manifest_carries_the_renderer",
+          "line": 623,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        },
+        {
+          "file": "tests/test_statusline_v2_142.py",
+          "test": "TestStatuslineRegistration142.test_committed_manifest_matches_build_entries",
+          "line": 631,
+          "detail": "pins regenerated artifact: deploy-manifest.yaml"
+        },
+        {
+          "file": "tests/test_subagent_injection.py",
+          "test": "TestExtNameResolution.test_broken_ext_yaml_keeps_internal_names",
+          "line": 478,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_subagent_injection.py",
+          "test": "TestExtNameResolution.test_real_repo_ext_citations_resolve",
+          "line": 485,
+          "detail": "pins regenerated artifact: _INDEX.ext.yaml"
+        },
+        {
+          "file": "tests/test_upgrade_016_sweep.py",
+          "test": "test_hook_wiring_runs_in_framework_env",
+          "line": 686,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_v012_milestone_audit.py",
+          "test": "test_no_legacy_precommit_reference",
+          "line": 51,
+          "detail": "pins regenerated artifact: .claude/hooks/"
+        },
+        {
+          "file": "tests/test_ws_layout_delegation_863c.py",
+          "test": "test_scan_target_excludes_sibling_worktrees_and_deployed_scaffolds",
+          "line": 90,
+          "detail": "pins regenerated artifact: .claude/scripts/"
+        }
+      ]
+    },
+    "param_redundant": {
+      "count": 15,
+      "items": [
+        {
+          "file": "tests/test_blocker_evidence_gate_340.py",
+          "test": "TestEnvAttributionEvidenceGate.test_every_pattern_phrasing_rejected_without_evidence",
+          "line": 139,
+          "detail": "9 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_completion_gate.py",
+          "test": "test_agent_identifiers_all_rejected",
+          "line": 186,
+          "detail": "14 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_dispatch_tools_760.py",
+          "test": "TestI1FrontmatterHelperUnit.test_tool_matches_pattern_semantics",
+          "line": 212,
+          "detail": "6 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_dynamic_channel_698.py",
+          "test": "test_channel_enum_known_values",
+          "line": 93,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_eval_matrix_ws5.py",
+          "test": "test_malformed_registry_refuses",
+          "line": 209,
+          "detail": "7 cases, branch-free, 0 assert(s)"
+        },
+        {
+          "file": "tests/test_lint_facts_532.py",
+          "test": "test_index_row_shape",
+          "line": 150,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_probe_features_581.py",
+          "test": "TestEntropyTokens.test_fixed_edge_bands",
+          "line": 92,
+          "detail": "9 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_probe_features_581.py",
+          "test": "TestConstantDensityTokens.test_fixed_edge_density_bands",
+          "line": 126,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_probe_features_581.py",
+          "test": "TestFeatureTableAdditiveBump.test_malformed_floss_face_rejected",
+          "line": 235,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_reproduction_oracle_248.py",
+          "test": "test_generation_language_is_detected",
+          "line": 42,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_runtime_fact_gate_341.py",
+          "test": "test_volatile_pattern_hits_subject_words",
+          "line": 140,
+          "detail": "10 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_seven_arm_569.py",
+          "test": "test_multisample_validation_refuses",
+          "line": 335,
+          "detail": "8 cases, branch-free, 0 assert(s)"
+        },
+        {
+          "file": "tests/test_subagent_injection.py",
+          "test": "TestRealShelfResolvability.test_real_citation_resolves",
+          "line": 562,
+          "detail": "11 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_validate_index.py",
+          "test": "TestPass.test_every_category_id_passes",
+          "line": 115,
+          "detail": "6 cases, branch-free, 1 assert(s)"
+        },
+        {
+          "file": "tests/test_validate_index.py",
+          "test": "TestFail.test_missing_required_field_fails",
+          "line": 144,
+          "detail": "7 cases, branch-free, 1 assert(s)"
+        }
+      ]
+    }
+  }
+}

@@ -289,6 +289,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `test_inventory.py` | #807 test-suite bloat inventory — DESCRIBE-ONLY AST classifier over tests/ (mock-shape-only asserts, CI-regenerated golden pins, dead-code pins, parameter-redundant duplicates) emitting JSON+MD evidence into devkit/reports/ BEFORE any deletion; candidates are HEURISTIC and require manual verification + GitNexus cross-check per the #807 method contract (never a deletion license) | tests (test_test_inventory_807), devkit/reports evidence |
 | `verification_ladder.py` | the RL kernel's verification ladder (#429 section 1): T1 write-debounced long-round oracle probe trigger + T2 round-close stalled-first priority queue (runs/t2-queue.json) — declaratively hosted via the #878 mechanism registry | eval_loop_runner, mechanism_scheduler, tests |
 | `workguard.py` | WORKGUARD actionable-set predicate (#434): dispatchable + returned-worker faces, PARK/wall semantics, fail-open with one canonical warn — the turn-exit decision core | hooks (workguard_gate), tests |
 | `strategy_sections.py` | versioned round-strategy/1 seam (#434 consumer face; #431 produces) — pointer + render, absent renders nothing | hooks (SessionStart/WORKGUARD), tests |
@@ -358,6 +359,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `coverage_floor.py` | #807 measured-set coverage floor — raise-only ratchet over scripts/+hooks/ (coverage-floor.json; `check` = CI gate step, `monotone` = PR floor may only move UP vs base ref, `validate` = schema face). Amends #564 observation-only: enforcement lives in the ratchet file, never a `--cov-fail-under`; Gate 4 (mutation validity) stays the primary effectiveness metric | CI (release-check floor steps), tests (test_coverage_floor_ratchet_807) |
 | `release_receipt.py` | release receipt generation + CLI probe | CI, tests |
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |

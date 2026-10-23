@@ -791,7 +791,7 @@ files:
   tests/test_deploy_surface_755.py:
     r1: 4
   tests/test_deploy_truth_412.py:
-    r1: 4
+    r1: 3
     r2: 1
   tests/test_detector_utilization_127.py:
     r1: 4

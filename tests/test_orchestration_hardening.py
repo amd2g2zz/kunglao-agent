@@ -56,9 +56,3 @@ def test_thresholds_are_shared_constants():
     assert tep.DISABLE_THRESHOLD == 5
 
 
-def test_apply_policy_embeds_claim_for_blocker_attribution():
-    r = tep.apply_policy("floss", 5, claim_id="C-003")
-    assert r["action"] == "disable_escalate"
-    assert "C-003" in r["blocker_note"]
-
-

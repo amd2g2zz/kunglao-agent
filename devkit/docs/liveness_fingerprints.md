@@ -27,6 +27,17 @@ that cannot pass anywhere means the face is decorative — the exact
 failure class of the 2026-10-18 rc2 wave (six escaped defects, all
 repo-green, all live-dead).
 
+## Key granularity (raised 2026-10-23)
+
+rl-posterior-moved counts only posterior-store rows carrying a NON-EMPTY
+arm key (`arm_key` or `arm`): case-level movement — key-less rows,
+dispatch-pending structural mass, or credits with no arm attribution —
+does NOT satisfy the sentinel. The two 2026-10 production runs broadcast
+same-value mass to case cells with arm=NULL while the family dimension
+never moved; the sentinel now reads that shape RED. Synthetic fixtures
+for this face live in devkit/production_shapes/ and are replayed by
+devkit/production_replay_gate.py.
+
 ## Seeds (2026-10-18)
 
 rl-sampler-exit, rl-admission-consumed, rl-posterior-moved,

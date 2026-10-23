@@ -121,3 +121,8 @@ scripts/rlvr/patterns/posterior-store.jsonl
 
 # eval corpus: local-only material (owner ruling) — never tracked
 /eval/
+# coverage run artifacts (#807 hygiene)
+.coverage
+coverage.xml
+coverage.json
+htmlcov/

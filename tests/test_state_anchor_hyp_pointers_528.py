@@ -110,18 +110,6 @@ def test_anchor_truncation_prefers_hyp_ids_visible(tmp_path: Path) -> None:
 
 # ---------- 3. payload helper (machine-readable pointers) ----------
 
-def test_payload_exposes_hypothesis_pointers(tmp_path: Path) -> None:
-    ws = _seed(tmp_path, [_snap()])
-    _seed_hypotheses(ws, [("H-1", "C-1", "open"),
-                          ("H-2", "C-2", "open"),
-                          ("H-3", "C-3", "superseded")])
-    payload = state_anchor.build_anchor_payload(ws)
-    ptrs = payload["hypothesis_pointers"]
-    assert {p["hyp_id"] for p in ptrs} == {"H-1", "H-2"}  # open only
-    for p in ptrs:
-        assert set(p.keys()) == {"claim_id", "hyp_id"}    # pointers only
-
-
 # ---------- 4. pre-#528 workspaces (no hypotheses/) ----------
 
 def test_anchor_builds_without_hypotheses_dir(tmp_path: Path) -> None:

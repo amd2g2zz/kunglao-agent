@@ -353,11 +353,13 @@ jobs:
 
     - name: Integration + slow tier (xdist parallel)
       if: needs.runner-probe.outputs.docs_only != 'true'
-      # #463 quality-gate framework: coverage is OBSERVATION only.
-      # pytest.ini MUST NOT carry --cov-fail-under; we pass --cov here just
-      # so the report lands in CI artifacts. Coverage % is NOT a gate.
-      # The quality gates (names/registry: devkit/quality_gates.py GATES)
-      # are documented in devkit/docs/quality_gates.md and run via
+      # #463 quality-gate framework, AMENDED by #807: coverage stays
+      # observation at the pytest.ini level (no --cov-fail-under anywhere),
+      # but the MEASURED SET (scripts/ + hooks/) is now ENFORCED in CI via
+      # the coverage_floor.py steps below — a raise-only ratchet
+      # (coverage-floor.json), never a static threshold. Gate 4 (mutation
+      # validity) remains the primary effectiveness metric; the quality
+      # gates are documented in devkit/docs/quality_gates.md and run via
       # `uv run python devkit/quality_gates.py` (Gate 2 IS pytest green,
       # but Coverage / Test-Count are observation not KPI).
       run: |
@@ -369,7 +371,34 @@ jobs:
         fi
         uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q \
           $DESELECT --junitxml=.pytest-result.xml \
-          --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
+          --cov=scripts --cov=hooks \
+          --cov-report=json:coverage.json \
+          --cov-report=xml --cov-report=term
+
+    - name: Coverage floor — measured set (#807, amends #564 observation)
+      # The #807 gate: measured-set (scripts/ + hooks/) coverage must meet
+      # the raise-only ratchet floor in coverage-floor.json. Failing below
+      # floor is red; the fix is REAL tests on the measured set, never
+      # bar-lowering (tests/test_coverage_floor_ratchet_807.py pins the
+      # absolute minimum and the raise-only semantics).
+      if: needs.runner-probe.outputs.docs_only != 'true'
+      run: uv run python scripts/coverage_floor.py check --coverage-json coverage.json
+
+    - name: Coverage floor ratchet monotone (#807 — floor may only move UP)
+      # PRs may not lower the ratchet vs the base branch. fetch-depth: 0
+      # above already fetched every branch with full history, so read the
+      # local origin/<base> ref directly (never a --depth=1 fetch here:
+      # it would graft the checkout AND break the mutation-baseline
+      # ancestry check in the quality-gates step below).
+      if: github.event_name == 'pull_request' && needs.runner-probe.outputs.docs_only != 'true'
+      run: |
+        # fetch-depth: 0 already fetched every branch - use the local
+        # origin/<base> ref (no network; a fetch here was both flaky and
+        # unnecessary). Fetch only if the ref is somehow missing.
+        BASE="origin/${{ github.event.pull_request.base.ref }}"
+        git rev-parse --verify -q "$BASE" >/dev/null \
+          || git fetch origin "${{ github.event.pull_request.base.ref }}"
+        uv run python scripts/coverage_floor.py monotone --base-ref "$BASE"
 
     - name: Upload coverage report (observation only, #463)
       if: needs.runner-probe.outputs.docs_only != 'true'

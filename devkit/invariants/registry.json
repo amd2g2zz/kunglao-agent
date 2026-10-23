@@ -2,13 +2,64 @@
   "schema": "invariants/1",
   "description": "The system-level invariants (properties of the LIVE system, not of any single PR). Every change spec cites the invariant ids it touches; the liveness gate and CI consume the same ids. Tier: per-PR (fast, free), nightly, release (smoke run).",
   "invariants": [
-    {"id": "INV-001", "name": "loop-sampler-exit", "statement": "a dispatch's method family is sampled with a logged propensity — 'default' strategy rows are anomalies, never the norm", "fingerprint": "rl-sampler-exit", "tier": "release"},
-    {"id": "INV-002", "name": "loop-admission-consumed", "statement": "the policy's plan() admission receipt is consumed at dispatch (the envelope carries the admitted set)", "fingerprint": "rl-admission-consumed", "tier": "release"},
-    {"id": "INV-003", "name": "loop-posterior-moves", "statement": "settlement updates the posterior store — the reward channel is alive, never 'posteriors never move'", "fingerprint": "rl-posterior-moved", "tier": "release"},
-    {"id": "INV-004", "name": "oracle-armed-at-init", "statement": "every analysis workspace has armed oracle cases derived from its anchors — no reward source, no analysis", "fingerprint": "oracle-armed", "tier": "release"},
-    {"id": "INV-005", "name": "settle-credit-flows", "statement": "claim-terminal settlement writes credit rows", "fingerprint": "settle-credit", "tier": "nightly"},
-    {"id": "INV-006", "name": "iron-log-append-tolerance", "statement": "the upgrade iron rule tolerates live appends to the kunglao event log and still rejects rewrites/deletions (#764)", "fingerprint": null, "check": "uv run pytest tests/test_upgrade_iron_log_764.py -q", "tier": "per-PR"},
-    {"id": "INV-007", "name": "recall-default-off", "statement": "reference-recall injection is opt-in (KUNGLAO_RECALL=1) per the #694 measurement, until the scorer earns its cost back (#771)", "fingerprint": null, "check": "uv run pytest tests/ -k recall_default -q", "tier": "nightly"},
-    {"id": "INV-008", "name": "upgrade-transactional-flow", "statement": "upgrade = snapshot, prune, deploy, configure, selfcheck, reload-prompt-or-rollback — in that order, self-gated (#774)", "fingerprint": null, "check": "uv run pytest tests/ -k upgrade_transaction -q", "tier": "release"}
+    {
+      "id": "INV-001",
+      "name": "loop-sampler-exit",
+      "statement": "a dispatch's method family is sampled with a logged propensity — 'default' strategy rows are anomalies, never the norm",
+      "fingerprint": "rl-sampler-exit",
+      "tier": "release"
+    },
+    {
+      "id": "INV-002",
+      "name": "loop-admission-consumed",
+      "statement": "the policy's plan() admission receipt is consumed at dispatch (the envelope carries the admitted set)",
+      "fingerprint": "rl-admission-consumed",
+      "tier": "release"
+    },
+    {
+      "id": "INV-003",
+      "name": "loop-posterior-moves",
+      "statement": "settlement updates the posterior store under a NON-EMPTY arm key — the reward channel is alive at family level; case-level posterior movement (key-less rows) never satisfies the sentinel (#807 family-level upgrade)",
+      "fingerprint": "rl-posterior-moved",
+      "tier": "release"
+    },
+    {
+      "id": "INV-004",
+      "name": "oracle-armed-at-init",
+      "statement": "every analysis workspace has armed oracle cases derived from its anchors — no reward source, no analysis",
+      "fingerprint": "oracle-armed",
+      "tier": "release"
+    },
+    {
+      "id": "INV-005",
+      "name": "settle-credit-flows",
+      "statement": "claim-terminal settlement writes credit rows",
+      "fingerprint": "settle-credit",
+      "tier": "nightly"
+    },
+    {
+      "id": "INV-006",
+      "name": "iron-log-append-tolerance",
+      "statement": "the upgrade iron rule tolerates live appends to the kunglao event log and still rejects rewrites/deletions (#764)",
+      "fingerprint": null,
+      "check": "uv run pytest tests/test_upgrade_iron_log_764.py -q",
+      "tier": "per-PR"
+    },
+    {
+      "id": "INV-007",
+      "name": "recall-default-off",
+      "statement": "reference-recall injection is opt-in (KUNGLAO_RECALL=1) per the #694 measurement, until the scorer earns its cost back (#771)",
+      "fingerprint": null,
+      "check": "uv run pytest tests/ -k recall_default -q",
+      "tier": "nightly"
+    },
+    {
+      "id": "INV-008",
+      "name": "upgrade-transactional-flow",
+      "statement": "upgrade = snapshot, prune, deploy, configure, selfcheck, reload-prompt-or-rollback — in that order, self-gated (#774)",
+      "fingerprint": null,
+      "check": "uv run pytest tests/ -k upgrade_transaction -q",
+      "tier": "release"
+    }
   ]
 }

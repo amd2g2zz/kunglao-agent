@@ -340,6 +340,10 @@ files:
     dest: .claude/scripts/cost_gate.py
     kind: scaffold
     sha256: b5c3a20d4cfaee110d9d98a032f8b69b8ba17ed92792ab423477e1ec9cbd3dbc
+  - src: scripts/coverage_floor.py
+    dest: .claude/scripts/coverage_floor.py
+    kind: scaffold
+    sha256: f6e1b758bf48cb2b71c7ec5ccbd3446cdd50d378e2a6cf630539a7324d38343f
   - src: scripts/dead_letter.py
     dest: .claude/scripts/dead_letter.py
     kind: scaffold
@@ -1168,6 +1172,10 @@ files:
     dest: .claude/scripts/terminal_settlement.py
     kind: scaffold
     sha256: 2ac2eaa3d03f9a2570425eea698b649ef1b1c6619cd9370973bcfa679d7efe3a
+  - src: scripts/test_inventory.py
+    dest: .claude/scripts/test_inventory.py
+    kind: scaffold
+    sha256: b871765e2d71a55f0ad230049dd02d397cdd54122ec7f1412a68fae52b224e60
   - src: scripts/think_seat.py
     dest: .claude/scripts/think_seat.py
     kind: scaffold
@@ -1455,7 +1463,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 3908f0f0b89ef95bf8ac7113fca0d57c34a035e4fbcd3f11bcd0482e2ed85da1
+    sha256: 8335799d80da739ed2e59f78686c6d8d1bf18cc2ae6abd430fcccb24ac7f03d2
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2043,7 +2051,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ab09ebf1f317dccb8f35f1a3d5a47407a29af3b3959d6941807408d605a210e0
+    sha256: 9a192469acc00c433077e052eec1f0f819148839b47e7f5a30cb4b03354a4130
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
