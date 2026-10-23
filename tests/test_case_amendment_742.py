@@ -51,6 +51,10 @@ def _ws(tmp_path: Path, claims: list[dict]) -> Path:
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}, allow_unicode=True),
         encoding="utf-8")
+    # #800 R2: ledger rows (pre-#800 fixtures settle nothing)
+    from _dispatch_fixture import mint_dispatches
+
+    mint_dispatches(ws, claims, pending=False)
     return ws
 
 

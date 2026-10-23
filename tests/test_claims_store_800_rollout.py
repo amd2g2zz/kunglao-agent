@@ -162,22 +162,27 @@ def test_terminal_claims_are_idempotent(tmp_path):
 def test_committed_dispatch_without_settlement_is_loud(tmp_path):
     """Amendment 4 (production C-005: dispatched + PROVEN, no
     settlement row, no warn — the silent lie): the audit emits ONE
-    missing_rollout event per gap; a dispatch banked under the legacy
-    claim alias stays quiet (no false alarm on pre-#800 rows)."""
+    missing_rollout event per gap; a dispatch banked under the REAL
+    dispatch id stays quiet. No-backcompat ruling: a row banked ONLY
+    under the pre-R2 claim alias is a gap too (the ledger id is the
+    one key)."""
     from rlvr import q_cells as qc
     ws = _ws(tmp_path, {"C-4": "OPEN", "C-5": "OPEN"})
+    dids = {}
     for cid in ("C-4", "C-5"):
         began = claims_store.begin_dispatch(
             ws, cid, "hook:worker_budget", tier=1, prompt="p",
             agent="a", method_family="static_recovery")
         assert began.ok
         assert claims_store.commit_dispatch(ws, cid).ok
-    # C-5: banked under the legacy claim alias (the pre-#800 shape)
+        dids[cid] = began.journal_id
+    # C-5: banked under the REAL dispatch id -> quiet
     qc.record_dispatch_observation(
         ws, "envelope", envelope_meta={"method_family":
                                        "static_recovery"},
-        claim="C-5", agent="a")
-    assert qc.observe_settlement(ws, "C-5", 1.0)["appended"] is True
+        claim="C-5", agent="a", dispatch_id=dids["C-5"])
+    assert qc.observe_settlement(
+        ws, dids["C-5"], 1.0)["appended"] is True
     _set_status(ws, "C-4", "PROVEN")
     _set_status(ws, "C-5", "PROVEN")
     gaps = claims_store.audit_missing_rollouts(ws)
@@ -189,6 +194,29 @@ def test_committed_dispatch_without_settlement_is_loud(tmp_path):
     events = [r for r in rows if r.get("action") == "missing_rollout"]
     assert len(events) == 1
     assert events[0].get("claim") == "C-4"
+
+
+def test_alias_banked_row_is_still_a_gap_no_backcompat(tmp_path):
+    """No-backcompat ruling (2026-09-01): the dispatch-ledger id is
+    the ONE key. A settlement banked ONLY under the pre-R2 claim-id
+    alias (no dispatch_id on the row) does not quiet the audit — the
+    gap stands and is loud."""
+    from rlvr import q_cells as qc
+    ws = _ws(tmp_path, {"C-8": "OPEN"})
+    began = claims_store.begin_dispatch(
+        ws, "C-8", "hook:worker_budget", tier=1, prompt="p",
+        agent="a", method_family="static_recovery")
+    assert began.ok
+    assert claims_store.commit_dispatch(ws, "C-8").ok
+    # pre-R2 shape: pending row + banked row carry NO dispatch_id
+    qc.record_dispatch_observation(
+        ws, "envelope", envelope_meta={"method_family":
+                                       "static_recovery"},
+        claim="C-8", agent="a")
+    assert qc.observe_settlement(ws, "C-8", 1.0)["appended"] is True
+    _set_status(ws, "C-8", "PROVEN")
+    gaps = claims_store.audit_missing_rollouts(ws)
+    assert [g["claim"] for g in gaps] == ["C-8"]
 
 
 def test_inflight_dispatch_is_not_a_gap(tmp_path):

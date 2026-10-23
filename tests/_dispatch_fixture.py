@@ -35,6 +35,8 @@ def mint_dispatches(ws, claims, family: str = "static_recovery",
     claim-level pool bridge admits instead."""
     from rlvr import q_cells
 
+    # fixtures may not create runs/ (the journal + ledger live there)
+    (Path(ws) / "runs").mkdir(parents=True, exist_ok=True)
     register = Path(ws) / "claim-register.yaml"
     open_doc = {"claims": [{**c, "status": "OPEN"} for c in claims]}
     register.write_text(yaml.safe_dump(open_doc), encoding="utf-8")

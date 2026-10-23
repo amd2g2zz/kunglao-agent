@@ -101,6 +101,11 @@ def _build_campaign_ws(tmp_path):
         mf.append_usage_row(ws, cid, fam, "w-test")
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}), encoding="utf-8")
+    # #800 R2: ledger rows for every claim (the starved shape is kept —
+    # still NO q-cell pending rows; the observation net missed them)
+    from _dispatch_fixture import mint_dispatches
+
+    mint_dispatches(ws, claims, pending=False)
     return ws
 
 

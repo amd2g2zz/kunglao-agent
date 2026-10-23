@@ -875,7 +875,9 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
         return None
-    _bank_strategy_store_row(ws, row, bank)
+    # #800 R2: the store row carries the SAME real dispatch id the Q
+    # bank matched (the rollout key), never the claim-grained row id
+    _bank_strategy_store_row(ws, {**row, "dispatch_id": did}, bank)
     return bank
 
 
