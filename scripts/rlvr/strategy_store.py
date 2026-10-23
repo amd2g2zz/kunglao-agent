@@ -56,6 +56,7 @@ from pathlib import Path
 
 from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
 
+from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import ledger as rl
 from rlvr import posteriors as dts
 from rlvr import q_cells
@@ -174,7 +175,7 @@ def append_row(row: dict) -> dict:
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        ok = q_cells._append_row(store_path(), row)
+        ok = q_cells._append_row(store_path(), _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -296,7 +297,7 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
         target = (Path(ws) if ws is not None else Path(".")) \
             / "runs" / "posterior-store.jsonl"
-        ok = q_cells._append_row(target, row)
+        ok = q_cells._append_row(target, _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -317,6 +318,7 @@ def load_rows(ws=None) -> list[dict]:
     rows = [r for r in iter_jsonl(text.splitlines())
             if isinstance(r, dict)
             and str(r.get("schema") or "") == STORE_SCHEMA]
+    rows = _seal.trusted_rows(rows, op="strategy_store.load_rows")
     if ws is not None:
         mine = workspace_id_of(ws)
         rows = [r for r in rows
@@ -703,7 +705,8 @@ class PosteriorStrategyStore:
     def cell_count(self, state_fingerprint: str) -> int | None:
         """Q-cell rows at this signature; None while the spine has no
         data at all (compose falls back to the settled-ledger total)."""
-        rows = self._qstore.observations()
+        rows = _seal.trusted_rows(self._qstore.observations(),
+                                  op="strategy_store.cell_count")
         if not rows:
             return None
         fp = str(state_fingerprint)
@@ -737,7 +740,8 @@ class PosteriorStrategyStore:
         the store's). Deterministic in workspace state; empty when
         nothing was ever declared."""
         counts: dict[str, int] = {}
-        for row in self._qstore.observations():
+        for row in _seal.trusted_rows(self._qstore.observations(),
+                                      op="strategy_store.prior"):
             if not isinstance(row, dict) \
                     or str(row.get("source") or "") != "dispatch":
                 continue

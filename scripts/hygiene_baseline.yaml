@@ -382,11 +382,13 @@ files:
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
-    r1: 12
+    r1: 17
   scripts/rlvr/l1_planner.py:
     r1: 1
   scripts/rlvr/l1_value.py:
     r1: 3
+  scripts/rlvr/learning_seal.py:
+    r1: 6
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -400,7 +402,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 64
+    r1: 70
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/reward.py:
@@ -420,7 +422,7 @@ files:
   scripts/rlvr/step_ledger.py:
     r1: 11
   scripts/rlvr/strategy_store.py:
-    r1: 18
+    r1: 19
   scripts/rlvr/triples.py:
     r1: 3
   scripts/rlvr/winrate.py:
@@ -1461,6 +1463,8 @@ files:
     r1: 5
   tests/test_script_harvest_engine_477.py:
     r1: 1
+  tests/test_seal_799.py:
+    r1: 3
   tests/test_secondstop_anchor_831.py:
     r1: 2
   tests/test_self_cap_smoke.py:
