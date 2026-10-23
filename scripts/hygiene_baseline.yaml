@@ -1417,7 +1417,7 @@ files:
   tests/test_rho_verifier_823p2.py:
     r1: 1
   tests/test_rl_output_path_691.py:
-    r1: 5
+    r1: 3
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
@@ -1456,6 +1456,8 @@ files:
     r1: 8
   tests/test_sample_govern_430.py:
     r1: 2
+  tests/test_sampled_binds_794.py:
+    r1: 3
   tests/test_sanction_datetime_47.py:
     r1: 5
   tests/test_sanitize.py:
@@ -1576,8 +1578,12 @@ files:
     r1: 1
   tests/test_summary_fake_826.py:
     r1: 1
+  tests/test_supply_admission_794.py:
+    r1: 3
   tests/test_supply_gate.py:
     r1: 3
+  tests/test_supply_hypothesis_794.py:
+    r1: 2
   tests/test_syspath_hygiene_671.py:
     r1: 6
   tests/test_t0_capability_697.py:

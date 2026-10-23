@@ -238,6 +238,8 @@ EMIT_ACTIONS = [
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
+    "hypothesis_supply_fail_open",  # supply-admission carrier-outage WARN face — not enforced, dispatch proceeds
+    "hypothesis_supply_reject",  # supply-admission REJECT face: claim without a linked open hypothesis
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
     "infeasible_filed",     # #815 gated INFEASIBLE proposal filed (DEFERRED)
     "infeasible_woken",     # #815 wake face: infeasible-DEFERRED revived

@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 8d5f1eefd92ba03e00faf5b76b895d22999ba99b52e5cd2fc347bb2a61060bf9
+    sha256: 5db8f53608807c803a7ccab9f07ccff03cc7d68d7a80af72e0220d3cefd3ab9e
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -95,7 +95,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: de2d8d54b42cf08478a0b684bb01eecfe0b319d1176cb52c930b449da2b728f3
+    sha256: 5fe175b1c3ac5558a372f72a2a4d14f5cc6b3bd305e1bbe94f8c1668e951fac7
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -291,7 +291,7 @@ files:
   - src: scripts/claim_granularity.py
     dest: .claude/scripts/claim_granularity.py
     kind: scaffold
-    sha256: 86880e3a2d19fe5ceff3dd9d3c10615fdbbcb12678f8f8c5adca84c9763cd1d6
+    sha256: 6a7d365161c3322400416a377818b3d8c6f8aa793faece30e739893c378d5d3a
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
@@ -527,7 +527,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 1146d83cbc5599f5fa96959a9c31a5efc5f8c1da637e1a595c13290b586611f1
+    sha256: a20bf1bd6936190f6dcf79267ba23a03ece15d3a69cde621d2f0efcb81c532bb
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -559,7 +559,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: 95ef491e032b0eb9b723ab08b5f35d99901f11a34d7299121bde46157e6a230b
+    sha256: a7c8c5c0e3196aabca86e8e6fbdec3f92c6ba1187d20114c037985bb2b2eac95
   - src: scripts/feature_mining.py
     dest: .claude/scripts/feature_mining.py
     kind: scaffold
@@ -631,7 +631,7 @@ files:
   - src: scripts/hypothesis_bridge.py
     dest: .claude/scripts/hypothesis_bridge.py
     kind: scaffold
-    sha256: f84d910eb7f891d9ca13f5a0c440fdccdc79f7048663735bc22dff5f1513d557
+    sha256: ecc56e08e9c633cbae6c52d6cce46966f23f71f9090e2442a1888744f1902292
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
@@ -1471,7 +1471,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 8335799d80da739ed2e59f78686c6d8d1bf18cc2ae6abd430fcccb24ac7f03d2
+    sha256: 782c38606acbdc3751029cca592eaff6ca531b167d91d4f640df32ef447d7483
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

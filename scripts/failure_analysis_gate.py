@@ -654,6 +654,13 @@ def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
         new_claim["obstacle_class"] = obstacle_class.strip()
     if (parent_claim or {}).get("answers_question"):
         new_claim["answers_question"] = parent_claim["answers_question"]
+    # Supply discipline (claim birth = hypothesis birth): the obstacle
+    # claim is born with its stub hypothesis (BEFORE the register write:
+    # a failed stub refuses the promotion cleanly, never half-mints).
+    from hypothesis_bridge import ensure_claim_stub
+    ensure_claim_stub(workspace, claim_id=new_id,
+                      statement=new_claim["statement"],
+                      qid=new_claim.get("answers_question"))
     claims.append(new_claim)
     reg["claims"] = claims
     (workspace / "claim-register.yaml").write_text(

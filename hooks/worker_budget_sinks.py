@@ -762,6 +762,18 @@ def _sample_reconciliation(ws, declared: str | None) -> dict:
         return gap
 
 
+def _override_reason(prompt: str) -> str | None:
+    """The recorded-decision reason face: an ``agent-reasoning:`` line is
+    the dispatch's own logged override rationale — shared by the
+    deviation record and the sampled-binds check (a deviation without
+    this line is SILENT, and silence is not a decision)."""
+    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
+                  re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip()[:200] or None
+
+
 def _emit_sample_deviation(ws, cid, declared, view: dict,
                            prompt: str) -> None:
     """#691: the deviation from the sampler's draw is a RECORDED
@@ -773,11 +785,7 @@ def _emit_sample_deviation(ws, cid, declared, view: dict,
     declared one (``agent-reasoning:`` — the prefix that excuses the
     top-1 claim rank elsewhere never silences this record). Fail-open: a
     logging failure never blocks the dispatch (one stderr note)."""
-    reason = None
-    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
-                  re.IGNORECASE)
-    if m:
-        reason = m.group(1).strip()[:200] or None
+    reason = _override_reason(prompt)
     detail = json.dumps({
         'declared': str(declared),
         'sampled': view.get('sampled_family'),
@@ -897,6 +905,40 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     # miss) rides the usage row — the recorded sample-vs-declared pair
     # the issue measured absent from runs/method-family-log.jsonl.
     view = _sample_reconciliation(paths.get('workspace'), mf_value)
+    # Sampled-binds-to-dispatch (owner directive, the logs-panel card):
+    # the sampler's draw is the dispatch CONTRACT. The logs panel
+    # measured the failure shape in production — 17/17 deviation rows
+    # joined to dispatches that ran the DECLARED family, never the
+    # sampled one, and 6/16 carried propensity 0.0 (a probability-0 draw
+    # is invalid for IPS; the propensity-coherence family). So a
+    # deviation is an EXPLICIT RECORDED decision with a COHERENT
+    # propensity: silent deviation -> REJECT with the sampled family as
+    # the exit (deterministic compliance in one retry, the undeclared
+    # exit's shape); reasoned deviation with propensity <= 0 -> REJECT
+    # (the declared family was never in the policy's support). This
+    # narrows the older "recorded, never rejected" amendment: the record
+    # RIDES the pass (reason + propensity on the row), it no longer
+    # substitutes for a decision. The off-registry other(...) escape
+    # keeps its quarantine face (triage, not a bind-contract
+    # declaration). A rejected dispatch writes no usage row — the
+    # gate-rejections ledger is the audit face.
+    if (view.get('deviates')
+            and _mf432.parse_other_detail(mf_value) is None):
+        prop = view.get('propensity')
+        coherent = (isinstance(prop, (int, float))
+                    and not isinstance(prop, bool)
+                    and float(prop) > 0.0)
+        if not _override_reason(prompt) or not coherent:
+            return (_reject(
+                'methodfamily',
+                f"declared family '{mf_value}' deviates from the sampler's "
+                f"draw '{view.get('sampled_family')}' (propensity "
+                f"{view.get('propensity')}) without a coherent recorded "
+                "decision — sampling binds the dispatch (#794 R2): declare "
+                "the sampled family, or record the override with an "
+                "`agent-reasoning:` line AND declare a family the current "
+                "policy actually supports (propensity > 0).",
+                paths), None)
     _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
                             row_agent, tier, tools,
                             propensity=view.get('propensity'),
