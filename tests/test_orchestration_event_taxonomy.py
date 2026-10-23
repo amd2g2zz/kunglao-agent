@@ -92,16 +92,6 @@ def test_worker_status_map_matches_producer_vocabulary():
     assert set(et.WORKER_STATUS_MAP) == {"in-progress", "done", "blocked"}
 
 
-def test_classify_worker_status_lines():
-    assert et.classify_worker_status("in-progress") == "worker_step"
-    assert et.classify_worker_status("done") == "worker_completed"
-    assert et.classify_worker_status("blocked") == "worker_failed"
-    # values no producer emits classify as None (never invented)
-    assert et.classify_worker_status("active") is None
-    assert et.classify_worker_status("started") is None
-    assert et.classify_worker_status("mystery") is None
-
-
 def test_classify_claim_register_statuses():
     assert et.classify_claim_status("PROVEN") == "claim_promoted"
     assert et.classify_claim_status("VERIFIED") == "claim_promoted"

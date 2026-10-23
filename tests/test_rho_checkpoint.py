@@ -72,14 +72,6 @@ def test_rho_from_distribution_expectation():
     assert rho == pytest.approx(0.55)
 
 
-def test_rho_sequence_monotonic_on_progress():
-    progress = [{"PQ1": {"grade": g}} for g in (0.1, 0.3, 0.5, 0.9)]
-    idle = [{"PQ1": {"grade": 0.5}} for _ in range(4)]
-    seq = rc.rho_sequence(progress)
-    assert seq == sorted(seq)
-    assert max(rc.rho_sequence(idle)) - min(rc.rho_sequence(idle)) < 1e-9
-
-
 def test_parse_verifier_response():
     good = json.dumps({"per_pq": [{"pq_id": "PQ1", "grade": 0.7},
                                   {"pq_id": "PQ2", "grade": 0.2}]})

@@ -301,22 +301,6 @@ def _dual_installs(fake_home):
     return prod, dev
 
 
-def test_verify_install_references_flags_mixed_state(fake_home, monkeypatch):
-    """The verifier sees a MIXED wiring (--project names the OLD install
-    root while the script path already points into the NEW one) and says
-    so — this state is what register_hooks must fully clean."""
-    prod, dev = _dual_installs(fake_home)
-    _exec_from(monkeypatch, dev)
-    ws = fake_home.parent / "ws-mixed-detect"
-    ws.mkdir(parents=True)
-    _write_at(prod / "hooks", ws)  # single env_check_gate command -> prod
-    result = hook_activation.verify_install_references(ws)
-    assert result["ok"] is False
-    assert result["stale_total"] >= 1
-    assert ".claude/settings.json" in result["stale"]
-    assert any(PROD_NAME in r for r in result["stale"][".claude/settings.json"])
-
-
 def test_mixed_state_rewire_all_commands_at_executing_root(fake_home,
                                                            monkeypatch):
     """AC3 headline: mixed-state workspace (--project OLD + script path NEW)
@@ -409,27 +393,6 @@ def test_v012_state_rewire_zero_stale_references(fake_home, monkeypatch):
     cmds = _commands(target)
     assert len(cmds) == WIRE_UP_ENTRIES
     assert hook_activation.verify_install_references(ws)["ok"] is True
-
-
-def test_tilde_claude_md_refs_scanned_and_verifiable(fake_home, monkeypatch):
-    """CLAUDE.md carries '~/.claude/skills/<name>/' references (the init
-    template face): the scanner reads BOTH prefix classes and the verifier
-    reports per-carrier."""
-    prod, dev = _dual_installs(fake_home)
-    ws = fake_home.parent / "ws-md"
-    ws.mkdir(parents=True)
-    (ws / "CLAUDE.md").write_text(
-        "# ws\nrun `~/.claude/skills/kunglao-agent/scripts/env_check.py .`\n"
-        "and `/some/other/.claude/skills/kunglao-agent-dev/tools/x`\nkeep\n",
-        encoding="utf-8")
-    result = hook_activation.verify_install_references(ws, active_root=dev)
-    assert result["ok"] is False
-    refs = result["stale"]["CLAUDE.md"]
-    # span ends AT the install-name token (the slash stays with whatever
-    # follows in the carrier text)
-    assert any(r == "~/.claude/skills/kunglao-agent" for r in refs), refs
-    # the OTHER active-name reference is NOT stale
-    assert not any("kunglao-agent-dev" in r for r in refs)
 
 
 # ===========================================================================

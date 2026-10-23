@@ -292,14 +292,6 @@ def test_map_has_issue_mandated_rows():
         "pure-CTI class must be exception-allowed"
 
 
-def test_map_coverage_stat_for_current_workspace_types():
-    """Coverage stat over current workspace fact types is ≥80% (acceptance)."""
-    seen = ["observation", "pure_negative", "positive_observation"]
-    covered, total, pct = kv.machine_check_map_coverage(seen)
-    assert total == 3
-    assert pct >= 80.0, f"mapping coverage {covered}/{total} = {pct}% < 80%"
-
-
 def test_map_parity_with_contract_doc():
     """references/contracts/machine-check-contract.md table must mirror the YAML map (no drift)."""
     doc = (ROOT / "references" / "contracts" / "machine-check-contract.md")

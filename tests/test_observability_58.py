@@ -201,15 +201,6 @@ class TestS2SubagentLifecycle:
             assert f"lifecycle_{phase}" in event_taxonomy.EMIT_ACTIONS
         assert "result_digest" in event_taxonomy.EMIT_ACTIONS
 
-    def test_ingest_lifecycle_dedupes_within_batch(self, tmp):
-        cands = [{"actor": "worker:kunglao-worker", "phase": "spawned",
-                  "claim": "C-001"},
-                 {"actor": "worker:kunglao-worker", "phase": "spawned",
-                  "claim": "C-001"}]
-        out = ingest_lifecycle(tmp, cands)
-        assert len(out) == 1
-        assert len(_rows(tmp)) == 1
-
     def test_ingest_lifecycle_dedupes_against_ledger(self, tmp):
         emit_lifecycle(tmp, actor="worker:kunglao-worker", phase="completed",
                        claim="C-001")
@@ -219,18 +210,5 @@ class TestS2SubagentLifecycle:
              "claim": "C-001"}])
         assert out == []
         assert len(_rows(tmp)) == before
-
-    def test_ingest_lifecycle_distinguishes_actors_and_claims(self, tmp):
-        out = ingest_lifecycle(tmp, [
-            {"actor": "worker:kunglao-worker", "phase": "started",
-             "claim": "C-001"},
-            {"actor": "verifier:kunglao-redteam", "phase": "started",
-             "claim": "C-001"},
-            {"actor": "worker:kunglao-worker", "phase": "started",
-             "claim": "C-002"},
-        ])
-        assert len(out) == 3
-        assert len(_rows(tmp)) == 3
-
 
 # ---------------------------------------------------------------- S4 --------

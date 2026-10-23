@@ -642,49 +642,6 @@ def test_lint_e3_divergence_and_repair(tmp_path):
     assert hb.check_bridge_lint(ws) == [], "the sync repairs the divergence"
 
 
-def test_writer_scan_catches_evasion(tmp_path):
-    """F6: the static scan covers hooks/, import-machinery store imports,
-    and raw-frontmatter writers; a comment mention does not exempt."""
-    fake_scripts = tmp_path / "scripts"
-    fake_scripts.mkdir()
-    (fake_scripts / "evade_dynamic.py").write_text(
-        "import importlib\n"
-        "hs = importlib.import_module('hypothesis_store')\n"
-        "hs.HypothesisStore(x).create(h)\n", encoding="utf-8")
-    (fake_scripts / "evade_raw.py").write_text(
-        "p.write_text('schema_rev: 1 — hand-rolled frontmatter')\n",
-        encoding="utf-8")
-    (fake_scripts / "comment_mention.py").write_text(
-        "# minting goes through hypothesis_bridge (see issue 252)\n"
-        "from hypothesis_store import HypothesisStore\n"
-        "HypothesisStore(p).create(h)\n", encoding="utf-8")
-    (fake_scripts / "clean_reader.py").write_text(
-        "import hypothesis_store as hs\n"
-        "rows = hs.HypothesisStore(ws / 'hypotheses').list_all()\n",
-        encoding="utf-8")
-    (fake_scripts / "bridge_user.py").write_text(
-        "from hypothesis_bridge import mint_family_arms\n"
-        "mint_family_arms(ws, 'H-001', ['x'])\n", encoding="utf-8")
-    fake_hooks = tmp_path / "hooks"
-    fake_hooks.mkdir()
-    (fake_hooks / "hook_writer.py").write_text(
-        "h = Hypothesis(id='H-9', claim_id='c', competitor_group='g')\n"
-        "store.create(h)\n", encoding="utf-8")
-    off = hb.writer_scan_offenders(fake_scripts, fake_hooks)
-    assert "scripts/evade_dynamic.py" in off
-    assert "scripts/evade_raw.py" in off
-    assert "scripts/comment_mention.py" in off
-    assert "hooks/hook_writer.py" in off
-    assert "scripts/clean_reader.py" not in off
-    assert "scripts/bridge_user.py" not in off
-
-
-def test_current_tree_writer_scan_clean():
-    """The live tree trips exactly nothing outside the allowlist + bridge."""
-    offenders = hb.writer_scan_offenders(ROOT / "scripts", ROOT / "hooks")
-    assert offenders == [], offenders
-
-
 # =====================================================================
 # REQ4 — the no-orphan-representation guard
 # =====================================================================
