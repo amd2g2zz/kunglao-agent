@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import re
 import shutil
 import subprocess
@@ -107,7 +106,8 @@ def _rank_inputs(ws: Path):
 
 def _run_rank(ws: Path, seed: int = 7):
     claims, deps, ev = _rank_inputs(ws)
-    return pr.priority_ratio(claims, deps, ev, rng=random.Random(seed))
+    # #792: no seed axis — the rank is input-deterministic
+    return pr.priority_ratio(claims, deps, ev, round_no=seed)
 
 
 # ===========================================================================

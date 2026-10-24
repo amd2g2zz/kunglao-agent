@@ -161,40 +161,43 @@ def _fixture_claims():
 
 _FIXTURE_DEPS = {"depends_on": {}, "competitor_groups": {}}
 
-# Frozen PRE-CHANGE capture (scripts/priority_ratio.py at base 8fcb264,
-# rng-seeded + default-rng faces). Any diff = behavior change = REJECT.
-# #680 update: `tier` added to Action.to_dict() (additive — the dispatch
-# envelope's tier derives from it); scores/order/other keys unchanged.
+# Frozen capture RE-MINTED under #792 (the deterministic evidence ranker).
+# History: the original capture pinned the #107 rng-draw face (base
+# 8fcb264, "seed42" vs "default" differed); #792 retired the seed axis, so
+# the two faces collapsed into ONE input-deterministic order. All fixture
+# claims are oracle-unlinked (no ws -> no oracle cases), so every score is
+# the honest 0.0 (no value channel) and the order is the declared
+# unlinked-band default: tier ascending, then claim_id. Any diff =
+# behavior change = REJECT.
 _FROZEN = {
     "seed42": [
-        {"claim_id": "C-2", "action": "family_attribution", "score": 0.682,
+        {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.0,
+         "skill": None, "weight": 1.0, "tier": 1},
+        {"claim_id": "C-4", "action": "evidence_collection", "score": 0.0,
+         "skill": None, "weight": 1.0, "tier": 1},
+        {"claim_id": "C-2", "action": "family_attribution", "score": 0.0,
          "skill": None, "weight": 1.0, "tier": 2},
-        {"claim_id": "C-3", "action": "persistence", "score": 0.441,
+        {"claim_id": "C-3", "action": "persistence", "score": 0.0,
          "skill": None, "weight": 1.0, "tier": 3},
-        {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.329,
-         "skill": None, "weight": 1.0, "tier": 1},
-        {"claim_id": "C-4", "action": "evidence_collection", "score": 0.328,
-         "skill": None, "weight": 1.0, "tier": 1},
     ],
     "default": [
-        {"claim_id": "C-4", "action": "evidence_collection", "score": 0.924,
+        {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.0,
          "skill": None, "weight": 1.0, "tier": 1},
-        {"claim_id": "C-3", "action": "persistence", "score": 0.338,
-         "skill": None, "weight": 1.0, "tier": 3},
-        {"claim_id": "C-1", "action": "c2_config_extract", "score": 0.21,
+        {"claim_id": "C-4", "action": "evidence_collection", "score": 0.0,
          "skill": None, "weight": 1.0, "tier": 1},
-        {"claim_id": "C-2", "action": "family_attribution", "score": 0.016,
+        {"claim_id": "C-2", "action": "family_attribution", "score": 0.0,
          "skill": None, "weight": 1.0, "tier": 2},
+        {"claim_id": "C-3", "action": "persistence", "score": 0.0,
+         "skill": None, "weight": 1.0, "tier": 3},
     ],
 }
 
 
 def test_rank_output_byte_equivalent_to_pre_change_baseline():
-    import random
     claims = _fixture_claims()
     ev = pr.EvidenceView()
     seeded = [x.to_dict() for x in pr.priority_ratio(
-        claims, _FIXTURE_DEPS, ev, rng=random.Random(42))]
+        claims, _FIXTURE_DEPS, ev)]
     default = [x.to_dict() for x in pr.priority_ratio(claims, _FIXTURE_DEPS, ev)]
     assert seeded == _FROZEN["seed42"]
     assert default == _FROZEN["default"]
@@ -255,16 +258,15 @@ def test_actions_section_does_not_perturb_the_rank(tmp_path):
     """A weights file carrying an actions: section ranks identically to
     the same file without it (composition is v0.2; the section lands as
     data)."""
-    import random
     base = "claim_classes:\n  c2_extract: 2.0\n"
     (tmp_path / "runs").mkdir()
     (tmp_path / "runs" / "value-weights.yaml").write_text(
         base + "actions:\n  operator.derive: 1.5\n", encoding="utf-8")
     a = [x.to_dict() for x in pr.priority_ratio(
         _fixture_claims(), _FIXTURE_DEPS, pr.EvidenceView(ws=tmp_path),
-        rng=random.Random(42))]
+    )]
     (tmp_path / "runs" / "value-weights.yaml").write_text(base, encoding="utf-8")
     b = [x.to_dict() for x in pr.priority_ratio(
         _fixture_claims(), _FIXTURE_DEPS, pr.EvidenceView(ws=tmp_path),
-        rng=random.Random(42))]
+    )]
     assert a == b

@@ -260,8 +260,9 @@ def test_case_posterior_moves_claim_rank_after_settlement(tmp_path):
     before = [a.claim_id for a in before_actions]
     assert before == ['C-1', 'C-2'] or before == ['C-2', 'C-1'], before
     for a in before_actions:
-        assert 'Thompson Beta over 1 linked' in a.feeds['thompson_sample'], \
-            a.feeds['thompson_sample']
+        # #792 renamed the value feed (posterior-mean case value)
+        assert 'posterior mean over 1 linked' in a.feeds['case_value'], \
+            a.feeds['case_value']
 
     # drag the leader's case down (+1 beta per REFUTED settlement),
     # boost the trailer's case up (+1 alpha per PROVEN settlement)

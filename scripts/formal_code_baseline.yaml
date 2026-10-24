@@ -19,7 +19,7 @@ files:
   hooks/user_signal_capture.py: 3
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
-  hooks/worker_budget_core.py: 51
+  hooks/worker_budget_core.py: 52
   hooks/worker_budget_gates.py: 129
   hooks/worker_budget_sinks.py: 135
   hooks/worker_pulse.py: 18
@@ -116,7 +116,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 166
+  scripts/event_taxonomy.py: 167
   scripts/exogenous.py: 3
   scripts/experience_triples.py: 2
   scripts/experiments/rc1_econ_replay.py: 5
@@ -151,12 +151,12 @@ files:
   scripts/intake_battery.py: 6
   scripts/intake_promise.py: 18
   scripts/jadx_exec.py: 21
-  scripts/kunglao-decide.py: 9
+  scripts/kunglao-decide.py: 11
   scripts/kunglao-init.py: 302
   scripts/kunglao-monitor.py: 13
   scripts/kunglao-status.py: 1
   scripts/kunglao.py: 27
-  scripts/kunglao_eval.py: 5
+  scripts/kunglao_eval.py: 7
   scripts/kunglao_export.py: 6
   scripts/kunglao_log.py: 56
   scripts/kunglao_record.py: 10
@@ -201,7 +201,7 @@ files:
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
   scripts/premise_gate.py: 3
-  scripts/priority_ratio.py: 117
+  scripts/priority_ratio.py: 125
   scripts/progress_report.py: 9
   scripts/progress_timeline.py: 7
   scripts/provider_health.py: 4

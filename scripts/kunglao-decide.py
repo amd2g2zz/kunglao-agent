@@ -14,7 +14,7 @@ redefined: every action
 Thompson-samples its case posterior (Beta(1,1) prior with no evidence =
 uniform random = intrinsic exploration), so there is no phase gate to
 switch on and no second ranking face to disagree with the dispatch audit
-(#100/#101 die at the root: one ranker, one seed — posterior_rng(ws)).
+(#100/#101 die at the root: one deterministic ranker — #792, no seed axis).
 
 Usage:
   python kunglao-decide.py <ws> [--json] [--scan-text <text>]
@@ -122,9 +122,9 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
          Intentionally omits open_count/partial_count/free_slots because
          those values are unreliable on the exception path.
 
-    #107: top_actions come from ONE ranking path — the Thompson ranker
-    seeded by pr.posterior_rng(ws) (the same seed the dispatch gate audits
-    with). A PosteriorSchemaError (unknown runs/posteriors.yaml version,
+    #792: top_actions come from ONE deterministic ranking path — the
+    evidence ranker (posterior-mean case value; no seed axis), the same
+    rank the dispatch gate audits with. A PosteriorSchemaError (unknown runs/posteriors.yaml version,
     the #106 version wall) is intentionally NOT swallowed here: it lands in
     _conservative_blocked with the error text — loud, never a silent
     wrong-schema read.
@@ -151,9 +151,8 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
         evidence = pr.EvidenceView.from_workspace(ws)
         failure_blocked_ids = set(base["failure_blocked"])
         claims = [c for c in (reg.get("claims") or []) if c.get("id") not in failure_blocked_ids]
-        rng, seed_round = pr.posterior_seed_state(ws)
-        actions = pr.priority_ratio(claims, deps, evidence, rng=rng,
-                                    round_no=seed_round)
+        actions = pr.priority_ratio(claims, deps, evidence,
+                                    round_no=pr.round_index(ws))
         for a in actions[: max(base["free_slots"], 0)]:
             out["top_actions"].append({
                 "claim_id": a.claim_id, "action": a.action,

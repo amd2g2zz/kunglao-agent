@@ -103,8 +103,13 @@ def test_kicker_ranks_via_ratio_even_without_deprecated_module(
     ws = tmp_path
     (ws / "facts").mkdir()
     (ws / "facts" / "_INDEX.md").write_text("# index\n", encoding="utf-8")
+    # #792: both claims are oracle-unlinked, so the rank order comes
+    # from the unlinked-band default (tier, then claim_id) — C-001 carries
+    # a higher evidence_tier_attempted and therefore sorts AFTER C-002,
+    # keeping the fixture's "scorer reorders the register" property.
     reg = {"claims": [
-        {"id": "C-001", "status": "OPEN", "tier": 1},
+        {"id": "C-001", "status": "OPEN", "tier": 1,
+         "evidence_tier_attempted": 1},
         {"id": "C-002", "status": "OPEN", "tier": 1,
          "answers_question": "who built the loader?"},
     ]}

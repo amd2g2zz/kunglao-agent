@@ -68,17 +68,20 @@ def test_lambda_dh_removed():
 def test_seeded_situational_categorical_no_longer_lifts_score(tmp_path):
     """Even WITH mint+seed (a populated situational categorical — the exact
     shape issue 250 made price nonzero ΔH), the score carries no ΔH face:
-    score > 0 from the Thompson case face alone, and no dh_pq feed."""
+    score > 0 from the posterior-mean case face alone, and no dh_pq feed."""
     _vmp_ws(tmp_path)
     minted = _mint_and_seed(tmp_path)
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
                                ws=tmp_path)
-    actions = pr.priority_ratio(minted, {}, evidence, rng=None)
+    actions = pr.priority_ratio(minted, {}, evidence)
     assert actions, "minted epistemic claims must be rankable candidates"
     for a in actions:
         assert "dh_pq" not in a.feeds, (
             "the dh_pq feed was removed by #295 (ADR-001)")
-        assert a.score > 0
+        # #792: minted PQs here have no oracle CASE linkage, so the value
+        # channel is honestly empty — score 0.0, never a fabricated draw.
+        assert a.score == 0.0
+        assert "unlinked — no value channel" in a.feeds["case_value"]
 
 
 def test_dh_feed_is_gone_entirely(tmp_path):
@@ -88,20 +91,20 @@ def test_dh_feed_is_gone_entirely(tmp_path):
     minted = _mint_and_seed(tmp_path)
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
                                ws=tmp_path)
-    actions = pr.priority_ratio(minted, {}, evidence, rng=None)
+    actions = pr.priority_ratio(minted, {}, evidence)
     for a in actions:
         assert all("dh" not in k for k in a.feeds), (
             f"unexpected ΔH feed survived: {sorted(a.feeds)}")
 
 
-def test_seed_region_untouched():
-    """issue 251 boundary pin: the seed-region functions keep their signatures —
-    this lane adds nothing to them."""
-    import inspect
-    # seed contract v2 (dev issue 251): case_face_seed threads round_no
-    assert list(inspect.signature(pr.case_face_seed).parameters) == [
-        "ledger", "round_no"]
-    assert list(inspect.signature(pr.posterior_rng).parameters) == ["ws"]
+def test_seed_region_retired_by_792():
+    """Boundary pin, updated by #792: the #251 seed-region functions are
+    RETIRED (determinism now comes from inputs, not a counter). Their
+    reappearance is ungoverned drift — same posture as LAMBDA_DH."""
+    assert not hasattr(pr, "case_face_seed"), (
+        "case_face_seed was retired by #792; a reappearance is drift")
+    assert not hasattr(pr, "posterior_rng"), (
+        "posterior_rng was retired by #792; a reappearance is drift")
 
 
 def test_unseeded_register_still_ranks_without_dh(tmp_path):
@@ -114,5 +117,5 @@ def test_unseeded_register_still_ranks_without_dh(tmp_path):
     _register(tmp_path, minted)  # NO seed_situational_pqs call
     evidence = pr.EvidenceView(terminal_fact_claims=frozenset({"C-000"}),
                                ws=tmp_path)
-    actions = pr.priority_ratio(minted, {}, evidence, rng=None)
+    actions = pr.priority_ratio(minted, {}, evidence)
     assert all("dh_pq" not in a.feeds for a in actions)

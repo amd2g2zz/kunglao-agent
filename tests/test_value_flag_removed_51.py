@@ -110,7 +110,7 @@ def test_pq_categorical_reaches_the_unified_ranking(tmp_path):
     ev = pr.EvidenceView.from_workspace(ws)
     gap = next(a for a in pr.priority_ratio(claims, {}, ev)
                if a.claim_id == "C-gap")
-    assert "thompson_sample" in gap.feeds, (
+    assert "case_value" in gap.feeds, (
         "the open-PQ claim must rank through the posteriors surface "
         "unconditionally (the #51 unified-path regression)")
     assert "dh_pq" not in gap.feeds, (

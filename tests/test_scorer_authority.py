@@ -2,8 +2,9 @@
 """tests/test_scorer_authority.py — #499/#107 scorer authority contract tests.
 
 The single authoritative next-claim scorer is scripts/priority_ratio.py
-(specs/phase-4/contract.md §1). #107 rebuilt it as the Thompson ranker and
-deleted the explore/exploit dual path, so there is exactly ONE ranking face:
+(specs/phase-4/contract.md §1). #792 made it the deterministic evidence
+ranker (the #107 Thompson draw face and the explore/exploit dual path are
+both retired), so there is exactly ONE ranking face:
 kunglao-decide, the dispatch-deviation audit (worker_budget.check_priority)
 and the worker_pulse next-up injection all rank through it.
 
@@ -15,8 +16,9 @@ a hardcoded order) cannot pass:
   1. the live next-up injection (hooks/worker_pulse.py) scores via
      priority_ratio — its recommendation equals the module's own top;
   2. the live dispatch-deviation audit (worker_budget.check_priority)
-     audits against the SAME ranker + posterior seed — dispatching the
-     module's top is silent, anything else deviates with a `thompson` tag;
+     audits against the SAME deterministic ranker — dispatching the
+     module's top is silent, anything else deviates with an
+     `evidence-mean` tag;
   3. caller-side filtering (contract §1: failure-blocked / RETRACTED
      filtering belongs to the caller) stays MINIMAL — a rank-None dispatch
      stays an advisory, never a silent pass;
@@ -98,6 +100,21 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
             '{"schema": "posteriors-schema/1", "cases": '
             '{"case-c-f": {"alpha": 1.0, "beta": 2.0, "pending_entries": 0}}, '
             '"pqs": {}}', encoding="utf-8")
+    if not failure_case:
+        # #792: C-A carries the fixture's only value channel (linked case,
+        # posterior mean .75) so the rank order is deterministic AND
+        # non-trivial (the retired draw face manufactured the spread).
+        # The failure_case variant writes its OWN ledger below (case-c-f
+        # must stay the only entry — the fail settlement arms the #146
+        # BLOCKED gate), so the value face is only added here.
+        cdir = path / "oracle" / "cases"
+        cdir.mkdir(parents=True, exist_ok=True)
+        (cdir / "case-pq1.yaml").write_text(
+            '{"id": "case-pq1", "target_pq": "PQ-1"}', encoding="utf-8")
+        (path / "runs" / "posteriors.yaml").write_text(
+            '{"schema": "posteriors-schema/1", "cases": '
+            '{"case-pq1": {"alpha": 3.0, "beta": 1.0, "pending_entries": 0}}, '
+            '"pqs": {}}', encoding="utf-8")
     reg = {"claims": claims}
     deps = {
         "depends_on": depends_on,
@@ -107,6 +124,12 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
     (path / "claim-register.yaml").write_text(json.dumps(reg), encoding="utf-8")
     (path / "claim_deps.yaml").write_text(json.dumps(deps), encoding="utf-8")
     (path / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+    # format-currency stamp (#536): without it the cc CLI subprocess inside
+    # worker_pulse refuses (rc 67) and the pulse's failure_blocked filter
+    # silently degrades to no-filter — the pulse test must exercise the
+    # filter on a workspace cc can actually read.
+    from _factories import stamp_current
+    stamp_current(path)
     (path / "runs" / "worker-status-W-1.md").write_text(
         "[12:00] step: work done | status: done\n", encoding="utf-8")
     write_hook_state(path, active_hooks=["worker_pulse"],
@@ -118,8 +141,7 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
 def _authority_rank(ws: Path, *, rng_posterior: bool):
     """A direct call into THE ranker with the caller filters the live faces
     apply: minus RETRACTED (and, when ws carries them, the failure-blocked
-    set). rng_posterior=True reproduces check_priority's seed; False is the
-    CLI/pulse default seed."""
+    set). #792: no seed face — every caller ranks identically."""
     import priority_ratio as pr
     reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
     deps = yaml.safe_load((ws / "claim_deps.yaml").read_text(encoding="utf-8"))
@@ -134,8 +156,8 @@ def _authority_rank(ws: Path, *, rng_posterior: bool):
         except Exception:
             pass
     ev = pr.EvidenceView.from_workspace(ws)
-    rng = pr.posterior_rng(ws) if rng_posterior else None
-    return pr.priority_ratio(claims, deps, ev, rng=rng)
+    return pr.priority_ratio(claims, deps, ev,
+                             round_no=pr.round_index(ws) if ws else None)
 
 
 def _pulse_payload(ws: Path) -> dict:
@@ -211,11 +233,11 @@ def test_pulse_filters_failure_blocked_and_terminal(tmp_path) -> None:
         f"recommended. Got:\n{out}")
 
 
-def test_check_priority_audits_against_thompson_ranker(tmp_path) -> None:
-    """The dispatch-deviation audit ranks by THE ranker with the posterior
-    seed: dispatching the module's top is a silent rank-#1 pass; dispatching
-    any other dispatchable claim deviates, and the advisory names the
-    authority (thompson) plus the true #1."""
+def test_check_priority_audits_against_deterministic_ranker(tmp_path) -> None:
+    """The dispatch-deviation audit ranks by THE deterministic ranker
+    (#792, no seed): dispatching the module's top is a silent rank-#1
+    pass; dispatching any other dispatchable claim deviates, and the
+    advisory names the authority (evidence-mean) plus the true #1."""
     import worker_budget as wb
     ws = _authority_ws(tmp_path / "ws")
     actions = _authority_rank(ws, rng_posterior=True)
@@ -232,9 +254,9 @@ def test_check_priority_audits_against_thompson_ranker(tmp_path) -> None:
         other.claim_id, ws=ws)
     assert deviated is True, (
         f"dispatching a non-#1 ({other.claim_id}) must register as a deviation")
-    assert top.claim_id in msg and "thompson" in msg.lower(), (
+    assert top.claim_id in msg and "evidence-mean" in msg.lower(), (
         f"the advisory must name the authority #1 ({top.claim_id}) and the "
-        f"thompson authority. Got: {msg!r}")
+        f"evidence-mean authority. Got: {msg!r}")
     # Injection M5 guard: on a failure-blocked workspace (failure_case=True,
     # C-F = failed attempt without failure_analysis), the BLOCKED pre-filter
     # must keep C-F out of the rank — dispatching it is an ADVISORY naming

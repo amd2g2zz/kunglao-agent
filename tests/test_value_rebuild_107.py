@@ -19,7 +19,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -139,24 +138,23 @@ def test_evidence_view_feeds_slimmed():
             f"EvidenceView.{dead} fed the deleted formula — must be deleted"
 
 
-def test_ranker_signature_rng_injection():
-    """priority_ratio(claims, deps, evidence, rng=None, round_no=None) —
-    deterministic by default (Random(0)), Thompson via injected rng;
-    round_no threads the seed round to the rank_feeds emit (None →
-    re-read round_index, static-fixture-only — see posterior_seed_state)."""
+def test_ranker_signature_deterministic_inputs_only():
+    """priority_ratio(claims, deps, evidence, round_no=None) — #792: no
+    rng parameter exists (determinism from inputs, never a counter);
+    round_no threads the tick to the rank_feeds emit and the exploration
+    slot ONLY (None → re-read round_index, static-fixture-only)."""
     import inspect
     import priority_ratio as pr
 
     sig = inspect.signature(pr.priority_ratio)
-    assert list(sig.parameters) == ["claims", "deps", "evidence", "rng",
+    assert list(sig.parameters) == ["claims", "deps", "evidence",
                                     "round_no"]
-    assert sig.parameters["rng"].default is None
     assert sig.parameters["round_no"].default is None
 
 
-def test_smoke_rank_is_deterministic_under_default_rng():
-    """Same inputs -> byte-identical to_dict() output twice (seeded rng,
-    no hidden state)."""
+def test_smoke_rank_is_deterministic_from_inputs():
+    """Same inputs -> byte-identical to_dict() output twice (no rng, no
+    hidden state)."""
     import priority_ratio as pr
 
     claims = [{"id": "C-1", "status": "OPEN", "statement": "c2 config",
@@ -170,12 +168,9 @@ def test_smoke_rank_is_deterministic_under_default_rng():
     assert a == b and len(a) == 2
 
 
-@pytest.mark.parametrize("seed", [0, 7, 12345])
-def test_smoke_rank_is_seed_sensitive(seed):
-    """Different tick seeds may reorder Thompson samples (intrinsic
-    exploration exists — no threshold gate); each seed is self-consistent."""
-    import random
-
+def test_smoke_rank_is_input_invariant():
+    """#792: there is no seed to be sensitive to — the same register ranks
+    identically no matter how many times it is called."""
     import priority_ratio as pr
 
     claims = [{"id": f"C-{i}", "status": "OPEN", "statement": "work",
@@ -183,9 +178,7 @@ def test_smoke_rank_is_seed_sensitive(seed):
               for i in range(1, 7)]
     deps = {"depends_on": {}, "competitor_groups": {}}
     ev = pr.EvidenceView()
-    once = [a.to_dict() for a in pr.priority_ratio(claims, deps, ev,
-                                                   rng=random.Random(seed))]
-    twice = [a.to_dict() for a in pr.priority_ratio(claims, deps, ev,
-                                                    rng=random.Random(seed))]
+    once = [a.to_dict() for a in pr.priority_ratio(claims, deps, ev)]
+    twice = [a.to_dict() for a in pr.priority_ratio(claims, deps, ev)]
     assert once == twice
     assert sorted(a["claim_id"] for a in once) == [c["id"] for c in claims]
