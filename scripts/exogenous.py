@@ -43,12 +43,31 @@ ENV_STATE_REL = Path("runs") / "env-state.json"
 PROXIMITY_MINUTES = 30
 
 # components required by the lane (liveness vocabulary of env_state_probe)
+# #812: android grows host_frida — the 9x dynamic-trace incident class
+# (a host frida absence failing the action is EXOGENOUS, never the
+# action's posterior eating the loss).
 LANE_REQUIRED: dict[str, tuple[str, ...]] = {
     "windows": ("vm_reachable", "mcp_bridge"),
     "linux": ("vm_reachable", "mcp_bridge"),
-    "android": ("adb", "frida_server"),
+    "android": ("adb", "frida_server", "host_frida"),
     "web": ("mcp_bridge",),
     "macos": ("mcp_bridge",),
+}
+
+# #812 vocabulary extension (acceptance 4): components required ONLY when
+# the action's METHOD needs them (method-grain, not lane-grain). The
+# classifier's own input granularity is project_type, so these ride the
+# `extra` parameter of classify_exogenous — a caller with method-grain
+# knowledge (dispatch intent preconditions) passes the lane's conditional
+# vocabulary. Registered-but-unprobed words are INERT by the conservative
+# rule ("unprobed capability is not evidence of down"): network_egress
+# has no probe producer yet (the #791 intake face owns capability
+# representation) — the vocabulary exists so attribution covers the
+# gdbserver-drop class the moment a producer lands.
+LANE_CONDITIONAL: dict[str, tuple[str, ...]] = {
+    "android": ("jdwp_debug", "device_root"),
+    "web": ("network_egress",),
+    "remote": ("mcp_bridge", "network_egress"),
 }
 
 
@@ -92,14 +111,20 @@ def state_at(ws: Path, action_ts, *,
 
 
 def classify_exogenous(ws: Path, project_type: str | None,
-                       action_ts=None, *, now=None) -> dict | None:
+                       action_ts=None, *, now=None,
+                       extra: tuple[str, ...] = ()) -> dict | None:
     """EXOGENOUS classification: a lane-required component DOWN at action
-    time. Returns {"component", "detail", "probe_ts"} or None (including
-    the component-up case — a healthy component never classifies)."""
+    time. #812: `extra` names the action's METHOD-grain required
+    components (pass the project's LANE_CONDITIONAL vocabulary when the
+    dispatch intent declared the method needs them); default () keeps
+    every existing caller byte-identical. Returns {"component", "detail",
+    "probe_ts"} or None (including the component-up case — a healthy
+    component never classifies)."""
     caps = state_at(ws, action_ts, now=now)
     if caps is None:
         return None
-    required = LANE_REQUIRED.get(str(project_type or "").strip(), ())
+    required = (LANE_REQUIRED.get(str(project_type or "").strip(), ())
+                + tuple(extra))
     for name in required:
         entry = caps.get(name)
         if not isinstance(entry, dict):

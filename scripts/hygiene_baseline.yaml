@@ -50,6 +50,8 @@ files:
     r1: 2
   scripts/calibration_gate.py:
     r1: 1
+  scripts/capability_probe.py:
+    r1: 4
   scripts/carrier_consistency.py:
     r1: 3
   scripts/case_bank.py:
@@ -124,7 +126,7 @@ files:
   scripts/env_repair_l1.py:
     r1: 4
   scripts/env_state_probe.py:
-    r1: 6
+    r1: 11
   scripts/error_response.py:
     r1: 8
   scripts/eval_chain.py:
@@ -173,7 +175,7 @@ files:
   scripts/evidence_certify.py:
     r1: 2
   scripts/exogenous.py:
-    r1: 2
+    r1: 6
   scripts/experience_triples.py:
     r1: 1
   scripts/experiments/rc1_econ_replay.py:
@@ -647,6 +649,8 @@ files:
     r1: 3
   tests/test_canonical_chain_752.py:
     r1: 12
+  tests/test_capability_probes_812.py:
+    r1: 3
   tests/test_carrier_consistency_829.py:
     r1: 1
   tests/test_case_admission_126.py:
