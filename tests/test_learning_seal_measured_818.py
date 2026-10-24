@@ -27,6 +27,7 @@ def armed(tmp_path, monkeypatch):
     key.write_bytes(b"k" * 48)
     monkeypatch.setattr(seal, "KEY_PATH", key)
     monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
+    monkeypatch.setattr(seal, "_NOTICE", {"shown": False})
     _WARN_LAST.clear()
     return key
 
@@ -35,6 +36,7 @@ def armed(tmp_path, monkeypatch):
 def unarmed(tmp_path, monkeypatch):
     monkeypatch.setattr(seal, "KEY_PATH", tmp_path / "missing.key")
     monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
+    monkeypatch.setattr(seal, "_NOTICE", {"shown": False})
     _WARN_LAST.clear()
 
 
