@@ -443,16 +443,38 @@ class TestDispatchProbeGate:
         assert self._gate(ws, _dispatch_prompt("static jadx decompile")) is None
 
     def test_verifier_remediation_passes(self, tmp_path, monkeypatch) -> None:
+        """The D2 honest path is a SLEEPING face of THIS gate too (the
+        _supply_admission contract, same shape) — and the exemption must
+        SELF-RESOLVE from the payload, not depend on the caller
+        remembering the flag (the CI interaction pin: a direct call with
+        the flag forgotten reached the probes and refused a
+        kunglao-redteam dispatch for a PROVEN claim on a frida-less
+        machine). The sleep must also come BEFORE any probe cost."""
+        import capability_probe as cp
         import dispatch_gate as dg
         ws = _mk_ws(tmp_path)
         (ws / "claim-register.yaml").write_text(
             "claims:\n  - id: C-1\n    status: PROVEN\n", encoding="utf-8")
+
+        def _no_probes(*a, **kw):
+            raise AssertionError(
+                "the D2 sleep face must short-circuit BEFORE any probe "
+                "execution — the honest path pays no probe cost")
+        monkeypatch.setattr(cp, "facts", _no_probes)
         payload = {"tool_input": {"prompt": json.dumps({"kunglao_dispatch": {
             "version": 1, "claim": "C-1", "tier": 1,
             "tools": ["Read"], "agent": "kunglao-redteam"}})
             + "\nfrida trace verify"}}
-        rc = dg._capability_probe_gate(ws, "C-1", payload["tool_input"]["prompt"])
+        rc = dg._capability_probe_gate(
+            ws, "C-1", payload["tool_input"]["prompt"], payload=payload)
         assert rc is None, "the D2 honest path is never capability-blocked"
+
+    def test_explicit_flag_still_sleeps(self, tmp_path) -> None:
+        import dispatch_gate as dg
+        ws = _mk_ws(tmp_path)
+        assert dg._capability_probe_gate(
+            ws, "C-1", "frida stalker trace",
+            verifier_remediation=True) is None
 
     def test_unreadable_cache_fails_open(self, tmp_path, monkeypatch) -> None:
         import capability_probe as cp

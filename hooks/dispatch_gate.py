@@ -1602,9 +1602,12 @@ def _emit_probe_price(ws: Path, claim_id: str,
         _emit_trace(ws, "probe_price_fail_open", claim_id,
                     f"reason={type(exc).__name__}: {exc}",
                     trace_id=trace_id)
+
+
 def _capability_probe_gate(ws: Path, claim_id: str, prompt_text: str,
                            trace_id: str | None = None,
-                           verifier_remediation: bool = False) -> int | None:
+                           verifier_remediation: bool = False,
+                           payload: dict | None = None) -> int | None:
     """#812 dispatch-gate capability probes: the dispatch's METHOD family
     (matched from the prompt's android keywords) consults its REQUIRED
     capability facts AT the gate. A probe FAIL refuses the dispatch
@@ -1619,11 +1622,29 @@ def _capability_probe_gate(ws: Path, claim_id: str, prompt_text: str,
     runs/.capability-probe-cache.json, one on-demand probe when both are
     stale) so the #475 narrow+low-IO dispatch shape survives while the
     facts are TTL-fresh. Verifier-remediation dispatches pass (the D2
-    honest path); any probe-infrastructure outage fails open (WARN +
-    capability_probe_fail_open trace) — a broken cache must not brick
-    dispatch."""
+    honest path) — the exemption SELF-RESOLVES from the payload when the
+    caller did not pass the resolved flag (the _supply_admission
+    sleep-face contract: the honest path must never depend on a call-site
+    remembering the flag, and it must sleep BEFORE any probe cost; the
+    CI interaction pin test_verifier_remediation_passes holds both).
+    Resolver outages fail open there — production's authoritative main()
+    flag still governs. Any probe-infrastructure outage fails open too
+    (WARN + capability_probe_fail_open trace) — a broken cache must not
+    brick dispatch."""
     if verifier_remediation:
         return None
+    if payload is not None:
+        try:
+            if _is_verifier_remediation_dispatch(
+                    ws, claim_id, payload, prompt_text):
+                return None
+        except Exception as exc:  # noqa: BLE001 — the exemption never blocks
+            # one rate-limited trace, never silence: a broken resolver must
+            # be VISIBLE while the honest path still proceeds (fail-open;
+            # production's authoritative main() flag still governs)
+            from kunglao_log import warn
+            warn("capability_probe_d2_resolve",
+                 f"{type(exc).__name__}: {exc}")
     try:
         with scripts_on_path():  # #671 scoped membership
             import capability_probe as cp
@@ -2328,7 +2349,8 @@ def _main_inner() -> int:
     # skip/absent facts and infra outages fail open.
     rc = _capability_probe_gate(ws, claim_id, prompt_text,
                                 trace_id=trace_id,
-                                verifier_remediation=verifier_remediation)
+                                verifier_remediation=verifier_remediation,
+                                payload=payload)
     if rc is not None:
         return rc
 
