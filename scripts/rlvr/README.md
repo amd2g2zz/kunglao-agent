@@ -235,6 +235,9 @@ the one-line pointer (name — the docstring's opening line):
 
 - `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
 - `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+- `episode_pool` — rlvr/episode_pool.py — the memory pool's physical layer (`runs/episodes/`) + the three policy gates (issue #824).
+- `episode_schema` — rlvr/episode_schema.py — the episode schema `episode/1` + summary caps + fail-closed validator (issue #824).
+- `pool_indexer` — rlvr/pool_indexer.py — the pool's derived views: value table + playbook (issue #824).
 - `constants_ref` — rlvr.constants_ref — the reference hash constant tables (entropy
 - `crystallize` — crystallize.py — the settlement writes knowledge back.
 - `expansion` — rlvr/expansion.py — the discovery-layer operator (issue #546, WS4 /
@@ -248,6 +251,7 @@ the one-line pointer (name — the docstring's opening line):
   reconcile_claim; signed negative face; #760-complementary, #799-sealed).
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
+- `reward_signal` — rlvr/reward_signal.py — the A1 learning signal `R = completion + milestone progress − cost` + the settlement hook (issue #824).
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
