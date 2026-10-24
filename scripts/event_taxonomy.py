@@ -254,6 +254,7 @@ EMIT_ACTIONS = [
     "investment_arc_open",   # issue 293 hypothesis-campaign arc open: budget/max_runs/stop_condition face
     "ladder_reject",      # issue 293 target_ladder settlement-gate block face (walk/inventory/siblings)
     "ladder_required",
+    "lane_capability_reject",  # R2 env floor: dispatch into a DOWN capability refused
     "lesson_burn",
     "lesson_citation",
     "lesson_deprecated",

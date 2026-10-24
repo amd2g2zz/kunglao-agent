@@ -90,7 +90,7 @@ files:
   scripts/detector_liveness.py:
     r1: 4
   scripts/difficulty_calibration.py:
-    r1: 6
+    r1: 5
   scripts/difficulty_thresholds.py:
     r1: 6
   scripts/digest_build.py:
@@ -235,7 +235,7 @@ files:
   scripts/intake_battery.py:
     r1: 4
   scripts/intake_promise.py:
-    r1: 6
+    r1: 5
   scripts/jadx_exec.py:
     r1: 14
   scripts/kunglao-decide.py:
@@ -1125,6 +1125,8 @@ files:
     r1: 1
   tests/test_intake_battery_460.py:
     r1: 2
+  tests/test_intake_draft_791.py:
+    r1: 1
   tests/test_intake_promise_813.py:
     r1: 7
   tests/test_intent_aware_completion.py:
@@ -1164,6 +1166,8 @@ files:
     r1: 6
   tests/test_l1_planner_718.py:
     r1: 4
+  tests/test_lane_profile_791.py:
+    r1: 3
   tests/test_lane_routing_208.py:
     r1: 2
   tests/test_late_arm_oracle_730.py:

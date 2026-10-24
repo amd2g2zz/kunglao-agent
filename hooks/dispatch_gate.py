@@ -1713,6 +1713,89 @@ def _supply_admission(ws: Path, claim_id: str, payload: dict,
         issue="794", ws=ws, gate_class="evidence")
 
 
+
+# ===================== R2 capability axis: lane capability gate =====================
+
+# The env floor under dispatch eligibility (the live-run logs review:
+# frida missing was known and only warned, dynamic-trace still went 9x —
+# lane capability never gated dispatch). Representation vs execution
+# split: the init face owns the capability STATE (lane_profile vocabulary +
+# runs/env-state.json); the probe-execution card owns probing. This gate
+# only READS the state: a dispatch whose declared tools mechanically
+# require an env capability that the near-time env-state records DOWN is
+# REJECTED with the wake condition — zero capability-fabricated
+# dispatches. skip/absent/stale/unreadable state = no opinion (fail-open;
+# the gate never fabricates a capability from silence).
+_LANE_CAPABILITY_PROXIMITY_FALLBACK_MINUTES = 30
+
+
+def _lane_capability_gate(ws: Path, claim_id: str, prompt_text: str,
+                          trace_id: str | None = None) -> int | None:
+    """Refuse a dispatch into a capability the env-state records DOWN.
+
+    Requirement mapping is mechanical: declared tools -> priority_ratio
+    tool families -> lane_profile.CAPABILITY_TOOL_FAMILIES reverse map.
+    A family with no capability dependency is unconstrained here; a
+    DOWN entry REJECTs (exit 2) with the component + the wake
+    condition in the guidance; a healthy/skipped/absent entry passes.
+    State sourcing: runs/env-state.json via exogenous.state_at (the
+    same proximity contract the exogenous classifier uses — one state
+    semantics, two consumers). Fail-open on ANY state outage (the
+    outage tiering: a broken monitor must not brick a mission)."""
+    try:
+        tools = load_hooks_lib().parse_dispatch(prompt_text or "")[1]
+    except Exception:  # noqa: BLE001 — payload contract is the rack gate's face
+        return None
+    if not tools:
+        return None
+    try:
+        with scripts_on_path():  # scoped membership
+            import priority_ratio as pr
+            import lane_profile
+            import exogenous
+        fams = pr.tool_families_from_tools(tools)
+        required: list[str] = []
+        for fam in sorted(fams):
+            for cap in lane_profile.capabilities_for_family(fam):
+                if cap not in required:
+                    required.append(cap)
+        if not required:
+            return None
+        caps = exogenous.state_at(ws, None)
+    except Exception as exc:  # noqa: BLE001 — state face outage: fail-open
+        print(f"dispatch_gate: WARN lane-capability fail-open — env-state "
+              f"unreadable ({type(exc).__name__}: {exc})", file=sys.stderr,
+              flush=True)
+        return None
+    if not caps:
+        return None  # no near-time state: silence is not evidence of DOWN
+    down = []
+    for cap in required:
+        entry = caps.get(cap)
+        if isinstance(entry, dict) and str(entry.get("status")) == "fail":
+            down.append((cap, str(entry.get("detail") or "")))
+    if not down:
+        return None
+    detail = "; ".join(f"{cap}: {text[:80]}" for cap, text in down)
+    _emit_trace(ws, "lane_capability_reject", claim_id, f"down={detail}",
+                exit_code=2, trace_id=trace_id)
+    wake = "; ".join(exogenous.wake_condition(cap) for cap, _ in down)
+    return _reject_with_guidance(
+        "lane_capability",
+        f"{claim_id} declares tools whose method requires "
+        f"{', '.join(cap for cap, _ in down)} — the near-time env-state "
+        f"records it DOWN ({detail}). Dispatching into a DOWN capability "
+        f"is how a run burns attempts on an environment failure that was "
+        f"already known (the 9x dynamic-trace pathology).",
+        f"repair the capability first (self-recovery L1->L3, "
+        f"scripts/env_repair_l1.py) or dispatch a claim whose method "
+        f"matches the capabilities that are actually up; the claim wakes "
+        f"when the component recovers ({wake}). Do NOT narrate a device/"
+        f"environment state the env-state file contradicts — check "
+        f"runs/env-state.json per_capability first.",
+        issue="791", ws=ws, gate_class="evidence")
+
+
 def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
                           trace_id: str | None = None) -> int | None:
     """#109: PQ-neighborhood first-dispatch admission (framework-rigidity
@@ -2159,6 +2242,13 @@ def _main_inner() -> int:
     # outages; asleep for pre-carrier workspaces and verifier dispatches.
     rc = _supply_admission(ws, claim_id, payload, trace_id=trace_id,
                            verifier_remediation=verifier_remediation)
+    if rc is not None:
+        return rc
+
+    # R2 capability axis: the env floor — a dispatch into a capability the near-time
+    # env-state records DOWN is refused before any strategy tooth (the
+    # 9x dynamic-trace pathology: known-DOWN, dispatched anyway).
+    rc = _lane_capability_gate(ws, claim_id, prompt_text, trace_id=trace_id)
     if rc is not None:
         return rc
 
