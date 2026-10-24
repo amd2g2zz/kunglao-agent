@@ -96,6 +96,7 @@ assets:
     # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
     # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they
     # are governed by tools/_INDEX.yaml + validate_index.py, not this manifest.
+    - tools/_lib/negative_cache.py
     - tools/auxiliary/audit_legacy_proven.py
     - tools/auxiliary/sanitize.py
     - tools/pipelines/build_evidence_index.py
