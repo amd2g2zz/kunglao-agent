@@ -19,6 +19,8 @@ from . import consolidated_ledger
 from . import belief
 from . import constants_ref
 from . import crystallize
+from . import episode_pool
+from . import episode_schema
 from . import expansion
 from . import feature_prior
 from . import hypotheses
@@ -35,6 +37,7 @@ from . import meta_arms
 from . import obstacles
 from . import phi_tree
 from . import policy_compare
+from . import pool_indexer
 from . import posteriors
 from . import pricing
 from . import prediction_ledger
@@ -43,6 +46,7 @@ from . import q_cells
 from . import recipe_arms
 from . import refutation_fold
 from . import reward
+from . import reward_signal
 from . import scalar
 from . import settlement_scorer
 from . import settlement_wire
