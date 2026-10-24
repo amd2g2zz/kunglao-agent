@@ -168,8 +168,10 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 127
+    r1: 129
     r2: 1
+  scripts/evidence_certify.py:
+    r1: 2
   scripts/exogenous.py:
     r1: 2
   scripts/experience_triples.py:
@@ -253,7 +255,7 @@ files:
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 34
+    r1: 35
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -269,7 +271,7 @@ files:
   scripts/lessons_telemetry.py:
     r1: 3
   scripts/lint_facts.py:
-    r1: 25
+    r1: 26
   scripts/liveness_policy.py:
     r1: 28
   scripts/log_setup.py:
@@ -933,6 +935,8 @@ files:
     r2: 1
   tests/test_event_wirings_434.py:
     r1: 2
+  tests/test_evidence_certify_803.py:
+    r1: 3
   tests/test_ex3_bucket_calibration_429.py:
     r1: 2
   tests/test_exit4_no_repair_e2e.py:

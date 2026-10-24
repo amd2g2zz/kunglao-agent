@@ -210,7 +210,9 @@ EMIT_ACTIONS = [
     "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
+    "evidence_certified",  # #803 evidence_certify: a claim's evidence chain certified (byte-exact+fresh-input row minted, sealed, replay-pinned)
     "evidence_pin_blocked",  # evidence_pin_guard: write refused on a checker-consumed sha-pinned artifact
+    "evidence_replayed",  # #803 evidence_certify: a certification row re-executed its own replay instruction byte-consistently (the certify->replay->result pin, observed)
     "fact_status_synced",  # the promotion write-back row: a PROVEN settlement synced the citing facts' frontmatter (synced + fully named skips ride the detail)
     "failure_blocked",
     "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face

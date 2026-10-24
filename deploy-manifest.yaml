@@ -7,7 +7,7 @@ files:
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 9badd29d600f22d39d11b54f07062a7a70a5e5de6549597971808961829e1135
+    sha256: 9fa56f308f785895da273f5e645356d308258f355eafaf69817dfc3207185e72
   - src: hooks/compact_continuity.py
     dest: .claude/hooks/compact_continuity.py
     kind: hook
@@ -527,7 +527,11 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: b61581071a82a1b0aa8d9ce6db506aaa656cc72c334813b5bc7a7420720a8ddb
+    sha256: 3e0b004108eaf6c51822824df5c464998e3bc65f2cf813f30b7058bfe0f0e9af
+  - src: scripts/evidence_certify.py
+    dest: .claude/scripts/evidence_certify.py
+    kind: scaffold
+    sha256: 8f50111af1ad3ee5259e8ac3679dbbebf4b6ff24ff9238da74f8c269c91f63bd
   - src: scripts/evidence_dag.py
     dest: .claude/scripts/evidence_dag.py
     kind: scaffold
@@ -743,7 +747,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: efca90ebd367b8d8f369bce1ca8bd77c129a4385e61f159274c320313ddf6aa4
+    sha256: c3d36069035eb71820a7e90fd05f51112197f88b05b0aeb3100ac6809d11f841
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -779,7 +783,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 19f904405c3b59fd0d2aafe2aff34b40f5d9b5c20353254464413e553c281112
+    sha256: 1a4a65148a884326c54df3724ff25c050fca7591b2ac11779ea3b8d795d38590
   - src: scripts/lint_protocol.py
     dest: .claude/scripts/lint_protocol.py
     kind: scaffold
@@ -999,7 +1003,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: cf999d8aa7e8b4f258a55c570d1d3d4dada58403e36af04b5cf5d523a1e02d95
+    sha256: be77d7f939e6f98058ed30523070c8c852f5bc11264e11abc8e537c26f78aab0
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -1475,11 +1479,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 534c5e81386c56b990dc6c4f38962774ca1193c4abb5afc2b888a3508a32abcc
+    sha256: d712a9ca98bbeedbb2ebd56b903c6fbf57920d46090e6cd97cc0744c13f40a4d
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 525b7016c3d534936228c5490ed9d3b60f0d9195681d2a29f5d564ab7e60c0d8
+    sha256: f4d0682f500c6e150d1d50edf53f9b270ff400ce9343784cb9d2865d650d785b
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1963,7 +1967,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: 11f2966b3724e1008db60b3702169ec2e9af1057b9a4f00e86c21d6e25acfcac
+    sha256: 4d65bafb95854cf3fea424e1301ae8f187d9ddf58e30ea133c9c4e9e60de1c40
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
@@ -2067,7 +2071,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 9a192469acc00c433077e052eec1f0f819148839b47e7f5a30cb4b03354a4130
+    sha256: fb6a30cccd5337ffb93c91cfd503d7567e36f2666dea326d0d72beb082e158df
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
