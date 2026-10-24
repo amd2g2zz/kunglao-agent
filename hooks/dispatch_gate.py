@@ -1578,6 +1578,32 @@ def _pq_dispatched_before(ws: Path, qid: str,
     return False
 
 
+def _emit_probe_price(ws: Path, claim_id: str,
+                      trace_id: str | None = None) -> None:
+    """issue-760: the supply-admission face's price read — ONE advisory
+    `probe_price` trace with the claim's PQ probe price (expected gain
+    decayed by the issue-800 dispatch-ledger repeat count). A pricing
+    outage degrades to the `probe_price_fail_open` trace; neither word
+    ever gates (this face's verdict is returned before/after,
+    unchanged)."""
+    try:
+        with scripts_on_path():  # scoped membership
+            from rlvr import pricing as _pricing760
+        priced = _pricing760.price_for_claim(ws, claim_id)
+        if priced is not None:
+            _emit_trace(ws, "probe_price", claim_id,
+                        f"target={priced['target']}; "
+                        f"status={priced['status']}; "
+                        f"gain_bits={priced['gain_bits']:.3f}; "
+                        f"repeat={priced['repeat']}; "
+                        f"price={priced['price']:.6f}",
+                        trace_id=trace_id)
+    except Exception as exc:  # noqa: BLE001 — pricing must never gate
+        _emit_trace(ws, "probe_price_fail_open", claim_id,
+                    f"reason={type(exc).__name__}: {exc}",
+                    trace_id=trace_id)
+
+
 def _supply_admission(ws: Path, claim_id: str, payload: dict,
                       trace_id: str | None = None,
                       verifier_remediation: bool = False) -> int | None:
@@ -1660,6 +1686,12 @@ def _supply_admission(ws: Path, claim_id: str, payload: dict,
         if ref:
             linked = any(h.id == ref and h.status == "open" for h in hyps)
     if linked:
+        # issue-760 pricing face — the dispatch qualification read
+        # (advisory telemetry, never a gate decision): the claim's PQ
+        # probe price rides the unified log at the approval point, so the
+        # repeat-probe pathology (a dead path re-probed N times) is
+        # visible where dispatches are minted. Fail-open both ways.
+        _emit_probe_price(ws, claim_id, trace_id=trace_id)
         return None
     # the REJECT face reaches the unified log like top1/capability.
     _emit_trace(ws, "hypothesis_supply_reject", claim_id,

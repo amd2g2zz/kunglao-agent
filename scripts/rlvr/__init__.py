@@ -35,6 +35,7 @@ from . import meta_arms
 from . import obstacles
 from . import policy_compare
 from . import posteriors
+from . import pricing
 from . import prediction_ledger
 from . import priors
 from . import q_cells
@@ -78,6 +79,7 @@ __all__ = [
     "obstacles",
     "policy_compare",
     "posteriors",
+    "pricing",
     "prediction_ledger",
     "priors",
     "q_cells",

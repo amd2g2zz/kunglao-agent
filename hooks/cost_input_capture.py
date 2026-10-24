@@ -177,6 +177,17 @@ def cockpit_ratio(ws: Path, transcript_path: str | Path) -> dict | None:
         det = detector_consumption(Path(ws))
         if det is not None:
             face["detector"] = det
+        # issue-760 pricing face: the information-gathering account rides
+        # the same consumption face (probes are no longer free — zero-info
+        # re-probes of decided targets are countable next to the
+        # unactuated detector evals). Fail-open: an outage drops the
+        # block, never the ratio.
+        try:
+            from rlvr import pricing as _pricing760
+            face["pricing"] = _pricing760.probe_consumption(Path(ws))
+        except Exception as exc:  # noqa: BLE001 — telemetry fail-open
+            warn("cockpit_ratio_pricing",
+                 f"{type(exc).__name__}: {exc}")
         (Path(ws) / COCKPIT_RATIO_REL).write_text(
             json.dumps(face, ensure_ascii=False), encoding="utf-8")
         if face["alarm"]:

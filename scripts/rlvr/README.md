@@ -61,6 +61,13 @@ scripts/rlvr/
 │                        #   collapsed arms), feature-keyed novelty (the
 │                        #   anti-renaming wall), verifier-gated admission
 │                        #   scoring, runs/expansion/E-<n>.json receipts
+├── pricing.py           # issue-760 pricing face — the unknown-set
+│                        #   projection (undecided PQs + open obstacles,
+│                        #   pure view over existing keys) + the
+│                        #   information-gain price (bits x value, decayed
+│                        #   by the issue-800 dispatch-ledger repeat
+│                        #   count) + probe-price/1 telemetry emit +
+│                        #   the issue-801 consumption account face
 └── README.md            # this document
 ```
 
