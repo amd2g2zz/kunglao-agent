@@ -6,6 +6,22 @@
 > quoted verbatim from the run's artifacts. The target is a constructed eval unit, so
 > its recovered constants and digests are publishable.
 
+> **MEASUREMENT-CLASS CORRECTION (#816, owner ruling 2026-10-24).** The run
+> below was measured against a SOURCE-READABLE material: the unit shipped
+> its reference interpreter (`target/src/vm.rs`) per the #551 delivery
+> design, and the solve anchored on that source. That delivery is
+> OVERRULED — an RE mission must never be solvable by reading the target's
+> source (the answer sheet was inside the envelope). All PROVEN claims,
+> facts, and the capability face of this run are QUARANTINED: excluded
+> from RE capability metrics and from the extrapolation-holdout verdict
+> input; retained only as exploration-channel artifacts. The unit was
+> rebuilt black-box on 2026-10-25 (compiled `target/vm`, 13KB, no source
+> in the unit; `material_class: black-box` + corpus lint live). Capability
+> numbers await black-box re-runs (separate run budget — not part of
+> #816). Reading the rest of this case study = reading an
+> exploration-channel artifact, not an RE capability result.
+
+
 An agent run reverse-engineered the KVM-8 custom bytecode ISA — container format,
 nibble opcode map, per-word guard bytes, and the `mix()` digest machine — from the
 reference interpreter's source, wrote a faithful Python emulator, computed the four
