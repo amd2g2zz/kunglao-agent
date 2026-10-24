@@ -45,10 +45,6 @@ NEGATIVE_REPEAT_LIMIT = 3
 STORE_REL = Path("runs") / ".toolsearch-negative-cache.json"
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def _parse_ts(value) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -104,7 +100,9 @@ def lookup(ws, family: str, *, now=None,
     last = _parse_ts(str(entry.get("last_ts") or ""))
     if last is None:
         return None
-    now = now or _utc_now()
+    # inline (not a def) — this layer is zero-repo-imports; the scripts
+    # layer passes now= via the canonical harness_common.utc_now
+    now = now or datetime.now(timezone.utc)
     drift = (now - last).total_seconds()
     if drift > ttl:
         return None
@@ -120,7 +118,9 @@ def record_negative(ws, family: str, query: str, *, now=None,
     """Record one negative occurrence for `family`; returns the stored
     row (occurrence counting is PER FAMILY — Standard 11)."""
     ws = Path(ws)
-    now = now or _utc_now()
+    # inline (not a def) — this layer is zero-repo-imports; the scripts
+    # layer passes now= via the canonical harness_common.utc_now
+    now = now or datetime.now(timezone.utc)
     ts = now.isoformat(timespec="seconds").replace("+00:00", "Z")
     doc = _load(ws)
     fams = doc.setdefault("families", {})
