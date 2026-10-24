@@ -3680,15 +3680,44 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 },
                 "diff_vs_verbatim": "",
                 "generalization": "required",
-                "declared_ts": utc_now_z(),
+                # the intake design: declared_ts stamps ONLY when the draft
+                # is confirmed (intake_draft.py --confirm) — a scaffold-
+                # stamped timestamp would let the confirm dialogue be
+                # skipped (obligations that are only taught, never gated,
+                # get skipped under pressure). Until confirm, this file
+                # is the convergence INVALID face's business.
+                "declared_ts": "",
             }, sort_keys=False, allow_unicode=True), encoding="utf-8")
             print(f"kunglao-init: goal-operationalization scaffold written "
-                  f"(DRAFT — fill deliverables/acceptance/not_done, then "
-                  f"goal_operationalization.py --stamp-dispatch before the "
-                  f"first dispatch): {goal_op_path}")
+                  f"(DRAFT, UNSTAMPED — confirm the intake draft "
+                  f"(intake_draft.py --confirm), fill deliverables/"
+                  f"acceptance/not_done, then goal_operationalization.py "
+                  f"--stamp-dispatch before the first dispatch): "
+                  f"{goal_op_path}")
         except OSError as exc:
             print(f"kunglao-init: WARNING goal-operationalization scaffold "
                   f"skipped: {exc}", file=sys.stderr)
+
+    # the bounded-intelligent intake draft — the dialogue's
+    # durable face (classification consequence echo + empty distillation
+    # lists, confirmed: false). WARN-tier: a scaffold failure never
+    # blocks init, but is never silent (the silent-skip pathology line).
+    if not skip_toolchain:
+        try:
+            import intake_draft as _intake_draft
+            _draft_path = _intake_draft.scaffold(ws)
+            print(f"kunglao-init: intake-draft scaffold written "
+                  f"(UNCONFIRMED — draft the distillation during the "
+                  f"intake dialogue, then intake_draft.py --confirm): "
+                  f"{_draft_path}")
+        except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
+            print(f"kunglao-init: ERROR intake-draft scaffold failed: "
+                  f"{exc}", file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"intake-draft scaffold: {exc}")
+            except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks
+                warn("run_intake_draft", f"{type(exc).__name__}: {exc}")
 
     # #15: sample difficulty calibration — 证据面(扫描器输出) -> easy/medium/
     # hard/max 内在难度，落 evidence/difficulty.json + task_spec `difficulty:`

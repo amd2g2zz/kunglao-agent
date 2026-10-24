@@ -96,16 +96,26 @@ def _probe_evidence_present(ws: Path, tool: str) -> bool:
     return _probe_evidence_usable(tool, doc)
 
 
-def _prescan(report, ws: Path) -> dict:
-    """#669 retirement (#460 Part B): per-project_type probe-LIST
-    membership gating is DELETED — every probe tool gets a DIRECT
-    capability fact on every lane/type, one uniform fallback chain:
-    toolchain item when present (PASS→available / WARN→degraded /
-    FAIL→missing), else host tool presence, else probe-evidence
-    presence, else missing. Facts, not rules; tier stays WARN."""
+def _prescan(report, ws: Path, lane: str | None = None) -> dict:
+    """The pre-scan retirement (the earlier flat-must-run ruling),
+    re-scoped per lane: the
+    probe battery is the LANE PROFILE's registry slice — in-lane probes
+    get one uniform DIRECT capability-fact chain (toolchain item when
+    present: PASS→available / WARN→degraded / FAIL→missing, else host
+    tool presence, else probe-evidence presence, else missing); probes
+    OUTSIDE the lane's battery are DROPPED at init, never emitted as
+    WARN stubs (the 51job defect: a web workspace carrying apkid/die
+    entries it can never satisfy). Facts, not rules; tier stays WARN."""
     items = {i.name: i for i in (getattr(report, "items", None) or [])}
     prescan: dict = {}
+    try:
+        import lane_profile
+        battery = lane_profile.prescan_probes(lane)
+    except Exception:  # noqa: BLE001 — registry unreadable: fail-open wide
+        battery = PRESCAN_TOOLS
     for tool in PRESCAN_TOOLS:
+        if tool not in battery:
+            continue  # out-of-lane probe: dropped, not a WARN stub
         item = items.get(tool)
         if item is not None:
             st = _status_name(item)
@@ -190,22 +200,33 @@ def build(report, task_spec, ws) -> dict:
     report duck-types toolchain.ToolchainReport（.items[].name/.status/.fix）。
     """
     ws = Path(ws)
-    return {
+    lane = _obligation_lane(task_spec, ws)
+    promise: dict = {
         "generated_at": _now_z(),
-        "prescan": _prescan(report, ws),
-        "obfuscation_prior": _obfuscation_prior(ws),
-        "java_reachability": _java_reachability(report, task_spec),
-        "prescan_obligation": _prescan_obligation(task_spec, ws),
+        "lane": lane,
+        "prescan": _prescan(report, ws, lane),
     }
+    try:
+        import lane_profile
+        binary_face = lane_profile.has_binary_face(lane)
+    except Exception:  # noqa: BLE001 — registry unreadable: fail-open wide
+        binary_face = True
+    if binary_face:
+        promise["obfuscation_prior"] = _obfuscation_prior(ws)
+        promise["java_reachability"] = _java_reachability(report, task_spec)
+    promise["prescan_obligation"] = _prescan_obligation(task_spec, ws)
+    return promise
 
 
-# Lanes whose analysis subject is a native binary: the T1 pre-scan
-# artifacts (die.json / apkid.json) exist only there. Owner ruling from
-# the 51job live run (web lane): a web target NEVER produces die.json /
-# apkid.json, so gating deep-analysis claims on them locks the workspace
-# forever — the obligation must be lane-aware AND explicit either way
-# (即使 web 车道用不上，也需显式落盘说明).
-NATIVE_OBLIGATION_LANES = frozenset({"malware"})
+# The T1 pre-scan artifacts (die.json / apkid.json) exist only on lanes
+# whose analysis subject is a native binary — the obligation table is the
+# LANE PROFILE registry's slice (lane_profile.obligation_artifacts —
+# the single source). Owner ruling from the 51job live run (web lane): a web
+# target NEVER produces die.json / apkid.json, so gating deep-analysis
+# claims on them locks the workspace forever — the obligation must be
+# lane-aware AND explicit either way (即使 web 车道用不上，也需显式落盘说明).
+# NATIVE_OBLIGATION_LANES keeps its name as the legacy no-registry
+# fallback (the legacy floor).
 
 
 def _obligation_lane(task_spec, ws: Path) -> str:
@@ -213,17 +234,34 @@ def _obligation_lane(task_spec, ws: Path) -> str:
     (the pre-lane contract — lane_spec.DEFAULT_LEGACY)."""
     lane = (task_spec or {}).get("lane")
     if isinstance(lane, str) and lane.strip():
-        return lane.strip()
+        resolved = lane.strip()
+    else:
+        try:
+            import lane_spec
+            declared = lane_spec.declared(ws)
+            resolved = (declared.strip()
+                        if isinstance(declared, str) and declared.strip()
+                        else "malware")
+        except Exception as exc:  # noqa: BLE001 — fail-open to the legacy default
+            print(f"intake-promise: WARN (fail-open) lane probe failed "
+                  f"({type(exc).__name__}: {exc}) — defaulting to the "
+                  f"malware lane obligation", file=sys.stderr)
+            resolved = "malware"
+    # the fail-open fallback must be LOUD — an out-of-registry lane
+    # silently receiving the binary battery is how the lane-blindness
+    # came back through the registry's back door.
     try:
-        import lane_spec
-        declared = lane_spec.declared(ws)
-        if isinstance(declared, str) and declared.strip():
-            return declared.strip()
-    except Exception as exc:  # noqa: BLE001 — fail-open to the legacy default
-        print(f"intake-promise: WARN (fail-open) lane probe failed "
-              f"({type(exc).__name__}: {exc}) — defaulting to the malware "
-              f"lane obligation", file=sys.stderr)
-    return "malware"
+        import lane_profile
+        _prof, exact = lane_profile.profile_for(resolved)
+        if not exact:
+            print(f"intake-promise: WARN lane_profile fallback — lane "
+                  f"{resolved!r} is not in the lane registry; the binary "
+                  f"battery applies (fail-open to the legacy yaml)",
+                  file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — the WARN never blocks the promise
+        print(f"intake-promise: WARN (fail-open) lane_profile probe failed "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+    return resolved
 
 
 def _predict_before_try_on() -> bool:
@@ -255,10 +293,15 @@ def _prescan_obligation(task_spec, ws: Path) -> dict:
             print(f"intake-promise: WARN (fail-open) probe-arm ranking "
                   f"unavailable ({type(exc).__name__}: {exc}) - legacy "
                   f"obligation memo", file=sys.stderr)
-    if lane in NATIVE_OBLIGATION_LANES:
+    try:
+        import lane_profile
+        artifacts = list(lane_profile.obligation_artifacts(lane))
+    except Exception:  # noqa: BLE001 — registry unreadable: legacy floor
+        artifacts = list(OBLIGATION) if lane in NATIVE_OBLIGATION_LANES else []
+    if artifacts:
         return {
             "lane": lane,
-            "required": list(OBLIGATION),
+            "required": artifacts,
             "note": "first claim must be the T1 pre-scan (#669) - "
                     "these artifacts gate deep-analysis claims",
         }

@@ -108,6 +108,31 @@ FAMILIES: dict[str, tuple[str, ...]] = {
     "surface_reduction": ("resources_stripped",),
 }
 
+# Per-lane factor maps: difficulty is lane-shaped, and a web
+# task under the binary map is a dead all-zero "easy" forever (the 51job
+# live evidence). The web map names the web resistance axes (captcha /
+# anti-bot dynamics, auth/session complexity, pagination integrity,
+# rate-limit pressure); its WEIGHTS are NOT locked — until a validated
+# web corpus exists (the locked-weights experiment
+# discipline), a web-lane factor
+# report scores as unknown, never as an easy/hard tier (honest-null:
+# absent or unvalidated extractors are never scored as difficulty).
+WEB_FAMILIES: dict[str, tuple[str, ...]] = {
+    "captcha_anti_bot": ("captcha_signal",),
+    "auth_session": ("auth_complexity",),
+    "pagination_integrity": ("pagination_gaps",),
+    "rate_limit": ("rate_limit_pressure",),
+}
+
+# factor_set key -> the family map; selection is registry-sourced
+# (lane_profile.factor_set) at the workspace face, unknown lane -> binary
+# (today's behavior — fail-open).
+FACTOR_SETS: dict[str, dict[str, tuple[str, ...]]] = {
+    "binary": FAMILIES,
+    "web": WEB_FAMILIES,
+}
+DEFAULT_FACTOR_SET = "binary"
+
 
 class CalibrationMountError(Exception):
     """task_spec.yaml exists but is unparseable / not a mapping — fail-closed."""
@@ -250,13 +275,18 @@ def features_from_evidence(evidence: dict) -> dict:
 def calibrate(features: dict) -> dict:
     """features_from_evidence() output -> stable machine-readable verdict.
 
-    Output schema (stable for #16): schema/tier/score/dominant_factor/factors/
-    families/coverage/notes. Pure + deterministic — no timestamps here (the
-    CLI face adds generated_at at the file boundary only).
+    Output schema (stable for the consumer): schema/tier/score/dominant_factor/
+    factor_set/factors/families/coverage/notes. Pure + deterministic — no
+    timestamps here (the CLI face adds generated_at at the file boundary
+    only).
     """
     factors_in = features.get("factors") or {}
     coverage = features.get("coverage") or {"die": False, "apkid": False}
     gaps = features.get("gaps") or []
+    factor_set = str(features.get("factor_set") or DEFAULT_FACTOR_SET)
+    if factor_set not in FACTOR_SETS:
+        factor_set = DEFAULT_FACTOR_SET  # unknown set: today's binary map
+    family_map = FACTOR_SETS[factor_set]
 
     factors_out: dict[str, dict] = {}
     score = 0.0
@@ -275,9 +305,10 @@ def calibrate(features: dict) -> dict:
         return float(factors_in.get(name, {}).get("score", 0.0))
 
     families_out = {}
-    for family in sorted(FAMILIES):
-        active = any(_fscore(member) >= 0.5 for member in FAMILIES[family])
-        top = max((_fscore(m) for m in FAMILIES[family]), default=0.0)
+    for family in sorted(family_map):
+        members = family_map[family]
+        active = any(_fscore(member) >= 0.5 for member in members)
+        top = max((_fscore(m) for m in members), default=0.0)
         families_out[family] = {"active": active, "score": round(top, 4)}
     active_families = sum(1 for f in families_out.values() if f["active"])
 
@@ -286,7 +317,19 @@ def calibrate(features: dict) -> dict:
     multi_front = packer >= 0.5 and (_fscore("anti_analysis") >= 0.5
                                      or _fscore("obfuscator_count") >= 0.5)
 
-    if not factors_out:
+    if not factors_out and factor_set != "binary":
+        # the design's panel amendment 2: a non-binary lane whose extractors
+        # reported NOTHING calibrates as UNKNOWN — never easy (the dead
+        # all-zero "easy" web task is exactly the defect this closes).
+        tier = "unknown"
+        notes.append(f"factor_set={factor_set} extractors reported nothing "
+                     "— tier unknown (honest-null: absent extractors are "
+                     "never scored as difficulty)")
+        dominant = "evidence_gap"
+        factors_out["evidence_gap"] = {
+            "detail": "; ".join(notes), "score": 0.0, "weight": 0.0,
+            "contribution": 0.0, "source": "none"}
+    elif not factors_out:
         # matrix4c parity: the absence-gap rule's dark side — an
         # UNCHARACTERIZED sample defaulted to easy. Difficulty is an
         # open-loop INPUT: when the entry is a native binary but
@@ -325,7 +368,15 @@ def calibrate(features: dict) -> dict:
             tier = "easy"
         dominant = max(sorted(factors_out),
                        key=lambda k: factors_out[k]["contribution"])
-        if not (coverage.get("die") and coverage.get("apkid")):
+        if factor_set != "binary":
+            # no validated weight table exists for this factor set yet (the
+            # locked-weights experiment discipline) — refusing to score
+            # beats an easy-by-default fabrication under the binary weights
+            tier = "unknown"
+            notes.append(f"factor_set={factor_set} has no validated weight "
+                         "table — refusing to score (tier unknown; lock the "
+                         "weights by experiment first)")
+        elif not (coverage.get("die") and coverage.get("apkid")):
             missing = [s for s in EVIDENCE_FILES if not coverage.get(s)]
             notes.append(f"partial evidence — scored from present sources only, "
                          f"missing: {', '.join(missing)} (ceiling capped by "
@@ -335,6 +386,7 @@ def calibrate(features: dict) -> dict:
             "tier": tier,
             "score": score,
             "dominant_factor": dominant,
+            "factor_set": factor_set,
             "factors": factors_out,
             "families": families_out,
             "coverage": {"die": bool(coverage.get("die")),
@@ -374,7 +426,33 @@ def calibrate_workspace(ws: Path | str) -> dict:
     # or an APK central directory listing lib/*.so) with NO scanner
     # output calibrates as unknown, never easy
     features["native_entry"] = _entry_looks_native(Path(ws))
+    features["factor_set"] = _workspace_factor_set(Path(ws))
     return calibrate(features)
+
+
+def _workspace_factor_set(ws: Path) -> str:
+    """The lane profile's factor-set key for the workspace's declared
+    lane; undeclared keeps the malware default, unknown fails open to
+    binary (today's map) — the LOUD WARN belongs to the caller that
+    knows the intake context (init), this face stays pure-read."""
+    lane = None
+    try:
+        spec_path = Path(ws) / "task_spec.yaml"
+        if spec_path.is_file():
+            spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+            if isinstance(spec, dict):
+                lane = spec.get("lane")
+        if not (isinstance(lane, str) and lane.strip()):
+            import lane_spec
+            declared = lane_spec.declared(Path(ws))
+            lane = declared if isinstance(declared, str) else None
+    except Exception:  # noqa: BLE001 — unreadable contract: legacy default
+        lane = None
+    try:
+        import lane_profile
+        return lane_profile.factor_set(lane)
+    except Exception:  # noqa: BLE001 — registry unreadable: binary map
+        return DEFAULT_FACTOR_SET
 
 
 def _entry_looks_native(ws: Path) -> bool:
