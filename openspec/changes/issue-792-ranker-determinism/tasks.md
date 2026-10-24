@@ -13,8 +13,11 @@
    unlinked demotion band, partition sort, exploration slot (default
    off), input-digest fingerprint (posterior_hash, rng_base null),
    seed-face retirement
-4. [x] GREEN: `scripts/rlvr/strategy_store.py` —
-   DEVIATION_PROPENSITY_FLOOR 0.1 on out-of-support declared arms
+4. [x] R2 resolution at merge: the #794 sampled-binds card (owner
+   merged mid-flight) supersedes the drafted store floor — strategy_store
+   stays dev-byte-identical; the R2 pin moves to the recorded-deviation
+   face (in-support arm, propensity > 0) and the honest 0.0 out-of-support
+   face #794's coherence gate consumes
 5. [x] GREEN: callers — kunglao-decide, worker_budget_core,
    replay_ruler drop the seed; acceptance_check pins the new feeds key
    + honest zero bound; event_taxonomy rank_feeds description

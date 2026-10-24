@@ -336,23 +336,54 @@ def _deviation_ws(tmp_path):
     return ws
 
 
-def test_deviation_to_unsupported_arm_carries_positive_propensity(tmp_path):
-    """R2 acceptance pin: a recorded deviation to arm A must carry
-    propensity_A > 0. Production (android 2026-10-21): 6/16 deviation
-    rows recorded 0.0 — ITT broken at the root."""
+def test_out_of_support_declaration_is_never_a_recorded_deviation(tmp_path):
+    """R2 acceptance pin, under the MERGED #794 sampled-binds semantics:
+    a declared family OUTSIDE the sampler's support keeps the honest 0.0
+    store face, and #794's gate turns exactly that incoherence into a
+    REJECT before any usage row or sample_deviation event exists — so a
+    RECORDED deviation to arm A structurally carries propensity_A > 0
+    (the production 6/16 propensity-0.0 deviation rows can never
+    re-emerge). The gate face is pinned by
+    tests/test_sampled_binds_794.py; this pins the store face the gate
+    consumes."""
     from rlvr import strategy_store as ss
     ws = _deviation_ws(tmp_path)
     view = ss.reconcile_declaration(ws, FAM_B)
     assert view["deviates"] is True
     assert view["sampled_family"] in {FAM_A, FAM_C}
+    assert view["propensity"] == 0.0, (
+        "the store stays honest: an out-of-support arm has draw "
+        "probability 0 — #794's coherence gate consumes this face")
+
+
+def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
+        tmp_path):
+    """R2 acceptance pin (the recorded face): a deviation to arm A that
+    the current policy actually supports (declared in the candidate set,
+    != the draw) carries propensity_A > 0 — the only deviation shape
+    that reaches the usage row and the sample_deviation event under the
+    sampled-binds gate."""
+    from rlvr import strategy_store as ss
+    from rlvr import state as rlvr_state
+    ws = _deviation_ws(tmp_path)
+    receipt = ss.PosteriorStrategyStore(ws).method_sample(
+        rlvr_state.signature_hash(rlvr_state.snapshot(ws)))
+    sampled = str(receipt["family"])
+    weights = {str(f): float((c or {}).get("weight") or 0.0)
+               for f, c in (receipt.get("candidates") or {}).items()}
+    total = sum(weights.values())
+    other = next(f for f in (FAM_A, FAM_C) if f != sampled)
+    view = ss.reconcile_declaration(ws, other)
+    assert view["deviates"] is True
     assert view["propensity"] is not None and view["propensity"] > 0.0, (
-        f"deviation recorded with propensity {view['propensity']!r}")
+        f"recorded deviation with propensity {view['propensity']!r}")
+    assert view["propensity"] == pytest.approx(
+        weights[other] / total, abs=1e-6)
 
 
 def test_in_support_declaration_propensity_unchanged(tmp_path):
     """The healthy face is byte-identical: a declared family inside the
-    sampler's support keeps its exact share (the floor is additive, it
-    never touches an in-support arm)."""
+    sampler's support keeps its exact share."""
     from rlvr import strategy_store as ss
     from rlvr import state as rlvr_state
     ws = _deviation_ws(tmp_path)
@@ -412,20 +443,28 @@ def test_fixture_rank_face_is_byte_identical_across_rounds(tmp_path):
 
 
 def test_fixture_deviation_face_replays_propensity_positive(tmp_path):
-    """The fixture's deviation face (declared family outside the history
-    candidate set — the production 0.0 rows) replays through the fixed
-    reconciliation with propensity > 0."""
+    """The fixture's deviation face replayed under the merged
+    sampled-binds semantics: the declared family rides the history
+    support (in-support arm, != the draw) and the recorded deviation
+    carries propensity > 0 — the production 0.0 shape (the fixture's
+    observed rows) is the REJECT face #794 pins."""
     fx = _rank_fixture()
     material = fx["shape"]["deviation_face_material"]
     from rlvr import q_cells
     from rlvr import strategy_store as ss
+    from rlvr import state as rlvr_state
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     for fam in material["history_families"]:
         q_cells.record_dispatch_observation(
             ws, "envelope", envelope_meta={"method_family": fam},
             claim="C-9")
-    view = ss.reconcile_declaration(ws, material["declared_absent"])
+    receipt = ss.PosteriorStrategyStore(ws).method_sample(
+        rlvr_state.signature_hash(rlvr_state.snapshot(ws)))
+    sampled = str(receipt["family"])
+    declared = next(f for f in material["history_families"]
+                    if f != sampled)
+    view = ss.reconcile_declaration(ws, declared)
     assert view["deviates"] is True
     assert view["propensity"] is not None and view["propensity"] > 0.0
     assert fx["expectations"].get("deviation-propensity-positive") == "PASS"

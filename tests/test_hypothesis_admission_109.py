@@ -289,6 +289,16 @@ class TestAdmissionSatisfied:
             _sys.path.insert(0, scripts)
         import hypothesis_bridge as hb
         import priority_ratio as pr
+        # #792: the rank is deterministic, so the fixture must make an ARM
+        # rank first honestly — the scaffold claim C-1 carries a higher
+        # evidence tier (tier 2), the minted arms stay tier 1, and the
+        # unlinked-band default (tier, then claim_id) puts an arm on top.
+        reg_doc0 = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        for c0 in reg_doc0.get("claims") or []:
+            if c0.get("id") == "C-1":
+                c0["evidence_tier_attempted"] = 1
+        _write_yaml(ws / "claim-register.yaml", reg_doc0)
         r = hb.mint_family_arms(ws, "H-001",
                                 ["AES-CBC", "custom-rolling-mac",
                                  "truncated-digest"],
@@ -296,8 +306,8 @@ class TestAdmissionSatisfied:
         assert r["refused"] is None, r
         assert hb.check_bridge_lint(ws) == [], "lint-clean by construction"
         # dispatch the deterministically top-ranked claim (the arms ARE
-        # TS-samplable — the production flow dispatches rank one); the
-        # seeded rng makes this stable.
+        # rank-eligible — the production flow dispatches rank one; #792
+        # makes the order the declared unlinked-band default).
         reg_doc = yaml.safe_load(
             (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
         claims = reg_doc.get("claims") or []

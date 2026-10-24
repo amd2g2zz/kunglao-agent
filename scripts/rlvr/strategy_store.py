@@ -785,20 +785,6 @@ def _row_outcome(row: dict) -> float:
     return max(0.0, min(1.0, reward))
 
 
-# #792 R2 (production, android 2026-10-21 archive): 6/16 sample_deviation
-# rows recorded propensity=0.0 while a deviation occurred — the executed
-# arm's recorded draw probability was ZERO, so the inverse-propensity
-# weight (1/p) that every ITT/OPE consumer divides by is undefined: the
-# event could never have been drawn, yet it happened. The behavior policy
-# at dispatch time is the MIXTURE "sampler draw + recorded-decision
-# override" (the #691 amendment: a deviation is a decision, never a
-# reject); the override channel's declared mass is this floor. An
-# out-of-support declared arm is recorded at floor/(total+floor) > 0 —
-# the deviation event always carries a defined propensity. Auditable,
-# tunable, never applied to an in-support arm (their shares are exact).
-DEVIATION_PROPENSITY_FLOOR = 0.1
-
-
 def reconcile_declaration(ws, declared: str | None) -> dict:
     """#691 — the dispatch-gate reconciliation view for ONE declared
     method family: the gate's OWN sampler draw (the same face
@@ -812,12 +798,8 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
     failure (ONE rate-limited warn carrying the error class only).
     Fail-open by design: telemetry never turns an ALLOW into anything
     else. ``propensity`` is the sampler's draw probability of the
-    DECLARED family; when the declared family is OUTSIDE the candidate
-    set (the draw could never have chosen it) the recorded propensity is
-    the override channel's mass, DEVIATION_PROPENSITY_FLOOR normalized
-    against the candidate total — never 0.0: a recorded deviation must
-    carry propensity > 0 or every ITT/OPE consumer divides by zero
-    (#792 R2; production 6/16)."""
+    DECLARED family (0.0 when it is not a candidate at all — the draw
+    could never have chosen it; the honest number, not a gap)."""
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False}
     if not ws or not declared:
@@ -837,17 +819,8 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
             except (TypeError, ValueError):
                 weights[str(fam)] = 0.0
         total = sum(weights.values())
-        if total <= 0.0:
-            propensity = None   # no usable mass — the honest gap
-        elif str(declared) in weights:
-            propensity = round(weights[str(declared)] / total, 6)
-        else:
-            # #792 R2 pin: the executed arm rode the override channel —
-            # its recorded propensity is that channel's declared mass,
-            # strictly positive (0.0 broke ITT on 6/16 production rows).
-            propensity = round(
-                DEVIATION_PROPENSITY_FLOOR
-                / (total + DEVIATION_PROPENSITY_FLOOR), 6)
+        propensity = (round(weights.get(str(declared), 0.0) / total, 6)
+                      if total > 0.0 else None)
         return {
             "sampled_family": sampled,
             "propensity": propensity,

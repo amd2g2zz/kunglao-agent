@@ -81,25 +81,34 @@ column.
 
 ### Requirement: a recorded deviation carries a positive propensity
 
-The dispatch-gate reconciliation (`strategy_store.reconcile_declaration`)
-SHALL record propensity > 0 for every deviating declaration: a declared
-family inside the sampler's candidate set keeps its exact share; a
-declared family outside the candidate set SHALL be recorded at
-`DEVIATION_PROPENSITY_FLOOR / (total + DEVIATION_PROPENSITY_FLOOR)`
-(the recorded-decision override channel's declared mass). The 0.0
-recording (production: 6/16 deviation rows) SHALL NOT reappear.
+A RECORDED deviation (one that reaches the usage row or the
+`sample_deviation` event) SHALL declare a family inside the sampler's
+candidate support and SHALL carry propensity > 0 — its exact candidate
+weight share. A declared family outside the candidate set SHALL keep
+the honest store face (draw probability exactly 0.0) and SHALL never
+become a recorded deviation: the #794 sampled-binds gate rejects that
+shape (reasoned or silent) before any row is written. The production
+6/16 propensity-0.0 deviation rows SHALL be structurally impossible to
+re-emit.
 
-#### Scenario: an out-of-support declaration replays with positive propensity
+#### Scenario: an out-of-support declaration never becomes a recorded deviation
 
 - **WHEN** the workspace history prior holds families A and C, and a
   dispatch declares registered family B (no history mass) that the
   sampler did not propose
-- **THEN** the reconciliation view reports `deviates: true` with
-  `propensity > 0`, and the `sample_deviation` event carries the same
-  positive propensity
+- **THEN** the reconciliation view reports `deviates: true` with the
+  honest `propensity == 0.0`, and the #794 sampled-binds gate REJECTS
+  the dispatch — no usage row, no `sample_deviation` event
 
-#### Scenario: an in-support declaration keeps its exact share
+#### Scenario: a recorded in-support deviation replays with positive propensity
 
-- **WHEN** the declared family is inside the sampler's candidate set
+- **WHEN** the sampler's draw is family A and the dispatch declares the
+  in-support family C (both hold history mass) with a recorded override
+- **THEN** the recorded propensity equals C's candidate weight share
+  and is strictly positive
+
+#### Scenario: an in-support declaration that matches the draw keeps its exact share
+
+- **WHEN** the declared family is the sampler's draw
 - **THEN** the recorded propensity equals its candidate weight share
-  byte-identically (the floor never touches in-support arms)
+  byte-identically

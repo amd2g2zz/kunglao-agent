@@ -42,19 +42,24 @@ every ITT/OPE consumer dividing by 1/p is undefined.
    enabled, every Nth round promotes the best unlinked/lowest-attempts
    claim and labels it `exploration_arm` in feeds; value scores are
    untouched (never conflated with the value column).
-5. **R2 — deviation propensity floor** —
-   `strategy_store.reconcile_declaration` records an out-of-support
-   declared arm at `DEVIATION_PROPENSITY_FLOOR / (total + floor)`
-   (floor 0.1 = the recorded-decision override channel's declared mass)
-   instead of 0.0. In-support arms keep their exact shares
-   byte-identically. Every `sample_deviation` event now carries
-   propensity > 0.
+5. **R2 — deviation propensity coherence (merged with #794)** — the
+   production 6/16 propensity-0.0 deviation rows are closed structurally
+   by the sampled-binds card the owner merged mid-flight: an
+   out-of-support declaration is a REJECT (never a recorded deviation),
+   and a RECORDED deviation requires an `agent-reasoning:` line AND a
+   propensity > 0 arm. This card keeps the store face honest (an
+   out-of-support arm's draw probability stays exactly 0.0 — the number
+   #794's coherence gate consumes) and pins the RECORDED face: every
+   deviation that reaches the usage row / `sample_deviation` event
+   declares an in-support arm and carries propensity > 0.
 
 ## Impact
 
 - Affected: `scripts/priority_ratio.py` (value face, partition sort,
   exploration slot, fingerprint, seed-face retirement),
-  `scripts/rlvr/strategy_store.py` (propensity floor),
+  `scripts/rlvr/strategy_store.py` (untouched at merge — the #794
+  sampled-binds gate supersedes the floor approach this card first
+  drafted; the store's honest 0.0 out-of-support face stays),
   `scripts/kunglao-decide.py` / `hooks/worker_budget_core.py` /
   `scripts/replay_ruler.py` (callers drop the seed), 
   `scripts/acceptance_check.py` (feeds key + honest zero bound),
