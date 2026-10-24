@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: e2eae4a4ec7995866b5bc48a8fcbeb03e6af3a9b8994602998d0469c877a47cf
+    sha256: 2d32f1c29908054cfab98446f1778b4f83a196133556e9f169054beb25ed3170
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -383,7 +383,7 @@ files:
   - src: scripts/difficulty_calibration.py
     dest: .claude/scripts/difficulty_calibration.py
     kind: scaffold
-    sha256: d92433cbdda7a11bb35749319bf1e9819cc6d670a098b45ebc361c48286a1468
+    sha256: eff3436e3ba7b753eb3b85f640955dd33211282f1729e6ad3ef20868884a703f
   - src: scripts/difficulty_thresholds.py
     dest: .claude/scripts/difficulty_thresholds.py
     kind: scaffold
@@ -431,7 +431,7 @@ files:
   - src: scripts/env_state_probe.py
     dest: .claude/scripts/env_state_probe.py
     kind: scaffold
-    sha256: 21374220034d954ff85e66df349dc32f43348ae46e6bc252087c2b9a6143363b
+    sha256: 938f064205a4bad8ae6adb9d5687f2fd0deb76fe16d06a12fdd348b7ade687f9
   - src: scripts/error_response.py
     dest: .claude/scripts/error_response.py
     kind: scaffold
@@ -527,7 +527,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 3e0b004108eaf6c51822824df5c464998e3bc65f2cf813f30b7058bfe0f0e9af
+    sha256: 9bcad7edf4eb9a9354015bb6d675be50e0a8fe069d0e065502cc97e6c318fcab
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -684,10 +684,14 @@ files:
     dest: .claude/scripts/intake_battery.py
     kind: scaffold
     sha256: 5b53257b5e19101bc561b320b633bcb9858d1cb797ac6f2d828d768105329167
+  - src: scripts/intake_draft.py
+    dest: .claude/scripts/intake_draft.py
+    kind: scaffold
+    sha256: 548305f0ba5c45b3fb4e8cad7cc60aff7c0f78d15097a7615d848c13eaf57e36
   - src: scripts/intake_promise.py
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
-    sha256: c2c18f80e8321d950662dfdb1db97643afdef000ed52794ed132fdbf7f792660
+    sha256: 883e849cfc1564bbbacc1482da6bfbb9867eae778461d3c3913060409db12081
   - src: scripts/intelligent_scheduling.py
     dest: .claude/scripts/intelligent_scheduling.py
     kind: scaffold
@@ -715,7 +719,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 32f1100d780be0dfcc1150be15d21a974db4d9334c086d932225e08666cb620c
+    sha256: dc810e1929f713243269118d244b943f172a791e3e76653834c877146e3b2d18
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -772,6 +776,10 @@ files:
     dest: .claude/scripts/kunglao_wait.py
     kind: scaffold
     sha256: a638c510ca6719acecefce9efd3263aecc6a7b3d4668c32ebe46fa7a14ebe359
+  - src: scripts/lane_profile.py
+    dest: .claude/scripts/lane_profile.py
+    kind: scaffold
+    sha256: 038f958443af8d57a20d3256e755699037ac775e89a039810c47d0845503cfcd
   - src: scripts/lane_spec.py
     dest: .claude/scripts/lane_spec.py
     kind: scaffold
@@ -1483,11 +1491,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: e6306a662f9089e29cc5124ec7e718073bd52d60791d74b78c466dbca5f23e1e
+    sha256: 286041c9200d50f4974558013f51ffc3d98318bb15c3815f7b9802cf25c17f6c
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f8266d0bd40e3d99abee3c9ccecc6e705a62aa0c4718299d4c4f7ab6becdf184
+    sha256: 4b2789cee679d35d51629543c425e2773d249ef8f88f06d01825a3a710b12db0
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2075,7 +2083,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: fb6a30cccd5337ffb93c91cfd503d7567e36f2666dea326d0d72beb082e158df
+    sha256: 31308e94c1b874042091a4458f666b8e04963267019c39b6aac9e3a37dca89f4
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

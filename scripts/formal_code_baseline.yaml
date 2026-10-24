@@ -150,7 +150,7 @@ files:
   scripts/install_reference.py: 4
   scripts/instrument_menu.py: 15
   scripts/intake_battery.py: 6
-  scripts/intake_promise.py: 18
+  scripts/intake_promise.py: 15
   scripts/jadx_exec.py: 21
   scripts/kunglao-decide.py: 11
   scripts/kunglao-init.py: 302
