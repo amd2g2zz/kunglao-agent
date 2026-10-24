@@ -253,7 +253,7 @@ files:
   scripts/rlvr/step_credit.py: 5
   scripts/rlvr/step_grain.py: 19
   scripts/rlvr/step_ledger.py: 15
-  scripts/rlvr/strategy_store.py: 37
+  scripts/rlvr/strategy_store.py: 32
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14

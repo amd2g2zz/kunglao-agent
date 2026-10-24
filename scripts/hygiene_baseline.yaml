@@ -9,7 +9,7 @@ files:
   scripts/_hooks_path.py:
     r1: 2
   scripts/acceptance_check.py:
-    r1: 7
+    r1: 8
   scripts/active_intervention.py:
     r1: 2
   scripts/adversarial_loop.py:
@@ -249,7 +249,7 @@ files:
   scripts/kunglao.py:
     r1: 20
   scripts/kunglao_eval.py:
-    r1: 13
+    r1: 14
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
@@ -329,7 +329,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 60
+    r1: 69
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -547,7 +547,7 @@ files:
   tests/test_act_budget_523.py:
     r1: 1
   tests/test_action_space_12.py:
-    r1: 1
+    r1: 3
   tests/test_action_space_539.py:
     r1: 1
   tests/test_adversarial_gate_909.py:
@@ -559,7 +559,7 @@ files:
   tests/test_agents_lint.py:
     r1: 3
   tests/test_algorithm_event_log_157.py:
-    r1: 3
+    r1: 6
   tests/test_android_lighting_54.py:
     r1: 7
   tests/test_anomaly_detector.py:
@@ -626,7 +626,7 @@ files:
   tests/test_bridge_campaign_779.py:
     r1: 5
   tests/test_budget_channel_862.py:
-    r1: 5
+    r1: 7
   tests/test_builtin_skills_flag_25.py:
     r1: 2
   tests/test_c_normalize.py:
@@ -694,7 +694,7 @@ files:
   tests/test_cockpit_persist_873.py:
     r1: 1
   tests/test_cognition_759.py:
-    r1: 8
+    r1: 9
   tests/test_coldstart_digest_528.py:
     r1: 5
   tests/test_compat_removal_863d.py:
@@ -743,7 +743,7 @@ files:
   tests/test_credit_amendment_731.py:
     r1: 1
   tests/test_credit_settle_634.py:
-    r1: 3
+    r1: 4
   tests/test_crypto_algorithms.py:
     r1: 3
   tests/test_crypto_tool.py:
@@ -893,7 +893,7 @@ files:
   tests/test_envcheck_modern_757.py:
     r1: 18
   tests/test_epistemic_pricing_250.py:
-    r1: 4
+    r1: 6
   tests/test_error_response.py:
     r1: 3
   tests/test_eval_chain_370.py:
@@ -1024,7 +1024,7 @@ files:
   tests/test_goal_operationalization_128.py:
     r1: 1
   tests/test_governance_binding_867.py:
-    r1: 3
+    r1: 4
   tests/test_governance_docs_784.py:
     r1: 2
     r2: 1
@@ -1064,7 +1064,7 @@ files:
   tests/test_hygiene_rc_record_only.py:
     r1: 2
   tests/test_hypothesis_admission_109.py:
-    r1: 12
+    r1: 14
   tests/test_hypothesis_contradiction_gate.py:
     r1: 2
   tests/test_hypothesis_loop_integration_111.py:
@@ -1136,7 +1136,7 @@ files:
   tests/test_kunglao_core_loop.py:
     r1: 6
   tests/test_kunglao_decide.py:
-    r1: 8
+    r1: 9
   tests/test_kunglao_init.py:
     r1: 28
   tests/test_kunglao_log.py:
@@ -1155,7 +1155,7 @@ files:
   tests/test_kunglao_wait_902.py:
     r1: 6
   tests/test_l1_planner_718.py:
-    r1: 3
+    r1: 4
   tests/test_lane_routing_208.py:
     r1: 2
   tests/test_late_arm_oracle_730.py:
@@ -1329,13 +1329,13 @@ files:
   tests/test_premature_termination_detect.py:
     r1: 3
   tests/test_priority_data_hookup_9.py:
-    r1: 7
+    r1: 10
   tests/test_priority_inputs_594_596.py:
     r1: 4
   tests/test_priority_ratio.py:
-    r1: 7
+    r1: 16
   tests/test_priority_value_terms.py:
-    r1: 1
+    r1: 3
   tests/test_probe_liveness_303.py:
     r1: 1
   tests/test_probe_tiers_474.py:
@@ -1361,6 +1361,8 @@ files:
     r1: 5
   tests/test_query_formulation_487.py:
     r1: 5
+  tests/test_ranker_determinism_792.py:
+    r1: 9
   tests/test_rc1_checkpoints_hardening_601.py:
     r1: 6
   tests/test_recall_inject.py:
@@ -1412,7 +1414,7 @@ files:
   tests/test_replay_gate.py:
     r1: 3
   tests/test_replay_ruler_294.py:
-    r1: 10
+    r1: 13
   tests/test_report_consistency_check.py:
     r1: 3
   tests/test_reproduction_oracle_248.py:
@@ -1444,7 +1446,7 @@ files:
   tests/test_rho_verifier_823p2.py:
     r1: 1
   tests/test_rl_output_path_691.py:
-    r1: 3
+    r1: 4
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
@@ -1500,7 +1502,7 @@ files:
   tests/test_scheduler_schema_679.py:
     r1: 1
   tests/test_scorer_authority.py:
-    r1: 6
+    r1: 10
   tests/test_script_discipline.py:
     r1: 5
   tests/test_script_harvest_engine_477.py:
@@ -1633,6 +1635,8 @@ files:
     r1: 1
   tests/test_think_bets_711.py:
     r1: 2
+  tests/test_thompson_tui_face_218.py:
+    r1: 1
   tests/test_tick_rc_617.py:
     r1: 2
   tests/test_tier_contract_680.py:
@@ -1720,7 +1724,7 @@ files:
     r1: 3
     r2: 1
   tests/test_value_rebuild_107.py:
-    r1: 7
+    r1: 9
     r2: 1
   tests/test_value_reconciliation_133.py:
     r1: 5
