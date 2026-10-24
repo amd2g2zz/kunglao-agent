@@ -451,4 +451,7 @@ class TestEmissionRegistration:
     def test_sorted_position_between_priority_and_proven(self) -> None:
         i = et.EMIT_ACTIONS.index("probe_infra_dead")
         assert et.EMIT_ACTIONS[i - 1] == "priority_deviation"
-        assert et.EMIT_ACTIONS[i + 1] == "proven_waiver_used"
+        # the #760 pricing words (probe_price, probe_price_fail_open)
+        # now sort between probe_infra_dead and proven_waiver_used —
+        # the global sorted/unique pin above still guards the ordering
+        assert et.EMIT_ACTIONS[i + 1] == "probe_price"
