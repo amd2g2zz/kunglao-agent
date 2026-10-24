@@ -179,6 +179,8 @@ EMIT_ACTIONS = [
     "candidate_landed",   # online distillation: a distilled candidate landed in the run-local tool shelf (tools-local, with provenance manifest)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_gate_error",  # owner ruling 2026-09-28: _capability_guard gate ERROR -> durable fail-closed REJECT
+    "capability_probe_reject",  # #812: dispatch-gate capability probe FAIL — the family's required fact is down, dispatch refused with an alternative arm
+    "capability_probe_unverified",  # #812: a REQUIRED family fact is skip/unprobed — dispatch proceeds, the zero-root-check visibility face (the incident: logs showed none)
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face

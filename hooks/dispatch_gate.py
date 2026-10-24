@@ -1602,6 +1602,91 @@ def _emit_probe_price(ws: Path, claim_id: str,
         _emit_trace(ws, "probe_price_fail_open", claim_id,
                     f"reason={type(exc).__name__}: {exc}",
                     trace_id=trace_id)
+def _capability_probe_gate(ws: Path, claim_id: str, prompt_text: str,
+                           trace_id: str | None = None,
+                           verifier_remediation: bool = False) -> int | None:
+    """#812 dispatch-gate capability probes: the dispatch's METHOD family
+    (matched from the prompt's android keywords) consults its REQUIRED
+    capability facts AT the gate. A probe FAIL refuses the dispatch
+    (execution_surface class — a dead tool/device surface) with the
+    family's alternative arm; a SKIP/absent fact never fabricates a
+    refusal (the conservative rule — and the incident's anti-pattern:
+    refusing on a channel-absent skip is exactly how "host frida missing"
+    became "device has no root").
+
+    Facts, not commands: the gate consults the TTL fact cache
+    (capability_probe.facts — fresh env-state.json snapshot first, then
+    runs/.capability-probe-cache.json, one on-demand probe when both are
+    stale) so the #475 narrow+low-IO dispatch shape survives while the
+    facts are TTL-fresh. Verifier-remediation dispatches pass (the D2
+    honest path); any probe-infrastructure outage fails open (WARN +
+    capability_probe_fail_open trace) — a broken cache must not brick
+    dispatch."""
+    if verifier_remediation:
+        return None
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            import capability_probe as cp
+            from init_state import read_project_type
+        ptype = read_project_type(ws)
+        if ptype is None:
+            return None  # undeclared lane — the android vocabulary sleeps
+        matched = cp.match_required(prompt_text or "", ptype)
+        if not matched:
+            return None
+        required = sorted({cap for _fam, caps in matched for cap in caps})
+        try:
+            facts = cp.facts(ws, required)
+        except Exception as exc:  # noqa: BLE001 — outage tiering: fail-open
+            _emit_trace(ws, "capability_probe_fail_open", claim_id,
+                        f"reason=facts_read_failed; "
+                        f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+            return None
+        failed = {name: entry for name, entry in facts.items()
+                  if str(entry.get("status")) == "fail"}
+        if not failed:
+            unverified = sorted(name for name, entry in facts.items()
+                                if str(entry.get("status")) == "skip")
+            if unverified:
+                # the incident's visibility face: a REQUIRED fact skipped
+                # means the root/tool check did NOT execute — say so in
+                # the machine log instead of silence
+                _emit_trace(ws, "capability_probe_unverified", claim_id,
+                            f"required={required}; skip={unverified} "
+                            f"(check did not execute — no device verdict "
+                            f"exists)", trace_id=trace_id)
+            return None
+        failed_words = ", ".join(
+            f"{name} FAIL ({(entry.get('detail') or '')[:60]})"
+            for name, entry in sorted(failed.items()))
+        alternatives = "; ".join(
+            f"{family} -> {cp.alternative_for(family)}"
+            for family, caps in matched
+            if any(cap in failed for cap in caps) and cp.alternative_for(family))
+        _emit_trace(ws, "capability_probe_reject", claim_id,
+                    f"failed={sorted(failed)}; required={required}",
+                    exit_code=2, trace_id=trace_id)
+        return _reject_with_guidance(
+            "capability_probe",
+            f"{claim_id} dispatches into a dead capability lane: "
+            f"{failed_words}. These are SEPARATE facts — a host-side face "
+            f"failing says NOTHING about the device-side face (and vice "
+            f"versa); no device verdict exists from this evidence.",
+            f"pivot to the proven alternative arm — {alternatives} — or "
+            f"repair the surface (install/restore the missing capability, "
+            f"the init gate's AGENT-DO ladder owns the repair commands) "
+            f"and re-dispatch. Facts surface: runs/env-state.json + "
+            f"runs/.capability-probe-cache.json (TTL "
+            f"{cp.PROBE_TTL_SECONDS}s).",
+            issue="812", ws=ws, gate_class="execution_surface")
+    except Exception as exc:  # noqa: BLE001 — the gate must never brick dispatch
+        try:
+            from kunglao_log import warn
+            warn("capability_probe_gate", f"{type(exc).__name__}: {exc}")
+        except Exception:  # noqa: BLE001 — logging failure keeps the fallthrough
+            print(f"dispatch_gate: capability-probe gate error ({exc!r})",
+                  file=sys.stderr, flush=True)
+        return None
 
 
 def _supply_admission(ws: Path, claim_id: str, payload: dict,
@@ -2152,6 +2237,17 @@ def _main_inner() -> int:
         rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
         if rc is not None:
             return rc
+
+    # #812 capability-probe gate — the environment's SEPARATE facts are
+    # consulted BEFORE the paperwork teeth: a dead-lane dispatch (host
+    # frida gone, device root unverified-then-needed) must not burn the
+    # supply/hypothesis faces first. execution_surface class (hard);
+    # skip/absent facts and infra outages fail open.
+    rc = _capability_probe_gate(ws, claim_id, prompt_text,
+                                trace_id=trace_id,
+                                verifier_remediation=verifier_remediation)
+    if rc is not None:
+        return rc
 
     # Supply admission (the floor UNDER the PQ first-dispatch face): the
     # claim must carry >= 1 linked OPEN hypothesis before it reaches
