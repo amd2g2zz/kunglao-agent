@@ -251,7 +251,7 @@ files:
   scripts/rlvr/signal_guard.py: 1
   scripts/rlvr/state.py: 24
   scripts/rlvr/step_credit.py: 5
-  scripts/rlvr/step_grain.py: 20
+  scripts/rlvr/step_grain.py: 19
   scripts/rlvr/step_ledger.py: 15
   scripts/rlvr/strategy_store.py: 32
   scripts/rlvr/termination.py: 1

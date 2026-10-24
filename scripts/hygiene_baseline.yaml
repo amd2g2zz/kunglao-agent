@@ -1311,6 +1311,8 @@ files:
     r1: 7
   tests/test_priority_value_terms.py:
     r1: 1
+  tests/test_probe_liveness_303.py:
+    r1: 1
   tests/test_probe_tiers_474.py:
     r1: 5
   tests/test_progress_granularity_14.py:
