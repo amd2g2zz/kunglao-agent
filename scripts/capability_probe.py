@@ -46,8 +46,10 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+
+from harness_common import utc_now  # #863 Family F: the canonical face
 
 # facts fresher than this answer without executing anything; a required
 # fact older than TTL is re-probed once on demand (documented policy
@@ -63,10 +65,6 @@ ENV_STATE_REL = Path("runs") / "env-state.json"
  #: canonical probe commands (pinned verbatim by the injection tests)
 HOST_FRIDA_ARGV = ("frida", "--version")
 DEVICE_ROOT_ARGV_TAIL = ("shell", "su", "-c", "id")
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _parse_ts(value) -> datetime | None:
@@ -234,7 +232,7 @@ def facts(ws, required, *, now=None, run=None,
     probe (executed once, cached). Unknown names yield an honest skip —
     never a fabricated fact."""
     ws = Path(ws)
-    now = now or _utc_now()
+    now = now or utc_now()
     global _PROBE_ADB
     _PROBE_ADB = shutil.which("adb")
     snapshot = (_read_json(ws / ENV_STATE_REL).get("per_capability") or {})
