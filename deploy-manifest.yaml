@@ -643,7 +643,7 @@ files:
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
-    sha256: 88cd6758e87e0ec492f0d005678ba61a485f4bb0ab65bb2b6f1289996d3a9b5f
+    sha256: 3134dd66d4399758afac4624a0ef6ddf77b3b49106a0415f5e03479cd5ebf5b0
   - src: scripts/hypothesis_view.py
     dest: .claude/scripts/hypothesis_view.py
     kind: scaffold
@@ -1299,7 +1299,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 7934c0b8f602c78507a0c40b8ee5cb69aab57ad4e12a688a5cfb8614e72dbe9f
+    sha256: 39449300f63bdd1b423d8d3ca5f098ea18737e65be721f15c310c53493ff3ca7
   - src: scripts/rlvr/belief.py
     dest: .claude/scripts/rlvr/belief.py
     kind: scaffold
@@ -1315,7 +1315,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 994600adffa9f4f923f8523ab9e8b91ef1523dd0b646aaedc480261b5f9fd781
+    sha256: 18a9254096a5d03d81c5e27362177b733999d84d81912aae9ada96542317af14
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1339,7 +1339,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: 4bd249560e4581b6fc541501c2f1be525db470de804a41b8618af2153db40b75
+    sha256: 05109162b3c1f3ae906bdbcd2c8cbf42606965be3a12521b0bd558e07d9ca8b1
   - src: scripts/rlvr/invariants.py
     dest: .claude/scripts/rlvr/invariants.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
-    sha256: 0918e008de757a125b44b7150fd951728cf55bc7bf5b56d35530f125eeca7621
+    sha256: 92a8e1dfb8085f2988058c3af96d8babba0ce5cbf49106b80f14a30d2b0043e7
   - src: scripts/rlvr/liveness.py
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
@@ -1380,6 +1380,10 @@ files:
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
     sha256: 1a033c46c80c6a491a01fce6cb6c71291dedd0cef02f70a7352ac157918d1930
+  - src: scripts/rlvr/phi_tree.py
+    dest: .claude/scripts/rlvr/phi_tree.py
+    kind: scaffold
+    sha256: 36a6b56ed5e7beb290c73d9c8239baae35a421ff95cd09f28c35f14768f44d13
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
@@ -1411,11 +1415,11 @@ files:
   - src: scripts/rlvr/refutation_fold.py
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
-    sha256: 0e75bf4ae7d8eaf1009b87896f19d30482b7526af190a92bb6043fc6a9a1a163
+    sha256: 6b784adc6f017cea27fd5d78db1a7124dc265de0ae8f162b3a6853e464a41b5f
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
-    sha256: d1a0571767861d5a9f6edeb232a9b0f080d75beeddca2d6be4549d450f5deb13
+    sha256: 72875a11267c9c9694dcacb7c4117ee3325d07719fb7b4f2a803da6172b4b465
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
@@ -1479,11 +1483,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: d712a9ca98bbeedbb2ebd56b903c6fbf57920d46090e6cd97cc0744c13f40a4d
+    sha256: e6306a662f9089e29cc5124ec7e718073bd52d60791d74b78c466dbca5f23e1e
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f4d0682f500c6e150d1d50edf53f9b270ff400ce9343784cb9d2865d650d785b
+    sha256: f8266d0bd40e3d99abee3c9ccecc6e705a62aa0c4718299d4c4f7ab6becdf184
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1595,7 +1599,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: c605a5934460bdd7dac2a727b6201d7d0228fd500d5c21ab39cf169813b933e0
+    sha256: 7a8e7820c8871575c2e7576eee6aa9fbdabea8e9ea7b903955007d071d5430b1
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset
