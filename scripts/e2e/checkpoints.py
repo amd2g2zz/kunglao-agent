@@ -1364,11 +1364,14 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
     # banks one keyed-store row (the credit mapping rides inside the
     # leaf) so a second workspace with the same feature signature
     # inherits the raised verification density. Fail-open telemetry, the
-    # transition above is the authoritative local record.
+    # transition above is the authoritative local record. #796 L9: the
+    # absorbed marker rides through — a kill-banked verdict is censored
+    # in the shared store, never clean cross-workspace evidence.
     try:
         _rf = _load_repo_module(ctx.repo, "rlvr.refutation_fold")
         _rf.record_verify_outcome(str(ctx.ws), verdict=str(verdict or ""),
-                                  boundary=str(variant or ""))
+                                  boundary=str(variant or ""),
+                                  absorbed=bool(absorbed_from_disk))
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud
         kunglao_log.warn("e2e.refutation_store",
                          f"{type(exc).__name__}: {exc}")

@@ -305,12 +305,19 @@ def cadence_multiplier(ws) -> float:
 # --- write face (the cross-engagement substrate) -----------------------------
 
 def record_verify_outcome(ws, *, verdict: str, boundary: str = "",
-                          signature: str | None = None) -> dict:
+                          signature: str | None = None,
+                          absorbed: bool = False) -> dict:
     """Record one verify outcome into the keyed store (the write face
     behind cross-engagement): the verdict banks through THE credit
     mapping (verify_credit — reuse, never a second rule), the row rides
     the shared append primitive (holdout-filtered, guarded root,
-    fail-open loud). Loud result dict, never raises."""
+    fail-open loud). Loud result dict, never raises.
+
+    #796 L9 fold-in: an ABSORBED row (the verify act was hard-killed
+    and the verdict was read back from the act's on-disk face) rides
+    ``censored: true`` — a kill-banked verdict never propagates to the
+    shared store as clean cross-workspace evidence. The clean path
+    stays ``censored: false`` byte-identical."""
     from rlvr import incremental_reward  # noqa: PLC0415 — lazy (import cost)
     from rlvr import strategy_store  # noqa: PLC0415 — lazy (import cost)
     try:
@@ -326,7 +333,7 @@ def record_verify_outcome(ws, *, verdict: str, boundary: str = "",
             "fingerprint": None,
             "status": str(boundary).strip() or DEFAULT_BOUNDARY,
             "credit": incremental_reward.verify_credit(verdict),
-            "censored": False,
+            "censored": bool(absorbed),
             "facts_citing": 0,
             "propensity": None,
             "phi_delta": None,

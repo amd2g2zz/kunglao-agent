@@ -33,6 +33,7 @@ from . import liveness
 from . import marl
 from . import meta_arms
 from . import obstacles
+from . import phi_tree
 from . import policy_compare
 from . import posteriors
 from . import pricing
@@ -77,6 +78,7 @@ __all__ = [
     "marl",
     "meta_arms",
     "obstacles",
+    "phi_tree",
     "policy_compare",
     "posteriors",
     "pricing",
@@ -85,6 +87,7 @@ __all__ = [
     "q_cells",
     "recipe_arms",
     "refutation_fold",
+    "reward",
     "scalar",
     "settlement_wire",
     "source_reliability",
