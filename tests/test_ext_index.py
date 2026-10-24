@@ -283,7 +283,15 @@ class TestToolSearchFind:
     def test_find_no_match_is_valid_empty_query(self) -> None:
         r = run_py(TOOL_SEARCH, "--find", "zzz-no-such-capability-qqq", "--json")
         assert r.returncode == 0
-        assert json.loads(r.stdout) == {"count": 0, "tools": []}
+        # #812: a no-match answer carries the negative-cache face (the
+        # repetition the agent SEES) — occurrence may grow across reruns
+        # (append-only count), so pin the shape, not the exact tally
+        doc = json.loads(r.stdout)
+        assert doc["count"] == 0
+        assert doc["tools"] == []
+        nc = doc.get("negative_cache") or {}
+        assert nc.get("family") == "zzz-no-such-capability-qqq"
+        assert int(nc.get("occurrence") or 0) >= 1
 
     def test_find_combines_with_internal_filters(self) -> None:
         # 2026-10-08 re-pin (owner ergonomics ruling): --find COMBINES with
