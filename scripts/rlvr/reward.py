@@ -46,7 +46,9 @@ from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
 RULES_REL = Path("references") / "contracts" / "reward-rules.yaml"
 RULES_SCHEMA = "reward-rules/1"
 
-BANDS = ("SETTLED_GREEN", "SETTLED_RED", "ADVERSE", "HELPED", "NEUTRAL")
+BANDS = ("SETTLED_GREEN", "SETTLED_RED", "ADVERSE", "HELPED", "NEUTRAL",
+         "SETTLED_CREDIT",  # #796: the decisive-resolution sign band
+         "CLAWBACK")        # #796: the signed negative churn band
 NEUTRAL_BAND = "NEUTRAL"
 POLARITY_ALPHA_BANDS = frozenset({"SETTLED_GREEN", "HELPED"})
 POLARITY_BETA_BANDS = frozenset({"SETTLED_RED", "ADVERSE"})

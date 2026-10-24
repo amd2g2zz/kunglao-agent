@@ -62,11 +62,14 @@ LOCK_REL = "runs/.rollout-ledger.lock"
 KIND_TASK = "task"
 KIND_SELF_DISTILL = "self_distill"
 KIND_HYBRID_DISTILL = "hybrid_distill"
+KIND_HYPOTHESIS = "hypothesis"
 
 ROLLOUT_KINDS: dict[str, str] = {
     KIND_TASK: "oracle-checked task rollout",
     KIND_SELF_DISTILL: "self-distillation rollout, lesson/card unit",
     KIND_HYBRID_DISTILL: "hybrid distill rollout — producer is the distill engine",
+    KIND_HYPOTHESIS: "hypothesis resolution/churn rollout — the Φ-tree "
+                     "economy (#796)",
 }
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from kunglao_log import warn  # noqa: E402 — post-constants, matches the shim layout

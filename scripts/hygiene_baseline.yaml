@@ -104,7 +104,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 82
+    r1: 83
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -217,7 +217,7 @@ files:
   scripts/hypothesis_seeder.py:
     r1: 13
   scripts/hypothesis_store.py:
-    r1: 6
+    r1: 7
   scripts/incremental_telemetry.py:
     r1: 1
   scripts/infeasible_proposal.py:
@@ -386,7 +386,7 @@ files:
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
-    r1: 17
+    r1: 22
   scripts/rlvr/l1_planner.py:
     r1: 1
   scripts/rlvr/l1_value.py:
@@ -401,6 +401,8 @@ files:
     r1: 1
   scripts/rlvr/meta_arms.py:
     r1: 6
+  scripts/rlvr/phi_tree.py:
+    r1: 4
   scripts/rlvr/policy_compare.py:
     r1: 1
   scripts/rlvr/priors.py:
@@ -409,8 +411,10 @@ files:
     r1: 70
   scripts/rlvr/recipe_arms.py:
     r1: 8
+  scripts/rlvr/refutation_fold.py:
+    r1: 1
   scripts/rlvr/reward.py:
-    r1: 3
+    r1: 5
   scripts/rlvr/scalar.py:
     r1: 10
   scripts/rlvr/settlement_scorer.py:
@@ -541,7 +545,7 @@ files:
   tests/fixtures/experiments/ex6_option_death.py:
     r1: 2
   tests/test_absorb_settle_597.py:
-    r1: 3
+    r1: 4
   tests/test_acceptance.py:
     r1: 2
   tests/test_acceptance_689.py:
@@ -1298,6 +1302,8 @@ files:
   tests/test_partial_proven_510.py:
     r1: 2
   tests/test_pdl_collapse_582.py:
+    r1: 1
+  tests/test_phi_tree_796.py:
     r1: 1
   tests/test_pkg_detect.py:
     r1: 2

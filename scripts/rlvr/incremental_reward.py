@@ -10,15 +10,20 @@ settlement credit gives ordinary tool success zero signal (the owner's
 attribution gap). This module is pure instrumentation — no behavior
 change, no sampling change, no critic.
 
-Reward form (design doc docs/design/external-smdp-phase-b.md §2):
+Reward form (design doc docs/design/external-smdp-phase-b.md §2, as
+amended by issue-796's Φ-v2):
 
     r_t = ALPHA * [Φ(s') - Φ(s)] - LAMBDA * cost_t
-    Φ(s) = W_FACTS * graded_fact_fraction + W_ORACLE * oracle_green_rate
+    Φ(s) = W_TREE * tree_phi(s) + W_ORACLE * oracle_green_rate
 
-(the facts term is fact_face's graded ``weighted_fraction`` since
-issue-678 D-678.5 — certified 1.0 / present 0.5 / draft 0.25; the
-binary verified-count it replaced made Φ degenerate in live
-workspaces)
+(#796: the facts term is REPLACED by the closure-hypothesis-tree mass —
+``W_FACTS·graded_fraction`` was dilution-dominated, punishing discovery
+because every new fact grew the denominator before certification grew
+the numerator; the tree Φ carries mass only on DECISIVELY-resolved
+nodes, so discovery can never move it. The oracle term rides unchanged
+behind the #799 seal. rlvr/phi_tree.py owns the tree face, the policy
+constants, and the ``PHI_REGIME`` version stamp every transition row
+carries — the ledger survives a Φ swap without retroactive corruption.)
 
 Φ is a potential function — potential-based shaping (Ng, Harada & Russell
 1999) preserves the optimal-policy order, so layering it over the
@@ -48,9 +53,10 @@ import uuid
 from _common import utc_now_z
 from pathlib import Path
 
-from rlvr.state import fact_face, _oracle_status_progress
+from rlvr.state import _oracle_status_progress
 from rlvr import learning_seal as _seal  # #799: the learning-channel seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
+from rlvr import phi_tree as _phi  # #796: the Φ-tree economy face
 
 # #721: the row stamp inside runs/experience.jsonl (the legacy
 # runs/transitions.jsonl rel lives in the consolidated_ledger LEGACY
@@ -76,26 +82,28 @@ _STASH_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 # ---- policy constants (design doc §2; NOT fitted) ------------------------
 ALPHA = 1.0          # potential-difference weight
 LAMBDA_COST = 1.0    # cost weight
-W_FACTS = 0.3        # Φ: verified-facts fraction weight
+W_TREE = 0.5         # Φ: decisive closure-tree mass weight (#796)
 W_ORACLE = 0.5       # Φ: oracle green-rate weight
 COST_TOKENS_DIV = 10_000.0   # normalize: 10k tokens = 1 cost unit
 COST_SECONDS_DIV = 3_600.0   # normalize: 1 wall hour = 1 cost unit
 
 
 def potential(ws) -> float:
-    """Φ(s) ∈ [0, 1]: verified-facts fraction + oracle green rate,
-    renormalized over PRESENT dims (a missing organ drops its dim —
-    the honest-absence doctrine, state.py precedent). The facts term
-    reads fact_face's GRADED ``weighted_fraction`` (issue-678 D-678.5:
-    certified terminal 1.0 / present non-terminal 0.5 / draft 0.25), so
-    partially-verified workspaces produce INTERMEDIATE potentials — the
-    binary verified-count made Φ degenerate ({0.0, 1.0} in live
-    workspaces) and the transition ledger recorded no partial progress."""
+    """Φ(s) ∈ [0, 1]: the closure-tree decisive mass (#796) + the
+    oracle green rate, renormalized over PRESENT dims (a missing organ
+    drops its dim — the honest-absence doctrine, state.py precedent).
+    #796 replaces the graded-fact-fraction term: it was
+    dilution-dominated (discovery grew the denominator before
+    certification grew the numerator — discovery steps banked r_t < 0);
+    the tree Φ moves only on decisive resolution/refutation, so
+    discovery is Φ-neutral by construction. A workspace without a tree
+    rides the oracle dim alone (the dim is honest-absent, never
+    fabricated)."""
     ws = Path(ws)
     parts: list[tuple[float, float]] = []  # (weight, value)
-    ff = fact_face(ws)
-    if ff["count"] > 0:
-        parts.append((W_FACTS, float(ff.get("weighted_fraction", 0.0))))
+    tree = _phi.tree_phi(ws)
+    if tree is not None:
+        parts.append((W_TREE, float(tree)))
     oracle = _oracle_progress_sealed(ws)
     if oracle is not None:
         passed, total = oracle
@@ -334,6 +342,9 @@ def append_transition(ws, claim: str, outcome: str, *,
                      if absorbed_from_disk else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
+            # #796 pre-condition 2: the row stamps its Φ formula version
+            # so the append-only ledger survives a Φ swap uncorrupted
+            "phi_regime": _phi.PHI_REGIME,
             # issue-678 T4: the EXPLICIT Φ movement (the #548 tiebreaker
             # raw material was previously only derivable by subtraction)
             # plus the launch stash's claim/action provenance — the row
@@ -356,6 +367,19 @@ def append_transition(ws, claim: str, outcome: str, *,
             # the row never banked — the stash stays for a later settle
             return None
         launch_p.unlink(missing_ok=True)  # stash consumed
+        if done:
+            # #796: the claim's terminal close fires the proxy-vs-truth
+            # reconciliation pass (calibration triples + escrow release);
+            # fail-open telemetry, the row above already banked
+            try:
+                _phi.reconcile_claim(
+                    ws, str(launch.get("claim") or claim),
+                    oracle_outcome=str(outcome))
+            except Exception as exc:  # noqa: BLE001 — loud, never fatal
+                from kunglao_log import warn  # noqa: PLC0415
+                warn("incremental_reward.append_transition",
+                     f"phi reconcile failed for {claim!r}: "
+                     f"{type(exc).__name__}: {exc}")
         return row
     except (OSError, ValueError, TypeError) as exc:  # loud telemetry (#275)
         from kunglao_log import warn  # noqa: PLC0415

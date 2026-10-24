@@ -1,5 +1,5 @@
 schema: reward-rules/1
-version: 3
+version: 4
 description: >
   Deterministic settlement rules for the unified rollout ledger (#366).
   THE reward currency contract: reward_settlement.py reads ONLY this table
@@ -26,12 +26,33 @@ description: >
   TRACE canonical, once per demotion class per dispatch row. V/dV and
   the root layers are unchanged; process quality (D4/D5/cost) stays in
   the MEASUREMENT dimensions, never in the VALUE dimension.
+
+  version 4 (issue 796, the Φ-tree economy): the hypothesis rule
+  classes. `hypothesis/decisive-resolution` settles credit ONLY on a
+  decisive ΔΦ (≥ the documented threshold, with a machine witness or
+  an independent referee confirmation) and `hypothesis/churn` bands
+  the clawback (overturning a credited node revokes its escrowed
+  credit against the PROPOSING step plus the documented penalty, on
+  the signed negative face). The row contract pairs the two axes:
+  every credited resolution row carries BOTH the ΔΦ valuation AND the
+  proposing-step attribution ref — missing either, the row is invalid.
+  The settled AMOUNT for a decisive row is the machine-recorded ΔΦ
+  (the closure-tree state diff — never a model opinion); the table's
+  numeric reward is the SIGN indicator only. Assertion-only flips
+  settle NEUTRAL. The machine evaluation face is rlvr/phi_tree.py.
+
 bands:
   SETTLED_GREEN: {reward: 1.0, polarity: positive}
   SETTLED_RED:   {reward: 0.0, polarity: negative}
   ADVERSE:       {reward: 0.0, polarity: negative}
   HELPED:        {reward: 0.5, reward_full: 1.0, polarity: positive}
   NEUTRAL:       {reward: 0.0, polarity: none}
+  SETTLED_CREDIT: {reward: 1.0, reward_note: "sign indicator only —
+    the settled AMOUNT is the machine-recorded ΔΦ on the row",
+    polarity: positive}
+  CLAWBACK:      {reward: 0.0, reward_note: "the negative leg rides
+    the signed phi-clawback/1 face (clawed credit + penalty)",
+    polarity: negative}
 rules:
   - rule_id: task/oracle-green
     kind: task
@@ -77,6 +98,38 @@ rules:
     reward: 0.5
     reward_full: 1.0     # when every optional predicate holds too
     evidence: [distill engine consumption rows, convergence ledger]
+
+  # --- v4: the hypothesis rule classes (issue 796, Φ-tree economy) -----
+  # Machine evaluation face: rlvr/phi_tree.py. Signals come from the
+  # machine-recorded tree state diff + the evidence store — no model
+  # source anywhere; the decisive rule's three signals are each
+  # independent (the multi-signal anti-pollution floor holds).
+
+  - rule_id: hypothesis/decisive-resolution
+    kind: hypothesis
+    order: 5
+    requires:
+      - {type: resolution_decisive, equals: true}
+      - {type: machine_witness, equals: true}
+      - {type: delta_phi_at_threshold, equals: true}
+    band: SETTLED_CREDIT
+    reward: 1.0          # SIGN indicator only; the AMOUNT is the row's
+                         # machine-recorded ΔΦ (escrowed until the
+                         # claim's terminal reconcile releases it)
+    evidence: [runs/experience.jsonl, hypotheses/ tree state diff]
+
+  - rule_id: hypothesis/churn
+    kind: hypothesis
+    order: 6
+    requires:
+      - {type: churn_clawback, equals: true}
+      - {type: escrow_attribution, equals: true}
+    band: CLAWBACK
+    reward: 0.0          # the negative leg rides the signed
+                         # phi-clawback/1 face: clawed credit + penalty
+                         # against the PROPOSING step; never folded
+                         # into any non-negative credit stream
+    evidence: [runs/experience.jsonl, runs/planning-actions.jsonl]
 
 # --- v2: the tiered scalar (episode settlement, #379) --------------------
 # scalar_settlement.py consumes THIS section + the machine signals on the

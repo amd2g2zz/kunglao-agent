@@ -187,7 +187,8 @@ def test_kill_without_verdict_on_disk_is_the_bare_kill(ctx):
     assert set(row) == {"schema", "ts", "dispatch_id", "action_type",
                         "s", "a", "o", "s_prime_phi", "phi_before",
                         "phi_delta", "claim_ref", "action_key", "r_incr",
-                        "r_settle", "done"}
+                        "r_settle", "done",
+                        "phi_regime"}  # #796: the Φ formula version stamp
 
 
 def test_unparseable_note_keeps_the_bare_kill(ctx):

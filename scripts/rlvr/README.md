@@ -243,6 +243,9 @@ the one-line pointer (name — the docstring's opening line):
 - `invariants` — rlvr.invariants — the invariant-pruning operator (entropy reduction).
 - `marl` — marl.py — the MARL knowledge-transfer protocol (#705).
 - `meta_arms` — meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms,
+- `phi_tree` — rlvr/phi_tree.py — the Φ-tree economy (#796): decisive mass on the
+  closure hypothesis tree (tree_phi/settle_resolution/clawback/elimination_credit/
+  reconcile_claim; signed negative face; #760-complementary, #799-sealed).
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned

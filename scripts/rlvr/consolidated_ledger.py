@@ -101,7 +101,12 @@ SWITCHED: tuple[str, ...] = ("experience",)
 #: pre-seeds them at 0: a schema whose writer dies must read DEAD, never
 #: be absent (an unregistered stamp is invisible).
 NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
-    "experience": ("case-observation/1", "case-amendment/1"),
+    "experience": ("case-observation/1", "case-amendment/1",
+                   # issue-796: the Φ-tree economy rows (resolution /
+                   # elimination / signed clawback / calibration) are
+                   # born in the consolidated experience file
+                   "hypothesis-resolution/1", "hypothesis-elimination/1",
+                   "phi-clawback/1", "phi-calibration/1"),
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",),
