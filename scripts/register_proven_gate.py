@@ -392,6 +392,22 @@ def check_register_transitions(ws: Path, new_text: str,
             continue
         if old.get(cid) == PROVEN:
             continue  # already PROVEN — not a transition
+        # issue 803: promotion eligibility reads EVIDENCE CLASS first —
+        # a sealed, replay-consistent certification of the F009 shape
+        # (byte-exact reproduction + fresh-input acceptance) admits
+        # ->PROVEN without another dispatch cycle. Red-team
+        # sample-verification stays available on suspicion, never as a
+        # toll. A certification that fails its own replay is worse than
+        # none: the fault is loud and the legacy legs stay enforced.
+        try:
+            import evidence_certify
+            c_ok, c_why = evidence_certify.admission(ws, cid)
+        except Exception as exc:  # noqa: BLE001 — fail closed to legacy
+            c_ok = False
+            c_why = f"admission fault {type(exc).__name__}: {exc}"
+            warn("check_register_transitions", f"{cid}: {c_why}")
+        if c_ok:
+            continue
         wv = _waiver(ws, cid)
         if wv is not None:
             if not wv["justify"]:
@@ -401,6 +417,26 @@ def check_register_transitions(ws: Path, new_text: str,
             else:
                 waivers.append(wv)
             continue
+        # issue 803, the inversion's other end pinned dead: a
+        # scaffold-only claim with NO evidence class can no longer
+        # reach PROVEN via red-team alone — process conformance is not
+        # evidence strength. A fact with a declared non-triage
+        # evidence_class, or an (admitted) certification, is not this
+        # shape.
+        claim_class = str((claims.get(cid) or {}).get("claim_class")
+                          or "").strip().lower()
+        if claim_class == "scaffold":
+            if facts is None:
+                facts = facts_by_claim(ws)
+            classes = {_evidence_class(fm) for fm in (facts.get(cid) or [])}
+            if not classes - {TRIAGE_GRADE_CLASS}:
+                violations.append(
+                    f"{cid}: scaffold claim with no evidence class cannot "
+                    f"reach PROVEN via red-team alone (issue 803 — the "
+                    f"certification inversion pinned dead); attach a "
+                    f"byte-exact+fresh-input certification or a fact with "
+                    f"a non-triage evidence_class")
+                continue
         # issue 215: evidence-class admission (algorithm-recovery claims).
         # Checked at ADMISSION, ahead of the runs/ predicates, so the named
         # reason is the evidence grade the claim actually failed on.

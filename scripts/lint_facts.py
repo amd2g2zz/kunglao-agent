@@ -77,6 +77,41 @@ VALID_PROVENANCE_ROLES = {"sample_raw", "decompiled_c", "disassembled_s",
 CODE_SOURCE_VALUES = {"static-decompile", "dynamic-trace", "qiling-emu"}
 NEGATIVE_SOURCE_VALUES = {"static-decompile", "dynamic-trace", "qiling-emu",
                           "vt-pivot", "public-osint"}
+# issue 803: the web lane's native evidence sources — registered in ONE
+# place (scripts/evidence_certify.WEB_SOURCE_ENUM) and mirrored here for
+# the frontmatter contract. On lane: web the mandatory set slims to the
+# ~6 load-bearing fields and these sources join the status x source
+# matrix; off the web lane they are NOT in the enum (the lane contract
+# never leaks into the malware projection).
+WEB_MANDATORY_FIELDS = ("id", "type", "title", "status", "source",
+                        "claim_id")
+
+
+def web_source_values() -> frozenset:
+    """The web-native source enum (lazy import — the certification face
+    owns the vocabulary, the lint face consumes it)."""
+    from evidence_certify import WEB_SOURCE_ENUM
+    return frozenset(WEB_SOURCE_ENUM)
+
+
+def workspace_lane(ws) -> str | None:
+    """<ws>/task_spec.yaml `lane:` — None on absent/blank/unknown (the
+    lane gate owns refusal at init; the lint face never guesses a lane
+    to enforce a contract on). Mirrors dispatch_gate._workspace_lane's
+    read without importing the hook."""
+    path = Path(ws) / "task_spec.yaml"
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8",
+                                             errors="replace"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    raw = data.get("lane")
+    if isinstance(raw, str) and raw.strip().lower() in {
+            "malware", "algorithm", "protocol", "web", "data", "app"}:
+        return raw.strip().lower()
+    return None
 
 ID_RE = re.compile(r"^F\d{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 CLAIM_ID_RE = re.compile(r"^C-\d{3,}$")
@@ -457,7 +492,8 @@ def read_register_proven(ws: Path) -> set:
 
 
 def certification_defects(fm: dict, body: str, proven: set,
-                          fact_ids: set) -> list:
+                          fact_ids: set,
+                          lane: str | None = None) -> list:
     """One fact's certification defects: the fact grammar's error
     defects (lint_fact) plus the terminal-status provenance rule — a
     PROVEN/VERIFIED status counts as verified only when EVERY claim the
@@ -465,7 +501,7 @@ def certification_defects(fm: dict, body: str, proven: set,
     citation is uncertifiable. Non-terminal statuses carry no
     certification defect (the grammar still applies)."""
     errs = [d for d in lint_fact(str(fm.get("id") or ""), fm, fact_ids,
-                                 body) if d[0] == "error"]
+                                 body, lane=lane) if d[0] == "error"]
     status = str(fm.get("status") or "").strip().upper()
     if status in ("PROVEN", "VERIFIED"):
         refs = collect_claim_refs(fm)
@@ -509,11 +545,12 @@ def certification_scan(ws: Path) -> dict:
             fact_ids.add(str(fm.get("id")))
         parsed.append((p, fid, fm or {}, body))
     proven = read_register_proven(ws)
+    lane = workspace_lane(ws)
     for p, fid, fm, body in parsed:
         if not fm:
             out[p.stem] = {"certified": False, "status": "", "refs": []}
             continue
-        errs = certification_defects(fm, body, proven, fact_ids)
+        errs = certification_defects(fm, body, proven, fact_ids, lane=lane)
         out[p.stem] = {
             "certified": not errs,
             "status": str(fm.get("status") or "").strip().upper(),
@@ -694,7 +731,8 @@ def _issue(sev, code, fact_id, msg):
     return (sev, code, f"fact {fact_id}: {msg}")
 
 
-def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
+def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "",
+              lane: str | None = None) -> list:
     issues = []
     t = fm.get("type")
     if t != "fact":
@@ -708,14 +746,22 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
         "promotion_gate": "MISSING_PROMOTION_GATE", "provenance": "MISSING_PROVENANCE",
         "source": "MISSING_SOURCE", "confidence": "MISSING_CONFIDENCE",
     }
+    # issue 803: the web lane slims the mandatory set to the ~6
+    # load-bearing fields (type stays through the BAD_TYPE structural
+    # check above — file identity, not schema ceremony); every other
+    # field may still be WRITTEN, it is just not mandatory.
+    mandatory = (set(FIELD_CODES) if lane != "web"
+                 else set(WEB_MANDATORY_FIELDS) - {"type"})
     for f, code in FIELD_CODES.items():
-        if f not in fm:
+        if f not in fm and f in mandatory:
             issues.append(_issue("error", code, fid, f"missing mandatory field {f}"))
     # Layer 2 — omitted only for OPEN/DEFERRED (matrix default)
     if fm.get("status") in ("OPEN", "DEFERRED"):
         issues[:] = [i for i in issues if not (i[0] == "error" and i[1] in ("MISSING_SOURCE", "MISSING_CONFIDENCE"))]
     # kunglao extension layer (lint-notes.py parity: claim/reproduce/expected/verified)
-    for f in EXTENSION_FIELDS:
+    # — web lane omits it (the certification face carries the replayable
+    # instruction; the frontmatter ceremony is not load-bearing there)
+    for f in (EXTENSION_FIELDS if lane != "web" else ()):
         if f not in fm:
             issues.append(_issue("error", "MISSING_EXTENSION_FIELD", fid,
                                  f"kunglao extension layer requires {f}"))
@@ -753,9 +799,11 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                 issues.append(_issue("warning", "STALE_LAST_REVIEWED", fid,
                                      f"last_reviewed is {days} days old (>{STALENESS_WARN_DAYS})"))
     src = fm.get("source")
-    if src is not None and src not in VALID_SOURCE:
+    valid_source = VALID_SOURCE | (web_source_values()
+                                   if lane == "web" else frozenset())
+    if src is not None and src not in valid_source:
         issues.append(_issue("error", "BAD_SOURCE_ENUM", fid,
-                             f"source {src!r} not in {sorted(VALID_SOURCE)}"))
+                             f"source {src!r} not in {sorted(valid_source)}"))
     ec = fm.get("evidence_class")
     if ec is not None and str(ec) not in VALID_EVIDENCE_CLASSES:
         issues.append(_issue("error", "BAD_EVIDENCE_CLASS", fid,
@@ -771,6 +819,8 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
     # status × source × confidence matrix
     if st in LEGAL_COMBOS and src and conf:
         legal_src, legal_conf = LEGAL_COMBOS[st]
+        if lane == "web":
+            legal_src = legal_src | web_source_values()
         if src not in legal_src:
             issues.append(_issue("error", "ILLEGAL_SOURCE_FOR_STATUS", fid,
                                  f"status={st} does not allow source={src!r}"))
@@ -815,9 +865,10 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
     if bt == "pure_negative" and czh and czh != "不支持":
         issues.append(_issue("error", "PURE_NEG_CONFIDENCE", fid,
                              f"boundary_type=pure_negative requires confidence_zh='不支持' (got {czh!r})"))
-    # provenance
+    # provenance (web lane: optional — not in the #803 slim mandatory
+    # set; when present it is still validated by the branch below)
     prov = fm.get("provenance")
-    if not prov:
+    if not prov and lane != "web":
         issues.append(_issue("error", "MISSING_PROVENANCE", fid,
                              "provenance must be a non-empty list — every artifact the fact depends on"))
     elif isinstance(prov, list):
@@ -854,7 +905,7 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                 issues.append(_issue("warning", "RECOMPUTE_NOT_UNDER_TOOLS", fid,
                                      f"provenance[{j}] recompute_script path {p['path']!r} — "
                                      "kunglao keeps verify scripts under runs/ (documented deviation)"))
-    else:
+    elif prov is not None:
         issues.append(_issue("error", "BAD_PROVENANCE", fid,
                              "provenance must be a list of {role, path, content_sha256, credibility} dicts"))
     # code-source visibility (mirrors lint-notes.py NO_CODE_SOURCE)
@@ -927,7 +978,10 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
     # issue 250: observation-vs-world wording — an observational-source fact
     # whose title asserts a world-existential needs a tool-scope qualifier.
     title = str(fm.get("title") or "")
-    if src in OBSERVATIONAL_SOURCES and title:
+    observational = OBSERVATIONAL_SOURCES | (web_source_values()
+                                             if lane == "web"
+                                             else frozenset())
+    if src in observational and title:
         if WORLD_EXISTENTIAL_RE.search(title) and not TOOL_SCOPE_RE.search(title):
             issues.append(_issue("error", "OBSERVATION_WORLD_BLUR", fid,
                                  f"title {title!r} asserts a world claim on "
@@ -961,6 +1015,7 @@ def lint_workspace(ws: Path):
     facts_dir = ws / "facts"
     errors: list = []
     warnings: list = []
+    lane = workspace_lane(ws)
     if not facts_dir.is_dir():
         return [("error", "NO_FACTS_DIR", f"{facts_dir} not a directory")], []
     fact_ids: set = set()
@@ -1001,7 +1056,8 @@ def lint_workspace(ws: Path):
         parsed[p] = (fm, body, perr)
     for p, (fm, body, _perr) in sorted(parsed.items()):
         fid = str(fm.get("id") or "")
-        for sev, code, msg in lint_fact(fid or p.stem, fm, fact_ids, body):
+        for sev, code, msg in lint_fact(fid or p.stem, fm, fact_ids, body,
+                                        lane=lane):
             if sev == "error":
                 errors.append((sev, code, f"{p.name}: {msg}"))
             else:

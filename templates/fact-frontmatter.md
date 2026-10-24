@@ -90,6 +90,27 @@ A non-malware lane never writes a `sample_raw` entry for a sample it does
 not mount (the lane check set does not require `bins/`, and init seeds no
 sample claim); the credibility letter/number rules above are unchanged.
 
+## Web-lane slim contract (issue 803)
+
+On a workspace whose `task_spec.yaml` declares `lane: web`, the mandatory
+set slims to the **6 load-bearing fields** — `id`, `type`, `title`,
+`status`, `source`, `claim_id` (type stays through the structural
+`type: fact` check; `created`/`last_reviewed`/`confidence`/
+`boundary_type`/`promotion_gate`/`provenance` and the kunglao extension
+layer are OPTIONAL — writable, never mandatory). The `source` enum gains
+the web-native values registered by `scripts/evidence_certify.py`
+(single source):
+
+`capture` · `replay` · `fresh-input` · `offline-execution`
+
+These are observational evidence classes and are legal wherever the
+malware observational set is (PROVEN/VERIFIED/REFUTED included); off the
+web lane they are NOT in the enum. Evidence-strength certification on
+the web lane rides the certification row
+(`evidence/cert-<claim>.json`, schema `evidence-cert/1`) — the
+replayable declaration whose replay instruction the face executes; see
+`scripts/evidence_certify.py`.
+
 - `content_sha256` = sha256 of the artifact bytes (migrate_facts.py computes it).
 - `credibility` = Admiralty code `{letter}{digit}`: source reliability A (completely
   reliable) → F (unreliable) × information credibility 1 (confirmed) → 6 (cannot be

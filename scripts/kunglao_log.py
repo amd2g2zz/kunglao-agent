@@ -228,6 +228,7 @@ LEGACY_ACTORS = frozenset({
     "dead_letter",  # issue-234 dispatch-failure 3-strike writer (must_ask escalation face)
     "decision_pending", "digest_build", "dispatch_context", "dual_gate",
     "env_check", "env_check_gate", "env_repair_l1", "env_state_probe",
+    "evidence_certify",  # #803 certification face (evidence_certified/evidence_replayed)
     "event_taxonomy", "external_kicker", "failure_analysis",
     "failure_analysis_gate",
     "fix_guard",  # issue 304 fix-as-guard: dormancy sweep writer (guard_dormant face)
