@@ -4,7 +4,7 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 9
-  hooks/dispatch_gate.py: 225
+  hooks/dispatch_gate.py: 229
   hooks/env_check_gate.py: 30
   hooks/gate_policy.py: 11
   hooks/heartbeat_touch.py: 24
@@ -53,6 +53,7 @@ files:
   scripts/cadence_advisor.py: 9
   scripts/calibration_face.py: 10
   scripts/calibration_gate.py: 1
+  scripts/capability_probe.py: 9
   scripts/carrier_consistency.py: 3
   scripts/case_bank.py: 22
   scripts/check_global_rule_subset.py: 1
@@ -93,7 +94,7 @@ files:
   scripts/env_check.py: 110
   scripts/env_manifest.py: 44
   scripts/env_repair_l1.py: 7
-  scripts/env_state_probe.py: 11
+  scripts/env_state_probe.py: 19
   scripts/error_response.py: 9
   scripts/eval_chain.py: 4
   scripts/eval_chain_grader.py: 2
@@ -116,9 +117,9 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 169
+  scripts/event_taxonomy.py: 172
   scripts/evidence_certify.py: 10
-  scripts/exogenous.py: 3
+  scripts/exogenous.py: 7
   scripts/experience_triples.py: 2
   scripts/experiments/rc1_econ_replay.py: 5
   scripts/external_kicker.py: 41
@@ -315,6 +316,7 @@ files:
   scripts/zero_output_fingerprint.py: 5
   tools/_lib/index_schema.py: 1
   tools/_lib/lib_disasm.py: 3
+  tools/_lib/negative_cache.py: 4
   tools/_lib/stdio.py: 1
   tools/_lib/workspace_manifest.py: 2
   tools/auxiliary/audit_legacy_proven.py: 3
@@ -352,6 +354,6 @@ files:
   tools/static/web_gitnexus_demo.py: 3
   tools/static/yara-gen.py: 3
   tools/static/yara-scan.py: 3
-  tools/tool-search.py: 31
+  tools/tool-search.py: 33
   tools/validate_index.py: 36
   tools/web/jsvmp_triage.py: 5
