@@ -51,7 +51,7 @@ files:
   scripts/calibration_gate.py:
     r1: 1
   scripts/capability_probe.py:
-    r1: 4
+    r1: 5
   scripts/carrier_consistency.py:
     r1: 3
   scripts/case_bank.py:
@@ -170,7 +170,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 129
+    r1: 130
     r2: 1
   scripts/evidence_certify.py:
     r1: 2
