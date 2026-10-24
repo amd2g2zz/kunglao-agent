@@ -181,7 +181,10 @@ def test_monotone_cmd_faces(tmp_path) -> None:
     # a base ref with no ratchet file: first landing, vacuously monotone
     assert cf.main(["monotone", "--base-ref", "does-not-exist-ref",
                     "--repo", str(repo), "--floor-file", str(FLOOR)]) == 0
-    assert cf.floor_from_git(repo, "origin/dev") == 57.0
+    # the ratchet's raise-only law: the floor NEVER falls below the 57.0
+    # seed (the former literal == 57.0 pinned the pre-raise base and
+    # self-expired the moment segment-4's raise to 59.0 merged)
+    assert cf.floor_from_git(repo, "origin/dev") >= 57.0
     import pytest
     with pytest.raises(ValueError, match="no coverage-floor.json"):
         cf.floor_from_git(repo, "does-not-exist-ref")
