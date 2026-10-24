@@ -590,6 +590,9 @@ files:
     r1: 1
   tests/test_bash_fact_guard_809.py:
     r1: 1
+  tests/test_bash_fact_guard_faces_818.py:
+    r1: 1
+    r2: 1
   tests/test_belief_reconcile_600.py:
     r2: 1
   tests/test_bench_analyze.py:
@@ -657,6 +660,8 @@ files:
     r1: 3
   tests/test_censored_review_548.py:
     r1: 1
+  tests/test_challenge_ledger_818.py:
+    r1: 1
   tests/test_challenge_ledger_909.py:
     r1: 1
   tests/test_changelog.py:
@@ -667,6 +672,9 @@ files:
     r1: 4
   tests/test_claims_store_800_rollout.py:
     r1: 1
+  tests/test_claims_store_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_classification_collapse_581.py:
     r1: 1
   tests/test_claudemd_conditional_919.py:
@@ -890,6 +898,8 @@ files:
     r1: 3
   tests/test_eval_chain_370.py:
     r1: 3
+  tests/test_eval_chain_render_818.py:
+    r1: 1
   tests/test_eval_contract_352.py:
     r1: 1
   tests/test_eval_control_arm_236.py:
@@ -986,6 +996,12 @@ files:
     r1: 13
   tests/test_gate_layers_717.py:
     r1: 4
+  tests/test_gate_machinery_measured_818.py:
+    r1: 1
+    r2: 1
+  tests/test_gate_policy_818.py:
+    r1: 1
+    r2: 1
   tests/test_gate_power_473.py:
     r1: 3
   tests/test_gate_residuals_427.py:
@@ -1105,6 +1121,8 @@ files:
     r1: 7
   tests/test_intent_aware_completion.py:
     r1: 2
+  tests/test_invocation_hygiene_lint_818.py:
+    r1: 1
   tests/test_issue238_role_contracts.py:
     r1: 2
   tests/test_issue454_wiring_transparency.py:
@@ -1144,6 +1162,9 @@ files:
     r1: 2
   tests/test_launch_stash_integrity_654.py:
     r1: 2
+  tests/test_learning_seal_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_ledger_consolidation_721.py:
     r1: 1
   tests/test_ledger_settlement_8.py:
@@ -1160,6 +1181,8 @@ files:
     r1: 2
   tests/test_lint_facts_532.py:
     r1: 9
+  tests/test_lint_facts_faces_818.py:
+    r1: 1
   tests/test_liveness_policy_597.py:
     r1: 4
   tests/test_liveness_triad_682.py:
@@ -1168,6 +1191,8 @@ files:
     r1: 1
   tests/test_loader_delegation_863b.py:
     r1: 4
+  tests/test_log_setup_818.py:
+    r1: 1
   tests/test_logging_arch_406.py:
     r1: 1
   tests/test_logging_coverage.py:
@@ -1378,6 +1403,8 @@ files:
     r1: 1
   tests/test_relib_audit_production_866a.py:
     r1: 2
+  tests/test_render_rl_visuals_818.py:
+    r1: 1
   tests/test_renderer_unify.py:
     r1: 4
   tests/test_renew_audit_619.py:
@@ -1513,6 +1540,9 @@ files:
     r2: 1
   tests/test_slot_monitor_636.py:
     r1: 1
+  tests/test_source_reliability_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_specialist_contract_expansion.py:
     r1: 8
   tests/test_specialist_gate.py:
@@ -1525,6 +1555,9 @@ files:
     r1: 6
   tests/test_state_anchor_hyp_pointers_528.py:
     r1: 3
+  tests/test_state_anchor_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_state_layer_diagnosis_213.py:
     r1: 1
   tests/test_state_signature_396.py:
@@ -1621,6 +1654,9 @@ files:
     r1: 1
   tests/test_tool_value_881.py:
     r1: 2
+  tests/test_tool_value_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_toolchain.py:
     r1: 21
   tests/test_toolchain_bug_756.py:
@@ -1699,6 +1735,9 @@ files:
     r1: 2
   tests/test_verifier_identity_825.py:
     r1: 1
+  tests/test_verifier_integrity_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_verify_backlog_face_342.py:
     r1: 1
   tests/test_verify_receipts_653.py:
@@ -1730,10 +1769,16 @@ files:
   tests/test_winrate_curve_156.py:
     r1: 3
     r2: 1
+  tests/test_winrate_measured_818.py:
+    r1: 1
+    r2: 1
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
     r1: 60
+    r2: 1
+  tests/test_worker_budget_gates_measured_818.py:
+    r1: 9
     r2: 1
   tests/test_worker_death_resume_11.py:
     r1: 7
@@ -1757,6 +1802,8 @@ files:
     r1: 2
   tests/test_write_guard_686.py:
     r1: 3
+  tests/test_write_guard_faces_818.py:
+    r1: 2
   tests/test_write_guard_register_gate_819.py:
     r1: 3
   tests/test_write_guard_supersedes_528.py:

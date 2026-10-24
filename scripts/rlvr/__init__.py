@@ -95,4 +95,5 @@ __all__ = [
     "strategy_store",
     "termination",
     "verification_debt",
+    "winrate",
 ]
