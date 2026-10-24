@@ -104,8 +104,8 @@ files:
   scripts/eval_checker.py: 4
   scripts/eval_contract.py: 3
   scripts/eval_control_arm.py: 4
-  scripts/eval_crypto.py: 4
   scripts/eval_corpus_lint.py: 10
+  scripts/eval_crypto.py: 4
   scripts/eval_dataset.py: 15
   scripts/eval_loop_runner.py: 37
   scripts/eval_matrix_report.py: 1
