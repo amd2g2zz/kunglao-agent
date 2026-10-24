@@ -23,7 +23,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: e2eae4a4ec7995866b5bc48a8fcbeb03e6af3a9b8994602998d0469c877a47cf
+    sha256: 98736354066650826a516cc8ff69d7b24e406684c343b4d0fe712718b90eb33f
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -268,6 +268,10 @@ files:
     dest: .claude/scripts/calibration_gate.py
     kind: scaffold
     sha256: 8bf486dfb2490741226601093eab2603aef12f91c3259bdf22ce4907752039b1
+  - src: scripts/capability_probe.py
+    dest: .claude/scripts/capability_probe.py
+    kind: scaffold
+    sha256: 24f95448ae1b2d79c59b186199837797d831c3b4f82a15e893f4c554488c82b9
   - src: scripts/carrier_consistency.py
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
@@ -431,7 +435,7 @@ files:
   - src: scripts/env_state_probe.py
     dest: .claude/scripts/env_state_probe.py
     kind: scaffold
-    sha256: 21374220034d954ff85e66df349dc32f43348ae46e6bc252087c2b9a6143363b
+    sha256: 5dbe5e183b0d593f2ee388815306f1149f6a96526bed0d9d0e92137b7ebb48b2
   - src: scripts/error_response.py
     dest: .claude/scripts/error_response.py
     kind: scaffold
@@ -527,7 +531,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 3e0b004108eaf6c51822824df5c464998e3bc65f2cf813f30b7058bfe0f0e9af
+    sha256: e24d02bb90a80c62f24c11322b2e8e2967c7e05912f94059c56cf85148c210c9
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -543,7 +547,7 @@ files:
   - src: scripts/exogenous.py
     dest: .claude/scripts/exogenous.py
     kind: scaffold
-    sha256: f779e4c23cad053dd46de7fdc19aee9be7859a350c8b20d77efaccc25fb22c3d
+    sha256: e7d00f3e557a56cab530e61dc89eb5b9457b683cdb1f4de0518b98394808b595
   - src: scripts/experience_triples.py
     dest: .claude/scripts/experience_triples.py
     kind: scaffold
@@ -1479,11 +1483,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: d712a9ca98bbeedbb2ebd56b903c6fbf57920d46090e6cd97cc0744c13f40a4d
+    sha256: 48ae664f6ea15dc308950d59ac4cdc13d4e298039d97bb3fba70affe82df1794
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f4d0682f500c6e150d1d50edf53f9b270ff400ce9343784cb9d2865d650d785b
+    sha256: afc1fe688adabdaac54897d1bd082901b7ae72426ad29aeabf74c2d8a7460339
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2063,7 +2067,7 @@ files:
   - src: tools/README.md
     dest: .claude/tools/README.md
     kind: asset
-    sha256: 85cbefd8fa6f882fe967171e1399958a17366798beb9b2b4ef413017057ac28e
+    sha256: eb96b2993559a9312041d7618016c1da3f5dbb67e66f7e0c2ca7de96c1a994aa
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
@@ -2116,6 +2120,10 @@ files:
     dest: .claude/tools/_lib/lib_disasm.py
     kind: asset
     sha256: c3d78b9126e79d3013dc9a18888c72df74fbf8d6063d8483c9af34eaeb75dd36
+  - src: tools/_lib/negative_cache.py
+    dest: .claude/tools/_lib/negative_cache.py
+    kind: asset
+    sha256: dec0e90da5f856fb9d203f2457086d0e9fa6f6bbcac4e183a261763a190c23f4
   - src: tools/_lib/stdio.py
     dest: .claude/tools/_lib/stdio.py
     kind: asset
@@ -2331,7 +2339,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 6cc34325b57a646f6bbc72f819f73f6607884dd8f3872d62bdeb50e1e2e080e6
+    sha256: 549cd57cd18649a896a09b0dd896add15768e07f0afd0cff9a8cf3f996d2b8e0
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
