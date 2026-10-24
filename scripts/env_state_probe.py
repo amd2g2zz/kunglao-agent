@@ -63,16 +63,20 @@ VM_CAPS = ("vm_reachable", "mcp_bridge")
 # #474 follow-up (2026-08-19): jdwp_debug joins the snapshot — the toolchain
 # WARN (capability-absence) is the orchestrator-facing signal this file
 # mechanizes (probe miss → env-state entry → monitor ENV_DRIFT + gate view).
-# R2 capability axis (the live-run logs review): device_root joins the
-# snapshot vocabulary — root lives only in init-time human configure
-# (toolchain HUMAN_ONLY), so an env-state entry is the machine-anchored
-# counter-check against a narrated "device has no root" (the incident:
-# host-missing frida got narrated as device-unrooted; the probe miss left
-# that claim with no state to check against).
-ANDROID_CAPS = ("adb", "frida_server", "jdwp_debug", "device_root")
+# #812: device_root joins (acceptance 3 — dispatch consults it, killing the
+# "no root" misattribution class at the source) and host_frida joins (the
+# 9x dynamic-trace incident: host frida missing was narrated as a device
+# verdict because no host-side fact existed to separate it).
+ANDROID_CAPS = ("adb", "frida_server", "jdwp_debug", "device_root",
+                "host_frida")
 
 
 from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
+
+# #812: the dispatch-gate capability probes (host_frida / device_root)
+# are THE single source for those two faces — this module only adapts
+# their (status, detail) into snapshot entries.
+import capability_probe as _cp  # noqa: E402
 
 
 def _entry(status: str, detail: str) -> dict:
@@ -126,23 +130,42 @@ def _probe_frida_server() -> dict:
                   f"frida-server on custom port {tc.FRIDA_PORT}: {detail}")
 
 
-def _probe_device_root() -> dict:
-    """The R2 root counter-check, same probe semantics as the init-time
-    toolchain check (adb shell su -c id; uid=0 = root) — presence/
-    liveness tier only, never a capability trial (the periodic-path
-    contract)."""
+def _probe_jdwp_debug() -> dict:
+    """#421 seam closed: ANDROID_CAPS declared jdwp_debug since the #474
+    follow-up, but probe() never emitted it for android — the classifier
+    vocabulary had no producer. Wiring reuses the #474 primitive
+    (`_adb_jdwp_probe`) — never reimplemented (single source)."""
     adb = _adb_path()
     if not adb:
-        return _entry("skip", "adb not on PATH — device_root not probeable")
+        return _entry("skip", "adb not on PATH — jdwp not probeable")
     attached, _ = _adb_device_attached(adb)
     if not attached:
-        return _entry("skip", "no adb device attached — device_root not "
+        return _entry("skip", "no adb device attached — jdwp not probeable")
+    ok, detail = tc._adb_jdwp_probe(adb)
+    return _entry("pass" if ok else "fail", detail)
+
+
+def _probe_device_root() -> dict:
+    """#812 acceptance 3: the canonical root check joins the snapshot.
+    Channel-absent stays a SKIP — a host without adb cannot produce a
+    device-state verdict (the misattribution trap is structural)."""
+    adb = _adb_path()
+    if not adb:
+        return _entry("skip", "adb not on PATH — device root UNVERIFIED "
+                              "(channel absent, not device-unrooted)")
+    attached, _ = _adb_device_attached(adb)
+    if not attached:
+        return _entry("skip", "no adb device attached — device root not "
                               "probeable")
-    rc, out, err = tc._run_cmd([adb, "shell", "su", "-c", "id"], timeout=10)
-    if rc == 0 and "uid=0" in out:
-        return _entry("pass", f"device rooted ({out.splitlines()[0][:60] if out else 'uid=0'})")
-    return _entry("fail", f"not rooted or su unavailable: "
-                          f"{(err or out)[:80]}")
+    status, detail = _cp.probe_device_root(adb=adb)
+    return _entry(status, detail)
+
+
+def _probe_host_frida() -> dict:
+    """#812 acceptance 1: the HOST-side face is its own fact — independent
+    of any adb channel (frida --version runs with no device attached)."""
+    status, detail = _cp.probe_host_frida()
+    return _entry(status, detail)
 
 
 def _probe_mcp_bridge(ws: Path, ptype: str) -> dict:
@@ -173,7 +196,9 @@ def probe(ws: Path) -> dict:
     elif ptype == "android":
         caps["adb"] = _probe_adb()
         caps["frida_server"] = _probe_frida_server()
+        caps["jdwp_debug"] = _probe_jdwp_debug()
         caps["device_root"] = _probe_device_root()
+        caps["host_frida"] = _probe_host_frida()
     return {"per_capability": caps, "written_by": WRITTEN_BY, "ts": _utc_now()}
 
 

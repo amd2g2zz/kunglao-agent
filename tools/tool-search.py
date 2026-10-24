@@ -649,6 +649,18 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     mode = args.match or "any"
     query = compile_query(flat, mode)
     terms = _ast_leaves(query)
+    # #812 negative cache: within TTL an identical negative query is
+    # answered from the cache WITHOUT the four-source scan (the dead lane
+    # is not re-probed); a fresh-hit or workspace-less query never
+    # touches it (fail-open, silent when no workspace resolves)
+    from _lib import negative_cache as _nc
+    ws = resolve_workspace(args.ws)
+    family = _nc.normalize_family(terms)
+    if family and ws is not None:
+        cached = _nc.lookup(ws, family)
+        if cached is not None:
+            _emit_negative_cached(cached, args.json)
+            return 0
     ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
     refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
     ref_paths = load_reference_paths(refs_index)
@@ -670,8 +682,27 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     if args.type is not None:
         hits = [h for h in hits if h.get("type") == args.type]
     hits = _with_score(hits, terms)
+    if not hits and family and ws is not None:
+        # record the negative fact (per-family occurrence counting,
+        # Standard 11) — the NEXT identical query answers from cache
+        _nc.record_negative(ws, family, flat)
     _emit(hits, args.json, format_find_text)
     return 0
+
+
+def _emit_negative_cached(row: dict, as_json: bool) -> None:
+    """The #812 cache-hit face: the scan did NOT run — the row carries
+    occurrence/cached_at/ttl_remaining so the repetition is visible
+    (Standard 11 escalation rides `escalated`)."""
+    if as_json:
+        print(json.dumps({"count": 0, "tools": [], "negative_cache": row},
+                         ensure_ascii=False))
+    else:
+        print(f"# negative-cache: family '{row['family']}' answered from "
+              f"cache (0 hits x{row['occurrence']}, ttl "
+              f"{row['ttl_remaining']}s"
+              + (", DEAD LANE — pivot suggested" if row["escalated"] else "")
+              + "); scan skipped")
 
 
 def main(argv: list[str] | None = None) -> int:
