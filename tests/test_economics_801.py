@@ -531,8 +531,10 @@ class TestIncrementalTelemetry:
                       feeds={"a": "1"}),
         ]
         monkeypatch.setattr(pr, "round_index", lambda _ws: 1)
-        pr._emit_rank_feeds(ws, [], ev, 7, actions, 1)
-        pr._emit_rank_feeds(ws, [], ev, 8, actions, 1)
+        ri = {"claims_hash": "0", "evidence_hash": "0",
+              "posterior_hash": "0"}
+        pr._emit_rank_feeds(ws, [], ev, ri, actions, 1)
+        pr._emit_rank_feeds(ws, [], ev, ri, actions, 1)
         ledger = (ws / "runs" / "logs").glob("kunglao-*.jsonl")
         rows = [json.loads(ln) for f in ledger for ln in
                 f.read_text(encoding="utf-8").splitlines() if ln.strip()]

@@ -177,7 +177,7 @@ def test_missing_schema_field_raises(tmp_path):
         raise AssertionError("missing schema field must fail loudly")
 
 
-# ---------- Thompson sample 确定性 ----------
+# ---------- CasePosterior.sample RNG determinism (sampler face) ----------
 
 def test_thompson_sample_deterministic_same_seed():
     c = po.CasePosterior("C-001", alpha=7.0, beta=3.0)

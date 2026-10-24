@@ -68,9 +68,10 @@ def _check_cli_surface() -> dict:
 
 
 def _check_priority_voi() -> dict:
-    """#107+#294: the ranker is the rebuilt Thompson composite — score =
-    (sampled case posterior + W_DOWNSTREAM*downstream_term) * worth,
-    deterministic under the default seed, with the feeds diagnostics and
+    """#792: the ranker is the deterministic evidence composite — score =
+    (posterior-mean case value + W_DOWNSTREAM*downstream_term) * worth,
+    deterministic from its inputs (#792: no seed axis), with the feeds
+    diagnostics and
     no weighted-era fields. (#295 removed the LAMBDA_DH*dH face —
     docs/adr-001-strategy-parameter-governance.md. The check token keeps
     its historical name; the formula it pins changed by owner ruling —
@@ -84,17 +85,21 @@ def _check_priority_voi() -> dict:
         again = pr.priority_ratio(claims, {}, pr.EvidenceView())[0]
         det = (a.to_dict() == again.to_dict())
         composite = (hasattr(a, "feeds")
-                     and {"thompson_sample", "case_flip_potential", "downstream"}
+                     and {"case_value", "case_flip_potential", "downstream"}
                      <= set(a.feeds or {})
                      and "dh_pq" not in (a.feeds or {})
                      and not hasattr(a, "leverage")
                      and not hasattr(a, "delta_disc"))
         max_dh_free_lift = pr.W_DOWNSTREAM * pr.DOWNSTREAM_CAP
-        bounded = 0.0 < a.score < 1.0 + max_dh_free_lift + 1e-9  # Beta sample + no deps
+        # #792: the cold unlinked claim has NO value channel — the honest
+        # score is exactly 0.0 (no fabricated prior draw). The bound keeps
+        # the old upper face (worth lift) and allows the zero floor.
+        bounded = 0.0 <= a.score < 1.0 + max_dh_free_lift + 1e-9  # mean face + no deps
+        unlinked = ("unlinked — no value channel" in (a.feeds or {}).get("case_value", ""))
         return {"name": "priority_voi_formula",
-                "passed": det and composite and bounded,
+                "passed": det and composite and bounded and unlinked,
                 "detail": f"score={a.score} det={det} composite={composite} "
-                          f"bounded={bounded}"}
+                          f"bounded={bounded} unlinked={unlinked}"}
     except Exception as exc:
         return {"name": "priority_voi_formula", "passed": False, "detail": f"error: {exc}"}
 

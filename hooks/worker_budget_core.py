@@ -99,7 +99,7 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent
 ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import (priority_ratio as _ratio_rank,
-                                posterior_seed_state as _posterior_seed_state,
+                                round_index as _round_index,
                                 EvidenceView as _EvidenceView,
                                 action_tier as _action_tier)  # #680 tier contract
     from retract_claim import RETRACTED  # retracted = terminal (#331)
@@ -325,12 +325,12 @@ def check_backtrack_gate(paths):
 def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
     ranks by the authoritative scorer (priority_ratio.py — specs/phase-4/
-    contract.md §1). #107 rebuilt that scorer as ONE Thompson ranker (sampled
-    case posterior + W_DOWNSTREAM·downstream_term, seeded by posterior_rng(ws)
-    — the same
-    seed DECIDE ranks with), so the audit and DECIDE share a single ranking
-    face and an authority_mismatch is structurally impossible (#100/#101 die
-    at the root; the second face is deleted with the phase gate).
+    contract.md §1). #792 keeps that scorer ONE deterministic ranker
+    (posterior-mean case value + W_DOWNSTREAM·downstream_term — the same
+    rank DECIDE issues with, no seed axis), so the audit and DECIDE share
+    a single ranking face and an authority_mismatch is structurally
+    impossible (#100/#101 die at the root; the second face is deleted
+    with the phase gate).
 
     Silent for rank-#1 dispatches; ADVISORY when the dispatched claim is not
     the top-ranked dispatchable one. `deviated=True` means the dispatch
@@ -338,8 +338,8 @@ def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
     "pretend-priority" dispatches that skip the recorded-deviation discipline).
 
-    The ranking is Thompson-seeded from the posterior state — there is no
-    weights/override face (the old priority_weights/PRIORITY_WEIGHTS override
+    The ranking is deterministic from the posterior state (#792) — there
+    is no weights/override face (the old priority_weights/PRIORITY_WEIGHTS override
     does not apply to the authority scorer; the inert task_spec_path
     signature-stability parameter is deleted, compat-rot sweep 2026-09-29).
 
@@ -359,7 +359,6 @@ def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
     deps = _load_yaml(deps_path)
     claims = [c for c in (reg.get('claims') or []) if c.get('id')]
     evidence = _EvidenceView()
-    rng = None
     seed_round = None
     if ws:
         ws_path = Path(ws)
@@ -371,13 +370,13 @@ def check_priority(reg_path, deps_path, dispatched_cid, ws=None):
         except Exception as exc:  # pragma: no cover - the audit stays usable, fail-open
             warn("check_priority", f"{type(exc).__name__}: {exc}")
         evidence = _EvidenceView.from_workspace(ws_path)
-        rng, seed_round = _posterior_seed_state(ws_path)
+        seed_round = _round_index(ws_path)
     # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
     # (frozen without RETRACTED), so THIS caller removes it. Every other
     # terminal-status row is kept: is_open already excludes it from candidacy.
     claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
-    actions = _ratio_rank(claims, deps, evidence, rng=rng, round_no=seed_round)
-    authority = 'thompson'
+    actions = _ratio_rank(claims, deps, evidence, round_no=seed_round)
+    authority = 'evidence-mean'
     if not actions:
         return (True, '', False)
     top = actions[0]

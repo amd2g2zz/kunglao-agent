@@ -49,7 +49,6 @@ the fixture's case set + the naive client red on every case).
 from __future__ import annotations
 
 import hashlib
-import random
 import sys
 from pathlib import Path
 
@@ -396,8 +395,7 @@ def run_round(ws: Path, round_no: int) -> tuple[int | None, list[str]]:
         pool = [c for c in claims
                 if CLAIM_FAMILY[c["id"]] not in eliminated]
         evidence = pr.EvidenceView.from_workspace(ws)
-        actions = pr.priority_ratio(pool, deps, evidence,
-                                    rng=random.Random(FIXTURE_SEED))
+        actions = pr.priority_ratio(pool, deps, evidence)
         if not actions:
             return None, sequence
         top = actions[0]

@@ -62,20 +62,12 @@ def _oracle_case(ws, case_id, target_pq):
         encoding="utf-8")
 
 
-def _prior_sample(cid, alpha=1.0, beta=1.0):
-    """Replica of the ranker's default-seed fork (Random(0) base, claim-keyed
-    child) — lets tests assert the exact draw a cold-start case produces."""
-    import random
-    base = random.Random(0).getrandbits(64)
-    return random.Random(f"thompson/{base}/{cid}").betavariate(alpha, beta)
-
-
 # ---------- case posterior -> Thompson sample ----------
 
-def test_case_posterior_feeds_thompson_sample(tmp_path):
+def test_case_posterior_feeds_case_value(tmp_path):
     """GREEN prior (Beta(6,1)) vs RED prior (Beta(1,6)): the same claim's
-    Thompson sample moves with the posterior — the runner verdict IS the
-    reward signal (owner ruling, #106/#107)."""
+    case value (posterior mean) moves with the posterior — the runner
+    verdict IS the reward signal (owner ruling, #106/#107; #792)."""
     ws_green = _mk_ws(tmp_path, "green", claims=[_claim("C-1", answers_question="q1")])
     ws_red = _mk_ws(tmp_path, "red", claims=[_claim("C-1", answers_question="q1")])
     for ws, a, b in ((ws_green, 6.0, 1.0), (ws_red, 1.0, 6.0)):
@@ -86,10 +78,10 @@ def test_case_posterior_feeds_thompson_sample(tmp_path):
     red = pr.priority_ratio([_claim("C-1", answers_question="q1")], {},
                             pr.EvidenceView.from_workspace(ws_red))[0]
     assert green.score > red.score, (
-        "a case the runner keeps passing must sample above one it keeps "
-        "failing (Thompson over the Bernoulli posterior)")
-    assert "case-1" in green.feeds["thompson_sample"]
-    assert "case-1" in red.feeds["thompson_sample"]
+        "a case the runner keeps passing must rank above one it keeps "
+        "failing (posterior mean over the Bernoulli posterior)")
+    assert "case-1" in green.feeds["case_value"]
+    assert "case-1" in red.feeds["case_value"]
 
 
 def test_pq_categorical_is_rank_inert(tmp_path):
@@ -119,33 +111,38 @@ def test_peaked_categorical_emits_no_dh_feed(tmp_path):
 # ---------- neutral fallbacks (fail-open discipline) ----------
 
 def test_cold_start_neutral_no_posteriors(tmp_path):
-    """No posteriors.yaml / no oracle cases → Beta(1,1) prior sample +
-    explicit 0.3 fallback on the flip potential (absence is never signal)."""
+    """No posteriors.yaml / no oracle cases → no value channel (score 0.0,
+    #792) + explicit 0.3 fallback on the flip potential (absence is never
+    signal)."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _mk_ws(tmp_path, claims=claims)
     ev = pr.EvidenceView.from_workspace(ws)
     assert ev.ws == ws
     a = pr.priority_ratio(claims, {}, ev)[0]
-    assert "Beta(1,1) prior" in a.feeds["thompson_sample"]
+    assert a.score == 0.0
+    assert "unlinked — no value channel" in a.feeds["case_value"]
     assert f"{pr.FLIP_POTENTIAL_FALLBACK} fallback" in a.feeds["case_flip_potential"]
     assert "dh_pq" not in a.feeds  # #295 removal: no ΔH feed exists
 
 
 def test_oracle_case_without_verdict_uses_prior(tmp_path):
     """A scaffolded case (targets pinned, expected pending, zero runner
-    rounds) is exactly the cold-start shape: Beta(1,1) sample."""
+    rounds) is exactly the cold-start shape: neutral prior mean 0.5."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _mk_ws(tmp_path, claims=claims)
     _oracle_case(ws, "case-1", "q1")  # no runs/posteriors.yaml entry
     a = pr.priority_ratio(claims, {}, pr.EvidenceView.from_workspace(ws))[0]
-    assert "case-1" in a.feeds["thompson_sample"]
+    assert a.score == 0.5
+    assert "case-1" in a.feeds["case_value"]
 
 
 def test_bare_view_no_ws_still_ranks():
     """EvidenceView() with no ws (pure-function contract §1) ranks with
-    prior samples and no ΔH face — never a crash, never a fake feed."""
+    no value channel (#792) and no ΔH face — never a crash, never a fake
+    feed."""
     a = pr.priority_ratio([_claim("C-1")], {}, pr.EvidenceView())[0]
-    assert "Beta(1,1) prior" in a.feeds["thompson_sample"]
+    assert a.score == 0.0
+    assert "unlinked — no value channel" in a.feeds["case_value"]
     assert "dh_pq" not in a.feeds
 
 
@@ -161,8 +158,8 @@ def test_corrupt_ledger_fails_open(tmp_path):
                                                  encoding="utf-8")
     ev = pr.EvidenceView.from_workspace(ws)
     a = pr.priority_ratio(claims, {}, ev)[0]
-    assert "case-1" in a.feeds["thompson_sample"]
-    assert a.score == round(_prior_sample("C-1"), 6)
+    assert "case-1" in a.feeds["case_value"]
+    assert a.score == 0.5  # degraded ledger -> neutral prior mean (#792)
 
 
 def test_unknown_ledger_schema_raises_loud(tmp_path):
@@ -187,7 +184,7 @@ def test_unreadable_oracle_case_is_skipped(tmp_path):
     ws = _mk_ws(tmp_path, claims=claims)
     (ws / "oracle" / "cases" / "bad.yaml").write_text("{broken", encoding="utf-8")
     a = pr.priority_ratio(claims, {}, pr.EvidenceView.from_workspace(ws))[0]
-    assert "bad" not in a.feeds["thompson_sample"]
+    assert "bad" not in a.feeds["case_value"]
 
 
 def test_no_ws_dir_at_all_no_crash(tmp_path):
@@ -209,7 +206,7 @@ def test_no_ws_dir_at_all_no_crash(tmp_path):
 def test_posterior_state_changes_the_rank(tmp_path):
     """Two workspaces identical except one case posterior: the rank order
     follows the runner verdicts — same posterior state → same rank
-    (determinism clause); different state → the sample moves."""
+    (determinism clause); different state → the value moves."""
     claims = [_claim("C-1", answers_question="q1"),
               _claim("C-2", answers_question="q2")]
     ws1 = _mk_ws(tmp_path, "ws1", claims=claims)

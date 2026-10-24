@@ -8,7 +8,6 @@ posteriors for the ranker, episode tiers).
 Fixtures are SYNTHETIC (no workspace data)."""
 from __future__ import annotations
 
-import random
 
 import yaml
 
@@ -208,13 +207,13 @@ def test_case_settlement_leg_feeds_the_ranker(tmp_path):
     actions = pr.priority_ratio(
         [{"id": "C-1", "status": "OPEN", "answers_question": "q-x"}],
         {"depends_on": {}}, pr.EvidenceView(ws=ws))
-    base = random.Random(0).getrandbits(64)
-    child = random.Random(f"thompson/{base}/C-1")
-    expected = round(child.betavariate(led.cases["case-a"].alpha,
-                                       led.cases["case-a"].beta), 6)
+    # #792 mean face: the settled Beta's mean is the value (no draw)
+    expected = round(led.cases["case-a"].alpha
+                     / (led.cases["case-a"].alpha
+                        + led.cases["case-a"].beta), 6)
     assert actions[0].score == expected, \
-        "the ranker's case face must draw the settled Beta"
-    assert "no linked oracle case" not in actions[0].feeds["thompson_sample"]
+        "the ranker's case face must read the settled Beta mean"
+    assert "no value channel" not in actions[0].feeds["case_value"]
 
 
 def test_episode_tier_leg_amends_and_is_idempotent(tmp_path):

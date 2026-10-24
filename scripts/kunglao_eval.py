@@ -100,10 +100,10 @@ def oracle_selfcheck() -> list[dict]:
     def check(name, cond, reason):
         results.append({"name": name, "passed": bool(cond), "reason": reason if not cond else "ok"})
 
-    # #107 Thompson rebuild: the known-answer cases now pin the candidate
-    # filter, the deterministic Thompson sampling, the flip-potential
-    # diagnostics and the #759 worth channel (the L/D/N terms are deleted
-    # with the weighted formula — owner ruling "之前的不要了").
+    # #792 evidence ranker: the known-answer cases pin the candidate
+    # filter, the input-deterministic value face, the flip-potential
+    # diagnostics and the #759 worth channel (the L/D/N terms and the
+    # Thompson draw face are both retired — owner rulings #107/#792).
     out = pr.priority_ratio([_C("C-1", status="PROVEN"), _C("C-2")], {}, pr.EvidenceView())
     check("terminal_claim_excluded", [a.claim_id for a in out] == ["C-2"],
           f"got {[a.claim_id for a in out]}")

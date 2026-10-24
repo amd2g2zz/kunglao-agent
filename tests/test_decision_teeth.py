@@ -525,13 +525,13 @@ class TestObstaclePromotion:
         assert "C-2" in out, (
             "obstacle claim must become dispatchable once the parent is terminal")
         # #295: the dH face is removed (ADR-001) — the inherited
-        # answers_question now surfaces through the Thompson linkage face,
+        # answers_question now surfaces through the case linkage face,
         # which names the PQ the oracle-case linkage keys on.
         assert "dh_pq" not in out["C-2"].feeds, (
             "the dh_pq feed was removed by #295 (ADR-001)")
-        assert "PQ-3" in out["C-2"].feeds["thompson_sample"], (
+        assert "PQ-3" in out["C-2"].feeds["case_value"], (
             f"the inherited answers_question must key the rank face "
-            f"(Thompson linkage); got {out['C-2'].feeds['thompson_sample']}")
+            f"(oracle-case linkage); got {out['C-2'].feeds['case_value']}")
 
 
 # ---------- ③ strategy novelty (minimal interface) ----------------------

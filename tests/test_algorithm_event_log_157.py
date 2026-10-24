@@ -6,8 +6,8 @@ unified kunglao_log (#157 contract: "every agent-consumed algorithm state
 must be event-logged" — the dual of the display principle):
 
   1. rank_feeds       priority_ratio(), ONE emit per RUN (not per claim):
-                      per-claim Thompson feeds + input fingerprint
-                      (claims hash, evidence-view hash, rng base draw,
+                      per-claim case-value feeds + input fingerprint
+                      (claims hash, evidence-view hash, posterior hash,
                       round) — every ranking decision exactly
                       replayable; frozen sampling tail-observable.
   2. posterior_update record_posteriors(), per case observation:
@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
 import sys
 from pathlib import Path
 
@@ -153,13 +152,16 @@ def test_rank_feeds_one_emit_per_run_with_feeds_and_fingerprint(
         assert payload["feeds"][cid] == dict(action.feeds)
     assert payload["ranked_order"] == [a.claim_id for a in actions]
 
-    # input fingerprint: claims hash + evidence-view hash + rng base draw +
-    # the round, replayable from the payload components alone
+    # input fingerprint (#792): claims hash + evidence-view hash +
+    # posterior hash + the round (rng_base retired as null), replayable
+    # from the payload components alone
     fp = payload["input_fingerprint"]
-    assert {"claims_hash", "evidence_hash", "rng_base", "round",
-            "fingerprint"} <= set(fp)
+    assert {"claims_hash", "evidence_hash", "posterior_hash", "rng_base",
+            "round", "fingerprint"} <= set(fp)
+    assert fp["rng_base"] is None
     canon = json.dumps({"claims_hash": fp["claims_hash"],
                         "evidence_hash": fp["evidence_hash"],
+                        "posterior_hash": fp["posterior_hash"],
                         "rng_base": fp["rng_base"],
                         "round": fp["round"]},
                        sort_keys=True, ensure_ascii=False)
@@ -170,40 +172,40 @@ def test_rank_feeds_one_emit_per_run_with_feeds_and_fingerprint(
         .encode("utf-8")).hexdigest()
 
 
-def test_rank_feeds_replay_same_seed_same_payload(tmp_path, events):
-    """The replay proof: same rng seed + same inputs -> identical feeds
-    payload (thompson draws, fingerprint), i.e. every rank decidable from
-    the event tail alone."""
+def test_rank_feeds_replay_same_inputs_same_payload(tmp_path, events):
+    """The replay proof (#792): same inputs -> identical feeds payload
+    (value face, fingerprint), i.e. every rank decidable from the event
+    tail alone."""
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    pr.priority_ratio(claims, deps, ev, rng=random.Random(20260907))
-    pr.priority_ratio(claims, deps, ev, rng=random.Random(20260907))
+    pr.priority_ratio(claims, deps, ev)
+    pr.priority_ratio(claims, deps, ev)
     rows = _rows(events, "rank_feeds")
     assert len(rows) == 2
     assert rows[0]["payload"] == rows[1]["payload"]
 
 
-def test_rank_feeds_fingerprint_moves_with_seed_and_inputs(tmp_path, events):
+def test_rank_feeds_fingerprint_moves_with_inputs(tmp_path, events):
     ws_a = _rank_ws(tmp_path / "a", cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     ws_b = _rank_ws(tmp_path / "b", cases=[("CASE-A", "pq-a", 5.0, 1.0)])
     claims, deps, ev_a = _rank_inputs(ws_a)
-    pr.priority_ratio(claims, deps, ev_a, rng=random.Random(1))
+    pr.priority_ratio(claims, deps, ev_a)
     _, _, ev_b = _rank_inputs(ws_b)
-    pr.priority_ratio(claims, deps, ev_b, rng=random.Random(2))
+    pr.priority_ratio(claims, deps, ev_b)
     rows = _rows(events, "rank_feeds")
     assert len(rows) == 2
     fp_a, fp_b = (r["payload"]["input_fingerprint"] for r in rows)
-    # posterior state enters through the seed derivation: different seed ->
-    # different base draw -> different fingerprint
+    # posterior state enters the fingerprint directly (#792): a different
+    # posterior -> different posterior_hash -> different fingerprint
     assert fp_a["fingerprint"] != fp_b["fingerprint"]
-    assert fp_a["rng_base"] != fp_b["rng_base"]
+    assert fp_a["posterior_hash"] != fp_b["posterior_hash"]
+    assert fp_a["rng_base"] is None and fp_b["rng_base"] is None
     # a different evidence VIEW (worth weights) moves the evidence component
     pr.priority_ratio(
         claims, deps,
         pr.EvidenceView(terminal_fact_claims=frozenset({"C-1"}),
                         verified_fact_count=1, ws=Path(ws_a),
-                        value_class_weights={"rce": 2.0}),
-        rng=random.Random(1))
+                        value_class_weights={"rce": 2.0}))
     fp_c = _rows(events, "rank_feeds")[2]["payload"]["input_fingerprint"]
     assert fp_c["evidence_hash"] != fp_a["evidence_hash"]
     assert fp_c["fingerprint"] != fp_a["fingerprint"]
@@ -297,9 +299,9 @@ def _boom(*args, **kwargs):
 def test_rank_feeds_emit_crash_fail_open(tmp_path, monkeypatch):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    baseline = pr.priority_ratio(claims, deps, ev, rng=random.Random(0))
+    baseline = pr.priority_ratio(claims, deps, ev)
     monkeypatch.setattr(kunglao_log, "emit", _boom)
-    result = pr.priority_ratio(claims, deps, ev, rng=random.Random(0))
+    result = pr.priority_ratio(claims, deps, ev)
     assert [(a.claim_id, a.score, dict(a.feeds)) for a in result] == \
         [(a.claim_id, a.score, dict(a.feeds)) for a in baseline]
 

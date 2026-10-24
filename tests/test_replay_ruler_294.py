@@ -13,7 +13,6 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
-import random
 import sys
 from pathlib import Path
 
@@ -278,17 +277,17 @@ class TestLambdaCheck:
 
 class TestDownstreamTerm:
     def test_blocker_score_lifted_by_exact_term(self):
-        """Same-seed double run with/without the dep edges: the ONLY score
-        difference on P is W_DOWNSTREAM * downstream_term (the Thompson
-        base draw is seed-identical, leaves carry no term)."""
+        """Double run with/without the dep edges: the ONLY score
+        difference on P is W_DOWNSTREAM * downstream_term (#792: the rank
+        is input-deterministic, leaves carry no term)."""
         claims = [_claim("P"), _claim("K1"), _claim("K2"), _claim("K3")]
         ev = pr.EvidenceView()
-        import random
+        # #792: the ranker is input-deterministic (no rng), so the only
+        # score difference on P is the downstream term itself.
         with_deps = pr.priority_ratio(
             claims, {"depends_on": {"K1": ["P"], "K2": ["P"], "K3": ["P"]}},
-            ev, rng=random.Random(7))
-        without = pr.priority_ratio(claims, {"depends_on": {}}, ev,
-                                    rng=random.Random(7))
+            ev)
+        without = pr.priority_ratio(claims, {"depends_on": {}}, ev)
         by = {a.claim_id: a.score for a in with_deps}
         wo = {a.claim_id: a.score for a in without}
         expect = pr.W_DOWNSTREAM * pr.downstream_term(
@@ -322,20 +321,20 @@ class TestDownstreamTerm:
         _write_register(ws, claims)
         _write_deps(ws, {"K": ["P"]})
         ev = pr.EvidenceView(ws=ws)
-        import random
         acts = pr.priority_ratio(claims, {"depends_on": {"K": ["P"]}}, ev,
-                                 rng=random.Random(3), round_no=0)
+                                 round_no=0)
         feeds = {a.claim_id: a.feeds for a in acts}
         assert "downstream" in feeds["P"]
         # the blocked child still scores zero downstream weight
         assert pr.downstream_term("K", {"K": ["P"]}) == 0.0
         # an unblocked sibling face carries the feed too
         acts2 = pr.priority_ratio([_claim("P"), _claim("K")],
-                                  {"depends_on": {}}, ev,
-                                  rng=random.Random(3), round_no=0)
+                                  {"depends_on": {}}, ev, round_no=0)
         assert all("downstream" in a.feeds for a in acts2)
 
-    def test_seed_contract_holds_with_term(self, tmp_path):
+    def test_determinism_holds_with_term(self, tmp_path):
+        """#792: same inputs (incl. dep edges) -> identical ranking, no
+        seed involved."""
         ws = tmp_path / "ws"
         ws.mkdir()
         claims = [_claim("P"), _claim("K1"), _claim("K2")]
@@ -345,10 +344,10 @@ class TestDownstreamTerm:
         ev = pr.EvidenceView(ws=ws)
         a = pr.priority_ratio(claims, {"depends_on": {"K1": ["P"],
                                                       "K2": ["P"]}}, ev,
-                              rng=pr.posterior_rng(ws), round_no=4)
+                              round_no=4)
         b = pr.priority_ratio(claims, {"depends_on": {"K1": ["P"],
                                                       "K2": ["P"]}}, ev,
-                              rng=pr.posterior_rng(ws), round_no=4)
+                              round_no=4)
         assert [(x.claim_id, x.score) for x in a] == \
                [(x.claim_id, x.score) for x in b]
 
@@ -821,12 +820,12 @@ class TestNoRuntimeSelfTuning:
         ev = pr.EvidenceView.from_workspace(ws)
         pr.priority_ratio([{"id": "C-1", "status": "OPEN",
                             "statement": "s", "promotion_attempts": 0}],
-                          {}, ev, rng=random.Random(0))
+                          {}, ev)
         assert (pr.W_DOWNSTREAM, pr.DOWNSTREAM_DECAY,
                 pr.DOWNSTREAM_CAP) == before
         assert not hasattr(pr, "LAMBDA_DH")
         # no env-var side channel is consulted by the ranker either —
-        # the ranker is a pure function of (claims, deps, evidence, rng).
+        # the ranker is a pure function of (claims, deps, evidence).
         assert not any(k.startswith("KUNGLAO_RANKER_") for k in os.environ)
 
     def test_hooks_dispatch_budget_pass_leaves_constants_frozen(

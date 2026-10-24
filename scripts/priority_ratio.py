@@ -19,14 +19,26 @@ Concretely, per dispatchable claim (the candidate filter is UNCHANGED:
 OPEN + promotion_attempts<3 + every depends_on parent holding a terminal
 fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
 
-  case face — the claim's oracle cases (workspace `oracle/cases/*.yaml`,
-  each `target_pq` == the claim's `answers_question`) are Bernoulli
-  posteriors (#106 CasePosterior, runs/posteriors.yaml). ONE Thompson Beta
-  sample per linked case, summed; a claim with no linked case samples the
-  Beta(1,1) prior once — cold start is uniform-random WITHIN a round (the
-  per-round seed itself advances with the ledger row count), which is Thompson's
-  intrinsic exploration: an uncertain arm occasionally ranks first with no
-  threshold gate, and bad priors recover by evidence.
+  case face — #792: the value face is the posterior MEAN, never a draw.
+  The claim's oracle cases (workspace `oracle/cases/*.yaml`, each
+  `target_pq` == the claim's `answers_question`) are Bernoulli posteriors
+  (#106 CasePosterior, runs/posteriors.yaml — the SAME store the strategy
+  sampler consumes). value = sum(alpha_i / (alpha_i + beta_i)) over the
+  linked cases: deterministic given data, monotone in evidence, moving
+  only when evidence moves. A claim with NO linked case has no value
+  channel by definition — zero is not fabricated for it; it is DEMOTED
+  below every value-bearing claim, ordered by the declared deterministic
+  default (downstream_term, tier, worth), and its feeds say
+  `unlinked — no value channel (arm oracle cases / set answers_question)`
+  so the linkage gap is the visible actionable signal. The retired draw
+  faces (the round-seeded `thompson/{base}/{cid}` Beta re-draw and the
+  Beta(1,1) unlinked fallback) simulated exploration while doing none of
+  its work: nothing fed the draw back, nothing learned from it. Real
+  exploration lives in the strategy sampler (method_sample) — and at
+  this face only as the EXPLICIT exploration slot (EXPLORE_EVERY_N_ROUNDS,
+  default 0 = off): when enabled, every Nth round promotes the best
+  unlinked/lowest-attempts claim, labeled `exploration_arm` in feeds,
+  never conflated with the value column.
 
   PQ face — REMOVED (#295, the first ADR-001 governed application). The
   #106/#107 ΔH_PQ face (case_face + LAMBDA_DH·ΔH) died on replay
@@ -52,21 +64,20 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   — a sanctioned exogenous multiplier, not a formula DOF; absent
   weights → 1.0.
 
-  rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
-  random.Random(0): same inputs → same ranking (anchor-deterministic).
-  Live callers (kunglao-decide, worker_budget.check_priority) share ONE
-  seed source, posterior_rng(ws) — the #251 f(posterior_state, round)
-  digest: sha256 of the canonical CASES posterior payload plus the round
-  (the convergence ledger's RAW snapshot-row count, round_index). The
-  sample moves when evidence moves OR the round advances — static
-  posteriors can no longer freeze Thompson (the #251 defect: 5/5
-  identical rankings on one rng_base; 53 consecutive in the wild) — while
-  the determinism clause survives per-round ("same rank given the same
-  posterior state and round", no wall clock anywhere: the round axis is
-  an append-order counter, machine-independent) and DECIDE + the dispatch
-  gate can never disagree about rank #1 (#100/#101 die at the root). The
-  per-claim rng is forked from ONE base draw keyed by claim_id, so a
-  register reorder never reshuffles dispatch order.
+  determinism — #792: same (ledger, claims, weights) → byte-identical
+  ranking, ANY round. The #251 per-round seed (case_face_seed /
+  posterior_rng / posterior_seed_state — the f(posterior_state, round)
+  digest) is RETIRED together with the draw it seeded: a ranking column
+  whose numbers move because the round counter advanced is ordering
+  noise, not signal (the same claim re-ranked across rounds while no
+  data changed). The rank is a pure function of the inputs; the emit
+  fingerprint pins (claims_hash, evidence_hash, posterior_hash, round)
+  so the event tail stays exactly replayable. DECIDE + the dispatch gate
+  share the ONE deterministic ranker — an authority mismatch stays
+  structurally impossible (#100/#101 die at the root, now seed-free).
+  The #266 frozen-sampling observable is defined out at the source: new
+  rank_feeds fingerprints carry rng_base=null (the detector remains for
+  historical tails, where it still reads the retired integer face).
 
   flip potential (diagnostic, feeds["case_flip_potential"]) — the
   conservative P(cflip) reading: 0.5 at cold start, decayed by the claim's
@@ -153,14 +164,23 @@ DOWNSTREAM_DECAY = 0.5
 DOWNSTREAM_CAP = 4.0
 W_DOWNSTREAM = 0.1
 
+# #792 explicit exploration slot (design 3 — structural, never smuggled):
+# every Nth round promotes the best unlinked/lowest-attempts claim and
+# LABELS it `exploration_arm` in feeds. 0 = OFF (the default: the value
+# column is then the whole rank, byte-identical across rounds). A nonzero
+# value is a DECLARED exploration face — auditable, tunable, removable —
+# never a hidden draw inside the score.
+EXPLORE_EVERY_N_ROUNDS = 0
+
 # #266 frozen-sampling marker: K CONSECUTIVE rank runs whose recorded
 # rng_base is EQUAL while the recorded round ADVANCES. The #251 contract
-# makes the seed move whenever the round moves — a run of advancing rounds
-# with a static base is exactly the old frozen-sampler defect re-emerging
-# (the 53-consecutive wild audit), detectable from the event tail alone.
-# Equal base with EQUAL rounds is the contract's deterministic replay of
-# an unchanged tick, never freezing. The consumer is a pure tail function:
-# no state, idempotent under tail replay.
+# made the seed move whenever the round moved — a run of advancing rounds
+# with a static base was the old frozen-sampler defect (the 53-consecutive
+# wild audit). #792 retires the seed at the SOURCE (ranker output is
+# round-invariant), so new fingerprints carry rng_base=null and the
+# detector reads them as the honest gap; the consumer remains a pure tail
+# function for HISTORICAL tails (the retired integer face) — no state,
+# idempotent under tail replay.
 FROZEN_SAMPLE_K = 3
 
 _TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
@@ -251,11 +271,12 @@ class EvidenceView:
 class Action:
     """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1).
 
-    #107+#294: score = (Thompson case face + W_DOWNSTREAM·downstream_term)
-    · worth (the #295 governed removal deleted the LAMBDA_DH·ΔH_PQ face —
-    docs/adr-001-strategy-parameter-governance.md). The
+    #792: score = (posterior-mean case value + W_DOWNSTREAM·downstream_term)
+    · worth (the #107 draw face and the #295 LAMBDA_DH·ΔH_PQ face are both
+    retired — docs/adr-001-strategy-parameter-governance.md). The
     weighted-era term fields (leverage/discriminator/novelty and the old
-    lexicographic sort head) are deleted; feeds carries the new diagnostics."""
+    lexicographic sort head) are deleted; feeds carries the diagnostics
+    (case_value / case_flip_potential / downstream)."""
 
     claim_id: str
     action: str
@@ -691,52 +712,18 @@ def round_index(ws) -> int:
                and "type" not in e and "open_count" in e)
 
 
-def case_face_seed(ledger: PosteriorLedger, round_no: int) -> int:
-    """Deterministic seed digest of (CASES posterior state, round) — the
-    seed contract f(posterior_state, tick).
-
-    Only the cases namespace enters the posterior half: a PQ-categorical
-    update must move the ΔH term, not reshuffle the Thompson case samples
-    (one signal, one channel). The ROUND half is round_index(ws) — the
-    convergence ledger's raw snapshot-row count — mixed INSIDE the hashed
-    doc ({"cases": ..., "round": n}, one canonical payload), so a runner
-    verdict (new alpha/beta) OR a round advance moves the seed: static
-    posteriors no longer freeze Thompson (the frozen-sample defect). No wall clock
-    anywhere: v1's "no clock and no counter file" claim is retired — there
-    IS a counter file (the ledger), and the clock was never needed."""
+def posterior_digest(ledger: PosteriorLedger) -> str:
+    """Canonical digest of the CASES posterior state (#792 fingerprint
+    component). Only the cases namespace enters: a PQ-categorical update
+    must not move the case-value face (one signal, one channel — the same
+    scoping the retired case_face_seed used). The digest pins the ledger
+    state in the rank_feeds fingerprint, so the event tail stays exactly
+    replayable without any seed: same (claims, evidence, posteriors) →
+    the identical ranking, recomputeable from the tail alone."""
     doc = {"cases": {k: ledger.cases[k].to_dict()
-                     for k in sorted(ledger.cases)},
-           "round": int(round_no)}
+                     for k in sorted(ledger.cases)}}
     payload = json.dumps(doc, sort_keys=True, ensure_ascii=False)
-    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
-
-
-def posterior_rng(ws) -> random.Random:
-    """THE shared per-tick Thompson seed source — DECIDE (kunglao-decide)
-    and the dispatch gate (worker_budget.check_priority) both rank through
-    this, so they can never disagree about rank #1 (#100/#101 die at the
-    root: one ranker, one seed).
-
-    Seed = case_face_seed(runs/posteriors.yaml, round_index(ws)) — the
-    f(posterior_state, round) contract. The empty/absent-posteriors
-    cold start is the SAME hash face ({"cases": {}, "round": n}) — v1
-    short-circuited to constant Random(0) BEFORE any hashing and froze the
-    cold start forever, regardless of round; that branch is gone. A
-    PosteriorSchemaError (unknown ledger version — the #106 version wall)
-    propagates LOUD: DECIDE lands in its conservative-BLOCKED path, the
-    gate fails open with a trace. Never a silent wrong-schema read."""
-    return posterior_seed_state(ws)[0]
-
-
-def posterior_seed_state(ws) -> tuple[random.Random, int]:
-    """posterior_rng PLUS the round it was seeded at (adversarial review):
-    telemetry callers must thread THIS round — a second round_index(ws)
-    read races a concurrent _append_ledger append and would record round
-    n+1 beside an rng_base derived from round n (tail replay mismatch,
-    frozen-delta miscounts)."""
-    rnd = round_index(ws)
-    ledger = PosteriorLedger.load(ws)
-    return random.Random(case_face_seed(ledger, rnd)), rnd
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------- #266 frozen-sampling consumer (pure tail function) -------------
@@ -846,7 +833,7 @@ def _view_stats(actions: list) -> dict:
 
 
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
-                     rng_base: int, actions: list[Action],
+                     rank_inputs: dict, actions: list[Action],
                      round_no: int | None,
                      planner: dict | None = None) -> None:
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
@@ -854,13 +841,15 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     evidence-view digest, rng base draw, #251 round). Given the seed inputs,
     the ranking is exactly replayable from the event tail.
 
-    Frozen-sampling observable: the THREADED seed round rides the
-    fingerprint doc next to ``rng_base``, so frozen sampling (equal rng_base
-    across advancing rounds — the 53-consecutive wild audit) is detectable
-    from the event tail in a one-line delta. The fingerprint hash covers the
-    round key. Never re-read round_index(ws) here when the round is
-    THREADED — the None fallback re-read (static-fixture callers only)
-    lives inside the fail-open try. See posterior_seed_state.
+    #792 fingerprint: (claims_hash, evidence_hash, posterior_hash, round)
+    — the FULL ranking input face, so the event tail is exactly replayable
+    without any seed: same inputs → recompute the identical ranking from
+    the tail alone. The retired ``rng_base`` ride stays as an explicit
+    null (the #266 detector reads it as the honest gap; historical tails
+    keep their integer face). The fingerprint hash covers the round key.
+    Never re-read round_index(ws) here when the round is THREADED — the
+    None fallback re-read (static-fixture callers only) lives inside the
+    fail-open try.
 
     SILENT FAIL-OPEN for the ranking (the decide_fail_open contract, #569):
     a crash in payload build or emit never reaches the ranking result. Issue
@@ -889,13 +878,13 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     view keys), so an all-empty run emits the pre-#718 payload
     byte-identically."""
     try:
-        claims_hash = hashlib.sha256(json.dumps(
-            claims, sort_keys=True, ensure_ascii=False, default=repr)
-            .encode("utf-8")).hexdigest()
-        evidence_hash = _evidence_digest(evidence)
-        fp_doc = {"claims_hash": claims_hash,
-                  "evidence_hash": evidence_hash,
-                  "rng_base": rng_base,
+        fp_doc = {"claims_hash": rank_inputs["claims_hash"],
+                  "evidence_hash": rank_inputs["evidence_hash"],
+                  "posterior_hash": rank_inputs["posterior_hash"],
+                  # #792: the per-round seed draw is retired — the null
+                  # keeps the key face stable for tail readers while the
+                  # frozen-sampling detector reads it as the honest gap.
+                  "rng_base": None,
                   "round": int(round_no) if round_no is not None
                   else round_index(ws)}
         fingerprint = hashlib.sha256(json.dumps(
@@ -937,17 +926,23 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
 
 
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
-                   rng: random.Random | None = None,
                    round_no: int | None = None) -> list[Action]:
-    """#107 Thompson ranking (purely mechanical, zero LLM).
+    """#792 deterministic evidence ranking (purely mechanical, zero LLM).
 
     Input: claims (claim-register claims[]), deps (claim_deps.yaml {depends_on, competitor_groups}),
           evidence (EvidenceView; `ws` present → #106 posteriors + oracle cases load),
-          rng (injected; None → random.Random(0) — deterministic),
-          round_no (the round the rng was seeded at — threaded to the emit;
-          None → re-read round_index(ws), fine for static test fixtures only)
-    Output: the sorted Action list (Thompson sample descending, stable
-          tie-break by claim_id — the #107 spec sort).
+          round_no (the calling tick — threaded to the emit fingerprint and
+          the exploration slot ONLY; the ranking itself never reads it).
+    Output: the sorted Action list — value-bearing claims by composite
+          score descending; unlinked claims DEMOTED below every value-
+          bearing one, ordered by the declared deterministic default
+          (downstream_term, tier, worth); stable tie-break claim_id.
+
+    Value face (issue #792): score = (case_value + W_DOWNSTREAM ·
+    downstream_term) · worth, where case_value = Σ αᵢ/(αᵢ+βᵢ) over the
+    linked oracle-case posteriors — deterministic given data, monotone in
+    evidence. Unlinked claims carry no fabricated value (the Beta(1,1)
+    fallback is gone); the linkage gap is their feeds-visible signal.
 
     Candidate filter UNCHANGED from the pre-#107 ranker: OPEN + attempts<3
     + all depends_on parents holding a terminal fact (#594/#596 per-claim
@@ -996,45 +991,54 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
               if evidence.ws is not None else PosteriorLedger())
     oracle_cases = _load_oracle_cases(evidence.ws)
 
-    # ONE base draw; per-claim forks key on claim_id, so a register reorder
-    # never reshuffles the dispatch order (the reorder-stability property).
-    if rng is None:
-        rng = random.Random(0)  # #107 default: same inputs → same ranking
-    base = rng.getrandbits(64)
+    # #792 rank-input digests: the emit fingerprint's input face and the
+    # L1 planner fork seed BOTH derive from these — inputs, never a round
+    # counter (the planner block must not reintroduce round-dependence).
+    claims_hash = hashlib.sha256(json.dumps(
+        claims, sort_keys=True, ensure_ascii=False, default=repr)
+        .encode("utf-8")).hexdigest()
+    evidence_hash = _evidence_digest(evidence)
+    posterior_hash = posterior_digest(ledger)
 
     actions: list[Action] = []
+    # #792: the unlinked demotion metadata — cid -> (dterm, tier, worth)
+    # for the declared deterministic default ordering of the no-value band.
+    unlinked_meta: dict[str, tuple[float, int, float]] = {}
     for c in candidates:
         cid = c["id"]
         pq = str(c.get("answers_question") or "").strip()
         linked = [case_id for case_id, tpq in oracle_cases
                   if tpq and tpq == pq]
-        child = random.Random(f"thompson/{base}/{cid}")
-        # case face: ONE Thompson Beta sample per linked oracle case, summed;
-        # no linkage → a single Beta(1,1) prior sample (cold start = uniform
-        # random WITHIN a round — the per-round seed advances: Thompson's
-        # intrinsic exploration, no threshold gate).
+        # case value: the posterior MEAN of each linked oracle case, summed
+        # (#792). No linkage → NO fabricated value (the Beta(1,1) fallback
+        # is retired): case_value stays 0.0 and the claim is demoted by the
+        # partition sort below; the linkage gap is the feeds signal.
         if linked:
-            case_face = 0.0
+            case_value = 0.0
+            linked_names: list[str] = []
             for case_id in linked:
                 post = ledger.cases.get(case_id) or CasePosterior(case_id)
-                case_face += child.betavariate(post.alpha, post.beta)
+                case_value += post.alpha / (post.alpha + post.beta)
+                linked_names.append(case_id)
             fp = FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c))
-            thompson_state = (f"Thompson Beta over {len(linked)} linked oracle "
-                              f"case(s) [{', '.join(linked)}] -> "
-                              f"sample={round(case_face, 6)}")
+            value_state = (f"posterior mean over {len(linked)} linked oracle "
+                           f"case(s) [{', '.join(linked_names)}] -> "
+                           f"value={round(case_value, 6)}")
         else:
-            case_face = child.betavariate(1.0, 1.0)
+            case_value = 0.0
             fp = min(FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c)),
                      FLIP_POTENTIAL_FALLBACK)
-            thompson_state = (f"no linked oracle case (oracle/cases/ target_pq "
-                              f"!= '{pq or '-'}') -> Beta(1,1) prior sample="
-                              f"{round(case_face, 6)} (cold-start exploration)")
+            value_state = ("unlinked — no value channel (arm oracle cases / "
+                           f"set answers_question): oracle/cases/ target_pq "
+                           f"!= '{pq or '-'}'")
         # ΔH_PQ face REMOVED (#295 governed application, ADR-001): the
         # PQ categorical is no longer read, no entropy is computed, and
         # no dh_pq feed is emitted. On all real ledgers the removed term
         # contributed LAMBDA_DH × 0 ≡ 0 at every tick (EXP-B: 612/612
         # rank events dh_pq=0; #294: λ=0.25 vs λ=0 order digests
         # byte-identical), so ordering is unchanged byte-for-byte.
+        # #792 keeps the removal intact — the mean face never reads the
+        # PQ categorical either.
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
@@ -1044,9 +1048,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # stored at 6dp (sort precision; the to_dict/json face still rounds
         # to 3) so the #759 worth multiplier stays an exact identity.
         score = round(
-            (case_face + W_DOWNSTREAM * dterm) * weight, 6)
+            (case_value + W_DOWNSTREAM * dterm) * weight, 6)
         feeds = {
-            "thompson_sample": thompson_state,
+            "case_value": value_state,
             "case_flip_potential": (
                 f"P(flip)={round(fp, 3)} (base {FLIP_POTENTIAL_BASE} decayed "
                 f"by attempts={attempts_of(c)} [dispatches="
@@ -1082,6 +1086,8 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
             weight=weight, feeds=feeds,
         ))
+        if not linked:
+            unlinked_meta[cid] = (dterm, action_tier(c), weight)
     # #718 additive L1 planner signal: while the value store is empty
     # `advisory_factors` returns {} and nothing here runs (the ranking
     # above stays byte-identical — the frozen-capture contract). Once
@@ -1089,7 +1095,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # verified answer already exists — reuse dominates its ratio) is
     # dragged by the dispatch SHARE; exact-1.0 claims keep their score
     # and their feeds untouched. Fail-open: a broken planner never
-    # touches the ranking result.
+    # touches the ranking result. #792: the planner fork seed derives
+    # from the rank INPUT digests (never the round), so the planner face
+    # cannot reintroduce round-dependence into the rank.
     planner_block: dict | None = None
     if evidence.ws is not None:
         factors: dict = {}
@@ -1097,7 +1105,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             from rlvr import l1_planner as _l1p  # noqa: PLC0415 — lazy
             factors = _l1p.advisory_factors(
                 evidence.ws, [(a.claim_id, a.cost) for a in actions],
-                rng=random.Random(f"l1rank/{base}"))
+                rng=random.Random(f"l1rank/{claims_hash}/{evidence_hash}"))
         except Exception as exc:  # noqa: BLE001 — the rank never breaks
             warn("priority_ratio.planner",
                  f"{type(exc).__name__}: {exc}")
@@ -1115,8 +1123,25 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                                     f"beats the replay's)"))
                 if a.claim_id in moves else a
                 for a in actions]
-    # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
-    actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # #792 partition sort: value-bearing claims by composite score
+    # descending; unlinked claims DEMOTED below every value-bearing one,
+    # ordered by the declared deterministic default (downstream_term, tier,
+    # worth); stable tie-break by claim id — the sort key is a pure
+    # function of the actions and their unlinked metadata (no rng, no
+    # round, no clock).
+    def _rank_key(a: Action) -> tuple:
+        meta = unlinked_meta.get(a.claim_id)
+        if meta is None:
+            return (0, -a.score, 0, 0.0, a.claim_id)
+        dterm_u, tier_u, weight_u = meta
+        return (1, -dterm_u, tier_u, -weight_u, a.claim_id)
+
+    actions.sort(key=_rank_key)
+    # #792 design 3: the explicit exploration slot (default OFF — see
+    # EXPLORE_EVERY_N_ROUNDS). When enabled and the round hits the slot,
+    # the best unlinked (or lowest-attempts) claim is promoted and
+    # LABELED, never conflated with the value column.
+    actions = _apply_exploration_slot(actions, unlinked_meta, round_no)
     # The emit below reads actions[0] as the event's arm — valid only
     # because this sort already ran: actions[0] IS the selected arm.
     # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
@@ -1125,9 +1150,39 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # tests/test_algorithm_event_log_157.py). No ws -> pure in-memory
     # surface, nothing to log to (bare-EvidenceView calls stay pure).
     if evidence.ws is not None:
-        _emit_rank_feeds(evidence.ws, claims, evidence, base, actions,
-                         round_no=round_no, planner=planner_block)
+        _emit_rank_feeds(evidence.ws, claims, evidence,
+                         {"claims_hash": claims_hash,
+                          "evidence_hash": evidence_hash,
+                          "posterior_hash": posterior_hash},
+                         actions, round_no=round_no, planner=planner_block)
     return actions
+
+
+def _apply_exploration_slot(actions: list[Action],
+                            unlinked_meta: dict[str, tuple[float, int, float]],
+                            round_no: int | None) -> list[Action]:
+    """#792 design 3 — the DECLARED epsilon slot. Disabled (the default,
+    EXPLORE_EVERY_N_ROUNDS == 0) this is the identity. Enabled, every Nth
+    round promotes the best unlinked claim (or, with none, the
+    lowest-attempts claim) to the front and labels it `exploration_arm` in
+    feeds — the value scores of every row are untouched, so the promotion
+    is never conflated with the value column. Pure: same inputs -> the
+    same promoted arm (ties break by the incoming sort order)."""
+    n = EXPLORE_EVERY_N_ROUNDS
+    if n <= 0 or round_no is None or len(actions) < 2 \
+            or round_no % n != 0:
+        return actions
+    pick = next((a for a in actions if a.claim_id in unlinked_meta), None)
+    if pick is None:
+        pick = min(actions, key=lambda a: (a.attempts, a.claim_id))
+    if pick is actions[0]:
+        return actions
+    labeled = replace(pick, feeds=dict(
+        pick.feeds,
+        exploration_arm=(f"exploration arm: round {round_no} slot "
+                         f"(every {n}) — coverage promotion; value column "
+                         f"untouched (#792 design 3)")))
+    return [labeled] + [a for a in actions if a is not pick]
 
 
 

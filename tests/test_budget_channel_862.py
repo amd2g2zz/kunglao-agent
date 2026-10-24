@@ -96,14 +96,18 @@ def test_description_only_shape_rejected(tmp_path):
 def test_devreason_requires_canonical_marker(tmp_path):
     """#862: 偏差场景（派发 rank#2 的 claim）下裸 reasoning: 不再过门，
     canonical agent-reasoning: 通过。 The deviating claim is picked via
-    the production ranking — the #251 round-seed contract intentionally
-    moved the cold-start Thompson sample, and this test pins the deviation
+    the production ranking (#792 deterministic evidence rank), and the
+    envelope tier follows the deviating claim's own derived tier so the
+    tiercons gate stays out of the way — this test pins the deviation
     GATE, not a hand-pinned sample order."""
     ws = _healthy_ws(tmp_path)
+    # same eta for both claims so the tier GATE never differentiates;
+    # rank separation comes from the #759 worth channel only (C-001 is
+    # rank #1, C-002 is the deviating rank #2 — matching the plan file).
     _write_register(ws / "claim-register.yaml", [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
-         'evidence_tier_attempted': 3,
-         'statement': 'decompile main'},
+         'evidence_tier_attempted': 1,
+         'statement': 'rce chain'},
         {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 1,
          'statement': 'strings triage of packer; xor decode; config extract'},
@@ -116,10 +120,13 @@ def test_devreason_requires_canonical_marker(tmp_path):
     deps = yaml.safe_load((ws / 'claim_deps.yaml').read_text(encoding='utf-8'))
     top = pr.priority_ratio(reg['claims'], deps,
                             pr.EvidenceView.from_workspace(ws),
-                            rng=pr.posterior_rng(ws))[0].claim_id
-    dev_cid = 'C-002' if top == 'C-001' else 'C-001'
+                            round_no=pr.round_index(ws))[0].claim_id
+    assert top == 'C-001'
+    dev_cid = 'C-002'
+    dev_tier = pr.action_tier(
+        next(c for c in reg['claims'] if c['id'] == dev_cid))
     env = (ENV.replace('"claim": "C-001"', f'"claim": "{dev_cid}"')
-              .replace('"tier": 1', '"tier": 2'))
+              .replace('"tier": 1', f'"tier": {dev_tier}'))
     rc, err, _ = _run(_payload(env + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
                                + 'reasoning: why not rank1'), _paths_for(ws))
     assert rc == 2, err

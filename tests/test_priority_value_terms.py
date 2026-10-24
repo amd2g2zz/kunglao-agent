@@ -35,13 +35,25 @@ def test_dead_a3_terms_are_gone():
     assert not hasattr(pr, "_resolve_prior_p")
 
 
-def test_worth_class_weight_multiplies_score():
-    import random
-    claims = [_claim("C-001")]
-    base = random.Random(0).getrandbits(64)
-    raw = random.Random(f"thompson/{base}/C-001").betavariate(1.0, 1.0)
+def test_worth_class_weight_multiplies_score(tmp_path):
+    """#792 mean face: worth multiplies the posterior-mean case value
+    exactly (score stored at 6dp; no draw, no dh)."""
+    import yaml
+    claims = [_claim("C-001", answers_question="q1")]
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-1.yaml").write_text(
+        yaml.safe_dump({"id": "case-1", "target_pq": "q1"}), encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(
+        yaml.safe_dump({"schema": "posteriors-schema/1",
+                        "cases": {"case-1": {"alpha": 2.0, "beta": 1.0,
+                                             "pending_entries": 0}},
+                        "pqs": {}}),
+        encoding="utf-8")
+    raw = 2.0 / 3.0  # posterior mean, no draw (#792)
     worth = pr.priority_ratio(
-        claims, {}, pr.EvidenceView(value_class_weights={"rce": 4.0}))[0]
+        claims, {}, pr.EvidenceView(value_class_weights={"rce": 4.0}, ws=ws))[0]
     assert worth.weight == 4.0
     assert worth.score == round(raw * 4.0, 6)  # exact: no cost, no dh
 

@@ -3,7 +3,7 @@
 
 #107 (Thompson rebuild, owner ruling "探索和价值网络完全重构，之前的
 不要了"): kunglao-decide has ONE ranking path — the Thompson ranker in
-priority_ratio, seeded by pr.posterior_rng(ws). The explore/exploit dual
+priority_ratio, deterministic from the posterior state (#792). The explore/exploit dual
 path (the count-threshold gate, the cheapness face, the explore_mode
 output field) is deleted: there is no phase to switch on and no second
 ranking face. #100's dependency-gate standard SURVIVES the rebuild (it
@@ -137,10 +137,10 @@ def test_dispatch_order_survives_register_reorder(tmp_path):
         f"a={out_a} b={out_b}")
 
 
-def test_decide_is_deterministic_and_seed_reproducible(tmp_path):
-    """kd.decide is deterministic for the same posterior state, and its
-    top_actions scores reproduce a direct ranker call with the same
-    posterior_rng seed (one ranker, one seed)."""
+def test_decide_is_deterministic_and_replayable(tmp_path):
+    """kd.decide is deterministic for the same workspace state, and its
+    top_actions scores reproduce a direct ranker call (one deterministic
+    ranker, #792 — no seed axis)."""
     kd = _load_kd()
     sys.path.insert(0, str(SCRIPTS))
     import priority_ratio as pr
@@ -156,7 +156,8 @@ def test_decide_is_deterministic_and_seed_reproducible(tmp_path):
     reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
     deps = yaml.safe_load((ws / "claim_deps.yaml").read_text(encoding="utf-8"))
     ev = pr.EvidenceView.from_workspace(ws)
-    actions = pr.priority_ratio(reg["claims"], deps, ev, rng=pr.posterior_rng(ws))
+    actions = pr.priority_ratio(reg["claims"], deps, ev,
+                                round_no=pr.round_index(ws))
     expected = [{"claim_id": a.claim_id, "action": a.action,
                  "score": round(a.score, 3), "skill": None}
                 for a in actions[:out1["free_slots"]]]
@@ -206,18 +207,19 @@ def test_decide_top1_passes_gate_silently(tmp_path):
         f"msg={msg!r}")
 
 
-def test_deviation_msg_names_thompson_authority(tmp_path):
+def test_deviation_msg_names_rank_authority(tmp_path):
     """#101 trace requirement: a deviation is judged under the single
-    Thompson authority — the advisory msg names it so post-mortems can
-    classify the deviation (a dep-blocked claim is rank-None: advisory
-    without a deviation, also naming the authority)."""
+    deterministic rank authority (#792 evidence-mean) — the advisory msg
+    names it so post-mortems can classify the deviation (a dep-blocked
+    claim is rank-None: advisory without a deviation, also naming the
+    authority)."""
     import worker_budget as wb
     ws = _conflict_ws(tmp_path, name="ws-auth")
     _ok, msg, deviated = wb.check_priority(
         str(ws / "claim-register.yaml"), str(ws / "claim_deps.yaml"),
         "C-1", ws=ws)
     assert deviated is True, f"C-1 is a non-#1 dispatch; got msg={msg!r}"
-    assert "thompson" in msg.lower(), (
+    assert "evidence-mean" in msg.lower(), (
         f"deviation msg must name the single ranking authority; got {msg!r}")
 
 
