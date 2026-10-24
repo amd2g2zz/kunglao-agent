@@ -281,15 +281,20 @@ class TestToolSearchFind:
         assert json.loads(r.stdout)["count"] >= 1
 
     def test_find_no_match_is_valid_empty_query(self) -> None:
+        # #812: the negative-cache face appears on the REPEAT query (a
+        # TTL-fresh cached row is served — the repetition the agent
+        # SEES); a cold first query is just an empty set. Pin both.
         r = run_py(TOOL_SEARCH, "--find", "zzz-no-such-capability-qqq", "--json")
         assert r.returncode == 0
-        # #812: a no-match answer carries the negative-cache face (the
-        # repetition the agent SEES) — occurrence may grow across reruns
-        # (append-only count), so pin the shape, not the exact tally
         doc = json.loads(r.stdout)
         assert doc["count"] == 0
         assert doc["tools"] == []
-        nc = doc.get("negative_cache") or {}
+        r2 = run_py(TOOL_SEARCH, "--find", "zzz-no-such-capability-qqq", "--json")
+        assert r2.returncode == 0
+        doc2 = json.loads(r2.stdout)
+        assert doc2["count"] == 0
+        assert doc2["tools"] == []
+        nc = doc2.get("negative_cache") or {}
         assert nc.get("family") == "zzz-no-such-capability-qqq"
         assert int(nc.get("occurrence") or 0) >= 1
 
