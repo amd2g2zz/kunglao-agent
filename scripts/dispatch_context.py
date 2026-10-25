@@ -293,16 +293,9 @@ def build_dispatch_context(
     # chosen commit, fed not bypassed).
     try:
         from rlvr import meta_policy as _meta_policy
-        from rlvr import episode_pool as _episode_pool
-        # the phase IS the claim's episode state: first dispatch = the
-        # episode-start retrieval; a claim with a pool episode already
-        # is AT a commit boundary (the persist/tune/switch decision)
-        if _episode_pool.episode_path(ws, claim_id).is_file():
-            _phase = "commit_boundary"
-        else:
-            _phase = "episode_start"
-        meta_block = _meta_policy.envelope_block(ws, claim_id,
-                                                 phase=_phase)
+        meta_block = _meta_policy.envelope_block(
+            ws, claim_id,
+            phase=_meta_policy.episode_phase(ws, claim_id))
     except Exception:  # noqa: BLE001 — context build never raises
         meta_block = None
     ctx = {

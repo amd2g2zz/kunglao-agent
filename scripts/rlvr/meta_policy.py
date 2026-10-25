@@ -204,6 +204,17 @@ def select_commit(ws, features: list[str], *, family: str | None = None,
 
 # ------------------------------------------------------- envelope face
 
+def episode_phase(ws, claim) -> str:
+    """The dispatch-time phase rule: a claim with no pool episode yet is
+    at episode_start (the pattern-recognition retrieval); a claim whose
+    episode exists is AT a commit boundary (the persist/tune/switch
+    decision rides the retrieved evidence)."""
+    from rlvr import episode_pool  # noqa: PLC0415 — lazy, in-package
+    if episode_pool.episode_path(ws, str(claim)).is_file():
+        return "commit_boundary"
+    return "episode_start"
+
+
 def envelope_block(ws, claim, *, phase: str, family: str | None = None) \
         -> dict:
     """THE SINGLE dispatch interface (schema meta-policy/1): commit

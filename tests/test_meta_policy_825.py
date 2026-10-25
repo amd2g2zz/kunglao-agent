@@ -391,6 +391,15 @@ class TestEnvelopeInterface:
         assert meta["commit"]["action"] == "select"  # the phase menu
         assert "C-9" in [c["claim"] for c in meta["context"]["cases"]]
 
+    def test_episode_phase_rule(self, tmp_path, monkeypatch):
+        for name in _META_ENV:
+            monkeypatch.delenv(name, raising=False)
+        ws = _mk_ws(tmp_path)
+        assert mp.episode_phase(ws, "C-1") == "episode_start"
+        _seed(ws, _episode("C-1", ["fam-x"], "persist"))
+        assert mp.episode_phase(ws, "C-1") == "commit_boundary"
+        assert mp.episode_phase(ws, "C-2") == "episode_start"
+
     def test_claim_with_episode_is_at_commit_boundary(self, tmp_path,
                                                       monkeypatch):
         for name in _META_ENV:
