@@ -81,8 +81,12 @@ def _record_deaths(ws: Path, kind: str, family: str, n: int) -> None:
 
 
 def _settle(ws: Path, family: str, credit: float, sig: str = "aaaabbbbcccc", ts: str = TS) -> None:
-    """One q-cell settlement observation (the real append face)."""
-    out = q_cells.append_observation(ws, sig, family, credit, source="settlement", ts=ts)
+    """One q-cell settlement observation (the real append face).
+    #804 regen: the keyed shape — the fold banks arm_key-carrying rows
+    only, and the goldens pin the same masses through the family part."""
+    out = q_cells.append_observation(ws, sig, family, credit,
+                                     source="settlement", ts=ts,
+                                     arm_key_col=f"{family}|facts_snapshot|none|0")
     assert out["appended"], out
 
 

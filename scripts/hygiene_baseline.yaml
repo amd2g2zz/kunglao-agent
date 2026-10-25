@@ -1280,7 +1280,7 @@ files:
   tests/test_mechanisms_retirement.py:
     r1: 4
   tests/test_meta_policy_825.py:
-    r1: 1
+    r1: 2
   tests/test_method_families_432.py:
     r1: 6
   tests/test_migrate_facts_809.py:
@@ -1398,6 +1398,8 @@ files:
     r1: 16
   tests/test_priority_value_terms.py:
     r1: 3
+  tests/test_probe_features_581.py:
+    r1: 1
   tests/test_probe_liveness_303.py:
     r1: 1
   tests/test_probe_tiers_474.py:
@@ -1516,7 +1518,7 @@ files:
   tests/test_rlvr_p0_524.py:
     r1: 3
   tests/test_rlvr_termination_461.py:
-    r1: 1
+    r1: 2
   tests/test_roi_settlement_49.py:
     r1: 2
     r2: 1

@@ -108,9 +108,11 @@ def _seed(ws: Path, doc: dict) -> None:
 
 
 def _bandit_row(family: str, credit: float, sig: str = "sig") -> dict:
+    # #804 regen: keyed shape — the fold banks arm_key-carrying rows only
     return {"schema": "q-cell-obs/1", "signature_hash": sig,
             "method_family": family, "credit": credit,
-            "credit_kind": "solve", "source": "dispatch"}
+            "credit_kind": "solve", "source": "dispatch",
+            "arm_key": f"{family}|facts_snapshot|none|0"}
 
 
 # ------------------------------------------------- 1. feature sources
