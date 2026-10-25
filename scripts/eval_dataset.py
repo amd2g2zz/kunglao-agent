@@ -230,6 +230,18 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
         errors.append("seed must be generator-stamped (int)")
 
 
+def _validate_material_class(task: dict, errors: list[str]) -> None:
+    """#816: the measurement-integrity class. Optional here (the corpus
+    lint owns presence + registry consistency on the live corpus); when
+    declared it must be one of the two enum values — a typo must not
+    silently demote a black-box unit to unclassified."""
+    mc = task.get("material_class")
+    if mc is not None and mc not in ("source-readable", "black-box"):
+        errors.append(
+            f"material_class must be 'source-readable' or 'black-box', "
+            f"got {mc!r} (#816)")
+
+
 def _validate_anchors(task: dict, errors: list[str]) -> None:
     anchors = task.get("anchors")
     if not isinstance(anchors, dict):
@@ -343,6 +355,7 @@ def validate_task(task: dict) -> tuple[bool, list[str]]:
         return False, ["task unit is not a mapping"]
     errors: list[str] = []
     _validate_identity(task, errors)
+    _validate_material_class(task, errors)
     _validate_anchors(task, errors)
     _validate_scaffold(task, errors)
     _validate_checker(task, errors)

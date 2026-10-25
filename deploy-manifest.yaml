@@ -472,6 +472,10 @@ files:
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
     sha256: 98b847a14d955f33a6eb97507464cd0030986752185ac93b7972d786a258e122
+  - src: scripts/eval_corpus_lint.py
+    dest: .claude/scripts/eval_corpus_lint.py
+    kind: scaffold
+    sha256: 74d72a40507d66cd5814969721dfca0162de392fef67cd6fcf4334e0f7323fc5
   - src: scripts/eval_crypto.py
     dest: .claude/scripts/eval_crypto.py
     kind: scaffold
@@ -479,7 +483,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: f128c891003bb15b52864bab86b0391b6e1c43e26a75c76c7a09a5f207bc3e97
+    sha256: ee0f6d818454860a39b72d43dda0b9171128e6bdefcad170ff4b0f28c16321a6
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -1511,11 +1515,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 365645287bdb7f8f409b903c7454b84f9edba8a3c3d310950ebf06aaa9bd861b
+    sha256: 9dfab5ba53ee5a71b29c1467cbfdf8eadbce00c858eb14864b0eed5b5fbc668b
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 996eec2b5ef2b75d9b96e9cdbaa1ecbeceb6fe5922bbdbe8ad60efb72cebd317
+    sha256: 3f42e63b58845c775e14f86d83f297e7b8f57000c4b2d0c2cf4514967f0bee8a
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2103,7 +2107,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 31308e94c1b874042091a4458f666b8e04963267019c39b6aac9e3a37dca89f4
+    sha256: 763f6db5471a391ab4653346bdbb1de13326d2a1a9e90657bf925c110b8e60fa
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
