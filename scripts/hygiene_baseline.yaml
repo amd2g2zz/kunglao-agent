@@ -381,8 +381,12 @@ files:
     r1: 7
   scripts/rho_verifier.py:
     r1: 9
+  scripts/rlvr/attribution.py:
+    r1: 2
   scripts/rlvr/censored_review.py:
     r1: 6
+  scripts/rlvr/commit_semantics.py:
+    r1: 1
   scripts/rlvr/compose.py:
     r1: 5
   scripts/rlvr/episode_pool.py:
@@ -417,6 +421,8 @@ files:
     r1: 1
   scripts/rlvr/phi_tree.py:
     r1: 4
+  scripts/rlvr/playbook.py:
+    r1: 1
   scripts/rlvr/policy_compare.py:
     r1: 1
   scripts/rlvr/pool_indexer.py:
@@ -600,6 +606,8 @@ files:
     r1: 4
   tests/test_assembly_history_700.py:
     r1: 2
+  tests/test_attribution_playbook_826.py:
+    r1: 1
   tests/test_audit_env_determinism_794.py:
     r1: 4
   tests/test_audit_guard_reviewgate_799.py:

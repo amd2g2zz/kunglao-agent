@@ -102,6 +102,10 @@ def knobs() -> dict:
         "retrieval": os.environ.get("KUNGLAO_META_RETRIEVAL", "1") != "0",
         "value_table": os.environ.get("KUNGLAO_META_VALUE_TABLE",
                                       "1") != "0",
+        # the four-knob component-ablation set (the P3 switches)
+        "attribution": os.environ.get("KUNGLAO_META_ATTRIBUTION",
+                                      "1") != "0",
+        "playbook": os.environ.get("KUNGLAO_META_PLAYBOOK", "1") != "0",
     }
 
 
@@ -230,14 +234,21 @@ def envelope_block(ws, claim, *, phase: str, family: str | None = None) \
                               actions=PHASE_ACTIONS[phase])
     from rlvr import meta_retrieval  # noqa: PLC0415 — lazy (cycle-free)
     context = meta_retrieval.assemble(ws, features, phase=phase, knobs=k)
-    return {"schema": ENVELOPE_SCHEMA,
-            "claim": str(claim),
-            "phase": phase,
-            "features": features,
-            "commit": {"action": selection["action"],
-                       "scores": selection["scores"],
-                       "source": selection["source"]},
-            "context": context}
+    block = {"schema": ENVELOPE_SCHEMA,
+             "claim": str(claim),
+             "phase": phase,
+             "features": features,
+             "commit": {"action": selection["action"],
+                        "scores": selection["scores"],
+                        "source": selection["source"]},
+             "context": context}
+    # the additive P3 enrichment: the dead-path reading, the surprise
+    # re-examination, and the tune/switch contract fields. enrich_block
+    # is itself fail-open (it never raises into the dispatch path) —
+    # the episode_start select face stays exactly the P2 shape.
+    from rlvr import commit_semantics  # noqa: PLC0415 — lazy
+    block = commit_semantics.enrich_block(ws, claim, block)
+    return block
 
 
 def render_block(block: dict) -> str:
@@ -248,6 +259,26 @@ def render_block(block: dict) -> str:
              f"phase={block.get('phase')} "
              f"commit={commit.get('action')} "
              f"(source={commit.get('source')})"]
+    # the additive P3 faces (rendered only when present)
+    attribution = commit.get("attribution") or {}
+    if attribution:
+        lines.append(f"attribution: available={attribution.get('available')} "
+                     f"method={attribution.get('method')} "
+                     f"ref={attribution.get('ref')}")
+    tune = commit.get("tune") or {}
+    if tune:
+        lines.append(f"tune: class={tune.get('class')} "
+                     f"same_class={tune.get('same_class')} "
+                     f"requires={','.join(tune.get('requires') or [])}")
+    dead = commit.get("dead_path") or {}
+    if dead:
+        over = " OVER CAP" if dead.get("over_cap") else ""
+        lines.append(f"dead-path: class={dead.get('class')} "
+                     f"attempts={dead.get('attempts')}/{dead.get('cap')}"
+                     f"{over}")
+    reex = commit.get("reexamination") or {}
+    if reex:
+        lines.append(f"reexamination: {reex.get('summary') or ''}")
     features = block.get("features") or []
     if features:
         lines.append("features: " + ", ".join(str(f) for f in features))

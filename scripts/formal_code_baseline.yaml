@@ -229,7 +229,9 @@ files:
   scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
   scripts/rho_verifier.py: 11
+  scripts/rlvr/attribution.py: 4
   scripts/rlvr/censored_review.py: 8
+  scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
@@ -249,6 +251,7 @@ files:
   scripts/rlvr/meta_retrieval.py: 1
   scripts/rlvr/obstacles.py: 3
   scripts/rlvr/phi_tree.py: 13
+  scripts/rlvr/playbook.py: 2
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13

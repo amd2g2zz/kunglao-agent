@@ -23,7 +23,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from rlvr import episode_pool as pool
-from rlvr import pool_indexer
 
 #: playbook groups ride the same context budget (the executor reads
 #: cases + playbook within one budget; documented, not fitted)
@@ -59,7 +58,8 @@ def assemble(ws, features: list[str], *, phase: str,
     k = _knobs(knobs)
     budget = {"max_cases": int(k["retrieve_max"]),
               "min_utility": float(k["min_utility"]),
-              "retrieval": bool(k["retrieval"])}
+              "retrieval": bool(k["retrieval"]),
+              "playbook": bool(k["playbook"])}
     if not k["retrieval"]:
         return {"cases": [], "playbook": [], "budget": budget}
 
@@ -81,13 +81,18 @@ def assemble(ws, features: list[str], *, phase: str,
                                        .get("utility") or 0.0),
                       "summary": fragments[0] if fragments else ""})
 
-    playbook: list[dict] = []
-    for group in pool_indexer.playbook_view(ws):
-        group_feats = {str(f)
-                       for f in group.get("context_features") or []}
-        if not group_feats & {str(f) for f in features}:
-            continue
-        playbook.append(group)
-        if len(playbook) >= PLAYBOOK_GROUPS_CAP:
-            break
-    return {"cases": cases, "playbook": playbook, "budget": budget}
+    groups: list[dict] = []
+    if k["playbook"]:
+        # the P3 compression face: the P1 admission spine with the
+        # quality axioms applied (case-specific refused, verb-bearing
+        # kept, support-ranked) — no store, computed per call
+        from rlvr import playbook  # noqa: PLC0415 — lazy (cycle-free)
+        feats = {str(f) for f in features}
+        for group in playbook.compressed_view(ws):
+            if not feats & {str(f) for f in
+                            group.get("context_features") or []}:
+                continue
+            groups.append(group)
+            if len(groups) >= PLAYBOOK_GROUPS_CAP:
+                break
+    return {"cases": cases, "playbook": groups, "budget": budget}

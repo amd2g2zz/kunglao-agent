@@ -1315,7 +1315,11 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: fdc0fb8fc2123eaaa96e62699c67e4df8102b223abe75968756cb23466d6bc72
+    sha256: 6d5e5ae8f17e0634e099236823186ce97bc7092651607cbb32b8ae282013475b
+  - src: scripts/rlvr/attribution.py
+    dest: .claude/scripts/rlvr/attribution.py
+    kind: scaffold
+    sha256: 36a2817a3b33a76405510fdc5a2aa215b6f0caea22e9682e0a8e1041d0649af0
   - src: scripts/rlvr/belief.py
     dest: .claude/scripts/rlvr/belief.py
     kind: scaffold
@@ -1324,6 +1328,10 @@ files:
     dest: .claude/scripts/rlvr/censored_review.py
     kind: scaffold
     sha256: b012e5ef640137ff4f5e83f62046855535f85e5a3a1c12aad5296b5be4b7cd86
+  - src: scripts/rlvr/commit_semantics.py
+    dest: .claude/scripts/rlvr/commit_semantics.py
+    kind: scaffold
+    sha256: 2b05e62eb50e606bd95c567781e4d23e0986aad9b2dab23575027d9c6440ac86
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
@@ -1407,11 +1415,11 @@ files:
   - src: scripts/rlvr/meta_policy.py
     dest: .claude/scripts/rlvr/meta_policy.py
     kind: scaffold
-    sha256: 64d67ee2bdad5096c17258a1d4575d34a076e51cc743191ffeb850d14a440345
+    sha256: 7b76f38c99d90bbc5823d8f17bf1561bc2b877135ca2820b1a3bfa37db940b7f
   - src: scripts/rlvr/meta_retrieval.py
     dest: .claude/scripts/rlvr/meta_retrieval.py
     kind: scaffold
-    sha256: bc3f4900867a16911de764afc057c878734437cea7e4254af0b61b99662d7983
+    sha256: da5825f11e446c1c0517390402c9e62ca62156e95722c0812f75a24dbf0955af
   - src: scripts/rlvr/obstacles.py
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
@@ -1420,6 +1428,10 @@ files:
     dest: .claude/scripts/rlvr/phi_tree.py
     kind: scaffold
     sha256: 36a6b56ed5e7beb290c73d9c8239baae35a421ff95cd09f28c35f14768f44d13
+  - src: scripts/rlvr/playbook.py
+    dest: .claude/scripts/rlvr/playbook.py
+    kind: scaffold
+    sha256: b3506055feacd2105c234a9bb22bc5a58a5384a11c480388fb81a32ac73e3a76
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
@@ -1527,11 +1539,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: b02c29d86fee0382ac8be42f664888edec7ef842ba4a6d7e1b63d9bcf80559aa
+    sha256: 7c1d1c5eeac7b82cece832ff5f815dd376da458c97de84b868086fd8f5a89890
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 32f427e841ba8b9c711a253377c6109e5e30b37fc8e5f03484fcea46eea129c4
+    sha256: de2c6d3562fefd4fbfb8e36a59b792451464bca3e330b3e8294875f22d21c124
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
