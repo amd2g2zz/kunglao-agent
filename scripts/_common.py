@@ -19,6 +19,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+#: the Windows face (mode bits are Unix-only semantics); test seam so
+#: guards can be flipped without touching the global os.name
+_NT = os.name == "nt"
+
 
 def seq_sum(values: Iterable[float]) -> float:
     """Input-order float64 reduction — the settlement determinism axiom
@@ -160,7 +164,9 @@ def _atomic_write(path: str | Path, payload, binary: bool, *,
         else:
             tmp.write_text(payload, encoding="utf-8")
     try:
-        if mode is not None:
+        if mode is not None and not _NT:
+            # the mode bits are Unix-only semantics; Windows honors at
+            # most the read-only bit, so the nt branch skips the call
             os.chmod(tmp, mode)
         os.replace(tmp, p)
     except BaseException:

@@ -155,7 +155,7 @@ files:
   - src: scripts/_common.py
     dest: .claude/scripts/_common.py
     kind: scaffold
-    sha256: 8a9fd80743079866cd492620dff5ea340c509b1e83090bd41b687a5b9192e1e1
+    sha256: e3053de8e3a737993484a83eb03a6509e1b098edc4b8bf68880c8ac51d8a3d84
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -535,7 +535,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 94fa4076d4e6a83a2d9cbe034309f73145a28a89d0099ab5880787c3c7301b47
+    sha256: 47252786a561dfd1ea56fe852f002d0146a2fbd367ecded5da2983417ced16d7
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -883,7 +883,7 @@ files:
   - src: scripts/online_distill.py
     dest: .claude/scripts/online_distill.py
     kind: scaffold
-    sha256: c1023b28d80487749e818050f7acf2e9b0a063594e9f7dbd7025ca5683a97d2c
+    sha256: 625b1b3964d59ef7122d99a8e82c13738017d5a36e9143f13d9cce0e1bcc42f2
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
@@ -928,6 +928,10 @@ files:
     dest: .claude/scripts/planning_actions.py
     kind: scaffold
     sha256: 6b1208d5b2414bf40819e4a78bf553144a761073080498aa98b6ac9cb1ade194
+  - src: scripts/platform_matrix.py
+    dest: .claude/scripts/platform_matrix.py
+    kind: scaffold
+    sha256: 6d3dba61c78b77bcdfa0e524058e72bae2dceb595b19358c1ef148b05c5d5208
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
@@ -1335,7 +1339,7 @@ files:
   - src: scripts/rlvr/compose.py
     dest: .claude/scripts/rlvr/compose.py
     kind: scaffold
-    sha256: 30e0753991520b1b585730dffa9c069b67ef09907764523c115779a196cf932a
+    sha256: 3338c20910651614fdc33db6551d1c823eae0202c87ac1af8f836887285bbefa
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold

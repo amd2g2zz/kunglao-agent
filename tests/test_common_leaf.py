@@ -9,6 +9,7 @@ returns ``(doc, error)`` so every caller keeps its own warn policy.
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,9 @@ def test_unique_write_tmp_is_a_sibling(tmp_path, monkeypatch):
     assert seen == [(p.parent, p.parent)]
 
 
+@pytest.mark.skipif(os.name == "nt",
+                    reason="mode bits are Unix-only semantics; the "
+                           "atomic-write leaf skips chmod on the nt face")
 def test_mode_parity_chmods_the_destination(tmp_path):
     p = tmp_path / "parity.json"
     atomic_write_text(p, "{}\n", unique=True, mode=0o644)

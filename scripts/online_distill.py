@@ -45,7 +45,6 @@ deterministic serialization; no network, no LLM.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -57,6 +56,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from _common import atomic_write_text  # noqa: E402
+import platform_matrix  # noqa: E402 — the host support matrix seam
 from harness_common import utc_now_z as _utc_now  # the Family F single source
 
 # the canonical warn — ONE implementation (process-wide dedupe + the
@@ -321,11 +321,14 @@ class _LedgerLock:
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fd = os.open(self.path, os.O_WRONLY | os.O_CREAT, 0o644)
-        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        # feature-detected advisory lock (flock / msvcrt / declared
+        # no-op) — a top-level POSIX-only import killed the Windows
+        # host class outright; the strategy rides the support matrix.
+        self.lock_face = platform_matrix.fd_lock(self.fd)
         return self
 
     def __exit__(self, *exc):
-        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        platform_matrix.fd_unlock(self.fd)
         os.close(self.fd)
         return False
 
@@ -645,7 +648,8 @@ def run_candidate(candidate: Path, sample: Path, *, expect_rc: int = 0,
         else:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=timeout_s,
-                encoding="utf-8", errors="replace")
+                encoding="utf-8", errors="replace",
+                env=platform_matrix.utf8_env())
             proc_out = (proc.returncode, proc.stdout)
         rc, stdout = proc_out
         out["rc"] = rc
@@ -694,7 +698,7 @@ def land_candidate(ws, attempt_dir, report: dict, candidate_name: str,
     tools_dir.mkdir(parents=True, exist_ok=True)
     dest = tools_dir / f"{candidate_name}.py"
     dest.write_bytes(cand_file.read_bytes())
-    os.chmod(dest, 0o755)
+    platform_matrix.chmod_checked(dest, 0o755)
     oracle = dict(oracle_outcome)
     oracle["oracle_self_declared"] = True
     manifest = {
@@ -835,6 +839,13 @@ def main(argv: list[str] | None = None) -> int:
                          "record is available (guarded, ws-relative)")
     args = ap.parse_args(argv)
     ws = Path(args.ws)
+    # run-start platform assertion: declared host classes are recorded
+    # in the ledger; undeclared ones refuse the closure duties loudly
+    # (nonzero exit + stderr + ledger row) instead of wiping out
+    # silently on every tick.
+    platform = platform_matrix.assert_run_start(ws)
+    if not platform["declared"]:
+        return 3
     if args.scan:
         triggers = scan_triggers(ws)
         for t in triggers:
