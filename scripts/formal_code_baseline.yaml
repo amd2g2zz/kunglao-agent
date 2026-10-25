@@ -173,13 +173,13 @@ files:
   scripts/lane_spec.py: 2
   scripts/lessons_telemetry.py: 4
   scripts/lint_facts.py: 47
-  scripts/liveness_policy.py: 30
+  scripts/liveness_policy.py: 33
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
   scripts/loop_scheduler.py: 16
   scripts/loop_state.py: 5
-  scripts/loop_watchdog.py: 1
+  scripts/loop_watchdog.py: 5
   scripts/mcp_probe.py: 42
   scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
@@ -318,6 +318,7 @@ files:
   scripts/verify_backlog_face.py: 5
   scripts/verify_status_watch.py: 4
   scripts/wait_dispose.py: 8
+  scripts/watchdog_interval.py: 7
   scripts/winrate_curve.py: 5
   scripts/wire_up_settings.py: 59
   scripts/worker_death.py: 9
