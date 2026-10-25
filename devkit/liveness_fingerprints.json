@@ -1,6 +1,6 @@
 {
  "schema": "liveness-fingerprints/1",
- "description": "Per system face, the ledger evidence that proves the face FIRED in a real run. A fingerprint that cannot pass on a live workspace means the face is decorative. Consumed by devkit/liveness_gate.py; the product-side zero-activity auditor derives from the same spec (devkit/docs/liveness_fingerprints.md).",
+ "description": "Per system face, the ledger evidence that proves the face FIRED in a real run. A fingerprint that cannot pass on a live workspace means the face is decorative. Consumed by devkit/liveness_gate.py; the product-side zero-activity auditor derives from the same spec (devkit/docs/liveness_fingerprints.md). Issue 805 extends the file to the HOOK battery: every hooks/battery.yaml face joins a fingerprint here (the registry x fingerprint join must be total); the dispatch checks read the worker_battery pass row the battery lands on every full pass.",
  "fingerprints": [
   {
    "id": "rl-sampler-exit",
@@ -87,6 +87,427 @@
      "schema": "settlement-wire/1"
     },
     "field_nonempty": "identity",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-stepsettled",
+   "face": "the dispatch battery ran with the stepsettled check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "stepsettled",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-workers",
+   "face": "the dispatch battery ran with the workers check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "workers",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-max_retries",
+   "face": "the dispatch battery ran with the max_retries check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "max_retries",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-cap",
+   "face": "the dispatch battery ran with the cap check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "cap",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-branchbudget",
+   "face": "the dispatch battery ran with the branchbudget check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "branchbudget",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-tools",
+   "face": "the dispatch battery ran with the tools check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "tools",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-hostchan",
+   "face": "the dispatch battery ran with the hostchan check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "hostchan",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-deadline",
+   "face": "the dispatch battery ran with the deadline check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "deadline",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-tiercons",
+   "face": "the dispatch battery ran with the tiercons check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "tiercons",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-tier",
+   "face": "the dispatch battery ran with the tier check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "tier",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-selfcap",
+   "face": "the dispatch battery ran with the selfcap check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "selfcap",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-heartbeat",
+   "face": "the dispatch battery ran with the heartbeat check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "heartbeat",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-drift",
+   "face": "the dispatch battery ran with the drift check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "drift",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-health",
+   "face": "the dispatch battery ran with the health check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "health",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-envfresh",
+   "face": "the dispatch battery ran with the envfresh check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "envfresh",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-envpremise",
+   "face": "the dispatch battery ran with the envpremise check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "envpremise",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-backtrack",
+   "face": "the dispatch battery ran with the backtrack check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "backtrack",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-zerooutput",
+   "face": "the dispatch battery ran with the zerooutput check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "zerooutput",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-plan",
+   "face": "the dispatch battery ran with the plan check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "plan",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-granularity",
+   "face": "the dispatch battery ran with the granularity check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "granularity",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-toolfirst",
+   "face": "the dispatch battery ran with the toolfirst check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "toolfirst",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-toolsearch",
+   "face": "the dispatch battery ran with the toolsearch check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "toolsearch",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-handroll",
+   "face": "the dispatch battery ran with the handroll check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "handroll",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-agenttype",
+   "face": "the dispatch battery ran with the agenttype check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "agenttype",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-rotation",
+   "face": "the dispatch battery ran with the rotation check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "rotation",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-snapshot",
+   "face": "the dispatch battery ran with the snapshot check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "snapshot",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-priority",
+   "face": "the dispatch battery ran with the priority check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "priority",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-check-methodfamily",
+   "face": "the dispatch battery ran with the methodfamily check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "methodfamily",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-face-settle",
+   "face": "the round-closure settle face aggregated a completion-grain step-record/2 row (issue 805 registry: rlvr.step_grain.settle_step via hooks/round_closure)",
+   "ledger": "runs/step-ledger.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "schema": "step-record/2"
+    },
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-face-compose",
+   "face": "the round-closure compose face versioned a round-strategy object (issue 805 registry: rlvr.compose.write_strategy via hooks/round_closure)",
+   "ledger": "runs/round-strategy/tick-*.yaml",
+   "check": {
+    "kind": "file_glob_min",
+    "min": 1,
+    "content_any": [
+     "schema:",
+     "strategy"
+    ]
+   }
+  },
+  {
+   "id": "battery-face-rl-digest",
+   "face": "the round-closure digest face emitted a decision (the marker the rate limiter owns — issue 805 registry: rl_digest.emit via hooks/round_closure)",
+   "ledger": "runs/.rl-digest.json",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "schema": "rl-digest/1"
+    },
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-face-t2",
+   "face": "the round-closure T2 face built the unblocking-value queue (issue 805 registry: verification_ladder.round_close via hooks/round_closure; the persisted queue is signature-gated, so the EMIT row is the fired evidence)",
+   "ledger": "runs/logs/latest",
+   "check": {
+    "kind": "jsonl_count",
+    "contains": "t2_queue_built",
+    "min": 1
+   }
+  },
+  {
+   "id": "battery-face-distill",
+   "face": "the online-distillation trigger face fired a real trigger (issue 805 registry: online_distill.scan_triggers via hooks/round_closure; SIGNAL-CONDITIONAL — evaluated on tiers whose loop produces miss signals, a no-signal workspace cannot prove this face)",
+   "ledger": "runs/logs/latest",
+   "check": {
+    "kind": "jsonl_count",
+    "contains": "distill_attempt",
     "min": 1
    }
   }

@@ -281,6 +281,21 @@ def _kernel_faces(ws: Path, session_id: str = "",
     # kunglao-settler subagent, and settles any ruling that arrived. The
     # wire face rides its own cage: a wire failure never disturbs the
     # stop path and never falls back INTO the unblinded judgment.
+    # issue 805: the closure battery registers too — the launch gate
+    # here is WARN-ONLY (the closure's fail-open double cage is
+    # contractual: a registry trouble is one rate-limited warn and never
+    # disturbs the subagent's stop path; the dispatch battery's gate is
+    # the fail-closed one).
+    try:
+        import battery_registry
+        _bat = battery_registry.launch_gate(
+            battery_registry.registered_names("closure"),
+            battery="closure")
+        if _bat:
+            warn(battery_registry.LAUNCH_WARN_OP, _bat)
+    except Exception as _exc:  # noqa: BLE001 — cage, never the stop path
+        warn("battery_registry_launch",
+             f"{type(_exc).__name__}: {_exc}")
     receipt = None
     blind_receipt: dict = {}
     try:

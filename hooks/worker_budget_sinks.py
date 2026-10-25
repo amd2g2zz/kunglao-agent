@@ -229,6 +229,21 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'verify/promote step) - collapse the spin, then resume.'
         ),
     },
+    'batteryreg': {
+        'additionalContext': (
+            'hook battery registry gate (issue 805, fail-closed): the '
+            'battery cannot prove its own registration, so the dispatch '
+            'is refused instead of silently ungated. Fix: make '
+            'hooks/battery.yaml load + validate — run '
+            'python -c "import battery_registry; '
+            'print(battery_registry.validate_registry())" from hooks/ and '
+            'repair the listed registry error(s); if a NEW check was added '
+            'to the pre_check battery, REGISTER it in hooks/battery.yaml '
+            'first (entry + trigger.gate + cost_class + telemetry_word + '
+            'liveness_fingerprint in devkit/liveness_fingerprints.json — '
+            '不入册不许跑).'
+        ),
+    },
     'backtrack': {
         'additionalContext': (
             'stuck worker(s) without a valid backtrack decision. Fix: append a '
@@ -1139,6 +1154,23 @@ def pre_check(payload: dict, paths: dict) -> int:
         # with guidance pointing at the characterization reference card.
         ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
+    # issue 805: registration is a LAUNCH PREREQUISITE — the battery may
+    # not run one check that is not registered (hooks/battery.yaml, with
+    # its telemetry word + liveness fingerprint). A broken/uncovered
+    # registry REFUSES the dispatch (fail-closed: the gate battery's
+    # native direction — silently ungating would be the B4 posture).
+    try:
+        import battery_registry
+        _unregistered = battery_registry.launch_gate(
+            {n for n, _ in checks} | {'snapshot', 'priority',
+                                      'methodfamily'})
+        if _unregistered:
+            return _reject('batteryreg', _unregistered, paths)
+    except Exception as _exc:  # noqa: BLE001 — a registry-module trouble
+        # must not silently ungate either: refuse with the reason.
+        return _reject('batteryreg',
+                       f'hook battery registry unreadable: '
+                       f'{type(_exc).__name__}: {_exc}', paths)
     for name, (ok, msg) in checks:
         if not ok:
             return _reject(name, msg, paths)
@@ -1175,6 +1207,20 @@ def pre_check(payload: dict, paths: dict) -> int:
                                           tier, tools)
     if mf_rc is not None:
         return mf_rc
+    # issue 805: the battery's LIVENESS EVIDENCE — a full pass lands ONE
+    # durable row (gate=worker_battery, msg=check names) so the per-check
+    # fingerprints in devkit/liveness_fingerprints.json can distinguish
+    # 'battery ran' from 'battery absent' (absence of evidence = FAIL;
+    # rejects carry their own #683 rows). Fail-open: evidence never
+    # flips the ALLOW verdict.
+    try:
+        import gate_telemetry as _gt805
+        _gt805.append_row(
+            paths.get('workspace'), 'worker_battery', 0,
+            msg=','.join(sorted(n for n, _ in checks) +
+                        ['methodfamily', 'priority', 'snapshot']))
+    except Exception as _exc:  # noqa: BLE001 — evidence never gates
+        warn('battery_pass_row', f'{type(_exc).__name__}: {_exc}')
     worker_id = agent_name or f'w{int(time.time())}'
     # #880: the toolfirst PASS face fires here (approval point) with the
     # (keyword->tool) attribution payload, and a MATCHED evaluation persists
