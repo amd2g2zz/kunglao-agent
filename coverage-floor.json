@@ -1,6 +1,6 @@
 {
   "schema": "coverage-floor/1",
-  "floor": 63.0,
+  "floor": 65.0,
   "min_floor": 70.0,
   "measured_set": [
     "scripts",
@@ -27,6 +27,12 @@
       "floor": 63.0,
       "measured_local": 65.01,
       "note": "+4.0pt over segment-1's 59.0; local union 65.01% (6636->6857 passed, +221 tests, zero product-code changes); dispatch_gate 474->280 miss, oracle_runner 478->86, oracle_cadence 86->13, oracle_case_admission 170->33, eval_misdirection 514->363, eval_split_lint 95->9, eval_native_targets 521->410, eval_control_arm 244->187, eval_matrix_runner 342->146; floor keeps the segment-1 CI headroom discipline (~0.6pt CI-below-local observed); climb to 70 continues in follow-up segments (eval_checker/eval_chain_mint/eval_matrix_report residuals + hooks worker_pulse/violation_capture)"
+    },
+    {
+      "pr": "818-segment-3 (climb-seg3)",
+      "floor": 65.0,
+      "measured_local": 67.31,
+      "note": "+2.0pt over segment-2's 63.0; local union 67.31% (6857->6993 passed, +129 tests across six pin files, zero product-code changes): worker_pulse 119->35 miss, violation_capture 83->8, eval_checker 322->76, eval_chain_mint 276->28, eval_matrix_report 393->50, eval_misdirection 363->38 (self-check + route-mock parity), eval_control_arm 187->72, eval_native_targets 410->283 (real NDK ladder; host-cc faces skip honest), eval_chain_grader 149->35, eval_matrix_runner 146->~60 (dry-launch schedule); floor keeps the segment-2 CI headroom discipline (CI runs ~0.6pt below local, 65.0 holds ~1.7pt of tolerance); climb to 70 continues in follow-up segments (dispatch_gate 185 + capability gates, eval_native_targets dynamic-proof faces, eval_targets registry/CLI residuals, the 120-miss long tail: acceptance_check/value_replay/rollup/release_receipt class). NOTE: this machine's full runs intermittently lose one xdist coverage shard (test_meta_policy_825/test_attribution_playbook_826 rode 89-99% module coverage in isolation but ~14% in two full unions) — the seg4 certification run should serial-verify the rlvr new-teeth modules' contribution"
     }
   ]
 }
