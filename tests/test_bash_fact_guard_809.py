@@ -55,7 +55,7 @@ def test_violation_recorded_and_surfaced(tmp_path, capsys):
             if line.strip():
                 rows.append(json.loads(line))
     assert any(r.get("action") == "write_blocked"
-               and r.get("actor") == "bash_fact_guard" for r in rows), rows[-3:]
+               and r.get("actor") == "hook:bash_fact_guard" for r in rows), rows[-3:]
 
 
 def test_non_facts_command_silent(tmp_path, capsys):

@@ -197,7 +197,7 @@ def _secondstop_anchor(ws: Path, adj: dict) -> tuple[bool, str | None]:
                        f"(#831)")
     # first sighting → anchor it (legacy back-anchor, #831 item 3)
     entry = {"type": SECOND_STOP_EVENT, "action": SECOND_STOP_EVENT,
-             "actor": "completion_gate", "record_sha256": h,
+             "actor": "hook:completion_gate", "record_sha256": h,
              "ts": datetime.now(tz=timezone.utc).strftime(
                  "%Y-%m-%dT%H:%M:%SZ"),
              "detail": "second-stop PASS sanction anchored (#831)"}

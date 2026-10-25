@@ -115,7 +115,7 @@ def test_first_sanctioned_pass_anchors(tmp_path):
     rows = _anchor_rows(ws)
     assert len(rows) == 1, rows
     assert rows[0]["record_sha256"] == _sha(adj)
-    assert rows[0]["actor"] == "completion_gate"
+    assert rows[0]["actor"] == "hook:completion_gate"
 
 
 def test_repeat_pass_no_duplicate_anchor(tmp_path):

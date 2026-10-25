@@ -636,7 +636,7 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
     try:
         mod = load_module_by_path(
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
-        mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
+        mod.emit(ws, "hook:recall_inject", action, tool="Agent", detail=detail)
     except Exception as exc:  # noqa: BLE001
         warn("recall_inject.trace_emit", f"{type(exc).__name__}: {exc}")
     try:

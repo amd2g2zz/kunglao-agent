@@ -156,3 +156,30 @@ def test_observe_accepts_an_explicit_arm_key(tmp_path):
                     arm_key="static-symbolic|full_recall|none|0")
     rows = q_cells.JSONLQStore(ws).observations()
     assert rows[0]["arm_key"] == "static-symbolic|full_recall|none|0"
+
+
+# --------------------------------- 5. the actor vocabulary only shrinks
+
+def test_migrated_hook_actors_no_longer_validate_bare():
+    """#804 wave-1: four hook-file emitters migrated to the strict
+    ``hook:<name>`` form — the bare legacy words are no longer adopted
+    (the strict forms still validate)."""
+    import kunglao_log
+    for bare, strict in (
+            ("bash_fact_guard", "hook:bash_fact_guard"),
+            ("violation_capture", "hook:violation_capture"),
+            ("recall_inject", "hook:recall_inject"),
+            ("completion_gate", "hook:completion_gate")):
+        ok_bare, _why = kunglao_log.validate_actor(bare)
+        ok_strict, _why2 = kunglao_log.validate_actor(strict)
+        assert not ok_bare, f"{bare} must no longer be adopted"
+        assert ok_strict, f"{strict} is the strict form"
+
+
+def test_legacy_actor_set_shrinks_below_the_pre_collapse_count():
+    """The adoption set is one-way: #804 wave-1 deleted the 36 dead words
+    (no producer left in scripts/ or hooks/) plus the 4 migrated words —
+    96 -> 56. The pin freezes the CEILING so the set cannot silently
+    regrow (new emitters must use strict shapes)."""
+    import kunglao_log
+    assert len(kunglao_log.LEGACY_ACTORS) <= 56

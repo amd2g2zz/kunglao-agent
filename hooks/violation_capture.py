@@ -194,7 +194,7 @@ def main(stdin_stream=None) -> int:
                 break
         if ws is not None:
             for ev in events:
-                kunglao_log.emit(ws, actor="violation_capture",
+                kunglao_log.emit(ws, actor="hook:violation_capture",
                                  action=ev["action"],
                                  detail=light_detail(ev["action"],
                                                      ev["detail"]))
