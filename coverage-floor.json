@@ -1,6 +1,6 @@
 {
   "schema": "coverage-floor/1",
-  "floor": 59.0,
+  "floor": 63.0,
   "min_floor": 70.0,
   "measured_set": [
     "scripts",
@@ -21,6 +21,12 @@
       "floor": 59.0,
       "measured_local": 62.01,
       "note": "facade registration fix (winrate joins rlvr.__all__, #756 pin) — no coverage delta, floor unchanged; also the round where the release-check trigger was re-fired after a concurrency race swallowed the push event"
+    },
+    {
+      "pr": "818-segment-2 (climb-seg2)",
+      "floor": 63.0,
+      "measured_local": 65.01,
+      "note": "+4.0pt over segment-1's 59.0; local union 65.01% (6636->6857 passed, +221 tests, zero product-code changes); dispatch_gate 474->280 miss, oracle_runner 478->86, oracle_cadence 86->13, oracle_case_admission 170->33, eval_misdirection 514->363, eval_split_lint 95->9, eval_native_targets 521->410, eval_control_arm 244->187, eval_matrix_runner 342->146; floor keeps the segment-1 CI headroom discipline (~0.6pt CI-below-local observed); climb to 70 continues in follow-up segments (eval_checker/eval_chain_mint/eval_matrix_report residuals + hooks worker_pulse/violation_capture)"
     }
   ]
 }
