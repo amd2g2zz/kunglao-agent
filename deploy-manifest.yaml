@@ -627,7 +627,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 7ffe9ae583310e9c175beff56eba3c8782e46145ccd1879c4bdf3386ac631e63
+    sha256: 41535ebeea7aed90ac213a9009d64c86a02e643b5b1fc2905926420611a2baea
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -819,7 +819,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 41a446d5bdb5c4600cdb0de1983a37c8cbb3adb6df8a5d2599df738776f085fd
+    sha256: 204482b07e89cd77f50c11dd1b26e1c7b655259f7172758f173adbec135f8ea9
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -843,7 +843,7 @@ files:
   - src: scripts/loop_watchdog.py
     dest: .claude/scripts/loop_watchdog.py
     kind: scaffold
-    sha256: 4b244982c98f74666177252c4e6d9f10833d881aadfabaa56c399f7bd2cdca0a
+    sha256: a0243c9dbf68562a5f7027f07f3b5224bc1a65712ea314348b39408e63e95aed
   - src: scripts/mcp_probe.py
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
@@ -1300,6 +1300,10 @@ files:
     dest: .claude/scripts/wait_dispose.py
     kind: scaffold
     sha256: 46767195eabe2bdb9025dddf6a3e04ca622d22aa51bb23e9263d26e86a62ea95
+  - src: scripts/watchdog_interval.py
+    dest: .claude/scripts/watchdog_interval.py
+    kind: scaffold
+    sha256: cfde1600df1a2d80070bb3d653571a8ec1729da5d9ce125be78ab2ebfb6b1560
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
@@ -1563,11 +1567,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 289e251235b193212b4b698d45f748a2e517d17da64002adb8644b61e8bb2f58
+    sha256: 30048b619207c4340a2e0d5d107d49097fc6fd34b2cde481ed3aa88c18de272c
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 97cf4a5705a9b53f52de96e590768a2856c3be71452ff53da3b36f1b1da0caa2
+    sha256: 629f6fdccd4ed3f670304c314ff83efdc7fae19cb2eebeff96e29e9a6fbe04c2
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
