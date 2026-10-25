@@ -162,31 +162,15 @@ def read_transitions(ws: Path) -> list[dict]:
     """The workspace's transition ledger rows (oldest first); absent or
     dirty rows are skipped, never invented (the ledger's own posture).
 
-    #721: rides the consolidated read face (runs/experience.jsonl plus
-    the legacy runs/transitions.jsonl archive during the compat window)
-    — never a direct path read, so the migration cannot strand this
-    consumer. A partial deploy without the rlvr core degrades to the
-    legacy path read (the except body IS the fallback)."""
-    try:
-        from rlvr import incremental_reward as _ir  # noqa: PLC0415
-        return _ir.read_transitions(ws)
-    except ImportError:
-        p = Path(ws) / "runs" / "transitions.jsonl"
-        if not p.is_file():
-            return []
-        rows = []
-        for line in p.read_text(encoding="utf-8",
-                                errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict):
-                rows.append(row)
-        return rows
+    #721: rides the consolidated read face (the ONE face since #804's
+    de-compat — the legacy runs/transitions.jsonl path-read fallback is
+    retired; a missing rlvr core is an ImportError LOUD)."""
+    # #804 de-compat: the legacy runs/transitions.jsonl path-read
+    # fallback is retired — the consolidated read face is the ONE face
+    # (a missing rlvr core is an ImportError LOUD, never a silent
+    # legacy read).
+    from rlvr import incremental_reward as _ir  # noqa: PLC0415
+    return _ir.read_transitions(ws)
 
 
 def _rewarded_rows(ws: Path | None) -> list[dict]:
