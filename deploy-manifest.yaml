@@ -535,7 +535,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 47252786a561dfd1ea56fe852f002d0146a2fbd367ecded5da2983417ced16d7
+    sha256: 404b2ee78b7dbf69f56dfb69ee48ec32432152d0005d003222420791e8d22f38
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1132,6 +1132,10 @@ files:
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
     sha256: 642571d461a1b9f434a1587122763e0998b84b234f5efa0a6c6ec9e0e8310a4d
+  - src: scripts/signal_router.py
+    dest: .claude/scripts/signal_router.py
+    kind: scaffold
+    sha256: a9c437583d6eebb9f092945d018fbdde2224fb6c5ee340e9ce11d08fff6632f2
   - src: scripts/signals_stream.py
     dest: .claude/scripts/signals_stream.py
     kind: scaffold
@@ -1156,6 +1160,10 @@ files:
     dest: .claude/scripts/status_defs.py
     kind: scaffold
     sha256: 48252be36bcae396f2b8d95e69a1ef02f6689b9401c27db7a0e4c3e54ad29c71
+  - src: scripts/status_narration.py
+    dest: .claude/scripts/status_narration.py
+    kind: scaffold
+    sha256: 0cb879912325d05ce8f100b6146e8bef0b6f0e0b1853ad615e9586f85cdcb2fd
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
@@ -1251,7 +1259,7 @@ files:
   - src: scripts/user_signal.py
     dest: .claude/scripts/user_signal.py
     kind: scaffold
-    sha256: fb8990d62ee6db8bb0521affdddcded6148a41f33adb4be0483e393820c48401
+    sha256: 65f9a07bbc9f3d1f7cb6528d136353692ddc0da520e8cf7a0e90b2774f0e10ff
   - src: scripts/value_replay.py
     dest: .claude/scripts/value_replay.py
     kind: scaffold
@@ -2135,7 +2143,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 763f6db5471a391ab4653346bdbb1de13326d2a1a9e90657bf925c110b8e60fa
+    sha256: e30a363d08bfe5830c31b0c531b760efd12e0878973e957c8b5641ce44bed73e
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

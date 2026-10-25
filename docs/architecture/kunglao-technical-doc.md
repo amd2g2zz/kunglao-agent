@@ -735,6 +735,8 @@ flowchart TD
 | `tuition_curve.py` | tuition_curve.py — #823-P4 学费曲线聚合器 + 座舱 V/D/ETA 数据面。 | cost_state(), missions_from_ledger(), curve(), got_cheaper(), summarize() | 7/7 |
 | `update_index.py` | update_index — atomic facts/_INDEX.md maintenance (DESIGN §13.6). | count_by_status(), upsert(), main() | 0/4 |
 | `user_signal.py` | user_signal.py — #868 用户信号捕获/分类/路由核心。 | classify(), apply_volition(), file_factual(), ingest(), cockpit_face() | 1/1 |
+| `signal_router.py` | signal_router.py — #811 意图路由器（六类意图 + 否定转折先行 + commit 对齐 + 遥测）。 | classify_intent(), route_health(), _post_pivot(), _scan() | 0/0 |
+| `status_narration.py` | status_narration.py — #811 状态叙事面（四要素只读投影 + 中文叙事）。 | build_view(), render_zh(), main() | 0/0 |
 | `value_replay.py` | value_replay.py — P1 offline replay settlement (#823, AB-VALUE arm N). | verify_rows(), detect_reopen(), gate_interceptions(), z_self(), ws_score() | 2/1 |
 | `verification_ladder.py` | verification_ladder.py — the three-tier verification ladder's mechanical | t1_state(), note_write(), pending_writes(), t1_due(), fire_t1() | 3/2 |
 | `verifier_identity.py` | verifier_identity.py — #825 verifier machine-identity extraction + anchor. | session_tag(), extract_from_md(), extract_from_json(), anchors_for(), anchor() | 2/0 |

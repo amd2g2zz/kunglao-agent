@@ -322,6 +322,7 @@ EMIT_ACTIONS = [
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
     "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
+    "signal_routed",         # intent router decision face (user-signal surface)
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "split_units_minted",  # issue 293 claim_granularity split fan-out mint face (parent SUPERSEDED rides detail)
     "stale_plan_on_new_evidence",
