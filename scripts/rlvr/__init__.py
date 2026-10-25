@@ -13,7 +13,9 @@ Submodule design notes live in the README face map; the per-module
 detail is each module's own docstring.
 """
 
+from . import attribution
 from . import censored_review
+from . import commit_semantics
 from . import compose
 from . import consolidated_ledger
 from . import belief
@@ -39,6 +41,7 @@ from . import meta_retrieval
 from . import meta_arms
 from . import obstacles
 from . import phi_tree
+from . import playbook
 from . import policy_compare
 from . import pool_indexer
 from . import posteriors
@@ -66,8 +69,10 @@ from . import verification_debt
 from . import winrate
 
 __all__ = [
+    "attribution",
     "belief",
     "censored_review",
+    "commit_semantics",
     "compose",
     "consolidated_ledger",
     "constants_ref",
@@ -89,6 +94,7 @@ __all__ = [
     "meta_retrieval",
     "obstacles",
     "phi_tree",
+    "playbook",
     "policy_compare",
     "posteriors",
     "pricing",
