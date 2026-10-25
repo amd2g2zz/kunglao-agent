@@ -409,6 +409,12 @@ files:
     r1: 1
   scripts/rlvr/meta_arms.py:
     r1: 6
+  scripts/rlvr/meta_context.py:
+    r1: 2
+  scripts/rlvr/meta_policy.py:
+    r1: 1
+  scripts/rlvr/meta_retrieval.py:
+    r1: 1
   scripts/rlvr/phi_tree.py:
     r1: 4
   scripts/rlvr/policy_compare.py:
@@ -1263,6 +1269,8 @@ files:
     r1: 4
   tests/test_mechanisms_retirement.py:
     r1: 4
+  tests/test_meta_policy_825.py:
+    r1: 1
   tests/test_method_families_432.py:
     r1: 6
   tests/test_migrate_facts_809.py:

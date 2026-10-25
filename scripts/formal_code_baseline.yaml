@@ -244,6 +244,9 @@ files:
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/marl.py: 2
   scripts/rlvr/meta_arms.py: 8
+  scripts/rlvr/meta_context.py: 3
+  scripts/rlvr/meta_policy.py: 1
+  scripts/rlvr/meta_retrieval.py: 1
   scripts/rlvr/obstacles.py: 3
   scripts/rlvr/phi_tree.py: 13
   scripts/rlvr/policy_compare.py: 5

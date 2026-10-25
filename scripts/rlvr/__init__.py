@@ -33,6 +33,9 @@ from . import ledger
 from . import learning_seal
 from . import liveness
 from . import marl
+from . import meta_context
+from . import meta_policy
+from . import meta_retrieval
 from . import meta_arms
 from . import obstacles
 from . import phi_tree
@@ -81,6 +84,9 @@ __all__ = [
     "learning_seal",
     "marl",
     "meta_arms",
+    "meta_context",
+    "meta_policy",
+    "meta_retrieval",
     "obstacles",
     "phi_tree",
     "policy_compare",
