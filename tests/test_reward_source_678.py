@@ -218,9 +218,11 @@ def test_settlement_with_credited_fact_banks_nonzero_r(tmp_path):
 # ---------- 5. D-678.4a: TRACE credit is observation-only -------------------
 
 def _q_row(sig: str, fam: str, credit, source="settlement") -> dict:
+    # #804 regen: keyed shape (the fold banks arm_key-carrying rows only)
     return {"schema": q_cells.OBS_SCHEMA, "ts": "2026-10-14T00:00:00Z",
             "source": source, "signature_hash": sig, "method_family": fam,
-            "claim": None, "agent": None, "credit": credit}
+            "claim": None, "agent": None, "credit": credit,
+            "arm_key": f"{fam}|facts_snapshot|none|0"}
 
 
 def test_trace_credit_does_not_bank_as_failure_mass(tmp_path):
@@ -233,21 +235,21 @@ def test_trace_credit_does_not_bank_as_failure_mass(tmp_path):
         _q_row("sig1", "red-team-verification", ss.TRACE_CANONICAL),
     ])
     cell = q_cells.fold(trace_store, gamma=1.0).cells[("sig1",
-                                                       "red-team-verification")]
+                                                       "red-team-verification|facts_snapshot|none|0")]
     assert cell.success == 0.0, "TRACE credit must not bank success"
     assert cell.failure == 0.0, "TRACE credit must not bank failure mass"
 
     fail_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", 0.0)])
     fcell = q_cells.fold(fail_store, gamma=1.0).cells[("sig1",
-                                                       "dynamic-trace")]
+                                                       "dynamic-trace|facts_snapshot|none|0")]
     assert fcell.success == 0.0
     assert fcell.failure == 1.0, "a genuine 0.0 still trains failure"
 
     full_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", 1.0)])
     scell = q_cells.fold(full_store, gamma=1.0).cells[("sig1",
-                                                       "dynamic-trace")]
+                                                       "dynamic-trace|facts_snapshot|none|0")]
     assert scell.success == 1.0
     assert scell.failure == 0.0
 
@@ -258,14 +260,14 @@ def test_observation_band_edges_are_pinned(tmp_path):
     top_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", q_cells.OBSERVATION_BAND_CEIL)])
     top = q_cells.fold(top_store, gamma=1.0).cells[("sig1",
-                                                    "dynamic-trace")]
+                                                    "dynamic-trace|facts_snapshot|none|0")]
     assert (top.success, top.failure) == (0.0, 0.0)
 
     above_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace",
                q_cells.OBSERVATION_BAND_CEIL + 0.01)])
     above = q_cells.fold(above_store, gamma=1.0).cells[("sig1",
-                                                        "dynamic-trace")]
+                                                        "dynamic-trace|facts_snapshot|none|0")]
     assert above.success == pytest.approx(0.06)
     assert above.failure == pytest.approx(0.94)
 

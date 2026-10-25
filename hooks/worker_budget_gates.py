@@ -358,18 +358,28 @@ def check_branch_budget(paths: dict, claim_id: str | None,
     """#690: branch_budget.retries is the branch ACT budget — once the
     claim's independent dispatch_count reaches it, the next dispatch is
     REJECTED (the hard constraint the parsed-but-unconsumed envelope
-    field was always meant to be). No budget dict / no claim / a
-    malformed retries value -> unconstrained (v1 envelopes stay
-    first-class via the envelope_v2_defaults back-fill)."""
+    field was always meant to be). No budget dict / no claim -> the
+    schema-legal unconstrained posture. #804 de-compat: a DECLARED but
+    malformed retries value is a LOUD emitter defect (one rate-limited
+    warn) + unconstrained — the v1-envelope silent-fail-open posture is
+    retired; absence is still unconstrained, never zero."""
     if not budget or not claim_id:
         return (True, '')
     retries = budget.get('retries')
-    if isinstance(retries, bool):
+    if retries is None or isinstance(retries, bool):
+        if retries is not None:
+            warn('gate_error:branch_budget_malformed',
+                 f"branch_budget.retries={retries!r} is a bool — the dim "
+                 f"is unconstrained this dispatch (loud emitter defect, "
+                 f"#804)")
         return (True, '')
     try:
         retries_n = int(retries)
     except (TypeError, ValueError):
-        return (True, '')  # malformed budget dim — unconstrained (fail-open)
+        warn('gate_error:branch_budget_malformed',
+             f"branch_budget.retries={retries!r} is not an int — the dim "
+             f"is unconstrained this dispatch (loud emitter defect, #804)")
+        return (True, '')
     if retries_n <= 0:
         return (True, '')
     ws = paths.get('workspace') if isinstance(paths, dict) else None

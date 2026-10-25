@@ -74,8 +74,7 @@ for a constant γ this is exactly the γ^age weight.
 ## Recording face (the sampler's data spine)
 
 ``runs/experience.jsonl`` (the consolidated WHAT-HAPPENED file, #721;
-``runs/q-cell-log.jsonl`` remains readable — and migration-archived —
-during the compat window) — append-only rows
+the single substrate, #804 de-compat) — append-only rows
 {schema: q-cell-obs/1, ts, source: dispatch|settlement, signature_hash,
 method_family, claim, agent, credit}. Dispatch rows carry credit=None
 (pending — structural cell mass, never posterior mass); settlement rows
@@ -149,8 +148,10 @@ from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
-OBS_REL = "runs/q-cell-log.jsonl"  # legacy rel (pre-#721 archive)
-# #721: the consolidated experience rel (the live observation home)
+# #721: the consolidated experience rel (the ONE observation home).
+# #804 de-compat: the legacy runs/q-cell-log.jsonl rel is retired — the
+# archive is a READ-registry entry in rlvr.consolidated_ledger.LEGACY
+# (the #721 migration source), never a write or scan target.
 EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
@@ -245,9 +246,6 @@ def _resolve_schedule(gamma) -> GammaSchedule:
         f"constant in (0, 1], or a gamma()/observe() schedule; got "
         f"{gamma!r:.80}")
 
-# the #432 v0 prose declaration face (dual-face contract: v1 envelope
-# field FIRST, prose marker second — same order as method_families)
-_V0_MARKER_RE = re.compile(r"method-family:\s*([^\n]+)", re.IGNORECASE)
 _SIG_HASH_RE = re.compile(r"^[0-9a-f]{12}$")
 
 # #432 usage-log face (the (family, cell) counting feed) and the
@@ -284,13 +282,12 @@ class InMemoryStore:
 
 class JSONLQStore:
     """The default day-one store: the consolidated runs/experience.jsonl
-    (#721) with the legacy runs/q-cell-log.jsonl riding the compat
-    window. The stamp filter keeps the file's other schemas out — only
-    q-cell-obs rows ever enter the fold."""
+    (#721 — the single substrate, #804 de-compat). The stamp filter keeps
+    the file's other schemas out — only q-cell-obs rows ever enter the
+    fold."""
 
     def __init__(self, root):
         self.root = Path(root)
-        self.path = self.root / OBS_REL  # legacy rel (kept for callers)
 
     def observations(self) -> list[dict]:
         return _cl.read(self.root, "experience",
@@ -335,8 +332,15 @@ class CellCounts:
 
 @dataclass(frozen=True)
 class Fold:
-    """The γ-discounted read view over a store's observations."""
+    """The γ-discounted read view over a store's observations.
+
+    ``unkeyed`` (#804 de-compat): rows without an ``arm_key`` — the
+    pre-keyed old-log shape — bank NO mass and NO pending count; the
+    counter IS the loud un-attributed gap (mirrors kunglao_log's
+    null-actor gap: the missing attribution is the signal, never a
+    fabricated bucket)."""
     cells: dict[tuple[str, str], CellCounts] = field(default_factory=dict)
+    unkeyed: int = 0
 
     def family_mass(self, family: str) -> tuple[float, float]:
         """(success, failure) mass over ALL signatures — the family
@@ -406,18 +410,20 @@ def tiebroken_credit(credit: float, phi_delta) -> float:
 
 
 def family_of_action(action_key: str) -> str:
-    """The FAMILY part of a consumed action key: the 4-dim arm_key's
-    first segment, or the key itself for legacy family-keyed rows (the
-    dual-write tolerance — #539 WS1 recorded the key, #545 consumes it)."""
+    """The FAMILY part of a consumed action key: the arm_key's first
+    segment (the 4-dim family|recipe|verif|tier shape; a 5-dim
+    agent-conditioned key's first segment is equally the family)."""
     k = str(action_key or "")
     return k.split("|", 1)[0] if "|" in k else k
 
 
-def _action_key_of(row: dict) -> str:
-    """The row's consumption key: the arm_key column when present, else
-    the bare method_family (old logs keep folding exactly as before)."""
+def _action_key_of(row: dict) -> str | None:
+    """The row's consumption key: the arm_key column — or None when the
+    row carries no key. #804 de-compat: the former bare method_family
+    fallback (old logs folded into family cells) is retired; an unkeyed
+    row is the loud un-attributed gap (``Fold.unkeyed``), never mass."""
     ak = str(row.get("arm_key") or "").strip()
-    return ak or str(row.get("method_family") or "")
+    return ak or None
 
 
 def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
@@ -438,12 +444,12 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     Pending rows (credit=None) count toward n_pending only, never
     posterior mass.
 
-    #545 keyed consumption: rows group by the 4-dim arm_key
-    (family|recipe|verif|tier — dual-written since WS1); rows without an
-    arm_key fall back to the bare method_family, so old logs fold
-    exactly as before (the dual-write tolerance). The read face stays
-    family-addressed through ``family_of_action`` /
-    ``Fold.family_mass``.
+    #545 keyed consumption: rows group by the 4/5-dim arm_key
+    (family|recipe|verif|tier[|agent]). #804 de-compat: the former
+    bare-method_family fallback for key-less old-log rows is RETIRED —
+    an unkeyed row banks no mass and no pending count and is counted in
+    ``Fold.unkeyed`` (the loud un-attributed gap). The read face stays
+    family-addressed through ``family_of_action`` / ``Fold.family_mass``.
 
     #548 tiebreaker: a row's effective credit runs through
     ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
@@ -490,11 +496,18 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
         w *= gammas[i + 1]
         weights[i] = w
     cells: dict[tuple[str, str], CellCounts] = {}
+    unkeyed = 0
     for i, row in enumerate(rows):
         raw_credit = _credit_of(row)
         weight = weights[i]
-        key = (str(row.get("signature_hash") or ""),
-               _action_key_of(row))
+        action = _action_key_of(row)
+        if action is None:
+            # #804 de-compat: the un-attributed gap — the row is a real
+            # outcome (it already advanced the γ chain above) but banks
+            # NO cell mass: no key, no bucket, never a fabricated one.
+            unkeyed += 1
+            continue
+        key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key)
         if cell is None:
             cell = CellCounts(key[0], key[1])
@@ -530,13 +543,17 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
             continue
         if not _admits_to_posterior(row):
             continue          # #705: verification rows are never pending
-        key = (str(row.get("signature_hash") or ""),
-               _action_key_of(row))
+        action = _action_key_of(row)
+        if action is None:
+            # #804 de-compat: unkeyed pending rows are the same loud gap.
+            unkeyed += 1
+            continue
+        key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key) or CellCounts(key[0], key[1])
         cells[key] = CellCounts(cell.signature_hash, cell.family,
                                 cell.success, cell.failure,
                                 cell.n_pending + 1)
-    return Fold(cells)
+    return Fold(cells, unkeyed=unkeyed)
 
 
 # ---------------------------------------------------------------------------
@@ -556,10 +573,13 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     nowhere-observed family yields the wide Beta(1,1) prior.
 
     ``arm_key`` (#545 keyed consumption): address the cell at the 4-dim
-    action key (family|recipe|verif|tier). The legacy cell at the bare
-    family key (old logs — the dual-write tolerance) POOLS into the
-    local mass, and the leave-one-out anchor subtracts BOTH, so a
-    key-addressed read never self-echoes its own family-grain history.
+    action key (family|recipe|verif|tier). #804 de-compat: the former
+    bare-family pooling tolerance is retired — a keyed read's local mass
+    is ITS OWN cell only; the rest of the family stays in the
+    leave-one-out anchor, so a key-addressed read never self-echoes its
+    own family-grain history. ``arm_key=None`` is the FAMILY-GRAIN read:
+    local is the (never banked) bare-family cell — effectively empty —
+    and the anchor carries the whole family.
 
     #705 MARL: a 5-dim agent-conditioned key (…|agent) reads its OWN
     cell as local mass and does NOT pool the same-arm 4-dim cell into
@@ -592,15 +612,10 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
         (signature_hash, arm_key or family),
         CellCounts(signature_hash, family))
     s_local, f_local = cell.success, cell.failure
-    # #539/#545 legacy tolerance: a 4-dim key pools the bare family cell
-    # into local (and the leave-one-out anchor subtracts both). A 5-dim
-    # agent key skips this — the same-arm mass stays ANCHOR (prior),
-    # never this agent's own evidence.
-    if arm_key and arm_key != family and not _is_agent_key(arm_key):
-        legacy = fold_view.cells.get((signature_hash, family))
-        if legacy is not None:
-            s_local += legacy.success
-            f_local += legacy.failure
+    # #804 de-compat: the #539/#545 legacy tolerance (a 4-dim key
+    # POOLING the bare family cell into local, anchor subtracting both)
+    # is retired — local mass is the addressed cell ONLY; every other
+    # cell of the family stays in the leave-one-out anchor.
     fam_s, fam_f = fold_view.family_mass(family)
     s_anchor = max(fam_s - s_local, 0.0)
     f_anchor = max(fam_f - f_local, 0.0)
@@ -961,13 +976,6 @@ def agent_of_action(action_key: str) -> str | None:
     return parts[4] if len(parts) >= 5 and parts[4] else None
 
 
-def _is_agent_key(action_key: str) -> bool:
-    """True for a 5-dim agent-conditioned key (the #705 local-mass
-    carve-out: a 5-dim read never pools a same-arm 4-dim cell into
-    local — sharing rides the anchor, never forced pooling)."""
-    return len(str(action_key or "").split("|")) >= 5
-
-
 def _recipe_cols(recipe_id, recipe_propensity,
                  recipe_source) -> tuple[str | None, float | None,
                                          str | None]:
@@ -1149,12 +1157,17 @@ def append_observation(ws, signature_hash: str, method_family: str,
 
 
 def observe(ws, signature_hash: str, method_family: str,
-            credit: float) -> dict:
+            credit: float, *, arm_key: str | None = None) -> dict:
     """The settlement feed: one (signature_hash, method_family, credit)
     observation — the observation interface as DATA (the W2-T4
-    settlement wiring calls this from settled round_credit rows)."""
+    settlement wiring calls this from settled round_credit rows).
+
+    #804 de-compat: the keyed bank face — an ``arm_key`` supplied here
+    rides the row so the fold banks it; a row banked WITHOUT one is the
+    loud un-attributed gap (``Fold.unkeyed``), never family mass."""
     return append_observation(ws, signature_hash, method_family, credit,
-                              source="settlement")
+                              source="settlement",
+                              arm_key_col=arm_key)
 
 
 def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
@@ -1650,18 +1663,15 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:
-    """The declared method family — the #432 dual-face contract, single
-    owner reused when importable: v1 envelope field first, v0 prose
-    marker second. The local fallback is byte-equivalent for
-    pre-#432-bases; once #432 is on dev the lazy import resolves and the
-    fallback is dead code kept only for partial deployments."""
+    """The declared method family — the #432 envelope field is the ONE
+    declaration face. #804 de-compat: the v0 prose-marker fallback
+    (``method-family:`` in the prompt text — dead code kept for partial
+    deployments) is retired; an envelope without the field is the
+    undeclared honest gap."""
     if isinstance(envelope_meta, Mapping):
         v = envelope_meta.get("method_family")
         if isinstance(v, str) and v.strip():
             return v.strip()
-    m = _V0_MARKER_RE.search(prompt_text or "")
-    if m:
-        return m.group(1).strip()
     return None
 
 
@@ -1849,8 +1859,9 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     #428 adaptive schedule imported from the posterior store; an
     explicit constant γ selects the exact-count calibration face).
 
-    Face 1 — runs/q-cell-log.jsonl (authoritative; exact signatures +
-    credits). Face 2 — the #432 usage log (family + claim, NO
+    Face 1 — the consolidated runs/experience.jsonl (authoritative;
+    exact signatures + credits; the #804 de-compat retires the legacy
+    q-cell-log.jsonl scan). Face 2 — the #432 usage log (family + claim, NO
     signature/credit): keyed under the workspace's CURRENT signature
     (approximation — historical signatures are unrecoverable from a
     final-state workspace), counted PENDING only. Face 3 — unified-log
@@ -1865,16 +1876,16 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    for p in (sorted(root.rglob(OBS_REL))
-              + sorted(root.rglob(EXPERIENCE_REL))):
+    # #804 de-compat: face 1 scans the consolidated experience file ONLY
+    # — the legacy runs/q-cell-log.jsonl rel is retired (the #721 read
+    # registry in consolidated_ledger.LEGACY remains the archive source).
+    for p in sorted(root.rglob(EXPERIENCE_REL)):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
-        if p.name == Path(EXPERIENCE_REL).name:
-            # #721: the consolidated file is multi-schema — only
-            # q-cell-obs rows are face-1 rows; the legacy group above
-            # precedes this one (archive history predates the file)
-            rows = [r for r in rows
-                    if str(r.get("schema") or "").startswith("q-cell-obs")]
+        # #721: the consolidated file is multi-schema — only
+        # q-cell-obs rows are face-1 rows
+        rows = [r for r in rows
+                if str(r.get("schema") or "").startswith("q-cell-obs")]
         rows_scanned += len(rows)
         face1_rows.extend(rows)
     fold_view = fold(InMemoryStore(face1_rows), gamma=schedule)
@@ -1919,6 +1930,9 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
         "root": str(root),
         "rows_scanned": rows_scanned,
         "unattributed": unattributed,
+        # #804 de-compat: face-1 rows without an arm_key bank no mass —
+        # the count is the loud un-attributed gap, never silent absence.
+        "unkeyed": fold_view.unkeyed,
         "signature_approximated_cells": approximated,
         "cells": cells,
         "families": [families[k] for k in sorted(families)],

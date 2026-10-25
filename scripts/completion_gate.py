@@ -61,7 +61,7 @@ import kunglao_log  # noqa: E402
 
 # #534: observability lifeline — module-level emit on load.
 try:
-    kunglao_log.emit(ws, actor="completion_gate", action="write_blocked",
+    kunglao_log.emit(ws, actor="hook:completion_gate", action="write_blocked",
                               detail="module wired")
 except NameError as exc:
     _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")

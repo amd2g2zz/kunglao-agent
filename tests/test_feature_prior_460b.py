@@ -271,11 +271,13 @@ def _shrink_store():
     rows = [
         {"schema": q_cells.OBS_SCHEMA, "ts": "t", "source": "settlement",
          "signature_hash": "aaaaaaaaaaaa", "method_family": "anchor-family",
-         "claim": None, "agent": None, "credit": 1.0}] * 10
+         "claim": None, "agent": None, "credit": 1.0,
+         "arm_key": "anchor-family|facts_snapshot|none|0"}] * 10
     rows += [{"schema": q_cells.OBS_SCHEMA, "ts": "t",
               "source": "settlement", "signature_hash": "bbbbbbbbbbbb",
               "method_family": "anchor-family",
-              "claim": None, "agent": None, "credit": 1.0}]
+              "claim": None, "agent": None, "credit": 1.0,
+              "arm_key": "anchor-family|facts_snapshot|none|0"}]
     return q_cells.InMemoryStore(rows)
 
 
@@ -285,7 +287,9 @@ def test_cell_posterior_no_pool_is_the_pinned_formula():
     LOO anchor 10s → m = 11/12, w = 8 → alpha = 1 + 8·(11/12) + 1,
     beta = 1 + 8·(1/12))."""
     fold = q_cells.fold(_shrink_store(), gamma=1.0)
-    a, b = q_cells.cell_posterior(fold, "bbbbbbbbbbbb", "anchor-family")
+    a, b = q_cells.cell_posterior(
+        fold, "bbbbbbbbbbbb", "anchor-family",
+        arm_key="anchor-family|facts_snapshot|none|0")
     assert a == pytest.approx(28.0 / 3.0, abs=1e-9)
     assert b == pytest.approx(5.0 / 3.0, abs=1e-9)
 

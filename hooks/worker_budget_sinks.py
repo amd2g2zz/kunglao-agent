@@ -990,13 +990,25 @@ def pre_check(payload: dict, paths: dict) -> int:
         paths.get('workspace'), cid, payload, prompt)
     # #690: the v2 action tuple — branch_budget ({wall_s, retries}, the
     # branch ACT budget) normalized through the ONE consumer face
-    # (envelope_v2_defaults): a v1 envelope back-fills to {} — the budget
-    # dims below treat absence as unconstrained, never as zero.
+    # (envelope_v2_defaults). #804 de-compat: the v1-envelope back-fill
+    # support is retired — the schema defaults still apply (the budget
+    # dims treat absence as unconstrained, never as zero), but a parsed
+    # envelope MISSING any v2 action field is a LOUD emitter defect (one
+    # rate-limited warn naming the gaps), never a silently served shape.
     _budget = {}
     try:
         _pm = load_hooks_lib().parse_dispatch_json(prompt)
         if isinstance(_pm, tuple) and len(_pm) == 4:
-            _budget = (load_hooks_lib().envelope_v2_defaults(_pm[3] or {})
+            _meta = _pm[3] or {}
+            _missing = [f for f in ('action_type', 'context_recipe',
+                                    'verification_mode', 'control')
+                        if not str(_meta.get(f) or '').strip()]
+            if _missing:
+                warn('gate_error:envelope_v1_shape',
+                     f"dispatch envelope lacks the v2 action field(s) "
+                     f"{_missing} — the v1 back-fill support retired "
+                     f"(#804): the emitter must declare the action tuple")
+            _budget = (load_hooks_lib().envelope_v2_defaults(_meta)
                        .get('branch_budget') or {})
     except Exception:  # noqa: BLE001 - budget parse is advisory, fail-open
         _budget = {}

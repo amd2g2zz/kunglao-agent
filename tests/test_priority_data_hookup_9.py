@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import priority_ratio as pr  # noqa: E402
-from posteriors import CasePosterior, PQCategorical, PosteriorLedger  # noqa: E402
-from posteriors import PosteriorSchemaError  # noqa: E402
+from posteriors_case import CasePosterior, PQCategorical, PosteriorLedger  # noqa: E402
+from posteriors_case import PosteriorSchemaError  # noqa: E402
 
 
 def _claim(cid, status="OPEN", answers_question=None, statement=""):

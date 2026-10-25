@@ -116,7 +116,7 @@ def _case_ws(tmp_path, claims, cases=(), name="ws"):
 
 
 def _ledger(ws):
-    import posteriors as po
+    import posteriors_case as po
     return po.PosteriorLedger.load(ws)
 
 

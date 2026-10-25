@@ -864,7 +864,7 @@ flowchart TD
 | `runs/plan-stages.yaml` | `scripts/plan_stages.py` |
 | `runs/planning-actions.jsonl` | `scripts/planning_actions.py` |
 | `runs/posterior-store.jsonl` | `scripts/rlvr/posteriors.py` |
-| `runs/posteriors.yaml` | `scripts/posteriors.py` |
+| `runs/posteriors.yaml` | `scripts/posteriors_case.py` |
 | `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/prediction_ledger.py` |
 | `runs/q-cell-log.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
 | `runs/roi-intents.jsonl` | `hooks/dispatch_gate.py`, `scripts/roi_settlement.py` |

@@ -7,8 +7,9 @@ under the workspace. Worker, orchestrator, and hook events share ONE schema:
 
   ts          ISO8601 UTC timestamp (auto, Z suffix)
   actor       who did it (#879 vocabulary: orchestrator / worker:<name> /
-              verifier:<name> / hook:<name> / subagent:<type>; legacy names
-              adopted in LEGACY_ACTORS)
+              verifier:<name> / hook:<name> / subagent:<type>; pre-#804
+              legacy names ride the shrinking LEGACY_ACTORS adoption set —
+              new emitters are strict-shape only, mandate #804)
   action      what happened (dispatch / tool_call / artifact_written / verify / ...)
               — #459: emit-side words come from the controlled vocabulary
               event_taxonomy.EMIT_ACTIONS (CI-anchored, unregistered = red)
@@ -209,57 +210,72 @@ ACTOR_RE = re.compile(
     r"|hook:[A-Za-z0-9._-]+)$")
 
 # Adoption discipline mirrors #459 EMIT_ACTIONS ("words already emitted by
-# real producers were incorporated verbatim"): pre-existing actor literals are
-# adopted here instead of mass-rewriting ~50 emit sites. The CI anchor
-# (scan_actor_literals, anchored by tests/test_trace_identity_879.py) makes
-# every NEW literal vocabulary-or-red; legacy names stop growing.
+# real producers were incorporated verbatim") — PRE-#804. MANDATE 2026-10-25
+# (issue #804 full collapse): the adopted set only SHRINKS — emitters migrate
+# to the strict ACTOR_RE shapes (hook:<name> / worker:<id> / ...) and their
+# words leave this set in the same change; dead vocabulary (no producer left
+# in scripts/ or hooks/) is deleted outright. The CI anchor
+# (scan_actor_literals, tests/test_trace_identity_879.py) keeps every NEW
+# literal vocabulary-or-red. 96 entries at the #804 sweep; wave-1 removed 40.
 LEGACY_ACTORS = frozenset({
-    # #415/#830 durable tick-sidecar actor labels (runs/.heartbeat.log rows,
-    # NOT ledger actors): "tick" = real cron/main-flow tick, "register" =
-    # registration marker, "hook" = heartbeat_touch pulse. Adopted so the
-    # repo-wide actor-literal anchor stays green.
-    "tick", "register", "hook",
-    "anomaly_detector", "ask_for_direction", "ask_for_direction_gate",
     "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
-    "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",
     "claim_granularity",  # issue 293 tagged decision emission (split fan-out + verdict)
-    "complete_teardown", "completion_gate", "convergence_check",
+    "convergence_check",
     "convergence_health",  # #127 detector liveness telemetry (detector_eval/detector_fired)
     "dead_letter",  # issue-234 dispatch-failure 3-strike writer (must_ask escalation face)
-    "decision_pending", "digest_build", "dispatch_context", "dual_gate",
-    "env_check", "env_check_gate", "env_repair_l1", "env_state_probe",
+    "digest_build",
+    "dispatch_context",
+    "dual_gate",
+    "env_check",
+    "env_check_gate",
+    "env_repair_l1",
     "evidence_certify",  # #803 certification face (evidence_certified/evidence_replayed)
-    "event_taxonomy", "external_kicker", "failure_analysis",
-    "failure_analysis_gate",
-    "fix_guard",  # issue 304 fix-as-guard: dormancy sweep writer (guard_dormant face)
-    "heartbeat_tick", "heartbeat_touch",
+    "external_kicker",
+    "heartbeat_tick",
+    "heartbeat_touch",
+    "hook",
+    "hook_activation",
     "hypothesis_bridge",  # issue-252 family-ledger sync + bridge lint writer
-    "hypothesis_seeder", "infeasible_proposal", "infeasible_signal",
+    "hypothesis_seeder",
+    "infeasible_proposal",
+    "infeasible_signal",
+    "init",
     "instrument_menu",  # issue 243 menu/beat faces (handroll_warn + promotion emit)
-    "hook", "hook_activation", "hypothesis", "init", "kunglao-decide",
-    "kunglao_record", "kunglao_resume", "kunglao_status", "kunglao_upgrade",
-    "kubectl_test", "lessons_telemetry", "lint", "log_setup", "loop_state",
-    "migrate_facts", "mission_ledger", "mission_stall", "notes_writer",
-    "nursery", "operator", "oracle_runner",  # #146 retirement coverage WARN face
-    "orchestrator_tool_guard", "outcome_capture",
-    "plan_drift", "plan_drift_detector", "plan_epistemics", "policy_state",
-    # #769 the policy-state projection writer (round-closure kernel face;
-    # policy_state_projected emit row)
-    "priority", "priority_ratio", "progress_timeline",  # issue 293 tagged decision emission
-    "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
-    "reward_settlement",  # unified-reward tick face (rollout_settled summary emit)
+    "kunglao-decide",
+    "kunglao_upgrade",
+    "loop_state",
+    "migrate_facts",
+    "mission_ledger",
+    "mission_stall",
+    "notes_writer",
+    "nursery",
+    "operator",
+    "oracle_runner",  # #146 retirement coverage WARN face
+    "outcome_capture",
+    "plan_drift_detector",
+    "plan_epistemics",
+    "policy_state",  # #769 the policy-state projection writer (round-closure kernel face)
+    "priority_ratio",  # issue 293 tagged decision emission
+    "progress_timeline",  # issue 293 tagged decision emission
+    "refutation_propagate",
+    "retract_claim",
+    "rho_checkpoint",
+    "rho_verifier",
     "rollup",
     "rotation_induction",  # issue-341 same-slot value-join induction writer
-    "retract_claim", "rho_verifier", "scan_worker_budget",
     "statusline_snapshot",  # #883 statusline health-snapshot writer (event-driven, #142)
     "target_ladder",  # issue 293 tagged decision emission (sibling fan-out + settlement gate)
-    "telemetry", "think_seat", "toolchain_install", "tuition_curve",
-    "update_index", "upgrade", "user", "user_signal", "verdict_scorer",
+    "telemetry",
+    "tick",
+    "toolchain_install",
+    "update_index",
+    "user",
     "verification_ladder",  # issue 429 §1 ladder host (oracle_probe_t1 / t2_queue_built faces)
-    "verify_status_watch", "verifier", "violation_capture",
-    "wire_up_settings", "worker", "worker_budget",
+    "verify_status_watch",
+    "wire_up_settings",
     "zero_output_fingerprint",
 })
+
 
 _REPO_SHA: str | None = None
 _REPO_SHA_RESOLVED = False

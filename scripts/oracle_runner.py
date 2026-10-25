@@ -1173,7 +1173,7 @@ def ensure_pq(led, ws, pq_id: str):
     `primary_questions[]` entry whose id == pq_id with a non-empty
     candidates list, and stored into led.pqs. No task_spec entry ->
     None (the caller annotates the skip)."""
-    import posteriors as po
+    import posteriors_case as po
     pq = led.pqs.get(pq_id)
     if pq is not None:
         return pq
@@ -1354,7 +1354,7 @@ def record_posteriors(ws, report: dict) -> Path | None:
     Settlement-PQ (the delta_h writer): the same load now ALSO drives the
     PQ-categorical settlement face (record_pq_updates); both faces land in
     one atomic ledger save, return value unchanged."""
-    import posteriors as po
+    import posteriors_case as po
     # issue 303 D2: _settled_rows drops infra rows — a dead instrument never
     # feeds Beta(alpha, beta) as a red (or green) observation.
     updates = _settled_rows(report)

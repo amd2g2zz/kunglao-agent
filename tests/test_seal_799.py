@@ -107,6 +107,7 @@ def test_sealed_transition_row_tamper_refused(armed, ws):
 def test_worker_proven_alone_is_not_step_credit_1(armed, ws, capsys):
     """Worker-typed PROVEN + passes alone must NOT bank step 1.0."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-3")
     out = qc.observe_step_credit(ws, "C-3", 1.0)
     assert out["appended"] is True
@@ -125,6 +126,7 @@ def test_worker_proven_alone_is_not_step_credit_1(armed, ws, capsys):
 def test_step_cap_lifted_by_valid_evidence_seal(armed, ws):
     """The host's sealed evidence face lifts the ceiling (the seal leg)."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-4")
     evidence = seal.sign_row({"kind": "step-evidence",
                               "dispatch_id": "C-4", "credit": 1.0})
@@ -138,6 +140,7 @@ def test_step_cap_lifted_by_valid_evidence_seal(armed, ws):
 def test_step_cap_forge_refused(armed, ws):
     """A forged (tampered) evidence seal keeps the ceiling."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-5")
     forged = seal.sign_row({"kind": "step-evidence",
                             "dispatch_id": "C-5", "credit": 1.0})
@@ -153,6 +156,7 @@ def test_step_cap_forge_refused(armed, ws):
 def test_unsealed_qcell_row_refused_and_bytes_unchanged(armed, ws, capsys):
     """A raw unsealed credit row never folds; the store bytes stay."""
     qc.append_observation(ws, "sig", "graph", 1.0, source="settlement",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           ts="2026-01-01T00:00:00Z")
     exp = _experience(ws)
     before = exp.read_bytes()
@@ -174,6 +178,7 @@ def test_unsealed_qcell_row_refused_and_bytes_unchanged(armed, ws, capsys):
 def test_pending_match_ignores_unsealed_dispatch_row(armed, ws):
     """The settlement matcher never matches an unsealed pending row."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-6", ts="2026-01-01T00:00:00Z")
     exp = _experience(ws)
     # strip the seal from the pending row (a post-hoc tamper)
@@ -243,6 +248,7 @@ def test_fiat_propensity_dropped_without_receipt_L8(armed, ws, capsys):
 def test_receipt_matched_propensity_survives(armed, ws):
     """The sealed sampler receipt's propensity cross-checks the stash."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-10", recipe_id="r",
                           recipe_propensity=0.7,
                           recipe_source="sampled",
@@ -255,6 +261,7 @@ def test_receipt_matched_propensity_survives(armed, ws):
 def test_propensity_mismatch_dropped(armed, ws):
     """A stash propensity edited away from the receipt is dropped."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-11", recipe_id="r",
                           recipe_propensity=0.4,
                           recipe_source="sampled",
@@ -381,6 +388,7 @@ def test_settlement_row_carries_reward_and_band(armed, ws):
     """The settlement line self-documents reward + band (both inside the
     canonical sha the seal covers)."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-R1", ts="2026-01-01T00:00:00Z")
     out = qc.observe_settlement(ws, "C-R1", 0.8, reward=0.8,
                                 confidence_band="ROUND_CREDIT")
@@ -395,6 +403,7 @@ def test_settlement_row_carries_reward_and_band(armed, ws):
 def test_settlement_reward_column_is_tamper_evident(armed, ws, capsys):
     """A post-hoc reward edit on the settlement line refuses at read."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-R4", ts="2026-01-01T00:00:00Z")
     assert qc.observe_settlement(ws, "C-R4", 0.8, reward=0.8,
                                  confidence_band="ROUND_CREDIT")["appended"]
@@ -414,6 +423,7 @@ def test_settlement_reward_column_is_tamper_evident(armed, ws, capsys):
 def test_settlement_row_without_reward_band_is_legacy(armed, ws):
     """No reward/band supplied: the row equals the pre-R2 shape exactly."""
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-R2", ts="2026-01-01T00:00:00Z")
     assert qc.observe_settlement(ws, "C-R2", 0.8)["appended"] is True
     rows = _settlement_rows(ws)
@@ -430,6 +440,7 @@ def test_scalar_first_bank_wires_reward_and_band(
     store.mkdir()
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store))
     qc.append_observation(ws, "sig", "graph", None, source="dispatch",
+                          arm_key_col="graph|facts_snapshot|none|0",
                           claim="C-R3", ts="2026-01-01T00:00:00Z")
     from rlvr import scalar  # noqa: PLC0415
     bank = scalar._bank_q_cell_credit(

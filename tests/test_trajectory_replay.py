@@ -116,7 +116,7 @@ def _trajectory1_ws(root: Path) -> Path:
     _write(ws / "task_spec.yaml", {"primary_questions": []})
     # #146: arm the gate the live way — linked case + red settlements in
     # the #106 posterior ledger (the dispatch counter no longer arms).
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-1.yaml").write_text(

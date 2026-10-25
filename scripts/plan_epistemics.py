@@ -55,7 +55,7 @@ from pathlib import Path
 
 import yaml
 
-from posteriors import PosteriorLedger, PQCategorical, entropy_bits
+from posteriors_case import PosteriorLedger, PQCategorical, entropy_bits
 from _scriptlib import claims_of, load_register_doc, make_warn
 from _scriptlib import read_register_claims as _read_register
 

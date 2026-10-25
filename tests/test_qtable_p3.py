@@ -50,7 +50,7 @@ def test_pq_categorical_emits_no_dh_feed(tmp_path, monkeypatch):
     removal, ADR-001）：命中该 PQ 的 claim 无 dH feed、无 dH 加分；
     排序只由 Thompson case face + downstream term 决定。"""
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
-    from posteriors import PQCategorical, PosteriorLedger
+    from posteriors_case import PQCategorical, PosteriorLedger
     claims = [
         _claim("C-gap", answers_question="q1", tier=3),
         _claim("C-junk", tier=1),

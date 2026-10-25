@@ -283,7 +283,7 @@ def reconcile_case_settlements(ws: Path) -> dict:
     unobserved pair. Telemetry never raises into the pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
-        import posteriors as po
+        import posteriors_case as po
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z
 
@@ -404,7 +404,7 @@ def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
     try:
         if not entries:
             return out
-        import posteriors as po  # the posterior-ledger leaf
+        import posteriors_case as po  # the posterior-ledger leaf
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z  # the one timestamp source
 

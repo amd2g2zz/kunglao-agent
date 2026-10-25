@@ -269,7 +269,7 @@ def linked_fail_settlements(ws: Path, claim: dict) -> dict[str, int]:
         linked[case_id] = 0
     if not linked:
         return {}
-    import posteriors as po
+    import posteriors_case as po
     try:
         led = po.PosteriorLedger.load(ws)
     except po.PosteriorSchemaError:

@@ -135,24 +135,12 @@ def _prior_claim_ids(ws: Path) -> set:
     the legacy runs/transitions.jsonl archive during the compat window)
     — the wipe guard must never silently empty because the ledger moved.
     A partial deploy without the rlvr core degrades to the legacy path."""
-    rows: list[dict] = []
-    try:
-        from rlvr import incremental_reward as _ir  # noqa: PLC0415
-        rows = _ir.read_transitions(ws)
-    except ImportError:
-        p = Path(ws) / "runs" / "transitions.jsonl"
-        if p.is_file():
-            for line in p.read_text(encoding="utf-8",
-                                    errors="replace").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue  # a torn ledger line is not wipe evidence
-                if isinstance(row, dict):
-                    rows.append(row)
+    # #804 de-compat: the legacy runs/transitions.jsonl path-read
+    # fallback is retired — the consolidated read face is the ONE face
+    # (the wipe guard must never silently empty because the ledger moved,
+    # and a missing rlvr core is an ImportError LOUD).
+    from rlvr import incremental_reward as _ir  # noqa: PLC0415
+    rows = _ir.read_transitions(ws)
     out: set = set()
     for row in rows:
         cid = str((row or {}).get("dispatch_id") or "").strip()

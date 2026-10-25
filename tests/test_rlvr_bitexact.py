@@ -47,7 +47,7 @@ import case_bank as cb  # noqa: E402
 import rollout_ledger as rl  # noqa: E402
 import reward_settlement as rs  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
-from posteriors import CasePosterior, PosteriorLedger  # noqa: E402
+from posteriors_case import CasePosterior, PosteriorLedger  # noqa: E402
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
 

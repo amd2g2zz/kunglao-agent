@@ -122,7 +122,7 @@ import yaml
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
 import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
 import rank_face  # noqa: E402  (issue 218: the emit-failure marker)
-from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
+from posteriors_case import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 
 # #295: LAMBDA_DH is DELETED (the first governed application of
 # docs/adr-001-strategy-parameter-governance.md — see the module

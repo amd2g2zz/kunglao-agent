@@ -934,20 +934,11 @@ def preflight(ws: Path, *, run_selfcheck=None) -> tuple[bool, list[str]]:
 def _q_cell_face(ws: Path) -> int:
     """Armed q-cell observation rows — the learning-spine engagement
     organ. #721: the consolidated runs/experience.jsonl (stamp-filtered)
-    plus the legacy runs/q-cell-log.jsonl archive during the compat
-    window; absent = 0 (a missing organ is a zero metric, never a
-    crash). A partial deploy without the rlvr core degrades to the
-    legacy line count (the except body IS the fallback)."""
-    try:
-        from rlvr import q_cells  # noqa: PLC0415 — partial-deploy lifeline
-        return len(q_cells.JSONLQStore(ws).observations())
-    except ImportError:
-        path = Path(ws) / "runs" / "q-cell-log.jsonl"
-        if not path.is_file():
-            return 0
-        return sum(1 for line in path.read_text(
-            encoding="utf-8", errors="replace").splitlines()
-            if line.strip())
+    — the ONE home; absent = 0 (a missing organ is a zero metric, never
+    a crash). #804 de-compat: the legacy q-cell-log.jsonl line-count
+    fallback is retired; a missing rlvr core is an ImportError LOUD."""
+    from rlvr import q_cells  # noqa: PLC0415
+    return len(q_cells.JSONLQStore(ws).observations())
 
 
 def classify_harness_failure(metrics: dict, q_cell_rows: int) -> \

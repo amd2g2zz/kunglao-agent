@@ -64,7 +64,7 @@ def _usage_row(ws, cid: str, family: str) -> None:
 
 
 def _set_case(ws, case_id: str, alpha: float, beta: float) -> None:
-    import posteriors as po
+    import posteriors_case as po
 
     led = po.PosteriorLedger.load(ws)
     led.cases[case_id] = po.CasePosterior(case_id, alpha=alpha, beta=beta)

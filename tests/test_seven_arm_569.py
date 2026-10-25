@@ -112,18 +112,6 @@ def _seed_warm_store(monkeypatch, tmp_path: Path, n: int = 4) -> Path:
     return root
 
 
-def _seed_local_dispatch_rows(ws: Path, warm: int = 5, cold: int = 1) -> None:
-    """Local q-cell dispatch rows (proposal-channel only, credit=None):
-    an unbalanced count face so the live pooled prior is non-flat."""
-    log = ws / "runs" / "q-cell-log.jsonl"
-    rows = ([{"source": "dispatch", "method_family": FAM_WARM}
-             for _ in range(warm)]
-            + [{"source": "dispatch", "method_family": FAM_COLD}
-               for _ in range(cold)])
-    log.write_text("".join(json.dumps(r) + "\n" for r in rows),
-                   encoding="utf-8")
-
-
 def _ctx(ws: Path, declared: str):
     state = model.RunState(
         run_id="r", unit="u", family="release", repo=str(ROOT),
@@ -164,7 +152,6 @@ def test_uniform_scheduler_flattens_prior_and_posterior(
     wide Beta(1,1), no learned receipt block, the scheduler marker on."""
     ws = _ws(tmp_path)
     _seed_warm_store(monkeypatch, tmp_path)
-    _seed_local_dispatch_rows(ws)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "uniform")
     family, receipt = checkpoints._sample_envelope_family(ws)
     assert family in method_families.registered_tokens()
@@ -190,7 +177,6 @@ def test_learned_face_is_nonflat_without_the_env(tmp_path, monkeypatch):
     fixture."""
     ws = _ws(tmp_path)
     _seed_warm_store(monkeypatch, tmp_path)
-    _seed_local_dispatch_rows(ws)
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     cands = receipt["candidates"]
     assert any(c["p_llm"] != 1.0 for c in cands.values()), \
@@ -204,7 +190,6 @@ def test_any_other_scheduler_value_keeps_the_learned_face(
         tmp_path, monkeypatch):
     ws = _ws(tmp_path)
     _seed_warm_store(monkeypatch, tmp_path)
-    _seed_local_dispatch_rows(ws)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "dts")
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     cands = receipt["candidates"]

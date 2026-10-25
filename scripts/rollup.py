@@ -319,33 +319,11 @@ def _outcome_rows_summary(workspace: Path, claim_id: str) -> str:
 
 def _q_cell_obs_rows(workspace: Path) -> list[dict]:
     """#721 q-cell observation rows: the consolidated runs/experience.jsonl
-    (stamp-filtered) plus the legacy runs/q-cell-log.jsonl archive during
-    the compat window. A partial deploy without the rlvr core degrades to
-    the legacy path read (the except body IS the fallback)."""
-    try:
-        from rlvr import q_cells  # noqa: PLC0415 — partial-deploy lifeline
-        return q_cells.JSONLQStore(workspace).observations()
-    except ImportError:
-        log = workspace / "runs" / "q-cell-log.jsonl"
-        if not log.is_file():
-            return []
-        try:
-            lines = log.read_text(encoding="utf-8",
-                                  errors="replace").splitlines()
-        except OSError:
-            return []
-        out: list[dict] = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict):
-                out.append(row)
-        return out
+    (stamp-filtered) — the ONE home. #804 de-compat: the legacy
+    runs/q-cell-log.jsonl archive fallback is retired; a missing rlvr
+    core is an ImportError LOUD, never a silent legacy read."""
+    from rlvr import q_cells  # noqa: PLC0415
+    return q_cells.JSONLQStore(workspace).observations()
 
 
 def _dispatch_method_family(workspace: Path, claim_id: str) -> str:

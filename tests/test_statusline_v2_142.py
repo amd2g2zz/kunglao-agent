@@ -94,7 +94,7 @@ def _pq(pid: str, state: str = "unattempted", coverage: float = 0.0,
 
 def _posteriors(ws: Path, pqs: dict[str, dict[str, float]]) -> None:
     """runs/posteriors.yaml via the real PosteriorLedger persistence."""
-    from posteriors import PosteriorLedger, PQCategorical
+    from posteriors_case import PosteriorLedger, PQCategorical
     led = PosteriorLedger(pqs={pid: PQCategorical(pid, cands)
                                for pid, cands in pqs.items()})
     led.save(ws)
@@ -197,7 +197,7 @@ class TestProducerSchema142:
     # ---------- entropy badge ----------
 
     def test_h_bits_frontier_entropy(self, tmp_path):
-        from posteriors import PQCategorical
+        from posteriors_case import PQCategorical
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         pqs = [_pq("PQ-1", "answered", 1.0), _pq("PQ-2")]

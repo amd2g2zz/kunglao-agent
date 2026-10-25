@@ -227,7 +227,7 @@ class TestTop1Enforcement:
         _write(ws / "claim-register.yaml", reg)
         # #146: arm the failure-blocked slice the live way — a linked
         # oracle case carrying a fail settlement in the #106 ledger.
-        import posteriors as po
+        import posteriors_case as po
         cdir = ws / "oracle" / "cases"
         cdir.mkdir(parents=True, exist_ok=True)
         (cdir / "case-c-4.yaml").write_text(

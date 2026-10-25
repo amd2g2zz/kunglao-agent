@@ -34,7 +34,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
-import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
+import posteriors_case as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
 # 2026-09-22 case-hardening (#306 emptiness identity, NO output change):
 # the #306 emptiness probe hard-errors a workspace whose task_spec carries

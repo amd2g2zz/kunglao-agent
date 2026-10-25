@@ -859,9 +859,10 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     not the raw ladder — one signed ``observe_step_calibration`` row so
     cumulative success lands on the ladder value (over-credit clawed
     back, under-credit topped up) and cumulative failure on 1 − L.
-    n == 0 keeps the legacy observe_settlement face byte-identically
-    (the backward-compatibility acceptance: claims that settled before
-    this change work unchanged)."""
+    n == 0 is the NORMAL claim-shape under the real-id key (#804
+    restatement, not a compat acceptance): a claim with no banked step
+    credit settles whole through ``observe_settlement`` — the ladder
+    value IS the terminal mass, there is nothing to residualize."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
         did = _real_did(ws, str(row["dispatch_id"]))

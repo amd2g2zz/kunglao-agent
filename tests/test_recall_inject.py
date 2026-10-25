@@ -515,7 +515,7 @@ def test_failure_gate_blocked_output_recalls_failure_modes(tmp_path, capsys):
         }]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     # #146: arm the gate the live way — a linked case carrying a red
     # settlement in the #106 ledger (the counter no longer arms).
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-50.yaml").write_text(
