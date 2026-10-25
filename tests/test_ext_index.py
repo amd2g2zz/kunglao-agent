@@ -280,22 +280,27 @@ class TestToolSearchFind:
         assert r.returncode == 0
         assert json.loads(r.stdout)["count"] >= 1
 
-    def test_find_no_match_is_valid_empty_query(self) -> None:
-        # #812: the negative-cache face appears on the REPEAT query (a
-        # TTL-fresh cached row is served — the repetition the agent
-        # SEES); a cold first query is just an empty set. Pin both.
-        r = run_py(TOOL_SEARCH, "--find", "zzz-no-such-capability-qqq", "--json")
+    def test_find_no_match_is_valid_empty_query(self, tmp_path) -> None:
+        # #812: the negative-cache face rides the REPEAT query (a
+        # TTL-fresh cached row served). resolve_workspace is a cwd
+        # walk-up probe — a CI checkout has no runs/ marker, so the
+        # feature is engaged DETERMINISTICALLY via an explicit --ws
+        # (a tmp workspace whose runs/ marker exists).
+        ws = tmp_path / "ws"
+        (ws / "runs").mkdir(parents=True)
+        fam = "zzz-no-such-capability-qqq"
+        r = run_py(TOOL_SEARCH, "--find", fam, "--ws", str(ws), "--json")
         assert r.returncode == 0
         doc = json.loads(r.stdout)
         assert doc["count"] == 0
         assert doc["tools"] == []
-        r2 = run_py(TOOL_SEARCH, "--find", "zzz-no-such-capability-qqq", "--json")
+        r2 = run_py(TOOL_SEARCH, "--find", fam, "--ws", str(ws), "--json")
         assert r2.returncode == 0
         doc2 = json.loads(r2.stdout)
         assert doc2["count"] == 0
         assert doc2["tools"] == []
         nc = doc2.get("negative_cache") or {}
-        assert nc.get("family") == "zzz-no-such-capability-qqq"
+        assert nc.get("family") == fam
         assert int(nc.get("occurrence") or 0) >= 1
 
     def test_find_combines_with_internal_filters(self) -> None:
