@@ -41,6 +41,25 @@ if str(SCRIPTS) not in sys.path:
 import platform_matrix as pm  # noqa: E402
 import event_taxonomy  # noqa: E402
 
+# host feature truth (the running interpreter's real faces)
+try:
+    import fcntl as _fcntl  # noqa: F401
+    _HAVE_FCNTL = True
+except ImportError:  # Windows host
+    _HAVE_FCNTL = False
+
+try:
+    import msvcrt as _msvcrt  # noqa: F401
+    _HAVE_MSVCRT = True
+except ImportError:  # POSIX host
+    _HAVE_MSVCRT = False
+
+#: POSIX mode bits are skipped on the nt face by design (Windows honors
+#: at most the read-only bit) — the chmod-parity pins are POSIX-only
+_SKIP_NT = pytest.mark.skipif(os.name == "nt",
+                              reason="mode bits are Unix-only semantics; "
+                                     "the nt face skips chmod by design")
+
 
 # ---------------------------------------------------------------------------
 # the support matrix itself
@@ -54,9 +73,18 @@ def test_host_report_declares_posix_and_nt_only():
     assert posix["declared"] is True
     assert nt["declared"] is True
     assert other["declared"] is False
-    assert posix["lock_strategy"] == "posix-flock"
+    # the lock strategy reflects FEATURE availability on the running
+    # host, not the name alone (the subprocess tests pin each face);
+    # the flock face itself is pinned below on real fcntl hosts
+    assert posix["lock_strategy"] == pm.lock_strategy("posix")
     assert nt["chmod"] == "skipped-on-nt"
     assert posix["chmod"] == "posix-chmod"
+
+
+@pytest.mark.skipif(not _HAVE_FCNTL,
+                     reason="flock face needs a real fcntl host")
+def test_host_report_posix_flock_face():
+    assert pm.host_report(os_name="posix")["lock_strategy"] == "posix-flock"
 
 
 def test_platform_run_start_word_registered():
@@ -104,8 +132,12 @@ print(json.dumps({{"lock": platform_matrix.lock_strategy()}}))
                           capture_output=True, text=True, timeout=120,
                           encoding="utf-8", errors="replace")
     assert proc.returncode == 0, f"stderr={proc.stderr[-2000:]}"
+    # with fcntl blocked the degrade face is host-truthful: msvcrt
+    # locking where msvcrt exists (real Windows), else the declared
+    # no-op (POSIX host with fcntl made absent)
+    expected = "msvcrt-locking" if _HAVE_MSVCRT else "unlocked-noop"
     assert json.loads(proc.stdout.strip().splitlines()[-1])[
-        "lock"] == "unlocked-noop"
+        "lock"] == expected
 
 
 def test_msvcrt_lock_face_pinned_synhetically(tmp_path):
@@ -190,6 +222,7 @@ def test_chmod_checked_skips_int_fd_on_nt(nt_chmod):
     assert nt_chmod == []  # the nt branch never reaches os.chmod
 
 
+@_SKIP_NT
 def test_chmod_checked_applies_on_posix(tmp_path):
     target = tmp_path / "artifact.txt"
     target.write_text("x", encoding="utf-8")
@@ -210,6 +243,7 @@ def test_compose_atomic_write_nt_replay(tmp_path, nt_chmod):
     assert nt_chmod == []
 
 
+@_SKIP_NT
 def test_compose_atomic_write_posix_mode_kept(tmp_path):
     path = tmp_path / "card.md"
     _compose_atomic(path, "hello")
@@ -226,6 +260,7 @@ def test_common_atomic_write_skips_chmod_on_nt(tmp_path, nt_chmod,
     assert nt_chmod == []
 
 
+@_SKIP_NT
 def test_common_atomic_write_posix_mode_kept(tmp_path):
     import _common
     path = tmp_path / "ledger.json"
