@@ -18,6 +18,23 @@ ensure_git_snapshot() — git init + one snapshot commit + an explicit usage
 banner. Git is the snapshot layer ONLY; the workspace on disk stays ground
 truth, so a dirty git status can never masquerade as workspace state.
 
+The upgrade is a TRANSACTION (owner contract) — seven steps,
+in order, on the migration path:
+
+    1. git snapshot first (the rollback point precedes every mutation);
+    2. REMOVE all manifest-unknown kunglao files in the deployed trees —
+       outright: the snapshot is the safety net, no backup step;
+    3. deploy the new files (full manifest copy, deploy_workspace_copy);
+    4. update config (settings, ledgers, stamps — the migration items);
+    5. self-check — hooks_selfcheck --strict gates the outcome;
+    6. OK -> the summary tells the operator a session reload is required
+       (hooks are wired but dormant until then);
+    7. any failure in 2-5 rolls the tree back to the snapshot.
+
+The sub-faces (--wire-up registers, --deploy-local copies) keep their
+names; their help states which transaction steps they cover. The
+transactional flow is the ONE documented path.
+
 Spec: openspec/changes/issue-726-kunglao-upgrade/{proposal,design}/.
 
 Stable argv contract (consumed by `kunglao.py cmd_upgrade` and by
@@ -106,6 +123,7 @@ from hook_activation import (  # noqa: E402
     ALWAYS_ARMED_HOOKS,
     always_arm,
     canonical_install_root,
+    deploy_workspace_copy,
     register_hooks,
 )
 from wire_up_settings import WIRE_UP_HOOK_FILES, hook_deployment_targets  # noqa: E402  (#143 purge matches the #372 registry single source)
@@ -940,6 +958,11 @@ def _release_rank(key: tuple[int, ...]) -> tuple[int, ...]:
 # exempt from the iron-rule digest — they are init/upgrade telemetry, not
 # analysis data. Anything else under the seven dirs stays byte-protected.
 #   runs/.init-report.json          #534 init telemetry (upgrade appends)
+#   runs/.hooks-selfcheck.json      the component report — written by every
+#                                   selfcheck tick; the transaction's own
+#                                   step 5 writes it too, so it is
+#                                   framework-owned state, never analysis
+#                                   data
 #   runs/upgrade-snapshot.*.json    #726 own forensic output
 #   runs/logs/kunglao-*.jsonl       #726 emits ONLY its own actor lines —
 #                                   line-filtered, analysis events stay
@@ -947,6 +970,7 @@ def _release_rank(key: tuple[int, ...]) -> tuple[int, ...]:
 #   runs/claudemd-pending-merge.*   #5 refused-merge marker + diff report
 _EXEMPT_EXACT = (
     "runs/.init-report.json",
+    "runs/.hooks-selfcheck.json",
     PENDING_MERGE_REL,
     PENDING_MERGE_DIFF_REL,
 )
@@ -1583,6 +1607,67 @@ def _success_commit(ws: Path, origin: str, target: str) -> bool:
 
 
 # --------------------------------------------------------------------------
+# the upgrade transaction (owner contract: seven steps, one documented path)
+# --------------------------------------------------------------------------
+
+class TxSelfcheckFailure(RuntimeError):
+    """Raised when the transaction's self-check face (step 5) reports a
+    blocker: the tail handler rolls the tree back to the snapshot — a red
+    deployment never reaches the reload prompt."""
+
+
+def _tx_prune_old_files(ws: Path) -> str:
+    """Transaction step 2: REMOVE all manifest-unknown kunglao files in the
+    deployed trees — outright, no backup step. The pre-migration git
+    snapshot (step 1) is the safety net, so the standalone refresh's
+    backup-then-remove face is redundant here. A removal failure raises
+    into the transaction (rollback, RC_INCOMPLETE) — fail-loud, never a
+    silently half-pruned tree."""
+    import deployed_refresh as _dr
+    pruned = _dr.prune_outright(ws)
+    return f"tx_prune_removed={len(pruned)}"
+
+
+def _tx_deploy_files(ws: Path) -> str:
+    """Transaction step 3: deploy the new files — the full manifest copy
+    via deploy_workspace_copy (fail-loud on an unreadable manifest or an
+    env-import gap; copy+skip semantics, identical-sha targets skip)."""
+    try:
+        report = deploy_workspace_copy(ws)
+    except Exception as exc:
+        _emit_event("tx-deploy", "fail", f"{type(exc).__name__}: {exc}")
+        raise
+    detail = (f"tx_deploy copied={report['copied']} "
+              f"unchanged={report['skipped']} "
+              f"digest={str(report.get('digest'))[:8]}")
+    _emit_event("tx-deploy", "ok", detail)
+    return detail
+
+
+def _tx_selfcheck(ws: Path) -> None:
+    """Transaction step 5: the post-deploy selfcheck as the transaction's
+    test face. hooks_selfcheck runs its ownership-tier repairs (hook
+    rebuild, statusline keep-alive, MCP tier repairs), collects the full
+    component table, and its exit verdict — the HOOK-CHAIN liveness face,
+    i.e. the deployment's own deliverable — gates the outcome: rc != 0
+    (wiring still broken after the repair face) raises into the rollback.
+    The wider operational rows (MCP supply, oracle registration, scheduler,
+    ledger) ride the printed table + runs/.hooks-selfcheck.json without
+    gating the migration: they are operator supply state, not deployment
+    state, and a legacy workspace may legitimately lack them."""
+    import hooks_selfcheck as _hs
+    rc = _hs.main_with_ws(ws, strict=False)
+    if rc != 0:
+        _emit_event("tx-selfcheck", "fail",
+                    "hooks_selfcheck hook-chain verdict red — rolling back")
+        raise TxSelfcheckFailure(
+            "hooks_selfcheck reported a red hook chain after the repair "
+            "face (see the output above) — fix it and re-run "
+            "/kunglao-agent:upgrade")
+    _emit_event("tx-selfcheck", "ok", "hooks_selfcheck hook-chain pass")
+
+
+# --------------------------------------------------------------------------
 # end-step install-reference sweep (#752 D6)
 # --------------------------------------------------------------------------
 
@@ -2158,12 +2243,22 @@ def upgrade(ws: Path, dry_run: bool = False,
 
     if dry_run:
         print(f"kunglao-upgrade: dry-run {origin} -> {target}")
+        for tx_item in ("tx_prune(dry)", "tx_deploy(dry)"):
+            print(f"  [{target}] {tx_item}")
+            if items_out is not None:
+                items_out.append({"name": tx_item, "action": "noop",
+                                   "detail": "dry-run"})
         for v, fn in plan:
             for item in fn(ws, dry=True):
                 print(f"  [{v}] {item}")
                 if items_out is not None:
                     items_out.append({"name": item, "action": "noop",
                                        "detail": "dry-run"})
+        tx_check = "tx_selfcheck(dry)"
+        print(f"  [{target}] {tx_check}")
+        if items_out is not None:
+            items_out.append({"name": tx_check, "action": "noop",
+                               "detail": "dry-run"})
         # the required intake answers: report their state in the plan,
         # write nothing (the dry run never pends)
         _anchor_backfill(ws, dry_run=True, resolve=resolve, items_out=items_out)
@@ -2216,6 +2311,26 @@ def upgrade(ws: Path, dry_run: bool = False,
     applied = 0
     _emit_event("migration-start", "ok", f"{origin}->{target} migrations={len(plan)}")
     try:
+        # ---- transaction step 2: remove the old tree -------------------
+        # outright (the snapshot is the safety net); loud events on both
+        # faces so the trail names the step that moved the tree.
+        tx_step = _tx_prune_old_files(ws)
+        applied += 1
+        print(f"  [{target}] {tx_step} ok")
+        _emit(ws, "upgrade_item", tx_step)
+        _emit_event("tx-prune", "ok", tx_step)
+        if items_out is not None:
+            items_out.append({"name": tx_step, "action": "applied",
+                               "detail": "transaction-step-2"})
+        # ---- transaction step 3: deploy the new tree -------------------
+        tx_step = _tx_deploy_files(ws)
+        applied += 1
+        print(f"  [{target}] {tx_step} ok")
+        _emit(ws, "upgrade_item", tx_step)
+        if items_out is not None:
+            items_out.append({"name": tx_step, "action": "applied",
+                               "detail": "transaction-step-3"})
+        # ---- transaction step 4: config faces (the migration plan) -----
         for v, fn in plan:
             for item in fn(ws, dry=False):
                 applied += 1
@@ -2227,10 +2342,10 @@ def upgrade(ws: Path, dry_run: bool = False,
                                        "detail": f"version={v}"})
     except Exception as exc:  # noqa: BLE001 — transactional: roll back, never crash
         _rollback_failed(ws, snap_sha,
-                         f"migration item raised: {type(exc).__name__}: {exc}")
-        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — a migration "
-              f"item raised ({type(exc).__name__}: {exc}); the workspace "
-              f"was rolled back to the pre-migration snapshot.",
+                         f"transaction step raised: {type(exc).__name__}: {exc}")
+        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — a "
+              f"transaction step raised ({type(exc).__name__}: {exc}); the "
+              f"workspace was rolled back to the pre-migration snapshot.",
               file=sys.stderr)
         return RC_INCOMPLETE
 
@@ -2276,6 +2391,16 @@ def upgrade(ws: Path, dry_run: bool = False,
         # the item above already emitted the one WARN this run needs.
         _guarded_stamp_refresh(ws, version=target, warn=False)
         _emit_event("stamp", "ok", f"version={target}")
+        # ---- transaction step 5: the selfcheck gate --------------------
+        # The verdict decides step 6 (reload prompt) vs step 7 (rollback):
+        # a blocker raises TxSelfcheckFailure into the tail handler below,
+        # which rolls the tree back to the pre-migration snapshot.
+        _tx_selfcheck(ws)
+        _emit(ws, "upgrade_item", "tx_selfcheck(strict pass)")
+        if items_out is not None:
+            items_out.append({"name": "tx_selfcheck(strict pass)",
+                               "action": "applied",
+                               "detail": "transaction-step-5"})
         _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
         print(f"kunglao-upgrade: {origin} -> {target} "
               f"({applied} item(s), snapshot {snap_path.name})")
@@ -2301,10 +2426,15 @@ def upgrade(ws: Path, dry_run: bool = False,
                   f"error:{type(sweep_exc).__name__}")
             _warn_line(f"kunglao-upgrade: WARN - install-reference sweep "
                        f"skipped ({type(sweep_exc).__name__}: {sweep_exc})")
-        # #753 B3 — the skill package just moved; Claude Code picks the new
-        # slash-commands/hooks up only after a plugin reload.
+        # ---- transaction step 6: the reload prompt ---------------------
+        # The skill package just moved; Claude Code picks the new
+        # slash-commands/hooks up only after a plugin reload, and the
+        # wired hooks stay DORMANT until then — the summary says so.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")
+        print("kunglao-upgrade: RELOAD REQUIRED — a session reload is "
+              "required for the new deployment to take effect (hooks are "
+              "wired but dormant until then)")
     except Exception as exc:  # noqa: BLE001 — incomplete: roll back + RC 7
         tail_error = f"{type(exc).__name__}: {exc}"
         _emit_event("summary", "fail", tail_error)

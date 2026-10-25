@@ -87,23 +87,9 @@ def refresh(ws: Path, *, dry: bool = False,
     # REMOVED" (owner directive) is not hooks/agents-only. Unknown
     # scaffolding is backed up under runs/deploy-backup-orphan/ then
     # removed; recognizable (sha-known) variants survive.
-    deployed_roots = sorted({str(Path(dest).parent) for dest in dests})
-    for sub in deployed_roots:
-        base = ws / sub
-        if not base.is_dir():
-            continue
-        for f in sorted(base.rglob("*")):
-            if not f.is_file():
-                continue
+    if prune_orphans:
+        for f in _scan_orphans(ws, dests, known_shas):
             rel = f.relative_to(ws).as_posix()
-            if rel in dests:
-                continue
-            if not prune_orphans:
-                continue
-            import hashlib
-            h = hashlib.sha256(_norm(f.read_bytes())).hexdigest()
-            if h in known_shas:
-                continue  # recognizable variant of a manifest source
             obdir = ws / "runs" / "deploy-backup-orphan"
             obdir.mkdir(parents=True, exist_ok=True)
             # keep the subpath under the deployed tree so same-basename
@@ -144,6 +130,57 @@ def refresh(ws: Path, *, dry: bool = False,
     if carrier_head:
         parts.append(f"head={carrier_head[:8]}")  # identity witness
     return "deployed_refresh(" + ",".join(parts) + ")"
+
+
+def _scan_orphans(ws: Path, dests: set, known_shas: set) -> list[Path]:
+    """The double-confirm orphan rule, shared by the standalone refresh
+    (backup-then-remove) and the transaction's outright prune: a file
+    living in a deployed tree that is NEITHER a manifest destination NOR a
+    newline-normalized byte-variant of a manifest source is unknown
+    scaffolding. Ordered for deterministic trails; NESTED deployed roots
+    (a manifest may declare dests at .claude/templates and
+    .claude/templates/state) each rglob the same subtree, so each file is
+    visited once per covering root — dedupe by rel path so the caller
+    unlinks exactly once."""
+    import hashlib
+    orphans: list[Path] = []
+    seen_rels: set[str] = set()
+    deployed_roots = sorted({str(Path(dest).parent) for dest in dests})
+    for sub in deployed_roots:
+        base = ws / sub
+        if not base.is_dir():
+            continue
+        for f in sorted(base.rglob("*")):
+            if not f.is_file():
+                continue
+            rel = f.relative_to(ws).as_posix()
+            if rel in dests or rel in seen_rels:
+                continue
+            h = hashlib.sha256(_norm(f.read_bytes())).hexdigest()
+            if h in known_shas:
+                continue  # recognizable variant of a manifest source
+            seen_rels.add(rel)
+            orphans.append(f)
+    return orphans
+
+
+def prune_outright(ws: Path) -> list[str]:
+    """The upgrade transaction's REMOVE step: delete every
+    manifest-unknown file in the deployed trees OUTRIGHT — no backup step.
+    The transaction guarantees the pre-migration git snapshot BEFORE any
+    mutation, so the backup face of refresh() is redundant here; git
+    restores anything the scan got wrong. Returns the removed workspace-
+    relative paths; raises on manifest unavailability or removal failure
+    so the transaction rolls back (fail-loud, never a half-pruned tree)."""
+    ws = Path(ws)
+    import deploy_manifest as dm
+    entries = {e["dest"]: e for e in dm.build_entries()}
+    known_shas = {e.get("sha256") for e in entries.values()}
+    removed: list[str] = []
+    for f in _scan_orphans(ws, set(entries), known_shas):
+        f.unlink(missing_ok=True)
+        removed.append(f.relative_to(ws).as_posix())
+    return removed
 
 
 def _dep_gap_detail() -> str:

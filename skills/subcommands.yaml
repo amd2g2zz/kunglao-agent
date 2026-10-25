@@ -80,7 +80,7 @@ cli:
     slash: "guards /kunglao-agent:analysis"
   upgrade:
     usage: "kunglao upgrade <workspace> [--dry-run]"
-    summary: "workspace framework-scaffold migration"
+    summary: "workspace framework-scaffold migration (seven-step transaction: snapshot, prune, deploy, config, selfcheck, reload-prompt or rollback)"
     slash: "/kunglao-agent:upgrade"
   analysis:
     usage: "kunglao analysis <workspace>"

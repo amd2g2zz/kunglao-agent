@@ -8,10 +8,6 @@ files:
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
     sha256: 62d5c0d360f18f495c1ba14b922a0f69a03d0fcc7b32262ca0115df941bb97be
-  - src: hooks/battery_registry.py
-    dest: .claude/hooks/battery_registry.py
-    kind: hook
-    sha256: 3c9ea1ced1936b8546f1d44d2b31fa9eb6b4ada5ddc4652047e773510fac7b5c
   - src: hooks/compact_continuity.py
     dest: .claude/hooks/compact_continuity.py
     kind: hook
@@ -59,7 +55,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 6d4b87abc04ae87bd71b1a9bdacfe6a5062455f7e5fcc6ac77996d4bc0c9d1dd
+    sha256: 1b4c840abb3cfccfabad1a9a0701347e9a66923647326abcc95118d1cfcfaa9c
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -99,7 +95,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: ee841657da1329681e0ab67974c96c245da8617f9c16b07813ebba82ff7f8edd
+    sha256: 32b5484201fdbfdc5d2b2121fe8283c52aeaf6dc3da16e3224270c3b2fb4de52
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -112,10 +108,6 @@ files:
     dest: .claude/hooks/write_guard.py
     kind: hook
     sha256: 981684455457a5aaa5ba01ecd69ca4c40ebf36d12a05b1f72deabb1c4f975edc
-  - src: hooks/battery.yaml
-    dest: .claude/hooks/battery.yaml
-    kind: hook
-    sha256: a22dcdfed732d8b98bf27db579ccc39ed5887b6e569dcb74b83d5b420f8a636d
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -379,7 +371,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: 10a3df18f622c714a365bb127d5db1f1fba916b36200ae4945e92c8f412916b7
+    sha256: edbc83ffef08adc240f013f98b65c41967929514980833e27cae9b80041e1e60
   - src: scripts/deploy_shim.py
     dest: .claude/scripts/deploy_shim.py
     kind: scaffold
@@ -387,7 +379,7 @@ files:
   - src: scripts/deployed_refresh.py
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
-    sha256: e89caad8ad2f000b622cc65a48d5df9f14a8c21424cd42ed15fa822cd3dbf866
+    sha256: 3d38fa019f34654074ec652a4c7c2795ec34c5a188bede839a49806165e8b79c
   - src: scripts/detector_liveness.py
     dest: .claude/scripts/detector_liveness.py
     kind: scaffold
@@ -403,7 +395,7 @@ files:
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
-    sha256: c365c1a486f1ccb2cafe3c6561aba9271b1765b084b65ef42d985586ddee4455
+    sha256: 2ea9281a1e7415ba81e48b0dc42a2892fe08c435cc8b699f887b62862f6bbd7d
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
@@ -627,7 +619,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 41535ebeea7aed90ac213a9009d64c86a02e643b5b1fc2905926420611a2baea
+    sha256: 7ffe9ae583310e9c175beff56eba3c8782e46145ccd1879c4bdf3386ac631e63
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -639,7 +631,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 0c8bba6f4f2dd8e9d6df026442b44b09ace318592b37ed0f376284b7c63a35c1
+    sha256: 237f245370767cae11a080b2989172462a7b1e640c0046cd2f652ea5d5e0bf17
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -684,10 +676,6 @@ files:
     dest: .claude/scripts/init_state.py
     kind: scaffold
     sha256: bfe1c9032a96deaa0a4a32c1d090db253f4f09a3295a0a8612648cf7472b15f0
-  - src: scripts/input_signature.py
-    dest: .claude/scripts/input_signature.py
-    kind: scaffold
-    sha256: 4d50e9f395a8c9879475c3243e3e21566aac45b732b07242031db4811a9929c9
   - src: scripts/install_reference.py
     dest: .claude/scripts/install_reference.py
     kind: scaffold
@@ -787,7 +775,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 100f64a480fbe6ea7932ff3462f40e7c5f8164e7b91d758c2775c8bb98aeb93a
+    sha256: 8494e4640e4d3fd385bb4550b0d2c5fa9f396fb9509744c13bcd35bce2e47fba
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -819,7 +807,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 204482b07e89cd77f50c11dd1b26e1c7b655259f7172758f173adbec135f8ea9
+    sha256: 41a446d5bdb5c4600cdb0de1983a37c8cbb3adb6df8a5d2599df738776f085fd
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -843,7 +831,7 @@ files:
   - src: scripts/loop_watchdog.py
     dest: .claude/scripts/loop_watchdog.py
     kind: scaffold
-    sha256: a0243c9dbf68562a5f7027f07f3b5224bc1a65712ea314348b39408e63e95aed
+    sha256: 4b244982c98f74666177252c4e6d9f10833d881aadfabaa56c399f7bd2cdca0a
   - src: scripts/mcp_probe.py
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
@@ -951,7 +939,7 @@ files:
   - src: scripts/policy_state.py
     dest: .claude/scripts/policy_state.py
     kind: scaffold
-    sha256: a40e3559c5b460727136f13fc086449d8cc35f088430d4d594ac02a1239c5358
+    sha256: 99984bc9617b897cf287cc4cac16de6b7bb904ac63cda2b0f99ab8069161c4d3
   - src: scripts/posteriors_case.py
     dest: .claude/scripts/posteriors_case.py
     kind: scaffold
@@ -1279,7 +1267,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: 5c78c3a1e1621b8500023788b1fc4a67ffd206ef87ceb0856b9e5ed1859fdeb9
+    sha256: 0c252c67b8faa6a58484ea8ab49dc2c20c1769313e36527709d7aee6fde76a1e
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1300,10 +1288,6 @@ files:
     dest: .claude/scripts/wait_dispose.py
     kind: scaffold
     sha256: 46767195eabe2bdb9025dddf6a3e04ca622d22aa51bb23e9263d26e86a62ea95
-  - src: scripts/watchdog_interval.py
-    dest: .claude/scripts/watchdog_interval.py
-    kind: scaffold
-    sha256: cfde1600df1a2d80070bb3d653571a8ec1729da5d9ce125be78ab2ebfb6b1560
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
@@ -1567,11 +1551,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 30048b619207c4340a2e0d5d107d49097fc6fd34b2cde481ed3aa88c18de272c
+    sha256: aac198d95ba8a643f86a67480949a8ba6e88685e140a92208b2d9d674e5d6e24
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 629f6fdccd4ed3f670304c314ff83efdc7fae19cb2eebeff96e29e9a6fbe04c2
+    sha256: 5daab59ee41daebae6ce3ad43d52a49d8880a66b0bf55cf433f312bb4d395a36
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

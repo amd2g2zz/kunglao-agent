@@ -1347,7 +1347,11 @@ def main() -> int:
                              "the user-global settings, binding hooks to a worktree path that dies "
                              "with the worktree). Idempotent: merges into existing hooks config, "
                              "preserves other keys. Called at Phase 0 by the orchestrator; fixes "
-                             "'hooks never fired' recurrences.")
+                             "'hooks never fired' recurrences. Transaction coverage (the upgrade "
+                             "transaction): the config/wiring faces only — registers/repairs the "
+                             "hooks config and self-checks the wiring (transaction steps 4-5 "
+                             "wiring leg). No snapshot, no deploy, no prune, no component gate: "
+                             "the full seven-step flow is /kunglao-agent:upgrade.")
     parser.add_argument("--deploy-local", action="store_true",
                         help="#783 opt-in inverted deployment: copy the "
                              "deployment manifest into <workspace>/.claude/ "
@@ -1355,7 +1359,12 @@ def main() -> int:
                              "register the canonical registry against those "
                              "WORKSPACE-LOCAL copies (uv project = workspace). "
                              "Makes the workspace self-contained against later "
-                             "skill-package upgrades.")
+                             "skill-package upgrades. Transaction coverage (the "
+                             "upgrade transaction): copy (transaction step 3) "
+                             "+ register (transaction step 4 wiring) only — NO "
+                             "git snapshot, NO orphan "
+                             "prune, NO component selfcheck gate. The full "
+                             "seven-step flow is /kunglao-agent:upgrade.")
     parser.add_argument("--reconcile", action="store_true",
                         help="rebuild [active_workers] from the GROUND TRUTH — worker status "
                              "files in every .wt-*/ worktree (last status line == in-progress). Removes "
