@@ -1,6 +1,7 @@
 files:
   hooks/_path_hygiene.py: 9
   hooks/bash_fact_guard.py: 3
+  hooks/battery_registry.py: 6
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 9
@@ -11,7 +12,7 @@ files:
   hooks/lib_kunglao.py: 58
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 36
-  hooks/round_closure.py: 14
+  hooks/round_closure.py: 15
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
@@ -21,7 +22,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 52
   hooks/worker_budget_gates.py: 130
-  hooks/worker_budget_sinks.py: 136
+  hooks/worker_budget_sinks.py: 139
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 39
@@ -73,12 +74,12 @@ files:
   scripts/decision_lint.py: 1
   scripts/decision_pending.py: 10
   scripts/dep_surface_gate.py: 1
-  scripts/deploy_manifest.py: 18
+  scripts/deploy_manifest.py: 20
   scripts/deploy_shim.py: 13
   scripts/deployed_refresh.py: 4
   scripts/detector_liveness.py: 10
   scripts/difficulty_calibration.py: 3
-  scripts/digest_build.py: 26
+  scripts/digest_build.py: 28
   scripts/dispatch_context.py: 28
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
@@ -149,6 +150,7 @@ files:
   scripts/infeasible_signal.py: 6
   scripts/init_channel_default.py: 10
   scripts/init_state.py: 10
+  scripts/input_signature.py: 8
   scripts/install_reference.py: 4
   scripts/instrument_menu.py: 15
   scripts/intake_battery.py: 6
@@ -199,7 +201,7 @@ files:
   scripts/plan_reviser.py: 7
   scripts/plan_stages.py: 5
   scripts/platform_paths.py: 2
-  scripts/policy_state.py: 2
+  scripts/policy_state.py: 3
   scripts/posteriors_case.py: 7
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
@@ -311,7 +313,7 @@ files:
   scripts/update_index.py: 6
   scripts/user_signal.py: 3
   scripts/value_replay.py: 5
-  scripts/verification_ladder.py: 5
+  scripts/verification_ladder.py: 7
   scripts/verifier_identity.py: 4
   scripts/verify_backlog_face.py: 5
   scripts/verify_status_watch.py: 4

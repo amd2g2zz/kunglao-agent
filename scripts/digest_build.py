@@ -360,11 +360,36 @@ def build_digest(ws: Path) -> str:
     return "\n".join(L) + "\n"
 
 
+def _persist_sig(text: str) -> str:
+    """The input signature of the digest CONTENT: the head line's
+    ``reconciled:`` stamp is the render clock (moves every rebuild), so
+    it is stripped before hashing — only workspace-derived content
+    participates (issue 805: the signature covers the INPUT face, never
+    the render clock)."""
+    import re
+    import input_signature
+    body = re.sub(r"^schema: .+\| reconciled: .+$",
+                  "schema: <render>", text, count=1, flags=re.M)
+    return input_signature.signature(body)
+
+
 def write_digest(ws: Path) -> Path:
-    """Write runs/digest.md, return the path."""
+    """Write runs/digest.md, return the path — GATED on the content's
+    input signature (issue 805): an unchanged workspace persists nothing
+    (the head timestamp is a render clock, not a content change; the
+    stored file keeps its previous write time). Fail-open: any state
+    trouble rebuilds."""
     out = ws / DIGEST_PATH
+    text = build_digest(ws)
+    import input_signature
+    sig = _persist_sig(text)
+    state = ws / "runs" / ".digest-persist.json"
+    if input_signature.unchanged_state(state, "digest", sig) \
+            and out.is_file():
+        return out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build_digest(ws), encoding="utf-8")
+    out.write_text(text, encoding="utf-8")
+    input_signature.record_state(state, "digest", sig)
     return out
 
 
@@ -387,8 +412,24 @@ def main(argv: list[str] | None = None) -> int:
         print(build_digest(ws))
     else:
         p = write_digest(ws)
-        print(f"digest written: {p} ({p.stat().st_size} bytes)")
+        print(f"digest written: {p} ({p.stat().st_size} bytes)"
+              + (" [unchanged — input signature matched, no rewrite]"
+                 if _digest_unchanged_flag(p) else ""))
     return 0
+
+
+def _digest_unchanged_flag(path: Path) -> bool:
+    """The CLI's honest-idle note: the persisted content's sig still
+    matches the state sidecar (the write was suppressed)."""
+    import input_signature
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    # the digest and its sidecar share runs/ (DIGEST_PATH = runs/digest.md)
+    return input_signature.unchanged_state(
+        path.parent / ".digest-persist.json", "digest",
+        _persist_sig(text))
 
 
 if __name__ == "__main__":

@@ -795,11 +795,13 @@ REJECT_NAMES = [
     'methodfamily',  # #432: method-family vocabulary gate
     'stepsettled',  # #690: settle->update->decide sync barrier
     'branchbudget',  # #690: the branch act budget (retries)
+    'batteryreg',  # issue 805: the hook battery registration launch gate
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
 # not boilerplate
 REJECT_FIX_KEYWORDS = {
+    'batteryreg': 'battery.yaml',  # issue 805: the registration face
     'workers': 'TaskStop',
     'cap': 'promotion_attempts',
     'tools': 'vm_detonation',

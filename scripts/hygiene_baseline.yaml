@@ -84,7 +84,7 @@ files:
   scripts/decision_pending.py:
     r1: 2
   scripts/deploy_manifest.py:
-    r1: 18
+    r1: 19
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
@@ -232,6 +232,8 @@ files:
     r1: 4
   scripts/init_state.py:
     r1: 8
+  scripts/input_signature.py:
+    r1: 2
   scripts/install_reference.py:
     r1: 2
   scripts/instrument_menu.py:
@@ -527,7 +529,7 @@ files:
   scripts/value_replay.py:
     r1: 3
   scripts/verification_ladder.py:
-    r1: 1
+    r1: 2
   scripts/verifier_identity.py:
     r1: 1
   scripts/verify_backlog_face.py:
@@ -1116,6 +1118,8 @@ files:
     r1: 2
   tests/test_heartbeat_window_4.py:
     r1: 3
+  tests/test_hook_battery_registry_805.py:
+    r1: 2
   tests/test_hook_exit_codes.py:
     r1: 4
   tests/test_hook_registration_entry.py:
@@ -1177,6 +1181,8 @@ files:
     r1: 20
   tests/test_init_typeaware.py:
     r1: 14
+  tests/test_input_signature_805.py:
+    r1: 1
   tests/test_install_unidbg_165.py:
     r1: 1
   tests/test_intake_battery_460.py:

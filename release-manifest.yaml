@@ -29,6 +29,8 @@ assets:
     - agents/kunglao-init-worker.md   # #304 init worker agent
     - agents/kunglao-settler.md   # #687 blind settlement subagent
   hooks:
+    - hooks/battery.yaml   # issue 805: the hook battery's registration face (fail-closed launch prerequisite)
+    - hooks/battery_registry.py   # issue 805: registry loader/validator/launch gate (不入册不许跑 for the hook battery)
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
     - hooks/gate_policy.py   # #801 Face 2: gate-layering authority (five HARD classes + demotion + warn breaker)

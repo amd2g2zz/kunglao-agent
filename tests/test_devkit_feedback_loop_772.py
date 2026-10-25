@@ -51,7 +51,12 @@ def _live_ws(tmp_path: Path) -> Path:
         json.dumps({"action": "dispatch", "admitted": ["dispatch/C-001"],
                     "claim": "C-001"}) + "\n" +
         json.dumps({"action": "task_terminal_settlement",
-                    "claim": "C-001"}) + "\n", encoding="utf-8")
+                    "claim": "C-001"}) + "\n" +
+        # issue 805: the closure battery's T2 + distill faces ride the
+        # unified stream as their fired evidence
+        json.dumps({"action": "t2_queue_built", "queued": 1}) + "\n" +
+        json.dumps({"action": "distill_attempt", "phase": "triggered"})
+        + "\n", encoding="utf-8")
     (ws / "runs" / "posterior-store.jsonl").write_text(
         json.dumps({"schema": "posterior-store/1", "arm": "method:static"})
         + "\n", encoding="utf-8")
@@ -81,6 +86,30 @@ def _live_ws(tmp_path: Path) -> Path:
     (cases / "case-001.yaml").write_text(
         "channel: repl\nhypothesis_ref: H-001\nupdate_map: {}\n",
         encoding="utf-8")
+    # issue 805: the live-workspace contract grew the HOOK battery
+    # faces — ONE worker_battery pass row (all 28 registered dispatch
+    # checks) is the per-check fingerprints' evidence; the closure
+    # faces prove themselves on their own artifacts.
+    checks = ",".join(sorted(
+        ["stepsettled", "workers", "max_retries", "cap", "branchbudget",
+         "tools", "hostchan", "deadline", "tiercons", "tier", "selfcap",
+         "heartbeat", "drift", "health", "envfresh", "envpremise",
+         "backtrack", "zerooutput", "plan", "granularity", "toolfirst",
+         "toolsearch", "handroll", "agenttype", "rotation",
+         "methodfamily", "priority", "snapshot"]))
+    (ws / "runs" / "gate-telemetry.jsonl").write_text(
+        json.dumps({"gate": "worker_battery", "rc": 0, "msg": checks})
+        + "\n", encoding="utf-8")
+    (ws / "runs" / "step-ledger.jsonl").write_text(
+        json.dumps({"schema": "step-record/2", "claim_ref": "C-001",
+                    "outcome": "completed"}) + "\n", encoding="utf-8")
+    strategy = ws / "runs" / "round-strategy"
+    strategy.mkdir(parents=True)
+    (strategy / "tick-0001.yaml").write_text(
+        "schema: round-strategy/1\ntick: 1\n", encoding="utf-8")
+    (ws / "runs" / ".rl-digest.json").write_text(
+        json.dumps({"schema": "rl-digest/1", "round": 1,
+                    "lead": None}) + "\n", encoding="utf-8")
     return ws
 
 

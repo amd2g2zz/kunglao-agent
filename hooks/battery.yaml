@@ -1,0 +1,348 @@
+# battery.yaml — the hook battery's registration face (issue #805)
+#
+# THE single declaration source for the HOOK battery: the dispatch
+# pre_check checks (battery: dispatch) and the round-closure kernel
+# faces (battery: closure). mechanisms.yaml's law (不入册不许跑, #878)
+# extends here with the #805 prerequisites — registration FAILS CLOSED
+# on any of:
+#   entry               module:function — must RESOLVE to real code
+#                       (AST check; an unwired face is unregistrable)
+#   trigger.gate        always | dispatch | verifier_exempt
+#   cost_class          cheap | medium | expensive
+#   telemetry_word      the face's observable — an EMIT_ACTIONS word,
+#                       a worker_budget.<name> gate-telemetry face, or
+#                       file:<workspace-relative path>
+#   liveness_fingerprint  an id in devkit/liveness_fingerprints.json —
+#                       a face with no declared fingerprint CANNOT
+#                       register (the #805 fail-closed pin)
+#
+# Runtime: registration is a LAUNCH PREREQUISITE. The dispatch battery's
+# launch gate REJECTS on a broken/uncovered registry; a full pass lands
+# ONE durable row (runs/gate-telemetry.jsonl, gate=worker_battery,
+# msg=check names) — the liveness evidence the per-check fingerprints
+# read (absence of evidence = FAIL). The closure battery's launch gate
+# warns only (its fail-open double cage is contractual).
+
+schema: kunglao.hook-battery/1
+
+batteries: [dispatch, closure]
+cost_classes: [cheap, medium, expensive]
+gates: [always, dispatch, verifier_exempt]
+
+entries:
+  # ================= dispatch battery (hooks/worker_budget_sinks.pre_check)
+  - name: stepsettled
+    battery: dispatch
+    entry: worker_budget_gates:check_step_settled
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.stepsettled
+    liveness_fingerprint: battery-check-stepsettled
+    description: the settle->update->decide sync barrier (#690)
+
+  - name: workers
+    battery: dispatch
+    entry: worker_budget_gates:check_workers_lt_3
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.workers
+    liveness_fingerprint: battery-check-workers
+    description: the <3 concurrent workers slot gate
+
+  - name: max_retries
+    battery: dispatch
+    entry: worker_budget_gates:check_max_retries
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.max_retries
+    liveness_fingerprint: battery-check-max_retries
+    description: the (worker, claim) retry circuit breaker (#427)
+
+  - name: cap
+    battery: dispatch
+    entry: worker_budget_gates:check_promotion_attempts
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.cap
+    liveness_fingerprint: battery-check-cap
+    description: the promotion-attempts ceiling
+
+  - name: branchbudget
+    battery: dispatch
+    entry: worker_budget_gates:check_branch_budget
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.branchbudget
+    liveness_fingerprint: battery-check-branchbudget
+    description: the v2 branch act budget (#690)
+
+  - name: tools
+    battery: dispatch
+    entry: worker_budget_gates:check_tools_allowed
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.tools
+    liveness_fingerprint: battery-check-tools
+    description: task-spec tool allowlist
+
+  - name: hostchan
+    battery: dispatch
+    entry: worker_budget_gates:check_host_forbidden_tools
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.hostchan
+    liveness_fingerprint: battery-check-hostchan
+    description: host-channel forbidden tools
+
+  - name: deadline
+    battery: dispatch
+    entry: worker_budget_gates:check_deadline
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.deadline
+    liveness_fingerprint: battery-check-deadline
+    description: mission deadline
+
+  - name: tiercons
+    battery: dispatch
+    entry: worker_budget_gates:check_tier_consistency
+    trigger: {type: event, gate: verifier_exempt}
+    cost_class: cheap
+    telemetry_word: worker_budget.tiercons
+    liveness_fingerprint: battery-check-tiercons
+    description: declared-tier consistency, BEFORE the ladder gate (#680)
+
+  - name: tier
+    battery: dispatch
+    entry: worker_budget_gates:check_tier_gate
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.tier
+    liveness_fingerprint: battery-check-tier
+    description: the evidence-tier ladder gate
+
+  - name: selfcap
+    battery: dispatch
+    entry: worker_budget_gates:check_no_self_cap
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.selfcap
+    liveness_fingerprint: battery-check-selfcap
+    description: no self-promotion cap bypass
+
+  - name: heartbeat
+    battery: dispatch
+    entry: worker_budget_sinks:check_heartbeat_alive
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.heartbeat
+    liveness_fingerprint: battery-check-heartbeat
+    description: the loop-liveness precondition (v1.9.28)
+
+  - name: drift
+    battery: dispatch
+    entry: worker_budget_core:check_plan_drift
+    trigger: {type: event, gate: verifier_exempt}
+    cost_class: cheap
+    telemetry_word: worker_budget.drift
+    liveness_fingerprint: battery-check-drift
+    description: plan drift + repair window (v1.9.29)
+
+  - name: health
+    battery: dispatch
+    entry: worker_budget_core:check_convergence_health
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.health
+    liveness_fingerprint: battery-check-health
+    description: convergence health + stalled-remedy admission (#249)
+
+  - name: envfresh
+    battery: dispatch
+    entry: worker_budget_sinks:check_env_fresh
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.envfresh
+    liveness_fingerprint: battery-check-envfresh
+    description: env-state freshness (#475)
+
+  - name: envpremise
+    battery: dispatch
+    entry: worker_budget_sinks:check_env_premise
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.envpremise
+    liveness_fingerprint: battery-check-envpremise
+    description: premise-probe reconciliation (#340 scope B)
+
+  - name: backtrack
+    battery: dispatch
+    entry: worker_budget_core:check_backtrack_gate
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.backtrack
+    liveness_fingerprint: battery-check-backtrack
+    description: stuck-worker backtrack gate (v1.9.29)
+
+  - name: zerooutput
+    battery: dispatch
+    entry: worker_budget_gates:check_zero_output_circuit
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.zerooutput
+    liveness_fingerprint: battery-check-zerooutput
+    description: the A4 thrash circuit (#256, wired by #256's own card)
+
+  - name: plan
+    battery: dispatch
+    entry: worker_budget_gates:check_worker_plan
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.plan
+    liveness_fingerprint: battery-check-plan
+    description: plan-to-execute contract v2 (#239)
+
+  - name: granularity
+    battery: dispatch
+    entry: worker_budget_gates:check_claim_granularity
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.granularity
+    liveness_fingerprint: battery-check-granularity
+    description: plan-size / domain-span split gate (#241)
+
+  - name: toolfirst
+    battery: dispatch
+    entry: worker_budget_gates:check_tool_first
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.toolfirst
+    liveness_fingerprint: battery-check-toolfirst
+    description: the tool-catalog citation gate (#294)
+
+  - name: toolsearch
+    battery: dispatch
+    entry: worker_budget_gates:check_tool_search_citation
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.toolsearch
+    liveness_fingerprint: battery-check-toolsearch
+    description: the make-vs-reuse --find citation gate (#243)
+
+  - name: handroll
+    battery: dispatch
+    entry: worker_budget_gates:check_handroll_floor
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.handroll
+    liveness_fingerprint: battery-check-handroll
+    description: the >50-line hand-roll WARN floor (#243)
+
+  - name: agenttype
+    battery: dispatch
+    entry: worker_budget_gates:check_agent_type
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.agenttype
+    liveness_fingerprint: battery-check-agenttype
+    description: specialist-first routing gate (#310)
+
+  - name: rotation
+    battery: dispatch
+    entry: worker_budget_gates:check_rotation_experiment
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.rotation
+    liveness_fingerprint: battery-check-rotation
+    description: rotation-experiment marker gate (#341)
+
+  - name: snapshot
+    battery: dispatch
+    entry: worker_budget_sinks:pre_check
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.snapshot
+    liveness_fingerprint: battery-check-snapshot
+    description: the facts-snapshot marker leg (inline in pre_check, §1c)
+
+  - name: priority
+    battery: dispatch
+    entry: worker_budget_core:check_priority
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.devreason
+    liveness_fingerprint: battery-check-priority
+    description: best-first audit + agent-reasoning leg (v1.9.24)
+
+  - name: methodfamily
+    battery: dispatch
+    entry: worker_budget_sinks:_method_family_gate
+    trigger: {type: event, gate: dispatch}
+    cost_class: cheap
+    telemetry_word: worker_budget.methodfamily
+    liveness_fingerprint: battery-check-methodfamily
+    description: the #432 method-family vocabulary chokepoint
+
+  # ================= closure battery (hooks/round_closure._kernel_faces)
+  - name: settle
+    battery: closure
+    entry: rlvr.step_grain:settle_step
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: file:runs/step-ledger.jsonl
+    liveness_fingerprint: battery-face-settle
+    description: the step settlement — SubagentStop IS the boundary (#690)
+
+  - name: blind_settlement
+    battery: closure
+    entry: round_closure:_blind_settlement_face
+    trigger: {type: event, gate: always}
+    cost_class: medium
+    telemetry_word: file:runs/settlement.jsonl
+    liveness_fingerprint: blind-settlement-wired
+    description: the blind settlement park+settle face (#802)
+
+  - name: policy_state
+    battery: closure
+    entry: policy_state:run_face
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: policy_state_projected
+    liveness_fingerprint: policy-state-fresh
+    description: the policy-state projection (#769)
+
+  - name: compose
+    battery: closure
+    entry: rlvr.compose:write_strategy
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: file:runs/round-strategy.json
+    liveness_fingerprint: battery-face-compose
+    description: the compose single-point, one round-strategy per event (#462 W1)
+
+  - name: rl_digest
+    battery: closure
+    entry: rl_digest:emit
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: file:runs/.rl-digest.json
+    liveness_fingerprint: battery-face-rl-digest
+    description: the round-closure digest line (rate-limited per decision)
+
+  - name: t2
+    battery: closure
+    entry: verification_ladder:round_close
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: t2_queue_built
+    liveness_fingerprint: battery-face-t2
+    description: the T2 unblocking-value queue build+drain (#462 W6)
+
+  - name: distill
+    battery: closure
+    entry: online_distill:scan_triggers
+    trigger: {type: event, gate: always}
+    cost_class: medium
+    telemetry_word: distill_attempt
+    liveness_fingerprint: battery-face-distill
+    description: the online-distillation trigger scan face
