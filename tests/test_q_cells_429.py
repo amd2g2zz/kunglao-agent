@@ -45,13 +45,22 @@ N_DRAWS = 9000
 
 def _row(sig: str, fam: str, credit, ts="2026-09-29T00:00:00Z",
          source="settlement", claim=None) -> dict:
+    # #804 de-compat: fixtures are REGENERATED at the keyed shape — the
+    # fold banks arm_key-carrying rows only (an unkeyed row is the loud
+    # Fold.unkeyed gap); the deterministic key derives from the family.
     return {"schema": q_cells.OBS_SCHEMA, "ts": ts, "source": source,
             "signature_hash": sig, "method_family": fam,
-            "claim": claim, "agent": None, "credit": credit}
+            "claim": claim, "agent": None, "credit": credit,
+            "arm_key": f"{fam}|facts_snapshot|none|0"}
 
 
 def _store(rows):
     return q_cells.InMemoryStore(rows)
+
+
+def _ak(fam: str) -> str:
+    """The fixtures' deterministic 4-dim arm key (#804 regen shape)."""
+    return f"{fam}|facts_snapshot|none|0"
 
 
 # ---------------------------------------------------------------- 1. reindex
@@ -64,7 +73,7 @@ def test_reindex_forms_cells_from_replayed_history(tmp_path):
     sig_a1, sig_a2 = "aaaa0000aaaa", "aaaa0000bbbb"
 
     # face 1 — the authoritative q-cell observation log (exact signatures)
-    obs = ws_a / q_cells.OBS_REL
+    obs = ws_a / q_cells.EXPERIENCE_REL
     obs.parent.mkdir(parents=True)
     obs.write_text("\n".join(json.dumps(r) for r in [
         _row(sig_a1, "static-symbolic", 1.0),
@@ -156,23 +165,27 @@ def test_cell_with_one_sample_follows_the_global_anchor():
     fold = _shrink_fold(_shrink_fixture())
     # anchor-family totals (10x1.0 @aaaa + 1 good @bbbb + 1 bad @cccc):
     # bbbb's leave-one-out anchor = 10s + 1f -> m = 11/13, w = min(8,11) = 8
-    a, b = q_cells.cell_posterior(fold, "bbbbbbbbbbbb", "anchor-family")
+    a, b = q_cells.cell_posterior(fold, "bbbbbbbbbbbb", "anchor-family",
+                                  arm_key=_ak("anchor-family"))
     assert a == pytest.approx(114.0 / 13.0, abs=1e-9)   # 1 + 8*(11/13) + 1
     assert b == pytest.approx(29.0 / 13.0, abs=1e-9)    # 1 + 8*(2/13) + 0
     # one BAD local sample still ranks by the anchor (borrowed strength)
-    a2, b2 = q_cells.cell_posterior(fold, "cccccccccccc", "anchor-family")
+    a2, b2 = q_cells.cell_posterior(fold, "cccccccccccc", "anchor-family",
+                                    arm_key=_ak("anchor-family"))
     mean2 = a2 / (a2 + b2)
     assert mean2 > 0.7
     # monotone: more + worse local evidence -> lower posterior mean
     mean1 = a / (a + b)
-    a3, b3 = q_cells.cell_posterior(fold, "dddddddddddd", "diverge-family")
+    a3, b3 = q_cells.cell_posterior(fold, "dddddddddddd", "diverge-family",
+                                    arm_key=_ak("diverge-family"))
     mean3 = a3 / (a3 + b3)
     assert mean1 > mean2 > mean3
 
 
 def test_local_evidence_diverges_from_the_anchor():
     fold = _shrink_fold(_shrink_fixture())
-    a, b = q_cells.cell_posterior(fold, "dddddddddddd", "diverge-family")
+    a, b = q_cells.cell_posterior(fold, "dddddddddddd", "diverge-family",
+                                  arm_key=_ak("diverge-family"))
     mean = a / (a + b)
     # 20 local failures outweigh the capped anchor (w <= 8):
     # alpha = 1 + 8*(11/12) + 0 = 25/3, beta = 1 + 8*(1/12) + 20 = 65/3
@@ -184,11 +197,13 @@ def test_cold_family_and_single_cell_family():
     fold = _shrink_fold(_shrink_fixture())
     # family never observed anywhere: the wide Beta(1,1); one local bad
     # sample gives (1, 2) — no anchor exists to borrow from
-    a, b = q_cells.cell_posterior(fold, "eeeeeeeeeeee", "brand-new")
+    a, b = q_cells.cell_posterior(fold, "eeeeeeeeeeee", "brand-new",
+                                  arm_key=_ak("brand-new"))
     assert (a, b) == (1.0, 2.0)
     # a family observed ONLY in this cell: leave-one-out anchor is empty
     # (no self-echo inflation — the cell stands on its own 3 successes)
-    a2, b2 = q_cells.cell_posterior(fold, "ffffffffffff", "lonely-family")
+    a2, b2 = q_cells.cell_posterior(fold, "ffffffffffff", "lonely-family",
+                                    arm_key=_ak("lonely-family"))
     assert (a2, b2) == (4.0, 1.0)
 
 
@@ -196,7 +211,8 @@ def test_cold_cell_of_warm_family_uses_the_anchor():
     fold = _shrink_fold(_shrink_fixture())
     # a never-visited cell borrows the FULL family aggregate (12 rows:
     # 11s + 1f -> m = 6/7, w = 8): its posterior mean IS the anchor mean
-    a, b = q_cells.cell_posterior(fold, "000000000000", "anchor-family")
+    a, b = q_cells.cell_posterior(fold, "000000000000", "anchor-family",
+                                  arm_key=_ak("anchor-family"))
     assert a == pytest.approx(55.0 / 7.0, abs=1e-9)     # 1 + 8*(6/7)
     assert b == pytest.approx(15.0 / 7.0, abs=1e-9)     # 1 + 8*(1/7)
     assert a / (a + b) == pytest.approx(11.0 / 14.0, abs=1e-9)
@@ -224,6 +240,10 @@ def _target_probs(prior, store, sig="5e5e5e5e5e5e", gamma=None):
     fold = q_cells.fold(store, gamma=gamma)
     raw = {}
     for fam, p in prior.items():
+        # family-grain read (arm_key=None) — the sampler's own face when
+        # it CHOOSES a family (production callers pass no arm_context):
+        # #804 de-compat makes the family-grain read pure anchor (local
+        # empty), so targets mirror the sampler exactly.
         a, b = q_cells.cell_posterior(fold, sig, fam)
         raw[fam] = p * (a / (a + b))
     total = sum(raw.values())
@@ -257,9 +277,9 @@ def test_gamma_read_face_discounts_old_evidence():
     store = _store(rows)
     fold_g1 = q_cells.fold(store, gamma=1.0)
     fold_g5 = q_cells.fold(store, gamma=0.5)
-    h1 = fold_g1.cells[("0a0a0a0a0a0a", "fam-h")]
-    h5 = fold_g5.cells[("0a0a0a0a0a0a", "fam-h")]
-    i5 = fold_g5.cells[("0a0a0a0a0a0a", "fam-i")]
+    h1 = fold_g1.cells[("0a0a0a0a0a0a", _ak("fam-h"))]
+    h5 = fold_g5.cells[("0a0a0a0a0a0a", _ak("fam-h"))]
+    i5 = fold_g5.cells[("0a0a0a0a0a0a", _ak("fam-i"))]
     # exact discounted masses (binary-exact powers of two)
     assert h1.success == pytest.approx(2.0)
     assert h5.success == pytest.approx(0.375)   # 0.5^3 + 0.5^2
@@ -302,20 +322,21 @@ def test_shipped_default_fold_is_the_discounted_adaptive_schedule():
             + [_row("0b0b0b0b0b0b", "fam-dts", 0.0)] * 2)
     store = _store(rows)
     # decay is ACTIVE by default: default masses < γ = 1 masses
-    d = q_cells.fold(store).cells[("0b0b0b0b0b0b", "fam-dts")]
-    u = q_cells.fold(store, gamma=1.0).cells[("0b0b0b0b0b0b", "fam-dts")]
+    d = q_cells.fold(store).cells[("0b0b0b0b0b0b", _ak("fam-dts"))]
+    u = q_cells.fold(store, gamma=1.0).cells[
+        ("0b0b0b0b0b0b", _ak("fam-dts"))]
     assert d.evidence < u.evidence
     # the default IS the posteriors default schedule — bit-identical
     # masses (single source of truth: no duplicated constants here)
     s = q_cells.fold(store, gamma=rp.default_schedule()).cells[
-        ("0b0b0b0b0b0b", "fam-dts")]
+        ("0b0b0b0b0b0b", _ak("fam-dts"))]
     assert d.success == s.success
     assert d.failure == s.failure
     # and NOT any constant: a constant-γ replay cannot reproduce the
     # adaptive γ stream's masses (floor 0.8, λ 0.9 — EX-2)
     for const in (0.8, 0.9, 0.95, 1.0):
         c = q_cells.fold(store, gamma=const).cells[
-            ("0b0b0b0b0b0b", "fam-dts")]
+            ("0b0b0b0b0b0b", _ak("fam-dts"))]
         assert (c.success, c.failure) != (d.success, d.failure), const
 
 
@@ -478,7 +499,11 @@ def test_record_dispatch_observation_v1_envelope(tmp_path):
     assert row["method_family"] == "static-symbolic"
 
 
-def test_record_dispatch_observation_prose_marker_fallback(tmp_path):
+def test_record_dispatch_observation_prose_marker_is_retired(tmp_path):
+    """#804 de-compat REVERSAL of the former prose-marker pin: the v0
+    ``method-family:`` prompt marker is no longer a declaration face —
+    the envelope meta field is the only declaration, and a prose-only
+    prompt is the undeclared honest gap."""
     ws = tmp_path / "ws"
     ws.mkdir()
     prompt = '{"kunglao_dispatch": {"version": 1, "claim": "C-13", ' \
@@ -486,8 +511,8 @@ def test_record_dispatch_observation_prose_marker_fallback(tmp_path):
              "— extract the KDF\n" \
              "method-family: dynamic-instrumentation\n"
     out = q_cells.record_dispatch_observation(ws, prompt, claim="C-13")
-    assert out["appended"] is True
-    assert out["family"] == "dynamic-instrumentation"
+    assert out["appended"] is False
+    assert out["reason"] == "undeclared"
 
 
 def test_record_dispatch_observation_undeclared_is_honest_gap(tmp_path):
@@ -499,23 +524,26 @@ def test_record_dispatch_observation_undeclared_is_honest_gap(tmp_path):
         envelope_meta=None)
     assert out["appended"] is False
     assert out["reason"] == "undeclared"
-    assert not (ws / q_cells.OBS_REL).exists()
-    assert not (ws / q_cells.EXPERIENCE_REL).exists()  # #721: the live home
+    assert not (ws / q_cells.EXPERIENCE_REL).exists()  # the ONE home
 
 
 def test_observe_clamps_credit_into_the_unit_interval(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", 1.5)
-    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", -0.25)
-    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", 0.5)
+    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", 1.5,
+                    arm_key="static-symbolic|facts_snapshot|none|0")
+    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", -0.25,
+                    arm_key="static-symbolic|facts_snapshot|none|0")
+    q_cells.observe(ws, "abcdabcdabcd", "static-symbolic", 0.5,
+                    arm_key="static-symbolic|facts_snapshot|none|0")
     rows = q_cells.JSONLQStore(ws).observations()
     assert [r["credit"] for r in rows] == [1.0, 0.0, 0.5]
     assert all(r["source"] == "settlement" for r in rows)
     # gamma=1.0 explicit: this pin is the CLAMPING face (exact masses);
     # the shipped default is the DTS adaptive schedule (ruling 2026-09-29)
     fold = q_cells.fold(q_cells.JSONLQStore(ws), gamma=1.0)
-    cell = fold.cells[("abcdabcdabcd", "static-symbolic")]
+    cell = fold.cells[("abcdabcdabcd",
+                       "static-symbolic|facts_snapshot|none|0")]
     assert cell.success == pytest.approx(1.5)
     assert cell.failure == pytest.approx(1.5)
 
@@ -528,18 +556,20 @@ def test_dispatch_pending_and_settlement_credit_share_the_fold(tmp_path):
         ws, V1_PROMPT,
         envelope_meta={"method_family": "static-symbolic"}, claim="C-12")
     sig = ssig.signature_hash(ssig.snapshot(ws))
-    q_cells.observe(ws, sig, "static-symbolic", 1.0)
+    q_cells.observe(ws, sig, "static-symbolic", 1.0,
+                    arm_key="static-symbolic|facts_snapshot|none|0")
     fold = q_cells.fold(q_cells.JSONLQStore(ws))
-    # #545 keyed consumption: the dispatch row is keyed by its 4-dim
-    # arm_key (WS1 dual-write), the legacy observe() row falls back to
-    # the family key — the family-addressed read pools every cell of
-    # the family (the tolerance face).
+    # #545 keyed consumption: BOTH rows bank at the dispatch's 4-dim
+    # arm_key. #804 de-compat: the former bare-family fallback for
+    # key-less rows is retired — an unkeyed row is the loud gap
+    # (Fold.unkeyed), never family mass.
     pend = sum(c.n_pending for k, c in fold.cells.items()
                if k[0] == sig and q_cells.family_of_action(k[1])
                == "static-symbolic")
     s, _f = fold.family_mass("static-symbolic")
     assert pend == 1
     assert s == pytest.approx(1.0)
+    assert fold.unkeyed == 0
 
 
 # ------------------------------------------------- 8. gate hook wiring

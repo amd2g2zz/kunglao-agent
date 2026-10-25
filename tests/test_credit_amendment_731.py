@@ -50,6 +50,7 @@ from rlvr import q_cells as qc  # noqa: E402
 from rlvr import strategy_store as ss  # noqa: E402
 
 FAM = "static-symbolic"
+AK = f"{FAM}|facts_snapshot|none|0"  # #804 regen: keyed shape
 
 
 # ---------- fixtures --------------------------------------------------------
@@ -120,13 +121,13 @@ def test_amendment_row_folds_verbatim(tmp_path):
     outside the band, the tiebreak, and the [0,1] clamp: a clawback
     from 0.8 to 0.2 lands the cell on (0.2, 0.8)."""
     ws = _ws(tmp_path)
-    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1")
-    qc.append_observation(ws, "sig", FAM, -0.6, source="credit-amendment",
+    qc.append_observation(ws, "sig", FAM, -0.6, source="credit-amendment", arm_key_col=AK,
                           credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                           failure_delta=0.6, claim="C-1",
                           dispatch_id="C-1")
-    cell = _cell(ws).cells[("sig", FAM)]
+    cell = _cell(ws).cells[("sig", AK)]
     assert cell.success == pytest.approx(0.2)
     assert cell.failure == pytest.approx(0.8)
 
@@ -135,10 +136,10 @@ def test_amendment_excluded_from_gamma_ema(tmp_path):
     """The γ schedule never observes a signed row — a clawback must not
     drag the schedule's adaptive state off its declared range."""
     ws = _ws(tmp_path)
-    qc.append_observation(ws, "sig", FAM, 0.6, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.6, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1")
     qc.append_observation(ws, "sig", FAM, -0.4,
-                          source="credit-amendment",
+                          source="credit-amendment", arm_key_col=AK,
                           credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                           failure_delta=0.4, claim="C-1",
                           dispatch_id="C-1")
@@ -152,15 +153,15 @@ def test_amendment_admitted_to_posterior(tmp_path):
     moves the posterior while the verification row beside it stays
     inert (that is the whole point of the correction)."""
     ws = _ws(tmp_path)
-    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1")
-    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.8, source="settlement", arm_key_col=AK,
                           credit_kind="verification", claim="C-1",
                           dispatch_id="C-1")
     before = _cell_at(ws, "sig")
     assert before.success == pytest.approx(0.8)   # verification inert
     qc.append_observation(ws, "sig", FAM, -0.3,
-                          source="credit-amendment",
+                          source="credit-amendment", arm_key_col=AK,
                           credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                           failure_delta=0.3, claim="C-1",
                           dispatch_id="C-1")
@@ -174,7 +175,7 @@ def test_amendment_admitted_to_posterior(tmp_path):
 def test_boundary_takes_signed_amendment(tmp_path):
     ws = _ws(tmp_path)
     out = qc.append_observation(ws, "sig", FAM, -0.4,
-                                source="credit-amendment",
+                                source="credit-amendment", arm_key_col=AK,
                                 credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                                 failure_delta=0.4, claim="C-1",
                                 dispatch_id="C-1", reason="ledger-x")
@@ -190,7 +191,7 @@ def test_solve_rows_keep_their_clamp_and_shape(tmp_path):
     neither a kind column nor a reason column."""
     ws = _ws(tmp_path)
     out = qc.append_observation(ws, "sig", FAM, -0.4,
-                                source="settlement", claim="C-1",
+                                source="settlement", arm_key_col=AK, claim="C-1",
                                 dispatch_id="C-1")
     row = out["row"]
     assert row["credit"] == 0.0           # clamped, as always
@@ -242,7 +243,7 @@ def test_amend_half_grid_target_is_idempotent(tmp_path):
         ws, "C-1", 0.9979325, reason="r")["appended"] is False
     # a half-grid correction: at most ONE row, then converged
     _dispatch(ws, "C-2")
-    qc.append_observation(ws, "sig2", FAM, 0.123456, source="settlement",
+    qc.append_observation(ws, "sig2", FAM, 0.123456, source="settlement", arm_key_col=AK,
                           claim="C-2", dispatch_id="C-2")
     qc.amend_settlement(ws, "C-2", 0.1234565, reason="r")
     n = len(_rows(ws))
@@ -262,7 +263,7 @@ def test_banked_mass_skips_verification_rows(tmp_path):
     sig = str([r for r in _rows(ws)
                if r.get("source") == "dispatch"][0]["signature_hash"])
     qc.observe_settlement(ws, "C-1", 0.2)
-    qc.append_observation(ws, sig, FAM, 0.8, source="settlement",
+    qc.append_observation(ws, sig, FAM, 0.8, source="settlement", arm_key_col=AK,
                           credit_kind="verification", claim="C-1",
                           dispatch_id="C-1")
     assert qc.banked_mass(ws, "C-1") == (0.2, 0.8, 1)
@@ -289,13 +290,13 @@ def test_amend_identity_fallback_through_the_banked_row(tmp_path):
     banked settlement row carries the cell identity itself."""
     ws = _ws(tmp_path)
     qc.append_observation(ws, "sig-banked", FAM, 0.5,
-                          source="settlement", claim="C-1",
+                          source="settlement", arm_key_col=AK, claim="C-1",
                           dispatch_id="C-1")
     out = qc.amend_settlement(ws, "C-1", 0.9, reason="r")
     assert out["appended"] is True
     row = _amendment_rows(ws)[0]
     assert row["signature_hash"] == "sig-banked"
-    cell = _cell(ws).cells[("sig-banked", FAM)]
+    cell = _cell(ws).cells[("sig-banked", AK)]
     assert cell.success == pytest.approx(0.9)
     assert cell.failure == pytest.approx(0.1)
 
@@ -330,12 +331,12 @@ def test_amend_accounts_step_mass(tmp_path):
 def test_banked_mass_mirrors_the_fold(tmp_path):
     ws = _ws(tmp_path)
     # band-valued solve row: existence, zero mass — but it IS a row
-    qc.append_observation(ws, "sig", FAM, 0.05, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.05, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1")
     s, f, n = qc.banked_mass(ws, "C-1")
     assert (s, f, n) == (0.0, 0.0, 1)
     # tiebroken solve row: the tiebroken value is the mass
-    qc.append_observation(ws, "sig", FAM, 0.5, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.5, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1",
                           phi_delta=1.0)
     s, f, n = qc.banked_mass(ws, "C-1")
@@ -344,7 +345,7 @@ def test_banked_mass_mirrors_the_fold(tmp_path):
     assert f == pytest.approx(1.0 - tb)
     # a signed amendment rides verbatim
     qc.append_observation(ws, "sig", FAM, -0.2,
-                          source="credit-amendment",
+                          source="credit-amendment", arm_key_col=AK,
                           credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                           failure_delta=0.2, claim="C-1",
                           dispatch_id="C-1")
@@ -453,10 +454,10 @@ def test_cell_count_excludes_amendments(tmp_path):
     must not count amendment rows."""
     ws = _ws(tmp_path)
     store = ss.PosteriorStrategyStore(ws)
-    qc.append_observation(ws, "sig", FAM, 0.7, source="settlement",
+    qc.append_observation(ws, "sig", FAM, 0.7, source="settlement", arm_key_col=AK,
                           claim="C-1", dispatch_id="C-1")
     qc.append_observation(ws, "sig", FAM, -0.2,
-                          source="credit-amendment",
+                          source="credit-amendment", arm_key_col=AK,
                           credit_kind=qc.CREDIT_KIND_CREDIT_AMENDMENT,
                           failure_delta=0.2, claim="C-1",
                           dispatch_id="C-1")
