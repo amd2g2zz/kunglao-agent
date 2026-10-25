@@ -77,6 +77,7 @@ __all__ = [
     "consolidated_ledger",
     "constants_ref",
     "crystallize",
+    "episode_pool",
     "expansion",
     "feature_prior",
     "hypotheses",
