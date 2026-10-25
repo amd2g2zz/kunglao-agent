@@ -24,6 +24,41 @@ stamp matches the current skill package. The seven user-data directories are
 hashed (stamp-line-normalized) before/after; any byte difference aborts and
 keeps the pre-upgrade snapshot on disk for forensics.
 
+## The upgrade transaction (the one documented path)
+
+Every real run executes seven steps in order; any failure in steps 2-5 rolls
+the workspace back byte-identical to the snapshot:
+
+1. **git snapshot first** — the rollback point is committed (repo-less
+   workspaces get `git init` + the snapshot; a dirty repo's state IS the
+   snapshot) before any mutation.
+2. **REMOVE old files** — every manifest-unknown file in the deployed trees
+   (`.claude/` hooks, agents, references, templates, tools, scripts) is
+   deleted outright; the snapshot is the safety net, so there is no backup
+   step (`git` restores anything the scan got wrong).
+3. **Deploy the new files** — the full deployment manifest is copied into
+   the workspace (`deploy_workspace_copy`; fail-loud on an unreadable
+   manifest or an env-import gap).
+4. **Update config** — the version migration items run (hooks rewire,
+   ledgers, stamps, frame merge) plus the stamp tail.
+5. **Self-check** — `hooks_selfcheck` runs as the transaction's test face:
+   repairs are attempted first, then the hook-chain verdict gates the run.
+   A red chain after the repair face rolls everything back (RC 7). The
+   wider operational rows (MCP supply, oracle registration) ride the
+   report without gating the migration.
+6. **OK -> reload prompt** — the success summary explicitly states a
+   session reload is required for the new deployment to take effect (hooks
+   are wired but dormant until then): run `/reload-plugins`.
+7. **Failure -> rollback** — the tree is restored to the snapshot
+   (`reset --hard` + a scoped clean); the stderr trail names the failed
+   step.
+
+The sub-command faces keep their names and declare their coverage:
+`hook_activation.py --wire-up` covers the config/wiring faces only;
+`--deploy-local` covers copy + register only — neither takes the snapshot,
+runs the prune, or gates on the selfcheck. The full transaction is this
+skill.
+
 ## No arguments
 
 Print a guided workspace prompt — `cwd` is a candidate only with explicit
@@ -39,7 +74,7 @@ must be initialized first with `/kunglao-agent:init`.
 | `3` | workspace has no version stamp | "refused, run init first" |
 | `4` | iron-rule violation — user data drifted | "user-data drift detected, snapshot at `<workspace>/.kunglao-upgrade-pre-snapshot/` kept on disk; restore from snapshot" |
 | `6` | dirty owned-repo — migration needs a clean rollback anchor | "refused: commit or stash first (commands on stderr), then re-run" |
-| `7` | incomplete — migration applied but the finish sequence aborted; re-run upgrade | "warning: re-run /kunglao-agent:upgrade to complete" |
+| `7` | incomplete — a transaction step failed or the finish sequence aborted; the tree was rolled back to the pre-migration snapshot | "warning: fix the cause named on stderr (deploy face, prune, or the selfcheck hook-chain verdict) and re-run /kunglao-agent:upgrade" |
 | `8` | anchors pending — the required intake answers (goal_verbatim / success_criterion / verification_method) are missing from `task_spec.yaml`; the interview rode stdout as pending-decision JSON (flow `kunglao-upgrade`), collect via AskUserQuestion and re-run with `--resolve <answers.json>` | "collect the three anchors, re-run with --resolve" |
 
 The upgrade completion report states anchor status explicitly: `anchors:

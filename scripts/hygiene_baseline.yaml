@@ -269,7 +269,7 @@ files:
   scripts/kunglao_status.py:
     r1: 7
   scripts/kunglao_upgrade.py:
-    r1: 91
+    r1: 90
   scripts/kunglao_verify.py:
     r1: 29
   scripts/kunglao_wait.py:
