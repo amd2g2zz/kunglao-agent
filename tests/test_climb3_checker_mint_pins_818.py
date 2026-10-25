@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -45,7 +44,6 @@ if str(SCRIPTS) not in sys.path:
 import eval_checker as chk  # noqa: E402
 import eval_chain as cn  # noqa: E402
 import eval_chain_mint as cm  # noqa: E402
-import eval_dataset as ds  # noqa: E402
 import eval_misdirection as md  # noqa: E402
 import eval_targets as tg  # noqa: E402
 
