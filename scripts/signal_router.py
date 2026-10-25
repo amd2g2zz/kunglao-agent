@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""signal_router.py — issue 811 用户信号意图路由器（信号面）。
+"""signal_router.py — 本卡 用户信号意图路由器（信号面）。
 
-生产实证（issue 811）：46 行 user_signal 里 45 行 classified_by=fallback
+生产实证（本卡）：46 行 user_signal 里 45 行 classified_by=fallback
 route=unrouted，1 行真实指令被 keyword 劫走——"我不是要续跑，是要开一个
-新的研究方向" 落进 issue 868 的 factual/fix（"不是" 关键字），用户被迫重述。
-本模块是那 46 行的去处：issue 868 本体层留在 unrouted/meta 的信号，在持久化
+新的研究方向" 落进 前置信号卡 的 factual/fix（"不是" 关键字），用户被迫重述。
+本模块是那 46 行的去处：前置信号卡 本体层留在 unrouted/meta 的信号，在持久化
 之前先过意图路由。
 
 六类意图 → 动作路由（动作与统一模型的 commit 动作空间对齐，
@@ -16,7 +16,7 @@ deliver；新方向 = switch = 新 episode）：
     pause          → action=pause         commit=None（非提交算子，
                                             operator 面先于 commit 菜单）
     clarify        → action=clarify       commit=None（ask_back 算子）
-    status_query   → route_target=narration（issue 811 状态叙事面）
+    status_query   → route_target=narration（本卡 状态叙事面）
     connectivity   → route_target=env（环境/连通性，env-repair 面）
 
 否定转折先行（pivot pre-pass）：「不是要X，是要Y」→ 只用 Y 分类——
@@ -59,7 +59,7 @@ _SCAN_ORDER = ("new_direction", "pause", "continuation", "clarify",
 _PIVOT_SPLIT_RE = re.compile(r"[，,；;。！？!?]")
 _NEG_MARKERS = ("不是", "并非", "不想", "不要", "别想", "无需")
 
-#: 关键词表（生产实证词形：issue 811 issue 四类 + 生产 46 行 + 座舱三问）
+#: 关键词表（生产实证词形：本卡 issue 四类 + 生产 46 行 + 座舱三问）
 _KEYWORDS: dict[str, tuple[str, ...]] = {
     "new_direction": (
         "新的研究方向", "新方向", "新的方向", "开一个新的", "开个新的",
@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     ap = argparse.ArgumentParser(
-        description="signal router — 意图路由（issue 811）；--health 查遥测")
+        description="signal router — 意图路由（本卡）；--health 查遥测")
     ap.add_argument("--health", metavar="WS",
                     help="workspace root；打印 route_health JSON")
     args = ap.parse_args(argv)

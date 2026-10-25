@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""status_narration.py — issue 811 状态叙事面（成就前沿的只读投影）。
+"""status_narration.py — 本卡 状态叙事面（成就前沿的只读投影）。
 
-生产实证（issue 811）：用户只能靠问「现在是什么情况」「简单介绍一下
+生产实证（本卡）：用户只能靠问「现在是什么情况」「简单介绍一下
 分析结果」补座舱——座舱存在但没接线。本模块是那一条命令：四要素结构化
 摘要 + 中文叙事，全部读自既有单源面，绝不二次推导。
 
@@ -33,10 +33,13 @@ from kunglao_log import warn  # canonical warn: ONE implementation
 from _scriptlib import read_register_claims
 from status_defs import IN_PROGRESS_STATUSES
 
+_STDOUT_DEGRADED: list[str] = []
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+except (AttributeError, ValueError) as exc:
+    # GBK-console safety twin (event_taxonomy shape): degrade loudly into
+    # a list, never silently — the silent-except ratchet is shrink-only.
+    _STDOUT_DEGRADED.append(f"stdout.reconfigure: {type(exc).__name__}: {exc}")
 
 SCHEMA = "status-narration/1"
 
