@@ -558,7 +558,7 @@ class PosteriorStrategyStore:
         nothing. The registered-vocabulary wall + share normalization
         are the same faces as every other prior source."""
         import method_families as _mf  # noqa: PLC0415 — lazy
-        import posteriors as po  # noqa: PLC0415 — the ws posterior ledger
+        import posteriors_case as po  # noqa: PLC0415 — the ws posterior ledger
 
         led = po.PosteriorLedger.load(self.ws)
         if not led.cases:

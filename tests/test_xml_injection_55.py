@@ -242,7 +242,7 @@ def _failure_blocked_ws(root: Path) -> Path:
         {"claims": [{"id": "C-1", "status": "OPEN", "statement": "x",
                      "answers_question": "q1", "promotion_attempts": 1}]},
         allow_unicode=True, sort_keys=False), encoding="utf-8")
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-1.yaml").write_text(

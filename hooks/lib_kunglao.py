@@ -87,8 +87,13 @@ VERIFICATION_MODES = ("none", "replay_probe", "oracle_case", "red_team")
 
 
 def envelope_v2_defaults(payload: dict) -> dict:
-    """The v2 action fields with v1 back-fill defaults — the ONE face
-    every consumer reads the action tuple through (kwargs-drift guard)."""
+    """The v2 action fields with their schema defaults — the ONE face
+    every consumer reads the action tuple through (kwargs-drift guard).
+
+    #804 de-compat: this used to be the v1-envelope BACK-FILL (a legacy
+    shape silently served); it is now the schema-default reader only —
+    an envelope missing the v2 fields is a LOUD emitter defect (the
+    battery warns naming the gaps), never a supported input shape."""
     return {
         "action_type": str(payload.get("action_type") or "dispatch"),
         "context_recipe": str(payload.get("context_recipe")

@@ -183,3 +183,70 @@ def test_legacy_actor_set_shrinks_below_the_pre_collapse_count():
     regrow (new emitters must use strict shapes)."""
     import kunglao_log
     assert len(kunglao_log.LEGACY_ACTORS) <= 56
+
+
+# ------------------------- 6. the v1-envelope posture is loud, not silent
+
+def test_branch_budget_malformed_retries_warns_loud(monkeypatch):
+    """#804 de-compat: a DECLARED but malformed branch_budget.retries is
+    a loud emitter defect (one rate-limited warn) while the dim stays
+    unconstrained (absence is unconstrained, never zero — #690). The
+    former silent fail-open posture is retired."""
+    import importlib.util as ilu
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parents[1]
+    spec = ilu.spec_from_file_location(
+        "wbg_804", root / "hooks" / "worker_budget_gates.py")
+    wbg = ilu.module_from_spec(spec)
+    spec.loader.exec_module(wbg)
+    seen: list[tuple[str, str]] = []
+    monkeypatch.setattr(wbg, "warn", lambda op, why: seen.append((op, why)))
+    for bad in ({"retries": True}, {"retries": "many"}, {"retries": [2]}):
+        seen.clear()
+        ok, msg = wbg.check_branch_budget({"workspace": "unused"},
+                                          "C-1", bad)
+        assert (ok, msg) == (True, ""), \
+            "the dim stays unconstrained on a malformed value"
+        assert seen and "loud emitter defect" in seen[0][1], (bad, seen)
+    # schema-legal shapes never warn
+    seen.clear()
+    for good in ({}, {"retries": None}, {"retries": 0}, {"retries": 3}):
+        wbg.check_branch_budget({"workspace": "unused"}, "C-1", good)
+    assert seen == [], "legal shapes are silent"
+
+
+# ------------------------- 7. the posterior twins are renamed apart
+
+def test_bare_import_posteriors_is_unambiguous():
+    """#804 (original task 2): the import-name twins — scripts/posteriors.py
+    (the #106 CASE posterior) vs scripts/rlvr/posteriors.py (the DTS
+    store) — made a bare ``import posteriors`` binding depend on
+    sys.path order. The case twin is renamed posteriors_case; the probe
+    pins the new binding: the bare name resolves to NOTHING anymore
+    (every consumer names its face), the case face binds only under its
+    new name, and the DTS store is package-qualified only."""
+    import importlib
+    import sys
+    root = str(Path(__file__).resolve().parents[1] / "scripts")
+    saved_path = sys.path[:]
+    saved_mod = {k: v for k, v in sys.modules.items()
+                 if k.startswith("posteriors")}
+    sys.path.insert(0, root)
+    try:
+        for m in [k for k in sys.modules if k.startswith("posteriors")]:
+            del sys.modules[m]
+        try:
+            importlib.import_module("posteriors")
+            raise AssertionError("bare 'import posteriors' still binds — "
+                                 "the twin rename regressed")
+        except ImportError:
+            pass
+        case = importlib.import_module("posteriors_case")
+        assert hasattr(case, "PosteriorLedger"), "the #106 case face moved"
+        dts = importlib.import_module("rlvr.posteriors")
+        assert dts.__name__ == "rlvr.posteriors", "the DTS store is qualified"
+    finally:
+        sys.path[:] = saved_path
+        for k in [k for k in sys.modules if k.startswith("posteriors")]:
+            del sys.modules[k]
+        sys.modules.update(saved_mod)

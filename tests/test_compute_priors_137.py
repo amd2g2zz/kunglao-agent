@@ -42,7 +42,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import case_bank as cb  # noqa: E402
-from posteriors import CasePosterior, PosteriorLedger  # noqa: E402
+from posteriors_case import CasePosterior, PosteriorLedger  # noqa: E402
 
 
 # ---------- synthetic workspace builders ----------
@@ -200,7 +200,7 @@ def test_unknown_posteriors_schema_is_loud(tmp_path):
         "schema: posteriors-schema/99\ncases: {}\npqs: {}\n",
         encoding="utf-8")
     from compute_priors import compute_priors
-    from posteriors import PosteriorSchemaError
+    from posteriors_case import PosteriorSchemaError
     with pytest.raises(PosteriorSchemaError):
         compute_priors([ws])
 

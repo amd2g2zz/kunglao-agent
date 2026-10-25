@@ -39,7 +39,7 @@ sys.path.insert(0, SCRIPTS)
 
 import entropy_face  # noqa: E402
 import priority_ratio as pr  # noqa: E402
-from posteriors import PQCategorical, PosteriorLedger  # noqa: E402
+from posteriors_case import PQCategorical, PosteriorLedger  # noqa: E402
 from rlvr import constants_ref, hypotheses, invariants  # noqa: E402
 
 

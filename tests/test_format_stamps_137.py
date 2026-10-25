@@ -224,7 +224,7 @@ def test_mixed_generations_coexist_in_one_bank(tmp_path):
 # ---------- D. already-stamped surfaces (regression guards) ----------
 
 def test_posteriors_ledger_stamp_is_mandatory():
-    from posteriors import SCHEMA_ID, PosteriorSchemaError, PosteriorLedger
+    from posteriors_case import SCHEMA_ID, PosteriorSchemaError, PosteriorLedger
     assert SCHEMA_ID == "posteriors-schema/1"
     with pytest.raises(PosteriorSchemaError):
         PosteriorLedger.from_doc({"schema": "posteriors-schema/99",

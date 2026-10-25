@@ -28,7 +28,7 @@ SCRIPTS = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import plan_epistemics as pe  # noqa: E402
-from posteriors import PQCategorical, PosteriorLedger  # noqa: E402
+from posteriors_case import PQCategorical, PosteriorLedger  # noqa: E402
 
 
 # ---------- piece 1: per-step if-fails contingency lint ----------

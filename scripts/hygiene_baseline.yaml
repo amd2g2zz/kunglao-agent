@@ -112,7 +112,7 @@ files:
   scripts/e2e/model.py:
     r1: 9
   scripts/e2e/runtime.py:
-    r1: 7
+    r1: 8
   scripts/emit_gate.py:
     r1: 5
   scripts/encoding_lint.py:
@@ -154,7 +154,7 @@ files:
   scripts/eval_loop_runner.py:
     r1: 10
   scripts/eval_matrix_report.py:
-    r1: 1
+    r1: 2
   scripts/eval_native_sources.py:
     r1: 1
   scripts/eval_native_targets.py:
@@ -259,7 +259,7 @@ files:
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 35
+    r1: 37
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -330,7 +330,7 @@ files:
     r1: 1
   scripts/policy_state.py:
     r1: 1
-  scripts/posteriors.py:
+  scripts/posteriors_case.py:
     r1: 1
   scripts/premature_termination_detect.py:
     r1: 14
@@ -430,7 +430,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 70
+    r1: 76
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/refutation_fold.py:
@@ -787,7 +787,7 @@ files:
   tests/test_coverage_policy_564.py:
     r1: 5
   tests/test_credit_amendment_731.py:
-    r1: 1
+    r1: 2
   tests/test_credit_settle_634.py:
     r1: 4
   tests/test_crypto_algorithms.py:
@@ -820,6 +820,8 @@ files:
   tests/test_declared_coverage_147.py:
     r1: 17
     r2: 1
+  tests/test_decompat_804.py:
+    r1: 7
   tests/test_decompile_context.py:
     r1: 1
   tests/test_dedup_319.py:
@@ -1415,7 +1417,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_q_cells_429.py:
-    r1: 8
+    r1: 12
     r2: 2
   tests/test_qtable_p3.py:
     r1: 5
@@ -1499,7 +1501,7 @@ files:
   tests/test_reward_settlement_366.py:
     r1: 1
   tests/test_reward_source_678.py:
-    r1: 4
+    r1: 5
     r2: 1
   tests/test_rho_checkpoint.py:
     r1: 2
@@ -1881,9 +1883,9 @@ files:
   tests/test_ws2_holdout_firewall_545.py:
     r1: 1
   tests/test_ws2_tiebreaker_545.py:
-    r1: 2
+    r1: 3
   tests/test_ws2_warm_start_545.py:
-    r1: 1
+    r1: 5
     r2: 1
   tests/test_ws3_compose_lead_544.py:
     r1: 1

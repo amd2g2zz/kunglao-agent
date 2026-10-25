@@ -155,7 +155,7 @@ def test_expected_shape_is_armed(tmp_path):
 def test_campaign_replay_four_metrics(tmp_path):
     """THE acceptance replay: settle the three-unit campaign, then pin
     the four metrics on the ledger evidence."""
-    import posteriors as po
+    import posteriors_case as po
     import settle_round_credit as src
     from rlvr import strategy_store as ss
 

@@ -71,7 +71,7 @@ def frontier_entropy(ws: Path) -> tuple[float | None, str | None]:
     Frontier without a posterior -> deterministic max-entropy PQ fallback;
     empty/unreadable ledger -> (None, None)."""
     try:
-        from posteriors import PosteriorLedger
+        from posteriors_case import PosteriorLedger
         led = PosteriorLedger.load(ws)
         if not led.pqs:
             return None, None

@@ -41,7 +41,7 @@ if str(SCRIPTS) not in sys.path:
 import event_taxonomy as et  # noqa: E402
 import kunglao_log  # noqa: E402
 import oracle_runner as orun  # noqa: E402
-import posteriors as po  # noqa: E402
+import posteriors_case as po  # noqa: E402
 import priority_ratio as pr  # noqa: E402
 
 # oracle-runner fixture builders reuse the #108 suite's shaped constants

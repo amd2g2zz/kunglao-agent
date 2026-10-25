@@ -565,7 +565,7 @@ class TestRunFaces:
         assert fp1 == fp2 and len(fp1) == 64
 
     def test_record_posteriors_moves_beta_and_emits(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         ws, client = _mk_ws(tmp_path, [CASE_AUTH], GOOD_CLIENT)
         bad_src = GOOD_CLIENT.replace('"hmac-sha256"', '"md5"')
         bad = _client(tmp_path, bad_src)
@@ -602,7 +602,7 @@ class TestPqSettlement:
             ]}), encoding="utf-8")
 
     def test_pass_settles_green_face(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         ws, client = self._ws_with_pq_decl(tmp_path, GOOD_CLIENT)
         self._task_spec_with_candidates(ws)
         report = orun.run(ws / "oracle" / "cases", client)
@@ -619,7 +619,7 @@ class TestPqSettlement:
         assert events
 
     def test_fail_runs_red_face_then_elimination(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         bad_src = GOOD_CLIENT.replace('"hmac-sha256"', '"md5"')
         ws, client = self._ws_with_pq_decl(tmp_path, bad_src)
         self._task_spec_with_candidates(ws)
@@ -631,7 +631,7 @@ class TestPqSettlement:
         assert led.pqs["q1"].probs.get("beta") == 0.0
 
     def test_ensure_pq_idempotent_and_absent(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         ws = tmp_path / "ws"
         ws.mkdir(parents=True)
         led = po.PosteriorLedger()
@@ -643,7 +643,7 @@ class TestPqSettlement:
         assert pq2 is pq1  # never reseeded
 
     def test_apply_pq_event_skip_faces(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         pq = po.PQCategorical("q1", {"alpha": 1.0, "beta": 1.0})
         rec = orun.apply_pq_event(pq, "evidence", "ghost", 1.0)
         assert rec["status"] == "skipped" and "unknown candidate" in rec["reason"]
@@ -654,7 +654,7 @@ class TestPqSettlement:
         assert rec["status"] == "skipped" and "settled" in rec["reason"]
 
     def test_bad_declaration_is_a_skipped_record(self, tmp_path) -> None:
-        import posteriors as po
+        import posteriors_case as po
         case = dict(CASE_AUTH, target_pq="q1",
                     pq_update={"green_up": {"alpha": "not-a-number"}})
         ws, client = _mk_ws(tmp_path, [case], GOOD_CLIENT)

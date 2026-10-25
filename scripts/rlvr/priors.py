@@ -121,7 +121,7 @@ def _posteriors_obs(ws: Path) -> tuple[float, float]:
     input order over the ledger's case insertion order, bit-identical to
     the former builtin-sum loop, pinned by test_rlvr_bitexact.
     """
-    from posteriors import LEDGER_REL, PosteriorLedger
+    from posteriors_case import LEDGER_REL, PosteriorLedger
     path = ws / LEDGER_REL
     if not path.exists():
         return 0.0, 0.0

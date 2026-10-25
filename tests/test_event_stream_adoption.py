@@ -35,7 +35,7 @@ from _factories import stamp_current
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
+import posteriors_case as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
 # hook-level fixtures reuse the #496 suite's builders (same test dir is on
 # sys.path under pytest's rootdir collection; test_decide_state_machine.py

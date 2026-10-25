@@ -79,7 +79,7 @@ def _observe(ws: Path, cid: str, claim: str, passed: bool) -> None:
 
 
 def _belief(ws: Path, cid: str) -> tuple[float, float]:
-    import posteriors as po
+    import posteriors_case as po
     led = po.PosteriorLedger.load(ws)
     cp = led.cases.get(cid)
     return (cp.alpha, cp.beta) if cp else (1.0, 1.0)
@@ -216,7 +216,7 @@ def test_delta_composes_with_runner_banked_mass(tmp_path):
     """The runner face banks extra mass without ledger rows; the
     amendment is a DELTA on the accumulator, never a yaml-wide
     recompute — the runner's contribution must survive the flip."""
-    import posteriors as po
+    import posteriors_case as po
     ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN",
                          "answers_question": "q2"}])
     _arm_case(ws, "case-q2", "q2")
