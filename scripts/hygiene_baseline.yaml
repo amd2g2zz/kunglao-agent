@@ -279,7 +279,7 @@ files:
   scripts/lint_facts.py:
     r1: 26
   scripts/liveness_policy.py:
-    r1: 28
+    r1: 30
   scripts/log_setup.py:
     r1: 1
   scripts/loop_holds.py:
@@ -287,6 +287,8 @@ files:
   scripts/loop_scheduler.py:
     r1: 7
   scripts/loop_state.py:
+    r1: 3
+  scripts/loop_watchdog.py:
     r1: 3
   scripts/mcp_probe.py:
     r1: 26
@@ -538,6 +540,8 @@ files:
     r1: 2
   scripts/wait_dispose.py:
     r1: 5
+  scripts/watchdog_interval.py:
+    r1: 2
   scripts/winrate_curve.py:
     r1: 3
   scripts/wire_up_settings.py:
@@ -1842,6 +1846,8 @@ files:
     r1: 1
   tests/test_warn_delegation_863f.py:
     r1: 1
+  tests/test_watchdog_interval_770.py:
+    r1: 2
   tests/test_web_knowledge_761.py:
     r1: 4
   tests/test_web_labs_type_728.py:
