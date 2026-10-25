@@ -1,8 +1,9 @@
 # release-check.yml — kunglao-agent release contract gate (issue #80)
 #
 # Clean-environment validation of the release contract, split into four
-# parallel legs so the PR gate wall time tracks the slowest leg, not the
-# sum of all legs:
+# parallel POSIX legs plus a Windows closure-path leg (issue #810: the
+# closure path never ran on the production host class — this leg runs
+# its test subset on a GitHub-hosted windows runner):
 #   lint-hygiene   CI YAML selfcheck + manifest/CLI/structural contracts
 #   docs-contract  docs/README/governance contract tests (-m docs)
 #   unit-fast      pure-unit tier (-m "fast and not docs"), xdist -n auto
@@ -448,3 +449,41 @@ jobs:
         name: release-receipt-${{ github.sha }}
         path: release-receipt.json
         if-no-files-found: error
+
+  windows-closure:
+    # The production-host leg (issue #810): memory consolidation died
+    # 78/78 on Windows hosts because CI (macOS/Linux) could never
+    # execute the host class the product actually deploys to. GitHub-
+    # hosted windows runners are available on this public repo, so the
+    # closure-path test subset (support matrix + distill engine +
+    # compose + atomic-write leaf) runs on a real Windows host here.
+    # The injected-platform tests pin the semantics; this leg pins the
+    # host. Docs-only PRs skip it (same signal as the other legs).
+    needs: runner-probe
+    runs-on: windows-latest
+    if: needs.runner-probe.outputs.docs_only != 'true'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install uv (documented dependency manager)
+      # PowerShell installer — the sh installer is a no-go on Windows.
+      run: irm https://astral.sh/uv/install.ps1 | iex
+      shell: pwsh
+
+    - name: Put uv on PATH
+      run: Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.local\bin"
+      shell: pwsh
+
+    - name: Provision Python 3.11 (uv-managed, host-agnostic)
+      run: |
+        uv python install 3.11
+        uv run python --version
+      shell: pwsh
+
+    - name: Install dependencies (locked)
+      run: uv sync --locked
+      shell: pwsh
+
+    - name: Closure-path suite on the production host class
+      run: uv run python -m pytest tests/test_platform_matrix_810.py tests/test_online_distill_engine_458.py tests/test_online_distill_e2e_458.py tests/test_common_leaf.py tests/test_strategy_compose_431.py tests/test_ws3_compose_lead_544.py -q -n 4
+      shell: pwsh

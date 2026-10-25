@@ -290,6 +290,7 @@ EMIT_ACTIONS = [
     "plan_repair_verified",  # issue-281 drift amendment landed within the window (verification face)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
+    "platform_run_start",  # the run-start support-matrix row: host class declared (duties proceed) or undeclared (loud refusal, closure duties refused)
     "policy_state_projected",  # #769 the round close projected runs/policy-state.json (scripts/policy_state; the statusline policy face's producer row)
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live

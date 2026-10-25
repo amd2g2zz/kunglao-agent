@@ -57,6 +57,8 @@ from typing import Protocol, Sequence
 
 import yaml
 
+import platform_matrix  # the host support matrix (chmod guard seam)
+
 from rlvr import ledger as rl  # the package faces (issue 420 Phase 2)
 from rlvr import state as state_signature
 
@@ -304,8 +306,10 @@ def _atomic_write_text(path: Path, text: str) -> None:
     try:
         # 0o644 parity with the pre-atomic write_text face (mkstemp
         # creates 0600; same-user consumers are unaffected but a
-        # cross-user read face over these artifacts must not regress)
-        os.chmod(fd, 0o644)
+        # cross-user read face over these artifacts must not regress).
+        # Guarded: an int fd is not a legal chmod target on Windows
+        # (TypeError — the production kill), so nt skips the call.
+        platform_matrix.chmod_checked(fd, 0o644)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
         os.replace(tmp, path)
