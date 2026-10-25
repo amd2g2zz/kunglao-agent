@@ -344,7 +344,9 @@ class TestViolationMain:
                 if line.strip()]
         hits = [r for r in rows
                 if r.get("action") == "violation_sed_tamper"]
-        assert hits and hits[0]["actor"] == "violation_capture"
+        # the ledger names its recorder (the wiring may namespace the
+        # actor with the hook: channel prefix)
+        assert hits and "violation_capture" in hits[0]["actor"]
         assert "guardrails.md" in hits[0].get("detail", "")
 
     def test_broken_stdin_never_breaks_bash(self, capsys) -> None:
