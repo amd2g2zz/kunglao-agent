@@ -746,7 +746,7 @@ files:
   tests/test_climb3_misdirection_selfcheck_pins_818.py:
     r1: 1
   tests/test_climb3_native_control_misc_pins_818.py:
-    r1: 1
+    r1: 2
   tests/test_closure_contract_628_629.py:
     r1: 8
   tests/test_cockpit_persist_873.py:

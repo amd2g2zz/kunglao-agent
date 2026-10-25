@@ -235,9 +235,19 @@ class TestNativeUnitThroughChecker:
         import io
         from contextlib import redirect_stdout
         buf = io.StringIO()
-        with redirect_stdout(buf):
-            rc, ev = chk.run(str(tdir), cand, tmp_path / "out",
-                             tier="release")
+        try:
+            with redirect_stdout(buf):
+                rc, ev = chk.run(str(tdir), cand, tmp_path / "out",
+                                 tier="release")
+        except RuntimeError as _exc:
+            # the module-level NDK probe sees the HOST home; the checker's
+            # native oracle may resolve the toolchain inside a sandboxed
+            # env where it is absent — the honest posture is a skip naming
+            # the gap, never a red on environment shape (#818 doctrine)
+            if "TOOLCHAIN_MISSING" in str(_exc):
+                pytest.skip(f"checker native oracle sandbox lacks the "
+                            f"toolchain: {_exc}")
+            raise
         assert rc == chk.RC_PASS
         assert ev["verdict"] == "PASS"
         assert ev["family"] == task["family"] == "arm-native-kdf"
