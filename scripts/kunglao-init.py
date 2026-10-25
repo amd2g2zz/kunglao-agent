@@ -2131,8 +2131,8 @@ def quick_start_scaffold(project_type: str | None,
         return (
             f"**Material**: {lane_spec.material(lane)}.\n"
             f"**Lane**: `{lane}` — no binary sample is mounted; the "
-            "toolchain gate probes uv + python + the lane's material, not "
-            "the MCP/RE supply.\n"
+            "toolchain gate probes uv + python + the lane's registered "
+            "checks (web adds its supply faces), not the MCP/RE supply.\n"
             "1. Declare the task: `task_spec.yaml` primary_questions + "
             "oracle anchors (env derives from the task, not the reverse).\n"
             "2. Mount the material under the workspace (`corpora/`, "

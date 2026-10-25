@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -59,12 +60,25 @@ PROBE_TTL_SECONDS = 300
 #: the #812 capability pair — SEPARATE facts by contract (issue acceptance 1)
 CAPABILITY_NAMES = ("host_frida", "device_root")
 
+#: the web analysis chain's supply facts (SAME discipline: separate faces
+#: per supply surface — the host docker face and the workspace-env module
+#: face answer different questions and must never collapse into one)
+WEB_CAPABILITY_NAMES = ("host_docker", "iv8_module")
+
+ALL_CAPABILITY_NAMES = CAPABILITY_NAMES + WEB_CAPABILITY_NAMES
+
 CACHE_REL = Path("runs") / ".capability-probe-cache.json"
 ENV_STATE_REL = Path("runs") / "env-state.json"
 
  #: canonical probe commands (pinned verbatim by the injection tests)
 HOST_FRIDA_ARGV = ("frida", "--version")
 DEVICE_ROOT_ARGV_TAIL = ("shell", "su", "-c", "id")
+#: jsir runs through the docker image face — daemon contact is the
+#: mechanical requirement (client presence alone fakes a working jsir)
+DOCKER_VERSION_ARGV = ("docker", "version")
+#: iv8 must be importable in the workspace env (the interpreter the
+#: workspace scripts run under — argv head comes from sys.executable)
+IV8_IMPORT_TAIL = ("-c", "import iv8")
 
 
 def _parse_ts(value) -> datetime | None:
@@ -136,10 +150,50 @@ def _probe_device_root_channel(run=None) -> tuple[str, str]:
     return probe_device_root(run=run, adb=_PROBE_ADB or shutil.which("adb"))
 
 
+def probe_host_docker(run=None) -> tuple[str, str]:
+    """HOST-side docker daemon face (`docker version`). rc==0 -> pass
+    (daemon contacted); any nonzero rc -> fail with the real error (a
+    client-only install or a dead daemon both land here — the jsir face
+    needs the daemon, not the CLI); a crashed probe -> skip."""
+    runner = run or _default_run
+    argv = list(DOCKER_VERSION_ARGV)
+    try:
+        rc, out, err = runner(argv)
+    except Exception as exc:  # exec outage is no evidence of absence
+        return ("skip", f"probe crashed: {type(exc).__name__}: {exc}")
+    first = (out or "").strip().splitlines()
+    if rc == 0:
+        return ("pass", f"docker daemon up: "
+                        f"{(first[0][:60] if first else 'ok')}")
+    return ("fail", (err or out or f"rc={rc}").strip()[:120])
+
+
+def probe_iv8_module(run=None) -> tuple[str, str]:
+    """ENV-side iv8 module face (import in the workspace interpreter).
+    rc==0 -> pass with the reported version when any; any nonzero rc ->
+    fail whose detail NAMES the remediation pin (the exact install command
+    travels with the negative fact); a crashed probe -> skip."""
+    runner = run or _default_run
+    argv = [sys.executable, *IV8_IMPORT_TAIL]
+    try:
+        rc, out, err = runner(argv)
+    except Exception as exc:
+        return ("skip", f"probe crashed: {type(exc).__name__}: {exc}")
+    if rc == 0:
+        version = (out or "").strip().splitlines()[0][:40] \
+            if (out or "").strip() else ""
+        return ("pass", f"iv8 importable{' ' + version if version else ''}")
+    from web_chain import IV8_PIN  # sibling registry (lazy: pin single source)
+    return ("fail", f"iv8 not importable — install the pinned supply: "
+                    f"uv pip install iv8=={IV8_PIN} ({(err or f'rc={rc}')[:80]})")
+
+
 #: name -> probe face (unknown names never fabricate — they skip)
 PROBES = {
     "host_frida": probe_host_frida,
     "device_root": _probe_device_root_channel,
+    "host_docker": probe_host_docker,
+    "iv8_module": probe_iv8_module,
 }
 
 
@@ -170,27 +224,58 @@ ANDROID_FAMILIES: tuple[tuple[str, tuple[str, ...], tuple[str, ...], str],
      "re-dispatch)"),
 )
 
+#: the web analysis chain's family vocabulary — SAME shape as the android
+#: table (family, prompt-keyword triggers, required capabilities,
+#: alternative arm). The L4 face requires the MCP bridge the camoufox
+#: registration rides on; the jsir/iv8 faces require their supply facts.
+WEB_FAMILIES: tuple[tuple[str, tuple[str, ...], tuple[str, ...], str],
+                    ...] = (
+    ("web-static-jsir",
+     ("jsir", "hermes", "deobfuscate", "deobfuscation"),
+     ("host_docker",),
+     "no-docker arm: the wakaru/webcrack npx deobfuscation face, or the "
+     "plain AST census markers (L1) while the image is not built"),
+    ("web-offline-iv8",
+     ("iv8", "offline replay", "offline reproduction", "xhr injection",
+      "signature reproduction"),
+     ("iv8_module",),
+     "no-module arm: the camoufox live face (L4) drives the algorithm "
+     "in-browser while the iv8 module is not installed"),
+    ("web-live-camoufox",
+     ("camoufox", "fingerprint", "anti-bot", "captcha"),
+     ("mcp_bridge",),
+     "no-bridge arm: replay the recorded pairs offline (L3) while the "
+     "MCP registration is down"),
+)
+
+#: project_type -> family table (the android keywords misfire on web and
+#: vice versa, so each axis consults only its own table)
+_FAMILY_TABLES = {"android": ANDROID_FAMILIES, "web": WEB_FAMILIES}
+
 
 def match_required(prompt_text: str | None,
                    project_type: str | None) -> list[tuple[str, tuple[str, ...]]]:
     """(family, required-capabilities) pairs whose keyword triggers appear
-    in the dispatch prompt. Android-scoped: the keywords misfire on other
-    lanes (web JS hooking is camoufox, not frida), so a non-android
-    project type never matches."""
-    if str(project_type or "").strip() != "android":
+    in the dispatch prompt. Axis-scoped: each project type consults only
+    its own family table (web JS hooking is camoufox, not frida — and an
+    android dispatch never consults the web supply facts), so an unknown
+    or undeclared project type never matches."""
+    families = _FAMILY_TABLES.get(str(project_type or "").strip())
+    if not families:
         return []
     text = str(prompt_text or "").lower()
     out: list[tuple[str, tuple[str, ...]]] = []
-    for family, triggers, caps, _alt in ANDROID_FAMILIES:
+    for family, triggers, caps, _alt in families:
         if any(t in text for t in triggers):
             out.append((family, caps))
     return out
 
 
 def alternative_for(family: str) -> str | None:
-    """The family's alternative-arm suggestion (None for unknown)."""
-    for fam, _triggers, _caps, alt in ANDROID_FAMILIES:
-        if fam == family:
+    """The family's alternative-arm suggestion (None for unknown). Consults
+    every axis table — family names are globally unique across axes."""
+    for _fam, _triggers, _caps, alt in (*ANDROID_FAMILIES, *WEB_FAMILIES):
+        if _fam == family:
             return alt
     return None
 
