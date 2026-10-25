@@ -286,6 +286,18 @@ def build_dispatch_context(
         instrument_menu = _im.context_block(ws, claim_id)
     except Exception:  # noqa: BLE001 — context build never raises
         instrument_menu = None
+    # The meta-policy block rides the contract (same optional-key
+    # pattern as providers/tool_tiers/instrument_menu — fail-open, key
+    # absent on loader failure; NOT in VERIFIER_SAFE_KEYS, same
+    # orchestrator-side class: the episode-start pool retrieval + the
+    # chosen commit, fed not bypassed).
+    try:
+        from rlvr import meta_policy as _meta_policy
+        meta_block = _meta_policy.envelope_block(
+            ws, claim_id,
+            phase=_meta_policy.episode_phase(ws, claim_id))
+    except Exception:  # noqa: BLE001 — context build never raises
+        meta_block = None
     ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
@@ -306,6 +318,8 @@ def build_dispatch_context(
         ctx["tool_tiers"] = tool_tiers_block
     if instrument_menu is not None:
         ctx["instrument_menu"] = instrument_menu
+    if meta_block is not None:
+        ctx["meta_policy"] = meta_block
     _emit_context_manifest(ws, ctx)  # issue 293 field upgrade A
     return ctx
 

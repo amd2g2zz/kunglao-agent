@@ -46,6 +46,7 @@ FAST_MODULES = frozenset({
     "test_digest", "test_digest_sec_g_528", "test_disasm_constant_check", "test_dispatch_background_704",
     "test_dispatch_context", "test_dispatch_context_providers", "test_dlq_dead_letter", "test_doc_pointer_lighting_24",
     "test_model_contract_824",
+    "test_meta_policy_825",
     "test_docsync_589_563", "test_done_default_550", "test_drift_detection", "test_drift_events_612",
     "test_dual_gate_868", "test_emit_gate_880", "test_encoding_declarations", "test_entry_sweep_585",
     "test_env_dotenv", "test_env_negative_rule", "test_eval_dataset_299", "test_eval_harness", "test_eval_registry_561b4",
