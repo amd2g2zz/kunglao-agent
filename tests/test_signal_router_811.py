@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_signal_router_811.py — #811 意图路由器（信号面）。
+"""tests/test_signal_router_811.py — issue 811 意图路由器（信号面）。
 
-覆盖 issue #811 验收 1/3：真实路由（继续/开新方向/暂停/澄清 + 状态查询/
+覆盖 issue 811 验收 1/3：真实路由（继续/开新方向/暂停/澄清 + 状态查询/
 连通性）、生产误路由回归钉（"我不是要续跑，是要开一个新的研究方向" →
-开新方向，绝不被 #868 的 "fix"/"不是" 关键字劫走）、unrouted 率遥测 +
+开新方向，绝不被 issue 868 的 "fix"/"不是" 关键字劫走）、unrouted 率遥测 +
 钉死阈值、ingest 集成、commit 动作空间对齐（新方向 = switch = 新 episode）。
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ def test_production_misroute_pin_routes_new_direction():
     assert r["commit_action"] == "switch"
     assert r["new_episode"] is True
     assert r["classified_by"] != "fallback"
-    # 不落事实域（#868 的误路由形态：立案双门 = 用户被迫重述）
+    # 不落事实域（issue 868 的误路由形态：立案双门 = 用户被迫重述）
     assert r["route_target"] != "dual_gate"
 
 
@@ -123,8 +123,8 @@ def test_route_health_telemetry_after_routing(tmp_path):
     """46 行生产形态夹具（45 unrouted + 1 误路由）逐条过 ingest 后，
     unrouted 率必须落到钉死阈值以下（遥测形状诚实带 total）。"""
     ws = _mk_ws(tmp_path)
-    # 生产形态夹具：issue #811 记录的真实用户话语族（座舱三问 + 方向/
-    # 续跑/暂停/澄清/连通性）+ 1 条 #868 可路由事实 + 少量真闲聊
+    # 生产形态夹具：issue 811 记录的真实用户话语族（座舱三问 + 方向/
+    # 续跑/暂停/澄清/连通性）+ 1 条 issue 868 可路由事实 + 少量真闲聊
     utterances = [
         "我不是要续跑，是要开一个新的研究方向",
         "现在是什么情况", "简单介绍一下分析结果",
@@ -171,7 +171,7 @@ def test_ingest_routes_unrouted_not_factual(tmp_path):
     assert rec["new_episode"] is True
     rows = _log_rows(ws)
     assert any(r.get("action") == "signal_routed" for r in rows)
-    # 反向：双门无立案（#868 形态会 open_case）
+    # 反向：双门无立案（issue 868 形态会 open_case）
     assert not (ws / "runs" / "dual-gate").exists()
 
 
@@ -184,7 +184,7 @@ def test_ingest_status_query_returns_narration_target(tmp_path):
 
 
 def test_ingest_fallback_keeps_old_shape(tmp_path):
-    """无意图信号：routed=False + 旧形状不破（#868 一级兜底语义保留）。"""
+    """无意图信号：routed=False + 旧形状不破（issue 868 一级兜底语义保留）。"""
     ws = _mk_ws(tmp_path)
     out = us.ingest(ws, "今天天气不错")
     assert out["routed"] is False
@@ -199,10 +199,10 @@ def _log_rows(ws):
     return rows
 
 
-# ---------- deferral 精度钉（不丢 #868 真事实纠正） ----------
+# ---------- deferral 精度钉（不丢 issue 868 真事实纠正） ----------
 
 def test_no_intent_pivot_stays_factual(tmp_path):
-    """无意图的否定转折（真事实纠正）保持 #868 factual 立案——
+    """无意图的否定转折（真事实纠正）保持 issue 868 factual 立案——
     deferral 只在有意图时发生。"""
     ws = _mk_ws(tmp_path)
     out = us.ingest(ws, "这个方向不是内存破坏，应改查 size gate")

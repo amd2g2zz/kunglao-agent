@@ -168,7 +168,7 @@ def ingest(ws, prompt: str) -> dict:
     if (sig["ontype"] == "factual"
             and sig["classified_by"] == "keyword"
             and routing["intent"] is not None):
-        # 生产误路由钉（#811）：否定转折形态「不是要X，是要Y」被
+        # 生产误路由钉（issue 811）：否定转折形态「不是要X，是要Y」被
         # keyword "fix" 劫走——路由到意图层（开新方向等），不再立案修复。
         # prefix 显式分类与无意图的转折（真事实纠正）不受影响。
         sig = {**sig, "ontype": "unrouted", "route": "unrouted",
@@ -177,7 +177,7 @@ def ingest(ws, prompt: str) -> dict:
         return {"ontype": "volition", **apply_volition(ws, sig)}
     if sig["ontype"] == "factual":
         return {"ontype": "factual", **file_factual(ws, sig)}
-    # meta / unrouted：#811 意图路由——分类只路由，本体层不变
+    # meta / unrouted：issue 811 意图路由——分类只路由，本体层不变
     # （route 仍是 unrouted；意图字段是附加投影，分错不丢信号）
     routed = routing["intent"] is not None
     extra = {"routed": routed, "intent": routing["intent"],
@@ -197,7 +197,7 @@ def ingest(ws, prompt: str) -> dict:
            "new_episode": routing["new_episode"],
            "route_target": routing["route_target"]}
     if routing["route_target"] == "narration":
-        # #811 接线：状态查询直达叙事面（四要素只读投影，fail-open）
+        # issue 811 接线：状态查询直达叙事面（四要素只读投影，fail-open）
         try:
             import status_narration
             out["view"] = status_narration.build_view(ws)

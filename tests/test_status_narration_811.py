@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""tests/test_status_narration_811.py — #811 状态叙事面（成就前沿只读投影）。
+"""tests/test_status_narration_811.py — issue 811 状态叙事面（成就前沿只读投影）。
 
-覆盖 issue #811 验收 2/3：一条命令返回 当前 claim / blockers / next /
+覆盖 issue 811 验收 2/3：一条命令返回 当前 claim / blockers / next /
 waiting-on 四要素；中文 UX；与统一模型对齐（episode_phase + commit 菜单
 = P2 meta_policy 的只读投影）；只读不写；absent 形状诚实。
 """
