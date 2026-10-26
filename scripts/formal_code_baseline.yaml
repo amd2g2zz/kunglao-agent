@@ -11,7 +11,7 @@ files:
   hooks/heartbeat_touch.py: 24
   hooks/lib_kunglao.py: 58
   hooks/orchestrator_tool_guard.py: 24
-  hooks/recall_inject.py: 36
+  hooks/recall_inject.py: 34
   hooks/round_closure.py: 15
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
