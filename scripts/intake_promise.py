@@ -226,7 +226,9 @@ def build(report, task_spec, ws) -> dict:
 # claims on them locks the workspace forever — the obligation must be
 # lane-aware AND explicit either way (即使 web 车道用不上，也需显式落盘说明).
 # NATIVE_OBLIGATION_LANES keeps its name as the legacy no-registry
-# fallback (the legacy floor).
+# fallback (the legacy floor): lanes whose analysis subject is a native
+# binary keep the full obligation when the registry itself is unreadable.
+NATIVE_OBLIGATION_LANES = frozenset({"malware"})
 
 
 def _obligation_lane(task_spec, ws: Path) -> str:
