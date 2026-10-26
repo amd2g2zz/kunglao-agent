@@ -360,3 +360,85 @@ def test_allow_threads_the_usage_view_into_the_dispatch_row(
     assert row["propensity"] == 0.75
     assert row["sampled_family"] == "static-decompile"
     assert row["prior_source"] == "history"
+
+
+# ------------- 9. the read faces project the dispatch substrate
+# (R2: usage_family_map / dispatch_method / family_health / both
+# reindex faces read the experience.jsonl dispatch rows — the usage
+# log is an archive, never a scan target.)
+
+def _seed_dispatch(ws, claim: str, family: str, *, tier=None,
+                   tools=None, sig="aaaa00000000"):
+    q_cells.append_observation(ws, sig, family, None, source="dispatch",
+                               claim=claim, agent="w-test",
+                               tier=tier, tools=tools)
+
+
+def test_usage_family_map_projects_dispatch_rows(tmp_path):
+    """The settle-side join (claim -> LAST declared family) reads the
+    dispatch observation rows — same substrate the fold consumes."""
+    _seed_dispatch(tmp_path, "C-1", "static-decompile")
+    _seed_dispatch(tmp_path, "C-2", "dynamic-trace")
+    _seed_dispatch(tmp_path, "C-1", "obfuscation-peeling")  # last wins
+    assert q_cells.usage_family_map(tmp_path) == {
+        "C-1": "obfuscation-peeling", "C-2": "dynamic-trace"}
+
+
+def test_usage_family_map_is_the_honest_gap_on_empty(tmp_path):
+    assert q_cells.usage_family_map(tmp_path) == {}
+
+
+def test_dispatch_method_reads_family_and_tools(tmp_path):
+    """crystallize.resolve_method's face: the claim's LAST dispatch row
+    yields {family, tools}; an unknown claim is None (no fabricated
+    method)."""
+    _seed_dispatch(tmp_path, "C-1", "static-decompile", tools=["grep"])
+    _seed_dispatch(tmp_path, "C-1", "dynamic-trace", tools=["bash", "grep"])
+    assert q_cells.dispatch_method(tmp_path, "C-1") == {
+        "family": "dynamic-trace", "tools": ["bash", "grep"]}
+    assert q_cells.dispatch_method(tmp_path, "C-404") is None
+
+
+def test_family_health_reads_the_merged_substrate(tmp_path):
+    """The Q-report health block computes over the dispatch rows — the
+    same rows the map and the fold read (one substrate, one projection
+    family)."""
+    from method_families import family_health, registered_tokens
+    _seed_dispatch(tmp_path, "C-1", "static-decompile")
+    health = family_health(tmp_path)
+    assert set(health["never_fills"]) == (
+        set(registered_tokens()) - {"static-decompile"})
+    assert health["attributed_rows"] == 1
+
+
+def test_method_families_reindex_ignores_legacy_usage_files(tmp_path):
+    """The loud gap pin: an archived runs/method-family-log.jsonl (the
+    pre-merge face) contributes NOTHING to the index — not even an
+    unattributed count; only experience dispatch rows index."""
+    import json
+    from method_families import reindex as mf_reindex
+    ws = tmp_path / "ws-legacy"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / "method-family-log.jsonl").write_text(
+        json.dumps({"schema": "method-family-usage/1", "claim": "C-old",
+                    "cell": "C-old", "family": "static-decompile"}) + "\n")
+    _seed_dispatch(ws, "C-new", "dynamic-trace")
+    report = mf_reindex(tmp_path)
+    cells = {c["cell"]: c["n"] for c in report["cells"]}
+    assert cells == {"C-new": 1}, "legacy usage rows must not index"
+    assert report["unattributed"] == 0
+
+
+def test_q_cells_reindex_ignores_legacy_usage_files(tmp_path):
+    """q_cells.reindex's face-2 (the #432 usage log) is retired with the
+    merge — face 1 IS the usage face now; an archive-only workspace
+    indexes as honest zero."""
+    import json
+    ws = tmp_path / "ws-archive"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / "method-family-log.jsonl").write_text(
+        json.dumps({"schema": "method-family-usage/1", "claim": "C-old",
+                    "cell": "C-old", "family": "static-decompile"}) + "\n")
+    report = q_cells.reindex(tmp_path)
+    assert report["cells"] == []
+    assert report["rows_scanned"] == 0

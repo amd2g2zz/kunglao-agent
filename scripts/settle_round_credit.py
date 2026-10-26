@@ -532,9 +532,8 @@ def _bridge_pool_admission(ws: Path, banked: list[str]) -> dict:
         from rlvr import q_cells as _qc  # noqa: PLC0415
         from rlvr import strategy_store as _ss  # noqa: PLC0415
         from rlvr.scalar import BAND_ROUND_CREDIT  # noqa: PLC0415
-        import method_families as _mf  # noqa: PLC0415
 
-        fam_by_claim = _mf.usage_family_map(ws)
+        fam_by_claim = _qc.usage_family_map(ws)
         for cid in banked:
             cid = str(cid)
             _s, step_n = _qc.step_credit_totals(ws, cid)

@@ -98,12 +98,13 @@ when that factory exists (lazy import), else the JSONL face above.
 ## Offline index
 
 ``reindex(root)`` — the deterministic offline index over dispatch
-history, à la method_families.reindex: face 1 the q-cell observation
-log (exact signatures), faces 2/3 the #432 usage log and the
-unified-log dispatch rows (no historical signature recoverable — keyed
-under the workspace's CURRENT signature, flagged as approximated and
-counted pending only; credits join through the observe() face, the
-W2-T4 settlement wiring).
+history: face 1 the consolidated observation log (exact signatures —
+since the #804 usage merge it also carries the usage-ledger columns,
+so it is the only live (family, cell) source), face 2 the unified-log
+dispatch rows (no historical signature recoverable — keyed under the
+workspace's CURRENT signature, flagged as approximated and counted
+pending only; credits join through the observe() face, the W2-T4
+settlement wiring).
 
 ## Zero-decision posture
 
@@ -248,9 +249,11 @@ def _resolve_schedule(gamma) -> GammaSchedule:
 
 _SIG_HASH_RE = re.compile(r"^[0-9a-f]{12}$")
 
-# #432 usage-log face (the (family, cell) counting feed) and the
-# unified-log dispatch detail marker both feed reindex
-_USAGE_REL = "runs/method-family-log.jsonl"
+# the unified-log dispatch detail marker feeds reindex's replay face
+# (workspaces with no consolidated experience file). #804 usage merge:
+# the former face 2 (the #432 usage log) is RETIRED — face 1 (the
+# experience file) carries the usage columns since the merge and is
+# the only (family, cell) source for live workspaces.
 _FAMILY_DETAIL_RE = re.compile(r"\bmethod_family=([A-Za-z0-9-]+)")
 
 
@@ -310,6 +313,62 @@ def default_store(ws) -> QCellStore:
              f"posterior bank unusable ({type(exc).__name__}: {exc}) "
              f"— JSONL fallback")
         return JSONLQStore(ws)
+
+
+def _dispatch_rows(ws) -> list[dict]:
+    """The dispatch half of the consolidated observation log — the ONE
+    read face behind the usage projections (#804 usage merge): trusted
+    rows (the learner read face), dispatch source only."""
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.dispatch_rows")
+    return [r for r in rows if isinstance(r, dict)
+            and str(r.get("source") or "") == "dispatch"]
+
+
+def usage_family_map(ws) -> dict[str, str]:
+    """Claim id -> the LAST declared family — the settle-side join of
+    the learning→decision bridge. #804 usage merge: the former
+    usage-log read (method_families.usage_family_map) projects the
+    dispatch observation rows instead — the SAME substrate the fold
+    consumes, one store per write event. Tolerant: family-less rows
+    are skipped (the honest gap), never raise."""
+    out: dict[str, str] = {}
+    for row in _dispatch_rows(ws):
+        cid = str(row.get("claim") or "").strip()
+        fam = str(row.get("method_family") or "").strip()
+        if cid and fam:
+            out[cid] = fam
+    return out
+
+
+def dispatch_method(ws, claim: str) -> dict | None:
+    """The claim's declared method from its LAST dispatch row:
+    ``{family, tools}``. None when the claim never dispatched (the
+    honest gap — no fabricated method). #804 usage merge: the former
+    usage-log read (crystallize.resolve_method over read_usage)."""
+    cid = str(claim or "")
+    found = None
+    for row in _dispatch_rows(ws):
+        if str(row.get("claim") or "") != cid:
+            continue
+        fam = str(row.get("method_family") or "").strip()
+        if not fam:
+            continue
+        found = {"family": fam,
+                 "tools": [str(t) for t in (row.get("tools") or [])
+                           if str(t).strip()]}
+    return found
+
+
+def usage_rows(ws) -> list[dict]:
+    """The usage-ledger PROJECTION of the dispatch rows (#804 usage
+    merge): ``{family, cell, claim}`` — the counting columns the
+    vocabulary module's health face consumes, read from the single
+    substrate."""
+    return [{"family": str(r.get("method_family") or ""),
+             "cell": str(r.get("claim") or ""),
+             "claim": str(r.get("claim") or "")}
+            for r in _dispatch_rows(ws)]
 
 
 # ---------------------------------------------------------------------------
@@ -1879,21 +1938,6 @@ def _count_pending(rows: Iterable[dict], pendings: dict, sig: str,
     return unattributed, approximated
 
 
-def _scan_usage_face(root: Path, pendings: dict) -> tuple[set, int, int, int]:
-    """Face 2 — the #432 usage log (family + claim; NO signature)."""
-    roots: set[Path] = set()
-    scanned = unattributed = approximated = 0
-    for p in sorted(root.rglob(_USAGE_REL)):
-        roots.add(p.parent.parent)
-        rows = _read_jsonl(p)
-        scanned += len(rows)
-        u, a = _count_pending(rows, pendings, _current_sig(p.parent.parent),
-                              lambda r: str(r.get("family") or ""))
-        unattributed += u
-        approximated += a
-    return roots, scanned, unattributed, approximated
-
-
 def _scan_unified_face(root: Path, skip: set[Path],
                        pendings: dict) -> tuple[int, int, int]:
     """Face 3 — unified-log dispatch rows (method_family= in detail)."""
@@ -1922,25 +1966,25 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     explicit constant γ selects the exact-count calibration face).
 
     Face 1 — the consolidated runs/experience.jsonl (authoritative;
-    exact signatures + credits; the #804 de-compat retires the legacy
-    q-cell-log.jsonl scan). Face 2 — the #432 usage log (family + claim, NO
-    signature/credit): keyed under the workspace's CURRENT signature
-    (approximation — historical signatures are unrecoverable from a
-    final-state workspace), counted PENDING only. Face 3 — unified-log
-    dispatch rows carrying method_family= in detail (same
-    approximation); a workspace with its own usage log is counted from
-    that face only (no double count — the method_families.reindex
-    precedence). Rows without a family are unattributed: counted once
-    as the honest gap, never fabricated."""
+    exact signatures + credits; since the #804 usage merge it carries
+    the usage columns too, so it is the only live (family, cell)
+    source — the usage-log face and the legacy q-cell-log.jsonl scan
+    are both retired archives that index NOTHING). Face 2 — unified-log
+    dispatch rows carrying method_family= in detail (the replay
+    approximation: workspaces with no experience file, keyed under the
+    workspace's CURRENT signature, counted PENDING only). Rows without
+    a family are unattributed: counted once as the honest gap, never
+    fabricated."""
     root = Path(root)
     schedule = _resolve_schedule(gamma)
     rows_scanned = unattributed = approximated = 0
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    # #804 de-compat: face 1 scans the consolidated experience file ONLY
-    # — the legacy runs/q-cell-log.jsonl rel is retired (the #721 read
-    # registry in consolidated_ledger.LEGACY remains the archive source).
+    # face 1 scans the consolidated experience file — since the #804
+    # usage merge it carries the usage columns too, so it is the ONLY
+    # (family, cell) face for live workspaces (the usage-log face 2 and
+    # the legacy q-cell-log rel are both retired archives).
     for p in sorted(root.rglob(EXPERIENCE_REL)):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
@@ -1954,11 +1998,7 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     # representative γ for the approximate-count face: the schedule's
     # post-replay γ (what the engine believes after the whole stream)
     rep_gamma = float(schedule.gamma())
-    usage_roots, scanned, unattributed, approximated = _scan_usage_face(
-        root, pendings)
-    rows_scanned += scanned
-    scanned, u3, a3 = _scan_unified_face(root, usage_roots | obs_roots,
-                                         pendings)
+    scanned, u3, a3 = _scan_unified_face(root, obs_roots, pendings)
     rows_scanned += scanned
     unattributed += u3
     approximated += a3

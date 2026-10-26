@@ -981,7 +981,14 @@ def warm_context_block(source_ws: Path) -> str:
     from the LIVE store — that difference is the measurement. A source
     without train material renders a marked COLD block (differential
     zero — the arm still runs, the receipt shows why it carries no
-    warm signal)."""
+    warm signal).
+
+    #804 usage merge: the family summary reads the consolidated
+    experience dispatch rows (the usage-ledger columns ride them) —
+    total = dispatches per family, green = settled credits > 0.5 for
+    the family the dispatch declared (the former latent-dead read of
+    runs/method-family-log.jsonl counted fields that shape never
+    carried)."""
     from rlvr.compose import load_cards, render_card_block
 
     source = Path(source_ws)
@@ -1000,21 +1007,30 @@ def warm_context_block(source_ws: Path) -> str:
             lines.append("  " + render_card_block(card))
         except Exception as exc:  # noqa: BLE001 — one bad card skips itself
             lines.append(f"  (card skipped: {type(exc).__name__})")
-    fam_log = source / "runs" / "method-family-log.jsonl"
     fams: dict[str, list[int]] = {}
-    if fam_log.is_file():
-        for line in fam_log.read_text(encoding="utf-8",
-                                      errors="replace").splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            fam = str(row.get("method_family") or "")
-            if fam:
-                fams.setdefault(fam, [0, 0])
-                fams[fam][1] += 1
-                if row.get("outcome") in ("green", "pass", "settled"):
-                    fams[fam][0] += 1
+    try:
+        from rlvr import q_cells as _qc_elr  # noqa: PLC0415 — lazy
+        obs = _qc_elr.JSONLQStore(source).observations()
+    except Exception as exc:  # noqa: BLE001 — a cold/corrupt store renders cold
+        obs = []
+        lines.append(f"  (experience unreadable: "
+                     f"{type(exc).__name__}: {exc})")
+    for row in obs:
+        if not isinstance(row, dict):
+            continue
+        fam = str(row.get("method_family") or "")
+        if not fam:
+            continue
+        fams.setdefault(fam, [0, 0])
+        src = str(row.get("source") or "")
+        if src == "dispatch":
+            fams[fam][1] += 1
+        elif src == "settlement":
+            credit = row.get("credit")
+            if (isinstance(credit, (int, float))
+                    and not isinstance(credit, bool)
+                    and float(credit) > 0.5):
+                fams[fam][0] += 1
     if fams:
         lines.append("  method-family summary (green/total from the train "
                      "log):")

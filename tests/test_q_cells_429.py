@@ -81,20 +81,21 @@ def test_reindex_forms_cells_from_replayed_history(tmp_path):
         _row(sig_a2, "dynamic-instrumentation", 0.5),
     ]) + "\n", encoding="utf-8")
 
-    # face 2 — the #432 usage face (family + claim; no signature/credit);
-    # one row WITHOUT a family is the honest unattributed gap
-    usage = ws_b / "runs" / "method-family-log.jsonl"
-    usage.parent.mkdir(parents=True)
-    usage.write_text("\n".join(json.dumps(r) for r in [
-        {"schema": "method-family-usage/1", "ts": "2026-09-29T00:00:00Z",
-         "claim": "C-1", "cell": "C-1", "family": "static-symbolic",
-         "agent": "kunglao-worker", "tier": 1, "tools": []},
-        {"schema": "method-family-usage/1", "ts": "2026-09-29T00:00:01Z",
-         "claim": "C-2", "cell": "C-2", "family": "",
-         "agent": "kunglao-worker", "tier": 1, "tools": []},
-    ]) + "\n", encoding="utf-8")
+    # face 1 (wsB) — pending dispatch rows, exact claim keys; one row
+    # WITHOUT a family is the honest unattributed gap (#804 usage merge:
+    # the usage-ledger columns ride the experience rows — the separate
+    # usage-log face is retired and indexes nothing)
+    ws_b.mkdir(parents=True, exist_ok=True)
+    q_cells.append_observation(
+        ws_b, "bbbb0000bbbb", "static-symbolic", None,
+        source="dispatch", claim="C-1", agent="kunglao-worker", tier=1,
+        tools=[], arm_key_col=_ak("static-symbolic"))
+    q_cells.append_observation(
+        ws_b, "bbbb0000bbbb", "", None,
+        source="dispatch", claim="C-2", agent="kunglao-worker", tier=1,
+        tools=[])
 
-    # face 3 — the unified-log dispatch row (method_family= in detail)
+    # face 2 — the unified-log dispatch row (method_family= in detail)
     ulog = ws_c / "runs" / "logs" / "kunglao-2026-09-29.jsonl"
     ulog.parent.mkdir(parents=True)
     ulog.write_text(json.dumps({
@@ -113,7 +114,11 @@ def test_reindex_forms_cells_from_replayed_history(tmp_path):
 
     assert report["schema"] == q_cells.REINDEX_SCHEMA
     assert report["rows_scanned"] == 6
-    assert report["unattributed"] == 1
+    # #804 usage merge: face-1 rows carry arm keys, so the family-less
+    # pending row reports through the fold's UNKEYED gap (the wave-1
+    # loud counter), not the legacy unattributed face
+    assert report["unattributed"] == 0
+    assert report["unkeyed"] == 1
     cells = {(c["signature_hash"], c["method_family"]): c
              for c in report["cells"]}
     # face-1 rows: exact cells with credit masses
@@ -127,14 +132,15 @@ def test_reindex_forms_cells_from_replayed_history(tmp_path):
     assert a2["success"] == pytest.approx(0.5)
     # face-2/3 rows: pending cells under the workspace CURRENT signature
     # (the replay approximation — historical signatures are unrecoverable)
-    sig_b = ssig.signature_hash(ssig.snapshot(ws_b))
-    b_cell = cells[(sig_b, "static-symbolic")]
+    # wsB rows are face-1 rows now (#804 usage merge): EXACT signatures,
+    # not the usage face's current-signature approximation
+    b_cell = cells[("bbbb0000bbbb", "static-symbolic")]
     assert b_cell["pending"] == 1
     assert b_cell["credit_observations"] == 0
     sig_c = ssig.signature_hash(ssig.snapshot(ws_c))
     c_cell = cells[(sig_c, "arm-kdf")]
     assert c_cell["pending"] == 1
-    assert report["signature_approximated_cells"] == 2
+    assert report["signature_approximated_cells"] == 1
     # deterministic ordering
     keys = [(c["signature_hash"], c["method_family"])
             for c in report["cells"]]

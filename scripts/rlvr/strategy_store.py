@@ -557,14 +557,13 @@ class PosteriorStrategyStore:
         proposal). Retired cases and docs without an update_map join
         nothing. The registered-vocabulary wall + share normalization
         are the same faces as every other prior source."""
-        import method_families as _mf  # noqa: PLC0415 — lazy
         import posteriors_case as po  # noqa: PLC0415 — the ws posterior ledger
 
         led = po.PosteriorLedger.load(self.ws)
         if not led.cases:
             return {}
         hyp_claims = _hypothesis_claims(self.ws)
-        usage = _mf.usage_family_map(self.ws)
+        usage = q_cells.usage_family_map(self.ws)
         maps = _case_update_maps(self.ws)
         if not hyp_claims or not usage or not maps:
             return {}
