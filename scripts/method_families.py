@@ -25,7 +25,8 @@ health signals rendered at the existing Q/report face
                 triage() reports frequencies + promotion candidates and
                 NEVER auto-promotes (promotion is a reviewed registry
                 diff with a new derivation-doc row)
-  usage         ALLOW-tail rows land on the dispatch observation row
+  usage         the dispatch observation row IS the usage record (the
+                #804 usage merge closed the side-ledger write)
                 (rlvr.q_cells — the #804 usage merge: the former
                 runs/method-family-log.jsonl is a retired archive, a
                 projection read only, never a scan target); the
@@ -70,9 +71,7 @@ import yaml
 SCHEMA = "method-families/1"
 REGISTRY_PATH = Path(__file__).resolve().parent / "method_families.yaml"
 
-USAGE_SCHEMA = "method-family-usage/1"
 QUARANTINE_SCHEMA = "method-family-quarantine/1"
-USAGE_REL = "runs/method-family-log.jsonl"
 QUARANTINE_REL = "runs/method-family-quarantine.jsonl"
 
 # the workspace-local discovery overlay (producer: rlvr/expansion.py —
@@ -84,10 +83,6 @@ OTHER = "other"
 OTHER_RE = re.compile(r"^other\((.+)\)$", re.DOTALL)
 OTHER_DETAIL_MAX = 120
 TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]{2,39}$")
-
-# v0 prose declaration face (the #105 dual-face precedent: v1 envelope
-# field OR prose marker; ONE contract, two declaration shapes).
-V0_MARKER_RE = re.compile(r"method-family:\s*([^\n]+)", re.IGNORECASE)
 
 # triage / health policy constants (documented, not fitted)
 PROMOTION_MIN = 3        # same one-line seen >= N times -> promotion candidate
@@ -209,16 +204,20 @@ def _overlay_admits(ws, token: str) -> bool:
 # validation (the ONE gate chokepoint imports these)
 # ---------------------------------------------------------------------------
 
-def declared_value(envelope_meta: dict | None, prompt_text: str) -> str | None:
-    """The declared method family: v1 envelope field first, v0 prose
-    marker second (the #105 dual-face order). None when undeclared."""
+def declared_value(envelope_meta: dict | None,
+                   prompt_text: str = "") -> str | None:
+    """The declared method family: the v1 envelope field is the ONE
+    declaration face. #804 de-compat (R3, with the usage-write closure):
+    the v0 prose-marker fallback (``method-family:`` in the prompt text
+    — a replay-only marker, retired in the recording face in wave-1) is
+    RETIRED here too; keeping it would let a prose-declared ALLOW lose
+    its family record (the observation row is envelope-only). An
+    envelope without the field is the undeclared honest gap."""
+    del prompt_text  # the retired prose face's parameter slot
     if isinstance(envelope_meta, dict):
         v = envelope_meta.get("method_family")
         if isinstance(v, str) and v.strip():
             return v.strip()
-    m = V0_MARKER_RE.search(prompt_text or "")
-    if m:
-        return m.group(1).strip()
     return None
 
 
@@ -232,8 +231,8 @@ def validate_method_family(value: str | None,
     if value is None or not str(value).strip():
         return (False,
                 "dispatch declares no method_family (protocol v1 envelope "
-                "field, or a `method-family: <token>` line on v0 prompts) "
-                "— the approach must be countable for "
+                "field — the ONE declaration face; the v0 prose marker is "
+                "retired, #804) — the approach must be countable for "
                 "Q(state signature, method family) (#432).")
     v = str(value).strip()
     try:
@@ -301,36 +300,6 @@ def append_quarantine_row(ws, claim: str | None, detail: str,
     _append_jsonl(Path(ws) / QUARANTINE_REL, {
         "schema": QUARANTINE_SCHEMA, "ts": _utc_now_z(),
         "claim": claim, "detail": detail, "agent": agent})
-
-
-def append_usage_row(ws, claim: str | None, family: str, agent: str | None,
-                     tier: int = 0, tools: list | None = None, *,
-                     propensity: float | None = None,
-                     sampled_family: str | None = None,
-                     prior_source: str | None = None) -> None:
-    """One usage row per approved dispatch — the (family, cell) counting
-    feed. cell = the claim id today; W2 re-keys to state signatures.
-
-    #691: the row is ALSO the declaration reconciliation record —
-    ``propensity`` (the sampler's draw probability of the DECLARED
-    family), ``sampled_family`` (what the gate's own draw would have
-    chosen) and ``prior_source`` (history | llm_prior | store) ride every
-    row as explicit nulls when the sampler view is unavailable (the
-    honest gap, never a fabricated number). Values are validated at this
-    boundary: a non-numeric / NaN / out-of-[0,1] propensity degrades to
-    null, never a raise."""
-    if isinstance(propensity, bool) or not isinstance(
-            propensity, (int, float)) or propensity != propensity \
-            or not (0.0 <= float(propensity) <= 1.0):
-        propensity = None
-    _append_jsonl(Path(ws) / USAGE_REL, {
-        "schema": USAGE_SCHEMA, "ts": _utc_now_z(),
-        "claim": claim, "cell": claim, "family": family, "agent": agent,
-        "tier": tier, "tools": list(tools or []),
-        "propensity": (None if propensity is None
-                       else round(float(propensity), 6)),
-        "sampled_family": str(sampled_family) if sampled_family else None,
-        "prior_source": str(prior_source) if prior_source else None})
 
 
 def _read_jsonl(path: Path) -> list[dict]:

@@ -875,9 +875,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     dispatch and keeps the pre-#432 behavior).
 
     #691: the validated declaration is ALSO reconciled against the
-    gate's own sampler draw (see _sample_reconciliation) — the usage
-    row carries propensity + sampled_family + prior_source, and a
-    deviation emits the recorded-decision ``sample_deviation`` event.
+    gate's own sampler draw (see _sample_reconciliation) — the
+    reconciliation triple (propensity + sampled_family + prior_source)
+    rides the dispatch observation row since the #804 usage merge, and
+    a deviation emits the recorded-decision ``sample_deviation`` event.
     The reconciliation NEVER rejects for a DECLARED family (fail-open
     + warn: deviation = recorded decision, 2026-10-14 amendment) — the
     one #773 W2 exception is the UNDECLARED case: with sampler material
@@ -964,11 +965,9 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                 "`agent-reasoning:` line AND declare a family the current "
                 "policy actually supports (propensity > 0).",
                 paths), None, None)
-    _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
-                            row_agent, tier, tools,
-                            propensity=view.get('propensity'),
-                            sampled_family=view.get('sampled_family'),
-                            prior_source=view.get('prior_source'))
+    # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
+    # #691 reconciliation view rides the dispatch observation row (the
+    # ALLOW tail's lifecycle record), never a parallel ledger.
     mf_other = _mf432.parse_other_detail(mf_value)
     if mf_other is not None:
         _mf432.append_quarantine_row(paths.get('workspace'), cid,

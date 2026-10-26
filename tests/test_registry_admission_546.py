@@ -353,17 +353,19 @@ def _envelope(family: str) -> str:
 
 def test_gate_accepts_a_declared_overlay_dispatch(tmp_path, capsys):
     """End-to-end through the ONE chokepoint: the envelope declares the
-    discovered arm, the workspace carries its receipt — ALLOW + usage."""
+    discovered arm, the workspace carries its receipt — ALLOW + the
+    dispatch observation row (the #804 usage merge: the row IS the
+    usage record)."""
     import worker_budget_sinks as sinks
     ws = tmp_path
     _admitted_receipt(ws)
     rc = sinks.pre_check(_dispatch_payload(_envelope(DISCOVERED)),
                          _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
-    rows = [json.loads(ln) for ln in
-            (ws / "runs" / "method-family-log.jsonl")
-            .read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert rows and rows[-1]["family"] == DISCOVERED
+    from rlvr import q_cells
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("source") == "dispatch"]
+    assert rows and rows[-1]["method_family"] == DISCOVERED
 
 
 def test_gate_still_rejects_overlay_token_without_receipt(tmp_path, capsys):

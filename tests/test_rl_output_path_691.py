@@ -84,12 +84,13 @@ def _seed_history(ws: Path, family: str, n: int = 3) -> None:
                                    source='dispatch', claim=f'seed-{i}')
 
 
-def _usage_rows(ws: Path) -> list[dict]:
-    p = ws / 'runs' / 'method-family-log.jsonl'
-    if not p.is_file():
-        return []
-    return [json.loads(ln) for ln in
-            p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+def _usage_rows(ws: Path, claim: str = 'C-001') -> list[dict]:
+    """The gated claim's dispatch observation rows (#804 usage merge:
+    the former usage-log read — the dispatch row IS the record)."""
+    from rlvr import q_cells
+    return [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get('source') == 'dispatch'
+            and r.get('claim') == claim]
 
 
 def _events(ws: Path, action: str) -> list[dict]:
@@ -120,10 +121,12 @@ def _detail(row: dict) -> dict:
 
 def test_declared_family_records_propensity_and_sampled_family(
         tmp_path, capsys):
-    """#691 T2: one prior family, declared as-is — the usage row carries
-    the full reconciliation: sampled_family matches the declaration,
-    propensity is the sampler's draw probability (1.0 for the sole
-    candidate), prior_source names where the prior came from."""
+    """#691 T2: one prior family, declared as-is — the dispatch
+    observation row carries the full reconciliation (the #804 usage
+    merge: the row IS the record): sampled_family matches the
+    declaration, propensity is the sampler's draw probability (1.0 for
+    the sole candidate), prior_source names where the prior came
+    from."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     rc = sinks.pre_check(
@@ -132,8 +135,8 @@ def test_declared_family_records_propensity_and_sampled_family(
     rows = _usage_rows(ws)
     assert len(rows) == 1, rows
     row = rows[0]
-    assert row['schema'] == 'method-family-usage/1'
-    assert row['family'] == 'static-decompile'
+    assert row['schema'] == 'q-cell-obs/1'
+    assert row['method_family'] == 'static-decompile'
     assert row['sampled_family'] == 'static-decompile'
     assert row['propensity'] == 1.0
     assert row['prior_source'] == 'history'

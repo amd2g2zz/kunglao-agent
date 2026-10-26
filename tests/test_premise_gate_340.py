@@ -205,10 +205,10 @@ class TestPremiseReconciliation:
             "name": "w-t", "description": "dynamic detonation",
             "prompt": '{"kunglao_dispatch": {"version": 1, '
                       '"claim": "C-001", "tier": 2, '
-                      '"tools": ["vmr-shell"]}}\n'
+                      '"tools": ["vmr-shell"], '
+                      '"method_family": "dynamic-trace"}}\n'
                       "detonate "
-                      "facts-snapshot: 0 facts at 2026-09-22T00:00Z"
-                      "\nmethod-family: dynamic-trace"}}
+                      "facts-snapshot: 0 facts at 2026-09-22T00:00Z"}}
         rc = pre_check(payload, _paths(ws))
         captured = capsys.readouterr()
         assert "envpremise" not in captured.err

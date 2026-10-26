@@ -442,3 +442,88 @@ def test_q_cells_reindex_ignores_legacy_usage_files(tmp_path):
     report = q_cells.reindex(tmp_path)
     assert report["cells"] == []
     assert report["rows_scanned"] == 0
+
+
+# ------------- 10. the old usage write face closes (R3)
+
+def test_usage_writer_face_is_gone():
+    """The A2 end state: the side ledger's write AND read faces are
+    gone from the vocabulary module — one substrate per dispatch, the
+    projections in section 9 are the only reads."""
+    import method_families as mf
+    for name in ("append_usage_row", "read_usage", "usage_family_map",
+                 "USAGE_REL", "USAGE_SCHEMA"):
+        assert not hasattr(mf, name), \
+            f"method_families.{name} must be gone (the #804 A2 law)"
+
+
+def _r3_paths(ws):
+    return {"workspace": str(ws), "state": ws / "analysis_state.txt",
+            "register": ws / "claim-register.yaml",
+            "deps": ws / "claim_deps.yaml",
+            "task_spec": ws / "task_spec.yaml"}
+
+
+def _r3_prompt(family):
+    import json as _json
+    return (_json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": "C-804", "tier": 1, "tools": ["grep"],
+        "agent": "w-test", "method_family": family}})
+        + "\nfacts-snapshot: 1 facts")
+
+
+def test_allow_writes_no_usage_file(tmp_path, capsys, monkeypatch):
+    """The loud-absence pin: an ALLOW dispatch writes NO
+    runs/method-family-log.jsonl — the old side-ledger write is closed;
+    the family record is the dispatch observation row alone."""
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(
+        sinks, "_sample_reconciliation",
+        lambda ws_, declared: {"sampled_family": "static-decompile",
+                               "propensity": 1.0,
+                               "prior_source": "history",
+                               "deviates": False})
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": _r3_prompt("static-decompile")}},
+        _r3_paths(ws))
+    assert rc == 0, capsys.readouterr().err[-400:]
+    assert not (ws / "runs" / "method-family-log.jsonl").exists(), \
+        "the usage write face is CLOSED — no side ledger on ALLOW"
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804" and r.get("source") == "dispatch"]
+    assert len(rows) == 1 and rows[0]["method_family"] == "static-decompile"
+
+
+def test_prose_only_declaration_is_the_undeclared_gap(tmp_path, capsys):
+    """The v0 prose marker is a replay-only marker (the #804 abolish
+    list; wave-1 retired it in the recording face): a prose-only
+    declaration is the UNDECLARED loud gap — the gate REJECTS with the
+    sampled exit, never an ALLOW whose family record would vanish
+    (the dispatch observation row is envelope-only)."""
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-804", '
+              '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
+              'facts-snapshot: 1 facts\n'
+              'method-family: static-decompile')
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": prompt}}, _r3_paths(ws))
+    assert rc == 2, (
+        "a prose-only declaration must REJECT as undeclared "
+        f"(the loud gap), got rc={rc}")
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804"]
+    assert rows == [], "a rejected dispatch records no observation row"

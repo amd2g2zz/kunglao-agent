@@ -265,9 +265,12 @@ def test_pre_check_accepts_other_and_quarantines(tmp_path, capsys):
     assert q[0]['claim'] == 'C-001'
 
 
-def test_pre_check_accepts_v0_prose_marker(tmp_path, capsys):
-    """v0 dispatches declare the same field as a prose marker — one
-    contract, two declaration faces (the #105 intent precedent)."""
+def test_pre_check_rejects_v0_prose_marker_as_undeclared(tmp_path, capsys):
+    """#804 de-compat (R3): the v0 prose marker is a replay-only marker,
+    retired with the usage-write closure — a prose-only declaration is
+    the UNDECLARED loud gap (the envelope field is the ONE declaration
+    face; a prose ALLOW would lose its family record, the observation
+    row being envelope-only). The REJECT names the sampled exit."""
     ws = tmp_path / 'ws'
     prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
               '"tier": 1, "tools": ["grep"]}}\n'
@@ -275,8 +278,8 @@ def test_pre_check_accepts_v0_prose_marker(tmp_path, capsys):
               'facts-snapshot: 1 facts\n'
               'method-family: static-decompile')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
-    assert rc == 0, _stderr(capsys)
-    assert (ws / 'runs' / 'method-family-log.jsonl').exists()
+    assert rc == 2, _stderr(capsys)
+    assert not (ws / 'runs' / 'method-family-log.jsonl').exists()
 
 
 def test_non_dispatch_prompts_are_not_gated(tmp_path, capsys):
@@ -288,6 +291,8 @@ def test_non_dispatch_prompts_are_not_gated(tmp_path, capsys):
         _min_paths(ws))
     assert rc == 0, _stderr(capsys)
     assert not (ws / 'runs' / 'method-family-log.jsonl').exists()
+    from rlvr import q_cells
+    assert q_cells.JSONLQStore(ws).observations() == []
 
 
 def test_registry_outage_rejects_fail_closed(tmp_path, capsys, monkeypatch):
