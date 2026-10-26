@@ -711,7 +711,7 @@ files:
   - src: scripts/intake_promise.py
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
-    sha256: 883e849cfc1564bbbacc1482da6bfbb9867eae778461d3c3913060409db12081
+    sha256: ae7f7fe5427e6d7283342e429d931f749ffa0f291fdc6910d1b10a3e2ba9f7ca
   - src: scripts/intelligent_scheduling.py
     dest: .claude/scripts/intelligent_scheduling.py
     kind: scaffold
