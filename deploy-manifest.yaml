@@ -55,7 +55,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 6154a0397a0de82438f38bc408686225de4ef209e134f8f212949b00903bdac6
+    sha256: 876333346d9eaae3536c17d86c099a615f57b14152969e56cd609e752081ffd4
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
@@ -1571,7 +1571,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 743cc7f2cb87f9f96d73fbede08721bf45ea6ac890fd5857e9fc1f817c55d376
+    sha256: 846b748f9a6cab7c93bf7d88402cf2ad099837a5f360cab11d08d9b888707492
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold

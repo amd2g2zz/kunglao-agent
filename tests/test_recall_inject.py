@@ -77,39 +77,6 @@ DEFAULT_CLAIM = (
 )
 
 
-# ---- feature -> query mapping (pure) ----
-# issue 771: the category/tier -> query tables (GO_SIGNALS, WEB_QUERIES, tier
-# fallbacks) are RETIRED — queries derive from the dispatch question
-# (queries_for_question, pinned in tests/test_recall_default_771.py).
-# The four pins below asserted exactly the retired mapping: opt-in-skip.
-
-
-@pytest.mark.skip(reason="issue 771: category query mapping retired "
-                          "(need-driven queries)")
-def test_go_signals_map_to_go_query():
-    assert queries_for_features(GO_CLAIM, tier=1) == ["go", "static analysis"]
-
-
-@pytest.mark.skip(reason="issue 771: tier query mapping retired "
-                          "(need-driven queries)")
-def test_t3_signals_map_to_vm_dynamic_queries():
-    assert queries_for_features(VM_CLAIM, tier=3) == ["vm", "dynamic"]
-
-
-@pytest.mark.skip(reason="issue 771: tier query mapping retired "
-                          "(need-driven queries)")
-def test_disasm_tier2_maps_to_static_analysis_query():
-    # 'disasm' itself matches nothing in the index — the scene map's
-    # 反汇编/静态分析 entry is reached via the 'static analysis' query.
-    assert queries_for_features(DISASM_CLAIM, tier=2) == ["static analysis"]
-
-
-@pytest.mark.skip(reason="issue 771: tier query mapping retired "
-                          "(need-driven queries)")
-def test_default_tier1_maps_to_static_analysis_query():
-    assert queries_for_features(DEFAULT_CLAIM, tier=1) == ["static analysis"]
-
-
 # ---- evaluate(): recall injection on claim dispatch ----
 
 
