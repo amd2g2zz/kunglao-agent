@@ -141,7 +141,7 @@ files:
   scripts/heartbeat_touch.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
-  scripts/hooks_selfcheck.py: 63
+  scripts/hooks_selfcheck.py: 62
   scripts/hypothesis_bridge.py: 34
   scripts/hypothesis_seeder.py: 21
   scripts/hypothesis_store.py: 14
@@ -259,7 +259,7 @@ files:
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 158
+  scripts/rlvr/q_cells.py: 157
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/refutation_fold.py: 1
   scripts/rlvr/reward.py: 10
