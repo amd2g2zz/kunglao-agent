@@ -70,6 +70,12 @@ VM_CAPS = ("vm_reachable", "mcp_bridge")
 ANDROID_CAPS = ("adb", "frida_server", "jdwp_debug", "device_root",
                 "host_frida")
 
+# the web analysis chain's liveness subset: the MCP bridge (the camoufox
+# L4 face's registration), the docker daemon (the jsir image face) and
+# the iv8 module (the offline-execution face) — same probe-honesty
+# contract as the android set (channel-absent is a SKIP, never fabricated)
+WEB_CAPS = ("mcp_bridge", "host_docker", "iv8_module")
+
 
 from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
@@ -168,6 +174,21 @@ def _probe_host_frida() -> dict:
     return _entry(status, detail)
 
 
+def _probe_host_docker() -> dict:
+    """The web chain's docker daemon face (the jsir image supply) — the
+    probe face is the capability module's; this adapter only shapes the
+    snapshot entry."""
+    status, detail = _cp.probe_host_docker()
+    return _entry(status, detail)
+
+
+def _probe_iv8_module() -> dict:
+    """The web chain's module face (the offline-execution supply) — an
+    import probe in the workspace interpreter, honest negative included."""
+    status, detail = _cp.probe_iv8_module()
+    return _entry(status, detail)
+
+
 def _probe_mcp_bridge(ws: Path, ptype: str) -> dict:
     try:
         checks = mcp_probe.check_mcp(ws, ptype)
@@ -199,6 +220,10 @@ def probe(ws: Path) -> dict:
         caps["jdwp_debug"] = _probe_jdwp_debug()
         caps["device_root"] = _probe_device_root()
         caps["host_frida"] = _probe_host_frida()
+    elif ptype == "web":
+        caps["mcp_bridge"] = _probe_mcp_bridge(ws, ptype)
+        caps["host_docker"] = _probe_host_docker()
+        caps["iv8_module"] = _probe_iv8_module()
     return {"per_capability": caps, "written_by": WRITTEN_BY, "ts": _utc_now()}
 
 

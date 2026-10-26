@@ -108,7 +108,7 @@ the init Q&A, the sample, and the agent definitions' methodology (never
 invented). An untouched scaffold means cultivation has not happened yet. -->
 
 **Material**: reference corpora + trace dumps (no binary sample; run the recovered algorithm against recorded pairs).
-**Lane**: `algorithm` — no binary sample is mounted; the toolchain gate probes uv + python + the lane's material, not the MCP/RE supply.
+**Lane**: `algorithm` — no binary sample is mounted; the toolchain gate probes uv + python + the lane's registered checks (web adds its supply faces), not the MCP/RE supply.
 1. Declare the task: `task_spec.yaml` primary_questions + oracle anchors (env derives from the task, not the reverse).
 2. Mount the material under the workspace (`corpora/`, `references/`, `dataset/`, or the lane's own dir) and record its provenance (path + sha256) before deriving anything.
 3. Each unresolved observation becomes ONE claim in claim-register.yaml; one worker per claim.

@@ -313,6 +313,7 @@ EMIT_ACTIONS = [
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollout_settled",    # unified-reward tick face: adapters + settlement summary per rollup run
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "route_abstained",    # the tool-chain router's abstention face: no rule fired for the lane/state — the agent self-disposes (detail carries lane + reason; the abstention IS the learning corpus)
     "rt_read_blocked",    # rt_read_barrier: maker-face read refused for a red-team act
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
     "sample_deviation",   # #691 the declaration-vs-sampler deviation record: declared family != the gate's own draw (recorded decision, never a reject; reason rides detail)

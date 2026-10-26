@@ -484,6 +484,10 @@ _TOOL_FAMILY_BY_TOKEN: dict[str, str] = {
     "volatility": "volatility",
     "vmr-shell": "vm", "vmrun": "vm",
     "qiling": "qiling", "malware-framework": "qiling",
+    # the web analysis chain: the jsir docker face, the iv8 module face
+    # and the camoufox L4 MCP (part-split matching hits
+    # mcp__camoufox-reverse__* tool names too)
+    "jsir": "jsir", "iv8": "iv8", "camoufox": "camoufox",
 }
 
 _DISPROOF_RE = re.compile(r"capability-disproof:\s*([A-Za-z0-9_-]+)", re.IGNORECASE)

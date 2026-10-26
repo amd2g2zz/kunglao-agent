@@ -56,14 +56,19 @@ LANE_FIELD = "lane"
 
 # The lanes whose routing is IMPLEMENTED end to end. `algorithm` is the
 # one that is: no sample required, lane check set, lane render, lane seeds.
-IMPLEMENTED_LANES: tuple[str, ...] = ("malware", "algorithm")
+# `web` joins with a registered analysis chain (chain registry + per-lane
+# check set with the supply faces + material render); its init seeds stay
+# the non-malware generic shape.
+IMPLEMENTED_LANES: tuple[str, ...] = ("malware", "algorithm", "web")
 
 # The remaining lanes are documented STUBS (issue 208 scope): init routes
 # them, the render states their material and the toolchain gate probes the
 # lane's material dir with a WARN — but no lane-specific analysis toolchain
-# is claimed. They exist so a protocol/web/data/app task is not forced
+# is claimed. They exist so a protocol/data/app task is not forced
 # through the malware scaffolding while the deep lanes are built out.
-STUB_LANES: tuple[str, ...] = ("protocol", "web", "data", "app")
+# (web graduated: its analysis chain is a registered registry module and
+# the toolchain gate probes its supply faces.)
+STUB_LANES: tuple[str, ...] = ("protocol", "data", "app")
 
 # What each lane analyzes — the material contract, rendered into the
 # workspace handbook and carried in the pending-decision context so the
@@ -74,7 +79,10 @@ MATERIALS: dict[str, str] = {
                  "run the recovered algorithm against recorded pairs)",
     "protocol": "source dump or live capture (pcaps / frame samples) — "
                 "documented stub lane",
-    "web": "target URL + auth model — documented stub lane",
+    "web": "target URL + auth model + captured bundle (mount captures "
+           "under samples/ or references/; the analysis chain registry "
+           "resolves the deobfuscation -> offline-reproduction -> "
+           "live-validation route)",
     "data": "dataset path + format — documented stub lane",
     "app": "package file with a declared contract surface — documented "
            "stub lane",
@@ -83,10 +91,13 @@ MATERIALS: dict[str, str] = {
 # Per-lane toolchain item names — the single source toolchain._check_lane
 # consumes. `malware` is ABSENT on purpose: the malware lane keeps the
 # per-type CHECK_SETS dispatch untouched (byte-identical gate).
+# web carries its analysis-chain supply faces (jsir / iv8) next to the
+# material probe — the supply install is the agent-do layer, the check
+# only probes and guides (WARN, never a HARD refusal).
 REQUIRED_CHECKS: dict[str, tuple[str, ...]] = {
     "algorithm": ("uv", "python", "corpora"),
     "protocol": ("uv", "python", "protocol_material"),
-    "web": ("uv", "python", "web_material"),
+    "web": ("uv", "python", "web_material", "jsir", "iv8"),
     "data": ("uv", "python", "data_material"),
     "app": ("uv", "python", "app_material"),
 }

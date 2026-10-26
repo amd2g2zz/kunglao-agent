@@ -167,7 +167,7 @@ files:
   scripts/kunglao_record.py: 10
   scripts/kunglao_resume.py: 24
   scripts/kunglao_status.py: 10
-  scripts/kunglao_upgrade.py: 143
+  scripts/kunglao_upgrade.py: 142
   scripts/kunglao_verify.py: 30
   scripts/kunglao_wait.py: 10
   scripts/lane_spec.py: 2
