@@ -250,3 +250,113 @@ def test_bare_import_posteriors_is_unambiguous():
         for k in [k for k in sys.modules if k.startswith("posteriors")]:
             del sys.modules[k]
         sys.modules.update(saved_mod)
+
+
+# ------------- 8. the usage ledger merges into the dispatch obs row
+# (#804 named follow-up, wave-2: one substrate per write event — the
+# usage-ledger columns (tier / tools / propensity / sampled_family /
+# prior_source) ride the dispatch observation row additively; the read
+# faces project it; the old usage write face closes.)
+
+_V1_DECL = '{"kunglao_dispatch": {"method_family": "static-symbolic"}}'
+_USAGE_COLS = ("tier", "tools", "propensity", "sampled_family",
+               "prior_source")
+
+
+def _record_usage_merged(ws, **kw):
+    out = q_cells.record_dispatch_observation(
+        ws, _V1_DECL, envelope_meta={"method_family": "static-symbolic"},
+        claim="C-804", agent="w-test", **kw)
+    assert out["appended"] is True, out
+    return q_cells.JSONLQStore(ws).observations()[-1]
+
+
+def test_dispatch_row_carries_the_usage_columns(tmp_path):
+    """R1 (additive): the dispatch observation row carries the usage-
+    ledger columns — one substrate per dispatch, not two parallel write
+    faces for the same event."""
+    row = _record_usage_merged(
+        tmp_path, tier=2, tools=["grep", "bash"],
+        sampler_view={"sampled_family": "dynamic-trace", "propensity": 0.4,
+                      "prior_source": "history"})
+    assert row["tier"] == 2
+    assert row["tools"] == ["grep", "bash"]
+    assert row["propensity"] == 0.4
+    assert row["sampled_family"] == "dynamic-trace"
+    assert row["prior_source"] == "history"
+
+
+def test_usage_columns_absent_when_not_supplied(tmp_path):
+    """The additive-column discipline: a dispatch recorded without the
+    usage view keeps the pre-merge row shape — absent keys, never null
+    padding (byte-identity for every pre-merge writer)."""
+    row = _record_usage_merged(tmp_path)
+    for k in _USAGE_COLS:
+        assert k not in row, f"{k} must stay absent when not supplied"
+
+
+def test_sampler_triple_rides_together_or_not_at_all(tmp_path):
+    """Partial material still emits the WHOLE triple (explicit nulls
+    inside — the #695 recipe-triple precedent); defaults (tier 0, empty
+    tools) never pad the row."""
+    row = _record_usage_merged(
+        tmp_path, tier=0, tools=[],
+        sampler_view={"sampled_family": "static-symbolic"})
+    assert row["sampled_family"] == "static-symbolic"
+    assert row["propensity"] is None
+    assert row["prior_source"] is None
+    assert "tier" not in row and "tools" not in row
+
+
+def test_bad_propensity_degrades_to_null_at_the_boundary(tmp_path):
+    """The #691 boundary semantics survive the move: a non-numeric /
+    out-of-range propensity degrades to null with a warn, never a
+    raise into the producer."""
+    row = _record_usage_merged(tmp_path,
+                               sampler_view={"propensity": "not-a-number"})
+    assert row["propensity"] is None
+    row = _record_usage_merged(tmp_path, sampler_view={"propensity": 1.5})
+    assert row["propensity"] is None
+
+
+def test_allow_threads_the_usage_view_into_the_dispatch_row(
+        tmp_path, capsys, monkeypatch):
+    """The hook's ALLOW tail records ONE row carrying the usage view —
+    the gate's reconciliation result lands on the dispatch observation
+    (tier/tools from the dispatch shape, the sampler triple from the
+    #691 view), not on a side ledger."""
+    import json as _json
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    paths = {"workspace": str(ws), "state": ws / "analysis_state.txt",
+             "register": ws / "claim-register.yaml",
+             "deps": ws / "claim_deps.yaml",
+             "task_spec": ws / "task_spec.yaml"}
+    monkeypatch.setattr(
+        sinks, "_sample_reconciliation",
+        lambda ws_, declared: {"sampled_family": "static-decompile",
+                               "propensity": 0.75,
+                               "prior_source": "history",
+                               "deviates": False})
+    prompt = (_json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": "C-804", "tier": 1, "tools": ["grep"],
+        "agent": "w-test", "method_family": "static-decompile"}})
+        + "\nfacts-snapshot: 1 facts")
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": prompt}}, paths)
+    assert rc == 0, capsys.readouterr().err[-400:]
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804" and r.get("source") == "dispatch"]
+    assert len(rows) == 1, "one dispatch, one observation row"
+    row = rows[0]
+    assert row["tier"] == 1
+    assert row["tools"] == ["grep"]
+    assert row["propensity"] == 0.75
+    assert row["sampled_family"] == "static-decompile"
+    assert row["prior_source"] == "history"

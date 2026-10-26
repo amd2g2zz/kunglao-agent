@@ -1048,6 +1048,47 @@ def _coerce_credit(credit, credit_kind, failure_delta):
     return credit_out, failure_delta_out
 
 
+def _usage_cols(tier, tools, view: dict | None) -> tuple:
+    """#804 usage merge: the usage-ledger columns at the append boundary —
+    ``(tier_out, tools_out, triple_or_None)``. A non-int tier drops to
+    None; tools keep stripped non-empty strings; a non-numeric / NaN /
+    out-of-[0,1] propensity degrades to null (the #691 boundary
+    semantics, moved verbatim from append_usage_row). A SUPPLIED view
+    (even the all-None cold-sampler gap) emits the whole triple with
+    explicit nulls inside — the reconciliation receipt, never a
+    fabricated number; an unsupplied view emits nothing (the
+    byte-identical legacy row, the #695 emission discipline)."""
+    tier_out = None
+    if tier is not None:
+        try:
+            tier_out = int(tier)
+        except (TypeError, ValueError):
+            warn("q_cells.append", f"non-int tier dropped: {tier!r}")
+    tools_out = None
+    if isinstance(tools, (list, tuple)):
+        tools_out = [str(t).strip() for t in tools if str(t).strip()]
+    elif tools is not None:
+        warn("q_cells.append", f"non-list tools dropped: {tools!r:.80}")
+    view = view if isinstance(view, dict) else None
+    triple = None
+    if view is not None:
+        propensity = view.get("propensity")
+        if propensity is not None and (
+                isinstance(propensity, bool) or not isinstance(
+                    propensity, (int, float)) or propensity != propensity
+                or not (0.0 <= float(propensity) <= 1.0)):
+            warn("q_cells.append",
+                 f"invalid propensity dropped: {propensity!r}")
+            propensity = None
+        sampled = view.get("sampled_family")
+        prior = view.get("prior_source")
+        triple = {"propensity": (None if propensity is None
+                                 else round(float(propensity), 6)),
+                  "sampled_family": str(sampled).strip() if sampled else None,
+                  "prior_source": str(prior).strip() if prior else None}
+    return tier_out, tools_out, triple
+
+
 def append_observation(ws, signature_hash: str, method_family: str,
                        credit: float | None = None, *, source: str,
                        claim: str | None = None,
@@ -1065,7 +1106,9 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        failure_delta: float | None = None,
                        reason: str | None = None,
                        reward: float | None = None,
-                       confidence_band: str | None = None) -> dict:
+                       confidence_band: str | None = None,
+                       tier=None, tools=None,
+                       sampler_view: dict | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1151,6 +1194,16 @@ def append_observation(ws, signature_hash: str, method_family: str,
         row["reward"] = round(float(reward), 6)
     if confidence_band:
         row["confidence_band"] = str(confidence_band)
+    # #804 usage merge: the usage-ledger columns ride the dispatch row
+    # additively — defaults/absence keep the row byte-identical.
+    tier_out, tools_out, usage_triple = _usage_cols(
+        tier, tools, sampler_view)
+    if tier_out:
+        row["tier"] = tier_out
+    if tools_out:
+        row["tools"] = tools_out
+    if usage_triple is not None:
+        row.update(usage_triple)
     row = _seal.sign_row(row)  # #799: every q-cell row seals at write
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
@@ -1721,7 +1774,9 @@ def record_dispatch_observation(ws, prompt: str, *,
                                 claim: str | None = None,
                                 agent: str | None = None,
                                 fingerprint: str | None = None,
-                                dispatch_id: str | None = None) -> dict:
+                                dispatch_id: str | None = None,
+                                tier=None, tools=None,
+                                sampler_view: dict | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
@@ -1748,23 +1803,30 @@ def record_dispatch_observation(ws, prompt: str, *,
         meta = envelope_meta if isinstance(envelope_meta, dict) else {}
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
-        tier = meta.get("tier", 0)
+        meta_tier = meta.get("tier", 0)   # the arm key's tier dim
+
         # #695 recipe arms: the dispatch-time recipe view (envelope
         # declaration reconciled against the gate's own arm sampler —
         # rlvr.recipe_arms, fail-open to the none gap on any miss)
         view = _recipe_view(ws, family, meta, prompt, agent, claim)
+        # #804 usage merge: the usage-ledger columns ride THIS row —
+        # tier/tools from the dispatch shape, the #691 sampler
+        # reconciliation triple from the gate's view (additive; absence
+        # keeps the row byte-identical).
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
                                  dispatch_id=dispatch_id,
                                  arm_key_col=arm_key(family, recipe,
-                                                     verif, tier,
+                                                     verif, meta_tier,
                                                      meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
                                                  or "dispatch"),
                                  recipe_id=view.get("recipe_id"),
                                  recipe_propensity=view.get("propensity"),
-                                 recipe_source=view.get("source"))
+                                 recipe_source=view.get("source"),
+                                 tier=tier, tools=tools,
+                                 sampler_view=sampler_view)
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig,
                 "recipe": view}
