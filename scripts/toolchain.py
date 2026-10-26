@@ -2929,14 +2929,104 @@ def _check_lane(report: ToolchainReport, ws: Path, lane: str,
     The MCP analysis supply / decompiler family / VM+device channel are
     deliberately NOT probed here (LANE_NEVER_CHECKS) — a codec or protocol
     task is not a malware-binary engagement, and its env must not be gated
-    on IDA/Ghidra/frida/unidbg/pefile."""
+    on IDA/Ghidra/frida/unidbg/pefile.
+
+    The web lane's supply faces (jsir / iv8) join its check set: a probe
+    + guidance face (WARN tier, agent-do install) — a missing supply
+    degrades the lane to its L1/L4 faces, it never refuses init."""
     for name in lane_spec.REQUIRED_CHECKS.get(lane, ()):
         if name == "uv":
             _check_uv(report)
         elif name == "python":
             _check_python(report)
+        elif name == "jsir":
+            _check_jsir(report)
+        elif name == "iv8":
+            _check_iv8(report)
         else:
             _check_lane_material(report, ws, lane, name)
+
+
+def _check_jsir(report: ToolchainReport) -> None:
+    """The jsir static deep-analysis supply (docker image face).
+
+    Upstream publishes no image: the registry pins the source ref and the
+    first agent-do build mints (freezes) the digest. An absent digest is a
+    WARN with the build recipe; a present digest is verified against the
+    local docker image id (a mismatch is rebuild-or-correct guidance)."""
+    import web_chain  # sibling registry (lazy: lane-gated cost)
+
+    img = web_chain.JSIR_IMAGE
+    digest = img.get("digest")
+    if not digest:
+        report.items.append(CheckResult(
+            name="jsir", status=Status.WARN, tier=Tier.WARN,
+            detail=(
+                f"jsir image not minted yet — agent-do: docker build the "
+                f"{img['source_repo']} image at the pinned source ref, then "
+                f"freeze the digest in web_chain (supply gate: pinned by "
+                f"digest; license {web_chain.JSIR_LICENSE}). Until then the "
+                f"lane degrades to L1 census + L4 live faces"),
+            probe=ProbeTier.PRESENCE,
+        ))
+        return
+    rc, out, err = _run_cmd(["docker", "version"], timeout=10)
+    if rc != 0:
+        report.items.append(CheckResult(
+            name="jsir", status=Status.WARN, tier=Tier.WARN,
+            detail=(f"jsir digest pinned ({str(digest)[:16]}…) but the "
+                    f"docker daemon is not reachable: {(err or out)[:80]} — "
+                    f"start the daemon (agent-do) to verify the image"),
+            probe=ProbeTier.PRESENCE,
+        ))
+        return
+    rc, out, err = _run_cmd(
+        ["docker", "image", "inspect", "--format", "{{.Id}}",
+         str(img.get("image", "jsir"))], timeout=15)
+    image_id = (out or "").strip().splitlines()
+    if rc == 0 and image_id and digest in image_id[0]:
+        report.items.append(CheckResult(
+            name="jsir", status=Status.PASS, tier=Tier.WARN,
+            detail=f"jsir image verified against the pinned digest "
+                   f"({str(digest)[:16]}…)",
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+    report.items.append(CheckResult(
+        name="jsir", status=Status.WARN, tier=Tier.WARN,
+        detail=(f"jsir image digest mismatch (pinned {str(digest)[:16]}…, "
+                f"local {(image_id[0][:40] if rc == 0 and image_id else (err or out)[:40]) or 'absent'}) "
+                f"— rebuild from the pinned source ref and re-pin, or "
+                f"correct the registry entry"),
+        probe=ProbeTier.PRESENCE,
+    ))
+
+
+def _check_iv8(report: ToolchainReport) -> None:
+    """The iv8 offline-execution supply (module import face, exact PyPI
+    pin). The remediation line names the exact install command and the
+    non-commercial license note (the constraint travels with the fact)."""
+    import web_chain  # sibling registry (lazy: lane-gated cost)
+
+    rc, out, err = _run_cmd(
+        [sys.executable, "-c", "import iv8"], timeout=30)
+    if rc == 0:
+        report.items.append(CheckResult(
+            name="iv8", status=Status.PASS, tier=Tier.WARN,
+            detail=f"iv8 importable (pinned =={web_chain.IV8_PIN}"
+                   + (f"; reported {(out or '').strip()[:30]}"
+                      if (out or "").strip() else "") + ")",
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+    report.items.append(CheckResult(
+        name="iv8", status=Status.WARN, tier=Tier.WARN,
+        detail=(f"iv8 not importable — agent-do: "
+                f"uv pip install iv8=={web_chain.IV8_PIN} (PyPI pin; "
+                f"{web_chain.IV8_LICENSE_NOTE}): "
+                f"{(err or out or f'rc={rc}')[:70]}"),
+        probe=ProbeTier.PRESENCE,
+    ))
 
 # ---------- report formatting ----------
 

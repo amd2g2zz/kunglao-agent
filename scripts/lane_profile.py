@@ -83,7 +83,11 @@ LANE_PROFILES: dict[str, dict] = {
         "obfuscation_prior": False,
         "obligation_artifacts": (),
         "factor_set": "web",
-        "capabilities": ("mcp_bridge",),
+        # the analysis-chain supplies join the dispatch vocabulary: the
+        # jsir docker face and the iv8 module face are env capabilities
+        # dispatch may consult (the R2 axis), next to the MCP bridge the
+        # camoufox L4 face rides on
+        "capabilities": ("mcp_bridge", "host_docker", "iv8_module"),
         "battery_note": _WEB_BATTERY_NOTE,
     },
     "data": {
@@ -112,6 +116,11 @@ LANE_PROFILES: dict[str, dict] = {
 CAPABILITY_TOOL_FAMILIES: dict[str, tuple[str, ...]] = {
     "frida_server": ("frida",),
     "vm_reachable": ("vm",),
+    # the web analysis chain: jsir runs through the docker image face,
+    # iv8 needs its module importable in the workspace env — a DOWN entry
+    # stops a jsir/iv8 dispatch into a supply the env-state records dead
+    "host_docker": ("jsir",),
+    "iv8_module": ("iv8",),
 }
 
 
@@ -143,6 +152,16 @@ def factor_set(lane: str | None) -> str:
 def lane_capabilities(lane: str | None) -> tuple[str, ...]:
     prof, _ = profile_for(lane)
     return tuple(prof["capabilities"])
+
+
+def analysis_chains(lane: str | None) -> tuple[dict, ...]:
+    """The lane's registered analysis chains (web only — every other lane
+    is () until it registers a chain; the web registry lives in
+    web_chain, this accessor is the lane-shaped read face)."""
+    if str(lane or "").strip().lower() != "web":
+        return ()
+    import web_chain  # sibling registry (lazy: keeps import cost local)
+    return web_chain.CHAINS
 
 
 def has_binary_face(lane: str | None) -> bool:

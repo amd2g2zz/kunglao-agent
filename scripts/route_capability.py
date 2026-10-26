@@ -60,6 +60,7 @@ Usage:
 """
 from __future__ import annotations
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+from kunglao_log import emit
 from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 import argparse
 import json
@@ -72,6 +73,10 @@ import yaml
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout.
 from ws_layout import resolve_quiet as _resolve_ws
+
+# the web lane token route() branches on (the lane vocabulary itself is
+# lane_spec's; this module only needs the one member)
+_WEB_LANE = "web"
 
 CONFIDENCE_CAP = 0.95
 CORROBORATION_BONUS = 0.05
@@ -771,9 +776,61 @@ def _attach_lighting(result: dict, claim_text: str, tools: list[dict],
         result["capability_suggestions"] = suggestions
 
 
+def _web_route(features: dict, claim_text: str, tools: list[dict],
+               agents_dir: Path | None, ws) -> dict:
+    """The web lane's chain face: census rules -> chain recommendation,
+    ABSTENTION when no rule fired (never the binary fallback face).
+
+    No-rule-fired returns {recommendation: null, hand_to: "agent"} — a
+    fabricated low-confidence chain pollutes telemetry and misleads the
+    consumers that trust the confidence field. Every abstention with a
+    known workspace emits `route_abstained` (lane + reason) — the
+    agent's self-disposal IS the learning corpus for the future
+    learnable router."""
+    import web_chain  # sibling registry (lazy: web-only cost)
+
+    agent_type, agent_rationale = recommend_agent_type(
+        features, claim_text, load_specialist_table(agents_dir))
+    hits = web_chain.route_web(features or {})
+    if not hits:
+        reason = ("no web rule fired for the census/features — the agent "
+                  "self-disposes")
+        result = {**web_chain.abstention(web_chain.WEB_LANE, reason),
+                  "rationale": ["no web feature rule fired"],
+                  "agent_type": agent_type,
+                  "agent_rationale": agent_rationale}
+        if ws is not None:
+            try:
+                emit(ws, "orchestrator", web_chain.ROUTE_ABSTAINED,
+                     detail=f"lane=web reason={reason}")
+            except Exception as exc:  # noqa: BLE001 — telemetry never gates
+                warn("route_web_emit", f"{type(exc).__name__}: {exc}")
+        return result
+
+    ordered = sorted(hits, key=lambda h: -h[1])
+    top = max(s for _, s, _ in hits)
+    confidence = round(min(CONFIDENCE_CAP, top), 2)
+    chain: list[str] = []
+    alternatives: list[str] = []
+    for cap, strength, _ in ordered:
+        target = chain if strength >= top else alternatives
+        for entry in resolve_capability(cap, tools):
+            if entry not in chain and entry not in alternatives:
+                target.append(entry)
+    rationale = [reason for _, _, reason in ordered]
+    exact = sum(1 for _c, s, _ in ordered if s >= 0.9)
+    if exact > 1:
+        rationale.append(f"{exact} exact-band rule(s) fired")
+    return {"recommendation": {"chain": chain, "confidence": confidence,
+                               "alternatives": alternatives},
+            "rationale": rationale,
+            "agent_type": agent_type,
+            "agent_rationale": agent_rationale}
+
+
 def route(features: dict, claim_text: str, index_path: Path,
           agents_dir: Path | None = None,
-          ws: Path | None = None) -> dict:
+          ws: Path | None = None, lane: str | None = None) -> dict:
     """Deterministic routing: feature rules + claim overlay → recommendation,
     plus the specialist agent_type recommendation (#310).
 
@@ -781,7 +838,16 @@ def route(features: dict, claim_text: str, index_path: Path,
     deobf composition prior (capability_suggestions) from apkid evidence.
     #54: android toolchain lighting joins the same suggestion list for
     android-flavored dispatches (no workspace needed). A prior only:
-    chain/confidence are never altered by suggestions."""
+    chain/confidence are never altered by suggestions.
+
+    lane="web" switches to the web chain face: census rules resolve to
+    the registered web chains, no rule fired -> the abstention shape
+    (never the binary fallback face — zero static:disasm output on the
+    web lane). lane=None keeps the pre-lane behavior byte-identical
+    (the general any-lane abstention face is a separate card's surface)."""
+    if str(lane or "").strip().lower() == _WEB_LANE:
+        return _web_route(features, claim_text, load_index(index_path),
+                          agents_dir, ws)
     tools = load_index(index_path)
     fhits = feature_hits(features or {})
     chits = claim_hits(claim_text)
@@ -830,11 +896,16 @@ def route(features: dict, claim_text: str, index_path: Path,
 
 
 def format_text(result: dict) -> str:
-    rec = result["recommendation"]
-    lines = [f"recommendation: chain=[{', '.join(rec['chain'])}] "
-             f"confidence={rec['confidence']:.2f}"]
-    if rec["alternatives"]:
-        lines.append(f"alternatives: [{', '.join(rec['alternatives'])}]")
+    rec = result.get("recommendation")
+    if rec is None:
+        lines = [f"router: ABSTAINED — hand to agent "
+                 f"(lane={result.get('lane', 'unknown')}): "
+                 f"{result.get('reason', '')}"]
+    else:
+        lines = [f"recommendation: chain=[{', '.join(rec['chain'])}] "
+                 f"confidence={rec['confidence']:.2f}"]
+        if rec["alternatives"]:
+            lines.append(f"alternatives: [{', '.join(rec['alternatives'])}]")
     if result.get("agent_type"):
         lines.append(f"agent_type: {result['agent_type']}")
     lines.append("rationale:")
@@ -964,8 +1035,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: index file not found: {index_path}", file=sys.stderr)
         return 3
     try:
+        lane = None
+        ws_path = _resolve_ws(args.workspace)
+        try:
+            import lane_spec  # sibling vocabulary (lazy: declared only)
+            lane = lane_spec.declared(ws_path)
+        except Exception as exc:  # noqa: BLE001 — lane read fails open
+            warn("route_lane_read", f"{type(exc).__name__}: {exc}")
         result = route(features, claim_text, index_path,
-                       Path(args.agents_dir) if args.agents_dir else None)
+                       Path(args.agents_dir) if args.agents_dir else None,
+                       ws=ws_path, lane=lane)
     except (OSError, yaml.YAMLError) as exc:
         print(f"error: cannot read index {index_path}: {exc}", file=sys.stderr)
         return 3

@@ -449,15 +449,15 @@ def test_required_checks_has_no_malware_entry():
 def test_lane_registry_splits_implemented_from_stubs():
     """The stub lanes are declared as such (documented stub, not a promise)."""
     import lane_spec
-    assert lane_spec.IMPLEMENTED_LANES == ("malware", "algorithm")
-    assert lane_spec.STUB_LANES == ("protocol", "web", "data", "app")
+    assert lane_spec.IMPLEMENTED_LANES == ("malware", "algorithm", "web")  # web graduated to a registered chain
+    assert lane_spec.STUB_LANES == ("protocol", "data", "app")
     assert set(lane_spec.IMPLEMENTED_LANES) | set(lane_spec.STUB_LANES) == set(LANES)
     for lane in lane_spec.STUB_LANES:
         assert "stub" in lane_spec.material(lane), \
             f"{lane} material line must declare the stub status"
 
 
-@pytest.mark.parametrize("lane", ["protocol", "web", "data", "app"])
+@pytest.mark.parametrize("lane", ["protocol", "data", "app"])
 def test_stub_lane_contract(tmp_path, lane):
     """Per-lane contract: a stub lane initializes without a sample, renders
     no unresolved placeholder and no sample claim, and its toolchain gate is
@@ -481,7 +481,7 @@ def test_stub_lane_contract(tmp_path, lane):
         f"{lane} stub gate must not refuse a clean uv+python host"
 
 
-@pytest.mark.parametrize("lane", ["protocol", "web", "data", "app"])
+@pytest.mark.parametrize("lane", ["protocol", "data", "app"])
 def test_stub_lane_check_set_is_documented_in_lane_spec(lane):
     import lane_spec
     assert lane_spec.REQUIRED_CHECKS[lane] == ("uv", "python",
