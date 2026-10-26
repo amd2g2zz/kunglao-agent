@@ -215,6 +215,29 @@ def _blind_settlement_face(ws: Path, wire, pending) -> dict:
         return out
 
 
+def _distill_trigger_face(ws: Path) -> None:
+    """Online distillation trigger face (its own fail-open cage): scan
+    the just-completed worker's report surface for miss signals and
+    emit/stamp the production trigger rows."""
+    try:
+        with scripts_on_path():
+            import online_distill
+            triggers = online_distill.scan_triggers(ws)
+            for t in triggers:
+                reason = online_distill.refuse_reason(ws, t.token)
+                online_distill.emit_trigger_row(
+                    ws, t, allowed=(not reason), reason=reason)
+            # #487: the stamp carries the problem formulation + the
+            # per-facet coverage matrix (fail-open — a formulation
+            # failure stamps the pre-#487 shape and warns once)
+            formulation = (online_distill.formulate_for_trigger(
+                ws, triggers[0]) if triggers else None)
+            online_distill.stamp_trigger(ws, triggers,
+                                         formulation=formulation)
+    except Exception as exc:  # noqa: BLE001 — capability, never blocks
+        warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
+
+
 def _kernel_faces(ws: Path, session_id: str = "",
                   agent_id: str = "") -> dict | None:
     """The production round-closure kernel faces (step settlement +
@@ -355,23 +378,7 @@ def _kernel_faces(ws: Path, session_id: str = "",
             verification_ladder.drain_t2_queue(ws)
     except Exception as exc:  # noqa: BLE001 — kernel face, never blocks
         warn("round_closure_t2", f"{type(exc).__name__}: {exc}")
-    try:
-        with scripts_on_path():
-            import online_distill
-            triggers = online_distill.scan_triggers(ws)
-            for t in triggers:
-                reason = online_distill.refuse_reason(ws, t.token)
-                online_distill.emit_trigger_row(
-                    ws, t, allowed=(not reason), reason=reason)
-            # #487: the stamp carries the problem formulation + the
-            # per-facet coverage matrix (fail-open — a formulation
-            # failure stamps the pre-#487 shape and warns once)
-            formulation = (online_distill.formulate_for_trigger(
-                ws, triggers[0]) if triggers else None)
-            online_distill.stamp_trigger(ws, triggers,
-                                         formulation=formulation)
-    except Exception as exc:  # noqa: BLE001 — capability, never blocks
-        warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
+    _distill_trigger_face(ws)
 
     return receipt if isinstance(receipt, dict) else None
 

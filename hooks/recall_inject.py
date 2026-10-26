@@ -75,7 +75,6 @@ import sys
 from pathlib import Path
 
 from _path_hygiene import (  # #671 sys.path hygiene authority
-    ensure_scripts_path,
     load_hooks_lib,
     load_module_by_path,
 )

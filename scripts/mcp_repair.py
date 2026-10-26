@@ -269,7 +269,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{mark}] {r['name']} ({r.get('declared_in')}): {p.get('detail')}")
             rep = r.get("repair")
             if rep and rep.get("action") not in (None, "none"):
-                print(f"       repaired via {rep['action']}: {rep.get('old_command')} -> {rep.get('new_command')}")
+                print(f"       repaired via {rep['action']}: "
+                      f"{rep.get('old_command')} -> {rep.get('new_command')}")
             elif rep and rep.get("detail"):
                 print(f"       repair: {rep['detail']}")
         print(f"mcp_repair: {len(rows) - len(failed)}/{len(rows)} servers connect")

@@ -179,59 +179,11 @@ def _validate_pqs(raw) -> list[dict]:
     return questions
 
 
-def confirm(ws: Path, answers: dict) -> dict:
-    """The confirm wall: validate -> record -> merge -> fill -> stamp.
-    Returns a report dict {draft, task_spec, goal_op, goal_op_skipped}."""
-    if not isinstance(answers, dict):
-        raise IntakeDraftError("answers must be a mapping")
-    if answers.get("confirmed") is not True:
-        raise IntakeDraftError(
-            "confirmed: must be literal true — the authority is the "
-            "user's explicit confirm, never an implicit one")
-    if answers.get("classification_confirmed") is not True:
-        raise IntakeDraftError(
-            "classification_confirmed: must be literal true — the lane/"
-            "project_type consequence (probe battery / factor set / "
-            "capabilities) must be shown and accepted, not inherited")
-    draft = load(ws)
-    if draft is None:
-        raise IntakeDraftError(
-            "no intake draft on disk — run scaffold first (the draft is "
-            "the dialogue's durable face; confirming against nothing is "
-            "how the dialogue gets skipped)")
-    if draft.get("confirmed"):
-        raise IntakeDraftError(
-            "draft already confirmed — the confirm is one-way; post-"
-            "confirmation edits go through the goal-operationalization "
-            "re-scope records (R5), never a silent re-confirm")
-
-    pqs = _validate_pqs(answers.get("primary_questions"))
-    fields = {name: _answers_list(answers, name)
-              for name in DRAFT_LIST_FIELDS + OPTIONAL_LIST_FIELDS}
-    for name in ("deliverables", "acceptance", "not_done"):
-        if not fields[name]:
-            raise IntakeDraftError(
-                f"{name}: empty — the confirmed distillation must name "
-                f"it (R1 discipline: a goal without counterexamples is "
-                f"unaudited)")
-    if not fields["diff_vs_verbatim"]:
-        raise IntakeDraftError(
-            "diff_vs_verbatim: empty — silent equivalence; declare the "
-            "delta vs the verbatim task (R2)")
-    from goal_operationalization import RUBBER_STAMPS
-    for entry in fields["diff_vs_verbatim"]:
-        if entry.strip().lower() in RUBBER_STAMPS:
-            raise IntakeDraftError(
-                f"diff_vs_verbatim: {entry.strip()!r} is a rubber stamp "
-                "— silent equivalence is refused (R2)")
-
-    from harness_common import utc_now_z as _utc_now
-    ts = _utc_now()
-    report: dict = {"draft": None, "task_spec": None, "goal_op": None,
-                    "goal_op_skipped": None}
-
-    # 1) the draft record (immutable after confirm — R5's constitution
-    #    discipline starts here, at the pre-registration)
+def _confirm_write_draft(ws: Path, draft: dict, fields: dict,
+                         answers: dict, ts: str, report: dict) -> Path:
+    """Confirm phase 1: write the confirmed draft record (immutable
+    after confirm — R5's constitution discipline starts here, at the
+    pre-registration)."""
     draft.update({
         "confirmed": True,
         "declared_ts": ts,
@@ -243,9 +195,12 @@ def confirm(ws: Path, answers: dict) -> dict:
     out = draft_path(ws)
     out.write_text(yaml.safe_dump(draft, allow_unicode=True,
                                   sort_keys=False), encoding="utf-8")
-    report["draft"] = out
+    return out
 
-    # 2) primary_questions into task_spec.yaml (first-class, addendum 1)
+
+def _confirm_task_spec(ws: Path, answers: dict, report: dict) -> None:
+    """Confirm phase 2: primary_questions into task_spec.yaml
+    (first-class, addendum 1)."""
     spec_path = Path(ws) / "task_spec.yaml"
     if spec_path.is_file():
         try:
@@ -274,8 +229,12 @@ def confirm(ws: Path, answers: dict) -> dict:
                 encoding="utf-8")
             report["task_spec"] = spec_path
 
-    # 3) fill the DRAFT goal-operationalization + stamp declared_ts (the
-    #    ordering the issue mandates: confirm BEFORE the stamp)
+
+def _confirm_goal_op(ws: Path, fields: dict, answers: dict, ts: str,
+                     report: dict) -> None:
+    """Confirm phase 3: fill the DRAFT goal-operationalization +
+    stamp declared_ts (confirm BEFORE the stamp, per the issue
+    ordering)."""
     goal_path = Path(ws) / GOAL_OP_NAME
     if goal_path.is_file():
         try:
@@ -304,6 +263,66 @@ def confirm(ws: Path, answers: dict) -> dict:
                     yaml.safe_dump(goal, allow_unicode=True,
                                    sort_keys=False), encoding="utf-8")
                 report["goal_op"] = goal_path
+
+
+def confirm(ws: Path, answers: dict) -> dict:
+    """The confirm wall: validate -> record -> merge -> fill -> stamp.
+    Returns a report dict {draft, task_spec, goal_op, goal_op_skipped}."""
+    if not isinstance(answers, dict):
+        raise IntakeDraftError("answers must be a mapping")
+    if answers.get("confirmed") is not True:
+        raise IntakeDraftError(
+            "confirmed: must be literal true — the authority is the "
+            "user's explicit confirm, never an implicit one")
+    if answers.get("classification_confirmed") is not True:
+        raise IntakeDraftError(
+            "classification_confirmed: must be literal true — the lane/"
+            "project_type consequence (probe battery / factor set / "
+            "capabilities) must be shown and accepted, not inherited")
+    draft = load(ws)
+    if draft is None:
+        raise IntakeDraftError(
+            "no intake draft on disk — run scaffold first (the draft is "
+            "the dialogue's durable face; confirming against nothing is "
+            "how the dialogue gets skipped)")
+    if draft.get("confirmed"):
+        raise IntakeDraftError(
+            "draft already confirmed — the confirm is one-way; post-"
+            "confirmation edits go through the goal-operationalization "
+            "re-scope records (R5), never a silent re-confirm")
+
+    _validate_pqs(answers.get("primary_questions"))
+    fields = {name: _answers_list(answers, name)
+              for name in DRAFT_LIST_FIELDS + OPTIONAL_LIST_FIELDS}
+    for name in ("deliverables", "acceptance", "not_done"):
+        if not fields[name]:
+            raise IntakeDraftError(
+                f"{name}: empty — the confirmed distillation must name "
+                f"it (R1 discipline: a goal without counterexamples is "
+                f"unaudited)")
+    if not fields["diff_vs_verbatim"]:
+        raise IntakeDraftError(
+            "diff_vs_verbatim: empty — silent equivalence; declare the "
+            "delta vs the verbatim task (R2)")
+    from goal_operationalization import RUBBER_STAMPS
+    for entry in fields["diff_vs_verbatim"]:
+        if entry.strip().lower() in RUBBER_STAMPS:
+            raise IntakeDraftError(
+                f"diff_vs_verbatim: {entry.strip()!r} is a rubber stamp "
+                "— silent equivalence is refused (R2)")
+
+    from harness_common import utc_now_z as _utc_now
+    ts = _utc_now()
+    report: dict = {"draft": None, "task_spec": None, "goal_op": None,
+                    "goal_op_skipped": None}
+
+    report["draft"] = _confirm_write_draft(ws, draft, fields, answers,
+                                           ts, report)
+
+    _confirm_task_spec(ws, answers, report)
+
+    _confirm_goal_op(ws, fields, answers, ts, report)
+
     return report
 
 

@@ -7,7 +7,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -978,6 +979,62 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     return (None, mf_value, view)
 
 
+def _gate_battery(checks: list, paths: dict, payload: dict,
+                  prompt: str, cid) -> int | None:
+    """Run the assembled gate battery: the registration prerequisite
+    (a broken/uncovered registry REFUSES the dispatch — fail-closed),
+    the per-check rejection loop, the facts-snapshot hard marker
+    (anti state-loss spoof) and the best-first priority audit
+    (deviation-reasoning anti-spoof). Returns the reject rc when a gate
+    fires, None when the dispatch survives."""
+    # issue 805: registration is a LAUNCH PREREQUISITE — the battery may
+    # not run one check that is not registered (hooks/battery.yaml, with
+    # its telemetry word + liveness fingerprint). A broken/uncovered
+    # registry REFUSES the dispatch (fail-closed: the gate battery's
+    # native direction — silently ungating would be the B4 posture).
+    try:
+        import battery_registry
+        _unregistered = battery_registry.launch_gate(
+            {n for n, _ in checks} | {'snapshot', 'priority',
+                                      'methodfamily'})
+        if _unregistered:
+            return _reject('batteryreg', _unregistered, paths)
+    except Exception as _exc:  # noqa: BLE001 — a registry-module trouble
+        # must not silently ungate either: refuse with the reason.
+        return _reject('batteryreg',
+                       f'hook battery registry unreadable: '
+                       f'{type(_exc).__name__}: {_exc}', paths)
+    for name, (ok, msg) in checks:
+        if not ok:
+            return _reject(name, msg, paths)
+    # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
+    # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
+    # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
+    # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
+    desc = payload.get('tool_input', {}).get('prompt', '')
+    if 'facts-snapshot:' not in desc:
+        return _reject('snapshot',
+                       'dispatch prompt lacks `facts-snapshot:` marker '
+                       '(S1c v1.9.24 - checkpoint state before dispatch).', paths)
+    # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
+    # check_priority returns (ok, msg, deviated). If the dispatch deviates from
+    # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
+    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
+    # dispatching a different claim without recording why).
+    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
+    if deviated:
+        desc = payload.get('tool_input', {}).get('prompt', '')
+        if 'agent-reasoning:' not in prompt:
+            return _reject('devreason',
+                           'dispatch deviates from priority #1 but has no '
+                           '`agent-reasoning:` field (v1.9.24 anti-spoof). '
+                           f'PRIORITY: {pmsg}', paths)
+        print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
+    elif pmsg:
+        print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    return None
+
+
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
@@ -1163,51 +1220,9 @@ def pre_check(payload: dict, paths: dict) -> int:
         # with guidance pointing at the characterization reference card.
         ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
-    # issue 805: registration is a LAUNCH PREREQUISITE — the battery may
-    # not run one check that is not registered (hooks/battery.yaml, with
-    # its telemetry word + liveness fingerprint). A broken/uncovered
-    # registry REFUSES the dispatch (fail-closed: the gate battery's
-    # native direction — silently ungating would be the B4 posture).
-    try:
-        import battery_registry
-        _unregistered = battery_registry.launch_gate(
-            {n for n, _ in checks} | {'snapshot', 'priority',
-                                      'methodfamily'})
-        if _unregistered:
-            return _reject('batteryreg', _unregistered, paths)
-    except Exception as _exc:  # noqa: BLE001 — a registry-module trouble
-        # must not silently ungate either: refuse with the reason.
-        return _reject('batteryreg',
-                       f'hook battery registry unreadable: '
-                       f'{type(_exc).__name__}: {_exc}', paths)
-    for name, (ok, msg) in checks:
-        if not ok:
-            return _reject(name, msg, paths)
-    # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
-    # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
-    # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
-    # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
-    desc = payload.get('tool_input', {}).get('prompt', '')
-    if 'facts-snapshot:' not in desc:
-        return _reject('snapshot',
-                       'dispatch prompt lacks `facts-snapshot:` marker '
-                       '(S1c v1.9.24 - checkpoint state before dispatch).', paths)
-    # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
-    # check_priority returns (ok, msg, deviated). If the dispatch deviates from
-    # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
-    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
-    # dispatching a different claim without recording why).
-    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
-    if deviated:
-        desc = payload.get('tool_input', {}).get('prompt', '')
-        if 'agent-reasoning:' not in prompt:
-            return _reject('devreason',
-                           'dispatch deviates from priority #1 but has no '
-                           '`agent-reasoning:` field (v1.9.24 anti-spoof). '
-                           f'PRIORITY: {pmsg}', paths)
-        print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
-    elif pmsg:
-        print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    rc = _gate_battery(checks, paths, payload, prompt, cid)
+    if rc is not None:
+        return rc
     # #432 method-family vocabulary gate — the single validation
     # chokepoint (see _method_family_gate). Placed as the LAST validation
     # leg before the ALLOW-tail side effects: dispatches REJECTED by any

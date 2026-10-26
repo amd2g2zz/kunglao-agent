@@ -55,7 +55,8 @@ import shutil
 import subprocess
 import sys
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 from pathlib import Path
 
 from _common import scripts_bootstrap  # noqa: E402  (leaf prologue; imports below)

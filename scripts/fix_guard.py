@@ -92,7 +92,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # posture: settlements are rare; the ledger is the organ; the scan is
 # capped). This constant IS the live bound passed to kunglao_log.tail.
 LEDGER_SCAN_LIMIT = 100_000
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 # ------------------------------------------------------------ pure faces

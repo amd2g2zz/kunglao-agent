@@ -485,6 +485,30 @@ def _action_key_of(row: dict) -> str | None:
     return ak or None
 
 
+def _decay_weights(rows: list[dict], schedule) -> list[float]:
+    """Per-row γ^age weights over the credit stream (append-order age;
+    no wall clock — machine-independent replay).
+
+    Each row is decayed once per LATER observation, at THAT observation's
+    event-time γ (no peeking: the schedule emits γ before the row's own
+    credit is observed). A step_calibration residual occupies a stream
+    position (it takes this row's γ weight) but is NOT an outcome — it
+    never feeds the adaptive EMA (a signed clawback would drag the
+    schedule's γ off its declared range)."""
+    n = len(rows)
+    gammas = [0.0] * n
+    for i, row in enumerate(rows):
+        gammas[i] = schedule.gamma()
+        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
+            schedule.observe(_credit_of(row))
+    weights = [1.0] * n
+    w = 1.0
+    for i in range(n - 2, -1, -1):
+        w *= gammas[i + 1]
+        weights[i] = w
+    return weights
+
+
 def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
          ) -> Fold:
     """DTS-discounted fold over the credit stream. The SHIPPED default
@@ -539,21 +563,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     rows = [r for r in obs
             if isinstance(r, dict) and _credit_of(r) is not None
             and _admits_to_posterior(r)]
-    n = len(rows)
-    gammas = [0.0] * n
-    for i, row in enumerate(rows):
-        gammas[i] = schedule.gamma()
-        # #712: a step_calibration residual occupies a stream position
-        # (it takes this row's γ weight) but is NOT an outcome — it
-        # never feeds the adaptive EMA (a signed clawback would drag the
-        # schedule's γ off its declared range).
-        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
-            schedule.observe(_credit_of(row))
-    weights = [1.0] * n
-    w = 1.0
-    for i in range(n - 2, -1, -1):
-        w *= gammas[i + 1]
-        weights[i] = w
+    weights = _decay_weights(rows, schedule)
     cells: dict[tuple[str, str], CellCounts] = {}
     unkeyed = 0
     for i, row in enumerate(rows):

@@ -5,6 +5,7 @@
 # closure path never ran on the production host class — this leg runs
 # its test subset on a GitHub-hosted windows runner):
 #   lint-hygiene   CI YAML selfcheck + manifest/CLI/structural contracts
+#                  + the ruff static-analysis gate (#846)
 #   docs-contract  docs/README/governance contract tests (-m docs)
 #   unit-fast      pure-unit tier (-m "fast and not docs"), xdist -n auto
 #   integration    everything else (-m "not fast"), xdist -n auto — the
@@ -218,6 +219,18 @@ jobs:
       # ledger freezes the ~199-site inventory; growth fails, cleanup
       # shrinks it in later batches)
       run: uv run python scripts/silent_except_lint.py
+
+    - name: Ruff static-analysis gate (#846 CI leg for the #914 ratchet)
+      # fail-loud gate: the full scripts/ hooks/ tools/ surface must be
+      # ruff-clean under the pyproject ruleset (line-length 100, blunder-
+      # level rules). The #914 legacy ratchet — the per-file-ignores
+      # grandfather block at the tail of [tool.ruff.lint.per-file-ignores]
+      # — is the ONLY sanctioned suppression, and it is shrink-only
+      # (cleared as files are touched; a touched file must land at zero
+      # violations). New or re-touched code introducing a violation
+      # without a ledger entry goes red here; clearing debt lets the
+      # entry shrink in the same change.
+      run: uv run ruff check scripts/ hooks/ tools/
 
     - name: Formal-code marker ratchet (issue/version numbers in comments)
       run: uv run python scripts/formal_code_lint.py

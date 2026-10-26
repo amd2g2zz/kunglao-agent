@@ -49,7 +49,8 @@ REDO_TERMINAL_STATUSES = frozenset({"REFUTED"})
 
 # the agent marker the #461 linkage row writes into detail
 _AGENT_RE = re.compile(r"\bagent=(\S+)")
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _utc_now_z() -> str:

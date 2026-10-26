@@ -69,7 +69,8 @@ REFUTED_ARTIFACT_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 # context budget: the read face returns the most recent notes only.
 MAX_NOTES_PER_DISPATCH = 4
 _DIGEST_LEN = 12
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _now() -> str:

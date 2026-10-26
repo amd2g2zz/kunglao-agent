@@ -3666,7 +3666,6 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                      if (ws / "task_spec.yaml").is_file() else {}) or {}
             _goal = str((_spec or {}).get("goal_verbatim")
                         or "(fill: the user's goal, verbatim)")
-            from harness_common import utc_now_z
             goal_op_path.write_text(yaml.safe_dump({
                 "schema": "goal-operationalization/1",
                 "draft": True,

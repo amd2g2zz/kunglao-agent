@@ -57,7 +57,8 @@ import subprocess
 import sys
 from dataclasses import dataclass, replace
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 from pathlib import Path
 
 import yaml
