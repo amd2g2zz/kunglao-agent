@@ -98,12 +98,13 @@ when that factory exists (lazy import), else the JSONL face above.
 ## Offline index
 
 ``reindex(root)`` — the deterministic offline index over dispatch
-history, à la method_families.reindex: face 1 the q-cell observation
-log (exact signatures), faces 2/3 the #432 usage log and the
-unified-log dispatch rows (no historical signature recoverable — keyed
-under the workspace's CURRENT signature, flagged as approximated and
-counted pending only; credits join through the observe() face, the
-W2-T4 settlement wiring).
+history: face 1 the consolidated observation log (exact signatures —
+since the #804 usage merge it also carries the usage-ledger columns,
+so it is the only live (family, cell) source), face 2 the unified-log
+dispatch rows (no historical signature recoverable — keyed under the
+workspace's CURRENT signature, flagged as approximated and counted
+pending only; credits join through the observe() face, the W2-T4
+settlement wiring).
 
 ## Zero-decision posture
 
@@ -248,9 +249,11 @@ def _resolve_schedule(gamma) -> GammaSchedule:
 
 _SIG_HASH_RE = re.compile(r"^[0-9a-f]{12}$")
 
-# #432 usage-log face (the (family, cell) counting feed) and the
-# unified-log dispatch detail marker both feed reindex
-_USAGE_REL = "runs/method-family-log.jsonl"
+# the unified-log dispatch detail marker feeds reindex's replay face
+# (workspaces with no consolidated experience file). #804 usage merge:
+# the former face 2 (the #432 usage log) is RETIRED — face 1 (the
+# experience file) carries the usage columns since the merge and is
+# the only (family, cell) source for live workspaces.
 _FAMILY_DETAIL_RE = re.compile(r"\bmethod_family=([A-Za-z0-9-]+)")
 
 
@@ -310,6 +313,62 @@ def default_store(ws) -> QCellStore:
              f"posterior bank unusable ({type(exc).__name__}: {exc}) "
              f"— JSONL fallback")
         return JSONLQStore(ws)
+
+
+def _dispatch_rows(ws) -> list[dict]:
+    """The dispatch half of the consolidated observation log — the ONE
+    read face behind the usage projections (#804 usage merge): trusted
+    rows (the learner read face), dispatch source only."""
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.dispatch_rows")
+    return [r for r in rows if isinstance(r, dict)
+            and str(r.get("source") or "") == "dispatch"]
+
+
+def usage_family_map(ws) -> dict[str, str]:
+    """Claim id -> the LAST declared family — the settle-side join of
+    the learning→decision bridge. #804 usage merge: the former
+    usage-log read (method_families.usage_family_map) projects the
+    dispatch observation rows instead — the SAME substrate the fold
+    consumes, one store per write event. Tolerant: family-less rows
+    are skipped (the honest gap), never raise."""
+    out: dict[str, str] = {}
+    for row in _dispatch_rows(ws):
+        cid = str(row.get("claim") or "").strip()
+        fam = str(row.get("method_family") or "").strip()
+        if cid and fam:
+            out[cid] = fam
+    return out
+
+
+def dispatch_method(ws, claim: str) -> dict | None:
+    """The claim's declared method from its LAST dispatch row:
+    ``{family, tools}``. None when the claim never dispatched (the
+    honest gap — no fabricated method). #804 usage merge: the former
+    usage-log read (crystallize.resolve_method over read_usage)."""
+    cid = str(claim or "")
+    found = None
+    for row in _dispatch_rows(ws):
+        if str(row.get("claim") or "") != cid:
+            continue
+        fam = str(row.get("method_family") or "").strip()
+        if not fam:
+            continue
+        found = {"family": fam,
+                 "tools": [str(t) for t in (row.get("tools") or [])
+                           if str(t).strip()]}
+    return found
+
+
+def usage_rows(ws) -> list[dict]:
+    """The usage-ledger PROJECTION of the dispatch rows (#804 usage
+    merge): ``{family, cell, claim}`` — the counting columns the
+    vocabulary module's health face consumes, read from the single
+    substrate."""
+    return [{"family": str(r.get("method_family") or ""),
+             "cell": str(r.get("claim") or ""),
+             "claim": str(r.get("claim") or "")}
+            for r in _dispatch_rows(ws)]
 
 
 # ---------------------------------------------------------------------------
@@ -1048,6 +1107,47 @@ def _coerce_credit(credit, credit_kind, failure_delta):
     return credit_out, failure_delta_out
 
 
+def _usage_cols(tier, tools, view: dict | None) -> tuple:
+    """#804 usage merge: the usage-ledger columns at the append boundary —
+    ``(tier_out, tools_out, triple_or_None)``. A non-int tier drops to
+    None; tools keep stripped non-empty strings; a non-numeric / NaN /
+    out-of-[0,1] propensity degrades to null (the #691 boundary
+    semantics, moved verbatim from append_usage_row). A SUPPLIED view
+    (even the all-None cold-sampler gap) emits the whole triple with
+    explicit nulls inside — the reconciliation receipt, never a
+    fabricated number; an unsupplied view emits nothing (the
+    byte-identical legacy row, the #695 emission discipline)."""
+    tier_out = None
+    if tier is not None:
+        try:
+            tier_out = int(tier)
+        except (TypeError, ValueError):
+            warn("q_cells.append", f"non-int tier dropped: {tier!r}")
+    tools_out = None
+    if isinstance(tools, (list, tuple)):
+        tools_out = [str(t).strip() for t in tools if str(t).strip()]
+    elif tools is not None:
+        warn("q_cells.append", f"non-list tools dropped: {tools!r:.80}")
+    view = view if isinstance(view, dict) else None
+    triple = None
+    if view is not None:
+        propensity = view.get("propensity")
+        if propensity is not None and (
+                isinstance(propensity, bool) or not isinstance(
+                    propensity, (int, float)) or propensity != propensity
+                or not (0.0 <= float(propensity) <= 1.0)):
+            warn("q_cells.append",
+                 f"invalid propensity dropped: {propensity!r}")
+            propensity = None
+        sampled = view.get("sampled_family")
+        prior = view.get("prior_source")
+        triple = {"propensity": (None if propensity is None
+                                 else round(float(propensity), 6)),
+                  "sampled_family": str(sampled).strip() if sampled else None,
+                  "prior_source": str(prior).strip() if prior else None}
+    return tier_out, tools_out, triple
+
+
 def append_observation(ws, signature_hash: str, method_family: str,
                        credit: float | None = None, *, source: str,
                        claim: str | None = None,
@@ -1065,7 +1165,9 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        failure_delta: float | None = None,
                        reason: str | None = None,
                        reward: float | None = None,
-                       confidence_band: str | None = None) -> dict:
+                       confidence_band: str | None = None,
+                       tier=None, tools=None,
+                       sampler_view: dict | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1151,6 +1253,16 @@ def append_observation(ws, signature_hash: str, method_family: str,
         row["reward"] = round(float(reward), 6)
     if confidence_band:
         row["confidence_band"] = str(confidence_band)
+    # #804 usage merge: the usage-ledger columns ride the dispatch row
+    # additively — defaults/absence keep the row byte-identical.
+    tier_out, tools_out, usage_triple = _usage_cols(
+        tier, tools, sampler_view)
+    if tier_out:
+        row["tier"] = tier_out
+    if tools_out:
+        row["tools"] = tools_out
+    if usage_triple is not None:
+        row.update(usage_triple)
     row = _seal.sign_row(row)  # #799: every q-cell row seals at write
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
@@ -1721,7 +1833,9 @@ def record_dispatch_observation(ws, prompt: str, *,
                                 claim: str | None = None,
                                 agent: str | None = None,
                                 fingerprint: str | None = None,
-                                dispatch_id: str | None = None) -> dict:
+                                dispatch_id: str | None = None,
+                                tier=None, tools=None,
+                                sampler_view: dict | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
@@ -1748,23 +1862,30 @@ def record_dispatch_observation(ws, prompt: str, *,
         meta = envelope_meta if isinstance(envelope_meta, dict) else {}
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
-        tier = meta.get("tier", 0)
+        meta_tier = meta.get("tier", 0)   # the arm key's tier dim
+
         # #695 recipe arms: the dispatch-time recipe view (envelope
         # declaration reconciled against the gate's own arm sampler —
         # rlvr.recipe_arms, fail-open to the none gap on any miss)
         view = _recipe_view(ws, family, meta, prompt, agent, claim)
+        # #804 usage merge: the usage-ledger columns ride THIS row —
+        # tier/tools from the dispatch shape, the #691 sampler
+        # reconciliation triple from the gate's view (additive; absence
+        # keeps the row byte-identical).
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
                                  dispatch_id=dispatch_id,
                                  arm_key_col=arm_key(family, recipe,
-                                                     verif, tier,
+                                                     verif, meta_tier,
                                                      meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
                                                  or "dispatch"),
                                  recipe_id=view.get("recipe_id"),
                                  recipe_propensity=view.get("propensity"),
-                                 recipe_source=view.get("source"))
+                                 recipe_source=view.get("source"),
+                                 tier=tier, tools=tools,
+                                 sampler_view=sampler_view)
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig,
                 "recipe": view}
@@ -1817,21 +1938,6 @@ def _count_pending(rows: Iterable[dict], pendings: dict, sig: str,
     return unattributed, approximated
 
 
-def _scan_usage_face(root: Path, pendings: dict) -> tuple[set, int, int, int]:
-    """Face 2 — the #432 usage log (family + claim; NO signature)."""
-    roots: set[Path] = set()
-    scanned = unattributed = approximated = 0
-    for p in sorted(root.rglob(_USAGE_REL)):
-        roots.add(p.parent.parent)
-        rows = _read_jsonl(p)
-        scanned += len(rows)
-        u, a = _count_pending(rows, pendings, _current_sig(p.parent.parent),
-                              lambda r: str(r.get("family") or ""))
-        unattributed += u
-        approximated += a
-    return roots, scanned, unattributed, approximated
-
-
 def _scan_unified_face(root: Path, skip: set[Path],
                        pendings: dict) -> tuple[int, int, int]:
     """Face 3 — unified-log dispatch rows (method_family= in detail)."""
@@ -1860,25 +1966,25 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     explicit constant γ selects the exact-count calibration face).
 
     Face 1 — the consolidated runs/experience.jsonl (authoritative;
-    exact signatures + credits; the #804 de-compat retires the legacy
-    q-cell-log.jsonl scan). Face 2 — the #432 usage log (family + claim, NO
-    signature/credit): keyed under the workspace's CURRENT signature
-    (approximation — historical signatures are unrecoverable from a
-    final-state workspace), counted PENDING only. Face 3 — unified-log
-    dispatch rows carrying method_family= in detail (same
-    approximation); a workspace with its own usage log is counted from
-    that face only (no double count — the method_families.reindex
-    precedence). Rows without a family are unattributed: counted once
-    as the honest gap, never fabricated."""
+    exact signatures + credits; since the #804 usage merge it carries
+    the usage columns too, so it is the only live (family, cell)
+    source — the usage-log face and the legacy q-cell-log.jsonl scan
+    are both retired archives that index NOTHING). Face 2 — unified-log
+    dispatch rows carrying method_family= in detail (the replay
+    approximation: workspaces with no experience file, keyed under the
+    workspace's CURRENT signature, counted PENDING only). Rows without
+    a family are unattributed: counted once as the honest gap, never
+    fabricated."""
     root = Path(root)
     schedule = _resolve_schedule(gamma)
     rows_scanned = unattributed = approximated = 0
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    # #804 de-compat: face 1 scans the consolidated experience file ONLY
-    # — the legacy runs/q-cell-log.jsonl rel is retired (the #721 read
-    # registry in consolidated_ledger.LEGACY remains the archive source).
+    # face 1 scans the consolidated experience file — since the #804
+    # usage merge it carries the usage columns too, so it is the ONLY
+    # (family, cell) face for live workspaces (the usage-log face 2 and
+    # the legacy q-cell-log rel are both retired archives).
     for p in sorted(root.rglob(EXPERIENCE_REL)):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
@@ -1892,11 +1998,7 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     # representative γ for the approximate-count face: the schedule's
     # post-replay γ (what the engine believes after the whole stream)
     rep_gamma = float(schedule.gamma())
-    usage_roots, scanned, unattributed, approximated = _scan_usage_face(
-        root, pendings)
-    rows_scanned += scanned
-    scanned, u3, a3 = _scan_unified_face(root, usage_roots | obs_roots,
-                                         pendings)
+    scanned, u3, a3 = _scan_unified_face(root, obs_roots, pendings)
     rows_scanned += scanned
     unattributed += u3
     approximated += a3

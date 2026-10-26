@@ -58,9 +58,15 @@ def _hypothesis(ws, hid: str, claim_id: str) -> None:
 
 
 def _usage_row(ws, cid: str, family: str) -> None:
-    import method_families as mf
+    """One dispatch observation row via THE substrate append (#804 usage
+    merge: the dispatch row IS the family record the case prior's
+    claim->family join reads)."""
+    from rlvr import q_cells
 
-    mf.append_usage_row(ws, cid, family, "w-test")
+    q_cells.append_observation(
+        ws, "dddd00000000", family, None, source="dispatch", claim=cid,
+        agent="w-test",
+        arm_key_col=q_cells.arm_key(family, "facts_snapshot", "none", 0))
 
 
 def _set_case(ws, case_id: str, alpha: float, beta: float) -> None:
@@ -88,14 +94,22 @@ def _sig(ws):
 
 def test_case_prior_is_the_fourth_source(tmp_path):
     """Settled case Betas join to a family through the update_map →
-    hypothesis claim → usage-row chain and label ``case``."""
+    hypothesis claim → dispatch-row chain and fold taught weights into
+    the case face.
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)
+    """
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"])
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", FAM_A)
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)  # one green observation
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "case"
+    store = _store(ws)
+    assert store._case_prior() == {FAM_A: pytest.approx(1.0)}
+    prior, source = store.proposal_prior_labeled()
+    assert source == "history"
     assert prior == {FAM_A: pytest.approx(1.0)}
 
 
@@ -117,32 +131,42 @@ def test_history_and_llm_prior_win_over_case(tmp_path):
 
 def test_case_prior_red_case_teaches_nothing_upward(tmp_path):
     """A red-dominated case folds zero upward weight — a family taught
-    only by failures is not a candidate the case source proposes."""
+    only by failures is not a candidate the case source proposes.
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"])
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", FAM_A)
     _set_case(ws, "case-kdf", alpha=1.0, beta=2.0)  # one red observation
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "none" and prior == {}
+    assert _store(ws)._case_prior() == {}
 
 
 def test_case_prior_unobserved_case_contributes_nothing(tmp_path):
     """A Beta(1,1) case carries zero evidence over the support — no
-    weight, no source."""
+    weight, no source.
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"])
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", FAM_A)
     _set_case(ws, "case-kdf", alpha=1.0, beta=1.0)
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "none" and prior == {}
+    assert _store(ws)._case_prior() == {}
 
 
 def test_case_prior_shrink_cap_bounds_the_fold(tmp_path):
     """The SHRINK cap bounds one case's folded mass: a huge Beta folds as
     SHRINK_CAP mass, never raw counts (contract rl-signal-contract/1 §1.1
-    — counts are bounded by the γ/cap folding, never normalized)."""
+    — counts are bounded by the γ/cap folding, never normalized).
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     from rlvr import q_cells
 
     ws = _ws(tmp_path)
@@ -159,8 +183,7 @@ def test_case_prior_shrink_cap_bounds_the_fold(tmp_path):
     _hypothesis(ws, "H-3", "C-3")
     _usage_row(ws, "C-3", FAM_B)
     _set_case(ws, "case-c", alpha=35.0, beta=1.0)    # evidence mass 34
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "case"
+    prior = _store(ws)._case_prior()
     # capped masses: A = 8.0, B = 8.0 + 8.0 = 16.0 -> share 1/3 vs 2/3
     # (UNCAPPED it would be 100 vs 134 -> 0.43/0.57)
     assert prior[FAM_A] == pytest.approx(1.0 / 3.0, abs=1e-6)
@@ -170,38 +193,47 @@ def test_case_prior_shrink_cap_bounds_the_fold(tmp_path):
 
 def test_case_prior_unregistered_family_is_filtered(tmp_path):
     """The registry wall: a case joined to a retired/unregistered token
-    never rides the prior (the same filter as every prior face)."""
+    never rides the prior (the same filter as every prior face).
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"])
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", "win-kdf-ladder-totally-unregistered")
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "none" and prior == {}
+    assert _store(ws)._case_prior() == {}
 
 
 def test_case_prior_skips_retired_cases(tmp_path):
     """A retired case left the acceptance net — it keeps collecting no
-    decision-side weight either."""
+    decision-side weight either.
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"], retired=True)
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", FAM_A)
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "none" and prior == {}
+    assert _store(ws)._case_prior() == {}
 
 
 def test_case_prior_without_update_map_is_silent(tmp_path):
     """No update_map = no join = no weight (a case doc that discriminates
-    nothing teaches the sampler nothing)."""
+    nothing teaches the sampler nothing).
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", [], with_map=False)
     _hypothesis(ws, "H-1", "C-1")
     _usage_row(ws, "C-1", FAM_A)
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
-    prior, source = _store(ws).proposal_prior_labeled()
-    assert source == "none" and prior == {}
+    assert _store(ws)._case_prior() == {}
 
 
 def test_case_prior_broken_ledger_fails_open(tmp_path):
@@ -216,7 +248,11 @@ def test_case_prior_broken_ledger_fails_open(tmp_path):
 
 def test_method_sample_labels_the_case_source(tmp_path):
     """The sampler receipt carries prior_source=case when only cases have
-    settled — the issue's Face 3 acceptance read."""
+    settled — the issue's Face 3 acceptance read.
+    (#804 usage merge: the case join and the earned history read ONE
+    substrate — the dispatch observation rows — so a case-joined
+    workspace always carries earned history and the #691 chain order
+    keeps history first; the case face is pinned at its own unit face.)"""
     ws = _ws(tmp_path)
     _case_doc(ws, "case-kdf", ["H-1"])
     _hypothesis(ws, "H-1", "C-1")
@@ -224,17 +260,17 @@ def test_method_sample_labels_the_case_source(tmp_path):
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
     receipt = _store(ws).method_sample(_sig(ws))
     assert receipt is not None
-    assert receipt["prior_source"] == "case"
     assert receipt["family"] == FAM_A
+    assert receipt["prior_source"] == "history"
 
 
 # ------------------------- the decision-side consumption (usage row read)
 
 
 def test_reconcile_declaration_gains_the_case_draw(tmp_path):
-    """The #691 reconciliation view — the usage row's sampled_family
-    source — draws from the case prior on a case-only workspace: the
-    sampled family is non-empty where it used to be the cold gap."""
+    """The #691 reconciliation view — the dispatch row's sampled_family
+    source — draws from the learned prior: the sampled family is
+    non-empty where it used to be the cold gap."""
     from rlvr import strategy_store as ss
 
     ws = _ws(tmp_path)
@@ -244,14 +280,17 @@ def test_reconcile_declaration_gains_the_case_draw(tmp_path):
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
     view = ss.reconcile_declaration(ws, FAM_A)
     assert view["sampled_family"] == FAM_A
-    assert view["prior_source"] == "case"
+    assert view["prior_source"] == "history"
     assert view["propensity"] is not None and view["propensity"] > 0.0
 
 
-def test_usage_row_records_nonempty_sampled_family(tmp_path):
-    """The acceptance metric: usage rows carry a non-empty
+def test_dispatch_row_records_nonempty_sampled_family(tmp_path):
+    """The acceptance metric: dispatch observation rows carry a non-empty
     ``sampled_family`` once the case prior exists — written through THE
-    producer face (append_usage_row) with the reconciliation view."""
+    substrate append with the reconciliation view (#804 usage merge: the
+    #773 W2 wiring lands the triple on the dispatch row, not a side
+    ledger)."""
+    from rlvr import q_cells
     from rlvr import strategy_store as ss
 
     ws = _ws(tmp_path)
@@ -261,14 +300,23 @@ def test_usage_row_records_nonempty_sampled_family(tmp_path):
     _set_case(ws, "case-kdf", alpha=2.0, beta=1.0)
     view = ss.reconcile_declaration(ws, FAM_A)
     assert view["sampled_family"], view
-    import method_families as mf
 
     # the retry's ALLOW tail records the reconciliation view (the #773
-    # W2 wiring) — the sampled exit is durable in the usage row
-    mf.append_usage_row(ws, "C-1", FAM_A, "w-test",
-                        propensity=view.get("propensity"),
-                        sampled_family=view.get("sampled_family"),
-                        prior_source=view.get("prior_source"))
-    rows = mf.read_usage(ws)
+    # W2 wiring) — the sampled exit is durable on the dispatch row
+    q_cells.append_observation(ws, "dddd00000001", FAM_A, None,
+                               source="dispatch", claim="C-1",
+                               agent="w-test",
+                               sampler_view={"propensity":
+                                             view.get("propensity"),
+                                             "sampled_family":
+                                             view.get("sampled_family"),
+                                             "prior_source":
+                                             view.get("prior_source")})
+    rows = q_cells.JSONLQStore(ws).observations()
     assert rows and rows[-1]["sampled_family"] == FAM_A
-    assert rows[-1]["prior_source"] == "case"
+    # the recorded source is the reconciliation view's OWN label — the
+    # ride is the pin, not the chain position (#804 usage merge: the
+    # join and the earned history read ONE substrate, so a case-joined
+    # workspace always carries earned history and the #691 order keeps
+    # history first)
+    assert rows[-1]["prior_source"] == view.get("prior_source")

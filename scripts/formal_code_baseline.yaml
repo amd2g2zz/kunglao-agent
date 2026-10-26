@@ -22,7 +22,7 @@ files:
   hooks/worker_budget.py: 7
   hooks/worker_budget_core.py: 52
   hooks/worker_budget_gates.py: 130
-  hooks/worker_budget_sinks.py: 139
+  hooks/worker_budget_sinks.py: 144
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 39
@@ -108,7 +108,7 @@ files:
   scripts/eval_corpus_lint.py: 10
   scripts/eval_crypto.py: 4
   scripts/eval_dataset.py: 15
-  scripts/eval_loop_runner.py: 38
+  scripts/eval_loop_runner.py: 39
   scripts/eval_matrix_report.py: 4
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
@@ -126,7 +126,7 @@ files:
   scripts/experiments/rc1_econ_replay.py: 5
   scripts/external_kicker.py: 41
   scripts/failure_analysis_gate.py: 58
-  scripts/feature_mining.py: 4
+  scripts/feature_mining.py: 5
   scripts/feedback.py: 3
   scripts/fix_guard.py: 2
   scripts/formal_code_lint.py: 5
@@ -183,7 +183,7 @@ files:
   scripts/mcp_probe.py: 42
   scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
-  scripts/method_families.py: 7
+  scripts/method_families.py: 8
   scripts/migrate_facts.py: 12
   scripts/mission_ledger.py: 27
   scripts/mission_stall.py: 10
@@ -235,6 +235,7 @@ files:
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
+  scripts/rlvr/crystallize.py: 1
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
   scripts/rlvr/expansion.py: 4
@@ -258,7 +259,7 @@ files:
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 150
+  scripts/rlvr/q_cells.py: 158
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/refutation_fold.py: 1
   scripts/rlvr/reward.py: 10

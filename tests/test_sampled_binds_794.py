@@ -62,12 +62,13 @@ def _seed_history(ws: Path, family: str, n: int = 3) -> None:
                                    source='dispatch', claim=f'seed-{i}')
 
 
-def _usage_rows(ws: Path) -> list[dict]:
-    p = ws / 'runs' / 'method-family-log.jsonl'
-    if not p.is_file():
-        return []
-    return [json.loads(ln) for ln in
-            p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+def _usage_rows(ws: Path, claim: str = "C-001") -> list[dict]:
+    """The gated claim"s dispatch observation rows (#804 usage merge:
+    the former usage-log read — the dispatch row IS the record)."""
+    from rlvr import q_cells
+    return [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("source") == "dispatch"
+            and r.get("claim") == claim]
 
 
 def _events(ws: Path, action: str) -> list[dict]:
@@ -109,7 +110,7 @@ def test_silent_deviation_rejected_sampled_family_is_the_exit(
         f"RED (#794 R2): the silent deviation passed (rc={rc}) — the "
         f"sampler did not bind; err={err[-300:]}")
     assert 'static-decompile' in err, "guidance must name the sampled exit"
-    assert _usage_rows(ws) == [], "a rejected dispatch writes no usage row"
+    assert _usage_rows(ws) == [], "a rejected dispatch records no row"
     assert _events(ws, 'sample_deviation') == []
 
 
@@ -133,7 +134,7 @@ def test_reasoned_deviation_with_zero_propensity_rejected(tmp_path, capsys):
 def test_coherent_reasoned_deviation_passes_and_records(
         tmp_path, capsys, monkeypatch):
     """deviates + recorded reason + propensity > 0 -> the dispatch passes,
-    the usage row keeps the reconciliation, and the sample_deviation event
+    the dispatch row keeps the reconciliation, and the sample_deviation event
     carries the reason AND the positive propensity (the 留痕 face)."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
@@ -150,7 +151,7 @@ def test_coherent_reasoned_deviation_passes_and_records(
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
     row = _usage_rows(ws)[-1]
-    assert row['family'] == 'dynamic-trace'
+    assert row['method_family'] == 'dynamic-trace'
     assert row['sampled_family'] == 'static-decompile'
     assert row['propensity'] == 0.4
     evs = _events(ws, 'sample_deviation')

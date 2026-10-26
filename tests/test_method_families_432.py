@@ -230,21 +230,23 @@ def test_pre_check_rejects_bare_other(tmp_path, capsys):
 
 
 def test_pre_check_accepts_registered_token_and_records_usage(tmp_path, capsys):
-    """ALLOW face: the validated token lands in the countable usage log
-    (runs/method-family-log.jsonl), cell = the claim (W2 re-keys cells to
-    state signatures; the vocabulary/counting face lands first)."""
+    """ALLOW face: the validated token lands in the countable substrate —
+    the dispatch observation row carries family + cell = the claim (the
+    #804 usage merge: the usage-ledger columns ride the consolidated
+    experience row; the side usage log is retired)."""
+    from rlvr import q_cells
+
     ws = tmp_path / 'ws'
     rc = sinks.pre_check(
         _dispatch_payload(_full_prompt(family='static-decompile')),
         _min_paths(ws))
     assert rc == 0, _stderr(capsys)
-    rows = [json.loads(ln) for ln in
-            (ws / 'runs' / 'method-family-log.jsonl').read_text(
-                encoding='utf-8').splitlines() if ln.strip()]
+    rows = q_cells.JSONLQStore(ws).observations()
     assert len(rows) == 1
-    assert rows[0]['family'] == 'static-decompile'
-    assert rows[0]['cell'] == 'C-001'
-    assert rows[0]['schema'] == 'method-family-usage/1'
+    assert rows[0]['method_family'] == 'static-decompile'
+    assert rows[0]['claim'] == 'C-001'
+    assert rows[0]['schema'] == q_cells.OBS_SCHEMA
+    assert rows[0]['source'] == 'dispatch'
 
 
 def test_pre_check_accepts_other_and_quarantines(tmp_path, capsys):
@@ -263,9 +265,12 @@ def test_pre_check_accepts_other_and_quarantines(tmp_path, capsys):
     assert q[0]['claim'] == 'C-001'
 
 
-def test_pre_check_accepts_v0_prose_marker(tmp_path, capsys):
-    """v0 dispatches declare the same field as a prose marker — one
-    contract, two declaration faces (the #105 intent precedent)."""
+def test_pre_check_rejects_v0_prose_marker_as_undeclared(tmp_path, capsys):
+    """#804 de-compat (R3): the v0 prose marker is a replay-only marker,
+    retired with the usage-write closure — a prose-only declaration is
+    the UNDECLARED loud gap (the envelope field is the ONE declaration
+    face; a prose ALLOW would lose its family record, the observation
+    row being envelope-only). The REJECT names the sampled exit."""
     ws = tmp_path / 'ws'
     prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
               '"tier": 1, "tools": ["grep"]}}\n'
@@ -273,8 +278,8 @@ def test_pre_check_accepts_v0_prose_marker(tmp_path, capsys):
               'facts-snapshot: 1 facts\n'
               'method-family: static-decompile')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
-    assert rc == 0, _stderr(capsys)
-    assert (ws / 'runs' / 'method-family-log.jsonl').exists()
+    assert rc == 2, _stderr(capsys)
+    assert not (ws / 'runs' / 'method-family-log.jsonl').exists()
 
 
 def test_non_dispatch_prompts_are_not_gated(tmp_path, capsys):
@@ -286,6 +291,8 @@ def test_non_dispatch_prompts_are_not_gated(tmp_path, capsys):
         _min_paths(ws))
     assert rc == 0, _stderr(capsys)
     assert not (ws / 'runs' / 'method-family-log.jsonl').exists()
+    from rlvr import q_cells
+    assert q_cells.JSONLQStore(ws).observations() == []
 
 
 def test_registry_outage_rejects_fail_closed(tmp_path, capsys, monkeypatch):
@@ -375,18 +382,18 @@ def test_triage_never_auto_promotes(tmp_path):
 # E. replay re-index (EMBEDDED fixture: >= 3 cells with n >= 3)
 # ---------------------------------------------------------------------------
 
-def _write_usage(ws: Path, rows: list[dict]) -> None:
-    p = ws / 'runs' / 'method-family-log.jsonl'
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text('\n'.join(json.dumps(r) for r in rows) + '\n',
-                 encoding='utf-8')
+def _seed_dispatch(ws: Path, cell: str, family: str,
+                   claim: str | None = None) -> None:
+    """One dispatch observation row (#804 usage merge: the usage-ledger
+    columns ride the consolidated substrate; the former usage-log
+    fixture writer is retired — regeneration, not hand-merge)."""
+    from rlvr import q_cells
 
-
-def _usage_row(cell: str, family: str, ts: str = '2026-09-28T01:00:00Z',
-               claim: str | None = None) -> dict:
-    return {'schema': 'method-family-usage/1', 'ts': ts,
-            'claim': claim or cell, 'cell': cell, 'family': family,
-            'agent': 'w-test', 'tier': 1, 'tools': ['grep']}
+    q_cells.append_observation(ws, 'aaaa00000000', family, None,
+                               source='dispatch', claim=claim or cell,
+                               agent='w-test', tier=1, tools=['grep'],
+                               arm_key_col=q_cells.arm_key(
+                                   family, 'facts_snapshot', 'none', 1))
 
 
 def test_reindex_embedded_fixture_three_cells_n3(tmp_path):
@@ -396,8 +403,8 @@ def test_reindex_embedded_fixture_three_cells_n3(tmp_path):
     root = tmp_path / 'campaign'
     for cell in ('C-001', 'C-002', 'C-003'):
         ws = root / f'ws-{cell}'
-        _write_usage(ws, [_usage_row(cell, 'static-decompile', claim=cell)
-                          for _ in range(3)])
+        for _ in range(3):
+            _seed_dispatch(ws, cell, 'static-decompile', claim=cell)
     # legacy face: a unified-log dispatch row WITHOUT method_family
     legacy = root / 'ws-legacy' / 'runs' / 'logs'
     legacy.mkdir(parents=True, exist_ok=True)
@@ -436,7 +443,7 @@ def test_reindex_empty_root_is_honest_zero(tmp_path):
 def test_health_never_fills(tmp_path):
     """Registered vocabulary with zero usage is dead weight — surfaced."""
     ws = tmp_path / 'ws'
-    _write_usage(ws, [_usage_row('C-001', 'static-decompile')])
+    _seed_dispatch(ws, 'C-001', 'static-decompile')
     health = mf.family_health(ws)
     used = {'static-decompile'}
     assert health['never_fills']
@@ -445,34 +452,33 @@ def test_health_never_fills(tmp_path):
 
 def test_health_dominates_all(tmp_path):
     ws = tmp_path / 'ws'
-    rows = ([_usage_row(f'C-00{i}', 'static-decompile') for i in range(1, 10)]
-            + [_usage_row('C-010', 'dynamic-trace')])
-    _write_usage(ws, rows)
+    for i in range(1, 10):
+        _seed_dispatch(ws, f'C-00{i}', 'static-decompile')
+    _seed_dispatch(ws, 'C-010', 'dynamic-trace')
     health = mf.family_health(ws)
     assert health['dominates_all']['family'] == 'static-decompile'
     ws2 = tmp_path / 'ws2'
-    _write_usage(ws2, [_usage_row(f'C-00{i}', 'static-decompile')
-                       for i in (1, 2)]
-                 + [_usage_row('C-003', 'dynamic-trace')
-                    for _ in range(2)])
+    for i in (1, 2):
+        _seed_dispatch(ws2, f'C-00{i}', 'static-decompile')
+    for _ in range(2):
+        _seed_dispatch(ws2, 'C-003', 'dynamic-trace')
     assert mf.family_health(ws2)['dominates_all'] is None
 
 
 def test_health_other_share_persistent(tmp_path):
     ws = tmp_path / 'ws'
-    rows = ([_usage_row(f'C-00{i}', 'other(x)'.replace('x', 'gap reason'))
-             for i in (1, 2, 3)]
-            + [_usage_row(f'C-00{i}', 'static-decompile')
-               for i in (4, 5, 6, 7, 8, 9, 10, 11, 12)])
-    _write_usage(ws, rows)
+    for i in (1, 2, 3):
+        _seed_dispatch(ws, f'C-00{i}', 'other(gap reason)')
+    for i in range(4, 13):
+        _seed_dispatch(ws, f'C-00{i}', 'static-decompile')
     health = mf.family_health(ws)
     assert health['other_share_persistent'] is not None
     # NOT persistent: same share concentrated in ONE cell
     ws2 = tmp_path / 'ws2'
-    _write_usage(ws2, [_usage_row('C-001', 'other(gap reason)')
-                       for _ in range(3)]
-                 + [_usage_row(f'C-00{i}', 'static-decompile')
-                    for i in range(2, 12)])
+    for _ in range(3):
+        _seed_dispatch(ws2, 'C-001', 'other(gap reason)')
+    for i in range(2, 12):
+        _seed_dispatch(ws2, f'C-00{i}', 'static-decompile')
     assert mf.family_health(ws2)['other_share_persistent'] is None
 
 
@@ -484,7 +490,7 @@ def test_q_report_renders_family_health(tmp_path):
     doc = xt.q_report(ws)
     assert doc['schema'] == 'q-report/1'
     assert 'method_family_health' in doc
-    _write_usage(ws, [_usage_row('C-001', 'static-decompile')])
+    _seed_dispatch(ws, 'C-001', 'static-decompile')
     doc2 = xt.q_report(ws)
     assert doc2['method_family_health']['never_fills']
 

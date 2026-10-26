@@ -152,7 +152,7 @@ files:
   scripts/eval_dataset.py:
     r1: 5
   scripts/eval_loop_runner.py:
-    r1: 10
+    r1: 11
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -295,7 +295,7 @@ files:
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/method_families.py:
-    r1: 6
+    r1: 5
   scripts/migrate_facts.py:
     r1: 7
   scripts/mission_ledger.py:
@@ -393,6 +393,8 @@ files:
     r1: 1
   scripts/rlvr/compose.py:
     r1: 5
+  scripts/rlvr/crystallize.py:
+    r1: 1
   scripts/rlvr/episode_pool.py:
     r1: 3
   scripts/rlvr/episode_schema.py:
@@ -434,7 +436,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 76
+    r1: 83
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/refutation_fold.py:
@@ -660,9 +662,9 @@ files:
   tests/test_bp_matrix_faces_546.py:
     r1: 1
   tests/test_bridge_779.py:
-    r1: 7
+    r1: 9
   tests/test_bridge_campaign_779.py:
-    r1: 5
+    r1: 8
   tests/test_budget_channel_862.py:
     r1: 7
   tests/test_builtin_skills_flag_25.py:
@@ -697,7 +699,7 @@ files:
     r1: 3
     r2: 1
   tests/test_case_prior_779.py:
-    r1: 3
+    r1: 15
   tests/test_censored_review_548.py:
     r1: 1
   tests/test_challenge_ledger_818.py:
@@ -812,6 +814,8 @@ files:
     r1: 3
   tests/test_crypto_tool.py:
     r1: 2
+  tests/test_crystallization_686.py:
+    r1: 1
   tests/test_dead_code_removal.py:
     r1: 12
   tests/test_dead_letter.py:
@@ -839,7 +843,7 @@ files:
     r1: 17
     r2: 1
   tests/test_decompat_804.py:
-    r1: 7
+    r1: 13
   tests/test_decompile_context.py:
     r1: 1
   tests/test_dedup_319.py:
@@ -893,7 +897,7 @@ files:
   tests/test_dispatch_contract.py:
     r1: 1
   tests/test_dispatch_executor_773.py:
-    r1: 2
+    r1: 4
   tests/test_dispatch_gate_237_passthrough.py:
     r1: 4
   tests/test_dispatch_intent_105.py:
@@ -975,7 +979,7 @@ files:
   tests/test_eval_harness.py:
     r1: 16
   tests/test_eval_loop_closure_523.py:
-    r1: 1
+    r1: 2
   tests/test_eval_loop_runner_334.py:
     r1: 1
   tests/test_eval_matrix_ws5.py:
@@ -1304,7 +1308,7 @@ files:
   tests/test_meta_policy_825.py:
     r1: 2
   tests/test_method_families_432.py:
-    r1: 6
+    r1: 8
   tests/test_migrate_facts_809.py:
     r1: 1
   tests/test_milestone_readouts_585.py:
@@ -1441,7 +1445,7 @@ files:
   tests/test_python_floor.py:
     r1: 1
   tests/test_q_cells_429.py:
-    r1: 12
+    r1: 14
     r2: 2
   tests/test_qtable_p3.py:
     r1: 5
@@ -1482,7 +1486,7 @@ files:
   tests/test_register_writer_516.py:
     r1: 2
   tests/test_registry_admission_546.py:
-    r1: 3
+    r1: 4
   tests/test_reject_emit_624.py:
     r1: 1
   tests/test_release_receipt.py:
@@ -1532,7 +1536,7 @@ files:
   tests/test_rho_verifier_823p2.py:
     r1: 1
   tests/test_rl_output_path_691.py:
-    r1: 4
+    r1: 5
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
@@ -1572,7 +1576,7 @@ files:
   tests/test_sample_govern_430.py:
     r1: 2
   tests/test_sampled_binds_794.py:
-    r1: 3
+    r1: 4
   tests/test_sanction_datetime_47.py:
     r1: 5
   tests/test_sanitize.py:
@@ -1634,7 +1638,7 @@ files:
   tests/test_specialist_contract_expansion.py:
     r1: 8
   tests/test_specialist_gate.py:
-    r1: 4
+    r1: 5
   tests/test_stale_workspace_gate_748.py:
     r1: 1
   tests/test_stalled_remedy_full_cycle_249.py:

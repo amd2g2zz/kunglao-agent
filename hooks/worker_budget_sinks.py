@@ -659,7 +659,9 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
                            agent_name: str,
-                           dispatch_id: str | None = None) -> None:
+                           dispatch_id: str | None = None,
+                           tier=None, tools=None,
+                           sampler_view: dict | None = None) -> None:
     """#429 §4: record the (signature_hash, method_family) observation
     at the dispatch ALLOW tail — the Q-cell data spine for the TS
     envelope sampler (scripts/rlvr/q_cells.py).
@@ -681,7 +683,8 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
             meta = None
         _qc429.record_dispatch_observation(
             paths.get('workspace'), prompt, envelope_meta=meta,
-            claim=cid, agent=agent_name, dispatch_id=dispatch_id)
+            claim=cid, agent=agent_name, dispatch_id=dispatch_id,
+            tier=tier, tools=tools, sampler_view=sampler_view)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('qcell_record', f'{type(exc).__name__}: {exc}')
 
@@ -690,7 +693,8 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
                         prompt: str = '',
                         method_family: str | None = None,
-                        dispatch_id: str | None = None) -> None:
+                        dispatch_id: str | None = None,
+                        sampler_view: dict | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -727,7 +731,9 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
     # method_family declared on the envelope) — the sampler's data spine.
     # Fail-open inside; rejected dispatches above never reach this line.
-    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id)
+    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id,
+                           tier=tier, tools=tools,
+                           sampler_view=sampler_view)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -845,7 +851,8 @@ def _gate_sample(ws) -> dict:
 
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
-                        tools: list) -> tuple[int | None, str | None]:
+                        tools: list) -> tuple[int | None, str | None,
+                                              dict | None]:
     """#432: the method-family vocabulary gate — the single validation
     chokepoint for the dispatch's method_family declaration (v1 envelope
     field or v0 prose marker; ONE contract, two declaration faces).
@@ -858,23 +865,27 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     validator cannot read (2026-09-28 owner ruling posture); the
     other(<one-line>) escape passes and is quarantined for triage.
     Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
-    turns an ALLOW into anything else. Returns (rc, token): rc=2 means
-    REJECT already emitted; token feeds the lifecycle row so the unified
-    log is replay-re-indexable. Callers pass cid=None to skip (the leg
-    fires only on a recognized dispatch shape — a plain Agent prompt is
-    not a kunglao dispatch and keeps the pre-#432 behavior).
+    turns an ALLOW into anything else. Returns (rc, token, view):
+    rc=2 means REJECT already emitted; token feeds the lifecycle row so
+    the unified log is replay-re-indexable; view is the #691 sampler
+    reconciliation view (None on every reject path) — since the #804
+    usage merge it rides the dispatch observation row, not a side
+    ledger. Callers pass cid=None to skip (the leg fires only on a
+    recognized dispatch shape — a plain Agent prompt is not a kunglao
+    dispatch and keeps the pre-#432 behavior).
 
     #691: the validated declaration is ALSO reconciled against the
-    gate's own sampler draw (see _sample_reconciliation) — the usage
-    row carries propensity + sampled_family + prior_source, and a
-    deviation emits the recorded-decision ``sample_deviation`` event.
+    gate's own sampler draw (see _sample_reconciliation) — the
+    reconciliation triple (propensity + sampled_family + prior_source)
+    rides the dispatch observation row since the #804 usage merge, and
+    a deviation emits the recorded-decision ``sample_deviation`` event.
     The reconciliation NEVER rejects for a DECLARED family (fail-open
     + warn: deviation = recorded decision, 2026-10-14 amendment) — the
     one #773 W2 exception is the UNDECLARED case: with sampler material
     the gate rejects once so the sampled family becomes the exit
     (silence is not an override; owner directive 2026-10-18)."""
     if cid is None:
-        return (None, None)
+        return (None, None, None)
     if _mf432 is None:
         # partial deployment without the registry module — the gate cannot
         # see, so it must not wave the dispatch through (fail-closed)
@@ -882,7 +893,7 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
             'methodfamily',
             'method-family registry module unavailable (scripts/'
             'method_families.py not importable) — fail-closed per the '
-            '2026-09-28 owner ruling; repair the deployment.', paths), None)
+            '2026-09-28 owner ruling; repair the deployment.', paths), None, None)
     mf_meta = None
     try:
         mf_meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
@@ -909,13 +920,13 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                 f"{sampled.get('propensity')}, prior "
                 f"{sampled.get('prior_source')}): declaring it makes the "
                 "sampled exit durable in the usage row.",
-                paths), None)
+                paths), None, None)
     # the ws threads the overlay admission path: a discovered arm
     # validates only when THIS workspace carries its expansion receipt
     mf_ok, mf_msg = _mf432.validate_method_family(
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
-        return (_reject('methodfamily', mf_msg, paths), None)
+        return (_reject('methodfamily', mf_msg, paths), None, None)
     # #691: the declaration reconciliation view (fail-open gap on any
     # miss) rides the usage row — the recorded sample-vs-declared pair
     # the issue measured absent from runs/method-family-log.jsonl.
@@ -953,12 +964,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                 "the sampled family, or record the override with an "
                 "`agent-reasoning:` line AND declare a family the current "
                 "policy actually supports (propensity > 0).",
-                paths), None)
-    _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
-                            row_agent, tier, tools,
-                            propensity=view.get('propensity'),
-                            sampled_family=view.get('sampled_family'),
-                            prior_source=view.get('prior_source'))
+                paths), None, None)
+    # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
+    # #691 reconciliation view rides the dispatch observation row (the
+    # ALLOW tail's lifecycle record), never a parallel ledger.
     mf_other = _mf432.parse_other_detail(mf_value)
     if mf_other is not None:
         _mf432.append_quarantine_row(paths.get('workspace'), cid,
@@ -966,7 +975,7 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     if view.get('deviates'):
         _emit_sample_deviation(paths.get('workspace'), cid, mf_value,
                                view, prompt)
-    return (None, mf_value)
+    return (None, mf_value, view)
 
 
 def pre_check(payload: dict, paths: dict) -> int:
@@ -1203,8 +1212,8 @@ def pre_check(payload: dict, paths: dict) -> int:
     # chokepoint (see _method_family_gate). Placed as the LAST validation
     # leg before the ALLOW-tail side effects: dispatches REJECTED by any
     # battery gate keep their pre-#432 faces byte-identical.
-    mf_rc, mf_value = _method_family_gate(paths, prompt, cid, row_agent,
-                                          tier, tools)
+    mf_rc, mf_value, mf_view = _method_family_gate(paths, prompt, cid,
+                                                   row_agent, tier, tools)
     if mf_rc is not None:
         return mf_rc
     # issue 805: the battery's LIVENESS EVIDENCE — a full pass lands ONE
@@ -1257,7 +1266,8 @@ def pre_check(payload: dict, paths: dict) -> int:
         print(f'[kunglao-agent] dispatch-id mint WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
-                        method_family=mf_value, dispatch_id=_did800)
+                        method_family=mf_value, dispatch_id=_did800,
+                        sampler_view=mf_view)
     # #800: the approval-point side effects are ONE claims_store
     # transaction — intent journal first, then the steps (anchor nonce,
     # launch stash, ONE atomic register rewrite carrying the #624 flip +

@@ -55,8 +55,15 @@ def _ws(tmp_path: Path) -> Path:
 
 
 def _usage(ws: Path, claim: str, family: str = FAM) -> None:
-    method_families.append_usage_row(ws, claim, family, "analyst",
-                                     tools=list(TOOLS))
+    """The dispatch observation row (#804 usage merge: resolve_method
+    reads the substrate; the former usage-log append is retired)."""
+    from rlvr import q_cells
+
+    q_cells.append_observation(ws, "eeee00000000", family, None,
+                               source="dispatch", claim=claim,
+                               agent="analyst", tools=list(TOOLS),
+                               arm_key_col=q_cells.arm_key(
+                                   family, "facts_snapshot", "none", 0))
 
 
 def _facts_index(ws: Path, claim: str, status: str = "PROVEN") -> None:

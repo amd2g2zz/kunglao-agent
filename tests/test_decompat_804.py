@@ -250,3 +250,280 @@ def test_bare_import_posteriors_is_unambiguous():
         for k in [k for k in sys.modules if k.startswith("posteriors")]:
             del sys.modules[k]
         sys.modules.update(saved_mod)
+
+
+# ------------- 8. the usage ledger merges into the dispatch obs row
+# (#804 named follow-up, wave-2: one substrate per write event — the
+# usage-ledger columns (tier / tools / propensity / sampled_family /
+# prior_source) ride the dispatch observation row additively; the read
+# faces project it; the old usage write face closes.)
+
+_V1_DECL = '{"kunglao_dispatch": {"method_family": "static-symbolic"}}'
+_USAGE_COLS = ("tier", "tools", "propensity", "sampled_family",
+               "prior_source")
+
+
+def _record_usage_merged(ws, **kw):
+    out = q_cells.record_dispatch_observation(
+        ws, _V1_DECL, envelope_meta={"method_family": "static-symbolic"},
+        claim="C-804", agent="w-test", **kw)
+    assert out["appended"] is True, out
+    return q_cells.JSONLQStore(ws).observations()[-1]
+
+
+def test_dispatch_row_carries_the_usage_columns(tmp_path):
+    """R1 (additive): the dispatch observation row carries the usage-
+    ledger columns — one substrate per dispatch, not two parallel write
+    faces for the same event."""
+    row = _record_usage_merged(
+        tmp_path, tier=2, tools=["grep", "bash"],
+        sampler_view={"sampled_family": "dynamic-trace", "propensity": 0.4,
+                      "prior_source": "history"})
+    assert row["tier"] == 2
+    assert row["tools"] == ["grep", "bash"]
+    assert row["propensity"] == 0.4
+    assert row["sampled_family"] == "dynamic-trace"
+    assert row["prior_source"] == "history"
+
+
+def test_usage_columns_absent_when_not_supplied(tmp_path):
+    """The additive-column discipline: a dispatch recorded without the
+    usage view keeps the pre-merge row shape — absent keys, never null
+    padding (byte-identity for every pre-merge writer)."""
+    row = _record_usage_merged(tmp_path)
+    for k in _USAGE_COLS:
+        assert k not in row, f"{k} must stay absent when not supplied"
+
+
+def test_sampler_triple_rides_together_or_not_at_all(tmp_path):
+    """Partial material still emits the WHOLE triple (explicit nulls
+    inside — the #695 recipe-triple precedent); defaults (tier 0, empty
+    tools) never pad the row."""
+    row = _record_usage_merged(
+        tmp_path, tier=0, tools=[],
+        sampler_view={"sampled_family": "static-symbolic"})
+    assert row["sampled_family"] == "static-symbolic"
+    assert row["propensity"] is None
+    assert row["prior_source"] is None
+    assert "tier" not in row and "tools" not in row
+
+
+def test_bad_propensity_degrades_to_null_at_the_boundary(tmp_path):
+    """The #691 boundary semantics survive the move: a non-numeric /
+    out-of-range propensity degrades to null with a warn, never a
+    raise into the producer."""
+    row = _record_usage_merged(tmp_path,
+                               sampler_view={"propensity": "not-a-number"})
+    assert row["propensity"] is None
+    row = _record_usage_merged(tmp_path, sampler_view={"propensity": 1.5})
+    assert row["propensity"] is None
+
+
+def test_allow_threads_the_usage_view_into_the_dispatch_row(
+        tmp_path, capsys, monkeypatch):
+    """The hook's ALLOW tail records ONE row carrying the usage view —
+    the gate's reconciliation result lands on the dispatch observation
+    (tier/tools from the dispatch shape, the sampler triple from the
+    #691 view), not on a side ledger."""
+    import json as _json
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    paths = {"workspace": str(ws), "state": ws / "analysis_state.txt",
+             "register": ws / "claim-register.yaml",
+             "deps": ws / "claim_deps.yaml",
+             "task_spec": ws / "task_spec.yaml"}
+    monkeypatch.setattr(
+        sinks, "_sample_reconciliation",
+        lambda ws_, declared: {"sampled_family": "static-decompile",
+                               "propensity": 0.75,
+                               "prior_source": "history",
+                               "deviates": False})
+    prompt = (_json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": "C-804", "tier": 1, "tools": ["grep"],
+        "agent": "w-test", "method_family": "static-decompile"}})
+        + "\nfacts-snapshot: 1 facts")
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": prompt}}, paths)
+    assert rc == 0, capsys.readouterr().err[-400:]
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804" and r.get("source") == "dispatch"]
+    assert len(rows) == 1, "one dispatch, one observation row"
+    row = rows[0]
+    assert row["tier"] == 1
+    assert row["tools"] == ["grep"]
+    assert row["propensity"] == 0.75
+    assert row["sampled_family"] == "static-decompile"
+    assert row["prior_source"] == "history"
+
+
+# ------------- 9. the read faces project the dispatch substrate
+# (R2: usage_family_map / dispatch_method / family_health / both
+# reindex faces read the experience.jsonl dispatch rows — the usage
+# log is an archive, never a scan target.)
+
+def _seed_dispatch(ws, claim: str, family: str, *, tier=None,
+                   tools=None, sig="aaaa00000000"):
+    q_cells.append_observation(ws, sig, family, None, source="dispatch",
+                               claim=claim, agent="w-test",
+                               tier=tier, tools=tools)
+
+
+def test_usage_family_map_projects_dispatch_rows(tmp_path):
+    """The settle-side join (claim -> LAST declared family) reads the
+    dispatch observation rows — same substrate the fold consumes."""
+    _seed_dispatch(tmp_path, "C-1", "static-decompile")
+    _seed_dispatch(tmp_path, "C-2", "dynamic-trace")
+    _seed_dispatch(tmp_path, "C-1", "obfuscation-peeling")  # last wins
+    assert q_cells.usage_family_map(tmp_path) == {
+        "C-1": "obfuscation-peeling", "C-2": "dynamic-trace"}
+
+
+def test_usage_family_map_is_the_honest_gap_on_empty(tmp_path):
+    assert q_cells.usage_family_map(tmp_path) == {}
+
+
+def test_dispatch_method_reads_family_and_tools(tmp_path):
+    """crystallize.resolve_method's face: the claim's LAST dispatch row
+    yields {family, tools}; an unknown claim is None (no fabricated
+    method)."""
+    _seed_dispatch(tmp_path, "C-1", "static-decompile", tools=["grep"])
+    _seed_dispatch(tmp_path, "C-1", "dynamic-trace", tools=["bash", "grep"])
+    assert q_cells.dispatch_method(tmp_path, "C-1") == {
+        "family": "dynamic-trace", "tools": ["bash", "grep"]}
+    assert q_cells.dispatch_method(tmp_path, "C-404") is None
+
+
+def test_family_health_reads_the_merged_substrate(tmp_path):
+    """The Q-report health block computes over the dispatch rows — the
+    same rows the map and the fold read (one substrate, one projection
+    family)."""
+    from method_families import family_health, registered_tokens
+    _seed_dispatch(tmp_path, "C-1", "static-decompile")
+    health = family_health(tmp_path)
+    assert set(health["never_fills"]) == (
+        set(registered_tokens()) - {"static-decompile"})
+    assert health["attributed_rows"] == 1
+
+
+def test_method_families_reindex_ignores_legacy_usage_files(tmp_path):
+    """The loud gap pin: an archived runs/method-family-log.jsonl (the
+    pre-merge face) contributes NOTHING to the index — not even an
+    unattributed count; only experience dispatch rows index."""
+    import json
+    from method_families import reindex as mf_reindex
+    ws = tmp_path / "ws-legacy"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / "method-family-log.jsonl").write_text(
+        json.dumps({"schema": "method-family-usage/1", "claim": "C-old",
+                    "cell": "C-old", "family": "static-decompile"}) + "\n")
+    _seed_dispatch(ws, "C-new", "dynamic-trace")
+    report = mf_reindex(tmp_path)
+    cells = {c["cell"]: c["n"] for c in report["cells"]}
+    assert cells == {"C-new": 1}, "legacy usage rows must not index"
+    assert report["unattributed"] == 0
+
+
+def test_q_cells_reindex_ignores_legacy_usage_files(tmp_path):
+    """q_cells.reindex's face-2 (the #432 usage log) is retired with the
+    merge — face 1 IS the usage face now; an archive-only workspace
+    indexes as honest zero."""
+    import json
+    ws = tmp_path / "ws-archive"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / "method-family-log.jsonl").write_text(
+        json.dumps({"schema": "method-family-usage/1", "claim": "C-old",
+                    "cell": "C-old", "family": "static-decompile"}) + "\n")
+    report = q_cells.reindex(tmp_path)
+    assert report["cells"] == []
+    assert report["rows_scanned"] == 0
+
+
+# ------------- 10. the old usage write face closes (R3)
+
+def test_usage_writer_face_is_gone():
+    """The A2 end state: the side ledger's write AND read faces are
+    gone from the vocabulary module — one substrate per dispatch, the
+    projections in section 9 are the only reads."""
+    import method_families as mf
+    for name in ("append_usage_row", "read_usage", "usage_family_map",
+                 "USAGE_REL", "USAGE_SCHEMA"):
+        assert not hasattr(mf, name), \
+            f"method_families.{name} must be gone (the #804 A2 law)"
+
+
+def _r3_paths(ws):
+    return {"workspace": str(ws), "state": ws / "analysis_state.txt",
+            "register": ws / "claim-register.yaml",
+            "deps": ws / "claim_deps.yaml",
+            "task_spec": ws / "task_spec.yaml"}
+
+
+def _r3_prompt(family):
+    import json as _json
+    return (_json.dumps({"kunglao_dispatch": {
+        "version": 1, "claim": "C-804", "tier": 1, "tools": ["grep"],
+        "agent": "w-test", "method_family": family}})
+        + "\nfacts-snapshot: 1 facts")
+
+
+def test_allow_writes_no_usage_file(tmp_path, capsys, monkeypatch):
+    """The loud-absence pin: an ALLOW dispatch writes NO
+    runs/method-family-log.jsonl — the old side-ledger write is closed;
+    the family record is the dispatch observation row alone."""
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(
+        sinks, "_sample_reconciliation",
+        lambda ws_, declared: {"sampled_family": "static-decompile",
+                               "propensity": 1.0,
+                               "prior_source": "history",
+                               "deviates": False})
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": _r3_prompt("static-decompile")}},
+        _r3_paths(ws))
+    assert rc == 0, capsys.readouterr().err[-400:]
+    assert not (ws / "runs" / "method-family-log.jsonl").exists(), \
+        "the usage write face is CLOSED — no side ledger on ALLOW"
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804" and r.get("source") == "dispatch"]
+    assert len(rows) == 1 and rows[0]["method_family"] == "static-decompile"
+
+
+def test_prose_only_declaration_is_the_undeclared_gap(tmp_path, capsys):
+    """The v0 prose marker is a replay-only marker (the #804 abolish
+    list; wave-1 retired it in the recording face): a prose-only
+    declaration is the UNDECLARED loud gap — the gate REJECTS with the
+    sampled exit, never an ALLOW whose family record would vanish
+    (the dispatch observation row is envelope-only)."""
+    sys.path.insert(0, str(ROOT / "hooks"))
+    try:
+        import worker_budget_sinks as sinks
+    finally:
+        sys.path.pop(0)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-804", '
+              '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
+              'facts-snapshot: 1 facts\n'
+              'method-family: static-decompile')
+    rc = sinks.pre_check(
+        {"tool_input": {"name": "w-test", "description": "",
+                        "prompt": prompt}}, _r3_paths(ws))
+    assert rc == 2, (
+        "a prose-only declaration must REJECT as undeclared "
+        f"(the loud gap), got rc={rc}")
+    rows = [r for r in q_cells.JSONLQStore(ws).observations()
+            if r.get("claim") == "C-804"]
+    assert rows == [], "a rejected dispatch records no observation row"

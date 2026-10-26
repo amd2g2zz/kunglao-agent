@@ -6,9 +6,10 @@ The measured defect (issue #779): claims settled while the strategy
 pools starved — zero ``credit_kind=step`` rows, unmatched dispatch
 rows, so the sampler's pools stayed at prior while claims reached
 terminal. The bridge: at settle, resolve the claim's dispatch
-``method_family`` from the method-family-log usage rows keyed by cid
-and admit a claim-level ``observe_step_credit`` observation into the
-pool with credit = the claim's terminal credit — ONLY when the claim
+``method_family`` from the dispatch observation rows keyed by cid (the
+#804 usage merge — the side usage log is retired) and admit a
+claim-level ``observe_step_credit`` observation into the pool with
+credit = the claim's terminal credit — ONLY when the claim
 has no step records AND no banked terminal mass (step-grade stays when
 records exist; a matched terminal bank already fed the pool — a second
 admission would double-count one observation).
@@ -71,10 +72,15 @@ def _claim(cid: str, status: str = "PROVEN") -> dict:
 
 
 def _usage_row(ws, cid: str, family: str) -> None:
-    """One usage row via THE producer face (the #432 ALLOW-tail append)."""
-    import method_families as mf
+    """One dispatch observation row via THE substrate append (#804 usage
+    merge: the dispatch row IS the family record — the former usage-log
+    side row is retired; the settle-side map reads this row)."""
+    from rlvr import q_cells
 
-    mf.append_usage_row(ws, cid, family, "w-test")
+    q_cells.append_observation(
+        ws, "bbbb00000000", family, None, source="dispatch", claim=cid,
+        agent="w-test",
+        arm_key_col=q_cells.arm_key(family, "facts_snapshot", "none", 0))
 
 
 def _qcell_rows(ws):
@@ -103,9 +109,12 @@ def _terminal_credit(ws, cid: str) -> float:
 
 
 def test_bridge_admits_claim_credit_when_pool_starved(tmp_path):
-    """A settled claim with NO step records and NO matchable dispatch row
+    """A settled claim with NO step records and NO banked terminal mass
     gains one claim-level admission into the pool, credit = the terminal
-    credit — the pool can no longer starve while claims settle."""
+    credit — the pool can no longer starve while claims settle. #804
+    usage merge: the dispatch observation row IS the family record, so
+    the admission lands at the dispatch's OWN cell (the former
+    parallel-log rescue face is retired with the side ledger)."""
     import settle_round_credit as src
 
     ws = _ws(tmp_path, [_claim("C-1")])
@@ -134,10 +143,9 @@ def test_bridge_skips_when_step_records_exist(tmp_path):
 
     ws = _ws(tmp_path, [_claim("C-1")])
     _fact(ws, "F-1", "C-1")
+    # a pending dispatch row (the map's family record) + one banked step
+    # record (the dense signal)
     _usage_row(ws, "C-1", FAM)
-    # a pending dispatch row + one banked step record (the dense signal)
-    q_cells.record_dispatch_observation(
-        ws, "envelope", envelope_meta={"method_family": FAM}, claim="C-1")
     q_cells.observe_step_credit(ws, "C-1", 0.4)
     out = src.run(ws)
     steps = [r for r in _qcell_rows(ws)
@@ -156,9 +164,9 @@ def test_bridge_skips_when_terminal_mass_already_banked(tmp_path):
 
     ws = _ws(tmp_path, [_claim("C-1")])
     _fact(ws, "F-1", "C-1")
-    _usage_row(ws, "C-1", FAM)
     # #800 R2: the pending row carries the REAL dispatch id (the
-    # claim-alias shape is gone) — the bank matches under the one key
+    # claim-alias shape is gone) — the bank matches under the one key.
+    # #804 usage merge: this row is ALSO the map's family record.
     did = claims_store.latest_committed_dispatch(
         ws, "C-1")["dispatch_id"]
     q_cells.record_dispatch_observation(

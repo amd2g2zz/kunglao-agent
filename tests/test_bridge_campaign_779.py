@@ -9,7 +9,8 @@ docs/architecture/acceptance-bridge.md):
 
   1. posterior shift > 0 after bridged observations (case Beta moved by
      the settle legs AND q-cell family mass moved by the bridge);
-  2. usage rows have sampled_family non-empty;
+  2. dispatch rows carry a non-empty sampled_family (the #691
+     reconciliation triple, on the observation row since #804);
   3. fingerprint rl-posterior-moved flips green on the bridged
      posterior-store credit rows;
   4. fingerprint rl-sampler-exit flips green on the sampled-exit
@@ -59,10 +60,10 @@ def _fingerprint(ws, fp_id: str) -> tuple[bool, str]:
 def _build_campaign_ws(tmp_path):
     """The three-unit campaign workspace: terminal claims (each with a
     cited fact artifact), armed oracle cases (the five arming fields),
-    open hypotheses joined to the claims, usage rows per claim — and NO
-    q-cell dispatch rows (the starved-campaign shape: the observation
-    net missed the dispatches, the claims settled anyway)."""
-    import method_families as mf
+    open hypotheses joined to the claims, and one dispatch observation
+    row per claim (#804 usage merge: the dispatch row IS the family
+    record the settle-side bridge resolves — the former side usage log
+    is retired)."""
 
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
@@ -98,7 +99,11 @@ def _build_campaign_ws(tmp_path):
                             "mutations": [{"field": "k", "kind":
                                            "swap"}]}),
             encoding="utf-8")
-        mf.append_usage_row(ws, cid, fam, "w-test")
+        from rlvr import q_cells
+        q_cells.append_observation(
+            ws, f"cccc0000000{len(claims)}", fam, None,
+            source="dispatch", claim=cid, agent="w-test",
+            arm_key_col=q_cells.arm_key(fam, "facts_snapshot", "none", 0))
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}), encoding="utf-8")
     # #800 R2: ledger rows for every claim (the starved shape is kept —
@@ -175,15 +180,24 @@ def test_campaign_replay_four_metrics(tmp_path):
                        for _u, _s, fam, _h, _c in UNITS)
     assert bridged_mass > 0, "bridged pool mass never moved"
 
-    # ---- metric 2: usage rows have sampled_family non-empty
-    import method_families as mf
+    # ---- metric 2: dispatch rows carry a non-empty sampled_family
+    # (the #691 reconciliation triple rides the observation row since
+    # the #804 usage merge)
+    from rlvr import q_cells as qc779
     view = ss.reconcile_declaration(ws, UNITS[1][2])
     assert view["sampled_family"], "the sampler never exited"
-    mf.append_usage_row(ws, "C-win-l1", UNITS[1][2], "w-test",
-                        propensity=view.get("propensity"),
-                        sampled_family=view.get("sampled_family"),
-                        prior_source=view.get("prior_source"))
-    assert mf.read_usage(ws)[-1]["sampled_family"]
+    qc779.append_observation(ws, "cccc00000010", UNITS[1][2], None,
+                             source="dispatch", claim="C-win-l1",
+                             agent="w-test",
+                             sampler_view={"propensity":
+                                           view.get("propensity"),
+                                           "sampled_family":
+                                           view.get("sampled_family"),
+                                           "prior_source":
+                                           view.get("prior_source")})
+    last = qc779.JSONLQStore(ws).observations()[-1]
+    assert last["sampled_family"] == view["sampled_family"]
+    assert last["prior_source"] == view.get("prior_source")
     # the retry declares the sampled exit; the #496 strategy-log writer
     # lands the row the fingerprint counts (the real pass-path producer)
     _log_sampled_exit(ws, "C-win-l1")
