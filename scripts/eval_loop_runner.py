@@ -1743,6 +1743,36 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     return row
 
 
+def _select_task_dirs(tasks: list[str], *, tier: str) -> list[Path]:
+    """Corpus ids against the tier, plus explicit task-dir paths — the
+    blocked-path units (#816) live outside eval/v1/tasks/. A path counts
+    only when it carries its own task.yaml; anything else is refused by
+    id."""
+    all_dirs = ds.iter_task_dirs(tier=tier)
+    known = {d.name for d in all_dirs}
+    picked: list[Path] = []
+    unknown: list[str] = []
+    # order-preserving dedupe on the resolved dir — every entry is a real
+    # paid session, so "a,a" or id+path of the same unit must run once
+    seen: set[str] = set()
+    for t in tasks:
+        p = Path(t)
+        if (p / "task.yaml").is_file():
+            d, key = p, str(p.resolve())
+        elif t in known:
+            d = next(x for x in all_dirs if x.name == t)
+            key = str(d.resolve())
+        else:
+            unknown.append(t)
+            continue
+        if key not in seen:
+            seen.add(key)
+            picked.append(d)
+    if unknown:
+        raise ValueError(f"unknown task(s): {unknown}")
+    return picked if tasks else all_dirs
+
+
 def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   budget_usd: float = DEFAULT_BUDGET_USD,
                   wall_cap_s: float = DEFAULT_WALL_CAP_S,
@@ -1757,13 +1787,11 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     started = time.time()
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    all_dirs = ds.iter_task_dirs(tier=tier)
-    known = {d.name for d in all_dirs}
-    unknown = [t for t in tasks if t not in known]
-    if unknown:
-        _fail(f"unknown task(s): {unknown}")
+    try:
+        selected = _select_task_dirs(tasks, tier=tier)
+    except ValueError as exc:
+        _fail(str(exc))
         return RC_REFUSED, {}
-    selected = [d for d in all_dirs if not tasks or d.name in tasks]
 
     rows: list[dict] = []
     for tdir in selected:

@@ -1684,3 +1684,86 @@ class TestFailOpenWarnIdiom:
         warns = [ln for ln in self._lines(capsys)
                  if "claim_register" in ln and "WARN" in ln]
         assert len(warns) == 1
+
+
+# ------------------------------------------------- (i) #816 task-dir paths
+class TestExplicitTaskDirPaths:
+    """The #816 blocked-path units live OUTSIDE eval/v1/tasks/
+    (experiments/blocked-path-units/) — run_loop_tier must accept an
+    explicit task-dir path next to corpus ids: a directory carrying its
+    own task.yaml selects that directory; anything else is refused by
+    id, with the tier-level BAD_TASK refusal shape unchanged."""
+
+    def test_unknown_id_refusal_shape_unchanged(self, tmp_path, capsys):
+        rc, doc = lr.run_loop_tier(["no-such-task-816"], tmp_path / "out")
+        assert rc == lr.RC_REFUSED
+        assert doc == {}
+        assert "unknown task(s): ['no-such-task-816']" in capsys.readouterr().err
+
+    def test_bare_directory_without_task_yaml_is_refused(self, tmp_path):
+        bare = tmp_path / "blocked-units" / "tf-bare816"
+        bare.mkdir(parents=True)
+        rc, doc = lr.run_loop_tier([str(bare)], tmp_path / "out")
+        assert rc == lr.RC_REFUSED
+        assert doc == {}
+
+    def test_explicit_task_dir_path_outside_corpus_is_selected(
+            self, tmp_path, monkeypatch):
+        unit = tmp_path / "blocked-units" / "tf-pinv816-v1"
+        unit.mkdir(parents=True)
+        (unit / "task.yaml").write_text("id: tf-pinv816-v1\n",
+                                        encoding="utf-8")
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task": name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, doc = lr.run_loop_tier([str(unit)], tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert seen == ["tf-pinv816-v1"], \
+            "the explicit path's own directory basename is the task name"
+        assert doc["rows"][0]["task"] == "tf-pinv816-v1"
+        assert doc["summary"]["pass"] == 1
+
+    def test_mixed_corpus_id_and_external_path_run_in_given_order(
+            self, tmp_path, monkeypatch):
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        unit = tmp_path / "blocked-units" / "tf-pinv816-v1"
+        unit.mkdir(parents=True)
+        (unit / "task.yaml").write_text("id: tf-pinv816-v1\n",
+                                        encoding="utf-8")
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task": name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, _doc = lr.run_loop_tier([str(unit), corpus[0].name],
+                                    tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert seen == ["tf-pinv816-v1", corpus[0].name], \
+            "caller order is preserved across the path and id faces"
+
+    def test_duplicate_entries_run_once(self, tmp_path, monkeypatch):
+        """Every selected entry is a real paid session — 'a,a' (and an id
+        plus the same unit's explicit path) must select the task once."""
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        first = corpus[0]
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task": name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, _doc = lr.run_loop_tier(
+            [first.name, str(first), first.name], tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert seen == [first.name]
