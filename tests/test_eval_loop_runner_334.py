@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -1717,14 +1718,14 @@ class TestExplicitTaskDirPaths:
 
         def fake_run_loop_task(name, _out, **_kw):
             seen.append(name)
-            return {"task": name, "verdict": "PASS"}
+            return {"task_id": Path(name).name, "verdict": "PASS"}
 
         monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
         rc, doc = lr.run_loop_tier([str(unit)], tmp_path / "out")
         assert rc == lr.RC_OK
-        assert seen == ["tf-pinv816-v1"], \
+        assert [Path(s).name for s in seen] == ["tf-pinv816-v1"], \
             "the explicit path's own directory basename is the task name"
-        assert doc["rows"][0]["task"] == "tf-pinv816-v1"
+        assert doc["rows"][0]["task_id"] == "tf-pinv816-v1"
         assert doc["summary"]["pass"] == 1
 
     def test_mixed_corpus_id_and_external_path_run_in_given_order(
@@ -1740,13 +1741,14 @@ class TestExplicitTaskDirPaths:
 
         def fake_run_loop_task(name, _out, **_kw):
             seen.append(name)
-            return {"task": name, "verdict": "PASS"}
+            return {"task_id": Path(name).name, "verdict": "PASS"}
 
         monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
         rc, _doc = lr.run_loop_tier([str(unit), corpus[0].name],
                                     tmp_path / "out")
         assert rc == lr.RC_OK
-        assert seen == ["tf-pinv816-v1", corpus[0].name], \
+        assert [Path(s).name for s in seen] == [
+            "tf-pinv816-v1", corpus[0].name], \
             "caller order is preserved across the path and id faces"
 
     def test_duplicate_entries_run_once(self, tmp_path, monkeypatch):
@@ -1760,10 +1762,24 @@ class TestExplicitTaskDirPaths:
 
         def fake_run_loop_task(name, _out, **_kw):
             seen.append(name)
-            return {"task": name, "verdict": "PASS"}
+            return {"task_id": Path(name).name, "verdict": "PASS"}
 
         monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
         rc, _doc = lr.run_loop_tier(
             [first.name, str(first), first.name], tmp_path / "out")
         assert rc == lr.RC_OK
-        assert seen == [first.name]
+        assert [Path(s).name for s in seen] == [first.name]
+
+    def test_external_unit_runs_the_real_pipeline(self, tmp_path):
+        """The #816 face END-TO-END: a unit outside the corpus tree flows
+        through the REAL run_loop_task (stub session) — a name-only
+        re-resolution downstream crashed the tier in the first live
+        re-run attempt, so the tier loop must hand over the resolved
+        directory, not the basename."""
+        unit = tmp_path / "external" / "tf-ext816-copy-v1"
+        shutil.copytree(_task_dir(PY), unit)
+        rc, doc = lr.run_loop_tier([str(unit)], tmp_path / "out",
+                                   session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == lr.RC_OK
+        assert doc["rows"][0]["task_id"] == "tf-ext816-copy-v1"
+        assert doc["rows"][0]["verdict"] in ("PASS", "FAIL", "SKIP")
