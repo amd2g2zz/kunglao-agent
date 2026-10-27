@@ -428,3 +428,31 @@ mechanisms:
       emits the registered `oracle_probe_t1` word. Settlement accepts T0/T1
       immediately; the T2 rung upgrades settled rows via the ledger
       amendment path.
+
+  # ---- the distillation engine (issue-365; event-driven ONLY — the
+  # restraint ruling: no tick, no cron) -------------------------------------
+  - name: distill_engine
+    entry: tools/auxiliary/hybrid_distill.py
+    channel: cli
+    trigger:
+      type: event
+      gate: always
+      events: [settlement]
+    cost_class: medium
+    depth: workspace
+    cockpit_signal: "runs/settlement.jsonl distill-rollout/1 rows + runs/episodes/episode-D-*.md (the scored item library)"
+    owner: tools/auxiliary/hybrid_distill.py
+    description: >
+      The knowledge-distillation engine (issue #365): standardized
+      StandardDistillItem products, 0-1 scoring (generality 0.3 /
+      self-inspiring 0.25 / methodology-shape 0.25 / novelty 0.2),
+      distill_rollout settlement rows, and the 3-strike
+      optimize-then-remove ladder — the unified model's distillation
+      domain (A2: items ride the episode pool's write gate, no parallel
+      store). --strategy self collects from D-gate-passing notes +
+      lessons + facts + env-state; --strategy hybrid adds the
+      hypothesis-driven research loop with the SNR gate (two barren
+      rounds abandon; search action injected, never one-shot). EVENT-
+      DRIVEN ONLY (settlement event class — the restraint ruling lives
+      as the trigger type); CLI channel is the declaration face, the
+      scheduler never polls it.

@@ -207,6 +207,7 @@ EMIT_ACTIONS = [
     "dispatch",
     "distill_attempt",    # online distillation: a distillation act dispatched (phase=dispatched) or the production closure's trigger signal (phase=triggered)
     "distill_result",     # online distillation: per-attempt validation + sample-as-oracle outcome (rejections and phase=refused budget refusals included)
+    "distill_rollout",    # issue-365 the distillation engine: one `distill-rollout/1` attempt or consumption settlement row (item/strategy/score/product/reward in the detail)
     "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face

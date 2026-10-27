@@ -235,6 +235,10 @@ the one-line pointer (name — the docstring's opening line):
 
 - `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
 - `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+- `distill_dgate` — rlvr/distill_dgate.py — the D-gate three-question note lint (issue #365).
+- `distill_lifecycle` — rlvr/distill_lifecycle.py — the 3-strike optimize-then-remove ladder (issue #365).
+- `distill_rollout` — rlvr/distill_rollout.py — the distill-rollout/1 settlement rows + reward bands + strategy priors (issue #365).
+- `distill_score` — rlvr/distill_score.py — the 0-1 scoring face + the scored playbook view (issue #365).
 - `episode_pool` — rlvr/episode_pool.py — the memory pool's physical layer (`runs/episodes/`) + the three policy gates (issue #824).
 - `episode_schema` — rlvr/episode_schema.py — the episode schema `episode/1` + summary caps + fail-closed validator (issue #824).
 - `pool_indexer` — rlvr/pool_indexer.py — the pool's derived views: value table + playbook (issue #824).

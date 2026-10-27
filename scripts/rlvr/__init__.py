@@ -21,6 +21,10 @@ from . import consolidated_ledger
 from . import belief
 from . import constants_ref
 from . import crystallize
+from . import distill_dgate
+from . import distill_lifecycle
+from . import distill_rollout
+from . import distill_score
 from . import episode_pool
 from . import episode_schema
 from . import expansion
@@ -77,6 +81,10 @@ __all__ = [
     "consolidated_ledger",
     "constants_ref",
     "crystallize",
+    "distill_dgate",
+    "distill_lifecycle",
+    "distill_rollout",
+    "distill_score",
     "episode_pool",
     "expansion",
     "feature_prior",

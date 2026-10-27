@@ -497,6 +497,21 @@ tools:
     cost_hint: {mem_gb: 0.1, time: probe}
     quality: {aux:sanitize: high}
 
+  # -- aux: knowledge-distillation engine (issue #365 registration) --
+  - name: hybrid-distill
+    category: auxiliary
+    capability: aux:distill-engine
+    description: Knowledge-distillation collection kernel
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 'input: workspace + --strategy self|hybrid + optional --lessons-library (CLI: tools/auxiliary/hybrid_distill.py)', output: 'runs/episodes/episode-D-*.md scored StandardDistillItem pool items + runs/verification-D-*.md scorecards + runs/settlement.jsonl distill-rollout/1 rows'}
+    when_not: not for tool acquisition (that is online_distill #458) or for tick-scheduled runs (event-driven only, mechanisms.yaml)
+    provider: hybrid-distill
+    produces: [aux:distill-engine]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {aux:distill-engine: high}
+
 
   # -- android capability providers (#692 WP1; annotation block design D1) --
   # The registry IS the capability-provider matrix (design D0): multi-provider

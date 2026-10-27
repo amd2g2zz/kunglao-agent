@@ -408,6 +408,10 @@ files:
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
     sha256: ec3c87ae4dd43ad879ed64f0435b8e3ee6fd124d48043e70ba67b4535fc94ba6
+  - src: scripts/distill_schema.py
+    dest: .claude/scripts/distill_schema.py
+    kind: scaffold
+    sha256: b42d0bfcf6cb3c51401d881b32c313877c091f9c84485b6e2d5c66ca106711cf
   - src: scripts/distill_spine.py
     dest: .claude/scripts/distill_spine.py
     kind: scaffold
@@ -543,7 +547,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 3aa8f10850c5b5f203a33df88e1e12912b09ea103b5c5afcfe04cf7c29542c62
+    sha256: 6a0891c634f15ea01e8dc28b1e826ce13445baf7d3fedd76234d2f97b62bdafa
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1347,7 +1351,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 059e68eaf06990d073f30ca710b4eef7c2ac0dd5dc3bacc1a85c41798f093792
+    sha256: b8fc2f2314b3b8c858b9a53c82f6608f238894e326ddc3572ae3dcb168f73274
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1380,6 +1384,22 @@ files:
     dest: .claude/scripts/rlvr/crystallize.py
     kind: scaffold
     sha256: 8dd4e5f8596a7efdd9c2f31382f4d1c0e08cc154f9181fe7af09c36068159005
+  - src: scripts/rlvr/distill_dgate.py
+    dest: .claude/scripts/rlvr/distill_dgate.py
+    kind: scaffold
+    sha256: 374679c5cbc752c3fde81dbffdd383c0070e949514497704ffa8dd343bbaf01e
+  - src: scripts/rlvr/distill_lifecycle.py
+    dest: .claude/scripts/rlvr/distill_lifecycle.py
+    kind: scaffold
+    sha256: f65797fca4b07cef38fbc1aa4e41a5902c01c4ce25000b0cedb852d87c32f9ab
+  - src: scripts/rlvr/distill_rollout.py
+    dest: .claude/scripts/rlvr/distill_rollout.py
+    kind: scaffold
+    sha256: 9c3ae4656ffb5ebc7f8a2b10ad58b1b9ab25ad4d232c3612bf27e38fdd70cf46
+  - src: scripts/rlvr/distill_score.py
+    dest: .claude/scripts/rlvr/distill_score.py
+    kind: scaffold
+    sha256: 349c14fabcf9f038f35914ac72e96716fbee83061ad4eea3eb0804b027ba1b16
   - src: scripts/rlvr/episode_pool.py
     dest: .claude/scripts/rlvr/episode_pool.py
     kind: scaffold
@@ -1579,7 +1599,7 @@ files:
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: f35c75f1c04cb85b230a078bd508b4bcdc7a9db9aa028fb41749e4fcdddb136b
+    sha256: 03704c09cc698bcabd0316ab3429cb1fa4724bcda80aaa61982ded4656006f0d
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
@@ -2171,11 +2191,11 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: e866520359d2a0cd38a8842d6bbf6d20e45f5af49642076325a9608baac9dfd5
+    sha256: 7386007f525e946178ef78a963350535b1340caa58196768a5c4066f6c5a6ae5
   - src: tools/_index-auxiliary.md
     dest: .claude/tools/_index-auxiliary.md
     kind: asset
-    sha256: 70d3c84f4d8f5efb12cf66b54bacf2192980e243003fbf9db2f245c49e8239de
+    sha256: b3b360c754b408500a17f1806f7087164b7aa299a40189412b8c2629c7cf616b
   - src: tools/_index-crypto.md
     dest: .claude/tools/_index-crypto.md
     kind: asset
@@ -2232,6 +2252,10 @@ files:
     dest: .claude/tools/auxiliary/capture_golden.py
     kind: asset
     sha256: 928d5b0af18b5f8aa2572992d6af0c04aeb0e79c5f131bf7139cb5f6700eaf75
+  - src: tools/auxiliary/hybrid_distill.py
+    dest: .claude/tools/auxiliary/hybrid_distill.py
+    kind: asset
+    sha256: 623fc98e1f9627026e1fcfda4b06c937ea40f638a75585cb55a644800e9fcd24
   - src: tools/auxiliary/measure_blind_coverage.py
     dest: .claude/tools/auxiliary/measure_blind_coverage.py
     kind: asset
@@ -2431,7 +2455,7 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: d92da8c373bc7b0bc11a58ec4505983ca9ff41207d7a1811c940ba338d6d421a
+    sha256: b1af3da593359c3a2e068bf2eac71aba4c7fba109307006c7f9fec1953e789c2
   - src: tools/web/README.md
     dest: .claude/tools/web/README.md
     kind: asset
