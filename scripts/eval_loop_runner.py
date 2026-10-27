@@ -541,7 +541,9 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
 
 
 # ---------------------------------------------------------- wall partition
-def wall_partition_block(wall_cap_s: float) -> str:
+def wall_partition_block(wall_cap_s: float,
+                         solo_fraction: float = SOLO_PARTITION_FRACTION
+                         ) -> str:
     """M1 (exp5) + I1 (exp8): the WALL_BUDGET_PARTITION contract block.
     The runner owns the wall cap and kills the session tree at it — a
     session that was never told the cap cannot partition its own budget.
@@ -555,7 +557,7 @@ def wall_partition_block(wall_cap_s: float) -> str:
     so the block now mandates an early on-disk draft that is continuously
     improved; at the cap the CURRENT on-disk state is what gets graded."""
     total = int(round(wall_cap_s))
-    solo_cap = int(round(wall_cap_s * SOLO_PARTITION_FRACTION))
+    solo_cap = int(round(wall_cap_s * solo_fraction))
     due = max(int(round(wall_cap_s - DELIVERABLE_RESERVE_S)), 0)
     return (
         "WALL_BUDGET_PARTITION (harness contract — the runner enforces "
@@ -772,7 +774,8 @@ def init_workspace(task_dir: Path, work_root: Path,
 
 def init_cc_default_workspace(task_dir: Path,
                               work_root: Path,
-                              *, wall_cap_s: float | None = None
+                              *, wall_cap_s: float | None = None,
+                              solo_fraction: float | None = None
                               ) -> tuple[Path, str]:
     """The CC-DEFAULT arm's neutral cwd: NO kunglao-init, no plugin
     scaffold — ONLY the unit's material at its task-relative paths
@@ -799,7 +802,10 @@ def init_cc_default_workspace(task_dir: Path,
     prompt = (
         "Solve the reverse-engineering task in THIS working directory. "
         "Work fully autonomously: no questions, no user input.\n\n"
-        + (wall_partition_block(wall_cap_s) + "\n\n"
+        + (wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction
+            if solo_fraction is not None else SOLO_PARTITION_FRACTION)
+           + "\n\n"
            if wall_cap_s is not None else "")
         + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
@@ -1085,6 +1091,7 @@ def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
 
 def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       *, wall_cap_s: float | None = None,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       include_t1_direct: bool = True,
                       probe_block: str = "") -> str:
@@ -1115,7 +1122,9 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     (I5, exp8) adds the T-1 affirmative one-liner."""
     extras: list[str] = []
     if wall_cap_s is not None:
-        extras.append(wall_partition_block(wall_cap_s))
+        extras.append(wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction
+            if solo_fraction is not None else SOLO_PARTITION_FRACTION))
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1222,6 +1231,7 @@ def gap_redo_decision(verdict: str | None, session_record: dict, *,
 def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       gap_block: str, *, wall_cap_s: float,
                       budget_usd: float,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       probe_block: str = "") -> str:
     """The gap-redo session's brief: same task (anchors + contract +
@@ -1233,7 +1243,9 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
     same task under the same prompt contract. (issue 380 P3-1: the shared
     tail renders through _render_task_prompt.)"""
-    extras: list[str] = [wall_partition_block(wall_cap_s)]
+    extras: list[str] = [wall_partition_block(
+        wall_cap_s, solo_fraction=solo_fraction
+        if solo_fraction is not None else SOLO_PARTITION_FRACTION)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1532,6 +1544,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
+                  solo_fraction: float | None = None,
                   warm_context_from: Path | None = None) -> dict:
     """One eval task through the FULL pipeline: init -> real session ->
     harvest -> mechanical check -> results row. ``arm`` selects the
@@ -1550,7 +1563,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     try:
         if arm in ("cc-default", "cc-warm-context"):
             ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
-                                                   wall_cap_s=wall_cap_s)
+                                                   wall_cap_s=wall_cap_s,
+                                                   solo_fraction=solo_fraction)
             # the experiment doc sec5 attribution arm (frozen text):
             prompt = _arm_prompt(arm, prompt, warm_context_from)
         else:
@@ -1567,6 +1581,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                 return _preflight_skip_row(task, tdir, arm, pf_reasons, ws)
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
+                                       solo_fraction=solo_fraction,
                                        layer_paths=layer_paths,
                                        probe_block=probe_block)
     except RuntimeError as exc:
@@ -1646,6 +1661,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             tdir, task, deliverable_rel,
             render_gap_block(extract_checker_gap(res)),
             wall_cap_s=redo_wall, budget_usd=redo_budget,
+            solo_fraction=solo_fraction,
             layer_paths=layer_paths, probe_block=probe_block)
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
@@ -1779,6 +1795,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
+                  solo_fraction: float | None = None,
                   warm_context_from: Path | None = None
                   ) -> tuple[int, dict]:
     """The tier face: one kunglao-eval-results/1 doc (arm=loop or
@@ -1800,6 +1817,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         rows.append(run_loop_task(
             str(tdir), out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
             session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
+            solo_fraction=solo_fraction,
             warm_context_from=warm_context_from))
 
     summary = {
@@ -1856,6 +1874,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wall-cap-s", type=float, default=DEFAULT_WALL_CAP_S,
                     help="session wall-clock cap (the runner kills the "
                          "session tree past it; exhausted = terminal row)")
+    ap.add_argument("--solo-fraction", type=float, default=None,
+                    help="solo/direct recon window as a fraction of the "
+                         "wall (default 0.5, the smoke-tier economics; "
+                         "hard units want a short window, e.g. 0.15)")
     ap.add_argument("--session-cmd", default=None,
                     help="TEST/OVERRIDE ONLY: replacement session command "
                          "(prompt appended as the positional); the "
@@ -1883,6 +1905,7 @@ def main(argv: list[str] | None = None) -> int:
         wall_cap_s=args.wall_cap_s, session_cmd=args.session_cmd,
         plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None,
         arm=args.arm,
+        solo_fraction=args.solo_fraction,
         warm_context_from=(Path(args.warm_context_from)
                            if args.warm_context_from else None))
     return rc

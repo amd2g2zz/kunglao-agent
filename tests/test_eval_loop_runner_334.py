@@ -631,7 +631,7 @@ class TestCcDefaultArm:
         would spawn a real claude session inside a unit test."""
         monkeypatch.setenv("K334_STUB_MODE", "candidate")
 
-        def _ccd_stub(task_dir, root, *, wall_cap_s=None):
+        def _ccd_stub(task_dir, root, *, wall_cap_s=None, solo_fraction=None):
             ws = lr.init_workspace(_task_dir(PY), root)
             return ws, "solve it; deliver to runs/deliverables/candidate.py"
 
@@ -942,6 +942,28 @@ class TestWallPartitionBlock:
         assert "TOTAL WALL CAP: 7200s" in block2
         assert "SOLO/DIRECT ATTEMPT HARD CAP: 3600s" in block2
         assert "FINAL DELIVERABLE DUE BY 6900s" in block2
+
+    def test_solo_fraction_override_scales_the_recon_window(self):
+        """#816 re-run face: hard black-box units need a SHORT bounded
+        recon window with a long orchestrated tail — the fraction is
+        runner-parameterized. Default stays the toy-tuned 0.5 (the
+        exp5/exp8 smoke-tier economics)."""
+        block = lr.wall_partition_block(5400.0, solo_fraction=0.15)
+        assert "TOTAL WALL CAP: 5400s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 810s" in block, \
+            "5400s wall x 0.15 = 810s recon cap"
+        assert "FINAL DELIVERABLE DUE BY 5100s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 1800s" in \
+            lr.wall_partition_block(3600.0), \
+            "no override means the 50% default, byte-identical render"
+
+    def test_solo_fraction_threads_through_all_prompt_faces(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.py",
+            wall_cap_s=5400.0, solo_fraction=0.15)
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 810s" in prompt
 
     def test_loop_prompt_carries_partition_prominently(self):
         tdir = _task_dir(PY)
@@ -1783,3 +1805,21 @@ class TestExplicitTaskDirPaths:
         assert rc == lr.RC_OK
         assert doc["rows"][0]["task_id"] == "tf-ext816-copy-v1"
         assert doc["rows"][0]["verdict"] in ("PASS", "FAIL", "SKIP")
+
+    def test_solo_fraction_threads_from_tier_to_task(self, tmp_path,
+                                                     monkeypatch):
+        seen: dict = {}
+
+        def fake_run_loop_task(ref, out, **kw):
+            seen.update(kw)
+            return {"task_id": Path(ref).name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        rc, _doc = lr.run_loop_tier([corpus[0].name], tmp_path / "out",
+                                    solo_fraction=0.15)
+        assert rc == lr.RC_OK
+        assert seen.get("solo_fraction") == 0.15, \
+            "the CLI/tier face must reach the prompt builders"
