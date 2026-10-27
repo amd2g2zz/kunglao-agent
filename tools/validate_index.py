@@ -84,6 +84,7 @@ _CAPABILITY_TAGS = frozenset({
     # aux: — seeded from the #340 category contract test (auxiliary must be
     # a legal category with at least one routable capability tag)
     "aux:sanitize",
+    "aux:distill-engine",  # knowledge-distillation engine (hybrid_distill)
     # web: — #728 (js recovery pipelines) + #884 (JSVMP/VMP triage CLI)
     "js:deobfuscate",
     "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
