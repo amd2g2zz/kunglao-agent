@@ -1795,8 +1795,10 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
 
     rows: list[dict] = []
     for tdir in selected:
+        # the resolved DIR, never the basename — an external unit's name
+        # is not a corpus id and would re-resolve to FileNotFoundError
         rows.append(run_loop_task(
-            tdir.name, out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
+            str(tdir), out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
             session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
             warm_context_from=warm_context_from))
 

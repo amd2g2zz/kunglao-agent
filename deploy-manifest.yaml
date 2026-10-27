@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: dde94fed0d4c8c25ae862119495d358d487dabc80b69191036a0fb3e26827789
+    sha256: fad294f8387d56489003a7111bbde73abc6816a5dd1fcd810fc6c86ff547c594
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -1595,7 +1595,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 870ca5edecbee7ea726e67f0ff8837fc9c4fa1645e942d0a7e6e9bd4b6efc225
+    sha256: 927064d2c801672f8f7d575958c59b5c2a8f87ca902bcd884ef1266b8914517a
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
