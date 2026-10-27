@@ -64,7 +64,8 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 

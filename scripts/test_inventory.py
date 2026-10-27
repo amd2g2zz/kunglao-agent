@@ -41,7 +41,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 MOCK_ASSERT_RE = re.compile(
     r"assert_(called|not_called|any_call|called_once|called_once_with|"
@@ -315,6 +316,64 @@ def _unwired_modules(index: dict[Path, set[str]],
     return unwired
 
 
+def _dead_pin_facts(node: ast.AST, script_stems: set[str],
+                    local_defs: set[str],
+                    ref_index: dict) -> tuple[list[str], list[str]]:
+    """Dead-code-pin facts for one test: which imported subject modules
+    are unwired / dead from here."""
+    classes: list[str] = []
+    details: list[str] = []
+    used = _used_names(node, local_defs)
+    unwired = _unwired_modules(ref_index, script_stems)
+    dead = _dead_subjects(used, ref_index, script_stems)
+    if script_stems and unwired == sorted(script_stems):
+        # whole-module pin: every imported subject module is
+        # unwired (reachable only from tests/) — the
+        # dead-code-pin class, unwired-live semantics.
+        classes.append("dead_code_pin")
+        details.append(f"unwired modules: {','.join(unwired)}")
+    elif used and len(dead) == len(used):
+        classes.append("dead_code_pin")
+        details.append(f"dead subjects: {','.join(dead)}")
+    return classes, details
+
+
+def _classify_test_facts(node: ast.AST, script_stems: set[str],
+                         local_defs: set[str],
+                         ref_index: dict) -> tuple[list[str], list[str]]:
+    """The inventory taxonomy for one test function:
+    mock_shape_only / generated_golden / dead_code_pin / param_redundant."""
+    classes: list[str] = []
+    details: list[str] = []
+
+    total_a, mock_a = _assert_facts(node)
+    if total_a > 0 and mock_a == total_a:
+        classes.append("mock_shape_only")
+        details.append(f"{mock_a}/{total_a} asserts are mock-shape")
+
+    literals = " ".join(_string_literals(node))
+    gen_hits = [m for m in GENERATED_MARKERS if m in literals]
+    if gen_hits:
+        classes.append("generated_golden")
+        details.append(f"pins regenerated artifact: {gen_hits[0]}")
+
+    if local_defs:
+        pin_c, pin_d = _dead_pin_facts(node, script_stems, local_defs,
+                                       ref_index)
+        classes += pin_c
+        details += pin_d
+
+    cases = _parametrize_cases(node.decorator_list)
+    if cases >= MIN_REDUNDANT_CASES and not _has_branching(node):
+        n_asserts = sum(1 for n in ast.walk(node)
+                        if isinstance(n, ast.Assert))
+        if n_asserts <= 1:
+            classes.append("param_redundant")
+            details.append(f"{cases} cases, branch-free, "
+                           f"{n_asserts} assert(s)")
+    return classes, details
+
+
 def classify_file(path: Path, rel: str, stats: SuiteStats) -> None:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -340,44 +399,8 @@ def classify_file(path: Path, rel: str, stats: SuiteStats) -> None:
                 if not node.name.startswith("test_"):
                     continue
                 stats.functions += 1
-                classes: list[str] = []
-                details: list[str] = []
-
-                total_a, mock_a = _assert_facts(node)
-                if total_a > 0 and mock_a == total_a:
-                    classes.append("mock_shape_only")
-                    details.append(f"{mock_a}/{total_a} asserts are mock-shape")
-
-                literals = " ".join(_string_literals(node))
-                gen_hits = [m for m in GENERATED_MARKERS if m in literals]
-                if gen_hits:
-                    classes.append("generated_golden")
-                    details.append(f"pins regenerated artifact: {gen_hits[0]}")
-
-                if local_defs:
-                    used = _used_names(node, local_defs)
-                    unwired = _unwired_modules(ref_index, script_stems)
-                    dead = _dead_subjects(used, ref_index, script_stems)
-                    if script_stems and unwired == sorted(script_stems):
-                        # whole-module pin: every imported subject module is
-                        # unwired (reachable only from tests/) — the
-                        # dead-code-pin class, unwired-live semantics.
-                        classes.append("dead_code_pin")
-                        details.append(
-                            f"unwired modules: {','.join(unwired)}")
-                    elif used and len(dead) == len(used):
-                        classes.append("dead_code_pin")
-                        details.append(f"dead subjects: {','.join(dead)}")
-
-                cases = _parametrize_cases(node.decorator_list)
-                if cases >= MIN_REDUNDANT_CASES and not _has_branching(node):
-                    n_asserts = sum(1 for n in ast.walk(node)
-                                    if isinstance(n, ast.Assert))
-                    if n_asserts <= 1:
-                        classes.append("param_redundant")
-                        details.append(f"{cases} cases, branch-free, "
-                                       f"{n_asserts} assert(s)")
-
+                classes, details = _classify_test_facts(
+                    node, script_stems, local_defs, ref_index)
                 if classes:
                     qual = (f"{cls}." if cls else "") + node.name
                     info = TestInfo(rel, qual, node.lineno,

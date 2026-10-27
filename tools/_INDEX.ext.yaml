@@ -625,7 +625,7 @@ ext:
     consume: "invoke"
     source: "scripts/eval_matrix_runner.py"
     usage: "eval_matrix_runner.py [--config docs/design/ws5-five-arms.yaml]"
-    description: "eval_matrix_runner.py — the WS5 seven-arm capability matrix harness (B2 multi-sample + B3 uniform-scheduler arms included)."
+    description: "eval_matrix_runner.py — the WS5 seven-arm capability matrix harness"
   - name: "eval_misdirection"
     capability: "unknown"
     type: "tool"

@@ -59,23 +59,9 @@ def _yaml():
     return yaml
 
 
-def load_registry(path: Path | None = None,
-                  fingerprints_path: Path | None = None
-                  ) -> tuple[list[dict], list[str]]:
-    """Load + validate the battery registry. Returns (entries, errors);
-    errors non-empty means the registry is BROKEN and the launch gate
-    refuses (fail-closed). Mirrors mechanism_scheduler.load_registry's
-    contract, with the #805 prerequisites added."""
-    p = Path(path) if path is not None else REGISTRY_PATH
-    try:
-        data = _yaml().safe_load(p.read_text(encoding="utf-8")) or {}
-    except OSError as exc:
-        return [], [f"registry unreadable: {exc}"]
-    except Exception as exc:  # yaml or encoding trouble
-        return [], [f"registry unparseable: {exc}"]
-    if not isinstance(data, dict):
-        return [], ["registry root is not a mapping"]
-    errors: list[str] = []
+def _validate_vocab(data: dict, errors: list[str]) -> None:
+    """Schema + vocabulary checks (fail-closed: a missing required
+    member means the registry is broken and the launch gate refuses)."""
     if data.get("schema") != SCHEMA:
         errors.append(f"schema must be {SCHEMA!r}, got "
                       f"{data.get('schema')!r}")
@@ -88,6 +74,81 @@ def load_registry(path: Path | None = None,
         elif not set(required) <= set(got):
             errors.append(f"{vocab} vocabulary is missing required "
                           f"members: {sorted(set(required) - set(got))}")
+
+
+def _validate_entry_trigger(e: dict, where: str, battery_vocab: set,
+                            gate_vocab: set, errors: list[str]) -> None:
+    """Per-entry trigger + go-live prerequisite checks (fail-closed)."""
+    battery = e.get("battery")
+    if battery not in battery_vocab:
+        errors.append(f"{where}: unknown battery {battery!r}")
+    trig = e.get("trigger")
+    if not isinstance(trig, dict) or not trig:
+        errors.append(f"{where}: missing trigger")
+    else:
+        if trig.get("type") not in TRIGGER_TYPES:
+            errors.append(f"{where}: unknown trigger type "
+                          f"{trig.get('type')!r}")
+        gate = str(trig.get("gate") or "").strip()
+        if not gate:
+            errors.append(f"{where}: missing trigger.gate "
+                          "(go-live prerequisite)")
+        elif gate not in gate_vocab:
+            errors.append(f"{where}: unknown trigger.gate {gate!r} "
+                          f"(known: {sorted(gate_vocab)})")
+    for field in PREREQUISITES:
+        if not str(e.get(field) or "").strip():
+            errors.append(f"{where}: missing {field} "
+                          "(fail-closed go-live prerequisite)")
+
+
+def _validate_entry_refs(e: dict, where: str, cost_vocab: set,
+                         emit_words: set, fingerprints_path: Path | None,
+                         errors: list[str]) -> None:
+    """Per-entry reference checks: cost_class, telemetry_word, the
+    ``module:func`` entry resolution and the liveness fingerprint."""
+    cost = e.get("cost_class")
+    if str(cost or "").strip() and cost not in cost_vocab:
+        errors.append(f"{where}: unknown cost_class {cost!r} "
+                      f"(known: {sorted(cost_vocab)})")
+    word = str(e.get("telemetry_word") or "").strip()
+    if word and not _telemetry_word_ok(word, emit_words):
+        errors.append(f"{where}: unknown telemetry_word {word!r} "
+                      "(an EMIT_ACTIONS word, a worker_budget.<name> "
+                      "gate-telemetry face, or a file:<rel> observable")
+    entry = str(e.get("entry") or "").strip()
+    if entry:
+        err = resolve_entry(entry)
+        if err is not None:
+            errors.append(f"{where}: {err}")
+    fp = str(e.get("liveness_fingerprint") or "").strip()
+    if fp:
+        known = fingerprint_ids(fingerprints_path)
+        if known is not None and fp not in known:
+            errors.append(f"{where}: liveness_fingerprint {fp!r} is "
+                          "not in the fingerprint file (a declared-"
+                          "but-undefined fingerprint is the "
+                          "decorative-evidence loophole)")
+def load_registry(path: Path | None = None,
+                  fingerprints_path: Path | None = None
+                  ) -> tuple[list[dict], list[str]]:
+    """Load + validate the battery registry. Returns (entries, errors);
+    errors non-empty means the registry is BROKEN and the launch gate
+    refuses (fail-closed). Mirrors mechanism_scheduler.load_registry's
+    contract, with the #805 prerequisites added."""
+
+
+    p = Path(path) if path is not None else REGISTRY_PATH
+    try:
+        data = _yaml().safe_load(p.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        return [], [f"registry unreadable: {exc}"]
+    except Exception as exc:  # yaml or encoding trouble
+        return [], [f"registry unparseable: {exc}"]
+    if not isinstance(data, dict):
+        return [], ["registry root is not a mapping"]
+    errors: list[str] = []
+    _validate_vocab(data, errors)
     entries = data.get("entries")
     if not isinstance(entries, list) or not entries:
         errors.append("entries list missing/empty")
@@ -110,50 +171,13 @@ def load_registry(path: Path | None = None,
             continue
         seen.add(name)
         where = f"entry {name!r}"
-        battery = e.get("battery")
-        if battery not in battery_vocab:
-            errors.append(f"{where}: unknown battery {battery!r}")
-        trig = e.get("trigger")
-        if not isinstance(trig, dict) or not trig:
-            errors.append(f"{where}: missing trigger")
-        else:
-            if trig.get("type") not in TRIGGER_TYPES:
-                errors.append(f"{where}: unknown trigger type "
-                              f"{trig.get('type')!r}")
-            gate = str(trig.get("gate") or "").strip()
-            if not gate:
-                errors.append(f"{where}: missing trigger.gate "
-                              "(go-live prerequisite)")
-            elif gate not in gate_vocab:
-                errors.append(f"{where}: unknown trigger.gate {gate!r} "
-                              f"(known: {sorted(gate_vocab)})")
-        for field in PREREQUISITES:
-            if not str(e.get(field) or "").strip():
-                errors.append(f"{where}: missing {field} "
-                              "(fail-closed go-live prerequisite)")
-        cost = e.get("cost_class")
-        if str(cost or "").strip() and cost not in cost_vocab:
-            errors.append(f"{where}: unknown cost_class {cost!r} "
-                          f"(known: {sorted(cost_vocab)})")
-        word = str(e.get("telemetry_word") or "").strip()
-        if word and not _telemetry_word_ok(word, emit_words):
-            errors.append(f"{where}: unknown telemetry_word {word!r} "
-                          "(an EMIT_ACTIONS word, a worker_budget.<name> "
-                          "gate-telemetry face, or a file:<rel> observable")
-        entry = str(e.get("entry") or "").strip()
-        if entry:
-            err = resolve_entry(entry)
-            if err is not None:
-                errors.append(f"{where}: {err}")
-        fp = str(e.get("liveness_fingerprint") or "").strip()
-        if fp:
-            known = fingerprint_ids(fingerprints_path)
-            if known is not None and fp not in known:
-                errors.append(f"{where}: liveness_fingerprint {fp!r} is "
-                              "not in the fingerprint file (a declared-"
-                              "but-undefined fingerprint is the "
-                              "decorative-evidence loophole)")
+        _validate_entry_trigger(e, where, battery_vocab, gate_vocab,
+                                errors)
+        _validate_entry_refs(e, where, cost_vocab, emit_words,
+                             fingerprints_path, errors)
     return [e for e in entries if isinstance(e, dict)], errors
+
+
 
 
 def validate_registry(path: Path | None = None) -> dict:

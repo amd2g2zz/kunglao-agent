@@ -215,7 +215,7 @@ files:
   scripts/hook_exit_codes.py:
     r1: 6
   scripts/hooks_selfcheck.py:
-    r1: 40
+    r1: 39
   scripts/hypothesis_bridge.py:
     r1: 3
   scripts/hypothesis_seeder.py:
@@ -436,7 +436,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 83
+    r1: 82
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/refutation_fold.py:

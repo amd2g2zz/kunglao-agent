@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""eval_matrix_runner.py — the WS5 seven-arm capability matrix harness (B2 multi-sample + B3 uniform-scheduler arms included).
+"""eval_matrix_runner.py — the WS5 seven-arm capability matrix harness
+(B2 multi-sample + B3 uniform-scheduler arms included).
 
 MEASUREMENT PREP ONLY: this is ORCHESTRATION — it launches the existing
 per-unit arm runners (scripts/eval_loop_runner.py: the full loop face,

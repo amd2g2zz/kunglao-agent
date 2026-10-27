@@ -109,7 +109,8 @@ from rank_face import face as _rank_face
 # (rho, z) ledger pairs, plus the #127 rho_sampler liveness status). The
 # snapshot ships it verbatim; PRODUCE only — no gate may consume it.
 from calibration_face import face as _calibration_face
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 _DEGRADED: dict[str, str] = {}

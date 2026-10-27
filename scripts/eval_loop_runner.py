@@ -969,6 +969,40 @@ def governance_block(metrics: dict, status: str, q_cell_rows: int) -> dict:
     }
 
 
+def _family_usage_counts(source: Path, lines: list[str]) -> dict:
+    """green/total per family from the consolidated experience dispatch
+    rows (the usage-merge columns): total = dispatches per family, green =
+    settled credits > 0.5 for the family the dispatch declared (the
+    former latent-dead read of runs/method-family-log.jsonl counted
+    fields that shape never carried). A cold/corrupt store renders cold
+    (note appended to ``lines``, empty counts returned)."""
+    fams: dict[str, list[int]] = {}
+    try:
+        from rlvr import q_cells as _qc_elr  # noqa: PLC0415 — lazy
+        obs = _qc_elr.JSONLQStore(source).observations()
+    except Exception as exc:  # noqa: BLE001 — a cold/corrupt store renders cold
+        obs = []
+        lines.append(f"  (experience unreadable: "
+                     f"{type(exc).__name__}: {exc})")
+    for row in obs:
+        if not isinstance(row, dict):
+            continue
+        fam = str(row.get("method_family") or "")
+        if not fam:
+            continue
+        fams.setdefault(fam, [0, 0])
+        src = str(row.get("source") or "")
+        if src == "dispatch":
+            fams[fam][1] += 1
+        elif src == "settlement":
+            credit = row.get("credit")
+            if (isinstance(credit, (int, float))
+                    and not isinstance(credit, bool)
+                    and float(credit) > 0.5):
+                fams[fam][0] += 1
+    return fams
+
+
 def warm_context_block(source_ws: Path) -> str:
     """The CC+warm-context arm's context: the SAME train-derived material
     the K-warm loop reads, rendered as plain text — pattern/anti-hint
@@ -1007,30 +1041,7 @@ def warm_context_block(source_ws: Path) -> str:
             lines.append("  " + render_card_block(card))
         except Exception as exc:  # noqa: BLE001 — one bad card skips itself
             lines.append(f"  (card skipped: {type(exc).__name__})")
-    fams: dict[str, list[int]] = {}
-    try:
-        from rlvr import q_cells as _qc_elr  # noqa: PLC0415 — lazy
-        obs = _qc_elr.JSONLQStore(source).observations()
-    except Exception as exc:  # noqa: BLE001 — a cold/corrupt store renders cold
-        obs = []
-        lines.append(f"  (experience unreadable: "
-                     f"{type(exc).__name__}: {exc})")
-    for row in obs:
-        if not isinstance(row, dict):
-            continue
-        fam = str(row.get("method_family") or "")
-        if not fam:
-            continue
-        fams.setdefault(fam, [0, 0])
-        src = str(row.get("source") or "")
-        if src == "dispatch":
-            fams[fam][1] += 1
-        elif src == "settlement":
-            credit = row.get("credit")
-            if (isinstance(credit, (int, float))
-                    and not isinstance(credit, bool)
-                    and float(credit) > 0.5):
-                fams[fam][0] += 1
+    fams = _family_usage_counts(source, lines)
     if fams:
         lines.append("  method-family summary (green/total from the train "
                      "log):")
@@ -1476,6 +1487,46 @@ def _session_status(rec: dict, budget_usd: float) -> str:
     return _post_cap_status(rec, budget_usd)
 
 
+def _preflight_skip_row(task: dict, tdir: Path, arm: str,
+                        pf_reasons: list[str], ws: Path) -> dict:
+    """Structured SKIP row for a workspace whose PQ spine failed to seed
+    (the spine-seed closure): a claim-less/oracle-less/unwired workspace
+    burns the wall measuring nothing — SKIP before the session starts."""
+    row = ds.results_row(
+        task_id=tdir.name, family=task["family"],
+        checker_kind=task["checker"]["kind"],
+        metrics={m: 0 for m in ds.REQUIRED_METRICS},
+        verdict="SKIP",
+        failures=[{"code": "HARNESS_PREFLIGHT",
+                   "detail": "; ".join(pf_reasons)}],
+        evidence_ref="", arm=arm)
+    row["loop"] = {"status": "harness_error", "metrics": {},
+                   "checker_rc": 2, "session": {
+                       "returncode": None, "wall_s": 0.0,
+                       "timed_out": False,
+                       "session_cost": None,
+                       "harness_contaminated": False,
+                       "harness_drift_files": []},
+                   "workspace": str(ws), "deliverable": None,
+                   "prompt_sha256": None}
+    row["governance"] = governance_block({}, "harness_error", 0)
+    row["excluded_from_performance"] = True
+    print(f"VERDICT {tdir.name} SKIP ({arm}: harness_error — "
+          f"{'; '.join(pf_reasons)})")
+    return row
+
+
+def _arm_prompt(arm: str, prompt: str,
+                warm_context_from: Path | None) -> str:
+    """The cc arm's prompt tail: the warm-context attribution arm appends
+    the SAME train-derived context K-warm reads, as frozen text (no
+    hooks, no posterior sampling -- that difference IS the arm's
+    question)."""
+    if arm == "cc-warm-context":
+        prompt = (prompt + "\n\n" + warm_context_block(warm_context_from))
+    return prompt
+
+
 def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_BUDGET_USD, wall_cap_s: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
@@ -1500,13 +1551,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         if arm in ("cc-default", "cc-warm-context"):
             ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
                                                    wall_cap_s=wall_cap_s)
-            if arm == "cc-warm-context":
-                # the experiment doc §5's attribution arm: the SAME
-                # train-derived context K-warm reads, as frozen text —
-                # no hooks, no posterior sampling (that difference IS
-                # the arm's question)
-                prompt = (prompt + "\n\n"
-                          + warm_context_block(warm_context_from))
+            # the experiment doc sec5 attribution arm (frozen text):
+            prompt = _arm_prompt(arm, prompt, warm_context_from)
         else:
             ws = init_workspace(tdir, out / "workspaces")
             # #523 closure: seed the PQ spine + preflight BEFORE the
@@ -1518,28 +1564,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             except (OSError, ValueError, yaml.YAMLError) as exc:
                 pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
             if not pf_ok:
-                row = ds.results_row(
-                    task_id=tdir.name, family=task["family"],
-                    checker_kind=task["checker"]["kind"],
-                    metrics={m: 0 for m in ds.REQUIRED_METRICS},
-                    verdict="SKIP",
-                    failures=[{"code": "HARNESS_PREFLIGHT",
-                               "detail": "; ".join(pf_reasons)}],
-                    evidence_ref="", arm=arm)
-                row["loop"] = {"status": "harness_error", "metrics": {},
-                               "checker_rc": 2, "session": {
-                                   "returncode": None, "wall_s": 0.0,
-                                   "timed_out": False,
-                                   "session_cost": None,
-                                   "harness_contaminated": False,
-                                   "harness_drift_files": []},
-                               "workspace": str(ws), "deliverable": None,
-                               "prompt_sha256": None}
-                row["governance"] = governance_block({}, "harness_error", 0)
-                row["excluded_from_performance"] = True
-                print(f"VERDICT {tdir.name} SKIP ({arm}: harness_error — "
-                      f"{'; '.join(pf_reasons)})")
-                return row
+                return _preflight_skip_row(task, tdir, arm, pf_reasons, ws)
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
                                        layer_paths=layer_paths,

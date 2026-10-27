@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """rlvr/settlement_wire.py — the blind settlement WIRE (issue-802).
 
-The blind-settlement card (issue-687) shipped the barrier family (the whitelist builder, the settlement
-gate, the read barrier, the kunglao-settler face) and left it
+The blind-settlement card (issue-687) shipped the barrier family (the
+whitelist builder, the settlement gate, the read barrier, the
+kunglao-settler face) and left it
 armed-unwired: no production writer built a ``blind-settlement-input/1``
 doc and the unblinded ``settle_step`` judgment is what ran. This module
 is the wire — the production writer + consumer that route the

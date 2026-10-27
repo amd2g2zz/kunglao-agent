@@ -62,7 +62,8 @@ KIND_CONFIRMED_WITH_DIFF = "confirmed_with_diff"
 
 # the four penalty-input kinds of the factor-vector events block
 PENALTY_KINDS = (KIND_DISPATCH, KIND_VERIFY, KIND_CONFIRMED_WITH_DIFF)
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _path(ws) -> Path:

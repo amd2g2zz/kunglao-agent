@@ -30,7 +30,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 # idapro binding wheels ship for CPython 3.8-3.13; 3.14 has no wheel and
 # the binding refuses to import against it.

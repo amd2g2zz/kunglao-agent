@@ -272,6 +272,25 @@ def features_from_evidence(evidence: dict) -> dict:
             "factors": factors, "gaps": gaps}
 
 
+def _tier_from_score(score: float, multi_front: bool,
+                     active_families: int, notes: list[str]) -> str:
+    """Score-band tier with the multi-front discovery rule first
+    (heuristic-first problem discovery, not score attrition)."""
+    if multi_front or active_families >= 3:
+        notes.append(
+            f"MAX via multi-front discovery rule (packer+anti/obfuscator="
+            f"{multi_front}, active families={active_families}) — "
+            "heuristic-first problem discovery, not score attrition")
+        return "max"
+    if score >= TIER_MAX:
+        return "max"
+    if score >= TIER_HARD:
+        return "hard"
+    if score >= TIER_MEDIUM:
+        return "medium"
+    return "easy"
+
+
 def calibrate(features: dict) -> dict:
     """features_from_evidence() output -> stable machine-readable verdict.
 
@@ -352,20 +371,7 @@ def calibrate(features: dict) -> dict:
             "detail": "; ".join(notes), "score": 0.0, "weight": 0.0,
             "contribution": 0.0, "source": "none"}
     else:
-        if multi_front or active_families >= 3:
-            tier = "max"
-            notes.append(
-                f"MAX via multi-front discovery rule (packer+anti/obfuscator="
-                f"{multi_front}, active families={active_families}) — "
-                "heuristic-first problem discovery, not score attrition")
-        elif score >= TIER_MAX:
-            tier = "max"
-        elif score >= TIER_HARD:
-            tier = "hard"
-        elif score >= TIER_MEDIUM:
-            tier = "medium"
-        else:
-            tier = "easy"
+        tier = _tier_from_score(score, multi_front, active_families, notes)
         dominant = max(sorted(factors_out),
                        key=lambda k: factors_out[k]["contribution"])
         if factor_set != "binary":

@@ -7,7 +7,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:

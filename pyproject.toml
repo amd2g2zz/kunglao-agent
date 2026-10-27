@@ -156,7 +156,7 @@ max-complexity = 12
 "scripts/failure_analysis_gate.py" = ["C901", "E501"]
 "scripts/feedback.py" = ["E501"]
 "scripts/gate_telemetry.py" = ["E501"]
-"scripts/heartbeat.py" = ["C901", "E501"]
+"scripts/heartbeat.py" = ["E501"]  # C901 cleared (#846 r2)
 # #420 Phase 2: evaluate_tick_continuity moved VERBATIM from
 # scripts/heartbeat.py (pinned detail strings + complexity) to
 # scripts/rlvr/liveness.py — the grandfather rides with the body.
