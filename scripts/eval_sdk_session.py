@@ -142,7 +142,7 @@ async def run_session(prompt: str, options: sdk.ClaudeAgentOptions,
     """Stream the session; return (final result text, cost doc)."""
     result_text = ""
     cost: dict = {}
-    async for msg in sdk.query(prompt, options=options):
+    async for msg in sdk.query(prompt=prompt, options=options):
         if isinstance(msg, sdk.AssistantMessage):
             for block in (msg.content or []):
                 if isinstance(block, sdk.ToolUseBlock):
