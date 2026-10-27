@@ -759,19 +759,27 @@ files:
     r1: 2
   tests/test_climb4_acceptance_receipt_pins_818.py:
     r1: 1
+  tests/test_climb4_commit_semantics_pins_818.py:
+    r1: 1
   tests/test_climb4_dgate_capability_pins_818.py:
     r1: 6
   tests/test_climb4_eval_release_render_pins_818.py:
     r1: 1
   tests/test_climb4_eval_targets_vm_registry_pins_818.py:
     r1: 1
+  tests/test_climb4_migrate_facts_pins_818.py:
+    r1: 2
   tests/test_climb4_native_proof_pins_818.py:
     r1: 1
   tests/test_climb4_native_unit_pins_818.py:
     r1: 1
+  tests/test_climb4_query_reformulation_pins_818.py:
+    r1: 1
   tests/test_climb4_replay_analyze_pins_818.py:
     r1: 1
   tests/test_climb4_rollup_sweep_pins_818.py:
+    r1: 1
+  tests/test_climb4_toolflex_pins_818.py:
     r1: 1
   tests/test_closure_contract_628_629.py:
     r1: 8
