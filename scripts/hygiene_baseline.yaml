@@ -159,6 +159,9 @@ files:
     r1: 1
   scripts/eval_native_targets.py:
     r1: 1
+  scripts/eval_sdk_session.py:
+    r1: 1
+    r2: 1
   scripts/eval_smoke_runner.py:
     r1: 2
   scripts/eval_split_lint.py:
@@ -1013,6 +1016,8 @@ files:
   tests/test_eval_native_332.py:
     r1: 7
   tests/test_eval_release_332.py:
+    r1: 1
+  tests/test_eval_sdk_session.py:
     r1: 1
   tests/test_eval_split_lint_518.py:
     r1: 1

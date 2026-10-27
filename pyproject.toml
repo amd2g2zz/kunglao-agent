@@ -29,6 +29,7 @@ dependencies = [
     # order; >=2.2 keeps the 3.10 floor resolvable (2.3+/2.4+
     # need 3.11+).
     "pillow>=10",
+    "claude-agent-sdk>=0.2.174",
 ]
 
 # Console scripts (issue #416): the `kunglao` CLI family was previously only
