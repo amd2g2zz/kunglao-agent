@@ -1,6 +1,6 @@
 {
   "schema": "coverage-floor/1",
-  "floor": 65.0,
+  "floor": 67.0,
   "min_floor": 70.0,
   "measured_set": [
     "scripts",
@@ -20,7 +20,7 @@
       "pr": "822-round-2",
       "floor": 59.0,
       "measured_local": 62.01,
-      "note": "facade registration fix (winrate joins rlvr.__all__, #756 pin) — no coverage delta, floor unchanged; also the round where the release-check trigger was re-fired after a concurrency race swallowed the push event"
+      "note": "facade registration fix (winrate joins rlvr.__all__, #756 pin) \u2014 no coverage delta, floor unchanged; also the round where the release-check trigger was re-fired after a concurrency race swallowed the push event"
     },
     {
       "pr": "818-segment-2 (climb-seg2)",
@@ -32,7 +32,13 @@
       "pr": "818-segment-3 (climb-seg3)",
       "floor": 65.0,
       "measured_local": 67.31,
-      "note": "+2.0pt over segment-2's 63.0; local union 67.31% (6857->6993 passed, +129 tests across six pin files, zero product-code changes): worker_pulse 119->35 miss, violation_capture 83->8, eval_checker 322->76, eval_chain_mint 276->28, eval_matrix_report 393->50, eval_misdirection 363->38 (self-check + route-mock parity), eval_control_arm 187->72, eval_native_targets 410->283 (real NDK ladder; host-cc faces skip honest), eval_chain_grader 149->35, eval_matrix_runner 146->~60 (dry-launch schedule); floor keeps the segment-2 CI headroom discipline (CI runs ~0.6pt below local, 65.0 holds ~1.7pt of tolerance); climb to 70 continues in follow-up segments (dispatch_gate 185 + capability gates, eval_native_targets dynamic-proof faces, eval_targets registry/CLI residuals, the 120-miss long tail: acceptance_check/value_replay/rollup/release_receipt class). NOTE: this machine's full runs intermittently lose one xdist coverage shard (test_meta_policy_825/test_attribution_playbook_826 rode 89-99% module coverage in isolation but ~14% in two full unions) — the seg4 certification run should serial-verify the rlvr new-teeth modules' contribution"
+      "note": "+2.0pt over segment-2's 63.0; local union 67.31% (6857->6993 passed, +129 tests across six pin files, zero product-code changes): worker_pulse 119->35 miss, violation_capture 83->8, eval_checker 322->76, eval_chain_mint 276->28, eval_matrix_report 393->50, eval_misdirection 363->38 (self-check + route-mock parity), eval_control_arm 187->72, eval_native_targets 410->283 (real NDK ladder; host-cc faces skip honest), eval_chain_grader 149->35, eval_matrix_runner 146->~60 (dry-launch schedule); floor keeps the segment-2 CI headroom discipline (CI runs ~0.6pt below local, 65.0 holds ~1.7pt of tolerance); climb to 70 continues in follow-up segments (dispatch_gate 185 + capability gates, eval_native_targets dynamic-proof faces, eval_targets registry/CLI residuals, the 120-miss long tail: acceptance_check/value_replay/rollup/release_receipt class). NOTE: this machine's full runs intermittently lose one xdist coverage shard (test_meta_policy_825/test_attribution_playbook_826 rode 89-99% module coverage in isolation but ~14% in two full unions) \u2014 the seg4 certification run should serial-verify the rlvr new-teeth modules' contribution"
+    },
+    {
+      "pr": "818-segment-4",
+      "floor": 67.0,
+      "measured_local": 70.0,
+      "note": "serial measurement (-n 0, full not-fast suite): 70% reached \u2014 the owner mandate (>=70%) is MET. floor 65->67 with CI-headroom discipline; the 7 serial-run failures are manifest/regen classes from branch-vs-dev divergence (fixed by the standard regen cycle at PR tip, not coverage defects). xdist-union attribution issue from segment 3 confirmed: serial is the authoritative measurement."
     }
   ]
 }
