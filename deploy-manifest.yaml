@@ -479,7 +479,7 @@ files:
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
-    sha256: bf946b7d7ae900c542f519996c4fc3d00b087c9d97493e68aa06dc574273c790
+    sha256: 84a638d0417718dc4d8daed0a6a09014d8e97300ebb59abcc832647824c3f1eb
   - src: scripts/eval_control_arm.py
     dest: .claude/scripts/eval_control_arm.py
     kind: scaffold
@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: cf2c35da81fe6ce77299ac8b054a389478c7cab2e2f07fdfcec0e5762623a385
+    sha256: 66e1a54d19a6d014155eac09cf02bfc1869258a19595214240b48da2a1135c0b
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -523,7 +523,7 @@ files:
   - src: scripts/eval_sdk_session.py
     dest: .claude/scripts/eval_sdk_session.py
     kind: scaffold
-    sha256: 88f1d04046654199469854c637cf756816eba362f5782ebd6d5db4d9d1692f3c
+    sha256: a7a49262770d9cc9ed03f8f767c18a4e67fb6dd4551504a73d57563a419708b4
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold

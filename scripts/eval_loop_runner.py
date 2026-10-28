@@ -276,7 +276,8 @@ def build_cc_default_argv(prompt: str, budget_usd: float) -> list[str]:
 def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                    wall_cap_s: float, session_cmd: str | None = None,
                    plugin_dir: Path | None = None,
-                   plugin: bool = True) -> dict:
+                   plugin: bool = True,
+                   solo_fraction: float | None = None) -> dict:
     """THE adapter (harness-neutral): start the real analysis session in
     ``workspace`` cwd under the budget caps, wait, return the session
     record. The production face is `claude -p`; an explicit session
@@ -286,6 +287,14 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     CC-DEFAULT face (build_cc_default_argv): same caps, no kunglao
     plugin — the harness-capability-variable arm."""
     workspace = Path(workspace)
+    # the session driver's caps travel as child env — the runner OWNS
+    # wall/budget/solo; a hand-set env outside the runner would silently
+    # diverge from the caps the prompt advertises
+    child_env = dict(os.environ)
+    child_env["KUNGLAO_SDK_BUDGET_USD"] = str(budget_usd)
+    if wall_cap_s and solo_fraction:
+        child_env["KUNGLAO_SOLO_CAP_S"] = str(
+            int(round(wall_cap_s * solo_fraction)))
     if session_cmd is None:
         session_cmd = os.environ.get(ENV_SESSION_CMD) or None
     if session_cmd:
@@ -302,7 +311,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     try:
         proc = subprocess.Popen(
             argv, cwd=str(workspace), stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, start_new_session=True)
+            stderr=subprocess.PIPE, text=True, start_new_session=True,
+            env=child_env)
     except OSError as exc:
         # a session that cannot even start is a TERMINAL record, never a
         # crash: the run_loop_task face turns this into session_error
@@ -513,6 +523,7 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
                         wall_cap_s: float, session_cmd: str | None = None,
                         plugin_dir: Path | None = None,
                         plugin: bool = True,
+                        solo_fraction: float | None = None,
                         note: str = "") -> tuple[dict, list[str], list[str]]:
     """issue 380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
     route through here so the harness-drift handling can no longer
@@ -525,7 +536,8 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
     pre = integrity_surface_hashes()
     rec = launch_session(workspace, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-                         plugin_dir=plugin_dir, plugin=plugin)
+                         plugin_dir=plugin_dir, plugin=plugin,
+                         solo_fraction=solo_fraction)
     drifted = harness_drift(pre, integrity_surface_hashes())
     restored: list[str] = []
     if drifted:
@@ -542,7 +554,7 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
 
 # ---------------------------------------------------------- wall partition
 def wall_partition_block(wall_cap_s: float,
-                         solo_fraction: float = SOLO_PARTITION_FRACTION
+                         solo_fraction: float | None = None
                          ) -> str:
     """M1 (exp5) + I1 (exp8): the WALL_BUDGET_PARTITION contract block.
     The runner owns the wall cap and kills the session tree at it — a
@@ -556,6 +568,8 @@ def wall_partition_block(wall_cap_s: float,
     delivered its candidate AT budget death (0/16 graded on a rush job) —
     so the block now mandates an early on-disk draft that is continuously
     improved; at the cap the CURRENT on-disk state is what gets graded."""
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
     total = int(round(wall_cap_s))
     solo_cap = int(round(wall_cap_s * solo_fraction))
     due = max(int(round(wall_cap_s - DELIVERABLE_RESERVE_S)), 0)
@@ -803,8 +817,7 @@ def init_cc_default_workspace(task_dir: Path,
         "Solve the reverse-engineering task in THIS working directory. "
         "Work fully autonomously: no questions, no user input.\n\n"
         + (wall_partition_block(
-            wall_cap_s, solo_fraction=solo_fraction
-            if solo_fraction is not None else SOLO_PARTITION_FRACTION)
+            wall_cap_s, solo_fraction=solo_fraction)
            + "\n\n"
            if wall_cap_s is not None else "")
         + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
@@ -1123,8 +1136,7 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     extras: list[str] = []
     if wall_cap_s is not None:
         extras.append(wall_partition_block(
-            wall_cap_s, solo_fraction=solo_fraction
-            if solo_fraction is not None else SOLO_PARTITION_FRACTION))
+            wall_cap_s, solo_fraction=solo_fraction))
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1244,8 +1256,7 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     same task under the same prompt contract. (issue 380 P3-1: the shared
     tail renders through _render_task_prompt.)"""
     extras: list[str] = [wall_partition_block(
-        wall_cap_s, solo_fraction=solo_fraction
-        if solo_fraction is not None else SOLO_PARTITION_FRACTION)]
+        wall_cap_s, solo_fraction=solo_fraction)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1455,6 +1466,10 @@ def extract_candidate(workspace: Path, task: dict) -> Path | None:
         if not base.is_dir():
             continue
         for p in sorted(base.rglob(f"*{suffix}")):
+            # empty suffix = the binary-candidate face: the fallback only
+            # accepts an executable file, not any stray artifact
+            if suffix == "" and not os.access(p, os.X_OK):
+                continue
             if not p.is_file() or p.stat().st_size == 0:
                 continue
             if p.name.startswith(_EXCLUDE_PREFIXES):
@@ -1553,6 +1568,9 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     cc-default face + the train-store text render — the RL-vs-context
     attribution arm) — same caps, extractor and checker either way."""
     out = Path(out)
+    # ONE normalization site: everything downstream takes a plain float
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
     tdir = ds.resolve_task_dir(task_ref)
     task = ds.load_task(tdir)
     suffix = _candidate_suffix(task)
@@ -1618,7 +1636,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-        plugin_dir=plugin_dir, plugin=(arm == ARM))
+        plugin_dir=plugin_dir, plugin=(arm == ARM),
+        solo_fraction=solo_fraction)
     contaminated = bool(drifted)
     status = _session_status(rec, budget_usd)
 
@@ -1670,7 +1689,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             ws, redo_prompt, out, tdir.name, budget_usd=redo_budget,
             wall_cap_s=redo_wall, session_cmd=session_cmd,
             plugin_dir=plugin_dir, plugin=(arm == ARM),
-            note=" (gap-redo session)")
+            solo_fraction=solo_fraction, note=" (gap-redo session)")
         status = _session_status(redo_rec, redo_budget)
         gap_redo["ran"] = True
         gap_redo["session"] = {

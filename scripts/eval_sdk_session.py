@@ -111,6 +111,11 @@ def make_post_tool_use_hook(state: SessionState):
 
     async def hook(input_data, tool_use_id=None, context=None):
         state.record(input_data.get("tool_name") or "")
+        # the runner's wall-cap SIGKILL cannot be trapped — flush the
+        # forensics periodically so a killed session still leaves its
+        # census behind
+        if state.tool_census and sum(state.tool_census.values()) % 25 == 0:
+            _flush_forensics(state, "")
         if state.solo_due():
             reason = solo_escalation(
                 state.elapsed(), state.solo_cap_s, state.escalations)
@@ -139,15 +144,17 @@ def build_options(state: SessionState) -> sdk.ClaudeAgentOptions:
 
 async def run_session(prompt: str, options: sdk.ClaudeAgentOptions,
                       state: SessionState) -> tuple[str, dict]:
-    """Stream the session; return (final result text, cost doc)."""
+    """Stream the session; return (final result text, cost doc).
+
+    Counting lives in the PostToolUse hook ALONE: in a live SDK run the
+    hook fires once per tool execution AND the message stream carries
+    the same tool_use block — recording in both would double every
+    census entry (and the wall-cap SIGKILL is uncatchable, so the hook
+    also flushes forensics periodically instead of only at exit)."""
     result_text = ""
     cost: dict = {}
     async for msg in sdk.query(prompt=prompt, options=options):
-        if isinstance(msg, sdk.AssistantMessage):
-            for block in (msg.content or []):
-                if isinstance(block, sdk.ToolUseBlock):
-                    state.record(getattr(block, "name", "") or "")
-        elif isinstance(msg, sdk.ResultMessage):
+        if isinstance(msg, sdk.ResultMessage):
             result_text = getattr(msg, "result", "") or ""
             usage = getattr(msg, "usage", None) or {}
             cost = {
@@ -158,6 +165,16 @@ async def run_session(prompt: str, options: sdk.ClaudeAgentOptions,
                 },
             }
     return result_text, cost
+
+
+def _flush_forensics(state: "SessionState", result_head: str) -> None:
+    try:
+        Path.cwd().joinpath("sdk-session.json").write_text(
+            json.dumps({**state.forensics(),
+                        "result_head": result_head}), encoding="utf-8")
+    except OSError as exc:
+        print(f"[sdk-session] forensics flush failed: {exc}",
+              file=sys.stderr)  # loud but never session-breaking
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -174,9 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # loud, never a silent zero-spend row
         print(f"sdk session failed: {exc}", file=sys.stderr)
         return 1
-    Path.cwd().joinpath("sdk-session.json").write_text(
-        json.dumps({**state.forensics(),
-                    "result_head": result_text[:500]}), encoding="utf-8")
+    _flush_forensics(state, result_text[:500])
     print(json.dumps(cost))
     return 0
 

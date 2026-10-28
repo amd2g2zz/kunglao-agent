@@ -65,10 +65,24 @@ def _result(cost: float | None = 1.25) -> ResultMessage:
 
 @pytest.fixture()
 def fake_query(monkeypatch):
-    """Fake the sdk seam: yields the given messages for any prompt."""
+    """Fake the sdk seam: yields the given messages for any prompt,
+    faithfully dispatching the options' PostToolUse hooks once per
+    tool_use block — the census counts ONLY through the hook (the
+    live SDK fires the hook per tool execution; the message stream
+    carries the same block, and recording in both would double)."""
     def install(messages):
         async def _gen(prompt, options=None):
+            hooks = []
+            if options is not None and options.hooks:
+                for matcher in options.hooks.get("PostToolUse", []):
+                    hooks.extend(matcher.hooks)
             for m in messages:
+                if isinstance(m, AssistantMessage):
+                    for block in (m.content or []):
+                        if isinstance(block, ToolUseBlock):
+                            for cb in hooks:
+                                await cb(
+                                    {"tool_name": block.name})
                 yield m
         monkeypatch.setattr(sdk, "query", _gen)
     return install
@@ -167,9 +181,15 @@ class TestRunAndMain:
                                                               monkeypatch):
         fake_query([_assistant("Bash", "Agent"), _result(1.25)])
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("KUNGLAO_SDK_BUDGET_USD", raising=False)
+        monkeypatch.delenv("KUNGLAO_SDK_MAX_TURNS", raising=False)
+        monkeypatch.delenv("KUNGLAO_SDK_PLUGIN_DIR", raising=False)
+        monkeypatch.delenv("KUNGLAO_SOLO_CAP_S", raising=False)
         st = es.SessionState()
+        # the driver's own options face — the hook wiring is what the
+        # census rides on
         text, cost = asyncio.run(es.run_session(
-            "PROMPT", sdk.ClaudeAgentOptions(cwd=str(tmp_path)), st))
+            "PROMPT", es.build_options(st), st))
         assert text == "done"
         assert cost["total_cost_usd"] == 1.25
         assert st.dispatch_count == 1
