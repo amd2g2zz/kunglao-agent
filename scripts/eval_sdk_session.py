@@ -9,10 +9,10 @@ total_cost_usd at the end; rc 0 on completion) plus what print-mode
 cannot give the #816 re-run:
 
   - MESSAGE-LEVEL OBSERVABILITY: every tool use is counted live; the
-    dispatch count (Agent/Task tool uses) and the full tool census land
-    in sdk-session.json in the workspace — the zero-dispatch diagnosis
-    that took transcript archaeology on the first run becomes a
-    harvested artifact.
+    dispatch count (subagent-dispatch tool uses) and the full tool
+    census land in sdk-session.json in the workspace — the
+    zero-dispatch diagnosis that took transcript archaeology on the
+    first run becomes a harvested artifact.
   - SOLO-CAP ENFORCEMENT: past KUNGLAO_SOLO_CAP_S seconds with zero
     dispatches, every subsequent non-dispatch tool result is replaced
     with an escalating contract reminder (decision=block + reason) —

@@ -1554,6 +1554,65 @@ def _arm_prompt(arm: str, prompt: str,
     return prompt
 
 
+def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
+                    wall_cap_s: float, solo_fraction: float,
+                    deliverable_rel: str, layer_paths: list[str],
+                    probe_block: str,
+                    warm_context_from: Path | None = None
+                    ) -> tuple[Path | None, str, dict | None]:
+    """Workspace init + prompt build for one arm face. Returns
+    (ws, prompt, skip_row): a non-None skip_row is the structured SKIP
+    row for a failed init (BAD_TASK) or failed preflight — the caller
+    returns it without running a session."""
+    try:
+        if arm in ("cc-default", "cc-warm-context"):
+            ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
+                                                   wall_cap_s=wall_cap_s,
+                                                   solo_fraction=solo_fraction)
+            # the experiment doc sec5 attribution arm (frozen text):
+            prompt = _arm_prompt(arm, prompt, warm_context_from)
+        else:
+            ws = init_workspace(tdir, out / "workspaces")
+            # #523 closure: seed the PQ spine + preflight BEFORE the
+            # session — a claim-less/oracle-less/unwired workspace burns
+            # the wall measuring nothing (the pilot's 0/3 class)
+            try:
+                seed_question_spine(ws, task)
+                pf_ok, pf_reasons = preflight(ws)
+            except (OSError, ValueError, yaml.YAMLError) as exc:
+                pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+            if not pf_ok:
+                return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                   pf_reasons, ws)
+            prompt = build_loop_prompt(tdir, task, deliverable_rel,
+                                       wall_cap_s=wall_cap_s,
+                                       solo_fraction=solo_fraction,
+                                       layer_paths=layer_paths,
+                                       probe_block=probe_block)
+        return ws, prompt, None
+    except RuntimeError as exc:
+        # structured SKIP row, never a tier-wide crash: one unit's init
+        # failure must not take the other units' measurement with it
+        row = ds.results_row(
+            task_id=tdir.name, family=task["family"],
+            checker_kind=task["checker"]["kind"],
+            metrics={m: 0 for m in ds.REQUIRED_METRICS},
+            verdict="SKIP",
+            failures=[{"code": "BAD_TASK",
+                       "detail": str(exc)[-1500:]}],
+            evidence_ref="", arm=arm)
+        row["loop"] = {"status": "init_failed", "metrics": {},
+                       "checker_rc": 2, "session": {
+                           "returncode": None, "wall_s": 0.0,
+                           "timed_out": False,
+                           "session_cost": None,
+                           "harness_contaminated": False,
+                           "harness_drift_files": []},
+                       "workspace": None, "deliverable": None,
+                       "prompt_sha256": None}
+        return None, "", row
+
+
 def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   = DEFAULT_BUDGET_USD, wall_cap_s: float
                   = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
@@ -1578,60 +1637,23 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
 
     layer_paths, probe_block = prompt_injection_blocks(tdir, task)
 
-    try:
-        if arm in ("cc-default", "cc-warm-context"):
-            ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
-                                                   wall_cap_s=wall_cap_s,
-                                                   solo_fraction=solo_fraction)
-            # the experiment doc sec5 attribution arm (frozen text):
-            prompt = _arm_prompt(arm, prompt, warm_context_from)
-        else:
-            ws = init_workspace(tdir, out / "workspaces")
-            # #523 closure: seed the PQ spine + preflight BEFORE the
-            # session — a claim-less/oracle-less/unwired workspace burns
-            # the wall measuring nothing (the pilot's 0/3 class)
-            try:
-                seed_question_spine(ws, task)
-                pf_ok, pf_reasons = preflight(ws)
-            except (OSError, ValueError, yaml.YAMLError) as exc:
-                pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
-            if not pf_ok:
-                return _preflight_skip_row(task, tdir, arm, pf_reasons, ws)
-            prompt = build_loop_prompt(tdir, task, deliverable_rel,
-                                       wall_cap_s=wall_cap_s,
-                                       solo_fraction=solo_fraction,
-                                       layer_paths=layer_paths,
-                                       probe_block=probe_block)
-    except RuntimeError as exc:
-        # structured SKIP row, never a tier-wide crash: one unit's init
-        # failure must not take the other units' measurement with it
-        row = ds.results_row(
-            task_id=tdir.name, family=task["family"],
-            checker_kind=task["checker"]["kind"],
-            metrics={m: 0 for m in ds.REQUIRED_METRICS},
-            verdict="SKIP",
-            failures=[{"code": "BAD_TASK",
-                       "detail": str(exc)[-1500:]}],
-            evidence_ref="", arm=arm)
-        row["loop"] = {"status": "init_failed", "metrics": {},
-                       "checker_rc": 2, "session": {
-                           "returncode": None, "wall_s": 0.0,
-                           "timed_out": False,
-                           "session_cost": None,
-                           "harness_contaminated": False,
-                           "harness_drift_files": []},
-                       "workspace": None, "deliverable": None,
-                       "prompt_sha256": None}
-        # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
-        # stdout file for the pass@k arithmetic — a parsed downstream
-        # face. The mirror on stderr records the SKIP reason on the
-        # diagnostics channel (record-only batch).
-        print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
-        print(f"[kunglao-agent] eval_loop WARN (fail-open): "
-              f"verdict_skip_init_failed: {tdir.name} ({arm}) "
-              f"[mirrored on stdout per the autoresearch.sh contract]",
-              file=sys.stderr)
-        return row
+    ws, prompt, skip_row = _init_task_face(
+        tdir, task, out, arm=arm, wall_cap_s=wall_cap_s,
+        solo_fraction=solo_fraction, deliverable_rel=deliverable_rel,
+        layer_paths=layer_paths, probe_block=probe_block,
+        warm_context_from=warm_context_from)
+    if skip_row is not None:
+        if skip_row["failures"][0]["code"] == "BAD_TASK":
+            # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
+            # stdout file for the pass@k arithmetic — a parsed downstream
+            # face. The mirror on stderr records the SKIP reason on the
+            # diagnostics channel (record-only batch).
+            print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
+            print(f"[kunglao-agent] eval_loop WARN (fail-open): "
+                  f"verdict_skip_init_failed: {tdir.name} ({arm}) "
+                  f"[mirrored on stdout per the autoresearch.sh contract]",
+                  file=sys.stderr)
+        return skip_row
     baseline_rounds = count_snapshot_rows(ws)
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
