@@ -1827,7 +1827,17 @@ def _select_task_dirs(tasks: list[str], *, tier: str) -> list[Path]:
             picked.append(d)
     if unknown:
         raise ValueError(f"unknown task(s): {unknown}")
-    return picked if tasks else all_dirs
+    return _pool_order(picked if tasks else list(all_dirs))
+
+
+def _pool_order(dirs: list[Path]) -> list[Path]:
+    """P5 wiring, order only: the tier's task dirs by pool value when
+    the pool's derived view has data at the repo root; the caller's
+    order byte-identically when it has none. Membership, the dedupe and
+    the refusal contract above are untouched."""
+    from rlvr.pool_indexer import value_table  # noqa: PLC0415 — lazy: optional face
+    from rlvr.pool_scheduler import order_task_dirs  # noqa: PLC0415
+    return order_task_dirs(dirs, value_table(ds.ROOT))
 
 
 def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
