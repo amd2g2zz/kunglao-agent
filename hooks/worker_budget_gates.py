@@ -2217,3 +2217,334 @@ def check_rotation_experiment(paths: dict, cid, prompt: str) -> tuple:
                        f'({type(exc).__name__}: {exc}) — gate error is '
                        'fail-closed; repair the rotation flag store '
                        'before dispatching.')
+
+
+# ---------- tier envelopes — wall / call-count / spend caps ----------
+# A worker's step runs under ITS OWN tier's envelope (the tier the dispatch
+# envelope declared, recorded on the worker row at registration). The
+# pre-guards world had only the mission deadline: one T1 claim could balloon
+# into an hour and a worker could run a day, stalling the rollout —
+# settlement (P2's triage) must ALWAYS be reachable. At dispatch admission
+# every ACTIVE worker is audited against its recorded tier's envelope; an
+# over-envelope worker lands ONE envelope_timeout terminal row in the
+# trajectory (carrying the ACTUAL window spend/calls — cost honesty) and
+# further dispatches are REJECTED until the orchestrator settles/kills it.
+# A TIMEOUT whose window produced nothing (zero artifacts, zero fan-out
+# dispatches — GRANULARITY_FAULT_MIN_OUTPUT) is a granularity fault: the
+# sizing-discipline counter that eventually flips the forced-split marker
+# the plan-review face reads.
+
+TIER_ENVELOPES: dict[int, dict] = {
+    1: {"wall_s": 600, "calls": 30, "usd": 0.30},
+    2: {"wall_s": 1800, "calls": 100, "usd": 1.00},
+    3: {"wall_s": 5400, "calls": 300, "usd": 2.50},
+}
+ENVELOPE_DIMS = ("wall_s", "calls", "usd")
+ENVELOPE_TIMEOUT_ACTION = "envelope_timeout"
+GRANULARITY_FAULT_ACTION = "granularity_fault"
+# a fault is a TIMEOUT with LESS than this many artifacts AND less than
+# this many fan-out dispatches in the worker's window (pinned by tests)
+GRANULARITY_FAULT_MIN_OUTPUT = 1
+# consecutive zero-output TIMEOUTs after which the plan-review face must
+# demand a claim split (the forced-split marker)
+GRANULARITY_FAULT_SPLIT_THRESHOLD = 2
+_ENVELOPE_TIMEOUT_STATE = 'runs/.envelope-timeout.json'
+_GRANULARITY_FAULT_STATE = 'runs/.granularity-faults.json'
+# workspace dirs whose fresh files count as the worker's productive output
+_ENVELOPE_OUTPUT_DIRS = ("facts", "evidence", "notes", "deliverables",
+                         "layer_out")
+
+
+def envelope_for(tier: int) -> dict:
+    """The tier's own envelope (a copy — the table is never mutated)."""
+    return dict(TIER_ENVELOPES[tier])
+
+
+def envelope_overrun(tier: int, *, wall_s: float, calls: int | float,
+                     usd: float) -> tuple[dict, ...]:
+    """The exceeded dimensions, in ENVELOPE_DIMS order; empty at/under cap
+    (the cap is inclusive — "<= 10 min" in the issue is not an overrun)."""
+    env = TIER_ENVELOPES[tier]
+    actuals = {"wall_s": wall_s, "calls": calls, "usd": usd}
+    return tuple({"dim": dim, "cap": env[dim], "actual": actuals[dim]}
+                 for dim in ENVELOPE_DIMS if actuals[dim] > env[dim])
+
+
+def _window_consumption(ws: Path, since: float,
+                        claim_id: str | None) -> dict:
+    """THIS worker's window consumption, PER-WORKER ATTRIBUTED.
+
+    A source counts toward a worker only when it carries the worker's
+    identity: the tc journal keys its rows on the dispatch claim (the
+    documented derivation in tc_journal.from_kunglao_log), so calls join
+    on the audited worker's claim. runs/cost_events.jsonl carries no
+    worker identity ({"ts","amount","source"}) — it is UNATTRIBUTABLE and
+    is EXCLUDED from per-worker accounting: workspace-wide spend is never
+    silently charged to every worker (two concurrent workers at $0.20
+    each must not audit as $0.40). The envelope's usd dimension fires
+    only when a worker-attributed spend source exists (today: none); the
+    terminal row's usd stays THIS worker's own spend (0.0), never a
+    workspace total.
+
+    Telemetry read failures fail open to zero: a broken feed must not
+    deadlock dispatch (the wall dimension needs no telemetry)."""
+    calls = 0
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import tc_journal
+        for row in tc_journal.read(ws):
+            if not claim_id or str(row.get("dispatch_id") or "") != claim_id:
+                continue
+            ts = _anchor_epoch(row.get("ts") or "")
+            if ts is not None and ts >= since:
+                calls += 1
+    except Exception as exc:  # noqa: BLE001 — fail-open telemetry read
+        warn('envelope_calls_read', f'{type(exc).__name__}: {exc}')
+    return {"calls": calls, "usd": 0.0}
+
+
+def _window_output(ws: Path, since: float,
+                   claim_id: str | None) -> dict:
+    """The worker window's productive output. Dispatch rows join on the
+    audited worker's claim (the ledger row's attribution key) — another
+    claim's fan-out is not this worker's output. Fresh files under the
+    output dirs are a window-scoped CONSERVATIVE no-fault signal (files
+    carry no worker identity: they may suppress a fault, never invent
+    one). Tolerant counts (missing dirs / dirty rows contribute zero)."""
+    artifacts = 0
+    for d in _ENVELOPE_OUTPUT_DIRS:
+        base = ws / d
+        if not base.is_dir():
+            continue
+        for p in base.rglob('*'):
+            try:
+                if p.is_file() and p.stat().st_mtime >= since:
+                    artifacts += 1
+            except OSError:
+                continue
+    dispatches = 0
+    logs = ws / 'runs' / 'logs'
+    if logs.is_dir():
+        for p in sorted(logs.glob('kunglao-*.jsonl')):
+            try:
+                lines = p.read_text(encoding='utf-8',
+                                    errors='replace').splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if (isinstance(row, dict)
+                        and row.get('action') == 'dispatch'
+                        and (not claim_id
+                             or str(row.get('claim') or '') == claim_id)
+                        and (_anchor_epoch(row.get('ts') or '') or 0)
+                        >= since):
+                    dispatches += 1
+    return {"artifacts": artifacts, "dispatches": dispatches}
+
+
+def _read_timeout_marks(ws: Path) -> dict:
+    """The already-emitted TIMEOUT markers (fail-open: {} on any problem)."""
+    p = ws / _ENVELOPE_TIMEOUT_STATE
+    if not p.is_file():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _emit_envelope_timeout(ws: Path, worker_id: str, claim_id: str | None,
+                           tier: int, wall_s: float, cons: dict,
+                           overruns: tuple[dict, ...]) -> bool:
+    """ONE envelope_timeout terminal row per over-envelope worker (the
+    dedupe mark keeps re-evaluations from spamming the trajectory while
+    the rejection stays live). Fail-open: observability never gates.
+
+    Returns True when the row was FRESHLY emitted for this worker — False
+    when the worker was already marked, or the emit failed fail-open. The
+    caller counts the sizing fault ONLY on a fresh TIMEOUT: a retry churn
+    against the same stalled worker is one fault, not a growing count."""
+    key = f'{worker_id}:{claim_id}'
+    marks = _read_timeout_marks(ws)
+    if key in marks:
+        return False
+    try:
+        import kunglao_log
+        from harness_common import utc_now_z
+        detail = json.dumps(
+            {"worker": worker_id, "tier": tier, "over": list(overruns),
+             "wall_s": round(wall_s, 1), "calls": cons["calls"],
+             "usd": cons["usd"]},
+            ensure_ascii=False, sort_keys=True)
+        kunglao_log.emit(ws, 'hook:worker_budget', ENVELOPE_TIMEOUT_ACTION,
+                         claim=claim_id or None, detail=detail)
+        _atomic_write(ws / _ENVELOPE_TIMEOUT_STATE, json.dumps(
+            {**marks, key: {"ts": utc_now_z()}}, ensure_ascii=False,
+            sort_keys=True))
+        return True
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the gate
+        warn('envelope_timeout_emit', f'{type(exc).__name__}: {exc}')
+        return False
+
+
+def read_granularity_faults(workspace: str | Path) -> dict:
+    """The full sizing-discipline state (fail-open zero view on absence or
+    a corrupt store — the retry-counter posture)."""
+    p = Path(workspace) / _GRANULARITY_FAULT_STATE
+    if not p.is_file():
+        return {"count": 0, "forced_split": False, "faults": []}
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        warn('granularity_fault_read', f'{type(exc).__name__}: {exc}')
+        return {"count": 0, "forced_split": False, "faults": []}
+    if not isinstance(data, dict):
+        return {"count": 0, "forced_split": False, "faults": []}
+    faults = data.get('faults')
+    return {"count": int(data.get('count') or 0),
+            "forced_split": bool(data.get('forced_split')),
+            "faults": faults if isinstance(faults, list) else []}
+
+
+def granularity_fault_view(workspace: str | Path) -> dict:
+    """The expose face a plan-review face reads: {"count", "forced_split"}."""
+    state = read_granularity_faults(workspace)
+    return {"count": state["count"], "forced_split": state["forced_split"]}
+
+
+def record_granularity_fault(workspace: str | Path, worker_id: str,
+                             claim_id: str, tier: int) -> dict:
+    """Count one zero-output TIMEOUT; flip forced_split at the threshold.
+    Returns the NEW state (the store is rebuilt, never mutated in place)."""
+    state = read_granularity_faults(workspace)
+    faults = list(state["faults"])
+    try:
+        from harness_common import utc_now_z
+        faults.append({"ts": utc_now_z(), "worker": worker_id,
+                       "claim": claim_id, "tier": tier})
+    except Exception:  # noqa: BLE001 — clock outage: the count still moves
+        faults.append({"worker": worker_id, "claim": claim_id, "tier": tier})
+    new_state = {
+        "count": state["count"] + 1,
+        "forced_split": (state["count"] + 1)
+        >= GRANULARITY_FAULT_SPLIT_THRESHOLD,
+        "faults": faults,
+    }
+    try:
+        _atomic_write(Path(workspace) / _GRANULARITY_FAULT_STATE,
+                      json.dumps(new_state, ensure_ascii=False,
+                                 sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — fail-open write, count in memory
+        warn('granularity_fault_write', f'{type(exc).__name__}: {exc}')
+    return new_state
+
+
+def forced_split_directive(workspace: str | Path) -> str | None:
+    """The plan-review demand text once repeated faults force a split;
+    None below the threshold."""
+    view = granularity_fault_view(workspace)
+    if not view["forced_split"]:
+        return None
+    return (f'forced-split (sizing gate): {view["count"]} granularity '
+            f'fault(s) — steps that burned their whole envelope with zero '
+            f'output. The claim is oversized: decompose it at plan review '
+            f'via scripts/claim_granularity.py --split (one step = one '
+            f'question x one tool family x one envelope) before '
+            f're-dispatching.')
+
+
+def check_tier_envelope(paths: dict, tier: int = 0,
+                        now: float | None = None) -> tuple[bool, str]:
+    """The tier-envelope TIMEOUT gate at dispatch admission (P6 guards card).
+
+    Audits every ACTIVE worker against ITS recorded tier's envelope
+    (wall since dispatched_at / tool calls / USD spend in its window).
+    An over-envelope worker REJECTS the dispatch — the orchestrator must
+    settle (kill) it first; the rejection lands the worker's ONE
+    envelope_timeout terminal row (actual spend/calls — cost honesty)
+    and evaluates the sizing discipline (a zero-output TIMEOUT is a
+    granularity fault; repeated faults surface the forced-split marker).
+
+    Posture: a worker without an evaluable dispatched_at anchor is
+    skipped (the deadline gate's unparseable-ts line — the wall cannot be
+    computed, and telemetry alone must not reject); telemetry read
+    failures fail open to zero (documented in _window_consumption); an
+    unknown tier in the table is ungated. ``tier`` (the incoming
+    dispatch's tier) rides the reason text only — enforcement keys on
+    each worker row's own recorded tier.
+    """
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')
+    state_path = paths.get('state') or (Path(ws) / 'analysis_state.txt')
+    workers = read_active_workers(Path(state_path))
+    if not workers:
+        return (True, 'no active workers — envelope audit idle')
+    moment = time.time() if now is None else float(now)
+    for w in sorted(workers, key=lambda x: int(x.get('dispatched_at', 0)
+                                                or 0)):
+        w_tier = int(w.get('tier', 1))
+        if w_tier not in TIER_ENVELOPES:
+            continue
+        started = w.get('dispatched_at', 0)
+        try:
+            started = float(started)
+        except (TypeError, ValueError):
+            continue
+        if started <= 0:
+            continue  # no evaluable anchor — the skip posture above
+        wall_s = moment - started
+        worker_id = str(w.get('worker_id') or '?')
+        claim_id = str(w.get('claim_id') or '') or None
+        cons = _window_consumption(Path(ws), started, claim_id)
+        overruns = envelope_overrun(w_tier, wall_s=wall_s,
+                                    calls=cons["calls"], usd=cons["usd"])
+        if not overruns:
+            continue
+        timeout_fresh = _emit_envelope_timeout(Path(ws), worker_id, claim_id,
+                                               w_tier, wall_s, cons, overruns)
+        fault_tail = ''
+        if timeout_fresh:
+            # the fault rides the FRESH timeout only — the same stalled
+            # worker re-audited on every retry attempt is one sizing
+            # fault, never a growing count (the recount would let retry
+            # churn masquerade as repeated sizing failures)
+            out = _window_output(Path(ws), started, claim_id)
+            if (out["artifacts"] < GRANULARITY_FAULT_MIN_OUTPUT
+                    and out["dispatches"] < GRANULARITY_FAULT_MIN_OUTPUT):
+                try:
+                    import kunglao_log
+                    kunglao_log.emit(
+                        Path(ws), 'hook:worker_budget',
+                        GRANULARITY_FAULT_ACTION, claim=claim_id,
+                        detail=json.dumps({"worker": worker_id,
+                                           "tier": w_tier},
+                                          ensure_ascii=False))
+                except Exception as exc:  # noqa: BLE001 — never the verdict
+                    warn('granularity_fault_emit',
+                         f'{type(exc).__name__}: {exc}')
+                record_granularity_fault(Path(ws), worker_id,
+                                         claim_id or '', w_tier)
+                directive = forced_split_directive(Path(ws))
+                if directive:
+                    fault_tail = f' {directive}'
+        return (False, (
+            f'TIER ENVELOPE TIMEOUT: worker {worker_id} '
+            f'(claim {claim_id}, tier {w_tier}) exceeded its envelope — '
+            + '; '.join(f"{o['dim']} {o['actual']}>{o['cap']}"
+                        for o in overruns)
+            + f' (actual window: wall {wall_s:.0f}s, calls '
+              f'{cons["calls"]}, usd {cons["usd"]:.2f}). Settle (kill) the '
+              'over-envelope worker before re-dispatching — its '
+              'envelope_timeout terminal row is in the trajectory for the '
+              'P2 triage (granularity / envelope / method).' + fault_tail))
+    return (True, f'{len(workers)} active worker(s) within envelopes '
+                  f'(incoming tier={tier})')

@@ -32,6 +32,7 @@ from worker_budget_gates import (
     check_max_retries,  # #427: the #604 breaker wired into live enforcement
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_tier_consistency,  # #680: envelope tier == action_tier(claim)
+    check_tier_envelope,  # P6 guards: tier wall/call/spend envelope TIMEOUT gate
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
     check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
@@ -125,6 +126,20 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'then re-dispatch. If the worker is gone (crash/kill) the '
             'barrier self-admits after the stale TTL '
             '(liveness_policy.STEP_SETTLE_TTL_MINUTES) with a warn.'
+        ),
+    },
+    'envelope': {
+        'additionalContext': (
+            'a P6 tier-envelope TIMEOUT: an active worker exceeded its own '
+            'tier caps (wall / tool calls / USD) - further dispatches stay '
+            'rejected until it is settled. Fix: stop the over-envelope '
+            'worker (its envelope_timeout terminal row is already in the '
+            'trajectory with the actual spend/calls for settlement triage: '
+            'granularity / envelope / method), reconcile the worker list '
+            'runs/analysis_state.txt [active_workers], then re-dispatch. '
+            'Repeated zero-output TIMEOUTs flip the forced-split marker '
+            '(runs/.granularity-faults.json) - decompose the oversized '
+            'claim at plan review via claim_granularity --split.'
         ),
     },
     'branchbudget': {
@@ -1122,6 +1137,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
         ('deadline', check_deadline(paths['state'])),
+        # P6 guards: tier envelopes — every ACTIVE worker audited against
+        # its own tier's wall/call/spend caps; an over-envelope worker REJECTS
+        # with its one envelope_timeout terminal row (actual spend/calls)
+        # until settled (the P2 triage feeds from it).
+        ('envelope', check_tier_envelope(paths, tier)),
         # #680: tier consistency BEFORE the tier ladder gate — on the C-007
         # shape (declared tier=2, eta=0) both would reject; this one carries
         # the ACTIONABLE message (the correct tier = action_tier), while the

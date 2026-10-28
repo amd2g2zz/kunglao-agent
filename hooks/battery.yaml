@@ -103,6 +103,15 @@ entries:
     liveness_fingerprint: battery-check-deadline
     description: mission deadline
 
+  - name: envelope
+    battery: dispatch
+    entry: worker_budget_gates:check_tier_envelope
+    trigger: {type: event, gate: always}
+    cost_class: cheap
+    telemetry_word: worker_budget.envelope
+    liveness_fingerprint: battery-check-envelope
+    description: tier wall/call/spend envelope TIMEOUT gate (#864)
+
   - name: tiercons
     battery: dispatch
     entry: worker_budget_gates:check_tier_consistency

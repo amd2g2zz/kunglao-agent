@@ -212,6 +212,7 @@ EMIT_ACTIONS = [
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
+    "envelope_timeout",   # P6 guards: tier-envelope TIMEOUT terminal step row (actual spend/calls ride detail; settlement triage feeds from it)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "evidence_certified",  # #803 evidence_certify: a claim's evidence chain certified (byte-exact+fresh-input row minted, sealed, replay-pinned)
@@ -230,6 +231,7 @@ EMIT_ACTIONS = [
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
+    "granularity_fault",  # P6 guards sizing discipline: a TIMEOUT whose window produced nothing (zero artifacts x zero fan-out) — the forced-split counter face
     "granularity_reject",  # issue 293 claim_granularity --check monolithic verdict face
     "guard_dormant",  # issue 304 fix-as-guard: a wired guard with zero fire records across the settlement window (WARN-level finding, ledger-deduped)
     "guard_fired",  # issue 304 fix-as-guard fire record: a wired guard's check FIRED (detail JSON carries the guard identity: check_reference)
@@ -333,6 +335,7 @@ EMIT_ACTIONS = [
     "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "task_terminal_settlement",
+    "tick_gate_refused",  # P6 guards tick-arming gate: a LOOP-arm launch on an unarmed workspace refused (structured refusal row + stderr, no session)
     "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
