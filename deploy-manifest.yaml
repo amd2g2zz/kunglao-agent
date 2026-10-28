@@ -95,11 +95,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 854d0affd562e9e442e7661d18c37d136bcd828af460009c68af253ca3b0c82c
+    sha256: 8193c2089452b32829014d609b35ed3a022a5239e2158337f17061a73d4f02ae
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: bcfaeb4475d874cfa481a87de3da87cd64ad81fa6b4dcdfe0e2e4df22c1127c3
+    sha256: a007d096a5a1b0bc7494355bdc5f8eae9b1fbf43ec7475f4aec81de602e28d9d
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -115,7 +115,7 @@ files:
   - src: hooks/battery.yaml
     dest: .claude/hooks/battery.yaml
     kind: hook
-    sha256: a22dcdfed732d8b98bf27db579ccc39ed5887b6e569dcb74b83d5b420f8a636d
+    sha256: c9878a9c22d499ef6e3a8da4b0d60a69b34a57016a0e9a6989a00fdb344c0d8b
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 66e1a54d19a6d014155eac09cf02bfc1869258a19595214240b48da2a1135c0b
+    sha256: 34087273a4257146657189bd93690baa86c5c1cacd6ca4d64ac560e5064b20ce
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -523,7 +523,7 @@ files:
   - src: scripts/eval_sdk_session.py
     dest: .claude/scripts/eval_sdk_session.py
     kind: scaffold
-    sha256: a7a49262770d9cc9ed03f8f767c18a4e67fb6dd4551504a73d57563a419708b4
+    sha256: f86f1f82402ba59562ffe2b1c3647c0b6fa3206cc9332075d3863929cee82010
   - src: scripts/eval_smoke_runner.py
     dest: .claude/scripts/eval_smoke_runner.py
     kind: scaffold
@@ -551,7 +551,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 6a0891c634f15ea01e8dc28b1e826ce13445baf7d3fedd76234d2f97b62bdafa
+    sha256: 6c1778a8ad1acfac5df5487347e491ba37b34a7e5d1640aa51c308b470cf270d
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
