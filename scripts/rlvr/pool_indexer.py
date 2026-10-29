@@ -12,7 +12,9 @@ mean_cost}`: the learner's value statistics (the #806 axis demotes the
 context-free family bandit to a cold-start prior; THIS is the
 contextual successor). Only episodes with a stamped `reward.r`
 contribute to a cell (an honest gap — unstamped episodes carry no
-output signal yet); mean_cost is the normalized cost term in [0, 1].
+output signal yet); ``n`` is the DISTINCT-EPISODE count per cell (one
+mission = one count — commit rows of the same episode amend, never
+multiply); mean_cost is the normalized cost term in [0, 1].
 
 PLAYBOOK VIEW — successful-episode compression, the legitimate form of
 distillation: episodes with a verified completion, grouped by sorted
@@ -44,9 +46,14 @@ def cell_key(features: tuple[str, ...] | list[str], action: str) -> tuple:
 
 def value_table(ws) -> dict[tuple, dict]:
     """context-features x action -> {n, mean_reward, mean_cost} over the
-    pool's reward-stamped episodes. Deterministic; writes nothing."""
+    pool's reward-stamped episodes. ``n`` counts DISTINCT EPISODES per
+    cell — one mission = one count (a mission's several same-action
+    commit rows amend the cell once, never multiply it; the P7-confirmed
+    inflation where n counted commit rows is fixed here). Deterministic;
+    writes nothing."""
     sums: dict[tuple, dict] = {}
-    for _path, doc in pool.load_all(ws):
+    seen: dict[tuple, set] = {}
+    for path, doc in pool.load_all(ws):
         reward = doc.get("reward") or {}
         # the stamped mission reward may ride as a bare float (the
         # reward_block carries the decomposition) — read both shapes.
@@ -56,9 +63,14 @@ def value_table(ws) -> dict[tuple, dict]:
         cost = doc.get("cost") or {}
         cost_term = reward_signal.cost_term(cost.get("tokens") or 0.0,
                                             cost.get("seconds") or 0.0)
+        eid = str(doc.get("id") or path.name)
         for c in doc.get("commits") or []:
             key = cell_key(doc.get("context_features") or [],
                            c.get("action"))
+            contributors = seen.setdefault(key, set())
+            if eid in contributors:
+                continue  # identity amends, it does not multiply
+            contributors.add(eid)
             cell = sums.setdefault(key, {"n": 0, "sum_reward": 0.0,
                                          "sum_cost": 0.0})
             cell["n"] += 1

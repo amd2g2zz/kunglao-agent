@@ -40,6 +40,7 @@ from . import ledger
 from . import learning_seal
 from . import liveness
 from . import marl
+from . import memory_bridge
 from . import meta_context
 from . import meta_policy
 from . import meta_retrieval
@@ -103,6 +104,7 @@ __all__ = [
     "ledger",
     "learning_seal",
     "marl",
+    "memory_bridge",
     "meta_arms",
     "meta_context",
     "meta_policy",
