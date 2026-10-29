@@ -1355,7 +1355,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 79be6e78fac1f8ed44cb251d3a654d668dc4a576fbd34363eb3a0951071688e1
+    sha256: 2c3ae17a11451c2340ed4b8dba3e676328c27d2485ce8177f85b4e4f9faaceb1
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1415,7 +1415,7 @@ files:
   - src: scripts/rlvr/episode_settle.py
     dest: .claude/scripts/rlvr/episode_settle.py
     kind: scaffold
-    sha256: eceb00b6b7e0e2cb1692520ce640e09dc86507711c367af002127ae8f705aacd
+    sha256: 322b84d59f7955d7facd4133c6b58c7ccdb064f2cea5173528efdc16d0cf0b99
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1468,6 +1468,10 @@ files:
     dest: .claude/scripts/rlvr/marl.py
     kind: scaffold
     sha256: 49f98f6ef12d8d862ee907634f7108bc0675f9d5a23f8b53575c890f258afeb6
+  - src: scripts/rlvr/memory_bridge.py
+    dest: .claude/scripts/rlvr/memory_bridge.py
+    kind: scaffold
+    sha256: 8cf6c2d6fd27abcb51b658d7e8f8f9c377ac8571c20b548aea324c9bf7865ff3
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
@@ -1503,7 +1507,7 @@ files:
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
-    sha256: 466cfaffb9d8e8984c517c593c59c3f627e3a9115e87dca1e34e0023eea1f0ff
+    sha256: 1c80c2c3e2c49bf39ed3604bb968001068f380969d400311da38ef4181552859
   - src: scripts/rlvr/pool_scheduler.py
     dest: .claude/scripts/rlvr/pool_scheduler.py
     kind: scaffold
@@ -1536,6 +1540,10 @@ files:
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
     sha256: 6b784adc6f017cea27fd5d78db1a7124dc265de0ae8f162b3a6853e464a41b5f
+  - src: scripts/rlvr/review_windows.py
+    dest: .claude/scripts/rlvr/review_windows.py
+    kind: scaffold
+    sha256: 3da6a24e092be5eed30d61ca31e58776cc784d60bd82a63d850fdfb95ff3c633
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold

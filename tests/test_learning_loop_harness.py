@@ -79,12 +79,12 @@ def test_tool_learning_expected_cost_declines_across_laps(tmp_path):
     assert trace[0] > trace[1] > trace[2], trace
     # cold start pays the base estimate; lap 2 pays the single C-A1
     # cell under the mastery discount; lap 3 adds the cheaper C-A2
-    # cell (each mission folds its cumulative raw ledger rows — identity
-    # + settlement amendment — so the cells weight later missions)
+    # cell (P4's n-folding weights DISTINCT missions: two fam-a
+    # missions at 0.9 and 0.4 -> mean 0.65)
     assert trace[0] == pytest.approx(BASE_A)
     assert trace[1] == pytest.approx(BASE_A * ps.MASTERY_COST_FACTOR)
     assert trace[2] == pytest.approx(
-        (2 * BASE_A + 6 * 0.4) / 8 * ps.MASTERY_COST_FACTOR)
+        (BASE_A + 0.4) / 2 * ps.MASTERY_COST_FACTOR)
     # the lap-end series declines too (the refreshed table, lap by lap)
     ends = [lap["expected_cost_fam_a"] for lap in report["laps"]]
     assert ends[0] > ends[1] > ends[2], ends

@@ -41,6 +41,7 @@ from . import learning_seal
 from . import liveness
 from . import loop_sim
 from . import marl
+from . import memory_bridge
 from . import meta_context
 from . import meta_policy
 from . import meta_retrieval
@@ -60,6 +61,7 @@ from . import recipe_arms
 from . import refutation_fold
 from . import reward
 from . import reward_signal
+from . import review_windows
 from . import scalar
 from . import settlement_scorer
 from . import settlement_wire
@@ -104,6 +106,7 @@ __all__ = [
     "learning_seal",
     "loop_sim",
     "marl",
+    "memory_bridge",
     "meta_arms",
     "meta_context",
     "meta_policy",
@@ -121,6 +124,7 @@ __all__ = [
     "refutation_fold",
     "reward",
     "reward_signal",
+    "review_windows",
     "scalar",
     "settlement_wire",
     "source_reliability",
