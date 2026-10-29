@@ -1463,7 +1463,7 @@ files:
   - src: scripts/rlvr/loop_sim.py
     dest: .claude/scripts/rlvr/loop_sim.py
     kind: scaffold
-    sha256: 5af459901896b75ed56546cf1540ead0bb1ddee66ebd78bc6911d7a2607817d6
+    sha256: be8d0c5e097ea7f98b6e02bd0d479cf146123256519384d828d8693ea51741a3
   - src: scripts/rlvr/marl.py
     dest: .claude/scripts/rlvr/marl.py
     kind: scaffold

@@ -18,8 +18,8 @@ step_record (validate_step / segment_view / backward_plan / tree_view),
 reward_signal.step_reward, timeout_triage.classify_timeout,
 episode_settle (settle_mission / derived_views), pool_indexer
 .value_table, pool_scheduler (task_value / pick_next / reprice_scope /
-retire_reasons / inflow_from_failure / order_task_dirs), ledger.record,
-and the budget gate's envelope_overrun (read-only). This module owns
+retire_reasons / inflow_from_failure / order_task_dirs), and
+ledger.record. This module owns
 only the mock worker's choices (which tool, how many tokens) and ONE
 named stand-in for a face a later card owes:
 
@@ -193,15 +193,20 @@ ROLLOUTS = {"a1": _rollout_a1, "b1": _rollout_b1,
 def _rollout_b2_timeout():
     """Lap 2, fam-b: the OVERSIZED task — the envelope kills the window
     with zero artifacts; classify_timeout rules it a granularity fault."""
-    from hooks.worker_budget_gates import (ENVELOPE_TIMEOUT_ACTION,
-                                           envelope_overrun)
     from rlvr import step_record
     from rlvr import timeout_triage
-    over = envelope_overrun(1, wall_s=700.0, calls=5, usd=0.05)
+    # planted terminal row in the P6 gate's own documented shape
+    # (hooks/worker_budget_gates.py: action "envelope_timeout", detail
+    # {tier, over:[{dim, cap, actual}]}, TIER-1 wall cap 600s) — the
+    # gate EMITS this row in production; the mock plants it and the
+    # triage face CONSUMES it. No hooks import: scripts never import
+    # the hooks package (dep surface).
+    event = {"action": "envelope_timeout",
+             "detail": {"tier": 1,
+                        "over": [{"dim": "wall_s", "cap": 600,
+                                  "actual": 700.0}]}}
     plan = step_record.backward_plan(
         "the oversized claim completes inside the window", [])
-    event = {"action": ENVELOPE_TIMEOUT_ACTION,
-             "detail": {"tier": 1, "over": [dict(d) for d in over]}}
     verdict = timeout_triage.classify_timeout(plan, event, [])
     return {"checkpoints": plan, "envelope_event": event,
             "verdict": verdict}
