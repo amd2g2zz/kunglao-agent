@@ -22,14 +22,21 @@ Contract:
     id (register order, deterministic);
   - idempotent: a second settle over the same terminal workspace writes
     zero episodes (the mission episode file is the settle mark);
-  - cost-honest: spend_usd sums the workspace's cost-event faces
-    (cost_events.jsonl — the cost-gate face — and runs/cost_events.jsonl,
-    each writer owning its file, so no double count); that real spend is
-    converted onto the cost face at $1 == 10k tokens (reward_signal's
-    cost_t norm), so cost.tokens is never a zero stamp;
+  - cost-honest: spend_usd books the cost events of THIS mission's
+    window — the events since the previous settle mark (the mission
+    episode file), a first episode owning everything before it; the
+    window's per-face row counts ride the episode's cost block as
+    ``event_rows``, the next mission's booking boundary. (The old
+    cumulative fold booked the workspace's whole history into every
+    episode — a family whose missions spend >= $1 total saturated to
+    reward <= 0 and could never master.) The real spend converts onto
+    the cost face at $1 == 10k tokens (reward_signal's cost_t norm),
+    so cost.tokens is never a zero stamp;
   - family-carrying: context_features include the `family:<name>` token
     from task_spec.yaml when the mission declares one — the scheduler's
-    family join engages on settle-landed episodes;
+    family join engages on settle-landed episodes — and the episode
+    document carries the bare name as its own ``family`` field, the
+    identity the memory bridge's mastery face validates against;
   - trust: this face NEVER mints a verdict. A claim whose canonical
     verification surface is ABSENT gets a MIRROR stamped from the claim
     register's own terminal status (PROVEN -> verified) — the register's
@@ -230,26 +237,57 @@ def _committed_rows(ws: Path) -> list[dict]:
     return [r for r in iter_jsonl(text.splitlines()) if isinstance(r, dict)]
 
 
-def _spend_usd(ws: Path) -> float:
+def _amount_rows(p: Path) -> list[dict]:
+    """The parseable amount-bearing cost rows of one face."""
     from kunglao_log import iter_jsonl  # noqa: PLC0415 — lazy
-    total = 0.0
-    for rel in _COST_FACES:
-        p = ws / rel
-        if not p.is_file():
+    if not p.is_file():
+        return []
+    text = p.read_text(encoding="utf-8", errors="replace")
+    return [r for r in iter_jsonl(text.splitlines())
+            if isinstance(r, dict)
+            and isinstance(r.get("amount"), (int, float))
+            and not isinstance(r.get("amount"), bool)]
+
+
+def _consumed_cost_rows(ws: Path) -> dict[str, int]:
+    """The per-face cost-event high-water mark across the pool's prior
+    settle marks: each settled episode stamps the rows its own window
+    consumed (``cost.event_rows``), so the next mission's window starts
+    AFTER them — the idempotency mark is the booking boundary."""
+    marks: dict[str, int] = {}
+    for _path, doc in episode_pool.load_all(ws):
+        stamped = (doc.get("cost") or {}).get("event_rows")
+        if not isinstance(stamped, dict):
             continue
-        text = p.read_text(encoding="utf-8", errors="replace")
-        for row in iter_jsonl(text.splitlines()):
-            if isinstance(row, dict) and \
-                    isinstance(row.get("amount"), (int, float)) and \
-                    not isinstance(row.get("amount"), bool):
-                total += float(row["amount"])
-    return total
+        for rel, n in stamped.items():
+            if isinstance(n, int) and not isinstance(n, bool) \
+                    and n > marks.get(str(rel), 0):
+                marks[str(rel)] = n
+    return marks
+
+
+def _spend_window(ws: Path) -> tuple[float, dict[str, int]]:
+    """(spend_usd, per-face row counts) of THIS mission's window: the
+    cost events since the previous settle mark for the workspace, a
+    first episode owning everything before it."""
+    consumed = _consumed_cost_rows(ws)
+    total = 0.0
+    counts: dict[str, int] = {}
+    for rel in _COST_FACES:
+        rows = _amount_rows(ws / rel)
+        start = min(consumed.get(rel, 0), len(rows))
+        counts[rel] = len(rows)
+        total += sum(float(r["amount"]) for r in rows[start:])
+    return total, counts
 
 
 def _family_feature(ws: Path) -> str:
-    """The mission's family token, from task_spec.yaml's ``family``
-    field. No family declared -> no token (register features only, the
-    old shape). Without it the scheduler's family join never engages on
+    """The mission's family, from task_spec.yaml's ``family`` field, in
+    the scheduler's BARE vocabulary (pool_scheduler's joins are on the
+    bare name). No family declared -> "" (register features only, the
+    old shape). The context-feature token rides as ``family:<name>``;
+    the episode document carries the bare name as its own ``family``
+    field. Without it the scheduler's family join never engages on
     settle-landed episodes (the P7-confirmed finding)."""
     p = ws / "task_spec.yaml"
     if not p.is_file():
@@ -259,8 +297,7 @@ def _family_feature(ws: Path) -> str:
     except yaml.YAMLError:
         return ""
     family = spec.get("family") if isinstance(spec, dict) else None
-    family = str(family or "").strip()
-    return f"family:{family}" if family else ""
+    return str(family or "").strip()
 
 
 def _commit_summary(row: dict) -> str:
@@ -285,12 +322,12 @@ def _build_episode(ws: Path, anchor: str, claims: list[dict]) -> dict:
                   for i, (c, s) in enumerate(zip(claims, statuses))
                   if s not in _TERMINAL_PASS]
     rows = _committed_rows(ws)
-    spend = _spend_usd(ws)
+    spend, event_rows = _spend_window(ws)
     family = _family_feature(ws)
     now = utc_now_z()
     feats = {f"register:{s}" for s in statuses if s}
     if family:
-        feats.add(family)
+        feats.add(f"family:{family}")
     features = sorted(feats)
     fragments = []
     for c in claims:
@@ -319,7 +356,11 @@ def _build_episode(ws: Path, anchor: str, claims: list[dict]) -> dict:
         # tokens (reward_signal's cost_t norm) so the A1 cost term reads
         # the actual dollar spend instead of a zero stamp
         "cost": {"tokens": spend * reward_signal.COST_TOKENS_NORM,
-                 "seconds": 0, "spend_usd": spend},
+                 "seconds": 0, "spend_usd": spend,
+                 "event_rows": dict(event_rows)},
+        # the episode's OWN family (bare name): the identity the memory
+        # bridge's mastery face validates the stamping family against
+        "family": family,
         "utility": {"retrievals": 0, "citations": 0, "utility": 0.0},
         "reusable_fragments": fragments[:episode_schema.FRAGMENT_MAX],
         "milestones": [],
