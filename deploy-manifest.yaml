@@ -95,7 +95,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 8193c2089452b32829014d609b35ed3a022a5239e2158337f17061a73d4f02ae
+    sha256: fa613f347c4ef68572fdb20e7be042d629a93e7b3d2f6e29fbd4f7a8d76a2f78
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
