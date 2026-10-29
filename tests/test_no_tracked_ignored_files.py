@@ -52,6 +52,13 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # same tracked home as the core types.
     "experiments/learning-loop/ledger_frame.py":
         "rl-v2 ledger projection: tracked home, dep-gate exemption (#879)",
+    # the rl-v2 policy faces (#880-#882): the sampling decision modules
+    # share the learning-loop tracked home (the loop_sim precedent) —
+    # experiment code outside the deploy surface, deliberately.
+    "experiments/learning-loop/policy/__init__.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
+    "experiments/learning-loop/policy/selector.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
