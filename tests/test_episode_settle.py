@@ -340,3 +340,46 @@ class TestFloatRewardConsumers:
             next(iter(es.episode_pool.list_episodes(ws))))
         out = meta_policy.utility_chain(doc)
         assert out["improved"] is True
+
+
+class TestPerMissionSpendWindow:
+    def test_each_mission_books_only_its_own_spend(self, tmp_path):
+        """THE P8 BLOCKER (proof-battery face): the workspace's
+        CUMULATIVE cost events must not fold into every episode — the
+        settle mark is the booking boundary, a first episode owns
+        everything before it. Under the cumulative fold mission a2 paid
+        a1+b1+a2, any family whose missions spend >= $1 total saturated
+        to reward <= 0 and could never master."""
+        ws = _mk_ws(tmp_path)
+        (ws / "cost_events.jsonl").write_text('{"amount": 0.4}\n',
+                                              encoding="utf-8")
+        es.settle_mission(ws)
+        ep1, _b = es.episode_schema.read_episode_file(
+            es.episode_pool.episode_path(ws, "C-001"))
+        assert ep1["cost"]["spend_usd"] == pytest.approx(0.4)
+        assert ep1["reward"] == pytest.approx(0.6), \
+            "reward computed from THIS episode's own spend"
+        # mission 2 in the same workspace: fresh register + fresh spend
+        (ws / "claim-register.yaml").write_text(yaml.safe_dump(
+            {"claims": [{"id": "C-101", "status": "PROVEN",
+                         "title": "retry"}]}), encoding="utf-8")
+        with (ws / "cost_events.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write('{"amount": 0.25}\n')
+        out = es.settle_mission(ws)
+        assert out["episodes_written"] == 1
+        ep2, _b = es.episode_schema.read_episode_file(
+            es.episode_pool.episode_path(ws, "C-101"))
+        assert ep2["cost"]["spend_usd"] == pytest.approx(0.25), \
+            "NOT the cumulative 0.65 — the window starts after the mark"
+        assert ep2["reward"] == pytest.approx(0.75), \
+            "the reward reads the per-episode spend, not the history"
+        assert ep2["reward_block"]["cost_term"] == pytest.approx(0.25)
+
+    def test_first_episode_owns_everything_before_it(self, tmp_path):
+        """No prior settle mark -> the whole cost face is this
+        episode's window (the boundary's base case)."""
+        ws = _mk_ws(tmp_path)
+        es.settle_mission(ws)
+        ep, _b = es.episode_schema.read_episode_file(
+            es.episode_pool.episode_path(ws, "C-001"))
+        assert ep["cost"]["spend_usd"] == pytest.approx(0.65)

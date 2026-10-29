@@ -1415,7 +1415,7 @@ files:
   - src: scripts/rlvr/episode_settle.py
     dest: .claude/scripts/rlvr/episode_settle.py
     kind: scaffold
-    sha256: 322b84d59f7955d7facd4133c6b58c7ccdb064f2cea5173528efdc16d0cf0b99
+    sha256: ba04db4a81e8602fe193bc02c22183fb22d94df04dc5234dd1ec5e103999f8cc
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
@@ -1471,7 +1471,7 @@ files:
   - src: scripts/rlvr/memory_bridge.py
     dest: .claude/scripts/rlvr/memory_bridge.py
     kind: scaffold
-    sha256: 8cf6c2d6fd27abcb51b658d7e8f8f9c377ac8571c20b548aea324c9bf7865ff3
+    sha256: 3685754bd35fd3b832d0e5ad44bd34829dfda54c5736ad83d6e4f79960164a93
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
@@ -1507,7 +1507,7 @@ files:
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
-    sha256: 1c80c2c3e2c49bf39ed3604bb968001068f380969d400311da38ef4181552859
+    sha256: 40ba437ad7fd42986623d2cbf20699724dd3348e9175e3fa7bcc33dfbbd0f5cb
   - src: scripts/rlvr/pool_scheduler.py
     dest: .claude/scripts/rlvr/pool_scheduler.py
     kind: scaffold

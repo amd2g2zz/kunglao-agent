@@ -99,14 +99,15 @@ class TestStampWritesThrough:
     def test_hot_index_row_and_cold_detail_file(self, tmp_path):
         ws, doc = _settled_episode(tmp_path)
         out = mb.stamp_family_memory(ws, doc)
-        assert out["family"] == "family:tf-snake"
+        assert out["family"] == "tf-snake", \
+            "the bare scheduler vocabulary, prefix stripped"
         assert len(out["written"]) == 3, "one row per reusable fragment"
         rows = mb.load_rows(ws)
         assert {r["key"] for r in rows} == set(out["written"])
-        assert all(r["family"] == "family:tf-snake" for r in rows)
+        assert all(r["family"] == "tf-snake" for r in rows)
         frags = {r["summary"] for r in rows}
         assert "C-001: packaging" in frags
-        detail = ws / "runs" / "memory" / "family:tf-snake" / \
+        detail = ws / "runs" / "memory" / "tf-snake" / \
             f"{out['written'][0]}.md"
         assert detail.is_file(), "cold detail sinks to the file face"
         assert "packaging" in detail.read_text(encoding="utf-8")
@@ -125,8 +126,8 @@ class TestStampWritesThrough:
         out = mb.stamp_family_memory(ws, doc)
         assert out["mastered"] is True, "positive completed mission = method"
         view = mb.family_view(ws)
-        assert view["family:tf-snake"]["mastered"] is True
-        task = {"task_id": "t", "family": "family:tf-snake"}
+        assert view["tf-snake"]["mastered"] is True
+        task = {"task_id": "t", "family": "tf-snake"}
         assert ps.retire_reasons(task, {"memory": view}) == "learned"
 
     def test_failed_episode_lands_attribution_row_not_mastered(self, tmp_path):
@@ -240,8 +241,7 @@ class TestRecallSensors:
         row = mb.refute_narrow(ws, key, "run on a debug build")
         row = mb.refute_narrow(ws, key, "fat binary variant")
         assert row["retired"] is True, "repeated refutation retires (soft)"
-        detail = next((ws / "runs" / "memory" / "family:tf-snake")
-                      .glob("*.md"))
+        detail = next((ws / "runs" / "memory" / "tf-snake").glob("*.md"))
         assert detail.is_file(), "the row still exists on disk"
         gate = mb.recall_gate(row)
         assert gate["admit"] is False
@@ -360,3 +360,83 @@ class TestRealFaceFixes:
         es.episode_pool.write_episode(ws, other)
         table = pi.value_table(ws)
         assert table[key]["n"] == 2, "a second distinct mission counts once"
+
+    def test_zero_reward_stays_in_the_value_table(self, tmp_path):
+        """An honestly-zero reward is STAMPED, not absent: the `or {}`
+        fold dropped falsy rewards from the cell — a 0.0 episode must
+        land in its cell and count in n; None stays unstamped."""
+        ws = _mk_ws(tmp_path)
+        (ws / "runs" / "verification-C-777.md").write_text(
+            "verdict: verified\nclaim: C-777\n", encoding="utf-8")
+        zero = {"schema": "episode/1", "id": "mission-C-777",
+                "claim": "C-777",
+                "created": "2026-10-29T00:00:00Z",
+                "updated": "2026-10-29T00:00:00Z",
+                "context_features": ["family:tf-snake"],
+                "commits": [{"seq": 1, "action": "persist",
+                             "summary": "an honest zero"}],
+                "outcome": {"status": "completed", "verified": True,
+                            "evidence_ref": ""},
+                "cost": {"tokens": 0, "seconds": 0},
+                "utility": {"retrievals": 0, "citations": 0, "utility": 0.0},
+                "reusable_fragments": [], "milestones": [],
+                "reward": 0.0}
+        es.episode_pool.write_episode(ws, zero)
+        table = pi.value_table(ws)
+        key = next(k for k in table if "family:tf-snake" in k[0])
+        assert table[key]["n"] == 1, "the zero-reward episode counts"
+        assert table[key]["mean_reward"] == 0.0, "the honest zero holds"
+        # an ABSENT reward key is the unstamped shape (the schema only
+        # constrains the key when present; `doc.get("reward")` -> None)
+        bare = {k: v for k, v in zero.items() if k != "reward"}
+        bare["id"] = "mission-C-778"
+        bare["claim"] = "C-778"
+        (ws / "runs" / "verification-C-778.md").write_text(
+            "verdict: verified\nclaim: C-778\n", encoding="utf-8")
+        es.episode_pool.write_episode(ws, bare)
+        table = pi.value_table(ws)
+        assert table[key]["n"] == 1, \
+            "absent = unstamped (the honest gap), 0.0 is stamped"
+
+    def test_one_stamp_reaches_the_scheduler_family_join(self, tmp_path):
+        """ONE canonical vocabulary: a memory row stamped once is found
+        by the scheduler's family join in the scheduler's own BARE
+        family vocabulary — no companion token (the battery's
+        double-stamp smell)."""
+        ws, doc = _settled_episode(tmp_path)
+        mb.stamp_family_memory(ws, doc)
+        view = mb.family_view(ws)
+        assert view.get("tf-snake", {}).get("mastered") is True, \
+            "the family face keys the bare name the scheduler joins on"
+        task = {"task_id": "t", "family": "tf-snake"}
+        assert ps.retire_reasons(task, {"memory": view}) == "learned"
+        assert {r["family"] for r in mb.load_rows(ws)} == {"tf-snake"}, \
+            "rows carry the bare family, keys never mix vocabularies"
+
+
+class TestMasteryIdentity:
+    def test_scrambled_stamp_does_not_master_true_family(self, tmp_path):
+        """Mastery validates the family IDENTITY of the underlying
+        episode, not just the settlement's shape (the E1c finding:
+        misfiled episodes re-mastered every family). The episode's OWN
+        family must match the family being mastered — a misfiled stamp
+        masters nothing, so a family can only ever be mastered by its
+        own episodes."""
+        ws, doc = _settled_episode(tmp_path)
+        assert doc["family"] == "tf-snake", \
+            "the episode's OWN family rides the settle stamp"
+        scrambled = dict(doc, context_features=[
+            "family:other-fam",
+            *(f for f in doc["context_features"]
+              if not f.startswith("family:"))])
+        out = mb.stamp_family_memory(ws, scrambled)
+        assert out["mastered"] is False, \
+            "shape alone (completed + positive reward) masters nothing"
+        view = mb.family_view(ws)
+        assert not view.get("other-fam", {}).get("mastered"), \
+            "never the mislabeled one"
+        assert not view.get("tf-snake", {}).get("mastered"), \
+            "a scrambled stamp never masters the true family"
+        un = mb.stamp_family_memory(ws, doc)
+        assert un["mastered"] is True, "unscrambled stamping does"
+        assert mb.family_view(ws)["tf-snake"]["mastered"] is True
