@@ -59,6 +59,7 @@ from . import recipe_arms
 from . import refutation_fold
 from . import reward
 from . import reward_signal
+from . import review_windows
 from . import scalar
 from . import settlement_scorer
 from . import settlement_wire
@@ -119,6 +120,7 @@ __all__ = [
     "refutation_fold",
     "reward",
     "reward_signal",
+    "review_windows",
     "scalar",
     "settlement_wire",
     "source_reliability",

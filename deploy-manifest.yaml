@@ -1355,7 +1355,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: ce2693bf53343406db6cc0ddc791bb8868c4ac41f86f55e852e308751284a2a0
+    sha256: dbbd3b05b9b19c0608384c42fac2c5e473ceec558f31bccc228718ea1a6062bd
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1532,6 +1532,10 @@ files:
     dest: .claude/scripts/rlvr/refutation_fold.py
     kind: scaffold
     sha256: 6b784adc6f017cea27fd5d78db1a7124dc265de0ae8f162b3a6853e464a41b5f
+  - src: scripts/rlvr/review_windows.py
+    dest: .claude/scripts/rlvr/review_windows.py
+    kind: scaffold
+    sha256: 3da6a24e092be5eed30d61ca31e58776cc784d60bd82a63d850fdfb95ff3c633
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
