@@ -67,6 +67,7 @@ from . import state
 from . import step_credit
 from . import step_grain
 from . import step_ledger
+from . import step_record
 from . import strategy_store
 from . import termination
 from . import triples
@@ -121,6 +122,7 @@ __all__ = [
     "step_credit",
     "step_grain",
     "step_ledger",
+    "step_record",
     "strategy_store",
     "termination",
     "verification_debt",
