@@ -1197,7 +1197,8 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       include_t1_direct: bool = True,
-                      probe_block: str = "") -> str:
+                      probe_block: str = "",
+                      plan_block: str | None = None) -> str:
     """The loop brief: the anchors verbatim + the candidate contract + the
     mandated deliverable path, plus the injected contract blocks.
 
@@ -1222,7 +1223,10 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     never told. ``layer_paths`` (I2, exp8) injects the chain
     LAYER_CHECKPOINTS block (exact grader paths). ``probe_block`` (I3,
     exp8) injects the family SELF_CHECK block. ``include_t1_direct``
-    (I5, exp8) adds the T-1 affirmative one-liner."""
+    (I5, exp8) adds the T-1 affirmative one-liner. ``plan_block``
+    (learning-loop program, card P1) injects the goal-backward plan /
+    hypotheses block (backward_plan output) as a first-class section;
+    absent (None) the prompt is byte-identical to the pre-P1 shape."""
     extras: list[str] = []
     if wall_cap_s is not None:
         extras.append(wall_partition_block(
@@ -1231,6 +1235,8 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
+    if plan_block:
+        extras.append(plan_block)
     if include_t1_direct:
         extras.append(T1_DIRECT_LINE)
     opening = (
