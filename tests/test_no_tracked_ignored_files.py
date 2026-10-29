@@ -27,6 +27,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # Legitimate tracked-but-ignored files. Each entry must carry its
 # justification; the allowlist hygiene test below fails on stale entries.
 TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
+    # Experiment CODE deliberately tracked under the ignored experiments/
+    # tree (owner-approved 2026-10-29 restructure: the learning-loop
+    # driver lives next to its experiment records, outside the deploy
+    # surface; the 110 rule was scoped to local-only artifacts).
+    "experiments/learning-loop/loop_sim.py":
+        "experiment driver: owner-approved tracked home (restructure #865)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
