@@ -3,12 +3,12 @@
 of the learning-loop live-wire program).
 
 A closed-loop mock harness over synthetic fixture workspaces (no real
-sessions): the simulator in rlvr/loop_sim drives the REAL faces —
-step/1 records (validate_step), rolling step settlement (step_reward),
-the deviation window (segment_view), the timeout triage
-(classify_timeout), terminal settlement (settle_mission), the derived
-value table (pool_indexer.value_table), and the two-level scheduler
-(task_value / pick_next / reprice_scope / retire_reasons /
+sessions): the simulator in experiments/learning-loop/loop_sim drives
+the REAL faces — step/1 records (validate_step), rolling step
+settlement (step_reward), the deviation window (segment_view), the
+timeout triage (classify_timeout), terminal settlement (settle_mission),
+the derived value table (pool_indexer.value_table), and the two-level
+scheduler (task_value / pick_next / reprice_scope / retire_reasons /
 inflow_from_failure / order_task_dirs) — across three laps:
 
     lap 1  cold start, mixed families, one planted wrong-tool failure
@@ -25,11 +25,18 @@ history, memory faces absent at the scheduler boundary) is flat.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 import rlvr.pool_scheduler as ps
-from rlvr import loop_sim
 from rlvr import timeout_triage as tt
+
+_EXP = Path(__file__).resolve().parents[1] / "experiments" / "learning-loop"
+if str(_EXP) not in sys.path:
+    sys.path.insert(0, str(_EXP))
+import loop_sim
 
 DELTA = loop_sim.DELTA
 BASE_A = loop_sim.FAM_A_BASE_COST
@@ -77,12 +84,15 @@ def test_tool_learning_expected_cost_declines_across_laps(tmp_path):
     trace = report["expected_cost_trace"]
     assert len(trace) == 3
     assert trace[0] > trace[1] > trace[2], trace
-    # cold start pays the base estimate; lap 2 pays the single C-A1
-    # cell under the mastery discount; lap 3 adds the cheaper C-A2
-    # cell (P4's n-folding weights DISTINCT missions: two fam-a
-    # missions at 0.9 and 0.4 -> mean 0.65)
+    # every cell costs the mission's OWN honest spend (settle's
+    # per-mission spend window, $1 == 10k tokens): a1 books 9000 -> 0.9,
+    # a2 books 4000 -> 0.4, a4 books 2000 -> 0.2
     assert trace[0] == pytest.approx(BASE_A)
     assert trace[1] == pytest.approx(BASE_A * ps.MASTERY_COST_FACTOR)
+    # lap 3: the C-A1 and C-A2 missions fold as TWO DISTINCT EPISODES in
+    # one cell (n counts distinct episodes — a mission's commit rows
+    # amend, never multiply), so the empirical mean is the plain average
+    # of the two honest spends, under the mastery discount
     assert trace[2] == pytest.approx(
         (BASE_A + 0.4) / 2 * ps.MASTERY_COST_FACTOR)
     # the lap-end series declines too (the refreshed table, lap by lap)
@@ -92,19 +102,54 @@ def test_tool_learning_expected_cost_declines_across_laps(tmp_path):
 
 # ------------------------------------------- assertion 2: attribution (P3)
 
-@pytest.mark.skip(reason="P3 attribution bridge not built")
-def test_attribution_lands_on_method_memory():
-    """PENDING(P3): the plug-in point is the METHOD-MEMORY WRITE FACE —
-    P3's scripts/rlvr/review_windows.py attribution bridge feeding P4's
-    memory_bridge.differential_write. The harness already captures the
-    real deviation window (loop_sim: anchor 0, deviation 1 — the planted
-    wrong-tool step takes vm-trace where static-scan is the family
-    method, and its conclusion flips H3). When P3/P4 land, this asserts
-    that window lands a method-memory row keyed
-    (family='fam-a', wrong_tool='vm-trace', right_tool='static-scan')
-    carrying the deviation step's settled phi reward — success-path
-    steps carrying their attribution too."""
-    raise AssertionError("lights up when the P3 attribution bridge lands")
+def test_attribution_lands_on_method_memory(tmp_path):
+    """ATTRIBUTION LANDS (P3 live): the lap-1 fam-a trajectory (the
+    planted wrong-tool deviation, real step/1 records) driven through
+    review_windows.attribute_mission + land_attributions lands a
+    METHOD ledger row whose signals carry the STEP rewards and a
+    STRATEGY row carrying the MISSION reward — the two ledgers never
+    cross (no mission reward rides the method face, no step reward
+    rides the strategy face)."""
+    from rlvr import episode_pool
+    from rlvr import episode_schema
+    from rlvr import ledger
+    from rlvr import review_windows
+    report, ws = _run(tmp_path)
+    steps = report["trajectory_steps"]["a1"]
+    episode, _body = episode_schema.read_episode_file(
+        episode_pool.episode_path(ws, "C-A1"))
+    attribution = review_windows.attribute_mission(steps, episode)
+    out = review_windows.land_attributions(ws, attribution, family="fam-a")
+    assert out["written"] == 2, out
+    step_rewards = [float(s["reward"]["value"]) for s in steps]
+    ep_reward = episode["reward"]
+    mission_reward = float(
+        ep_reward["r"] if isinstance(ep_reward, dict) else ep_reward)
+    rows = ledger.read(ws)
+    method = [r for r in rows if r.get("kind") == "method_memory"]
+    strategy = [r for r in rows if r.get("kind") == "strategy_memory"]
+    assert method and strategy, rows
+    method_values = [float(s["value"]) for r in method for s in r["signals"]]
+    strategy_values = [float(s["value"])
+                       for r in strategy for s in r["signals"]]
+    # the METHOD face eats step rewards only: every method signal is one
+    # of the trajectory's settled step rewards (the non-neutral steps)
+    assert method_values
+    for mv in method_values:
+        assert any(abs(mv - sr) < 1e-9 for sr in step_rewards), \
+            (mv, step_rewards)
+    # the STRATEGY face eats the mission reward only
+    assert strategy_values == [pytest.approx(mission_reward)]
+    # neither crosses: no mission_attribution on the method row, no
+    # step-typed signal on the strategy row, and the mission reward is
+    # not any step's reward re-filed
+    assert all(s.get("type") != "mission_attribution"
+               for r in method for s in r["signals"])
+    assert all(str(s.get("type", "")).startswith("step_")
+               for r in method for s in r["signals"])
+    assert [s.get("type") for s in strategy[0]["signals"]] == \
+        ["mission_attribution"]
+    assert all(abs(mv - mission_reward) > 1e-9 for mv in method_values)
 
 
 # ------------------------------------- assertion 3: mastered zero-write
@@ -213,16 +258,38 @@ def test_timeout_three_verdicts_no_misfire(tmp_path):
 
 # ------------------------------------ assertion 7: recall pollution (P4)
 
-@pytest.mark.skip(reason="P4 recall sensors not built")
-def test_recall_pollution_gate_rises():
-    """PENDING(P4): the plug-in point is memory_bridge's RECALL SENSOR
-    face (the gate bandit over recalled keys + the refutation fold).
-    The harness already feeds the sensor input: the lap-2 learned-leg
-    steps stamp used_recalled=True through real step/1 records. When P4
-    lands, this asserts that a key recalled-and-ignored repeatedly has
-    its gate RAISED, and a refuted fragment's reusable_when narrows
-    through memory_bridge's differential write."""
-    raise AssertionError("lights up when the P4 recall sensors land")
+def test_recall_pollution_gate_rises(tmp_path):
+    """RECALL POLLUTION (P4 live): a key recalled-and-ignored repeatedly
+    pays the attention tax — its consecutive-ignored count rises, the
+    recall_gate threshold rises ABOVE the cold-start bar, and its
+    admission flips: the polluted key stops being admitted and stops
+    surfacing in the ranking (the attention-tax hard exit)."""
+    from rlvr import memory_bridge as mb
+    ws = tmp_path / "recall-ws"
+    ws.mkdir()
+    episode = {"claim": "C-T1",
+               "context_features": ["family:fam-t"],
+               "reusable_fragments": ["the movz chain derives the schedule"],
+               "outcome": {"status": "completed"},
+               "reward": {"r": 0.5}}
+    stamped = mb.stamp_family_memory(ws, episode)
+    assert stamped["written"], stamped
+    key = stamped["written"][0]
+    cold = mb.recall_gate(mb.load_rows(ws)[0])
+    assert cold["threshold"] == mb.GATE_BASE
+    assert cold["admit"] is True
+    for _ in range(3):
+        mb.record_usage(ws, key, "retrieved")
+        closed = mb.close_recall_window(ws, cited_keys=[])
+    assert closed["ignored"] == [key], closed
+    row = next(r for r in mb.load_rows(ws) if r["key"] == key)
+    assert int(row["consec_ignored"]) == 3, row
+    gate = mb.recall_gate(row)
+    assert gate["threshold"] == pytest.approx(3 * mb.GATE_IGNORED_STEP)
+    assert gate["threshold"] > cold["threshold"]
+    assert cold["admit"] is True and gate["admit"] is False
+    # the polluted key stops surfacing even for its own family's query
+    assert mb.rank_rows(mb.load_rows(ws), ["family:fam-t"]) == []
 
 
 # ------------------------------------------ assertion 8: election+hysteresis

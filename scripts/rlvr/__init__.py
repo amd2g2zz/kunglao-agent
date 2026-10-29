@@ -39,7 +39,6 @@ from . import l1_value
 from . import ledger
 from . import learning_seal
 from . import liveness
-from . import loop_sim
 from . import marl
 from . import memory_bridge
 from . import meta_context
@@ -93,6 +92,7 @@ __all__ = [
     "distill_rollout",
     "distill_score",
     "episode_pool",
+    "episode_schema",
     "episode_settle",
     "expansion",
     "feature_prior",
@@ -104,7 +104,6 @@ __all__ = [
     "l1_value",
     "ledger",
     "learning_seal",
-    "loop_sim",
     "marl",
     "memory_bridge",
     "meta_arms",
