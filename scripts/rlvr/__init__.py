@@ -49,6 +49,7 @@ from . import phi_tree
 from . import playbook
 from . import policy_compare
 from . import pool_indexer
+from . import pool_scheduler
 from . import posteriors
 from . import pricing
 from . import prediction_ledger

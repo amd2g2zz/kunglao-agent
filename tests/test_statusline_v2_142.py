@@ -589,6 +589,11 @@ class TestStatuslineRegistration142:
 
         sys.modules.pop("hooks_selfcheck", None)
         import hooks_selfcheck
+        # re-register the fresh object so monkeypatch restores the
+        # original at teardown — a bare pop leaves it swapped forever
+        # (the 774 upgrade tests then patch a stale module identity).
+        monkeypatch.setitem(sys.modules, "hooks_selfcheck",
+                            hooks_selfcheck)
         monkeypatch.setattr(sys, "argv", ["hooks_selfcheck.py", str(ws)])
         rc = hooks_selfcheck.main()
         assert rc == 0
@@ -602,6 +607,11 @@ class TestStatuslineRegistration142:
                                                      monkeypatch):
         sys.modules.pop("hooks_selfcheck", None)
         import hooks_selfcheck
+        # re-register the fresh object so monkeypatch restores the
+        # original at teardown — a bare pop leaves it swapped forever
+        # (the 774 upgrade tests then patch a stale module identity).
+        monkeypatch.setitem(sys.modules, "hooks_selfcheck",
+                            hooks_selfcheck)
         ws = _make_ws(tmp_path)
         settings = ws / ".claude" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
