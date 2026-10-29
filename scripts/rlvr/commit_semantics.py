@@ -174,7 +174,10 @@ def surprise_check(ws, doc: dict) -> dict:
                                    other.get("context_features") or []))
         if other_feats != feats:
             continue
-        r = (other.get("reward") or {}).get("r")
+        # the stamped mission reward may ride as a bare float (the
+        # reward_block carries the decomposition) — read both shapes.
+        reward = other.get("reward") or {}
+        r = reward.get("r") if isinstance(reward, dict) else reward
         if not isinstance(r, (int, float)) or isinstance(r, bool):
             continue
         for commit in other.get("commits") or []:

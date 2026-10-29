@@ -64,6 +64,10 @@ def _fail(field: str, why: str) -> "EpisodeError":
     return EpisodeError(f"episode.{field}: {why}")
 
 
+def _is_real_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _req(doc: dict, field: str):
     if field not in doc:
         raise _fail(field, "missing (schema episode/1 requires it)")
@@ -199,8 +203,14 @@ def validate_episode(doc, *, body: str = "") -> dict:
     _validate_fragments(doc)
     _validate_milestones(doc)
 
-    if not isinstance(doc.get("reward", {}), dict):
-        raise _fail("reward", "must be a mapping when present")
+    # P2 settlement card: the stamped mission reward rides as a bare
+    # float (reward_block carries the A1 decomposition) — a real number
+    # is a legal reward shape alongside the {r, ...} mapping; bools stay
+    # refused.
+    reward = doc.get("reward", {})
+    if not isinstance(reward, dict) and not _is_real_number(reward):
+        raise _fail("reward",
+                    "must be a mapping or a real number when present")
     if not isinstance(doc.get("surprise", False), bool):
         raise _fail("surprise", "must be a bool when present")
     if not isinstance(doc.get("attribution", ""), str):
@@ -215,11 +225,20 @@ def validate_episode(doc, *, body: str = "") -> dict:
 
 def render_episode(doc: dict, *, body: str = "") -> bytes:
     """Canonical bytes for one episode file (frontmatter + body).
-    Deterministic: same document -> same bytes."""
+    Deterministic: same document -> same bytes.
+
+    The closing frame rides as a YAML COMMENT (`# ---`), not a bare
+    `---` marker (the P2 settlement card): a second document marker
+    makes the FILE a two-document YAML stream, which `yaml.safe_load`
+    refuses — and the mission-episode consumption face reads the file
+    whole (the P2 RED pin). The comment keeps the stream
+    single-document while read_episode_file's split still finds its
+    second `---` substring; legacy files (bare `---` closer) keep
+    parsing on the read face."""
     validate_episode(doc, body=body)
     front = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True,
                            default_flow_style=False)
-    return (f"---\n{front}---\n{body}").encode("utf-8")
+    return (f"---\n{front}# ---\n{body}").encode("utf-8")
 
 
 def write_episode_file(path: Path, doc: dict, *, body: str = "") -> None:

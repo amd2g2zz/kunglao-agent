@@ -325,7 +325,10 @@ def utility_chain(doc: dict) -> dict:
     cited: set[str] = set()
     for commit in doc.get("commits") or []:
         cited.update(str(c) for c in (commit.get("cited") or []))
-    r = (doc.get("reward") or {}).get("r")
+    # the stamped mission reward may ride as a bare float (the
+    # reward_block carries the decomposition) — read both shapes.
+    reward = doc.get("reward") or {}
+    r = reward.get("r") if isinstance(reward, dict) else reward
     improved = isinstance(r, (int, float)) \
         and not isinstance(r, bool) and float(r) > 0.0
     return {"retrieved": len(retrieved), "cited": len(cited),
