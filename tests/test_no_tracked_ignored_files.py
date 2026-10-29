@@ -59,6 +59,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
     "experiments/learning-loop/policy/selector.py":
         "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
+    "experiments/learning-loop/policy/terminator.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#882)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
