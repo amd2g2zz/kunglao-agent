@@ -30,6 +30,7 @@ dependencies = [
     # need 3.11+).
     "pillow>=10",
     "claude-agent-sdk>=0.2.174",
+    "pandas>=2.3.3",
 ]
 
 # Console scripts (issue #416): the `kunglao` CLI family was previously only

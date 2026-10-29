@@ -46,6 +46,12 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 core types: loop_sim tracked-home precedent (#878)",
     "experiments/learning-loop/core/state.py":
         "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    # the ledger's pandas projection (#879): analysis face over the
+    # store — kept OUT of the deployed package because the dep-surface
+    # gate (#467) pins deployed imports to the framework env project;
+    # same tracked home as the core types.
+    "experiments/learning-loop/ledger_frame.py":
+        "rl-v2 ledger projection: tracked home, dep-gate exemption (#879)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
