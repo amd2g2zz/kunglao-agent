@@ -87,15 +87,15 @@ def _live_ws(tmp_path: Path) -> Path:
         "channel: repl\nhypothesis_ref: H-001\nupdate_map: {}\n",
         encoding="utf-8")
     # issue 805: the live-workspace contract grew the HOOK battery
-    # faces — ONE worker_battery pass row (all 28 registered dispatch
-    # checks) is the per-check fingerprints' evidence; the closure
+    # faces — ONE worker_battery pass row (every registered dispatch
+    # check) is the per-check fingerprints' evidence; the closure
     # faces prove themselves on their own artifacts.
     checks = ",".join(sorted(
         ["stepsettled", "workers", "max_retries", "cap", "branchbudget",
-         "tools", "hostchan", "deadline", "tiercons", "tier", "selfcap",
-         "heartbeat", "drift", "health", "envfresh", "envpremise",
-         "backtrack", "zerooutput", "plan", "granularity", "toolfirst",
-         "toolsearch", "handroll", "agenttype", "rotation",
+         "tools", "hostchan", "deadline", "envelope", "tiercons", "tier",
+         "selfcap", "heartbeat", "drift", "health", "envfresh",
+         "envpremise", "backtrack", "zerooutput", "plan", "granularity",
+         "toolfirst", "toolsearch", "handroll", "agenttype", "rotation",
          "methodfamily", "priority", "snapshot"]))
     (ws / "runs" / "gate-telemetry.jsonl").write_text(
         json.dumps({"gate": "worker_battery", "rc": 0, "msg": checks})

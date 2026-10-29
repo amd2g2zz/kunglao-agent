@@ -94,12 +94,21 @@ def _seed_cost(ws: Path, amount: float, ts_epoch: float) -> None:
 
 def _seed_calls(ws: Path, n: int, from_epoch: float,
                 claim: str = "C-001") -> None:
-    """Attributed call rows: the journal keys a row on the dispatch claim
-    (the documented derivation in tc_journal.from_kunglao_log)."""
+    """Journal rows ON DISK — used only to prove the battery path does
+    NOT read them (the import-direction wall); live attribution flows
+    through the injected row parameter (`_tc_rows`)."""
     import tc_journal
     for i in range(n):
         tc_journal.record_call(ws, claim, "Bash",
                                ts=_iso(from_epoch + i))
+
+
+def _tc_rows(claim: str, n: int, from_epoch: float) -> list[dict]:
+    """Parsed journal rows for INJECTION — the shape `check_tier_envelope`
+    consumes (dispatch_id keys the row on the dispatch claim, the same
+    derivation the journal itself documents)."""
+    return [{"dispatch_id": claim, "tool": "Bash",
+             "ts": _iso(from_epoch + i)} for i in range(n)]
 
 
 def _seed_dispatch_row(ws: Path, ts_epoch: float,
@@ -147,9 +156,10 @@ def _ledger_rows(ws: Path, action: str) -> list[dict]:
     return out
 
 
-def _gate(ws: Path, tier: int = 1):
+def _gate(ws: Path, tier: int = 1, tc_rows: list[dict] | None = None):
     return wbg.check_tier_envelope(
-        {"workspace": str(ws), "state": ws / "analysis_state.txt"}, tier)
+        {"workspace": str(ws), "state": ws / "analysis_state.txt"}, tier,
+        tc_rows=tc_rows)
 
 
 # ------------------------------------------------ 1. the envelope table ----
@@ -230,10 +240,9 @@ def test_timeout_event_row_carries_actual_spend_and_calls(tmp_path):
     ws = _ws(tmp_path)
     dispatched_at = _seed_worker(ws, tier=1, age_s=120)  # wall within T1
     since = dispatched_at + 1
-    _seed_calls(ws, 35, since)                   # 35 attributed calls > cap 30
     _seed_cost(ws, 0.55, since + 10)             # unattributable spend
     _seed_cost(ws, 9.99, dispatched_at - 100)    # pre-window spend never counts
-    ok, msg = _gate(ws, tier=1)
+    ok, msg = _gate(ws, tier=1, tc_rows=_tc_rows("C-001", 35, since))
     assert not ok, "T1 worker at 35 calls in-window must REJECT"
     assert "calls" in msg, msg
     rows = _ledger_rows(ws, "envelope_timeout")
@@ -269,15 +278,29 @@ def test_concurrent_worker_calls_do_not_bleed(tmp_path):
         dict(worker_id="w-2", claim="C-002", age_s=300),
     ])[0]
     since = dispatched_at + 1
-    _seed_calls(ws, 25, since, claim="C-001")
-    _seed_calls(ws, 25, since, claim="C-002")
-    ok, msg = _gate(ws, tier=1)
+    ok, msg = _gate(ws, tier=1, tc_rows=(
+        _tc_rows("C-001", 25, since) + _tc_rows("C-002", 25, since)))
     assert not ok, "w-1 over its wall cap still rejects"
     assert "calls 25" in msg and "calls 50" not in msg, (
         f"only w-1's own calls count: {msg}")
     detail = json.loads(
         _ledger_rows(ws, "envelope_timeout")[0]["detail"])
     assert detail["calls"] == 25, detail
+
+
+def test_battery_path_without_injection_reads_no_journal(tmp_path):
+    """The import-direction wall: the decision faces never import the
+    journal module, so the battery path (no injected rows) keeps
+    tc-sourced calls at 0 even when the journal has rows on disk — the
+    tc dimension is runner/caller-supplied, and the wall dimension stays
+    the primary kill."""
+    ws = _ws(tmp_path)
+    dispatched_at = _seed_worker(ws, tier=1, age_s=601)  # wall over T1 cap
+    _seed_calls(ws, 99, dispatched_at + 1)               # on disk, unread
+    ok, msg = _gate(ws, tier=1)                          # no tc_rows
+    assert not ok, "the worker is over its wall cap"
+    assert "calls 0" in msg, (
+        f"battery path without injection must not read the journal: {msg}")
 
 
 def test_window_dispatch_rows_are_claim_attributed(tmp_path):

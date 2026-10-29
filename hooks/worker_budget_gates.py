@@ -2270,37 +2270,36 @@ def envelope_overrun(tier: int, *, wall_s: float, calls: int | float,
                  for dim in ENVELOPE_DIMS if actuals[dim] > env[dim])
 
 
-def _window_consumption(ws: Path, since: float,
-                        claim_id: str | None) -> dict:
+def _window_consumption(ws: Path, since: float, claim_id: str | None,
+                        tc_rows: list[dict] | None = None) -> dict:
     """THIS worker's window consumption, PER-WORKER ATTRIBUTED.
 
     A source counts toward a worker only when it carries the worker's
-    identity: the tc journal keys its rows on the dispatch claim (the
-    documented derivation in tc_journal.from_kunglao_log), so calls join
-    on the audited worker's claim. runs/cost_events.jsonl carries no
-    worker identity ({"ts","amount","source"}) — it is UNATTRIBUTABLE and
-    is EXCLUDED from per-worker accounting: workspace-wide spend is never
-    silently charged to every worker (two concurrent workers at $0.20
-    each must not audit as $0.40). The envelope's usd dimension fires
-    only when a worker-attributed spend source exists (today: none); the
+    identity. The call dimension joins the parsed journal rows on the
+    dispatch claim (the row shape the journal itself documents:
+    dispatch_id keys a row on the dispatch claim); the rows arrive via
+    the ``tc_rows`` injection parameter because the import-direction wall
+    bars the decision faces from importing the recording module — a
+    caller OUTSIDE that face set (eval_loop_runner, tools) supplies them.
+    ``tc_rows=None`` (the battery path: no lawful supplier in the hook
+    call chain) keeps tc-sourced calls at 0 — the documented
+    unattributed-unavailable posture, exactly like the unattributable
+    cost_events source — and the wall dimension stays the primary kill.
+    runs/cost_events.jsonl carries no worker identity
+    ({"ts","amount","source"}) — it is UNATTRIBUTABLE and is EXCLUDED
+    from per-worker accounting: workspace-wide spend is never silently
+    charged to every worker. The envelope's usd dimension fires only
+    when a worker-attributed spend source exists (today: none); the
     terminal row's usd stays THIS worker's own spend (0.0), never a
-    workspace total.
-
-    Telemetry read failures fail open to zero: a broken feed must not
-    deadlock dispatch (the wall dimension needs no telemetry)."""
+    workspace total. Telemetry failures fail open to zero: a broken feed
+    must not deadlock dispatch (the wall needs no telemetry)."""
     calls = 0
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import tc_journal
-        for row in tc_journal.read(ws):
-            if not claim_id or str(row.get("dispatch_id") or "") != claim_id:
-                continue
-            ts = _anchor_epoch(row.get("ts") or "")
-            if ts is not None and ts >= since:
-                calls += 1
-    except Exception as exc:  # noqa: BLE001 — fail-open telemetry read
-        warn('envelope_calls_read', f'{type(exc).__name__}: {exc}')
+    for row in tc_rows or ():
+        if not claim_id or str(row.get("dispatch_id") or "") != claim_id:
+            continue
+        ts = _anchor_epoch(row.get("ts") or "")
+        if ts is not None and ts >= since:
+            calls += 1
     return {"calls": calls, "usd": 0.0}
 
 
@@ -2462,7 +2461,9 @@ def forced_split_directive(workspace: str | Path) -> str | None:
 
 
 def check_tier_envelope(paths: dict, tier: int = 0,
-                        now: float | None = None) -> tuple[bool, str]:
+                        now: float | None = None,
+                        tc_rows: list[dict] | None = None
+                        ) -> tuple[bool, str]:
     """The tier-envelope TIMEOUT gate at dispatch admission (P6 guards card).
 
     Audits every ACTIVE worker against ITS recorded tier's envelope
@@ -2480,6 +2481,12 @@ def check_tier_envelope(paths: dict, tier: int = 0,
     unknown tier in the table is ungated. ``tier`` (the incoming
     dispatch's tier) rides the reason text only — enforcement keys on
     each worker row's own recorded tier.
+
+    ``tc_rows`` — the call dimension's injected parsed journal rows, from
+    a caller OUTSIDE the decision-face set (the import-direction wall
+    bars these faces from importing the recording module; the battery
+    chain has no lawful supplier, so the battery passes None and
+    tc-sourced calls stay 0 — see _window_consumption).
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     if not ws:
@@ -2504,7 +2511,7 @@ def check_tier_envelope(paths: dict, tier: int = 0,
         wall_s = moment - started
         worker_id = str(w.get('worker_id') or '?')
         claim_id = str(w.get('claim_id') or '') or None
-        cons = _window_consumption(Path(ws), started, claim_id)
+        cons = _window_consumption(Path(ws), started, claim_id, tc_rows)
         overruns = envelope_overrun(w_tier, wall_s=wall_s,
                                     calls=cons["calls"], usd=cons["usd"])
         if not overruns:
