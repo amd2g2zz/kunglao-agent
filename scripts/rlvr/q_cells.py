@@ -1319,6 +1319,19 @@ def _v2_num(value, field: str) -> float:
     return float(value)
 
 
+def _v2_jsonable(value, field: str) -> None:
+    """The v2 payload boundary's serializability wall: a value that
+    json.dumps refuses would fail LATER, inside _cl.append's write —
+    warn-and-False there, which for a fail-closed face means the whole
+    row silently vanishing. Reject it HERE, loudly (#879 review)."""
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"q_cells.v2.{field}: must be JSON-serializable "
+            f"({type(exc).__name__})") from None
+
+
 def _v2_budget(budget) -> dict:
     if budget is None:
         return {}
@@ -1345,12 +1358,15 @@ def _append_v2(ws, row: dict) -> dict:
 
 def append_action(ws, kind: str, rollout_id: str, target: str, *,
                   step_id=None, params=None, budget=None,
-                  policy_version=None, ts=None) -> dict:
+                  policy_version=None, state_snapshot=None,
+                  ts=None) -> dict:
     """Record ONE decided action — the ``a`` of the (s,a,r) triple
     (#878). The row is the loop's decision trace; kind validation is
     the ``action/1`` boundary's job (core.actions.parse_action — the
     single source; the ledger trusts its validated producer, never a
-    duplicate vocabulary).
+    duplicate vocabulary). ``state_snapshot`` (#879) rides the state
+    the action was decided from — the ``s`` axis as an additive
+    column; absent = not recorded, never fabricated.
 
     Fail-CLOSED on structural garbage — unlike the telemetry faces:
     a silently-dropped action row would hollow the trajectory the
@@ -1363,6 +1379,13 @@ def append_action(ws, kind: str, rollout_id: str, target: str, *,
         params = {}
     if not isinstance(params, dict):
         raise ValueError("q_cells.v2.params: must be a mapping")
+    _v2_jsonable(params, "params")
+    if state_snapshot is not None:
+        if not isinstance(state_snapshot, dict):
+            raise ValueError(
+                "q_cells.v2.state_snapshot: must be a mapping")
+        state_snapshot = dict(state_snapshot)
+        _v2_jsonable(state_snapshot, "state_snapshot")
     row = {
         "schema": SCHEMA_ACTION_V2,
         "ts": ts or _now(),
@@ -1378,6 +1401,8 @@ def append_action(ws, kind: str, rollout_id: str, target: str, *,
     if policy_version is not None:
         row["policy_version"] = _v2_nonempty(policy_version,
                                              "policy_version")
+    if state_snapshot is not None:
+        row["state_snapshot"] = state_snapshot
     return _append_v2(ws, row)
 
 
