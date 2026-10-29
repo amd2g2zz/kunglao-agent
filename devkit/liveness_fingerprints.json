@@ -195,6 +195,19 @@
    }
   },
   {
+   "id": "battery-check-envelope",
+   "face": "the dispatch battery ran with the tier-envelope check registered (#864: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
+   "ledger": "runs/gate-telemetry.jsonl",
+   "check": {
+    "kind": "jsonl_count",
+    "all_of": {
+     "gate": "worker_battery"
+    },
+    "contains": "envelope",
+    "min": 1
+   }
+  },
+  {
    "id": "battery-check-tiercons",
    "face": "the dispatch battery ran with the tiercons check registered (issue 805: ONE worker_battery pass row per full battery pass — runs/gate-telemetry.jsonl; absence = the battery did not run = the armed-unwired failure)",
    "ledger": "runs/gate-telemetry.jsonl",

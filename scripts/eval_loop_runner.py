@@ -518,6 +518,96 @@ def _harness_drift_event(out: Path, task: str, drifted: list[str],
         fh.write(json.dumps(row) + "\n")
 
 
+# ------------------------------------------------------- tick-arming gate
+# P6 guards card: the orchestrator can stall silently when the tick loop was never
+# armed (live incident: 19 minutes of orchestrator silence while a worker
+# ran). The launch path therefore verifies the workspace heartbeat's cron
+# registration BEFORE spawning a LOOP-arm session. The verdict is the ONE
+# canonical check (heartbeat_loop_prompt.verify_loop — the HARD
+# registration-acceptance face), reused, never re-implemented. The refusal is loud and
+# structured: a harness-events row + stderr + a structured SKIP row, and
+# NO session launch. cc-default / cc-warm-context arms are never gated
+# (neutral workspaces carry no kunglao heartbeat), and the session-cmd
+# seam is never gated (the documented test/operator channel — the stub
+# harness cannot carry a live cron by construction; the production face
+# is the real claude argv this seam replaces).
+TICK_GATE_CODE = "TICK_GATE"
+TICK_GATE_REFUSED_ACTION = "tick_gate_refused"  # event_taxonomy.EMIT_ACTIONS
+
+
+def tick_arm_gate(ws: Path) -> tuple[bool, str]:
+    """The tick-arming verdict: (armed, message). Armed = the reused
+    verify_loop face returns 0 (loop_registered=true AND the continuous-
+    tick standard); anything else carries that face's own stderr guidance
+    (registration repair, not a gate invention)."""
+    import contextlib
+    import io
+    try:
+        import heartbeat_loop_prompt as _hlp
+    except Exception as exc:  # noqa: BLE001 — partial-deploy lifeline
+        _warn_fail_open("tick_gate_import", exc)
+        return (True, "heartbeat_loop_prompt unavailable — tick gate "
+                      "fail-open (partial deploy)")
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err), \
+            contextlib.redirect_stdout(io.StringIO()):
+        rc = _hlp.verify_loop(str(ws))
+    return (rc == 0, err.getvalue().strip())
+
+
+def _tick_gate_skip_row(ws: Path, task: dict, tdir: Path, out: Path, *,
+                        arm: str, session_cmd: str | None) -> dict | None:
+    """The launch-path guard: None when the session may launch; otherwise
+    the structured refusal row (mirrors _preflight_skip_row — a harness
+    precondition failed, no wall burned, excluded from performance)."""
+    if arm != ARM or session_cmd is not None:
+        return None
+    ok, why = tick_arm_gate(ws)
+    if ok:
+        return None
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    event = {
+        "schema": "harness-event/1",
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "task": tdir.name,
+        "action": TICK_GATE_REFUSED_ACTION,
+        "arm": arm,
+        "detail": why[-800:],
+        "remedy": "arm the loop first: heartbeat_loop_prompt.py <ws> -> "
+                  "CronCreate (or /loop 5m); the loop's first action marks "
+                  "loop_registered=true — then re-run",
+    }
+    with (out / "harness-events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event) + "\n")
+    print(f"TICK_GATE task={tdir.name} REFUSED ({arm}): no verified "
+          f"armed loop — no session launched", file=sys.stderr)
+    print(f"[kunglao-agent] eval_loop: {tdir.name} REFUSED by the tick "
+          f"gate: {why.splitlines()[-1] if why else 'unarmed'}",
+          file=sys.stderr)
+    print(f"VERDICT {tdir.name} SKIP ({arm}: {TICK_GATE_CODE} — no "
+          f"verified armed loop; no session launched)")
+    row = ds.results_row(
+        task_id=tdir.name, family=task["family"],
+        checker_kind=task["checker"]["kind"],
+        metrics={m: 0 for m in ds.REQUIRED_METRICS},
+        verdict="SKIP",
+        failures=[{"code": TICK_GATE_CODE, "detail": why[:1500]}],
+        evidence_ref="", arm=arm)
+    row["loop"] = {"status": "harness_error", "metrics": {},
+                   "checker_rc": 2, "session": {
+                       "returncode": None, "wall_s": 0.0,
+                       "timed_out": False,
+                       "session_cost": None,
+                       "harness_contaminated": False,
+                       "harness_drift_files": []},
+                   "workspace": str(ws), "deliverable": None,
+                   "prompt_sha256": None}
+    row["governance"] = governance_block({}, "harness_error", 0)
+    row["excluded_from_performance"] = True
+    return row
+
+
 def run_session_guarded(workspace: Path, prompt: str, out: Path,
                         task_name: str, *, budget_usd: float,
                         wall_cap_s: float, session_cmd: str | None = None,
@@ -1660,6 +1750,13 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   f"[mirrored on stdout per the autoresearch.sh contract]",
                   file=sys.stderr)
         return skip_row
+    # P6 guards tick-arming gate: the production LOOP-arm launch verifies the
+    # workspace heartbeat is armed BEFORE spawning the session (the cc
+    # arms and the stub seam pass through ungated — see the guard).
+    tick_skip = _tick_gate_skip_row(ws, task, tdir, out, arm=arm,
+                                    session_cmd=session_cmd)
+    if tick_skip is not None:
+        return tick_skip
     baseline_rounds = count_snapshot_rows(ws)
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
