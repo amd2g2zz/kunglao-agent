@@ -295,6 +295,12 @@ def test_surviving_blocker_reds_gate_and_rolls_back(up, tmp_path,
         return {"rebuilt": True, "rc": 1}
 
     monkeypatch.setattr(up, "register_hooks", _no_rewire)
+    # test_statusline_v2_142 pops+reimports hooks_selfcheck, leaving a
+    # fresh module object in sys.modules while this file's import-time
+    # binding goes stale; kunglao_upgrade re-imports at call time, so the
+    # patch must hit the LIVE binding (and the stale one defensively).
+    live_hs = sys.modules.get("hooks_selfcheck", hooks_selfcheck)
+    monkeypatch.setattr(live_hs, "rebuild_project_level", _rebuild_fail)
     monkeypatch.setattr(hooks_selfcheck, "rebuild_project_level",
                         _rebuild_fail)
     rc = up.main([str(ws)])
