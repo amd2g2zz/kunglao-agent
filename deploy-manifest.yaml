@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 9c04a3bf16149f59141471e75ca70aeda9e11987b5fe362e123087801619aa89
+    sha256: a7f65c19b35bfdf73e3a8f8895dd8b34df9700df05ddb6078969dc5ac7765768
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -1355,7 +1355,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: b8fc2f2314b3b8c858b9a53c82f6608f238894e326ddc3572ae3dcb168f73274
+    sha256: 389f59d546be70c76d323f44e0f02928b7c9a7b97f5bf269c3902f7854291200
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1568,6 +1568,10 @@ files:
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
     sha256: 854dfcdabb38cad7e43bc1171952daa7741b1a0eca31f5d1f1313ad314f73d58
+  - src: scripts/rlvr/step_record.py
+    dest: .claude/scripts/rlvr/step_record.py
+    kind: scaffold
+    sha256: b33272969de1e72f025ec014e92bb2be0bee20dba894e130274d8e343a21ccee
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
