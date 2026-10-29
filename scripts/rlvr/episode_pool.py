@@ -19,10 +19,13 @@ THE THREE POLICIES AS HOOK GATES (policy, not agent discipline):
 
   WRITE — two walls, both fail-closed:
     (1) the TRUST gate (A4: the reward channel's integrity at the
-        memory boundary): the episode outcome's evidence reference
+        memory boundary): a completed outcome's evidence reference
         resolves through the UNMODIFIED `verifier_integrity.
         resolve_verification` to a PASSED record — absence, escape,
-        unparseable, or a failing record refuses;
+        unparseable, or a failing record refuses. A FAILED outcome
+        rides the verified-failure face (verified=true AND a
+        non-empty attribution — the verified failure IS the trust;
+        unverified or unattributed failures refuse);
     (2) the ADMISSION policy: terminal-with-nonzero-reward (a verified
         completion IS the +1 terminal reward; an explicitly stamped
         non-zero `reward.r` admits too), OR a failure with a non-empty
@@ -96,16 +99,21 @@ def load_all(ws) -> list[tuple[Path, dict]]:
 
 # ------------------------------------------------------------- WRITE gate
 
+def _resolve_trust_word(ws, claim: str, ref: str) -> tuple:
+    """The trust spine, CALLED not modified — (passed, verdict word,
+    detail). Resolver fault refuses (fail-closed): (False, '', detail)."""
+    try:
+        from verifier_integrity import resolve_verification  # noqa: PLC0415
+        return resolve_verification(Path(ws), claim, ref or "")
+    except Exception as exc:  # noqa: BLE001 — resolver fault refuses
+        return (False, "", f"resolver fault: {type(exc).__name__}")
+
+
 def _trust_resolves(ws, claim: str, ref: str) -> bool:
     """The trust spine, CALLED not modified (#809 face): the evidence
     reference resolves to a PASSED record. Fail-closed."""
-    try:
-        from verifier_integrity import resolve_verification  # noqa: PLC0415
-        passed, _word, _detail = resolve_verification(
-            Path(ws), claim, ref or "")
-        return passed
-    except Exception:  # noqa: BLE001 — resolver fault refuses (fail-closed)
-        return False
+    passed, _word, _detail = _resolve_trust_word(ws, claim, ref)
+    return passed
 
 
 def _admission(doc: dict) -> str | None:
@@ -114,7 +122,9 @@ def _admission(doc: dict) -> str | None:
     surprise."""
     status = doc["outcome"]["status"]
     reward = doc.get("reward") or {}
-    r = reward.get("r")
+    # the stamped mission reward may ride as a bare float (the
+    # reward_block carries the decomposition) — read both shapes.
+    r = reward.get("r") if isinstance(reward, dict) else reward
     if status == "completed":
         return None  # a verified completion IS the +1 terminal reward
     if isinstance(r, (int, float)) and r != 0:
@@ -139,14 +149,42 @@ def write_episode(ws, doc: dict, *, body: str = "") -> Path:
 
     claim = doc["claim"]
     outcome = doc["outcome"]
-    if outcome["status"] != "completed" and not outcome.get("verified"):
-        raise WriteRefused(
-            "trust: outcome.verified is false — only verified outcomes "
-            "enter the pool (A4)")
-    if not _trust_resolves(ws, claim, outcome.get("evidence_ref") or ""):
-        raise WriteRefused(
-            f"trust: the outcome evidence reference for {claim} does not "
-            "resolve to a PASSED record (verifier_integrity, fail-closed)")
+    status = outcome["status"]
+    if status == "failed":
+        # P2 trust-gate fix: the verified-failure face IS the trust
+        # for failed outcomes (A4 — failed missions are the learning
+        # fuel). Demanding a PASSED record from a failure was the
+        # contradiction that made negative samples unlandable. The
+        # failure's verified binds to the trust spine: the claim's
+        # canonical surfaces — a real record, or the settle face's
+        # register-projection mirror (which carries its own header mark
+        # for provenance) — must RESOLVE to a verification record for
+        # the claim. A bare self-asserted verified=true over absent
+        # surfaces is a forgery and refuses.
+        if not outcome.get("verified") or \
+                not str(doc.get("attribution") or "").strip():
+            raise WriteRefused(
+                "trust: a failed episode enters only with outcome.verified "
+                "true AND a non-empty attribution — the verified failure "
+                "is the trust (A4); unverified or unattributed failures "
+                "refuse")
+        _passed, word, detail = _resolve_trust_word(
+            ws, claim, outcome.get("evidence_ref") or "")
+        if not word:
+            raise WriteRefused(
+                f"trust: the failed outcome for {claim} does not resolve "
+                f"to a verification record ({detail}) — the verified "
+                "failure binds to the trust spine (A4), never to a bare "
+                "self-asserted bool")
+    else:
+        if status != "completed" and not outcome.get("verified"):
+            raise WriteRefused(
+                "trust: outcome.verified is false — only verified outcomes "
+                "enter the pool (A4)")
+        if not _trust_resolves(ws, claim, outcome.get("evidence_ref") or ""):
+            raise WriteRefused(
+                f"trust: the outcome evidence reference for {claim} does not "
+                "resolve to a PASSED record (verifier_integrity, fail-closed)")
 
     why = _admission(doc)
     if why:

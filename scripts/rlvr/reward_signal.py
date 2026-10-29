@@ -122,6 +122,90 @@ def episode_reward(ws, doc: dict) -> dict:
             "cost_term": term, "r": r}
 
 
+# --- THE Φ STEP reward face (the P2 settlement card) ------------------------
+
+#: Φ contraction weights — the kill outweighs the confirm (the repo's
+#: refutation doctrine: a mismatch narrows the search more than a
+#: survival). Calibrated on the distribution fixture
+#: (tests/test_episode_settle.py, the Φ-gain distribution pin): with
+#: kill=1.0 / confirm=0.5 a symmetric pair scores refutation exactly 2x
+#: confirmation, and the sanity gate holds — active contraction > 0,
+#: no-contraction == 0, refutation >= confirmation over ~10 synthetic
+#: step pairs.
+PHI_KILL_WEIGHT = 1.0
+PHI_CONFIRM_WEIGHT = 0.5
+
+
+def phi_contraction_gain(prev_hypotheses, conclusion) -> float:
+    """Information gain of the conclusion over the prev hypothesis set,
+    as the covering space's contraction: each hypothesis is one
+    independently-decidable cell (the covering matrix's t=1 face over
+    {h_i: alive, dead} — 2^n assignments), so the gain is the DECIDED
+    mass share — a killed hypothesis at PHI_KILL_WEIGHT, an explicitly
+    confirmed one at PHI_CONFIRM_WEIGHT (refutation narrows more).
+    The decision scan is step_record's own clause-scoped contraction
+    matrix, CALLED single-source (kill face) + mirrored (confirm face)
+    so the verdict vocabulary never drifts. Deciding NOTHING gains
+    exactly 0 — activity theater dies. Pure; inputs never mutated."""
+    from rlvr import step_record  # noqa: PLC0415 — lazy (late facade line)
+    hyps = [h for h in (prev_hypotheses or []) if isinstance(h, dict)]
+    text = str(conclusion or "").strip()
+    if not hyps or not text:
+        return 0.0
+    killed = set(step_record._killed_identities({"conclusion": text}, hyps))
+    confirmed = _confirmed_identities(step_record, text, hyps) - killed
+    total = len(hyps)
+    gain = (PHI_KILL_WEIGHT * len(killed)
+            + PHI_CONFIRM_WEIGHT * len(confirmed)) / total
+    return max(0.0, min(1.0, gain))
+
+
+def _confirmed_identities(step_record, conclusion: str,
+                          hypotheses: list) -> set:
+    """The confirm-side mirror of step_record's clause-scoped kill scan:
+    same clause split, the confirm-marker vocabulary, the same reference
+    test (id or salient claim terms). Passed the module explicitly so
+    the single-source dependency stays visible at the call site."""
+    confirmed: set = set()
+    for clause in step_record._CLAUSE_SPLIT_RE.split(conclusion):
+        if not step_record._CONFIRM_RE.search(clause):
+            continue
+        cterms = step_record._salient_terms(clause)
+        for hyp in hypotheses:
+            if not isinstance(hyp, dict):
+                continue
+            ident = step_record._hyp_identity(hyp)
+            if not ident or ident in confirmed:
+                continue
+            if step_record._id_in_text(ident, clause) or \
+                    step_record._salient_terms(
+                        step_record._hyp_claim(hyp)) & cterms:
+                confirmed.add(ident)
+    return confirmed
+
+
+def step_reward(prev_hypotheses, conclusion, evidence_valid,
+                checkpoint_closed, cost_tokens, cost_seconds) -> float:
+    """THE step reward (the P2 settlement card), the step/1 reward
+    block's value:
+
+        r = phi_contraction_gain(prev_hypotheses, conclusion)
+            x evidence_valid x checkpoint_closed - cost_term(tokens, s)
+
+    The zero gate: a step that decides no hypothesis (gain 0), rides no
+    valid evidence, or closes no checkpoint scores EXACTLY 0.0 —
+    activity theater dies (no gain, no cost bill: there is nothing to
+    bill a gain against). Only a deciding step pays its cost, so a
+    costly lesson can ride negative (honest accounting)."""
+    gain = phi_contraction_gain(prev_hypotheses, conclusion)
+    gate = (1.0 if evidence_valid else 0.0) \
+        * (1.0 if checkpoint_closed else 0.0)
+    gain *= gate
+    if gain <= 0.0:
+        return 0.0
+    return gain - cost_term(cost_tokens, cost_seconds)
+
+
 def settled_receipt(ws, claim: str) -> dict | None:
     """The claim's settled receipt through the EXISTING consolidated
     settlement read face (settlement-wire rows, `settled: true`). None
