@@ -43,6 +43,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+# the lazy `from rlvr import ...` faces need scripts/ on sys.path after the relocation
+import sys
+_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
 DELTA = 0.1
 FAMILIES = ("fam-a", "fam-b", "fam-c")
 #: the tracked family's base cost (the probe's expected-cost anchor)

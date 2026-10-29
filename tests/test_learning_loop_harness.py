@@ -25,11 +25,18 @@ history, memory faces absent at the scheduler boundary) is flat.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 import rlvr.pool_scheduler as ps
-from rlvr import loop_sim
 from rlvr import timeout_triage as tt
+
+_EXP = Path(__file__).resolve().parents[1] / "experiments" / "learning-loop"
+if str(_EXP) not in sys.path:
+    sys.path.insert(0, str(_EXP))
+import loop_sim
 
 DELTA = loop_sim.DELTA
 BASE_A = loop_sim.FAM_A_BASE_COST

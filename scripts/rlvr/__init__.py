@@ -39,7 +39,6 @@ from . import l1_value
 from . import ledger
 from . import learning_seal
 from . import liveness
-from . import loop_sim
 from . import marl
 from . import memory_bridge
 from . import meta_context
@@ -104,7 +103,6 @@ __all__ = [
     "l1_value",
     "ledger",
     "learning_seal",
-    "loop_sim",
     "marl",
     "memory_bridge",
     "meta_arms",
