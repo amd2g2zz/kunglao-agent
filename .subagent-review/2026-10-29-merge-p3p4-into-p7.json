@@ -1,0 +1,12 @@
+{
+  "agent": "learning-loop-integrator",
+  "plan": "Merge origin/dev (P3 review_windows + P4 memory_bridge cards) into the P7 harness tip to base the proof-battery card on the real attribution and memory faces",
+  "status_sync": "runs/episodes/ (merged episodes carry the P3/P4 settle evidence)",
+  "tools_used": [
+    "scripts/rlvr/review_windows.py",
+    "scripts/rlvr/memory_bridge.py",
+    "scripts/rlvr/episode_settle.py",
+    "scripts/rlvr/pool_indexer.py"
+  ],
+  "verified_by": "origin-dev-CI-green-on-a1602a59-and-preceding-PR-merges"
+}

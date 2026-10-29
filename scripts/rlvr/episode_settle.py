@@ -24,7 +24,12 @@ Contract:
     zero episodes (the mission episode file is the settle mark);
   - cost-honest: spend_usd sums the workspace's cost-event faces
     (cost_events.jsonl — the cost-gate face — and runs/cost_events.jsonl,
-    each writer owning its file, so no double count);
+    each writer owning its file, so no double count); that real spend is
+    converted onto the cost face at $1 == 10k tokens (reward_signal's
+    cost_t norm), so cost.tokens is never a zero stamp;
+  - family-carrying: context_features include the `family:<name>` token
+    from task_spec.yaml when the mission declares one — the scheduler's
+    family join engages on settle-landed episodes;
   - trust: this face NEVER mints a verdict. A claim whose canonical
     verification surface is ABSENT gets a MIRROR stamped from the claim
     register's own terminal status (PROVEN -> verified) — the register's
@@ -241,6 +246,23 @@ def _spend_usd(ws: Path) -> float:
     return total
 
 
+def _family_feature(ws: Path) -> str:
+    """The mission's family token, from task_spec.yaml's ``family``
+    field. No family declared -> no token (register features only, the
+    old shape). Without it the scheduler's family join never engages on
+    settle-landed episodes (the P7-confirmed finding)."""
+    p = ws / "task_spec.yaml"
+    if not p.is_file():
+        return ""
+    try:
+        spec = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return ""
+    family = spec.get("family") if isinstance(spec, dict) else None
+    family = str(family or "").strip()
+    return f"family:{family}" if family else ""
+
+
 def _commit_summary(row: dict) -> str:
     rid = str(row.get("rollout_id") or row.get("kind") or "row")
     n = len(row.get("signals") or [])
@@ -255,6 +277,7 @@ def _build_episode(ws: Path, anchor: str, claims: list[dict]) -> dict:
     file's body stays empty — the whole-file YAML read face sees one
     clean document."""
     from harness_common import utc_now_z  # noqa: PLC0415 — lazy
+    from rlvr import reward_signal  # noqa: PLC0415 — lazy (late facade line)
     statuses = [str(c.get("status") or "").strip().casefold()
                 for c in claims]
     passed = all(s in _TERMINAL_PASS for s in statuses)
@@ -263,8 +286,12 @@ def _build_episode(ws: Path, anchor: str, claims: list[dict]) -> dict:
                   if s not in _TERMINAL_PASS]
     rows = _committed_rows(ws)
     spend = _spend_usd(ws)
+    family = _family_feature(ws)
     now = utc_now_z()
-    features = sorted({f"register:{s}" for s in statuses if s})
+    feats = {f"register:{s}" for s in statuses if s}
+    if family:
+        feats.add(family)
+    features = sorted(feats)
     fragments = []
     for c in claims:
         frag = f"{str(c.get('id') or '')}: {str(c.get('title') or '')}"
@@ -288,7 +315,11 @@ def _build_episode(ws: Path, anchor: str, claims: list[dict]) -> dict:
         "outcome": {"status": "completed" if passed else "failed",
                     "verified": True,
                     "evidence_ref": ""},
-        "cost": {"tokens": 0, "seconds": 0, "spend_usd": spend},
+        # cost-honest: the real spend rides the cost face — $1 == 10k
+        # tokens (reward_signal's cost_t norm) so the A1 cost term reads
+        # the actual dollar spend instead of a zero stamp
+        "cost": {"tokens": spend * reward_signal.COST_TOKENS_NORM,
+                 "seconds": 0, "spend_usd": spend},
         "utility": {"retrievals": 0, "citations": 0, "utility": 0.0},
         "reusable_fragments": fragments[:episode_schema.FRAGMENT_MAX],
         "milestones": [],
