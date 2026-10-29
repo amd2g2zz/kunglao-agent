@@ -93,6 +93,7 @@ __all__ = [
     "distill_rollout",
     "distill_score",
     "episode_pool",
+    "episode_schema",
     "episode_settle",
     "expansion",
     "feature_prior",
