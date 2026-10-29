@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 051c95017a49ebd3564a3baa4b4218db6e195bc7807c1f4ce89b461ba210b484
+    sha256: 4b3347f6cad52f63a558aa0abcc3a08222bc7b40a5c405439bf6de24bc782684
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -1355,7 +1355,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 1591d4a897d1087f81a44c7ce6ba93baf491793a0a56b12bfe6989dd6a20999b
+    sha256: 79be6e78fac1f8ed44cb251d3a654d668dc4a576fbd34363eb3a0951071688e1
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1460,6 +1460,10 @@ files:
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
     sha256: 54099382e65a94c8b8ac06283d5ec7e3906bc7cc06fb64c4ced1674a5b99d400
+  - src: scripts/rlvr/loop_sim.py
+    dest: .claude/scripts/rlvr/loop_sim.py
+    kind: scaffold
+    sha256: 5af459901896b75ed56546cf1540ead0bb1ddee66ebd78bc6911d7a2607817d6
   - src: scripts/rlvr/marl.py
     dest: .claude/scripts/rlvr/marl.py
     kind: scaffold
@@ -1500,6 +1504,10 @@ files:
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
     sha256: 466cfaffb9d8e8984c517c593c59c3f627e3a9115e87dca1e34e0023eea1f0ff
+  - src: scripts/rlvr/pool_scheduler.py
+    dest: .claude/scripts/rlvr/pool_scheduler.py
+    kind: scaffold
+    sha256: cd9edee1dc163e42ac055479ccb279efb30ccc6e5ce9f498d2a85c1abd552827
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold

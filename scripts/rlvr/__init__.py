@@ -39,6 +39,7 @@ from . import l1_value
 from . import ledger
 from . import learning_seal
 from . import liveness
+from . import loop_sim
 from . import marl
 from . import meta_context
 from . import meta_policy
@@ -49,6 +50,7 @@ from . import phi_tree
 from . import playbook
 from . import policy_compare
 from . import pool_indexer
+from . import pool_scheduler
 from . import posteriors
 from . import pricing
 from . import prediction_ledger
@@ -100,6 +102,7 @@ __all__ = [
     "l1_value",
     "ledger",
     "learning_seal",
+    "loop_sim",
     "marl",
     "meta_arms",
     "meta_context",
