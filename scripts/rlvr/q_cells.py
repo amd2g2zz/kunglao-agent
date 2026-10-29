@@ -1292,6 +1292,145 @@ def observe(ws, signature_hash: str, method_family: str,
                               arm_key_col=arm_key)
 
 
+# ---------------------------------------------------------------------------
+# v2 trajectory rows — the (s,a,r) ledger face (#878)
+# ---------------------------------------------------------------------------
+
+#: the v2 row kinds riding the SAME consolidated experience substrate:
+#: an action row records the DECIDED action (the ``a``), a result row
+#: records the step outcome + reward (the ``r``) and — once the credit
+#: face ran (#883) — the R_t / A_t credit columns. Old q-cell-obs/1
+#: rows are untouched and keep parsing (backward-compatible reads).
+SCHEMA_ACTION_V2 = "q-cell-action/1"
+SCHEMA_RESULT_V2 = "q-cell-result/1"
+_TRAJECTORY_PREFIXES = ("q-cell-obs", "q-cell-action", "q-cell-result")
+
+
+def _v2_nonempty(value, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"q_cells.v2.{field}: must be a non-empty string")
+    return value
+
+
+def _v2_num(value, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value):
+        raise ValueError(f"q_cells.v2.{field}: must be a finite number")
+    return float(value)
+
+
+def _v2_budget(budget) -> dict:
+    if budget is None:
+        return {}
+    if not isinstance(budget, dict):
+        raise ValueError("q_cells.v2.budget: must be a mapping")
+    wall_s = _v2_num(budget.get("wall_s"), "budget.wall_s")
+    if wall_s < 0.0:
+        raise ValueError("q_cells.v2.budget.wall_s: must be >= 0")
+    max_calls = budget.get("max_calls")
+    if max_calls is not None and (isinstance(max_calls, bool)
+                                  or not isinstance(max_calls, int)
+                                  or max_calls < 1):
+        raise ValueError(
+            "q_cells.v2.budget.max_calls: must be None or an int >= 1")
+    return {"wall_s": wall_s, "max_calls": max_calls}
+
+
+def _append_v2(ws, row: dict) -> dict:
+    """The v2 append tail — the SAME seal + consolidated-ledger path
+    every q-cell row takes (single-writer flock inside _cl.append)."""
+    row = _seal.sign_row(row)
+    return {"appended": _cl.append(ws, "experience", row), "row": row}
+
+
+def append_action(ws, kind: str, rollout_id: str, target: str, *,
+                  step_id=None, params=None, budget=None,
+                  policy_version=None, ts=None) -> dict:
+    """Record ONE decided action — the ``a`` of the (s,a,r) triple
+    (#878). The row is the loop's decision trace; kind validation is
+    the ``action/1`` boundary's job (core.actions.parse_action — the
+    single source; the ledger trusts its validated producer, never a
+    duplicate vocabulary).
+
+    Fail-CLOSED on structural garbage — unlike the telemetry faces:
+    a silently-dropped action row would hollow the trajectory the
+    credit face replays. A raise here is a loop bug surfacing."""
+    rid = _v2_nonempty(rollout_id, "rollout_id")
+    tgt = _v2_nonempty(target, "target")
+    kind_out = _v2_nonempty(kind, "kind")
+    sid = None if step_id is None else _v2_nonempty(step_id, "step_id")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise ValueError("q_cells.v2.params: must be a mapping")
+    row = {
+        "schema": SCHEMA_ACTION_V2,
+        "ts": ts or _now(),
+        "kind": kind_out,
+        "rollout_id": rid,
+        "step_id": sid,
+        "target": tgt,
+        "params": dict(params),
+    }
+    budget_doc = _v2_budget(budget)
+    if budget_doc:
+        row["budget"] = budget_doc
+    if policy_version is not None:
+        row["policy_version"] = _v2_nonempty(policy_version,
+                                             "policy_version")
+    return _append_v2(ws, row)
+
+
+def append_result(ws, rollout_id: str, step_id: str, *, r_t=None,
+                  verified: bool, cost: float = 0.0, verdict: str = "",
+                  evidence_refs=(), summary: str = "",
+                  R_t=None, A_t=None, ts=None) -> dict:
+    """Record ONE step result — the ``r`` of the (s,a,r) triple
+    (#878). ``r_t`` is the step's immediate reward (None = pending —
+    the settlement has not priced the step yet); ``R_t`` / ``A_t``
+    ride ADDITIVELY once the credit face (#883) computed the return
+    and advantage — absent columns mean not-yet-credited, never zero.
+    Fail-closed on structural garbage (same posture as append_action)."""
+    rid = _v2_nonempty(rollout_id, "rollout_id")
+    sid = _v2_nonempty(step_id, "step_id")
+    if not isinstance(verified, bool):
+        raise ValueError("q_cells.v2.verified: must be a bool")
+    r_out = None if r_t is None else _v2_num(r_t, "r_t")
+    rt_out = None if R_t is None else _v2_num(R_t, "R_t")
+    at_out = None if A_t is None else _v2_num(A_t, "A_t")
+    cost_out = _v2_num(cost, "cost")
+    if cost_out < 0.0:
+        raise ValueError("q_cells.v2.cost: must be >= 0")
+    row = {
+        "schema": SCHEMA_RESULT_V2,
+        "ts": ts or _now(),
+        "rollout_id": rid,
+        "step_id": sid,
+        "r_t": r_out,
+        "verified": verified,
+        "cost": round(cost_out, 6),
+        "verdict": str(verdict),
+        "evidence_refs": [str(e) for e in evidence_refs],
+        "summary": str(summary),
+    }
+    if rt_out is not None:
+        row["R_t"] = round(rt_out, 6)
+    if at_out is not None:
+        row["A_t"] = round(at_out, 6)
+    return _append_v2(ws, row)
+
+
+def trajectory_rows(ws) -> list[dict]:
+    """The v2 trajectory read face (#878): EVERY q-cell-* row of the
+    consolidated experience ledger in append order — observations
+    (old), actions, results — sealed rows only. Old q-cell-obs/1 rows
+    parse unchanged (backward-compatible reads): the file is a
+    multi-schema stream and the read face never rewrites a row."""
+    return _seal.trusted_rows(
+        _cl.read(ws, "experience", schema_prefix=_TRAJECTORY_PREFIXES),
+        op="q_cells.trajectory_rows")
+
+
 def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
     """The LATEST pending dispatch row carrying this identity (claim id
     or explicit dispatch_id) — the ONE match face shared by the #462 W5

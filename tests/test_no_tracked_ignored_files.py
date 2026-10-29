@@ -33,6 +33,19 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # surface; the 110 rule was scoped to local-only artifacts).
     "experiments/learning-loop/loop_sim.py":
         "experiment driver: owner-approved tracked home (restructure #865)",
+    # rl-v2 core types (#878): the trajectory-semantics value objects
+    # share the learning-loop tracked home (the loop_sim precedent) —
+    # experiment code outside the deploy surface, deliberately.
+    "experiments/learning-loop/core/__init__.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/actions.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/events.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/results.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/state.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
