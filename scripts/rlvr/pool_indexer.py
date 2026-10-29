@@ -54,9 +54,12 @@ def value_table(ws) -> dict[tuple, dict]:
     sums: dict[tuple, dict] = {}
     seen: dict[tuple, set] = {}
     for path, doc in pool.load_all(ws):
-        reward = doc.get("reward") or {}
+        reward = doc.get("reward")
         # the stamped mission reward may ride as a bare float (the
         # reward_block carries the decomposition) — read both shapes.
+        # None (or a non-numeric) is unstamped; an honest 0/0.0 IS a
+        # stamp and stays in its cell (the `or {}` fold vanished
+        # zero-reward episodes from the table).
         r = reward.get("r") if isinstance(reward, dict) else reward
         if not isinstance(r, (int, float)) or isinstance(r, bool):
             continue  # unstamped: no output signal yet (honest gap)

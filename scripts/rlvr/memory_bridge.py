@@ -14,9 +14,18 @@ episode's differential lands on two native faces of one store
   - COLD: one detail file per key under ``runs/memory/<family>/<key>.md``
     (fragment + provenance — sinks here, never lost).
 Differential means already-known content writes nothing: an identical
-fragment maps to the same key and is skipped (已会零写). A completed
-mission with a positive reward marks its family ``mastered`` — the
-scheduler's retire face then sees it through ``family_view``.
+fragment maps to the same key and is skipped (已会零写). ONE canonical
+family vocabulary — the scheduler's BARE name (the ``family:`` context
+feature, prefix stripped): row families, row keys, and the family face
+all carry it, so one stamp reaches the scheduler's family join without
+a companion token. A completed mission with a positive reward marks
+its family ``mastered`` — and ONLY when the episode's OWN family (the
+``family`` field the settle line stamps on the episode document)
+matches the family being mastered: the mastery flag validates the
+family identity of the underlying episode, not just the shape of the
+settlement, so a misfiled episode masters nothing (the E1c finding —
+misfiled episodes re-mastered every family — dies here). The
+scheduler's retire face then sees mastery through ``family_view``.
 
 RECALL SENSORS (the owner's model, all deterministic):
   - ``ignored``  — a recalled key never cited later: retrievals −
@@ -101,30 +110,46 @@ def _save_rows(ws, rows: list[dict]) -> None:
 
 
 def _family_of(episode: dict) -> str:
-    """The episode's family token: the ``family:`` context feature the
-    settle line stamps. A stamp without a family refuses loudly — a
-    memory row nobody can schedule for is noise."""
+    """The episode's family in the scheduler's BARE vocabulary: the
+    ``family:`` context feature the settle line stamps, prefix
+    stripped. A stamp without a family refuses loudly — a memory row
+    nobody can schedule for is noise."""
     for f in episode.get("context_features") or []:
         if isinstance(f, str) and f.startswith("family:"):
-            return f
+            name = f[len("family:"):].strip()
+            if name:
+                return name
     return ""
 
 
+def _own_family(episode: dict) -> str:
+    """The episode's OWN family identity — the bare ``family`` field
+    the settle line stamps on the episode document itself (a misfiling
+    may scramble the context feature; it cannot rewrite this)."""
+    return str(episode.get("family") or "").strip()
+
+
 def _reward_value(episode: dict) -> float | None:
-    reward = episode.get("reward") or {}
+    reward = episode.get("reward")
     r = reward.get("r") if isinstance(reward, dict) else reward
     if isinstance(r, (int, float)) and not isinstance(r, bool):
         return float(r)
     return None
 
 
-def _is_mastered(episode: dict) -> bool:
-    """A verified completion with a positive terminal reward means the
-    family's method worked end-to-end — that is ``mastered``."""
+def _is_mastered(episode: dict, family: str) -> bool:
+    """A verified completion with a positive terminal reward whose OWN
+    family matches the family being mastered. Shape alone (completed +
+    reward > 0) masters nothing: the mastery flag validates the family
+    identity of the underlying episode — a misfiled episode counts
+    toward its true family, never the mislabeled one."""
     if (episode.get("outcome") or {}).get("status") != "completed":
         return False
     r = _reward_value(episode)
-    return r is not None and r > 0.0
+    if r is None or r <= 0.0:
+        return False
+    own = _own_family(episode)
+    return bool(own) and own == family
 
 
 def _key_for(family: str, fragment: str) -> str:
@@ -166,7 +191,9 @@ def stamp_family_memory(ws, episode: dict) -> dict:
     reusable fragment (or the clean attribution when a failed mission
     has no fragments), one cold detail file each. Already-known content
     (same fragment -> same key) is skipped, not duplicated. A completed
-    positive-reward episode marks the family mastered. Returns
+    positive-reward episode marks the family mastered — only when the
+    episode's OWN family matches the family being mastered (identity,
+    not just settlement shape). Returns
     {family, written, skipped, mastered}."""
     ws = Path(ws)
     family = _family_of(episode)
@@ -206,7 +233,7 @@ def stamp_family_memory(ws, episode: dict) -> dict:
         written.append(key)
         _write_detail(ws, row)
     _save_rows(ws, rows)
-    mastered = _is_mastered(episode)
+    mastered = _is_mastered(episode, family)
     _mark_family(ws, family, mastered)
     return {"family": family, "written": written, "skipped": skipped,
             "mastered": mastered}
