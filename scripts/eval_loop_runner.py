@@ -276,7 +276,8 @@ def build_cc_default_argv(prompt: str, budget_usd: float) -> list[str]:
 def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                    wall_cap_s: float, session_cmd: str | None = None,
                    plugin_dir: Path | None = None,
-                   plugin: bool = True) -> dict:
+                   plugin: bool = True,
+                   solo_fraction: float | None = None) -> dict:
     """THE adapter (harness-neutral): start the real analysis session in
     ``workspace`` cwd under the budget caps, wait, return the session
     record. The production face is `claude -p`; an explicit session
@@ -286,6 +287,14 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     CC-DEFAULT face (build_cc_default_argv): same caps, no kunglao
     plugin — the harness-capability-variable arm."""
     workspace = Path(workspace)
+    # the session driver's caps travel as child env — the runner OWNS
+    # wall/budget/solo; a hand-set env outside the runner would silently
+    # diverge from the caps the prompt advertises
+    child_env = dict(os.environ)
+    child_env["KUNGLAO_SDK_BUDGET_USD"] = str(budget_usd)
+    if wall_cap_s and solo_fraction:
+        child_env["KUNGLAO_SOLO_CAP_S"] = str(
+            int(round(wall_cap_s * solo_fraction)))
     if session_cmd is None:
         session_cmd = os.environ.get(ENV_SESSION_CMD) or None
     if session_cmd:
@@ -302,7 +311,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     try:
         proc = subprocess.Popen(
             argv, cwd=str(workspace), stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, start_new_session=True)
+            stderr=subprocess.PIPE, text=True, start_new_session=True,
+            env=child_env)
     except OSError as exc:
         # a session that cannot even start is a TERMINAL record, never a
         # crash: the run_loop_task face turns this into session_error
@@ -513,6 +523,7 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
                         wall_cap_s: float, session_cmd: str | None = None,
                         plugin_dir: Path | None = None,
                         plugin: bool = True,
+                        solo_fraction: float | None = None,
                         note: str = "") -> tuple[dict, list[str], list[str]]:
     """issue 380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
     route through here so the harness-drift handling can no longer
@@ -525,7 +536,8 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
     pre = integrity_surface_hashes()
     rec = launch_session(workspace, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-                         plugin_dir=plugin_dir, plugin=plugin)
+                         plugin_dir=plugin_dir, plugin=plugin,
+                         solo_fraction=solo_fraction)
     drifted = harness_drift(pre, integrity_surface_hashes())
     restored: list[str] = []
     if drifted:
@@ -541,7 +553,9 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
 
 
 # ---------------------------------------------------------- wall partition
-def wall_partition_block(wall_cap_s: float) -> str:
+def wall_partition_block(wall_cap_s: float,
+                         solo_fraction: float | None = None
+                         ) -> str:
     """M1 (exp5) + I1 (exp8): the WALL_BUDGET_PARTITION contract block.
     The runner owns the wall cap and kills the session tree at it — a
     session that was never told the cap cannot partition its own budget.
@@ -554,8 +568,10 @@ def wall_partition_block(wall_cap_s: float) -> str:
     delivered its candidate AT budget death (0/16 graded on a rush job) —
     so the block now mandates an early on-disk draft that is continuously
     improved; at the cap the CURRENT on-disk state is what gets graded."""
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
     total = int(round(wall_cap_s))
-    solo_cap = int(round(wall_cap_s * SOLO_PARTITION_FRACTION))
+    solo_cap = int(round(wall_cap_s * solo_fraction))
     due = max(int(round(wall_cap_s - DELIVERABLE_RESERVE_S)), 0)
     return (
         "WALL_BUDGET_PARTITION (harness contract — the runner enforces "
@@ -772,7 +788,8 @@ def init_workspace(task_dir: Path, work_root: Path,
 
 def init_cc_default_workspace(task_dir: Path,
                               work_root: Path,
-                              *, wall_cap_s: float | None = None
+                              *, wall_cap_s: float | None = None,
+                              solo_fraction: float | None = None
                               ) -> tuple[Path, str]:
     """The CC-DEFAULT arm's neutral cwd: NO kunglao-init, no plugin
     scaffold — ONLY the unit's material at its task-relative paths
@@ -799,7 +816,9 @@ def init_cc_default_workspace(task_dir: Path,
     prompt = (
         "Solve the reverse-engineering task in THIS working directory. "
         "Work fully autonomously: no questions, no user input.\n\n"
-        + (wall_partition_block(wall_cap_s) + "\n\n"
+        + (wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction)
+           + "\n\n"
            if wall_cap_s is not None else "")
         + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
@@ -1085,6 +1104,7 @@ def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
 
 def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       *, wall_cap_s: float | None = None,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       include_t1_direct: bool = True,
                       probe_block: str = "") -> str:
@@ -1115,7 +1135,8 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     (I5, exp8) adds the T-1 affirmative one-liner."""
     extras: list[str] = []
     if wall_cap_s is not None:
-        extras.append(wall_partition_block(wall_cap_s))
+        extras.append(wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction))
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1222,6 +1243,7 @@ def gap_redo_decision(verdict: str | None, session_record: dict, *,
 def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       gap_block: str, *, wall_cap_s: float,
                       budget_usd: float,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       probe_block: str = "") -> str:
     """The gap-redo session's brief: same task (anchors + contract +
@@ -1233,7 +1255,8 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
     same task under the same prompt contract. (issue 380 P3-1: the shared
     tail renders through _render_task_prompt.)"""
-    extras: list[str] = [wall_partition_block(wall_cap_s)]
+    extras: list[str] = [wall_partition_block(
+        wall_cap_s, solo_fraction=solo_fraction)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
@@ -1443,6 +1466,10 @@ def extract_candidate(workspace: Path, task: dict) -> Path | None:
         if not base.is_dir():
             continue
         for p in sorted(base.rglob(f"*{suffix}")):
+            # empty suffix = the binary-candidate face: the fallback only
+            # accepts an executable file, not any stray artifact
+            if suffix == "" and not os.access(p, os.X_OK):
+                continue
             if not p.is_file() or p.stat().st_size == 0:
                 continue
             if p.name.startswith(_EXCLUDE_PREFIXES):
@@ -1527,30 +1554,21 @@ def _arm_prompt(arm: str, prompt: str,
     return prompt
 
 
-def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
-                  = DEFAULT_BUDGET_USD, wall_cap_s: float
-                  = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
-                  plugin_dir: Path | None = None,
-                  arm: str = ARM,
-                  warm_context_from: Path | None = None) -> dict:
-    """One eval task through the FULL pipeline: init -> real session ->
-    harvest -> mechanical check -> results row. ``arm`` selects the
-    harness face: "loop" (kunglao-init + plugin session), "cc-default"
-    (neutral cwd + plugin-less session), or "cc-warm-context" (the
-    cc-default face + the train-store text render — the RL-vs-context
-    attribution arm) — same caps, extractor and checker either way."""
-    out = Path(out)
-    tdir = ds.resolve_task_dir(task_ref)
-    task = ds.load_task(tdir)
-    suffix = _candidate_suffix(task)
-    deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
-
-    layer_paths, probe_block = prompt_injection_blocks(tdir, task)
-
+def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
+                    wall_cap_s: float, solo_fraction: float,
+                    deliverable_rel: str, layer_paths: list[str],
+                    probe_block: str,
+                    warm_context_from: Path | None = None
+                    ) -> tuple[Path | None, str, dict | None]:
+    """Workspace init + prompt build for one arm face. Returns
+    (ws, prompt, skip_row): a non-None skip_row is the structured SKIP
+    row for a failed init (BAD_TASK) or failed preflight — the caller
+    returns it without running a session."""
     try:
         if arm in ("cc-default", "cc-warm-context"):
             ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
-                                                   wall_cap_s=wall_cap_s)
+                                                   wall_cap_s=wall_cap_s,
+                                                   solo_fraction=solo_fraction)
             # the experiment doc sec5 attribution arm (frozen text):
             prompt = _arm_prompt(arm, prompt, warm_context_from)
         else:
@@ -1564,11 +1582,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             except (OSError, ValueError, yaml.YAMLError) as exc:
                 pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
             if not pf_ok:
-                return _preflight_skip_row(task, tdir, arm, pf_reasons, ws)
+                return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                   pf_reasons, ws)
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
+                                       solo_fraction=solo_fraction,
                                        layer_paths=layer_paths,
                                        probe_block=probe_block)
+        return ws, prompt, None
     except RuntimeError as exc:
         # structured SKIP row, never a tier-wide crash: one unit's init
         # failure must not take the other units' measurement with it
@@ -1589,21 +1610,56 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                            "harness_drift_files": []},
                        "workspace": None, "deliverable": None,
                        "prompt_sha256": None}
-        # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
-        # stdout file for the pass@k arithmetic — a parsed downstream
-        # face. The mirror on stderr records the SKIP reason on the
-        # diagnostics channel (record-only batch).
-        print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
-        print(f"[kunglao-agent] eval_loop WARN (fail-open): "
-              f"verdict_skip_init_failed: {tdir.name} ({arm}) "
-              f"[mirrored on stdout per the autoresearch.sh contract]",
-              file=sys.stderr)
-        return row
+        return None, "", row
+
+
+def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
+                  = DEFAULT_BUDGET_USD, wall_cap_s: float
+                  = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
+                  plugin_dir: Path | None = None,
+                  arm: str = ARM,
+                  solo_fraction: float | None = None,
+                  warm_context_from: Path | None = None) -> dict:
+    """One eval task through the FULL pipeline: init -> real session ->
+    harvest -> mechanical check -> results row. ``arm`` selects the
+    harness face: "loop" (kunglao-init + plugin session), "cc-default"
+    (neutral cwd + plugin-less session), or "cc-warm-context" (the
+    cc-default face + the train-store text render — the RL-vs-context
+    attribution arm) — same caps, extractor and checker either way."""
+    out = Path(out)
+    # ONE normalization site: everything downstream takes a plain float
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
+    tdir = ds.resolve_task_dir(task_ref)
+    task = ds.load_task(tdir)
+    suffix = _candidate_suffix(task)
+    deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
+
+    layer_paths, probe_block = prompt_injection_blocks(tdir, task)
+
+    ws, prompt, skip_row = _init_task_face(
+        tdir, task, out, arm=arm, wall_cap_s=wall_cap_s,
+        solo_fraction=solo_fraction, deliverable_rel=deliverable_rel,
+        layer_paths=layer_paths, probe_block=probe_block,
+        warm_context_from=warm_context_from)
+    if skip_row is not None:
+        if skip_row["failures"][0]["code"] == "BAD_TASK":
+            # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
+            # stdout file for the pass@k arithmetic — a parsed downstream
+            # face. The mirror on stderr records the SKIP reason on the
+            # diagnostics channel (record-only batch).
+            print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
+            print(f"[kunglao-agent] eval_loop WARN (fail-open): "
+                  f"verdict_skip_init_failed: {tdir.name} ({arm}) "
+                  f"[mirrored on stdout per the autoresearch.sh contract]",
+                  file=sys.stderr)
+        return skip_row
     baseline_rounds = count_snapshot_rows(ws)
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-        plugin_dir=plugin_dir, plugin=(arm == ARM))
+        plugin_dir=plugin_dir, plugin=(arm == ARM),
+        solo_fraction=solo_fraction)
     contaminated = bool(drifted)
     status = _session_status(rec, budget_usd)
 
@@ -1646,6 +1702,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             tdir, task, deliverable_rel,
             render_gap_block(extract_checker_gap(res)),
             wall_cap_s=redo_wall, budget_usd=redo_budget,
+            solo_fraction=solo_fraction,
             layer_paths=layer_paths, probe_block=probe_block)
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
@@ -1654,7 +1711,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             ws, redo_prompt, out, tdir.name, budget_usd=redo_budget,
             wall_cap_s=redo_wall, session_cmd=session_cmd,
             plugin_dir=plugin_dir, plugin=(arm == ARM),
-            note=" (gap-redo session)")
+            solo_fraction=solo_fraction, note=" (gap-redo session)")
         status = _session_status(redo_rec, redo_budget)
         gap_redo["ran"] = True
         gap_redo["session"] = {
@@ -1779,6 +1836,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
+                  solo_fraction: float | None = None,
                   warm_context_from: Path | None = None
                   ) -> tuple[int, dict]:
     """The tier face: one kunglao-eval-results/1 doc (arm=loop or
@@ -1800,6 +1858,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
         rows.append(run_loop_task(
             str(tdir), out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
             session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
+            solo_fraction=solo_fraction,
             warm_context_from=warm_context_from))
 
     summary = {
@@ -1856,6 +1915,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wall-cap-s", type=float, default=DEFAULT_WALL_CAP_S,
                     help="session wall-clock cap (the runner kills the "
                          "session tree past it; exhausted = terminal row)")
+    ap.add_argument("--solo-fraction", type=float, default=None,
+                    help="solo/direct recon window as a fraction of the "
+                         "wall (default 0.5, the smoke-tier economics; "
+                         "hard units want a short window, e.g. 0.15)")
     ap.add_argument("--session-cmd", default=None,
                     help="TEST/OVERRIDE ONLY: replacement session command "
                          "(prompt appended as the positional); the "
@@ -1883,6 +1946,7 @@ def main(argv: list[str] | None = None) -> int:
         wall_cap_s=args.wall_cap_s, session_cmd=args.session_cmd,
         plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None,
         arm=args.arm,
+        solo_fraction=args.solo_fraction,
         warm_context_from=(Path(args.warm_context_from)
                            if args.warm_context_from else None))
     return rc

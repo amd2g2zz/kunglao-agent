@@ -113,6 +113,7 @@ files:
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
   scripts/eval_native_targets.py: 6
+  scripts/eval_sdk_session.py: 1
   scripts/eval_smoke_runner.py: 2
   scripts/eval_split_lint.py: 4
   scripts/eval_targets.py: 12
