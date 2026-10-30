@@ -48,6 +48,7 @@ for _p in (Path(__file__).resolve().parents[1], _SCRIPTS):
 
 from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import q_cells  # noqa: E402
+from state import telemetry as _telemetry  # noqa: E402 — path set below
 
 #: the marker schema stamps (the receipt-stamp discipline).
 COMMIT_SCHEMA = "settlement-commit/1"
@@ -125,6 +126,14 @@ def _rows(ws) -> list[dict]:
     return _cl.read(ws, "settlement", schema_prefix=_READ_PREFIXES)
 
 
+def _refuse(ws, rid: str, why: str) -> None:
+    """The #915 telemetry: a refused landing is a notable path — it
+    lands a ``settlement.SETTLE_REFUSED`` row (fail-open; the row is
+    the record, never stdout)."""
+    _telemetry.emit(ws, "settlement", "SETTLE_REFUSED", rollout_id=rid,
+                    detail=why)
+
+
 def _draft_rows(ws) -> list[dict]:
     return [r for r in _rows(ws) if r.get("schema") == DRAFT_SCHEMA]
 
@@ -159,6 +168,7 @@ def land_draft(ws, priced: Mapping, *, ts: str | None = None) -> dict:
         same = (str(existing.get("rollout_id") or "") == rid
                 and str(existing.get("dispatch_id") or "") == did)
         if same:
+            _refuse(ws, rid, f"land refused: already-drafted ({did})")
             return {"schema": DRAFT_SCHEMA, "appended": False,
                     "reason": "already-drafted",
                     "batch_id": row["batch_id"],
@@ -166,17 +176,23 @@ def land_draft(ws, priced: Mapping, *, ts: str | None = None) -> dict:
     commits = _marker_rows(ws, COMMIT_SCHEMA)
     if any(str(m.get("batch_id") or "") == row["batch_id"]
            for m in commits):
+        _refuse(ws, rid, f"land refused: batch-already-committed ({did})")
         return {"schema": DRAFT_SCHEMA, "appended": False,
                 "reason": "batch-already-committed",
                 "batch_id": row["batch_id"],
                 "rollout_id": rid, "dispatch_id": did}
     if any(str(m.get("batch_id") or "") == row["batch_id"]
            for m in _marker_rows(ws, DISCARD_SCHEMA)):
+        _refuse(ws, rid, f"land refused: batch-discarded ({did})")
         return {"schema": DRAFT_SCHEMA, "appended": False,
                 "reason": "batch-discarded",
                 "batch_id": row["batch_id"],
                 "rollout_id": rid, "dispatch_id": did}
     appended = _cl.append(ws, "settlement", row)
+    _telemetry.emit(ws, "settlement", "SETTLE_DRAFTED" if appended
+                    else "SETTLE_REFUSED", rollout_id=rid,
+                    detail=f"dispatch {did} "
+                           f"{'landed' if appended else 'append-refused'}")
     return {"schema": DRAFT_SCHEMA, "appended": appended,
             "reason": None if appended else "append-refused",
             "batch_id": row["batch_id"],
@@ -231,6 +247,10 @@ def commit_batch(ws, rollout_id: str, *, ts: str | None = None) -> dict:
         "total_credit": total,
     }
     appended = _cl.append(ws, "settlement", marker)
+    _telemetry.emit(ws, "settlement", "SETTLE_COMMITTED" if appended
+                    else "SETTLE_REFUSED", rollout_id=rid,
+                    detail=f"batch {batch} total_credit {total} "
+                           f"{'committed' if appended else 'refused'}")
     return {"schema": COMMIT_SCHEMA, "appended": appended,
             "reason": None if appended else "append-refused",
             "batch_id": batch, "rollout_id": rid,
@@ -268,6 +288,9 @@ def discard_drafts(ws, rollout_id: str, *, reason: str = "",
         "reason": str(reason),
     }
     appended = _cl.append(ws, "settlement", marker)
+    _telemetry.emit(ws, "settlement", "SETTLE_DISCARDED" if appended
+                    else "SETTLE_REFUSED", rollout_id=rid,
+                    detail=f"batch {batch} discarded: {reason}")
     return {"schema": DISCARD_SCHEMA, "appended": appended,
             "reason": None if appended else "append-refused",
             "batch_id": batch, "rollout_id": rid}
