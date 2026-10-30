@@ -33,6 +33,10 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # surface; the 110 rule was scoped to local-only artifacts).
     "experiments/learning-loop/loop_sim.py":
         "experiment driver: owner-approved tracked home (restructure #865)",
+    "experiments/learning-loop/loop_sim_v3.py":
+        "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
+    "experiments/learning-loop/battery_v3_experiments.py":
+        "rl-v2 battery experiments: loop_sim tracked-home precedent (#887)",
     # rl-v2 core types (#878): the trajectory-semantics value objects
     # share the learning-loop tracked home (the loop_sim precedent) —
     # experiment code outside the deploy surface, deliberately.
