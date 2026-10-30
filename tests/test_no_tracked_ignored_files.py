@@ -65,6 +65,30 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
     "experiments/learning-loop/policy/prober.py":
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
+    # the rl-v2 construction-style worker faces (#885): same tracked
+    # home as the policy and credit faces.
+    "experiments/learning-loop/workers/__init__.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/workers/spawner.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/workers/brief.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/__init__.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/observer.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/budget_tracker.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    # the rl-v2 settlement faces (#884): per-dispatch pricing +
+    # draft/commit two-phase — same tracked home.
+    "experiments/learning-loop/settlement/__init__.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/per_dispatch.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/rollout_agg.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/draft_commit.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
     # the rl-v2 credit faces (#883): pure numpy credit assignment —
     # same tracked home as the policy faces.
     "experiments/learning-loop/credit/__init__.py":
