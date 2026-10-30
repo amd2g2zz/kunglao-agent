@@ -150,11 +150,17 @@ def select_task(ws, task_ids: Sequence,
 
 def record_selection(ws, task: str, *, rollout_id: str,
                      policy_version: str | None = None,
-                     params: dict | None = None) -> dict:
+                     params: dict | None = None,
+                     ts: str | None = None) -> dict:
     """Land the selection as ONE ``q-cell-action/1`` row (kind =
     ``select_task``, target = the task) — the standard single-writer
-    append; the trajectory's first row of every rollout."""
+    append; the trajectory's first row of every rollout. ``ts`` is the
+    deterministic-loop threading point (#909): a full-chain driver
+    stamps its counter clock here so the ledger carries NO wall clock
+    (the terminator's seed hashes the rows verbatim — a wall ts would
+    move the seed across identical decision histories); default None
+    keeps the legacy self-stamp byte-identical."""
     return q_cells.append_action(ws, kind="select_task",
                                  rollout_id=rollout_id, target=task,
                                  policy_version=policy_version,
-                                 params=params)
+                                 params=params, ts=ts)

@@ -311,13 +311,16 @@ def belief_digest(doc: Mapping) -> str:
 
 
 def record_belief(ws, doc: Mapping, *, claim: str | None = None,
-                  dispatch_id: str | None = None) -> dict:
+                  dispatch_id: str | None = None,
+                  ts: str | None = None) -> dict:
     """Append ONE telemetry row for a built snapshot — ``credit=None``
     by construction (no credit column -> the fold banks no posterior
-    mass; the snapshot observes, settlement credits)."""
+    mass; the snapshot observes, settlement credits). ``ts`` rides the
+    caller's deterministic clock (the fault-harness driver, #909);
+    default None = the face's own self-stamp (byte-identical legacy)."""
     if not isinstance(doc, Mapping) or doc.get("schema") != SCHEMA:
         raise _fail("schema", f"must be a {SCHEMA!r} document")
     return q_cells.append_observation(
         ws, belief_digest(doc), METHOD_FAMILY_BELIEF,
         credit=None, source=SOURCE, claim=claim, dispatch_id=dispatch_id,
-        reason=REASON_BELIEF)
+        reason=REASON_BELIEF, ts=ts)
