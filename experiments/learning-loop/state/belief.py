@@ -315,12 +315,9 @@ def record_belief(ws, doc: Mapping, *, claim: str | None = None,
                   ts: str | None = None) -> dict:
     """Append ONE telemetry row for a built snapshot — ``credit=None``
     by construction (no credit column -> the fold banks no posterior
-    mass; the snapshot observes, settlement credits). ``ts`` is the
-    deterministic-loop threading point (#909): a full-chain driver
-    stamps its counter clock so the ledger carries NO wall clock (the
-    terminator's seed hashes the rows verbatim — a wall ts would move
-    the seed across identical decision histories); default None keeps
-    the legacy self-stamp byte-identical."""
+    mass; the snapshot observes, settlement credits). ``ts`` rides the
+    caller's deterministic clock (the fault-harness driver, #909);
+    default None = the face's own self-stamp (byte-identical legacy)."""
     if not isinstance(doc, Mapping) or doc.get("schema") != SCHEMA:
         raise _fail("schema", f"must be a {SCHEMA!r} document")
     return q_cells.append_observation(

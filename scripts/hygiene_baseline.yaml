@@ -1572,6 +1572,9 @@ files:
     r1: 1
   tests/test_rl_output_path_691.py:
     r1: 5
+  tests/test_rl_v2_channel_pins_904.py:
+    r1: 4
+    r2: 1
   tests/test_rl_v2_core_types_878.py:
     r2: 1
   tests/test_rl_v2_credit_883.py:
