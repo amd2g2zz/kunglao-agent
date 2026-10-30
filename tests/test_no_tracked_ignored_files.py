@@ -79,6 +79,16 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
     "experiments/learning-loop/hooks/budget_tracker.py":
         "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    # the rl-v2 credit faces (#883): pure numpy credit assignment —
+    # same tracked home as the policy faces.
+    "experiments/learning-loop/credit/__init__.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/returns.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/advantage.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/lineage.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
