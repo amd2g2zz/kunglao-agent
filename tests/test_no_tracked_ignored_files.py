@@ -74,7 +74,16 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     "experiments/learning-loop/state/channel_pins.py":
         "rl-v2 state faces: loop_sim tracked-home precedent (#904)",
     "experiments/learning-loop/state/telemetry.py":
-        "rl-v2 telemetry face: loop_sim tracked-home precedent (#915)",    # the rl-v2 policy faces (#880-#882): the sampling decision modules
+        "rl-v2 telemetry face: loop_sim tracked-home precedent (#915)",
+    "experiments/learning-loop/loop.py":
+        "rl-v2 unified decision loop: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_pins.py":
+        "rl-v2 carried-pin faces: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_seams.py":
+        "rl-v2 loop seam methods: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_worker.py":
+        "rl-v2 flat mock worker: loop_sim tracked-home precedent (#913)",
+    # the rl-v2 policy faces (#880-#882): the sampling decision modules
     # share the learning-loop tracked home (the loop_sim precedent) —
     # experiment code outside the deploy surface, deliberately.
     "experiments/learning-loop/policy/__init__.py":
