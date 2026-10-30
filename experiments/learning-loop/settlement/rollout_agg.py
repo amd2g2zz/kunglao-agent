@@ -52,6 +52,11 @@ def _checked_drafts(rows: Any) -> list[Mapping]:
                     f"rows[{i}].{field}",
                     "must be a finite number (the aggregate would "
                     "fabricate or crash on this row)")
+            if field == "spend" and v < 0.0:
+                raise _fail(
+                    f"rows[{i}].spend",
+                    "must be a finite number >= 0 (spend is a cost — "
+                    "a negative figure would fabricate the aggregate)")
     if not rows:
         raise _fail("rows", "must be non-empty (an empty batch settles "
                             "nothing — credit the terminal to a real batch)")
@@ -69,20 +74,25 @@ def aggregate(rows: Sequence[Mapping], *, terminal: str,
               terminal_bonus: float = TERMINAL_BONUS) -> dict:
     """Σ(draft credits) + the terminal adjustment — pure. The bonus is
     + on ``completed``, − on ``rolled_back`` (the returns.py sign
-    flip); the spend aggregates the rows' own figures. Never the clock,
-    never the ledger — the caller supplies the rows."""
+    flip); the spend aggregates the rows' own figures. ``total_spend``
+    is the drafts' validated spend Σ ALONE — the terminal adjustment is
+    credit-side only (the TERMINALS vocabulary carries no spend
+    semantics), so it never touches the spend Σ (#916). Never the
+    clock, never the ledger — the caller supplies the rows."""
     safe = _checked_drafts(rows)
     if terminal not in TERMINALS:
         raise _fail("terminal",
                     f"terminal must be one of {TERMINALS}, got {terminal!r}")
     bonus = _checked_bonus(terminal_bonus)
     signed = bonus if terminal == "completed" else -bonus
+    credits = sum(float(r["credit"]) for r in safe)
+    spend = sum(float(r["spend"]) for r in safe)
     return {
         "dispatch_count": len(safe),
-        "credits_sum": round(sum(float(r["credit"]) for r in safe), 6),
-        "spend": round(sum(float(r["spend"]) for r in safe), 6),
+        "credits_sum": round(credits, 6),
+        "spend": round(spend, 6),
         "terminal": terminal,
         "terminal_adjustment": round(signed, 6),
-        "total_credit": round(sum(float(r["credit"]) for r in safe)
-                              + signed, 6),
+        "total_credit": round(credits + signed, 6),
+        "total_spend": round(spend, 6),
     }

@@ -1589,6 +1589,9 @@ files:
   tests/test_rl_v2_settlement_884.py:
     r1: 1
     r2: 1
+  tests/test_rl_v2_spend_agg_916.py:
+    r1: 3
+    r2: 1
   tests/test_rl_v2_terminator_882.py:
     r2: 1
   tests/test_rl_v2_watchdog_prior_906.py:
