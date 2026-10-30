@@ -55,6 +55,7 @@ from credit import returns as credit_returns  # noqa: E402
 from policy import assigner, selector, terminator  # noqa: E402
 from rlvr import q_cells  # noqa: E402
 from settlement import draft_commit  # noqa: E402
+from state import telemetry as _telemetry  # noqa: E402
 
 POLICY_VERSION = "rl-v2-loop/1"
 
@@ -207,11 +208,17 @@ def _bank_settled_credit(ws, ctx: dict, sig: str, family: str,
     memory face is FED but fed the WRONG family."""
     if scramble:
         family = ring_next(family)
-    return q_cells.append_observation(
+    row = q_cells.append_observation(
         ws, sig, family, credit, source="settlement", claim=claim,
         dispatch_id=dispatch_id, arm_key_col=arm_key(family),
         credit_kind="step", reason="v3-dispatch-settlement",
         ts=ctx["clock"].tick())
+    banked = float(row["row"]["credit"])
+    if banked != credit:
+        _telemetry.emit(ws, "credit", "CREDIT_V_CLAMPED", lap=ctx["lap"],
+                        detail=f"injected {credit} banked {banked} — the "
+                               f"rail clamp held")
+    return row
 
 
 def _terminal_rows(ws, ctx: dict, rid: str, *, terminal: str,
@@ -256,6 +263,14 @@ def _dispatch(ws, ctx: dict, rid: str, sig: str, situation: str,
         params={"method_family": family, "tier": TIER},
         budget={"wall_s": PER_DISPATCH_BUDGET_S, "max_calls": None},
         policy_version=POLICY_VERSION, ts=ctx["clock"].tick())
+    # telemetry AFTER the ledger row — a describe-before-durable emit
+    # would leave a phantom assignment row on append_action failure
+    if len(cands) > 1:
+        _telemetry.emit(ws, "assigner", "ASSIGN_WIDENED", lap=ctx["lap"],
+                        rollout_id=rid,
+                        detail=f"{len(cands)} families in the draw")
+    _telemetry.emit(ws, "assigner", "ASSIGN_ASSIGNED", lap=ctx["lap"],
+                    rollout_id=rid, detail=f"family {family}")
     out = _worker_execute(situation, family, planted)
     r_t = 1.0 if out["verified"] else 0.0
     cost = out["tokens"] / 10_000.0
@@ -303,6 +318,17 @@ def _decide_terminal(check: dict, covered: bool, watchdog: dict,
     return None
 
 
+def _emit_rule(ws, ctx: dict, rid: str, check: dict) -> None:
+    """#915 telemetry: a β rule that fired lands its code (fail-open;
+    the row is the record, never stdout)."""
+    code = {"loss_cut": "TERM_LOSSCUT",
+            "question_covered": "TERM_QUESTION_COVERED",
+            }.get(check["rule"])
+    if code is not None:
+        _telemetry.emit(ws, "terminator", code, lap=ctx["lap"],
+                        rollout_id=rid, detail=check["why"])
+
+
 def run_rollout(ws, ctx: dict, *, rid: str, task_id: str,
                 situation: str, gamma: float, ablate_credit: bool,
                 scramble_credit: bool, ablate_selector: bool,
@@ -337,6 +363,10 @@ def run_rollout(ws, ctx: dict, *, rid: str, task_id: str,
         deadline = terminator.watchdog_deadline(
             nominal, q_cells.trajectory_rows(ws),
             Budget(wall_s=PER_DISPATCH_BUDGET_S), round_no=ctx["lap"])
+        _telemetry.emit(ws, "terminator", "TERM_WATCHDOG_ARMED",
+                        lap=ctx["lap"], rollout_id=rid,
+                        detail=f"cold={deadline['cold']} "
+                               f"deadline_s={deadline['deadline_s']}")
     while terminal is None:
         step_no = len(steps) + 1
         disp = _dispatch(ws, ctx, rid, sig, situation, step_no,
@@ -358,9 +388,16 @@ def run_rollout(ws, ctx: dict, *, rid: str, task_id: str,
         last_check = terminator.check_termination(
             rid, coverage, q_cells.trajectory_rows(ws),
             rng=random.Random(f"v3/{ctx['seed']}/{rid}/{step_no}/term"))
+        _emit_rule(ws, ctx, rid, last_check)
         watchdog = terminator.watchdog_check(
             deadline, elapsed_s=sum(s["seconds"] for s in steps),
             rollout_completed=False)
+        if watchdog["fired"]:
+            _telemetry.emit(ws, "terminator", "TERM_WATCHDOG_FIRED",
+                            lap=ctx["lap"], rollout_id=rid,
+                            detail=f"elapsed "
+                                   f"{watchdog['elapsed_s']} >= deadline "
+                                   f"{watchdog['deadline_s']}")
         terminal = _decide_terminal(last_check, covered, watchdog,
                                     step_no)
     kind = "terminate_rollout" if terminal == "completed" else "rollback"
@@ -387,6 +424,9 @@ def run_rollout(ws, ctx: dict, *, rid: str, task_id: str,
         wd_final = terminator.watchdog_check(
             deadline, elapsed_s=sum(s["seconds"] for s in steps),
             rollout_completed=True)
+        _telemetry.emit(ws, "terminator", "TERM_WATCHDOG_CANCELLED",
+                        lap=ctx["lap"], rollout_id=rid,
+                        detail=f"early_cancel reason={wd_final['reason']}")
         efficiency = wd_final["efficiency_credit"]
     else:
         efficiency = False
@@ -544,6 +584,7 @@ def run_v3_loop(ws, *, laps: int = 3, seed: int = 0, gamma: float = GAMMA,
     all_task_ids: list[str] = []
     verified = 0
     dispatches = 0
+    prev_mass: float | None = None
     for lap_no in range(1, laps + 1):
         ctx["lap"] = lap_no
         lap_tasks = list(LAP_TASKS[lap_no - 1])
@@ -576,6 +617,20 @@ def run_v3_loop(ws, *, laps: int = 3, seed: int = 0, gamma: float = GAMMA,
                                      scramble_credit=scramble_credit,
                                      ablate_selector=ablate_selector)
                 report["lineage"].append(spawn)
+                _telemetry.emit(ws, "selector", "SELECT_CANDIDATES_WIDENED",
+                                lap=lap_no,
+                                detail=f"spawned child "
+                                       f"{rollout['task_id']}-child widens "
+                                       f"the candidates")
+        # #915 telemetry: the lap END is the batch boundary — the task
+        # posteriors' banked mass moving is the selector's prior move
+        post = selector.task_posteriors(ws, sorted(set(all_task_ids)))
+        mass = sum(a + b for _t, (a, b) in post.items())
+        if prev_mass is not None and mass > prev_mass:
+            _telemetry.emit(ws, "selector", "SELECT_PRIOR_MOVED",
+                            lap=lap_no,
+                            detail=f"banked posterior mass {mass}")
+        prev_mass = mass
         report["per_lap"].append(lap)
         report["assignment_p_tracked_trace"].append(
             assignment_distribution(ws, "offsets", draws=100,

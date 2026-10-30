@@ -68,6 +68,7 @@ from rlvr import q_cells  # noqa: E402
 from rlvr.step_credit import CROSS_VALIDATED, classify_verification  # noqa: E402
 
 from . import progress as _progress  # noqa: E402
+from . import telemetry as _telemetry  # noqa: E402
 
 SCHEMA = "belief-snapshot/1"
 
@@ -320,7 +321,14 @@ def record_belief(ws, doc: Mapping, *, claim: str | None = None,
     default None = the face's own self-stamp (byte-identical legacy)."""
     if not isinstance(doc, Mapping) or doc.get("schema") != SCHEMA:
         raise _fail("schema", f"must be a {SCHEMA!r} document")
-    return q_cells.append_observation(
+    row = q_cells.append_observation(
         ws, belief_digest(doc), METHOD_FAMILY_BELIEF,
         credit=None, source=SOURCE, claim=claim, dispatch_id=dispatch_id,
         reason=REASON_BELIEF, ts=ts)
+    # #915 telemetry: the snapshot's landing is a notable path — an
+    # all-empty document (nothing is known yet) lands its own code
+    empty = not any(doc.get(key) for key in ELEMENTS)
+    _telemetry.emit(ws, "belief", "BELIEF_EMPTY_SPEC" if empty
+                    else "BELIEF_SNAPSHOT",
+                    detail=f"digest {belief_digest(doc)[:12]}")
+    return row
