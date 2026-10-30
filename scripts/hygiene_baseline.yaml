@@ -1576,6 +1576,9 @@ files:
     r1: 3
   tests/test_rl_v2_selector_880.py:
     r2: 1
+  tests/test_rl_v2_settlement_884.py:
+    r1: 1
+    r2: 1
   tests/test_rl_v2_terminator_882.py:
     r2: 1
   tests/test_rl_wiring_518.py:
