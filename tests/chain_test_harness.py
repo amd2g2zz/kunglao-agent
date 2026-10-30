@@ -59,8 +59,8 @@ from typing import Any, Mapping
 
 import numpy as np
 
-_LOOP = Path(__file__).resolve().parent
-_SCRIPTS = _LOOP.parents[1] / "scripts"
+_LOOP = Path(__file__).resolve().parents[1] / "experiments" / "learning-loop"
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 for _p in (_LOOP, _SCRIPTS):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))

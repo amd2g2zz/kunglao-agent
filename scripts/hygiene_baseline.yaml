@@ -573,6 +573,8 @@ files:
     r1: 5
   tests/_tiers.py:
     r1: 1
+  tests/chain_test_harness.py:
+    r1: 5
   tests/conftest.py:
     r1: 2
   tests/experiment_difficulty_15.py:
