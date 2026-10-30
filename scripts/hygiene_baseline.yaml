@@ -62,6 +62,8 @@ files:
     r1: 2
   scripts/claims_store.py:
     r1: 11
+  scripts/claims_view.py:
+    r1: 26
   scripts/claudemd_frame.py:
     r1: 3
   scripts/completion_gate.py:
@@ -342,7 +344,7 @@ files:
   scripts/premature_termination_detect.py:
     r1: 14
   scripts/priority_ratio.py:
-    r1: 69
+    r1: 47
   scripts/progress_report.py:
     r1: 7
   scripts/provider_health.py:
@@ -509,7 +511,7 @@ files:
   scripts/template_version.py:
     r1: 3
   scripts/think_seat.py:
-    r1: 6
+    r1: 7
   scripts/tier_rules.py:
     r1: 1
   scripts/tool_error_policy.py:
@@ -1535,7 +1537,7 @@ files:
   tests/test_replay_gate.py:
     r1: 3
   tests/test_replay_ruler_294.py:
-    r1: 13
+    r1: 14
   tests/test_report_consistency_check.py:
     r1: 3
   tests/test_reproduction_oracle_248.py:

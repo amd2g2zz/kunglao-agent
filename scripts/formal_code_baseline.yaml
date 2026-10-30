@@ -61,6 +61,7 @@ files:
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
   scripts/claims_store.py: 20
+  scripts/claims_view.py: 43
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2
@@ -207,7 +208,7 @@ files:
   scripts/prediction_hit_rate.py: 3
   scripts/premature_termination_detect.py: 27
   scripts/premise_gate.py: 3
-  scripts/priority_ratio.py: 125
+  scripts/priority_ratio.py: 94
   scripts/progress_report.py: 9
   scripts/progress_timeline.py: 7
   scripts/provider_health.py: 4
@@ -302,7 +303,7 @@ files:
   scripts/template_render.py: 2
   scripts/template_version.py: 3
   scripts/terminal_settlement.py: 9
-  scripts/think_seat.py: 20
+  scripts/think_seat.py: 21
   scripts/tier_rules.py: 2
   scripts/tool_error_policy.py: 1
   scripts/tool_tiers.py: 11
