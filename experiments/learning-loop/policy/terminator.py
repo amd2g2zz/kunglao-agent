@@ -21,6 +21,18 @@ rollout continues, and the answer rides three rules —
           assign_step rows grouped per rollout — real fields only). A
           cold family takes the documented default prior, never zero.
           A rollout completing before the deadline early-cancels it.
+          The prior is STABILITY-FIRST (#906): it recomputes only at
+          batch boundaries (every PRIOR_BATCH-th family rollout),
+          commits a boundary candidate only outside the relative
+          hysteresis deadband, and the candidate is the just-completed
+          batch's rollout-order mean (recency — new short rollouts are
+          not averaged away by old long ones). An optional normalized
+          progress P_norm damps the frozen prior by (1 − κ·P_norm),
+          floored at one dispatch. Within the FIRST (sub-batch)
+          batch the read faces project the live all-history mean (the
+          #882 posture, byte-identical) — the warmup holder itself
+          carries no materialized prior, so incremental threading
+          composes exactly with one-shot replay.
 
 The deployed fixed-N surface under scripts/ and hooks/ is removed by
 the separate removal card; THIS face is the policy that supersedes it
@@ -82,6 +94,27 @@ COLD_FAMILY_PRIOR = 4.0
 
 #: the deadline's slack multiplier over prior × per-dispatch budget.
 WATCHDOG_SLACK = 2.0
+
+#: #906 batch cadence: the family prior recomputes ONLY at batch
+#: boundaries — every PRIOR_BATCH-th rollout observation of that
+#: family. Within a batch the deadline is FROZEN: a step length that
+#: churns per rollout adds noise, not signal.
+PRIOR_BATCH = 5
+
+#: #906 hysteresis deadband (relative): a boundary candidate replaces
+#: the standing prior only when |candidate − prior| > this fraction of
+#: the prior. Sub-deadband micro-fluctuations never move the deadline.
+PRIOR_DEADBAND = 0.20
+
+#: #906 state-conditioning damping: with normalized progress P_norm
+#: supplied, the effective prior is prior × (1 − κ·P_norm) — knowledge
+#: growth shortens the expected path, damped so the deadline never
+#: collapses on a rich state. Documented, not fitted.
+WATCHDOG_KAPPA = 0.5
+
+#: #906 floor for the P-damped effective prior, in dispatches: the
+#: watchdog never tightens below one dispatch regardless of progress.
+PRIOR_FLOOR = 1.0
 
 #: rule → closed action kind. The decision acts only through the
 #: #878 action space; both fire rules end the ROLLOUT (the loss-cut
@@ -245,15 +278,16 @@ def check_termination(rollout_id: str, coverage: Mapping[str, Any],
     }
 
 
-def _family_samples(rows: list[dict]) -> dict[str, tuple[float, int]]:
-    """Per-family expected dispatch count per rollout, learned from
-    the ledger's own history — the prior the watchdog spends. Two
+def _family_rollout_counts(rows: list[dict]) -> dict[str, list[int]]:
+    """Per-family rollout observations in ROLLOUT ORDER (append order —
+    never wall clock), learned from the ledger's own history. Two
     sample sources over REAL fields, pooled as independent rollout
     observations: obs dispatch rows (source=dispatch) grouped per
     ``claim`` with the claim's LAST declared ``method_family``
     winning, and v2 ``assign_step`` action rows grouped per
-    ``rollout_id`` keyed by ``params.method_family``. Family-less
-    rows are the honest gap — counted nowhere, never a bucket."""
+    ``rollout_id`` keyed by ``params.method_family``. Each sample is
+    one rollout's dispatch count. Family-less rows are the honest
+    gap — counted nowhere, never a bucket."""
     claim_family: dict[str, str] = {}
     claim_counts: dict[str, int] = {}
     ro_family: dict[str, str] = {}
@@ -288,44 +322,143 @@ def _family_samples(rows: list[dict]) -> dict[str, tuple[float, int]]:
         samples.setdefault(family, []).append(claim_counts[claim])
     for rid, family in ro_family.items():
         samples.setdefault(family, []).append(ro_counts[rid])
-    return {family: (sum(counts) / len(counts), len(counts))
-            for family, counts in sorted(samples.items())}
+    return samples
+
+
+def _fold_family_prior(
+        samples: Sequence[int],
+        state: tuple[float | None, int, tuple[int, ...]] | None = None,
+) -> tuple[float | None, int, tuple[int, ...]]:
+    """The #906 prior fold over one family's rollout-order samples.
+    Carries the prior-state holder ``(current_prior,
+    rollouts_since_update, batch_accumulator)``: every sample joins the
+    batch accumulator; at each PRIOR_BATCH-th sample (a batch boundary)
+    the accumulator's mean is the recency candidate, which replaces the
+    standing prior only outside PRIOR_DEADBAND. Until the FIRST
+    boundary commits, ``current_prior`` stays None — the warmup prior
+    is a READ-FACE PROJECTION (see ``_holder_prior``), never a
+    materialized state field, so threading a mid-batch state composes
+    EXACTLY with the one-shot fold (the first boundary commits
+    unconditionally in both). The fold is pure: new tuples in, no
+    globals; the state re-derives from replay, it is never stored."""
+    prior, since, acc = state if state is not None else (None, 0, ())
+    for count in samples:
+        acc = acc + (count,)
+        since += 1
+        if since >= PRIOR_BATCH:
+            candidate = sum(acc) / len(acc)
+            if prior is None \
+                    or abs(candidate - prior) > PRIOR_DEADBAND * prior:
+                prior = candidate
+            acc, since = (), 0
+    return (prior, since, acc)
+
+
+def _holder_prior(
+        state: tuple[float | None, int, tuple[int, ...]]) -> float | None:
+    """The effective prior a holder projects for the read faces: the
+    committed batch prior, or — before the first boundary — the live
+    all-history mean of the partial accumulator (the #882 warmup
+    posture, byte-identical for sub-batch histories). None = no
+    samples."""
+    prior, _since, acc = state
+    if prior is not None:
+        return prior
+    return sum(acc) / len(acc) if acc else None
+
+
+def _prior_state_and_census(
+        rows: list[dict],
+        prior_state: Mapping[str, tuple[float | None, int,
+                                         tuple[int, ...]]] | None = None,
+) -> tuple[dict[str, tuple[float | None, int, tuple[int, ...]]],
+           dict[str, list[int]]]:
+    """ONE scan over the rows returning both the #906 prior holder and
+    the raw rollout census, so the deadline face never rescans the
+    ledger it just folded."""
+    counts = _family_rollout_counts(rows)
+    state = dict(prior_state) if prior_state is not None else {}
+    holder = {family: _fold_family_prior(samples, state.get(family))
+              for family, samples in sorted(counts.items())}
+    return holder, counts
+
+
+def _family_samples(
+        rows: list[dict],
+        prior_state: Mapping[str, tuple[float | None, int,
+                                         tuple[int, ...]]] | None = None,
+) -> dict[str, tuple[float | None, int, tuple[int, ...]]]:
+    """Per-family #906 prior state: {family: (current_prior,
+    rollouts_since_update, batch_accumulator)}. The prior state is
+    DERIVABLE from the ledger replay — the batch counter and
+    accumulator recompute from the row order and are never stored.
+    Streaming contract: ``prior_state`` must summarize STRICTLY
+    PRECEDING rows and ``rows`` carries only the not-yet-condensed
+    tail — the composition then equals the one-shot fold over the
+    concatenation for ANY partition, mid-batch ones included (pinned)."""
+    return _prior_state_and_census(rows, prior_state)[0]
 
 
 def family_dispatch_priors(rows: Sequence[Mapping]) -> dict[str, float]:
-    """The prior read face: {family: expected dispatch count per
-    rollout}. A family absent from the map is COLD — consumers take
+    """The prior read face: {family: the #906 batch-frozen prior} — the
+    standing prior each rollout of that family sees at this ledger
+    state. A family absent from the map is COLD — consumers take
     ``COLD_FAMILY_PRIOR``, never zero."""
-    samples = _family_samples(_rows_wall(rows))
-    return {family: round(mean, 6)
-            for family, (mean, _rollouts) in samples.items()}
+    holder, _counts = _prior_state_and_census(_rows_wall(rows))
+    priors: dict[str, float] = {}
+    for family, state in holder.items():
+        prior = _holder_prior(state)
+        if prior is not None:
+            priors[family] = round(prior, 6)
+    return priors
+
+
+def _checked_p_norm(value: Any) -> float | None:
+    """None or a finite number in [0, 1] — the #898 P face's normalized
+    progress, damped by WATCHDOG_KAPPA at the deadline boundary."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise _fail("p_norm", "must be None or a finite number in [0, 1]")
+    return float(value)
 
 
 def watchdog_deadline(family: str, rows: Sequence[Mapping],
                       budget: Budget, *,
                       slack: float = WATCHDOG_SLACK,
-                      round_no: int = 0) -> dict:
+                      round_no: int = 0,
+                      p_norm: float | None = None) -> dict:
     """Arm the ONE-SHOT per-rollout watchdog:
-    deadline = family prior × per-dispatch budget × slack. The prior
-    adapts to the family's learned dispatch count; a cold family
-    takes the documented default. Pure arithmetic on Budget fields —
-    no clock is read here; the runtime that spends the deadline
-    compares elapsed wall time against ``deadline_s`` through
+    deadline = effective prior × per-dispatch budget × slack. The
+    prior is the #906 batch-frozen recency prior (batch cadence +
+    hysteresis, see the module docstring); a cold family takes the
+    documented default. With ``p_norm`` supplied (#898's normalized
+    progress in [0,1]) the EFFECTIVE prior is the frozen prior damped
+    by (1 − κ·p_norm), floored at PRIOR_FLOOR; without it the receipt
+    is byte-identical to the pre-#906 legacy receipt (same keys, same
+    values). The receipt's ``prior`` stays the learned frozen prior;
+    ``effective_prior`` is what the deadline spends. Pure arithmetic on
+    Budget fields — no clock is read here; the runtime that spends the
+    deadline compares elapsed wall time against ``deadline_s`` through
     ``watchdog_check``."""
     fam = _non_empty(family, "family")
     rnd = _count(round_no, "round_no", minimum=0)
+    norm = _checked_p_norm(p_norm)
     if not isinstance(budget, Budget):
         raise _fail("budget", "must be a core.Budget value object")
     wall = _real(budget.wall_s, "budget.wall_s", minimum=0.0,
                  exclusive=True)
     slack_f = _real(slack, "slack", minimum=0.0, exclusive=True)
     safe = _rows_wall(rows)
-    samples = _family_samples(safe)
-    if fam in samples:
-        prior, cold, rollouts = samples[fam][0], False, samples[fam][1]
+    holder, counts = _prior_state_and_census(safe)
+    projected = _holder_prior(holder[fam]) if fam in holder else None
+    if projected is not None:
+        prior, cold = projected, False
+        rollouts = len(counts.get(fam, ()))
     else:
         prior, cold, rollouts = COLD_FAMILY_PRIOR, True, 0
-    return {
+    rec: dict[str, Any] = {
         "schema": WATCHDOG_SCHEMA,
         "family": fam,
         "prior": round(prior, 6),
@@ -338,6 +471,13 @@ def watchdog_deadline(family: str, rows: Sequence[Mapping],
         "history_rollouts": rollouts,
         "seed": terminator_seed(safe, fam, rnd),
     }
+    if norm is not None:
+        effective = max(PRIOR_FLOOR, prior * (1.0 - WATCHDOG_KAPPA * norm))
+        rec["p_norm"] = norm
+        rec["kappa"] = WATCHDOG_KAPPA
+        rec["effective_prior"] = round(effective, 6)
+        rec["deadline_s"] = round(effective * wall * slack_f, 6)
+    return rec
 
 
 def watchdog_check(deadline: Mapping[str, Any], *, elapsed_s: float,
