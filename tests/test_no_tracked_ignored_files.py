@@ -33,6 +33,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # surface; the 110 rule was scoped to local-only artifacts).
     "experiments/learning-loop/loop_sim.py":
         "experiment driver: owner-approved tracked home (restructure #865)",
+    "experiments/learning-loop/counterfactual_analysis.py":
+        "rl-v2 counterfactual analysis: loop_sim tracked-home precedent (#905)",
     "experiments/learning-loop/loop_sim_v3.py":
         "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
     "experiments/learning-loop/battery_v3_experiments.py":
@@ -67,7 +69,10 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
     "experiments/learning-loop/state/stagnation.py":
         "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
-    # the rl-v2 policy faces (#880-#882): the sampling decision modules
+    "experiments/learning-loop/state/belief.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#903)",
+    "experiments/learning-loop/state/channel_pins.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#904)",    # the rl-v2 policy faces (#880-#882): the sampling decision modules
     # share the learning-loop tracked home (the loop_sim precedent) —
     # experiment code outside the deploy surface, deliberately.
     "experiments/learning-loop/policy/__init__.py":

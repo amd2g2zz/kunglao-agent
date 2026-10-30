@@ -573,6 +573,8 @@ files:
     r1: 5
   tests/_tiers.py:
     r1: 1
+  tests/chain_test_harness.py:
+    r1: 5
   tests/conftest.py:
     r1: 2
   tests/experiment_difficulty_15.py:
@@ -1570,6 +1572,9 @@ files:
     r1: 1
   tests/test_rl_output_path_691.py:
     r1: 5
+  tests/test_rl_v2_channel_pins_904.py:
+    r1: 4
+    r2: 1
   tests/test_rl_v2_core_types_878.py:
     r2: 1
   tests/test_rl_v2_credit_883.py:
