@@ -1362,7 +1362,7 @@ files:
   tests/test_no_cti_agents.py:
     r1: 1
   tests/test_no_tracked_ignored_files.py:
-    r1: 11
+    r1: 12
   tests/test_normalize_trace.py:
     r1: 1
   tests/test_notes_closure_762.py:
@@ -1574,6 +1574,9 @@ files:
     r2: 1
   tests/test_rl_v2_ledger_879.py:
     r1: 3
+  tests/test_rl_v2_progress_898.py:
+    r1: 4
+    r2: 1
   tests/test_rl_v2_selector_880.py:
     r2: 1
   tests/test_rl_v2_settlement_884.py:
