@@ -69,7 +69,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
     "experiments/learning-loop/state/belief.py":
         "rl-v2 state faces: loop_sim tracked-home precedent (#903)",
-    # the rl-v2 policy faces (#880-#882): the sampling decision modules
+    "experiments/learning-loop/state/channel_pins.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#904)",    # the rl-v2 policy faces (#880-#882): the sampling decision modules
     # share the learning-loop tracked home (the loop_sim precedent) —
     # experiment code outside the deploy surface, deliberately.
     "experiments/learning-loop/policy/__init__.py":
