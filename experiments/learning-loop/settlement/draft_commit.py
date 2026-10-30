@@ -330,6 +330,7 @@ def committed_rollout(ws, rollout_id: str, *,
                and str(r.get("rollout_id") or "") == rid]
     empty = {"rollout_id": rid, "committed": False, "batch_id": batch,
              "dispatch_count": 0, "credits_sum": 0.0, "spend": 0.0,
+             "total_spend": 0.0,
              "terminal": None, "terminal_adjustment": 0.0,
              "total_credit": 0.0}
     if not markers:
