@@ -1591,6 +1591,9 @@ files:
     r2: 1
   tests/test_rl_v2_terminator_882.py:
     r2: 1
+  tests/test_rl_v2_watchdog_prior_906.py:
+    r1: 4
+    r2: 1
   tests/test_rl_v2_worker_885.py:
     r2: 1
   tests/test_rl_wiring_518.py:
