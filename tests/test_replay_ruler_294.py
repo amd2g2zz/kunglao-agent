@@ -726,9 +726,12 @@ class TestNoRuntimeSelfTuning:
         LAMBDA_DH is never sanctionable — it is a removed constant."""
         if name == "LAMBDA_DH":
             return False
-        if rel == "scripts/priority_ratio.py" and owner == "<module>" \
+        if rel == "scripts/claims_view.py" and owner == "<module>" \
                 and form == "name":
-            return True   # the ranker's own module-level constant definitions
+            return True   # the canonical module-level constant definitions
+            # (#886 preparation: the #294 constants live in claims_view.py
+            # now — priority_ratio re-imports them and is no longer a
+            # sanctioned definition site)
         if rel == "scripts/replay_ruler.py" and owner == "_rank_under_config" \
                 and form == "attr":
             return True   # the harness parameterize/finally-restore block

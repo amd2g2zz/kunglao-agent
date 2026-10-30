@@ -308,6 +308,10 @@ files:
     dest: .claude/scripts/claims_store.py
     kind: scaffold
     sha256: acb581d66f7f00829ec586432880876030c21b9b97e88e69404b850a12674250
+  - src: scripts/claims_view.py
+    dest: .claude/scripts/claims_view.py
+    kind: scaffold
+    sha256: 742281cd65f1cd9e390adb6f2a6f8322f4e3e4180e5ab96c9127dc51bf21fe37
   - src: scripts/claudemd_frame.py
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
@@ -979,7 +983,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 21e7c3d6521b3967393976fb017eb70d7253cd5b5f0a82fbc7ae40e94caf58d9
+    sha256: 191d16eef2cca6347257079d6c5cf0d0d3fd0383d3e501713496805ce6b178bc
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -1231,7 +1235,7 @@ files:
   - src: scripts/think_seat.py
     dest: .claude/scripts/think_seat.py
     kind: scaffold
-    sha256: 06be8a3c85a552d554ad67bca509d02cc92806ad10240505a0c0718b1e1f49b8
+    sha256: 06226bcdea45d200e931a223abb5d51a87988ed391495cdbc36911f9b1a33cc4
   - src: scripts/tier_rules.py
     dest: .claude/scripts/tier_rules.py
     kind: scaffold
@@ -1619,11 +1623,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 5a85b7d40ce9d93c0d53dd1c91899033cc423093ada092c06594863d9fc1777a
+    sha256: efad5c2732abb2190a4629f0a7cc3cdf9af07e348f858226954595287c9b695f
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: b285a51f0824971222e43eca1d4cea594a5190eabaa4f61b114108eb3a130921
+    sha256: 69d4c3510bb1f78029c6a03331601aa956ff253c0d05b75f0457803260f6d5c1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

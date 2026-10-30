@@ -142,6 +142,9 @@ max-complexity = 12
 "scripts/challenge_ledger.py" = ["C901"]
 "scripts/check_global_rule_subset.py" = ["E501"]
 "scripts/claim_expiry.py" = ["E501"]
+# #886 prep: verbatim transplant from priority_ratio carries 4 E501
+# lines (3 docstring + 1 section header) — the file grant covers them
+"scripts/claims_view.py" = ["E501"]
 "scripts/completion_gate.py" = ["C901", "E501"]
 "scripts/convergence_check.py" = ["C901", "E501"]
 "scripts/convergence_health.py" = ["E501"]
