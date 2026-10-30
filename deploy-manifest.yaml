@@ -1619,11 +1619,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 27665ae8db2ab2c6d11f934107a497ac1977816d3808f7be1a0563d243c98ba2
+    sha256: 5a85b7d40ce9d93c0d53dd1c91899033cc423093ada092c06594863d9fc1777a
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c09190bf8c62539bafa947fe67b87f6ea84dcce0a01c2a48f214975e851ad7e4
+    sha256: f65a5f94bba2e764396c2ec8aa465eb285a90ab5579b750cce327df9e7ed540d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
