@@ -394,15 +394,6 @@ def write_digest(ws: Path) -> Path:
     return out
 
 
-def digest_completeness(ws: Path) -> bool:
-    """Whether a newly verified fact is already in the digest."""
-    md = build_digest(ws)
-    for f in _facts_index(ws):
-        if f["id"] not in md:
-            return False
-    return True
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="digest_build.py", description="mechanical digest generation")
     ap.add_argument("workspace", help="workspace root")
