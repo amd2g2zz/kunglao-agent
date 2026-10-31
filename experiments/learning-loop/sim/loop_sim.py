@@ -62,11 +62,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# the lazy `from rlvr import ...` faces need scripts/ on sys.path after the relocation
+# the lazy `from rlvr import ...` faces and the production scaffold
+# import need scripts/ + the learning-loop faces on sys.path after the
+# #936 relocation into the sim tier
 import sys
-_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+_SIM = Path(__file__).resolve().parent
+_LOOP = _SIM.parent
+_SCRIPTS = _SIM.parents[2] / "scripts"
+for _p in (_SIM, _LOOP, _SCRIPTS):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+from loop import _bootstrap  # noqa: E402 — the production scaffold (sim→production)
 
 DELTA = 0.1
 FAMILIES = ("fam-a", "fam-b", "fam-c")
@@ -325,13 +332,10 @@ def _stamp_family_memory(ws, claim, family, memory, *, scramble=False):
 
 # ------------------------------------------------------------- the loop
 
-def _bootstrap(ws):
-    ws.mkdir(parents=True, exist_ok=True)
-    (ws / "task_spec.yaml").write_text(
-        "primary_questions:\n- id: pq1\n  q: replay the fixture family\n",
-        encoding="utf-8")
-    (ws / "runs").mkdir(parents=True, exist_ok=True)
-
+# the one-workspace-one-run scaffold moved to the production face
+# (loop._bootstrap — the #936 extraction; the sim was its first
+# consumer, not its owner) and imported back above under the same
+# name, so ``loop_sim._bootstrap`` call sites keep resolving.
 
 def _register(ws, mission):
     import yaml

@@ -117,9 +117,17 @@ class SeamMixin:
             })
         pick = selector.select_task(self._ws, [CORE_TASK],
                                     rng=pick_rng)
+        # the decision-time distribution rides the action row (card
+        # 925): the winner alone under-records the ranking the same
+        # way a screen log does — the full posterior doc lands WITH
+        # the decision, under the driver's clock, in one fail-closed
+        # row (a paired telemetry row could silently not land while
+        # the winner persisted).
         row = selector.record_selection(
             self._ws, pick["task"], rollout_id=rid,
-            policy_version=POLICY_VERSION, ts=self._clock.tick())
+            policy_version=POLICY_VERSION,
+            params={"distribution": pick["candidates"]},
+            ts=self._clock.tick())
         return {"receipt": pick, "row": row["row"],
                 "appended": row["appended"]}
 
