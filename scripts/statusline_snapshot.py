@@ -911,8 +911,8 @@ def _difficulty_face(ws: Path) -> dict | None:
     Owner ruling 2026-10-30: the raw-signals tier is ALWAYS "unknown" —
     a raw score below a threshold is not a difficulty verdict, and this
     face is display-only (DAMP_NONE already covers unknown, so the loop
-    faces never read it). "easy" may only come from a real calibration.
-    The score stays as transparent data."""
+    faces never read it); "easy" may only come from a real calibration,
+    the score stays as transparent data."""
     try:
         import mission_ledger
         tier = mission_ledger.read_difficulty_tier(ws)

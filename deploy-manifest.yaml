@@ -1191,7 +1191,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: c85f0b6f93d7e22fb0937c7a8b69b69b27c98aab9a7e3e16f1d3d31a9e85cdd9
+    sha256: fb0e7d0e3df9b8f3c52ae80acaf155d347dd9f5154b14f35ec22a0068e06b2fb
   - src: scripts/strategy_sections.py
     dest: .claude/scripts/strategy_sections.py
     kind: scaffold
@@ -1623,7 +1623,7 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: efad5c2732abb2190a4629f0a7cc3cdf9af07e348f858226954595287c9b695f
+    sha256: cf50284fba2409077547da715b8272719a46b220658e90d2e2bdc44d442cb894
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
