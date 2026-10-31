@@ -151,6 +151,54 @@ def _v_slots(value: Any, field_name: str) -> int:
     return value
 
 
+#: the #938 distill sources vocabulary — the retrieval faces the
+#: deep-research driver may consult (references_recall is FIRST-CLASS;
+#: web is a seam — no network in the production faces).
+DISTILL_SOURCES = ("references", "web")
+
+
+def _v_distill_depth(value: Any, field_name: str) -> int:
+    """The round cap of the deep-research recursion (default 3, rail
+    1..5 — the owner's mal-recon conditional-recursion ruling)."""
+    _v_int(value, field_name)
+    if not 1 <= value <= 5:
+        raise ActionParamError(
+            f"action.params.{field_name}: must be an integer in [1, 5], "
+            f"got {value!r}")
+    return value
+
+
+def _v_distill_sources(value: Any, field_name: str) -> tuple:
+    """Nonempty sequence of ALLOWED source names, normalized to a tuple
+    (immutable — a row's sources can never be mutated in place)."""
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ActionParamError(
+            f"action.params.{field_name}: must be a non-empty sequence "
+            f"of source names (allowed: {list(DISTILL_SOURCES)})")
+    out = []
+    for item in value:
+        if not isinstance(item, str) or item not in DISTILL_SOURCES:
+            raise ActionParamError(
+                f"action.params.{field_name}: {item!r} is not an allowed "
+                f"source (allowed: {list(DISTILL_SOURCES)})")
+        out.append(item)
+    return tuple(out)
+
+
+def _v_positive_float(value: Any, field_name: str) -> float:
+    """A strictly positive finite number (bool refused — not a number
+    decision). The budget_scale rail."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value):
+        raise ActionParamError(
+            f"action.params.{field_name}: must be a finite number")
+    out = float(value)
+    if out <= 0.0:
+        raise ActionParamError(
+            f"action.params.{field_name}: must be > 0, got {out!r}")
+    return out
+
+
 @dataclass(frozen=True)
 class ActionParamSpec:
     """One kind's parameter contract. ``required`` maps name ->
@@ -229,10 +277,22 @@ _PROBE_SPEC = ActionParamSpec(
                                "leader": _v_nonempty_str}),
     optional=MappingProxyType({}))
 
+#: the issue-938 distill contract: the capability gap's problem
+#: formulation is REQUIRED (the shelf-miss signal's gap statement);
+#: the optional trio mirrors the deep-research driver — max_depth (the
+#: round cap, default 3), sources (the retrieval faces, default
+#: references+web), budget_scale (the round-budget scale, default 1.0).
+_DISTILL_SPEC = ActionParamSpec(
+    required=MappingProxyType({"formulation": _v_nonempty_str}),
+    optional=MappingProxyType({"max_depth": (3, _v_distill_depth),
+                               "sources": (DISTILL_SOURCES,
+                                           _v_distill_sources),
+                               "budget_scale": (1.0, _v_positive_float)}))
+
 
 def _build_specs() -> Mapping:
     """The frozen kind -> spec table, keyed by the closed vocabulary's
-    canonical STRINGS (the ten ``ActionKind.value`` spellings — the
+    canonical STRINGS (the eleven ``ActionKind.value`` spellings — the
     enum in experiments/learning-loop/core/actions.py stays the
     membership authority). WHY strings, not the enum: a scripts face
     cannot import experiments (the dep-surface gate refuses the
@@ -263,6 +323,7 @@ def _build_specs() -> Mapping:
         "rollback": _TERMINAL_SPEC,
         "spawn_candidate": _SPAWN_SPEC,
         "materialize": EMPTY_SPEC,
+        "distill": _DISTILL_SPEC,
     }
     return MappingProxyType(table)
 

@@ -47,7 +47,7 @@ from rlvr import q_cells  # noqa: E402
 
 ACTION_KINDS = ("select_task", "decompose", "assign_step", "probe",
                 "switch_method", "terminate_step", "terminate_rollout",
-                "rollback", "spawn_candidate", "materialize")
+                "rollback", "spawn_candidate", "materialize", "distill")
 
 
 def _action_doc(**over):
