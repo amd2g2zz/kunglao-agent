@@ -39,6 +39,10 @@ failures, and the candidate digest under the run out-dir (default
 runs/eval/<task_id>/).
 
 stdlib only.
+
+Judgment-layer rubric (verdict application + pass@k accounting):
+references/contracts/rubrics/llm-eval-grading-rubric.md — loaded by
+scenario, never wholesale.
 """
 from __future__ import annotations
 

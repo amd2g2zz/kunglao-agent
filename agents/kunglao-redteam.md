@@ -332,6 +332,10 @@ it mechanically withholds your derivation values from redo prompts while
 keeping your GAP shapes. You write for the judge; the slice writes for the
 redone worker.
 
+Verdict scoring rubric (anchors + disqualifiers):
+`references/contracts/rubrics/llm-redteam-rubric.md` — loaded by
+scenario, never wholesale.
+
 ## Verdict-layer mode
 
 The orchestrator dispatches this agent in ONE of two modes via the `--target`
