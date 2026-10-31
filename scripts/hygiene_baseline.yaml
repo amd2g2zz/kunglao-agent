@@ -90,7 +90,7 @@ files:
   scripts/deploy_shim.py:
     r1: 6
   scripts/deployed_refresh.py:
-    r1: 3
+    r1: 4
   scripts/detector_liveness.py:
     r1: 4
   scripts/difficulty_calibration.py:

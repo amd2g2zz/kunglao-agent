@@ -37,6 +37,7 @@ The convergence loop runs every round and is the only rule set that survives con
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
 - Delivery contract: complete `goal-operationalization.yaml` (deliverables / not_done / diff_vs_verbatim / probe_cases) and pass `scripts/goal_operationalization.py` on it BEFORE the first dispatch — an unaudited draft keeps every decide BLOCKED (verification undeclared, #147); then arm the declared probe cases (`oracle/`) and run `scripts/oracle_runner.py` until green.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
+- Learning system (rl-v2): the loop owns `runs/experience.jsonl` (created by its bootstrap, never seeded by init, never hand-edited — a hand edit is the corruption it would learn from); `experiments/` is local-only, carved out of every upgrade purge. Contracts and details: the skill's RL section and `docs/architecture/rl-signal-contract.md`.
 
 ## Skill & orchestrator
 
