@@ -205,10 +205,36 @@ def ensure_draft(ws, rollout_id: str, dispatch_id: str, spend: Any,
     """Price + land in one call — the loop's dispatch-end entry AND the
     crash-recovery entry (a re-run re-prices deterministically from the
     trajectory and converges to ``already-drafted``, never a second
-    row)."""
-    priced = per_dispatch.price_dispatch(rollout_id, dispatch_id, spend,
-                                         verdicts, ts=ts)
+    row. Mode-flip semantics: pricing is deterministic per the ledger
+    state AT REPRICE TIME — if the workspace flipped from cold-prior to
+    measured mode after a row landed, a recovery replay of that row
+    converges to already-drafted WITHOUT recomparing content: the
+    landed row stands, the replayed price would differ. Deterministic,
+    deliberately not scale-uniform across the flip
+    row).
+
+    Reward base (#932): the progress delta resolves FROM THE LEDGER at
+    settlement time — cold-start prior while the ladder has no
+    measurements (no state-progress transition rows anywhere), the
+    dispatch's measured ΣΔP otherwise (``state.progress`` is the read
+    face; the settlement never re-measures, it reads the recorded
+    state). The resolution is deterministic over the ledger state, so
+    the crash-recovery replay converges exactly."""
+    priced = per_dispatch.price_dispatch(
+        rollout_id, dispatch_id, spend, verdicts, ts=ts,
+        progress_delta=_settled_progress_delta(ws, dispatch_id))
     return land_draft(ws, priced)
+
+
+def _settled_progress_delta(ws, dispatch_id: str) -> float | None:
+    """The settlement-side progress resolution (#932): ``None`` while
+    the workspace's ladder has no measurements (the fixed ladder still
+    seeds); the dispatch's measured ΣΔP once any transition row
+    exists. Deterministic over the ledger state."""
+    from state import progress as _progress  # noqa: PLC0415 — the state face
+    if not _progress.has_measurements(ws):
+        return None
+    return _progress.dispatch_delta(ws, dispatch_id)
 
 
 def commit_batch(ws, rollout_id: str, *, ts: str | None = None) -> dict:
