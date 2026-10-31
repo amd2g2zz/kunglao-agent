@@ -906,7 +906,13 @@ def _difficulty_face(ws: Path) -> dict | None:
     calibration output, via mission_ledger.read_difficulty_tier), the raw
     calibration surface second — difficulty_calibration.calibrate_workspace
     consumes the apkid/die evidence directly and is REUSED here, never
-    re-derived. Nothing usable -> None (renderer hides the badge)."""
+    re-derived. Nothing usable -> None (renderer hides the badge).
+
+    Owner ruling 2026-10-30: the raw-signals tier is ALWAYS "unknown" —
+    a raw score below a threshold is not a difficulty verdict, and this
+    face is display-only (DAMP_NONE already covers unknown, so the loop
+    faces never read it); "easy" may only come from a real calibration,
+    the score stays as transparent data."""
     try:
         import mission_ledger
         tier = mission_ledger.read_difficulty_tier(ws)
@@ -920,7 +926,7 @@ def _difficulty_face(ws: Path) -> dict | None:
         cov = res.get("coverage") or {}
         if cov.get("die") or cov.get("apkid"):
             score = res.get("score")
-            return {"tier": res.get("tier"),
+            return {"tier": "unknown",
                     "score": (round(float(score), 4)
                               if score is not None else None),
                     "source": "raw-signals"}
@@ -1102,6 +1108,27 @@ def _read_prev(ws: Path) -> dict | None:
 
 
 
+def _loop_face(ws: Path) -> dict | None:
+    """The rl-v2 loop feed face: the materialized projection
+    the decision loop's belief seam writes (runs/.loop-statusline.json,
+    the policy-state precedent: the producer subsystem writes, this
+    reader stays pure disk observation — the deployed scripts tree
+    cannot import the experiments tree, so the FILE is the only
+    bridge). Absent / corrupt / wrong-schema source -> None (the
+    hidden face — the renderer hides absent segments, never a
+    placeholder, never a re-derivation here)."""
+    try:
+        doc = json.loads(
+            (ws / "runs" / ".loop-statusline.json").read_text(
+                encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict) \
+            or str(doc.get("schema") or "") != "loop-statusline/1":
+        return None
+    return doc
+
+
 def _policy_face(ws: Path) -> dict | None:
     """Issue 769: the policy-state display face — the round close's
     runs/policy-state.json projection (candidates / admitted / chosen /
@@ -1246,6 +1273,14 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
         warn("policy_face", f"{type(exc).__name__}: {exc}")
         policy = None
+    # The rl-v2 loop feed: the loop-side materialized file
+    # rides the snapshot verbatim (single source; absent = the hidden
+    # face).
+    try:
+        loop = _loop_face(ws)
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("loop_face", f"{type(exc).__name__}: {exc}")
+        loop = None
 
     return {
         "schema": SCHEMA_VERSION,
@@ -1306,6 +1341,10 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # runs/policy-state.json projection; single-sourced in
         # scripts/policy_state.py).
         "policy": policy,
+        # The rl-v2 loop feed (lap/rollout/P(s)/pool/trust/phase) —
+        # the loop-side file's verbatim projection; additive
+        # field — readers probe the field set, never a version ladder.
+        "loop": loop,
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,
