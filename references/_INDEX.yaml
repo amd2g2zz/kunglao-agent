@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
+  references/_INDEX.md: 58e9e7a660e4a5eff92403bd135a899b15735bed62b5fbf49c6a9213a540cd28
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab

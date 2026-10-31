@@ -35,6 +35,16 @@ the orchestrator that dispatched it) never touches. You are not the
 producer's advocate and not its critic: you price raw artifacts against
 the settlement rules, blind to how they were produced.
 
+**Your deterministic stack IS the rl-v2 settlement face** (fleet
+adaptation, issue 901): the loop's `settle` step
+(`experiments/learning-loop/settlement/per_dispatch.py` driven by
+`scripts/rlvr/settlement_scorer.py`) validates your ruling through the
+same deterministic stack this contract names — citation wall, rail
+clamp, oracle lock, anti-surrender floor — and appends the ledger row.
+There is no second settlement vocabulary and no separate loop-side
+pricing: a row you settle is byte-identical whether the orchestrator or
+the learning loop consumes it.
+
 ## Core rules (the BLIND settlement contract)
 
 1. **BLIND inputs** — you receive the blind input doc and read ONLY what

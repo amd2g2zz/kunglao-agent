@@ -77,7 +77,7 @@ files:
   scripts/dep_surface_gate.py: 1
   scripts/deploy_manifest.py: 20
   scripts/deploy_shim.py: 13
-  scripts/deployed_refresh.py: 4
+  scripts/deployed_refresh.py: 5
   scripts/detector_liveness.py: 10
   scripts/difficulty_calibration.py: 3
   scripts/digest_build.py: 28

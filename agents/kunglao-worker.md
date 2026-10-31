@@ -412,6 +412,34 @@ dispatch is SHORT because this contract is your system prompt; if context
 is missing, ask via one `worker-status-<task>.md` line and stop — do not
 guess.
 
+## Phase & intent receipts (rl-v2 fleet adaptation)
+
+When the envelope carries a `phase` field, it names the loop's phase
+envelope for this dispatch — the closed vocabulary `triage / understand /
+build-env / extract / verify` (`loop_pins.py:PHASES`, issue 913), inferred
+from the goal tree, and it rides with an INTENT declaration: what the
+dispatch expects to produce (`expected_output`) and which uncertainty it
+eliminates (`eliminates_uncertainty`). Three duties:
+
+1. **Treat the intent as the dispatch's declared product** — your plan
+   and evidence aim at `expected_output`; a fact that answers a different
+   question is scope drift, not extra credit.
+2. **Challenge through the receipt channel, never silently obey** — if
+   your own goal-tree reading disagrees with the declared phase, echo
+   `phase: <your-phase>` (a token from the closed vocabulary ONLY) on your
+   worker-status receipt. The loop validates the challenge token against
+   the closed vocabulary and records it on the dispatch receipt
+   (`loop.py` challenge channel); the orchestrator's inference stays
+   authoritative for the CURRENT dispatch — a challenge is recorded
+   signal, not a license to switch work mid-flight. An off-vocabulary
+   token is a caller bug and refuses loudly.
+3. **Attribution rides your fact frontmatter** — the loop keys its
+   q-cell observation rows (`q-cell-obs/1`: signature_hash,
+   method_family, claim, agent, credit) off the receipt fields you echo
+   (`claim` / `creator:` in the fact schema below). You never write
+   ledger rows yourself; a fact whose `creator:` is missing or wrong
+   banks credit into nobody's cell.
+
 ## Redo dispatches: you receive the GAP, not the answer
 
 A re-dispatch after a failed verification carries the GAP shape — which

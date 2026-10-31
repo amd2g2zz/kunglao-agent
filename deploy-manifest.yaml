@@ -135,15 +135,15 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: c9730df32c474e7ba15e0ca3399e55b4311f0d95c444dfeb3cdebf8ea6f4e227
+    sha256: e17aad83bd191abdb159b553011a7baed21cbb6339c276fa617301e1d521f74d
   - src: agents/kunglao-settler.md
     dest: .claude/agents/kunglao-settler.md
     kind: agent
-    sha256: ae3907b4fd64d6cafd5cc67c1cf885add84c1d2b334dedcfc01cd40f62e97450
+    sha256: b8ce035fd8fe80c7bc245d09f5723a8e57bdc37c92bfe981c5a865acfb609e77
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 9073ca6073192d363845e397e8097726560f15bd5adfb9a7758f8eb9888974c9
+    sha256: 288cbf5404c610b5b6f2bac8d9b7ecec078bf15cb649bc26af1efb38f45bc261
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -391,7 +391,7 @@ files:
   - src: scripts/deployed_refresh.py
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
-    sha256: 3d38fa019f34654074ec652a4c7c2795ec34c5a188bede839a49806165e8b79c
+    sha256: 43293832ca044dc64d6502982ea27d92eed5eeb213e22169eba42d42ba508e62
   - src: scripts/detector_liveness.py
     dest: .claude/scripts/detector_liveness.py
     kind: scaffold
@@ -751,7 +751,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: dd7db8234b9f4202a3d9c6089434e753847b2a8cdda45b2a87b46c52eb4c2b89
+    sha256: 455f1ae9e75f5c2b31cd7385dacdd3ad7839a607e77137d4ef4948eb7f489ad1
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -799,7 +799,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 8494e4640e4d3fd385bb4550b0d2c5fa9f396fb9509744c13bcd35bce2e47fba
+    sha256: 30fe6b7f486ccbdccab262d3df9eb58a49f98ec0834534d38387d6987ff8f0c1
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -1623,11 +1623,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: efad5c2732abb2190a4629f0a7cc3cdf9af07e348f858226954595287c9b695f
+    sha256: d735befa62fffdc1d93d7b2acead76640810f95b6d88e5e44bd9516daca7631e
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 4461504a62b6685e669e555992ab15a76a09d492812512f8dd15402d201a4480
+    sha256: 222e6554609923636d077a720e9714c8122915c6b9c9652f2aa75cd8dd33555d
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1647,11 +1647,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
+    sha256: 58e9e7a660e4a5eff92403bd135a899b15735bed62b5fbf49c6a9213a540cd28
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 6bc57169c48f8b8cee7db1c1f42226b85f828aec19cc04c0429884d582bf1cff
+    sha256: bce7ed21e26a81b997a949f9a88d7294e3beb331bd1b18d9ad47e9b0e3d394d5
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -2103,7 +2103,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: d37ccf638b50d6ba0cb7d071db6dde15c24c37bfe698b90f13951882023f1fb7
+    sha256: 4be45aca7c498f1942c494dcfb1f3f22eafd21ca6dbd64c2da249628db78e50a
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

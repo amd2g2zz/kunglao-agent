@@ -1622,7 +1622,10 @@ def _tx_prune_old_files(ws: Path) -> str:
     snapshot (step 1) is the safety net, so the standalone refresh's
     backup-then-remove face is redundant here. A removal failure raises
     into the transaction (rollback, RC_INCOMPLETE) — fail-loud, never a
-    silently half-pruned tree."""
+    silently half-pruned tree. The experiments carve-out holds on this
+    step too: the learning system's local-only tree (the loop faces under
+    an experiments segment, the loop-owned ledger substrate) is never
+    purge material — "experiments are local-only, never deployed"."""
     import deployed_refresh as _dr
     pruned = _dr.prune_outright(ws)
     return f"tx_prune_removed={len(pruned)}"

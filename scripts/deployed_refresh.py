@@ -10,7 +10,14 @@ upgrade-side half of the deployment inversion:
     that is NEITHER a manifest destination NOR byte-equal (newline-normalized)
     to any manifest source is unknown scaffolding — copied to
     runs/deploy-backup-orphan/ then removed. Anything recognizable is never
-    touched.
+    touched. The experiments carve-out (the learning-loop integration card):
+    a path segment named experiments marks the rl-v2 learning system's
+    local-only tree — the loop faces live under experiments/learning-loop/
+    in the source repo, outside the deploy manifest by design ("experiments
+    are local-only, never deployed") — so an experiments path is exempt
+    wherever the scan meets it, including a workspace-local staging copy
+    under a deployed root. The prune's contract is superseded-scaffolding
+    removal, never learning-system deletion.
 No-op on dry runs. Never raises into the migration (degrades to a warn
 detail) — mirrors agents_refresh posture.
 """
@@ -21,6 +28,11 @@ import time
 from pathlib import Path
 
 from kunglao_log import warn  # canonical warn (single implementation)
+
+#: the carve-out's single path segment — the learning system's local-only
+#: tree marker; a file under ANY directory of this name is exempt from the
+#: orphan scan (see the module docstring for the standing pin)
+EXPERIMENTS_SEGMENT = "experiments"
 
 
 def _norm(b: bytes) -> bytes:
@@ -137,7 +149,9 @@ def _scan_orphans(ws: Path, dests: set, known_shas: set) -> list[Path]:
     (backup-then-remove) and the transaction's outright prune: a file
     living in a deployed tree that is NEITHER a manifest destination NOR a
     newline-normalized byte-variant of a manifest source is unknown
-    scaffolding. Ordered for deterministic trails; NESTED deployed roots
+    scaffolding — EXCEPT the experiments carve-out (module docstring:
+    the learning system's local-only tree is exempt wherever the scan
+    meets it). Ordered for deterministic trails; NESTED deployed roots
     (a manifest may declare dests at .claude/templates and
     .claude/templates/state) each rglob the same subtree, so each file is
     visited once per covering root — dedupe by rel path so the caller
@@ -154,6 +168,15 @@ def _scan_orphans(ws: Path, dests: set, known_shas: set) -> list[Path]:
             if not f.is_file():
                 continue
             rel = f.relative_to(ws).as_posix()
+            # the experiments carve-out: the learning system's tree is
+            # exempt from unknown-scaffolding classification wherever the
+            # scan meets it — a manifest-dest parent tree may legitimately
+            # carry a staged copy, and the purge must never be the face
+            # that deletes the loop's substrate; casefold: a cased
+            # variant directory is the same directory (#687 precedent)
+            if any(seg.casefold() == EXPERIMENTS_SEGMENT
+                   for seg in rel.split("/")):
+                continue
             if rel in dests or rel in seen_rels:
                 continue
             h = hashlib.sha256(_norm(f.read_bytes())).hexdigest()
@@ -169,9 +192,11 @@ def prune_outright(ws: Path) -> list[str]:
     manifest-unknown file in the deployed trees OUTRIGHT — no backup step.
     The transaction guarantees the pre-migration git snapshot BEFORE any
     mutation, so the backup face of refresh() is redundant here; git
-    restores anything the scan got wrong. Returns the removed workspace-
-    relative paths; raises on manifest unavailability or removal failure
-    so the transaction rolls back (fail-loud, never a half-pruned tree)."""
+    restores anything the scan got wrong. The experiments carve-out
+    applies here too: the learning system's local-only tree is never
+    purge material. Returns the removed workspace-relative paths; raises
+    on manifest unavailability or removal failure so the transaction
+    rolls back (fail-loud, never a half-pruned tree)."""
     ws = Path(ws)
     import deploy_manifest as dm
     entries = {e["dest"]: e for e in dm.build_entries()}
