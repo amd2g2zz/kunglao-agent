@@ -1588,6 +1588,8 @@ files:
     r2: 1
   tests/test_rl_v2_distill_action_938.py:
     r1: 4
+  tests/test_rl_v2_gap_formulation_943.py:
+    r1: 1
   tests/test_rl_v2_judge_933.py:
     r1: 2
   tests/test_rl_v2_ledger_879.py:

@@ -69,7 +69,7 @@ import method_families  # noqa: E402 — the closed vocabulary owner
 from rlvr import action_params as _ap  # noqa: E402 — the #924 param spec
 from rlvr import q_cells  # noqa: E402 — the (s,a,r) store
 from settlement import draft_commit  # noqa: E402
-from state import evaluation, progress, stagnation  # noqa: E402
+from state import evaluation, gap_formulation, progress, stagnation  # noqa: E402
 from state import telemetry as _telemetry  # noqa: E402 — the #915 face
 from workers import brief as worker_brief  # noqa: E402
 from workers import spawner  # noqa: E402
@@ -86,7 +86,7 @@ __all__ = [
     "RIGHT_SECONDS", "WRONG_SECONDS", "FAMILIES", "TRACKED",
     "CORE_TASK", "MAX_STEPS", "STAGNATION_RANK_PENALTY",
     "OUT_OF_RAIL_CREDIT", "NOISE_MARK", "COLD_FAMILY", "MALFORMED_SPEC",
-    "FAULT_LAP_DEFAULT", "FAULT_MODES",
+    "FAULT_LAP_DEFAULT", "FAULT_MODES", "read_gap_candidates",
 ]
 
 SCHEMA = "loop-report/1"
@@ -749,6 +749,21 @@ class DecisionLoop(SeamMixin):
                 self.report["chain_stopped_lap"] = lap_no
                 break
         return {"ws": self._ws, "report": self.report}, self._ws
+
+
+def read_gap_candidates(ws: Path, *,
+                        memory_query: Callable | None = None,
+                        formulate_fn: Callable | None = None) -> list[dict]:
+    """The thin loop read (#943): the gap_formulation perception face's
+    ranked candidates at the loop's decision point. ADVISORY ONLY — the
+    read is row-silent and fires nothing; the loop's existing decision
+    discipline keeps the firing authority (the #938 shelf-miss trigger
+    stays the loop's choice, gated per budget + salience; this face
+    never auto-fires). The seams are the face's own injected Callables
+    (the #583 memory bridge and the LLM prose seam plug in later)."""
+    return gap_formulation.aggregate(
+        Path(ws), memory_query=memory_query,
+        formulate_fn=formulate_fn)["candidates"]
 
 
 def _bootstrap(ws: Path) -> None:
