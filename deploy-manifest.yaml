@@ -1647,7 +1647,7 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 516e4675525bde00fdd752c773a464333b19faeaedf97af390da28032d90d82f
+    sha256: 20f6f9a0679381fae48da25e19665dcd2e8176e9618c51de63fb7d7b5e830799
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
