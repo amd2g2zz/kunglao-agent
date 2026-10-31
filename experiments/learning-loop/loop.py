@@ -65,11 +65,12 @@ from loop_seams import (COLD_FAMILY, MALFORMED_SPEC)  # noqa: E402
 from loop_worker import (RIGHT_SECONDS, RIGHT_TOKENS, TRACKED,  # noqa: E402
                          WRONG_SECONDS, WRONG_TOKENS, LoopWorkerError,
                          WorkerFn, _worker_execute, mock_worker)
-from policy import assigner, terminator  # noqa: E402
+from policy import assigner, selector, terminator  # noqa: E402
 import method_families  # noqa: E402 — the closed vocabulary owner
 from rlvr import q_cells  # noqa: E402 — the (s,a,r) store
 from settlement import draft_commit  # noqa: E402
 from state import evaluation, progress, stagnation  # noqa: E402
+from state import telemetry as _telemetry  # noqa: E402 — the #915 face
 from workers import brief as worker_brief  # noqa: E402
 from workers import spawner  # noqa: E402
 
@@ -159,6 +160,9 @@ class DecisionLoop(SeamMixin):
         self._deltas: list[float] = []
         self._direction: str | None = None
         self._posture: dict[str, Any] = self._base_posture()
+        # the selector seam's lap-boundary baseline (the banked
+        # task-posterior mass; None until the first lap completes)
+        self._prev_mass: float | None = None
         self._sig = situation_signature(situation)
         self.report: LoopReport = {
             "schema": SCHEMA, "seed": seed, "laps": laps,
@@ -283,6 +287,17 @@ class DecisionLoop(SeamMixin):
                     "intent": dict(intent)},
             budget={"wall_s": PER_DISPATCH_BUDGET_S, "max_calls": None},
             policy_version=POLICY_VERSION, ts=self._clock.tick())
+        # telemetry AFTER the durable row (the SIM loop's exact
+        # semantics) — a describe-before-durable emit would leave a
+        # phantom assignment receipt on append failure
+        if len(self._posture["candidates"]) > 1:
+            _telemetry.emit(self._ws, "assigner", "ASSIGN_WIDENED",
+                            lap=lap_no, rollout_id=rid,
+                            detail=f"{len(self._posture['candidates'])} "
+                                   f"families in the draw")
+        _telemetry.emit(self._ws, "assigner", "ASSIGN_ASSIGNED",
+                        lap=lap_no, rollout_id=rid,
+                        detail=f"family {family}")
         self._tree = [*self._tree,
                       progress.Subgoal(id=f"g-{sid}",
                                        status="UNVERIFIED")]
@@ -595,6 +610,20 @@ class DecisionLoop(SeamMixin):
 
     # -------------------------------------------------------- one lap
 
+    def _prior_moved(self, lap_no: int) -> None:
+        """The selector seam's lap-boundary telemetry (the SIM loop's
+        prev-mass pattern): the banked task-posterior mass is the
+        prior the DTS draw samples — when it grows across the lap
+        (batch) boundary, the move lands. The first completed lap is
+        the baseline, never a mover."""
+        post = selector.task_posteriors(self._ws, [CORE_TASK])
+        mass = sum(a + b for _t, (a, b) in post.items())
+        if self._prev_mass is not None and mass > self._prev_mass:
+            _telemetry.emit(self._ws, "selector", "SELECT_PRIOR_MOVED",
+                            lap=lap_no,
+                            detail=f"banked posterior mass {mass}")
+        self._prev_mass = mass
+
     def _run_lap(self, lap_no: int) -> dict[str, Any]:
         """One lap of the COMPLETE protocol with every seam's receipt
         captured: select -> watchdog arm -> rollout (dispatch loop ->
@@ -619,11 +648,32 @@ class DecisionLoop(SeamMixin):
         if self._seam_active("ledger", lap_no):
             lap["noise"] = self._inject_noise(self._faults["ledger"],
                                               lap_no)
+        self._prior_moved(lap_no)
         return lap
 
     # ------------------------------------------------------------ run
 
+    def _guard_used_workspace(self) -> None:
+        """One workspace, one run, fail-closed at the entry: the
+        loop's rollout ids are deterministic (``ro-core-lapN``), so a
+        second run over a prior run's rows would join its drafts and
+        terminal rows onto ANOTHER run's history — the residual-draft
+        join that surfaces as a bare StopIteration from the credit
+        join. The guard reads before anything mutates."""
+        existing = q_cells.trajectory_rows(self._ws)
+        if not existing:
+            return
+        actions = sum(1 for row in existing
+                      if row.get("schema") == q_cells.SCHEMA_ACTION_V2)
+        raise LoopError(
+            f"loop913: {self._ws} already carries {len(existing)} "
+            f"ledger rows ({actions} action rows) from another run — "
+            f"one workspace, one run: re-running would join this "
+            f"run's deterministic rollout ids onto the residual rows; "
+            f"use a fresh workspace")
+
     def run(self) -> tuple[dict, Path]:
+        self._guard_used_workspace()
         loop_sim._bootstrap(self._ws)
         for lap_no in range(1, self._laps + 1):
             try:

@@ -174,10 +174,13 @@ class SeamMixin:
 
     def _belief_seam(self, lap_no: int, task_id: str) -> dict:
         """The BELIEF seam: the snapshot built from the faces, landed
-        as credit-free telemetry under the driver's clock. The
-        malformed_spec fault corrupts task_spec.yaml first — the #903
-        mapping guard's honest empty is the expected response and is
-        RECORDED as observed, never assumed."""
+        as credit-free telemetry under the driver's clock, plus the
+        #914 statusline feed materialized (once per lap — the
+        production write trigger; the snapshot producer reads the FILE
+        as pure disk observation, the deploy boundary has no import).
+        The malformed_spec fault corrupts task_spec.yaml first — the
+        #903 mapping guard's honest empty is the expected response and
+        is RECORDED as observed, never assumed."""
         fault_rec: dict[str, Any] | None = None
         if self._seam_active("belief", lap_no):
             (self._ws / "task_spec.yaml").write_text(
@@ -191,6 +194,15 @@ class SeamMixin:
             }
         row = belief.record_belief(self._ws, snap, claim=task_id,
                                    ts=self._clock.tick())
+        try:  # #914: fail-open at the SEAM — a feed wall raise must
+            # never kill the lap (the face itself stays fail-closed)
+            from state import statusline_feed  # noqa: PLC0415 — lazy
+            statusline_feed.write_feed(self._ws)
+        except Exception as exc:  # noqa: BLE001 — the loop never dies
+            from kunglao_log import warn  # noqa: PLC0415 — the ONE warn
+            warn("loop.belief_seam",
+                 f"statusline feed: {type(exc).__name__}: {exc} — "
+                 "the lap continues, the feed stays stale")
         return {"snapshot": snap, "row": row["row"], "fault": fault_rec}
 
     def _inject_noise(self, mode: str, lap_no: int) -> dict:

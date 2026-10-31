@@ -110,6 +110,9 @@ the learning loop consumes it.
   entry derives them deterministically from your verdict; the settlement
   row (those four plus the round-credit `credited` / `demoted` /
   `untraced` trio) is what the orchestrator reads back.
+- Scoring rubric (credit anchors + disqualifiers):
+  `references/contracts/rubrics/llm-settlement-rubric.md` — loaded by
+  scenario, never wholesale.
 
 ## Hard constraints
 
