@@ -143,6 +143,7 @@ if __package__ in (None, ""):
 
 from kunglao_log import iter_jsonl, warn
 
+from rlvr import action_params as _action_params  # noqa: E402 — the issue-924 spec (stdlib-only module)
 from rlvr import state as ssig  # the package face (issue 420 Phase 2)
 from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
@@ -1361,24 +1362,25 @@ def append_action(ws, kind: str, rollout_id: str, target: str, *,
                   policy_version=None, state_snapshot=None,
                   ts=None) -> dict:
     """Record ONE decided action — the ``a`` of the (s,a,r) triple
-    (#878). The row is the loop's decision trace; kind validation is
-    the ``action/1`` boundary's job (core.actions.parse_action — the
-    single source; the ledger trusts its validated producer, never a
-    duplicate vocabulary). ``state_snapshot`` (#879) rides the state
-    the action was decided from — the ``s`` axis as an additive
-    column; absent = not recorded, never fabricated.
+    (#878). The row is the loop's decision trace. The issue-924 param spec
+    wall lives HERE (the landing wall) and in core.actions.parse_action
+    (the boundary) — ONE table (rlvr.action_params), enforced twice:
+    kind validation, required/optional/unknown params, and the
+    effective-params normalization (optional-absent recorded at their
+    explicit defaults) all resolve through it — the ledger no longer
+    merely trusts the producer's vocabulary. ``state_snapshot`` (#879)
+    rides the state the action was decided from — the ``s`` axis as an
+    additive column; absent = not recorded, never fabricated.
 
-    Fail-CLOSED on structural garbage — unlike the telemetry faces:
-    a silently-dropped action row would hollow the trajectory the
-    credit face replays. A raise here is a loop bug surfacing."""
+    Fail-CLOSED on structural garbage AND spec violations — unlike the
+    telemetry faces: a silently-dropped action row would hollow the
+    trajectory the credit face replays. A raise here is a loop bug
+    surfacing."""
     rid = _v2_nonempty(rollout_id, "rollout_id")
     tgt = _v2_nonempty(target, "target")
     kind_out = _v2_nonempty(kind, "kind")
     sid = None if step_id is None else _v2_nonempty(step_id, "step_id")
-    if params is None:
-        params = {}
-    if not isinstance(params, dict):
-        raise ValueError("q_cells.v2.params: must be a mapping")
+    params = _action_params.normalize_params(kind_out, params)
     _v2_jsonable(params, "params")
     if state_snapshot is not None:
         if not isinstance(state_snapshot, dict):

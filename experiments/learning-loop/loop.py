@@ -67,6 +67,7 @@ from loop_worker import (RIGHT_SECONDS, RIGHT_TOKENS, TRACKED,  # noqa: E402
                          WorkerFn, _worker_execute, mock_worker)
 from policy import assigner, terminator  # noqa: E402
 import method_families  # noqa: E402 — the closed vocabulary owner
+from rlvr import action_params as _ap  # noqa: E402 — the #924 param spec
 from rlvr import q_cells  # noqa: E402 — the (s,a,r) store
 from settlement import draft_commit  # noqa: E402
 from state import evaluation, progress, stagnation  # noqa: E402
@@ -84,7 +85,7 @@ __all__ = [
     "RIGHT_SECONDS", "WRONG_SECONDS", "FAMILIES", "TRACKED",
     "CORE_TASK", "MAX_STEPS", "STAGNATION_RANK_PENALTY",
     "OUT_OF_RAIL_CREDIT", "NOISE_MARK", "COLD_FAMILY", "MALFORMED_SPEC",
-    "FAULT_LAP_DEFAULT", "FAULT_MODES",
+    "FAULT_LAP_DEFAULT", "FAULT_MODES", "MOCK_SPAWN_SLOTS",
 ]
 
 SCHEMA = "loop-report/1"
@@ -114,6 +115,13 @@ STAGNATION_RANK_PENALTY = 3.0
 #: report discipline)
 LoopReport = dict[str, Any]
 
+#: the mock loop's EXPLICIT dispatch width (#924): the loop's spawn
+#: seam records the orchestrator's conscious choice on every spawn row
+#: — a constant HERE (never auto-sized; the orchestrator-choice policy
+#: lands later on #901's integration surface), overridable per run
+#: through run_loop's spawn_slots so pins can prove pass-through.
+MOCK_SPAWN_SLOTS = 1
+
 
 class _Clock:
     """Deterministic timestamp counter — no wall clock anywhere (the
@@ -136,10 +144,15 @@ class DecisionLoop(SeamMixin):
 
     def __init__(self, ws: Path, *, seed: int, laps: int,
                  budget: Budget | None, faults: Mapping[str, str] | None,
-                 situation: str, worker: WorkerFn | None) -> None:
+                 situation: str, worker: WorkerFn | None,
+                 spawn_slots: int) -> None:
         self._ws = Path(ws)
         self._seed = seed
         self._laps = laps
+        self._spawn_slots = spawn_slots
+        # fail-fast at the loop boundary: the row wall would refuse a
+        # bad width MID-LAP; a conscious choice is validated up front
+        _ap.normalize_params("spawn_candidate", {"slots": spawn_slots})
         self._budget = budget or Budget(wall_s=PER_DISPATCH_BUDGET_S,
                                         max_calls=None)
         faults = dict(faults or {})
@@ -238,7 +251,8 @@ class DecisionLoop(SeamMixin):
         spawn_row = q_cells.append_action(
             self._ws, kind="spawn_candidate", rollout_id=rid,
             step_id=sid, target=spawn["worker_id"],
-            params={"spawn_id": spawn["spawn_id"], "goal": goal,
+            params={"slots": self._spawn_slots,
+                    "spawn_id": spawn["spawn_id"], "goal": goal,
                     "phase": phase},
             budget=spawn["budget"], policy_version=POLICY_VERSION,
             ts=self._clock.tick())
@@ -641,7 +655,8 @@ class DecisionLoop(SeamMixin):
 def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
              seed: int = 0, faults: Mapping[str, str] | None = None,
              situation: str = "offsets",
-             worker: WorkerFn | None = None) -> tuple[LoopReport, Path]:
+             worker: WorkerFn | None = None,
+             spawn_slots: int = MOCK_SPAWN_SLOTS) -> tuple[LoopReport, Path]:
     """``laps`` laps of the unified decision loop over ``ws`` — the
     full protocol with the carried pins built in and per-seam
     receipts. Returns ``(run, ws)`` where ``run["report"]`` is the
@@ -650,7 +665,10 @@ def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
     OBSERVED fault responses. ``budget`` is the dispatch envelope's
     wall budget (the watchdog's operand); ``worker`` is the test seam
     for the mock worker (the default is the flat deterministic mock —
-    never a real LLM)."""
+    never a real LLM); ``spawn_slots`` is the run's EXPLICIT dispatch
+    width (#924 — the mock loop's constant is the documented posture,
+    the orchestrator-choice policy lands later; never auto-sized)."""
     return DecisionLoop(Path(ws), seed=seed, laps=laps, budget=budget,
                         faults=faults, situation=situation,
-                        worker=worker).run()
+                        worker=worker,
+                        spawn_slots=spawn_slots).run()

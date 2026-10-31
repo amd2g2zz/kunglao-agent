@@ -168,6 +168,8 @@ def test_family_dispatch_priors_from_real_ledger_rows(tmp_path):
 
 
 def test_family_priors_count_assign_step_action_rows(tmp_path):
+    from rlvr import consolidated_ledger as cl
+    from rlvr import learning_seal as seal
     ws = tmp_path / "ws"
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-a",
                           step_id="s-1", target="step-1",
@@ -178,8 +180,15 @@ def test_family_priors_count_assign_step_action_rows(tmp_path):
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-b",
                           step_id="s-1", target="step-1",
                           params={"method_family": "arm-kdf"})
-    q_cells.append_action(ws, kind="assign_step", rollout_id="ro-c",
-                          step_id="s-1", target="step-1", params={})
+    # a PRE-issue-924 ledger row (params-free assign_step) — the wall no
+    # longer WRITES one, but the read face must still tolerate the
+    # old-shape row: family-less, counted nowhere, never a bucket
+    pre924 = seal.sign_row({
+        "schema": q_cells.SCHEMA_ACTION_V2,
+        "ts": "2026-01-01T00:00:00Z",
+        "kind": "assign_step", "rollout_id": "ro-c",
+        "step_id": "s-1", "target": "step-1", "params": {}})
+    cl.append(ws, "experience", pre924)
     priors = terminator.family_dispatch_priors(q_cells.trajectory_rows(ws))
     assert priors["mod-crypto"] == pytest.approx(2.0)
     assert priors["arm-kdf"] == pytest.approx(1.0)

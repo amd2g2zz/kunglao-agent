@@ -13,6 +13,7 @@ Submodule design notes live in the README face map; the per-module
 detail is each module's own docstring.
 """
 
+from . import action_params
 from . import attribution
 from . import censored_review
 from . import commit_semantics
@@ -79,6 +80,7 @@ from . import verification_debt
 from . import winrate
 
 __all__ = [
+    "action_params",
     "attribution",
     "belief",
     "censored_review",

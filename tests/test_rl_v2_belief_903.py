@@ -291,7 +291,8 @@ def test_build_snapshot_reads_existing_faces_end_to_end(tmp_path):
     q_cells.append_action(ws, kind="select_task", rollout_id="ro-1",
                           target="C-1")
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
-                          target="fam-a")
+                          target="fam-a",
+                          params={"method_family": "fam-a"})
     (ws / "task_spec.yaml").write_text(
         "primary_questions:\n"
         "  - id: Q-1\n"
@@ -423,7 +424,8 @@ def _run_situation(ws: Path, run_index: int, situation) -> list[float]:
     for k, (before, after, r_planted, verified) in enumerate(situation):
         q_cells.append_action(ws, kind="assign_step",
                               rollout_id=f"ro-{run_index}",
-                              target=f"fam-{k}")
+                              target=f"fam-{k}",
+                              params={"method_family": f"fam-{k}"})
         progress.record_transition(ws, before=before, after=after,
                                    claim=f"C-9{run_index}")
         q_cells.append_result(ws, rollout_id=f"ro-{run_index}",

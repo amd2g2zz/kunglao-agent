@@ -102,6 +102,9 @@ UNVERIFIED_CONFIDENCE = 0.5
 RECIPE_SEGMENT = "facts_snapshot"
 VERIF_SEGMENT = "none"
 TIER = 1
+#: the lineage axis's EXPLICIT spawn width (#924 — the mock driver's
+#: constant choice; the row must record the conscious decision)
+SPAWN_SLOTS = 1
 
 #: the loop's method vocabulary — REAL closed-registry tokens
 FAMILIES = ("crypto-core-identification", "dynamic-trace",
@@ -465,6 +468,7 @@ def _spawn_child(ws, ctx: dict, parent: dict, *, gamma: float,
     child_tid = f"{parent['task_id']}-child"
     q_cells.append_action(ws, kind="spawn_candidate", rollout_id=parent_rid,
                           step_id=f"{parent_rid}-spawn", target=child_tid,
+                          params={"slots": SPAWN_SLOTS},
                           policy_version=POLICY_VERSION,
                           ts=ctx["clock"].tick())
     child = run_rollout(ws, ctx, rid=child_rid, task_id=child_tid,
