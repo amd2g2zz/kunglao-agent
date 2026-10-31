@@ -42,7 +42,7 @@ from __future__ import annotations
 import random
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 _LOOP = Path(__file__).resolve().parent
 _SCRIPTS = _LOOP.parents[1] / "scripts"
@@ -69,7 +69,7 @@ import method_families  # noqa: E402 — the closed vocabulary owner
 from rlvr import action_params as _ap  # noqa: E402 — the #924 param spec
 from rlvr import q_cells  # noqa: E402 — the (s,a,r) store
 from settlement import draft_commit  # noqa: E402
-from state import evaluation, progress, stagnation  # noqa: E402
+from state import evaluation, gap_formulation, progress, stagnation  # noqa: E402
 from state import telemetry as _telemetry  # noqa: E402 — the #915 face
 from workers import brief as worker_brief  # noqa: E402
 from workers import spawner  # noqa: E402
@@ -77,6 +77,7 @@ from workers import spawner  # noqa: E402
 __all__ = [
     "PHASES", "INTENTS", "LoopError", "LoopWorkerError", "WorkerFn",
     "LoopReport", "infer_phase", "declare_intent", "require_intent",
+    "DistillResearchFn",
     "fact_base_ids", "evidence_wall", "bank_evaluation",
     "terminal_advantage", "situation_signature", "arm_key",
     "DecisionLoop", "run_loop", "SCHEMA", "POLICY_VERSION", "GAMMA",
@@ -85,7 +86,7 @@ __all__ = [
     "RIGHT_SECONDS", "WRONG_SECONDS", "FAMILIES", "TRACKED",
     "CORE_TASK", "MAX_STEPS", "STAGNATION_RANK_PENALTY",
     "OUT_OF_RAIL_CREDIT", "NOISE_MARK", "COLD_FAMILY", "MALFORMED_SPEC",
-    "FAULT_LAP_DEFAULT", "FAULT_MODES",
+    "FAULT_LAP_DEFAULT", "FAULT_MODES", "read_gap_candidates",
 ]
 
 SCHEMA = "loop-report/1"
@@ -121,6 +122,14 @@ LoopReport = dict[str, Any]
 #: lands later on #901's integration surface), overridable per run
 #: through run_loop's spawn_slots so pins can prove pass-through.
 
+#: the DISTILL research-execution seam (#938): the Callable the loop
+#: invokes when a worker receipt's shelf-miss trigger fires AND the
+#: caller injected an execution face. EXECUTOR INDEPENDENCE: this is
+#: NEVER the worker and never receives it — its whole argv is
+#: (ws, formulation, clock=...) (the research face's own signature;
+#: the worker Callable stays structurally out of distillation).
+DistillResearchFn = Callable[..., Mapping[str, Any]]
+
 
 class _Clock:
     """Deterministic timestamp counter — no wall clock anywhere (the
@@ -144,11 +153,13 @@ class DecisionLoop(SeamMixin):
     def __init__(self, ws: Path, *, seed: int, laps: int,
                  budget: Budget | None, faults: Mapping[str, str] | None,
                  situation: str, worker: WorkerFn | None,
-                 spawn_slots: int) -> None:
+                 spawn_slots: int,
+                 distill_research: DistillResearchFn | None = None) -> None:
         self._ws = Path(ws)
         self._seed = seed
         self._laps = laps
         self._spawn_slots = spawn_slots
+        self._distill_research = distill_research
         # fail-fast at the loop boundary: the row wall would refuse a
         # bad width MID-LAP; a conscious choice is validated up front
         _ap.normalize_params("spawn_candidate", {"slots": spawn_slots})
@@ -327,7 +338,7 @@ class DecisionLoop(SeamMixin):
             "spawn": spawn, "spawn_row": spawn_row,
             "brief": brief_doc, "result_row": None, "draft": None,
             "eval_doc": None, "banked_credit": None,
-            "bank_receipt": None, "fault": None,
+            "bank_receipt": None, "fault": None, "distill": None,
         }
         out = self._execute(lap_no, rid, step_no, family, step)
         if out is None:
@@ -360,6 +371,37 @@ class DecisionLoop(SeamMixin):
             return {"verified": "true", "tokens": RIGHT_TOKENS,
                     "seconds": RIGHT_SECONDS}
         return self._worker(self._situation, family)
+
+    def _trigger_distill(self, rid: str, sid: str,
+                         signal: Any) -> dict[str, Any]:
+        """The shelf-miss trigger (#938): a worker receipt's capability-
+        gap signal lands ONE DISTILL decision row — distillation as an
+        action in the closed space (the spec wall governs the row; the
+        budget_scale param scales the row's wall budget). EXECUTOR
+        INDEPENDENCE: the research execution is a SEPARATE injected
+        Callable — never the worker, never handed the worker; its whole
+        argv is (ws, formulation, clock=). Uninjected, the decision +
+        row are the WHOLE action (no auto-research loop on this card)."""
+        if not isinstance(signal, str) or not signal.strip():
+            raise LoopError(
+                f"loop.distill: shelf-miss signal {signal!r} must be a "
+                "non-empty formulation string (the capability gap's "
+                "problem statement)")
+        params = _ap.normalize_params("distill",
+                                      {"formulation": signal.strip()})
+        row = q_cells.append_action(
+            self._ws, kind="distill", rollout_id=rid, step_id=sid,
+            target=CORE_TASK, params=params,
+            budget={"wall_s": PER_DISPATCH_BUDGET_S
+                    * float(params["budget_scale"]), "max_calls": None},
+            policy_version=POLICY_VERSION, ts=self._clock.tick())
+        receipt: dict[str, Any] = {"trigger": "shelf_miss",
+                                   "formulation": signal.strip(),
+                                   "row": row["row"], "research": None}
+        if self._distill_research is not None:
+            receipt["research"] = self._distill_research(
+                self._ws, signal.strip(), clock=self._clock)
+        return receipt
 
     def _land_result(self, lap_no: int, rid: str, step_no: int,
                      sid: str, family: str, phase: str, out: Mapping,
@@ -399,6 +441,10 @@ class DecisionLoop(SeamMixin):
         if step["verified"]:
             step["eval_doc"] = self._bank_progress(lap_no, step_no,
                                                    sid, family, phase)
+        shelf_signal = out.get("shelf_miss")
+        if shelf_signal is not None:
+            step["distill"] = self._trigger_distill(rid, sid,
+                                                    shelf_signal)
         verdicts = {"mechanical": step["verified"],
                     "scope_verifier": step["verified"], "redteam": True}
         step["draft"] = draft_commit.ensure_draft(
@@ -705,6 +751,21 @@ class DecisionLoop(SeamMixin):
         return {"ws": self._ws, "report": self.report}, self._ws
 
 
+def read_gap_candidates(ws: Path, *,
+                        memory_query: Callable | None = None,
+                        formulate_fn: Callable | None = None) -> list[dict]:
+    """The thin loop read (#943): the gap_formulation perception face's
+    ranked candidates at the loop's decision point. ADVISORY ONLY — the
+    read is row-silent and fires nothing; the loop's existing decision
+    discipline keeps the firing authority (the #938 shelf-miss trigger
+    stays the loop's choice, gated per budget + salience; this face
+    never auto-fires). The seams are the face's own injected Callables
+    (the #583 memory bridge and the LLM prose seam plug in later)."""
+    return gap_formulation.aggregate(
+        Path(ws), memory_query=memory_query,
+        formulate_fn=formulate_fn)["candidates"]
+
+
 def _bootstrap(ws: Path) -> None:
     """The one-workspace-one-run scaffold: fresh task_spec seed plus
     the runs/ dir. Extracted from the sim tier (#936) — production
@@ -722,7 +783,9 @@ def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
              seed: int = 0, faults: Mapping[str, str] | None = None,
              situation: str = "offsets",
              worker: WorkerFn,
-             spawn_slots: int) -> tuple[LoopReport, Path]:
+             spawn_slots: int,
+             distill_research: DistillResearchFn | None = None
+             ) -> tuple[LoopReport, Path]:
     """``laps`` laps of the unified decision loop over ``ws`` — the
     full protocol with the carried pins built in and per-seam
     receipts. Returns ``(run, ws)`` where ``run["report"]`` is the
@@ -733,8 +796,14 @@ def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
     for the mock worker (the default is the flat deterministic mock —
     never a real LLM); ``spawn_slots`` is the run's EXPLICIT dispatch
     width (#924 — the mock loop's constant is the documented posture,
-    the orchestrator-choice policy lands later; never auto-sized)."""
+    the orchestrator-choice policy lands later; never auto-sized).
+    ``distill_research`` (#938) is the OPTIONAL research-execution
+    seam for the shelf-miss trigger — a Callable SEPARATE from the
+    worker (executor independence), invoked with
+    (ws, formulation, clock=); uninjected, the trigger lands the
+    DISTILL decision row only."""
     return DecisionLoop(Path(ws), seed=seed, laps=laps, budget=budget,
                         faults=faults, situation=situation,
                         worker=worker,
-                        spawn_slots=spawn_slots).run()
+                        spawn_slots=spawn_slots,
+                        distill_research=distill_research).run()

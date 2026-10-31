@@ -5,7 +5,7 @@ space (issue 924).
 Pins for the per-kind param spec + the explicit dispatch
 width (written before the faces they pin — the TDD order):
 
-  SPEC      ACTION_PARAM_SPECS covers ALL TEN ActionKinds; the table
+  SPEC      ACTION_PARAM_SPECS covers ALL ELEVEN ActionKinds; the table
             and every spec entry are frozen (immutability);
   WALLS     normalize_params, parse_action, and q_cells.append_action
             all enforce the ONE spec fail-closed: a missing required
@@ -65,7 +65,7 @@ def _isolated_store_root(monkeypatch, tmp_path):
 
 # ------------------------------------------------------------ the spec
 
-def test_spec_covers_all_ten_kinds():
+def test_spec_covers_the_closed_action_space():
     # the DRIFT pin (both directions): the table's string keys must be
     # EXACTLY the closed vocabulary's canonical values — a kind added
     # to the enum without a spec refuses at the wall ("no param spec");

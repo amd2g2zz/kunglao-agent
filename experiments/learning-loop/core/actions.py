@@ -2,10 +2,12 @@
 """core/actions.py — the ``action/1`` schema: the closed action space.
 
 The unified decision protocol (state -> candidates -> score -> select
--> execute -> record) acts ONLY through one of the ten closed action
-kinds (#878). The LLM is a candidate-generator tool — it proposes; the
-state-driven scoring face disposes — so an Action records what the
-loop DECIDED, never what a model suggested. The parse face is the
+-> execute -> record) acts ONLY through one of the eleven closed
+action kinds (#878; #938 adds DISTILL — distillation is an action in
+the space, not a side subsystem). The LLM is a candidate-generator
+tool — it proposes; the state-driven scoring face disposes — so an
+Action records what the loop DECIDED, never what a model suggested.
+The parse face is the
 fail-closed system boundary (the episode_schema validator posture):
 an illegal action document raises ActionError, and the ledger face
 downstream trusts these validated values (validation lives at the
@@ -51,6 +53,8 @@ class ActionKind(Enum):
     ROLLBACK = "rollback"
     SPAWN_CANDIDATE = "spawn_candidate"
     MATERIALIZE = "materialize"
+    DISTILL = "distill"       # #938: deep-research distillation — an
+                              # action, not a side subsystem
 
 
 _KINDS = frozenset(k.value for k in ActionKind)
