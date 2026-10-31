@@ -135,11 +135,11 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: c9730df32c474e7ba15e0ca3399e55b4311f0d95c444dfeb3cdebf8ea6f4e227
+    sha256: 17effbd752f05e34c9e21b58048a9c29d050017beca844a7c58d5dcdf85c5e44
   - src: agents/kunglao-settler.md
     dest: .claude/agents/kunglao-settler.md
     kind: agent
-    sha256: ae3907b4fd64d6cafd5cc67c1cf885add84c1d2b334dedcfc01cd40f62e97450
+    sha256: a2de83459bbc6e3729ce634953c0d4012a3f77ba9c4a731134bb0f64c97dca12
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -151,7 +151,7 @@ files:
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: b6ed0a85850015a5ba7ef31222a7c9e5c3978f9ff888c4fac285f86920f50eb6
+    sha256: 93a6ca54d89e3f1708080864c74ccdd440e250905ca58a78e54b4dc1485b88fe
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
@@ -479,7 +479,7 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: acf58dd88eda22167a4bca32c9e57793a35f28f24cca480f131cfd2dfcb26ba2
+    sha256: 963f661a40f70fc4bed3ca65a51628f654af3f0b4b3a8d7ff573e4c32092a41a
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold
@@ -1651,11 +1651,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
+    sha256: 20f6f9a0679381fae48da25e19665dcd2e8176e9618c51de63fb7d7b5e830799
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 6bc57169c48f8b8cee7db1c1f42226b85f828aec19cc04c0429884d582bf1cff
+    sha256: 9c76892a5203ee42a039da5f64582fb135f7ff82becf058ac8a6953e513293ce
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1744,6 +1744,22 @@ files:
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
     sha256: 7a8e7820c8871575c2e7576eee6aa9fbdabea8e9ea7b903955007d071d5430b1
+  - src: references/contracts/rubrics/llm-eval-grading-rubric.md
+    dest: .claude/references/contracts/rubrics/llm-eval-grading-rubric.md
+    kind: asset
+    sha256: 58774cc0fc9a2e7dc30b57ca3df25a4b832a904d80c0962432a27a13558c7f3c
+  - src: references/contracts/rubrics/llm-redteam-rubric.md
+    dest: .claude/references/contracts/rubrics/llm-redteam-rubric.md
+    kind: asset
+    sha256: 497dea687756d6537a4125594a71d0e0e5c631c12626e2472df1005a8fce63a3
+  - src: references/contracts/rubrics/llm-settlement-rubric.md
+    dest: .claude/references/contracts/rubrics/llm-settlement-rubric.md
+    kind: asset
+    sha256: 82cf48a3b2967943338ba3e84cd894eebf5daa8144814c03ca90f1ff36f29a5b
+  - src: references/contracts/rubrics/llm-verdict-scorer-rubric.md
+    dest: .claude/references/contracts/rubrics/llm-verdict-scorer-rubric.md
+    kind: asset
+    sha256: c99fee262008b078017a35378537c36e43b1ec5af9517591c4c4219b662c0dc0
   - src: references/contracts/wal-protocol.md
     dest: .claude/references/contracts/wal-protocol.md
     kind: asset
@@ -1827,7 +1843,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 9416777579a646363958d3212a584035473cfdcfd41e6f5cf2327bd4b3d505b0
+    sha256: e90d0de5ea203e7da3223362fed007609328eeb423e4f4dc242322f1ab06b20c
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset

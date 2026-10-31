@@ -188,6 +188,10 @@ Read the output of `fact_contradiction_gate.py`. If it reports PROVEN facts on t
 - **self_audit.evidence_strength**: `strong` (all questions PROVEN-FULL), `mixed` (some gaps or partial confidence), `weak` (major gaps).
 - **self_audit.open_questions**: items that need manual verification or additional analysis.
 
+Verdict scoring rubric (C0a/C0b anchors + disqualifiers):
+`references/contracts/rubrics/llm-verdict-scorer-rubric.md` — loaded by
+scenario, never wholesale.
+
 ## Anti-Patterns
 
 - Do NOT mark a question as answered if the answering fact lacks PROVEN status.
