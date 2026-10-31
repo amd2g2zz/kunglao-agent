@@ -37,6 +37,16 @@ and malformed refs/confidence raise ValueError.
 The ledger face appends transition rows with ``credit=None`` (source
 "state"): the state face is TELEMETRY — a row without a credit column
 banks no posterior mass anywhere in the fold.
+
+#932 read faces: the transition rows are the P(s) ledger state, and the
+settlement line prices MEASURED progress from them at settlement time.
+``transition_rows`` is the face's own first-class ledger read;
+``has_measurements`` answers the cold-start question (no transitions
+anywhere = the fixed ladder still seeds); ``dispatch_delta`` returns a
+dispatch's ΣΔP with a STRICT fingerprint parse — a row whose
+``delta_p=`` fingerprint is malformed is a tampered ledger and raises
+(a poisoned read must never silently price).
+
 """
 from __future__ import annotations
 
@@ -54,6 +64,7 @@ _SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402 — the ledger read
 from rlvr import q_cells  # noqa: E402 — the path bootstrap lands first
 from rlvr.step_credit import (  # noqa: E402
     CREDIT_BY_CLASS,
@@ -282,3 +293,70 @@ def record_transition(ws, *, before: Sequence[Subgoal],
         ws, _transition_digest(before, after), METHOD_FAMILY_TRANSITION,
         credit=None, source=SOURCE, claim=claim, dispatch_id=dispatch_id,
         fingerprint=f"delta_p={delta}", reason=REASON_TRANSITION)
+
+
+#: the transition rows' fingerprint vocabulary — ``delta_p=<ΔP>`` (the
+#: only legal shape; anything else on a state-progress row is poison).
+DELTA_PREFIX = "delta_p="
+
+
+def _parse_delta(fingerprint: Any) -> float:
+    """The STRICT fingerprint parse: exactly ``delta_p=<finite float>``
+    or a raise (fail-closed — a tampered row must never silently
+    price)."""
+    if not isinstance(fingerprint, str) \
+            or not fingerprint.startswith(DELTA_PREFIX):
+        raise _fail("fingerprint",
+                    f"malformed transition fingerprint {fingerprint!r} "
+                    f"(expected {DELTA_PREFIX!r}<ΔP>)")
+    try:
+        delta = float(fingerprint[len(DELTA_PREFIX):])
+    except ValueError as exc:
+        raise _fail("fingerprint",
+                    f"malformed transition fingerprint {fingerprint!r} "
+                    "(the ΔP tail does not parse as a float)") from exc
+    if not math.isfinite(delta):
+        raise _fail("fingerprint",
+                    f"non-finite ΔP in transition fingerprint "
+                    f"{fingerprint!r}")
+    return delta
+
+
+def transition_rows(ws, *, dispatch_id: str | None = None) -> list[dict]:
+    """This face's OWN ledger rows (source ``state``, method family
+    ``state-progress``, schema ``q-cell-obs/1``), append order — the
+    P(s) ledger state the settlement line prices from. Optionally
+    scoped to one dispatch's rows. The read is the JSONL substrate
+    (the JSONLQStore observation face's own query) — the LEDGER, not
+    the #428 posterior-bank fold view."""
+    did = None if dispatch_id is None else str(dispatch_id).strip()
+    out: list[dict] = []
+    for row in _cl.read(ws, "experience", schema_prefix="q-cell-obs"):
+        if str(row.get("source") or "") != SOURCE \
+                or str(row.get("method_family") or "") \
+                != METHOD_FAMILY_TRANSITION:
+            continue
+        if did is not None \
+                and str(row.get("dispatch_id") or "") != did:
+            continue
+        out.append(row)
+    return out
+
+
+def has_measurements(ws) -> bool:
+    """The cold-start question (#932): does the ledger carry ANY
+    state-progress transition row? False = the fixed CREDIT_BY_CLASS
+    ladder still seeds as the prior; True = the measured face prices."""
+    return bool(transition_rows(ws))
+
+
+def dispatch_delta(ws, dispatch_id: str) -> float:
+    """One dispatch's MEASURED posterior-mass change across the step —
+    the Σ of its transition rows' ΔP fingerprints (a step may advance
+    several subgoals). Deterministic from the ledger alone (the
+    settlement-time contract); fails closed on a poisoned row."""
+    did = _checked_id(dispatch_id)
+    total = 0.0
+    for row in transition_rows(ws, dispatch_id=did):
+        total += _parse_delta(row.get("fingerprint"))
+    return round(total, 6)
