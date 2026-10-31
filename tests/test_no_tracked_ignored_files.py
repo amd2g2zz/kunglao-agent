@@ -31,13 +31,17 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # tree (owner-approved 2026-10-29 restructure: the learning-loop
     # driver lives next to its experiment records, outside the deploy
     # surface; the 110 rule was scoped to local-only artifacts).
-    "experiments/learning-loop/loop_sim.py":
+    # the declared sim tier modules relocated into the sim/ subpackage
+    # (same tracked home, one tier deeper).
+    "experiments/learning-loop/sim/__init__.py":
+        "declared sim tier package marker: loop_sim tracked-home precedent (#936)",
+    "experiments/learning-loop/sim/loop_sim.py":
         "experiment driver: owner-approved tracked home (restructure #865)",
-    "experiments/learning-loop/counterfactual_analysis.py":
+    "experiments/learning-loop/sim/counterfactual_analysis.py":
         "rl-v2 counterfactual analysis: loop_sim tracked-home precedent (#905)",
-    "experiments/learning-loop/loop_sim_v3.py":
+    "experiments/learning-loop/sim/loop_sim_v3.py":
         "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
-    "experiments/learning-loop/battery_v3_experiments.py":
+    "experiments/learning-loop/sim/battery_v3_experiments.py":
         "rl-v2 battery experiments: loop_sim tracked-home precedent (#887)",
     # rl-v2 core types (#878): the trajectory-semantics value objects
     # share the learning-loop tracked home (the loop_sim precedent) —
@@ -102,6 +106,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
     "experiments/learning-loop/policy/redteam.py":
         "rl-v2 redteam faces: loop_sim tracked-home precedent (#933)",
+    "experiments/learning-loop/policy/redteam_constraints.py":
+        "rl-v2 redteam planning constraints: loop_sim tracked-home precedent (#939)",
     # the rl-v2 construction-style worker faces (#885): same tracked
     # home as the policy and credit faces.
     "experiments/learning-loop/workers/__init__.py":

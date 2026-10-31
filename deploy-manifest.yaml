@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
-    sha256: 939429f886f49fea93d551bbb690cbcb4ca4a70ae9fcaa71557b708a3c178801
+    sha256: 1039f7add329be5bece1e28c5e195f9534afb0f8bba447d63c4232beb5a1c46f
   - src: scripts/rlvr/attribution.py
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
@@ -1631,7 +1631,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 341485eab71f917ed486e7588015041fb823946f51591b432e6af2b45aa9bd2a
+    sha256: eac5613c4fd7f54a710745b245eef5da78ce55afbc2407c4f5c788caf7eb1d39
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
