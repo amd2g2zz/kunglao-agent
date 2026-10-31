@@ -195,7 +195,29 @@ def test_optional_absent_records_the_default_in_the_row(tmp_path):
                           params={"method_family": "m"}, ts="t0")
     (row,) = q_cells.trajectory_rows(ws)
     assert row["params"] == {"method_family": "m", "tier": 1,
-                             "phase": "", "intent": None}
+                             "phase": "", "intent": None,
+                             "distribution": None}
+
+
+def test_distribution_rides_select_and_assign(tmp_path):
+    """#925 reconciliation: the decision-time ranking distribution is
+    optional-at-None on both kinds — present when the loop persists it,
+    explicitly None otherwise (never a silent absence)."""
+    ws = tmp_path / "ws"
+    dist = {"static-scan": {"alpha": 3, "beta": 1}}
+    q_cells.append_action(ws, kind="select_task", rollout_id="ro-1",
+                          step_id="s-1", target="t-1",
+                          params={"distribution": dist}, ts="t0")
+    q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
+                          step_id="s-2", target="fam",
+                          params={"method_family": "static-scan",
+                                  "distribution": dist}, ts="t1")
+    q_cells.append_action(ws, kind="select_task", rollout_id="ro-2",
+                          step_id="s-3", target="t-2", ts="t2")
+    rows = q_cells.trajectory_rows(ws)
+    assert rows[0]["params"]["distribution"] == dist
+    assert rows[1]["params"]["distribution"] == dist
+    assert rows[2]["params"] == {"distribution": None}
 
 
 def test_spawn_row_records_effective_params(tmp_path):

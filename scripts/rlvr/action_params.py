@@ -163,6 +163,15 @@ class ActionParamSpec:
     optional: Mapping[str, ParamDefault]
 
 
+#: the issue-925 select contract. The distribution is the #925 ranking
+#: persistence (experiments/learning-loop/loop_seams.py:128 — the full
+#: per-candidate posterior map recorded at decision time); optional at
+#: default None so the pre-925 rows stay read-tolerant.
+_SELECT_SPEC = ActionParamSpec(
+    required=MappingProxyType({}),
+    optional=MappingProxyType({"distribution": (None,
+                                                _v_jsonable_or_none)}))
+
 EMPTY_SPEC = ActionParamSpec(required=MappingProxyType({}),
                              optional=MappingProxyType({}))
 
@@ -178,7 +187,9 @@ _ASSIGN_SPEC = ActionParamSpec(
     required=MappingProxyType({"method_family": _v_nonempty_str}),
     optional=MappingProxyType({"tier": (1, _v_int_ge1),
                                "phase": ("", _v_str),
-                               "intent": (None, _v_mapping_or_none)}))
+                               "intent": (None, _v_mapping_or_none),
+                               "distribution": (None,
+                                                _v_jsonable_or_none)}))
 
 #: the issue-924 spawn contract. slots REQUIRED — the orchestrator's
 #: explicit dispatch width (owner directive 2026-10-31; the row must
@@ -242,7 +253,7 @@ def _build_specs() -> Mapping:
     their specs admit params-free rows only, so the day a writer
     appears it must DECLARE its contract here first."""
     table: dict[str, ActionParamSpec] = {
-        "select_task": EMPTY_SPEC,
+        "select_task": _SELECT_SPEC,
         "decompose": EMPTY_SPEC,
         "assign_step": _ASSIGN_SPEC,
         "probe": _PROBE_SPEC,
