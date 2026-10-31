@@ -516,6 +516,10 @@ INTAKE_GUIDANCE = (
 # materialized at init (no lazy ambiguity — "absent" must never mean "not
 # yet decided"). runs/logs/ included per C-3 (the event dir was lazy).
 # hypotheses/ landed its real writer with #528 (scripts/hypothesis_store.py).
+# The rl-v2 ledger substrate is NOT here by ruling: runs/experience.jsonl
+# is loop-owned — the learning loop's bootstrap creates it on first run,
+# and init seeding it would pre-stage a state file the loop then trusts
+# as its own history (the same face owns the one-workspace-one-run guard).
 SCAFFOLD_DIRS = (
     "facts",
     "notes",

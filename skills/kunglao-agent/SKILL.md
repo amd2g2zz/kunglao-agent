@@ -174,6 +174,8 @@ The shape is fixed: a **v1 canonical JSON envelope** opening the dispatch prompt
 
 **Dispatch is fire-and-continue**: launch the worker as a BACKGROUND task and return to the tick loop immediately — NEVER wait inline on a worker's completion. A foreground Task call blocks the whole orchestrator: parallelism collapses to 1, the tick loop never fires, smart pings are never sent, and stuck workers sit undetected. The per-turn flow: convergence check → dispatch top claims (background, ≤3) → immediately re-enter MONITOR (enumerate ALL workers, TaskOutput non-blocking, ping silent ones, TaskStop delivered ones). Completion is discovered ON A LATER TICK via the worker-status flip + TaskOutput — then classify, update `claim-register.yaml`, re-run `priority_ratio.py`, dispatch the new top. `hooks/worker_budget_gates.py` counts active workers from `runs/worker-status-*.md` (`scan_active_workers`), so a dispatched-but-unwritten worker is invisible to the ≤3 gate — which is why the worker-side rule (status file FIRST, before any tool use) is mandatory, and why the orchestrator must not fire 4 launches in one turn assuming the gate will catch it.
 
+**Slots are a chosen dispatch parameter, never an auto-fill (owner ruling, issue 924)** — the always-fill policy is REVOKED: how many workers run concurrently is an EXPLICIT orchestrator decision made per dispatch round, range 1..5 (min 1, max 5; 0 and 6 refuse), NOT defaulted and NOT "as many as the free slots allow". A conscious choice of 1 is a legal, often correct round — serial execution when the next dispatch's shape depends on the previous result. The chosen slot count is recorded at the decision row for audit. The rl-v2 parameter contract (`scripts/action_params.py`, the fail-closed spec card — required/unknown/out-of-range refusal with the effective default recorded explicitly) is the enforcement face the loop reads; until that face lands, the recorded-decision discipline above is the contract. The standing harness gates (≤3 in-flight, worker_budget) still bind on top of the chosen count.
+
 **Plan-to-execute (owner ruling: dispatch carries intent, not a plan)** — the FIRST dispatch of a claim needs NO pre-existing plan (never ghostwrite one); planning is the worker's first act of execution (`runs/plan-C<NN>.md`, citing `dispatch-anchor: <dispatch_ts>`). Any RE-dispatch beyond the planning round requires the plan reference; the plan-author provenance check REJECTS an uncited pre-dispatch plan. Plans carry the state machine + `revision: N`; re-planning appends a `## revision-N` segment. When `plan_reviser.py --check` exits 3 (`suggest_revision`), you MUST produce a revision via `--apply` — "no change" still records a no-change revision. The dispatch prompt must carry `facts-snapshot:` or the dispatch is REJECTED; deviating from the top-ranked claim requires `reasoning:` in the prompt.
 
 **Online distillation (shelf-miss dispatch protocol)** — when a worker's status carries a `shelf-miss: <token>` marker (or `runs/distill-trigger.json` exists — the SubagentStop closure stamps it after scanning), the tool shelf has no viable candidate for that capability. Handle it as a bounded, budget-governed act:
@@ -271,6 +273,20 @@ Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no 
 ## Observability
 
 Monitor from disk — no live server: `kunglao-status.py <WORKSPACE>` renders the claims board + active workers + progress; every action appends a JSON line to `<WORKSPACE>/runs/logs/kunglao-<date>.jsonl` — `kunglao_log.py --tail <WORKSPACE> [N]` is the one-command diagnostic (action words from the controlled vocabulary `event_taxonomy.EMIT_ACTIONS`).
+
+## RL learning system (rl-v2)
+
+The learning layer runs OVER the convergence loop, not beside it: one pass of the decision protocol per dispatch — `select → assign → execute → terminate → settle → credit → belief` (faces under `experiments/learning-loop/`, wired by `loop.py`; local-only source tree, never deployed):
+
+- **select** — the DTS selector samples the next task from the ledger's terminal rollout returns: one Thompson draw per candidate (exploration is the Beta(1,1) prior, not a bolt-on); never a mean-argmax.
+- **assign** — the method assigner combines the planner's family ranking (P) with the ledger's shrunk per-family Beta posterior (Q) in one proportional draw; a rank tilts, evidence decides.
+- **execute** — construction-style worker brief; the loop's termination faces watch it.
+- **terminate** — β(s_t) ends a rollout on question-covered / loss-cut / one-shot watchdog (the family-prior deadline); it is the ONLY rollout-ender — the stagnation face advises (`stagnation-advice/1`, advisory data, `terminates: false`) and never ends anything.
+- **settle** — per-dispatch settlement prices ONE dispatch: the three verification layers arrive as data and are recorded verbatim — never re-run, re-ordered, or re-litigated; the conjunctive gate banks +1.0 only when every layer passes.
+- **credit** — settled rows become advantages `A = R − V(s)` with confidence modulation (an uncertain outcome attenuates its own update).
+- **belief** — the fact base aggregates into the structured P(s) read (`belief-snapshot/1`, six cognition elements, every element sourced from an existing face — nothing invented).
+
+**What learns**: the (situation-signature × arm) Beta posteriors and the task posteriors, γ-folded over the consolidated ledger. **Where the ledger lives**: `<WORKSPACE>/runs/experience.jsonl` — the ledger is LOOP-OWNED: init does not seed it (the loop's bootstrap creates its substrate), and neither operators nor workers hand-edit it — a hand edit is precisely the corruption the loop would then learn from. The upgrade purge carves out `experiments/**` (local-only, never deployed), so upgrades never sweep the loop's source tree. Design entry: `references/_INDEX.md`.
 
 ## Failure Routing
 
