@@ -38,12 +38,7 @@ The convergence loop runs every round and is the only rule set that survives con
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
 - Delivery contract: complete `goal-operationalization.yaml` (deliverables / not_done / diff_vs_verbatim / probe_cases) and pass `scripts/goal_operationalization.py` on it BEFORE the first dispatch — an unaudited draft keeps every decide BLOCKED (verification undeclared, #147); then arm the declared probe cases (`oracle/`) and run `scripts/oracle_runner.py` until green.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
-
-## Learning system (rl-v2)
-
-The RL layer learns from settled dispatches: (situation-signature × arm) Beta posteriors and task posteriors, folded over `runs/experience.jsonl`. The ledger is LOOP-OWNED — created by the learning loop's own bootstrap, never seeded by init, and never hand-edited by operators or workers: a hand edit is precisely the corruption the loop would then learn from. The loop's source tree (`experiments/` in the skill repo) is local-only and never deployed; upgrades carve it out of every purge.
-
-Fleet adaptation: the worker contracts already speak the loop's receipt faces — kunglao-worker echoes phase/intent receipts (closed phase vocabulary, the loop validates challenges), kunglao-redteam's verdict tokens (CONFIRMED / UNVERIFIED-WITH-GAP / REFUTED) land on the credit ladder directly, and kunglao-settler's deterministic stack is the loop's settle face. Dispatch slot count is an explicit orchestrator-chosen parameter (1..5); the always-fill policy is revoked.
+- Learning system (rl-v2): the loop owns `runs/experience.jsonl` (created by its bootstrap, never seeded by init, never hand-edited — a hand edit is the corruption it would learn from); `experiments/` is local-only, carved out of every upgrade purge. Contracts and details: the skill's RL section and `docs/architecture/rl-signal-contract.md`.
 
 ## Skill & orchestrator
 

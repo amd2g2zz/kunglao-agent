@@ -84,9 +84,10 @@ sys.path.insert(0, str(SCRIPTS))
 # (kunglao-settler) joined the derived table per fixture — no other byte
 # changed (diff-guarded regen, same sentinel renderer).
 # 2026-10-31 regen (issue 901 RL block): the project-instructions template
-# gained the rl-v2 learning-system block (what learns / where the ledger
-# lives / never hand-edit) — the four fixtures re-rendered through the
-# same sentinel path (diff-guarded regen).
+# gained the rl-v2 learning-system note, then F-C1 folded it into the
+# loop-enforcement bullet list (the core-section cap enforces the index
+# discipline) — the four fixtures re-rendered twice through the same
+# sentinel path (diff-guarded regen).
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 
