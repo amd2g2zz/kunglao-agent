@@ -1586,6 +1586,8 @@ files:
     r2: 1
   tests/test_rl_v2_credit_883.py:
     r2: 1
+  tests/test_rl_v2_judge_933.py:
+    r1: 2
   tests/test_rl_v2_ledger_879.py:
     r1: 3
   tests/test_rl_v2_loop_913.py:
@@ -1594,6 +1596,8 @@ files:
     r1: 4
     r2: 1
   tests/test_rl_v2_ranking_persistence_925.py:
+    r1: 1
+  tests/test_rl_v2_redteam_933.py:
     r1: 1
   tests/test_rl_v2_reward_base_932.py:
     r1: 6
