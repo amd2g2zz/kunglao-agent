@@ -106,6 +106,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
     "experiments/learning-loop/policy/redteam.py":
         "rl-v2 redteam faces: loop_sim tracked-home precedent (#933)",
+    "experiments/learning-loop/policy/redteam_constraints.py":
+        "rl-v2 redteam planning constraints: loop_sim tracked-home precedent (#939)",
     # the rl-v2 construction-style worker faces (#885): same tracked
     # home as the policy and credit faces.
     "experiments/learning-loop/workers/__init__.py":
