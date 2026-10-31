@@ -67,7 +67,7 @@ def test_real_loop_lands_the_assigner_codes(tmp_path):
     loop's telemetry registry is wired here too, not only in the sim."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=2, seed=7)
+    loop913.run_loop(ws, laps=2, seed=7, spawn_slots=1)
     codes = _codes(ws)
     assert "assigner.ASSIGN_ASSIGNED" in codes
     assert "assigner.ASSIGN_WIDENED" in codes
@@ -79,7 +79,7 @@ def test_assign_receipts_match_the_durable_rows(tmp_path):
     than one candidate), each stamped with its lap and rollout."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=2, seed=7)
+    loop913.run_loop(ws, laps=2, seed=7, spawn_slots=1)
     n_assign = _assign_step_count(ws)
     assert n_assign >= 2
     evs = telemetry.events(ws)
@@ -110,7 +110,7 @@ def test_assign_telemetry_follows_the_durable_row(tmp_path, monkeypatch):
 
     monkeypatch.setattr(q_cells, "append_action", boom)
     with pytest.raises(ValueError, match="assign row unavailable"):
-        loop913.run_loop(ws, laps=1, seed=7)
+        loop913.run_loop(ws, laps=1, seed=7, spawn_slots=1)
     assert any(r.get("kind") == "spawn_candidate"
                for r in q_cells.trajectory_rows(ws)), \
         "the harness reached the assign seam (the spawn row landed)"
@@ -127,7 +127,7 @@ def test_select_prior_moved_at_the_lap_boundary(tmp_path):
     never on the first lap."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=3, seed=7)
+    loop913.run_loop(ws, laps=3, seed=7, spawn_slots=1)
     moved = [r for r in telemetry.events(ws)
              if r.get("event") == "selector.SELECT_PRIOR_MOVED"]
     assert moved, "the banked posterior mass moved across the laps"
@@ -146,13 +146,13 @@ def test_rerun_on_a_used_workspace_raises_named_loop_error(tmp_path):
     from a residual-draft join."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    first, _ = loop913.run_loop(ws, laps=2, seed=7,
+    first, _ = loop913.run_loop(ws, laps=2, seed=7, spawn_slots=1,
                                 faults={"settle": "crash_mid_rollout"})
     assert first["report"]["chain_stopped_lap"] is None
     rows_before = q_cells.trajectory_rows(ws)
     assert rows_before
     with pytest.raises(loop913.LoopError) as excinfo:
-        loop913.run_loop(ws, laps=2, seed=7)
+        loop913.run_loop(ws, laps=2, seed=7, spawn_slots=1)
     msg = str(excinfo.value)
     assert str(ws) in msg
     assert str(len(rows_before)) in msg
@@ -164,7 +164,8 @@ def test_rerun_on_a_used_workspace_raises_named_loop_error(tmp_path):
 def test_fresh_workspace_still_runs(tmp_path):
     """The guard's converse: a workspace with no ledger rows enters
     cleanly and completes its laps."""
-    run, _ws = (loop913.run_loop(tmp_path / "fresh", laps=2, seed=7))
+    run, _ws = (loop913.run_loop(tmp_path / "fresh", laps=2, seed=7,
+                             spawn_slots=1))
     report = run["report"]
     assert report["chain_stopped_lap"] is None
     assert [lap["lap"] for lap in report["per_lap"]] == [1, 2]

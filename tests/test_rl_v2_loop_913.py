@@ -72,6 +72,9 @@ def _isolated_store_root(monkeypatch, tmp_path):
 def _run(tmp_path, name: str = "ws", **kw: Any):
     ws = tmp_path / name
     ws.mkdir()
+    # the suite's orchestrator choice, explicit in one place (spawn_slots
+    # is a required, never-defaulted decision per the #924 policy)
+    kw.setdefault("spawn_slots", 1)
     run, ws2 = loop913.run_loop(ws, **kw)
     return run["report"], ws2
 

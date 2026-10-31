@@ -250,7 +250,7 @@ def test_degraded_view_stable_empty(tmp_path):
 def test_loop_belief_seam_materializes_the_feed(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=1)
+    loop913.run_loop(ws, laps=1, spawn_slots=1)
     p = ws / "runs" / ".loop-statusline.json"
     assert p.is_file(), "the belief seam must materialize the feed"
     doc = json.loads(p.read_text(encoding="utf-8"))

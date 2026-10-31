@@ -86,7 +86,7 @@ __all__ = [
     "RIGHT_SECONDS", "WRONG_SECONDS", "FAMILIES", "TRACKED",
     "CORE_TASK", "MAX_STEPS", "STAGNATION_RANK_PENALTY",
     "OUT_OF_RAIL_CREDIT", "NOISE_MARK", "COLD_FAMILY", "MALFORMED_SPEC",
-    "FAULT_LAP_DEFAULT", "FAULT_MODES", "MOCK_SPAWN_SLOTS",
+    "FAULT_LAP_DEFAULT", "FAULT_MODES",
 ]
 
 SCHEMA = "loop-report/1"
@@ -121,7 +121,6 @@ LoopReport = dict[str, Any]
 #: — a constant HERE (never auto-sized; the orchestrator-choice policy
 #: lands later on #901's integration surface), overridable per run
 #: through run_loop's spawn_slots so pins can prove pass-through.
-MOCK_SPAWN_SLOTS = 1
 
 
 class _Clock:
@@ -706,7 +705,7 @@ def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
              seed: int = 0, faults: Mapping[str, str] | None = None,
              situation: str = "offsets",
              worker: WorkerFn | None = None,
-             spawn_slots: int = MOCK_SPAWN_SLOTS) -> tuple[LoopReport, Path]:
+             spawn_slots: int) -> tuple[LoopReport, Path]:
     """``laps`` laps of the unified decision loop over ``ws`` — the
     full protocol with the carried pins built in and per-seam
     receipts. Returns ``(run, ws)`` where ``run["report"]`` is the
