@@ -40,6 +40,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop"):
         sys.path.insert(0, str(_p))
 
 import loop as loop913  # noqa: E402
+from loop_worker import mock_worker  # noqa: E402
 from rlvr import learning_seal as seal  # noqa: E402
 from rlvr import q_cells  # noqa: E402
 from state import progress, statusline_feed  # noqa: E402
@@ -250,7 +251,7 @@ def test_degraded_view_stable_empty(tmp_path):
 def test_loop_belief_seam_materializes_the_feed(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=1, spawn_slots=1)
+    loop913.run_loop(ws, laps=1, spawn_slots=1, worker=mock_worker)
     p = ws / "runs" / ".loop-statusline.json"
     assert p.is_file(), "the belief seam must materialize the feed"
     doc = json.loads(p.read_text(encoding="utf-8"))

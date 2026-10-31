@@ -64,7 +64,7 @@ from loop_seams import (FAULT_LAP_DEFAULT, FAULT_MODES, NOISE_MARK,  # noqa: E40
 from loop_seams import (COLD_FAMILY, MALFORMED_SPEC)  # noqa: E402
 from loop_worker import (RIGHT_SECONDS, RIGHT_TOKENS, TRACKED,  # noqa: E402
                          WRONG_SECONDS, WRONG_TOKENS, LoopWorkerError,
-                         WorkerFn, _worker_execute, mock_worker)
+                         WorkerFn, _worker_execute)
 from policy import assigner, selector, terminator  # noqa: E402
 import method_families  # noqa: E402 — the closed vocabulary owner
 from rlvr import action_params as _ap  # noqa: E402 — the #924 param spec
@@ -78,7 +78,7 @@ from workers import spawner  # noqa: E402
 __all__ = [
     "PHASES", "INTENTS", "LoopError", "LoopWorkerError", "WorkerFn",
     "LoopReport", "infer_phase", "declare_intent", "require_intent",
-    "fact_base_ids", "evidence_wall", "bank_evaluation", "mock_worker",
+    "fact_base_ids", "evidence_wall", "bank_evaluation",
     "terminal_advantage", "situation_signature", "arm_key",
     "DecisionLoop", "run_loop", "SCHEMA", "POLICY_VERSION", "GAMMA",
     "RETURNS_GAMMA", "TERMINAL_BONUS", "UNVERIFIED_CONFIDENCE",
@@ -165,7 +165,7 @@ class DecisionLoop(SeamMixin):
         self._faults = faults
         self._fault_lap = FAULT_LAP_DEFAULT
         self._situation = situation
-        self._worker = worker or mock_worker
+        self._worker = worker
         self._clock = _Clock()
         self._tree: list[progress.Subgoal] = []
         self._facts: list[str] = []
@@ -704,7 +704,7 @@ class DecisionLoop(SeamMixin):
 def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,
              seed: int = 0, faults: Mapping[str, str] | None = None,
              situation: str = "offsets",
-             worker: WorkerFn | None = None,
+             worker: WorkerFn,
              spawn_slots: int) -> tuple[LoopReport, Path]:
     """``laps`` laps of the unified decision loop over ``ws`` — the
     full protocol with the carried pins built in and per-seam
