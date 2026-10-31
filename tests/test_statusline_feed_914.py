@@ -74,8 +74,8 @@ def _action_row(ws, *, rid: str = "ro-1", kind: str = "assign_step",
         ws, kind, rid, target,
         step_id=f"{rid}-s01",
         params=params if params is not None
-        else {"method_family": "static-scan", "tier": 1,
-              "phase": "triage"},
+        else ({"method_family": "static-scan", "tier": 1,
+               "phase": "triage"} if kind == "assign_step" else None),
         ts="2026-01-01T00:00:00Z")
     return row["row"]
 
@@ -146,9 +146,7 @@ def test_feed_task_from_belief_goal(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     _action_row(ws, kind="select_task",
-                target="recover the license check",
-                params={"method_family": "static-scan",
-                        "phase": "triage"})
+                target="recover the license check")
     doc = statusline_feed.feed(ws)
     assert doc["task"] == "recover the license check"
 
