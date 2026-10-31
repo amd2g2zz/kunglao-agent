@@ -144,21 +144,25 @@ def prepare_spawn(goal: str, snapshot: Mapping[str, Any],
 
 
 def record_spawn(ws, receipt: Mapping, *, rollout_id: str,
-                 step_id: str | None = None,
+                 slots: int, step_id: str | None = None,
                  policy_version: str | None = None) -> dict:
     """Land the construction as ONE ``q-cell-action/1`` row (kind =
     ``spawn_candidate``, the #878 action space) — the standard
-    single-writer append; the ledger trusts the validated receipt."""
+    single-writer append; the ledger trusts the validated receipt.
+    ``slots`` is the orchestrator's EXPLICIT dispatch width (#924) —
+    required keyword, no default: a spawn row without the conscious
+    choice recorded is exactly the hollow audit the ruling revokes."""
     if not isinstance(receipt, Mapping) or receipt.get("schema") != SCHEMA:
         raise _fail("receipt", f"must be a {SCHEMA!r} receipt")
     _non_empty(receipt.get("spawn_id"),
                "receipt.spawn_id (a hand-stamped receipt without the "
-               "content id would record a hollow audit row)")
+               "content id would register a hollow audit row)")
     return q_cells.append_action(
         ws, kind="spawn_candidate", rollout_id=rollout_id,
         step_id=step_id,
         target=_non_empty(receipt.get("worker_id"), "receipt.worker_id"),
-        params={"spawn_id": receipt.get("spawn_id"),
+        params={"slots": slots,
+                "spawn_id": receipt.get("spawn_id"),
                 "goal": receipt.get("goal"),
                 "snapshot_excerpt": receipt.get("snapshot_excerpt"),
                 "cards": receipt.get("cards")},

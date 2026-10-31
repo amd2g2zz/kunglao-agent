@@ -164,7 +164,7 @@ def test_record_spawn_lands_one_spawn_candidate_action(tmp_path):
     ws = tmp_path / "ws"
     r = _spawn()
     spawner.record_spawn(ws, r, rollout_id="ro-1", step_id="s-1",
-                         policy_version="v2")
+                         slots=1, policy_version="v2")
     (row,) = [x for x in q_cells.trajectory_rows(ws)
               if x["schema"] == q_cells.SCHEMA_ACTION_V2]
     assert row["kind"] == "spawn_candidate"
@@ -182,7 +182,7 @@ def test_record_spawn_rejects_a_non_receipt(tmp_path):
     ws = tmp_path / "ws"
     with pytest.raises(ValueError):
         spawner.record_spawn(ws, {"schema": "spawn-receipt/2"},
-                             rollout_id="ro-1")
+                             rollout_id="ro-1", slots=1)
 
 
 # ------------------------------------------------------------------ brief
@@ -399,7 +399,8 @@ def test_budget_report_consumes_only_result_rows(tmp_path):
     trajectory's decision trace) but only result-row costs spend."""
     ws = tmp_path / "ws"
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
-                          step_id="s-0", target="step-0")
+                          step_id="s-0", target="step-0",
+                          params={"method_family": "m"})
     _seed_results(ws, [0.5])
     r = budget_tracker.budget_report(Budget(wall_s=1.0),
                                      q_cells.trajectory_rows(ws))

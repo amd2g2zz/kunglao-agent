@@ -10,13 +10,26 @@ fail-closed system boundary (the episode_schema validator posture):
 an illegal action document raises ActionError, and the ledger face
 downstream trusts these validated values (validation lives at the
 boundary, not at every consumer).
+
+#924: the parse boundary ALSO enforces the per-kind parameter spec
+(``rlvr.action_params`` — the single source; re-exported here so a
+re-implemented table next door cannot drift). WHY the scripts-side
+import: the spec must be enforced at BOTH walls and the deployed
+scripts tree cannot import experiments/ — experiments→scripts is the
+loop's existing dependency direction.
 """
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Mapping
+
+_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
 
 SCHEMA = "action/1"
 
@@ -41,6 +54,11 @@ class ActionKind(Enum):
 
 
 _KINDS = frozenset(k.value for k in ActionKind)
+
+# after ActionKind — the spec table's keys resolve through it (the
+# keys are validated against ActionKind by the #924 test pin, both
+# directions fail-closed)
+from rlvr import action_params as _ap  # noqa: E402 — the path bootstrap lands first
 
 
 @dataclass(frozen=True)
@@ -112,7 +130,8 @@ def action_to_doc(action: Action) -> dict:
 
 def validate_action(doc: Mapping) -> dict:
     """Fail-closed ``action/1`` validation — returns the normalized
-    document or raises ActionError naming the offending field."""
+    document (params spec-complete: optional-absent at their explicit
+    defaults, #924) or raises naming the offending field."""
     if not isinstance(doc, Mapping):
         raise _fail("doc", "must be a mapping")
     if doc.get("schema") != SCHEMA:
@@ -124,6 +143,9 @@ def validate_action(doc: Mapping) -> dict:
     params = _req(doc, "params")
     if not isinstance(params, Mapping):
         raise _fail("params", "must be a mapping")
+    # the #924 param wall: the ONE spec decides required/optional/
+    # unknown — the boundary returns the EFFECTIVE params
+    params = _ap.normalize_params(kind, params)
     budget = _req(doc, "budget")
     if not isinstance(budget, Mapping):
         raise _fail("budget", "must be a mapping")
@@ -144,12 +166,14 @@ def validate_action(doc: Mapping) -> dict:
         _non_empty_str(step_id, "context.step_id")
     _non_empty_str(_req(context, "policy_version"),
                    "context.policy_version")
-    return dict(doc)
+    return {**dict(doc), "params": dict(params)}
 
 
 def parse_action(doc: Mapping) -> Action:
-    """Validate an ``action/1`` document and build the frozen Action."""
-    validate_action(doc)
+    """Validate an ``action/1`` document and build the frozen Action —
+    the Action carries the EFFECTIVE params (the spec-complete set,
+    #924)."""
+    doc = validate_action(doc)
     budget = doc["budget"]
     context = doc["context"]
     return Action(
@@ -162,3 +186,15 @@ def parse_action(doc: Mapping) -> Action:
                         step_id=context.get("step_id"),
                         policy_version=context["policy_version"]),
     )
+
+
+def __getattr__(name: str):
+    """The single-source re-exports (#924): the boundary face proves
+    it consumes THE table, never a local re-implementation. Lazy — a
+    module-level bind would run mid-import inside the spec table's own
+    build cycle."""
+    if name == "ACTION_PARAM_SPECS":
+        return _ap.ACTION_PARAM_SPECS
+    if name == "ActionParamError":
+        return _ap.ActionParamError
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -40,6 +40,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop"):
         sys.path.insert(0, str(_p))
 
 import loop as loop913  # noqa: E402
+from loop_worker import mock_worker  # noqa: E402
 from rlvr import learning_seal as seal  # noqa: E402
 from rlvr import q_cells  # noqa: E402
 from state import progress, statusline_feed  # noqa: E402
@@ -74,8 +75,8 @@ def _action_row(ws, *, rid: str = "ro-1", kind: str = "assign_step",
         ws, kind, rid, target,
         step_id=f"{rid}-s01",
         params=params if params is not None
-        else {"method_family": "static-scan", "tier": 1,
-              "phase": "triage"},
+        else ({"method_family": "static-scan", "tier": 1,
+               "phase": "triage"} if kind == "assign_step" else None),
         ts="2026-01-01T00:00:00Z")
     return row["row"]
 
@@ -146,9 +147,7 @@ def test_feed_task_from_belief_goal(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     _action_row(ws, kind="select_task",
-                target="recover the license check",
-                params={"method_family": "static-scan",
-                        "phase": "triage"})
+                target="recover the license check")
     doc = statusline_feed.feed(ws)
     assert doc["task"] == "recover the license check"
 
@@ -252,7 +251,7 @@ def test_degraded_view_stable_empty(tmp_path):
 def test_loop_belief_seam_materializes_the_feed(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
-    loop913.run_loop(ws, laps=1)
+    loop913.run_loop(ws, laps=1, spawn_slots=1, worker=mock_worker)
     p = ws / "runs" / ".loop-statusline.json"
     assert p.is_file(), "the belief seam must materialize the feed"
     doc = json.loads(p.read_text(encoding="utf-8"))

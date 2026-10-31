@@ -35,6 +35,10 @@ import ledger_frame  # noqa: E402
 from rlvr import l1_value, q_cells  # noqa: E402
 
 _SIG = "a" * 12
+# the spec-legal probe params (issue 924): the potential-based comparison
+# data the probe contract requires on every probe row
+_PROBE_PARAMS = {"portfolio": "probe-portfolio/1", "rank": 1,
+                 "arms": 2, "potential_based": True, "leader": "l"}
 
 
 def _seed_qcell_obs(ws) -> None:
@@ -59,6 +63,7 @@ def test_state_snapshot_column_round_trips(tmp_path):
     ws = tmp_path / "ws"
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
                           step_id="s-1", target="step-1",
+                          params={"method_family": "m"},
                           state_snapshot={"signature_hash": _SIG,
                                           "goal_depth": 2})
     (row,) = q_cells.trajectory_rows(ws)
@@ -69,12 +74,13 @@ def test_state_snapshot_column_round_trips(tmp_path):
 def test_state_snapshot_absent_and_rejected(tmp_path):
     ws = tmp_path / "ws"
     q_cells.append_action(ws, kind="probe", rollout_id="ro-1",
-                          target="fam-a")
+                          target="fam-a", params=_PROBE_PARAMS)
     (row,) = q_cells.trajectory_rows(ws)
     assert "state_snapshot" not in row      # additive-column discipline
     with pytest.raises(ValueError):
         q_cells.append_action(ws, kind="probe", rollout_id="ro-1",
-                              target="fam-a", state_snapshot="ro-1-state")
+                              target="fam-a", params=_PROBE_PARAMS,
+                              state_snapshot="ro-1-state")
 
 
 # -------------------------------------------- single-writer VERIFIED
@@ -109,10 +115,12 @@ def test_append_action_rejects_non_json_payloads(tmp_path):
     ws = tmp_path / "ws"
     with pytest.raises(ValueError):
         q_cells.append_action(ws, kind="probe", rollout_id="ro-1",
-                              target="x", params={"p": Path(".")})
+                              target="x",
+                              params={**_PROBE_PARAMS,
+                                      "snapshot_excerpt": Path(".")})
     with pytest.raises(ValueError):
         q_cells.append_action(ws, kind="probe", rollout_id="ro-1",
-                              target="x",
+                              target="x", params=_PROBE_PARAMS,
                               state_snapshot={"t": object()})
 
 
@@ -138,6 +146,7 @@ def test_dataframe_columns_cover_every_ledger_field(tmp_path):
                                              "prior_source": "llm"})
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
                           step_id="s-1", target="step-1",
+                          params={"method_family": "m"},
                           state_snapshot={"signature_hash": _SIG},
                           policy_version="v2")
     q_cells.append_result(ws, rollout_id="ro-1", step_id="s-1",
@@ -154,7 +163,8 @@ def test_trajectory_dataframe_load_query_round_trip(tmp_path):
     ws = tmp_path / "ws"
     _seed_qcell_obs(ws)
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-1",
-                          step_id="s-1", target="step-1")
+                          step_id="s-1", target="step-1",
+                          params={"method_family": "m"})
     q_cells.append_result(ws, rollout_id="ro-1", step_id="s-1",
                           r_t=0.5, verified=True, R_t=0.7)
     df = ledger_frame.trajectory_dataframe(ws)
@@ -187,7 +197,8 @@ def test_value_table_identical_with_v2_rows_present(tmp_path):
     ws_mixed = tmp_path / "mixed"
     _seed_l1(ws_mixed)
     q_cells.append_action(ws_mixed, kind="assign_step", rollout_id="ro-1",
-                          step_id="s-1", target="step-1")
+                          step_id="s-1", target="step-1",
+                          params={"method_family": "m"})
     q_cells.append_result(ws_mixed, rollout_id="ro-1", step_id="s-1",
                           r_t=0.9, verified=True, R_t=0.7, A_t=0.2)
     # value_table embeds the workspace path — compare the CELLS payload

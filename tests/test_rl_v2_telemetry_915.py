@@ -288,6 +288,7 @@ def test_trace_returns_the_rollout_chain_in_append_order(tmp_path):
     ws.mkdir()
     q_cells.append_action(ws, kind="assign_step", rollout_id="ro-t",
                           step_id="ro-t-s01", target="f",
+                          params={"method_family": "f"},
                           ts="2026-01-01T00:00:01Z")
     q_cells.append_result(ws, rollout_id="ro-t", step_id="ro-t-s01",
                           verified=True, cost=0.1,
