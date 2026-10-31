@@ -75,9 +75,11 @@ def test_parse_action_accepts_and_builds_frozen_value():
     assert a.kind is ActionKind.ASSIGN_STEP
     assert a.target == "step-3"
     # issue 924: the Action carries the EFFECTIVE params — the spec fills
-    # the optional-absent tier/phase/intent at their explicit defaults
+    # the optional-absent tier/phase/intent/distribution at their explicit
+    # defaults (distribution = the #925 ranking persistence, optional)
     assert a.params == {"method_family": "mod-crypto", "tier": 2,
-                        "phase": "", "intent": None}
+                        "phase": "", "intent": None,
+                        "distribution": None}
     assert a.budget == Budget(wall_s=600.0, max_calls=None)
     assert a.context == Context(rollout_id="ro-1", step_id="s-3",
                                 policy_version="v2")
@@ -91,7 +93,7 @@ def test_action_to_doc_round_trip():
     # spec-complete set the boundary normalizes to)
     expected = {**doc, "params": {"method_family": "mod-crypto",
                                   "tier": 2, "phase": "",
-                                  "intent": None}}
+                                  "intent": None, "distribution": None}}
     assert action_to_doc(parse_action(doc)) == expected
 
 
@@ -185,9 +187,10 @@ def test_q_cells_v2_action_row_round_trip(tmp_path):
     assert row["rollout_id"] == "ro-1"
     assert row["step_id"] is None
     assert row["target"] == "claim-C-001"
-    # issue 924: the row is spec-complete — select_task admits a
-    # params-free row (its contract rides the target)
-    assert row["params"] == {}
+    # issue 924 + 925: the row is spec-complete — select_task admits a
+    # params-free row (its contract rides the target) and records the
+    # optional-absent distribution at its explicit None default
+    assert row["params"] == {"distribution": None}
     assert row["budget"] == {"wall_s": 600.0, "max_calls": None}
     assert row["policy_version"] == "v2"
 

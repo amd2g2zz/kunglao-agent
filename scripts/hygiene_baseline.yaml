@@ -1580,6 +1580,7 @@ files:
     r1: 4
     r2: 1
   tests/test_rl_v2_core_types_878.py:
+    r1: 1
     r2: 1
   tests/test_rl_v2_credit_883.py:
     r2: 1
