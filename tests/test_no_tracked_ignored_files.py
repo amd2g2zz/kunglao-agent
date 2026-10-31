@@ -77,6 +77,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 telemetry face: loop_sim tracked-home precedent (#915)",
     "experiments/learning-loop/state/statusline_feed.py":
         "rl-v2 statusline feed face: loop_sim tracked-home precedent (#914)",
+    "experiments/learning-loop/state/judge.py":
+        "rl-v2 gated judge face: loop_sim tracked-home precedent (#933)",
     "experiments/learning-loop/loop.py":
         "rl-v2 unified decision loop: loop_sim tracked-home precedent (#913)",
     "experiments/learning-loop/loop_pins.py":
@@ -98,6 +100,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
     "experiments/learning-loop/policy/prober.py":
         "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
+    "experiments/learning-loop/policy/redteam.py":
+        "rl-v2 redteam faces: loop_sim tracked-home precedent (#933)",
     # the rl-v2 construction-style worker faces (#885): same tracked
     # home as the policy and credit faces.
     "experiments/learning-loop/workers/__init__.py":
@@ -122,6 +126,8 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
     "experiments/learning-loop/settlement/draft_commit.py":
         "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/judge_cap.py":
+        "rl-v2 judge-cap face: loop_sim tracked-home precedent (#933)",
     # the rl-v2 credit faces (#883): pure numpy credit assignment —
     # same tracked home as the policy faces.
     "experiments/learning-loop/credit/__init__.py":
