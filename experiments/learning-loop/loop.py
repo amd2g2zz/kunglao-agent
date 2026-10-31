@@ -298,7 +298,12 @@ class DecisionLoop(SeamMixin):
             self._ws, kind="assign_step", rollout_id=rid, step_id=sid,
             target=family,
             params={"method_family": family, "tier": 1, "phase": phase,
-                    "intent": dict(intent)},
+                    "intent": dict(intent),
+                    # the decision-time P⊗Q distribution rides the row
+                    # (card 925) — the full per-candidate doc, the same
+                    # object the report receipt carries, one fail-closed
+                    # write with the winner it selected from
+                    "distribution": assign["candidates"]},
             budget={"wall_s": PER_DISPATCH_BUDGET_S, "max_calls": None},
             policy_version=POLICY_VERSION, ts=self._clock.tick())
         # telemetry AFTER the durable row (the SIM loop's exact
