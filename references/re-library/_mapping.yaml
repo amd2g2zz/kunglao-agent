@@ -34,7 +34,7 @@ scenarios:
   Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
   Action error / tool-VM-install failure response: contracts/error-response-taxonomy
   Ask-the-user / irreversible-action decision: contracts/agent-three-state-charter
-  LLM judging or scoring a surface (settle / redteam / verdict / eval grade): contracts/rubrics/llm-settlement-rubric + contracts/rubrics/llm-redteam-rubric + contracts/rubrics/llm-verdict-scorer-rubric + contracts/rubrics/llm-eval-grading-rubric
+  LLM judging or scoring a surface (settle / redteam / eval grade): contracts/rubrics/llm-settlement-rubric + contracts/rubrics/llm-redteam-rubric + contracts/rubrics/llm-eval-grading-rubric
 when_to_read:
   references/re-library/web/external-distilled/_GAP-REPORT.md: Before extending the external-distilled
     lane or judging a follow-up adoption.

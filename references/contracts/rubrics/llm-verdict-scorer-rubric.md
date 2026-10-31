@@ -1,3 +1,8 @@
+> **RETIRED (#886)**: superseded by the deterministic executor
+> `scripts/verdict_scorer.py` (C0a/C0b gates over the canonical PQ
+> parse). This rubric is retained as the historical judgment spec; the
+> adversarial gate stays orchestrator-side at signing.
+
 ---
 name: llm-verdict-scorer-rubric
 description: Scoring rubric for the verdict-scorer PQ-coverage ruling — the written standard the scorer LLM applies when deciding answered/unresolved per primary question via the C0a/C0b confidence bands, answers_question matching, and PROVEN status. Anchors on the CREDIT_BY_CLASS ladder pattern (cross_validated 1.0 / unverified 0.3 / refuted 0.0 mapped to answered / partial-with-degradation / unresolved), edge cases including the reproduction controlled-comparison demand, hard disqualifiers, and the escalate-vs-decide line. Read when writing or auditing evidence/verdict.json, when judging whether a question was honestly answered, or when calibrating degraded[] and self_audit entries.

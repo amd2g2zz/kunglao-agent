@@ -62,8 +62,8 @@ def _count_anomaly_notes(workspace: Path) -> int:
     Per issue #663 acceptance criterion #3: progress_report output must
     surface the anomaly observation count so operators do not have to
     count notes/*.md by hand. Data source is the post-scan ground truth
-    (anomaly_detector._write_anomaly_note writes these notes after
-    scan_anomalies flags a fact — see scripts/anomaly_detector.py:332-374).
+    (notes with `boundary_type: anomaly` frontmatter, written after
+    scan_anomalies flags a fact).
 
     Tolerant frontmatter parsing: extracts the YAML block (between the
     first two `---` markers when both exist) and falls back to scanning
