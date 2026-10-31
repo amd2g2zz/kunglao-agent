@@ -233,7 +233,7 @@ files:
   scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
   scripts/rho_verifier.py: 11
-  scripts/rlvr/action_params.py: 5
+  scripts/rlvr/action_params.py: 6
   scripts/rlvr/attribution.py: 4
   scripts/rlvr/censored_review.py: 8
   scripts/rlvr/commit_semantics.py: 2
