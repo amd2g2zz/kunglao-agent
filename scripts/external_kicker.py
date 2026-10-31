@@ -411,12 +411,6 @@ def build_schtasks_command(task_name: str, interval_min: int, python_exe: str,
             str(interval_min), "/tr", f'"{python_exe}" "{script}" "{workspace}"', "/f"]
 
 
-def build_crontab_line(interval_min: int, python_exe: str, script: str,
-                       workspace: str) -> str:
-    """D5: POSIX crontab line for the same schedule."""
-    return f"*/{interval_min} * * * * {python_exe} {script} {workspace}"
-
-
 # ---------- D6: interval gate ----------
 
 def validate_interval(tick_interval_min: int) -> None:

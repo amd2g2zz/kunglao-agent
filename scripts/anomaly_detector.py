@@ -200,48 +200,6 @@ def scan_anomalies(
     return anomalies
 
 
-def check_fact_anomaly(
-    fact_id: str,
-    facts_dir: Path,
-    baseline: Optional[BaselineCorpus] = None,
-    threshold: Optional[float] = None,
-) -> Tuple[bool, str]:
-    """Single-fact consumer surface. Returns (allowed, reason).
-
-    allowed=False means anomaly detected at >= threshold. The reason
-    names the score and threshold (mirrors fact_contradiction_gate's
-    check_proven_contradiction shape — hook-wired consumers parse
-    the second element).
-    """
-    if baseline is None:
-        baseline = _load_baseline()
-    threshold = threshold if threshold is not None else DEFAULT_THRESHOLD
-
-    fact_text = _read_fact_text(facts_dir, fact_id)
-    if not fact_text:
-        return (True, f"fact {fact_id} not found or empty")
-
-    index_path = facts_dir / "_INDEX.md"
-    rows = _read_index_rows(index_path)
-    row = next((r for r in rows if r["fact_id"] == fact_id), None)
-    if not row:
-        return (True, f"fact {fact_id} not in _INDEX")
-
-    conclusion = row.get("conclusion", "")
-    claim_id = row.get("claim_id")
-    sample_refs = _extract_sample_refs(fact_text)
-
-    tokens = _tokenize(conclusion)
-    lex = _lexical_rarity_score(tokens, baseline)
-    sem = _semantic_unusualness_score(claim_id, conclusion, baseline)
-    path = _path_unusualness_score(sample_refs, baseline)
-
-    score = max(lex, sem, path)
-    if score >= threshold:
-        return (False, f"fact {fact_id} anomaly score {score:.3f} >= threshold {threshold}")
-    return (True, f"fact {fact_id} anomaly score {score:.3f} < threshold {threshold}")
-
-
 # ---------------------------------------------------------------------------
 # Baseline loader (design D2)
 # ---------------------------------------------------------------------------
@@ -338,51 +296,6 @@ def _read_fact_text(facts_dir: Path, fact_id: str) -> str:
     return ""
 
 
-def _write_anomaly_note(
-    fact_path: Path,
-    score: float,
-    top_dimension: str,
-    threshold: float,
-) -> Path:
-    """Write a co-resident anomaly note (per design.md D8, tasks.md §4.8).
-
-    Per D8: anomaly is NOT a verdict demotion — the fact's own status stays
-    unchanged. The anomaly surfaces as a co-resident note at notes/<fact_id>.md
-    so analysts see it in progress_report / digest views.
-
-    Returns the written note path. Caller is responsible for logging the
-    note creation via kunglao_log (out of scope for this helper).
-    """
-    fact_id = fact_path.stem
-    notes_dir = fact_path.parent.parent / "notes"
-    notes_dir.mkdir(parents=True, exist_ok=True)
-    note_path = notes_dir / f"{fact_id}.md"
-    body = (
-        "---\n"
-        f"id: {fact_id}\n"
-        "type: observation\n"
-        f"boundary_type: anomaly\n"
-        f"score: {score:.3f}\n"
-        f"top_dimension: {top_dimension}\n"
-        f"anomaly_threshold: {threshold}\n"
-        "verify_status: pending\n"
-        "claim_id: C-NNN\n"  # placeholder; analyst fills when reviewing
-        "created: 2026-08-25\n"
-        "last_reviewed: 2026-08-25\n"
-        "---\n\n"
-        f"# Anomaly observation: {fact_id}\n\n"
-        f"Score {score:.3f} above threshold {threshold} on dimension "
-        f"`{top_dimension}`. Per design.md D8: this is a co-resident observation, "
-        "NOT a verdict demotion — the source fact's PROVEN status is preserved.\n\n"
-        "## Analyst action\n\n"
-        "- [ ] Review: is the anomaly a genuine signal or a baseline gap?\n"
-        "- [ ] Confirm: note stays (refute baseline gap, or document the anomaly)\n"
-        "- [ ] Refute: delete note + extend `analysis_state.txt` baseline_corpus\n"
-    )
-    note_path.write_text(body, encoding="utf-8")
-    return note_path
-
-
 def _extract_sample_refs(fact_text: str) -> List[str]:
     """Extract sample_refs from YAML frontmatter (yaml block or line-level).
 
@@ -446,8 +359,8 @@ def observe_taint(ws, threshold=None) -> List[dict]:
     status changes. Reads evidence/dexdc_taint.json (status ok); scores
     the DISTINCT high-risk seed-category concentration; >= threshold
     (default 2) distinct high-risk categories -> write
-    notes/taint-observation.md (co-resident observation note, the same
-    face as _write_anomaly_note). Fail-open: missing/bad evidence or an
+    notes/taint-observation.md (co-resident observation note, the
+    boundary_type: anomaly frontmatter shape). Fail-open: missing/bad evidence or an
     unreadable table -> [] (never raises). Returns [observation] or [].
     """
     ws = Path(ws)
