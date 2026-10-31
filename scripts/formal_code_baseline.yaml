@@ -293,7 +293,7 @@ files:
   scripts/stale_blocker_prune.py: 1
   scripts/state_signature.py: 2
   scripts/status_defs.py: 4
-  scripts/statusline_snapshot.py: 103
+  scripts/statusline_snapshot.py: 104
   scripts/strategy_sections.py: 2
   scripts/structural_check.py: 2
   scripts/summary_discriminator.py: 4
