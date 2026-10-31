@@ -50,7 +50,6 @@ for _p in (_LOOP, _SCRIPTS):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import loop_sim  # noqa: E402 — the shared workspace bootstrap
 from core import Budget  # noqa: E402 — the path bootstrap lands first
 from credit import returns as credit_returns  # noqa: E402
 from loop_pins import (CORE_TASK, INTENTS, POLICY_VERSION, PHASES,  # noqa: E402
@@ -687,7 +686,7 @@ class DecisionLoop(SeamMixin):
 
     def run(self) -> tuple[dict, Path]:
         self._guard_used_workspace()
-        loop_sim._bootstrap(self._ws)
+        _bootstrap(self._ws)
         for lap_no in range(1, self._laps + 1):
             try:
                 self.report["per_lap"].append(self._run_lap(lap_no))
@@ -699,6 +698,19 @@ class DecisionLoop(SeamMixin):
                 self.report["chain_stopped_lap"] = lap_no
                 break
         return {"ws": self._ws, "report": self.report}, self._ws
+
+
+def _bootstrap(ws: Path) -> None:
+    """The one-workspace-one-run scaffold: fresh task_spec seed plus
+    the runs/ dir. Extracted from the sim tier (#936) — production
+    machinery the SIM was merely the first consumer of. run() calls it
+    right after the used-workspace guard; the sim faces import it back
+    from here (the allowed sim→production direction)."""
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "task_spec.yaml").write_text(
+        "primary_questions:\n- id: pq1\n  q: replay the fixture family\n",
+        encoding="utf-8")
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
 
 
 def run_loop(ws: Path, *, laps: int = 5, budget: Budget | None = None,

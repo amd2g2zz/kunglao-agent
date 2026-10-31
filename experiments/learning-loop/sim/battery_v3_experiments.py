@@ -21,9 +21,10 @@ import random
 import sys
 from pathlib import Path
 
-_LOOP = Path(__file__).resolve().parent
-_SCRIPTS = _LOOP.parents[1] / "scripts"
-for _p in (_LOOP, _SCRIPTS):
+_SIM = Path(__file__).resolve().parent
+_LOOP = _SIM.parent
+_SCRIPTS = _SIM.parents[2] / "scripts"
+for _p in (_SIM, _LOOP, _SCRIPTS):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

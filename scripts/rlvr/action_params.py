@@ -179,8 +179,8 @@ EMPTY_SPEC = ActionParamSpec(required=MappingProxyType({}),
 #: family-rollout prior reads it back from v2 assign_step rows
 #: (experiments/learning-loop/policy/terminator.py:315, keyed by
 #: ``params.method_family``). tier/phase/intent are the loop's audit
-#: enrichment on the same rows (loop.py:293-297 writes all three;
-#: loop_sim_v3.py:263 and tests/chain_test_harness.py:287 write tier
+#: enrichment on the same rows (loop.py:292-296 writes all three;
+#: sim/loop_sim_v3.py:264 and tests/chain_test_harness.py:288 write tier
 #: only) — optional at their defaults so the row always shows the
 #: effective assignment.
 _ASSIGN_SPEC = ActionParamSpec(
@@ -196,7 +196,7 @@ _ASSIGN_SPEC = ActionParamSpec(
 #: record the conscious choice, never a policy default).
 #: spawn_id/goal/snapshot_excerpt/cards ride the spawn receipt's audit
 #: (workers/spawner.py:163-167 record_spawn); phase rides the loop's
-#: construction seam (experiments/learning-loop/loop.py:241-242).
+#: construction seam (experiments/learning-loop/loop.py:240-241).
 _SPAWN_SPEC = ActionParamSpec(
     required=MappingProxyType({"slots": _v_slots}),
     optional=MappingProxyType({"spawn_id": (None, _v_str_or_none),
@@ -206,10 +206,10 @@ _SPAWN_SPEC = ActionParamSpec(
                                "cards": (None, _v_seq_or_none),
                                "phase": ("", _v_str)}))
 
-#: the terminal rows' audit: the β rule + the arbiter's ΔP (loop.py:504
-#: writes both; loop_sim_v3.py:406 and tests/chain_test_harness.py:456
-#: write rule only; loop_sim_v3.py:678-680 writes neither). No read face
-#: consumes them yet (counterfactual_analysis.py:239 and
+#: the terminal rows' audit: the β rule + the arbiter's ΔP (loop.py:503
+#: writes both; sim/loop_sim_v3.py:407 and tests/chain_test_harness.py:457
+#: write rule only; sim/loop_sim_v3.py:679-681 writes neither). No read face
+#: consumes them yet (sim/counterfactual_analysis.py:240 and
 #: state/telemetry.py:258 read the KIND) — optional at explicit
 #: not-applicable defaults, so the row shows the terminal's inputs.
 _TERMINAL_SPEC = ActionParamSpec(
