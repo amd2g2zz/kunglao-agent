@@ -46,8 +46,10 @@ import rlvr.pool_scheduler as ps
 from rlvr import reward_signal
 
 _EXP = Path(__file__).resolve().parents[1] / "experiments" / "learning-loop"
-if str(_EXP) not in sys.path:
-    sys.path.insert(0, str(_EXP))
+_SIM = _EXP / "sim"
+for _p in (_EXP, _SIM):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 import loop_sim
 
 DELTA = loop_sim.DELTA
