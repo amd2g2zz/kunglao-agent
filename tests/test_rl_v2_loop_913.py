@@ -45,6 +45,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop",
         sys.path.insert(0, str(_p))
 
 import loop as loop913  # noqa: E402
+from loop_worker import mock_worker  # noqa: E402
 from rlvr import consolidated_ledger as cl  # noqa: E402
 from rlvr import learning_seal as seal  # noqa: E402
 import method_families  # noqa: E402 — the closed vocabulary owner
@@ -72,6 +73,10 @@ def _isolated_store_root(monkeypatch, tmp_path):
 def _run(tmp_path, name: str = "ws", **kw: Any):
     ws = tmp_path / name
     ws.mkdir()
+    # the suite's orchestrator choice, explicit in one place (spawn_slots
+    # is a required, never-defaulted decision per the #924 policy)
+    kw.setdefault("spawn_slots", 1)
+    kw.setdefault("worker", mock_worker)
     run, ws2 = loop913.run_loop(ws, **kw)
     return run["report"], ws2
 

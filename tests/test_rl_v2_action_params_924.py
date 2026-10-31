@@ -39,6 +39,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop",
         sys.path.insert(0, str(_p))
 
 import loop as loop913  # noqa: E402
+from loop_worker import mock_worker  # noqa: E402
 from rlvr import action_params  # noqa: E402
 from rlvr import learning_seal as seal  # noqa: E402
 from rlvr import q_cells  # noqa: E402
@@ -271,7 +272,7 @@ def _rows_of(ws, kind: str) -> list[dict]:
 
 def test_loop_records_effective_params_including_slots(tmp_path):
     ws = tmp_path / "ws"
-    run, ws2 = loop913.run_loop(ws, laps=1, seed=7, spawn_slots=3)
+    run, ws2 = loop913.run_loop(ws, laps=1, seed=7, spawn_slots=3, worker=mock_worker)
     assert ws2 == ws
     spawn_rows = _rows_of(ws, "spawn_candidate")
     assert spawn_rows, "the loop landed no spawn row"
@@ -294,7 +295,7 @@ def test_loop_records_effective_params_including_slots(tmp_path):
 def test_loop_run_is_rejected_without_explicit_slots_type(tmp_path):
     ws = tmp_path / "ws"
     with pytest.raises(ValueError):
-        loop913.run_loop(ws, laps=1, seed=7, spawn_slots=6)
+        loop913.run_loop(ws, laps=1, seed=7, spawn_slots=6, worker=mock_worker)
 
 
 # ------------------------------------------------ the spawner write face

@@ -1587,7 +1587,7 @@ files:
   tests/test_rl_v2_ledger_879.py:
     r1: 3
   tests/test_rl_v2_loop_913.py:
-    r1: 4
+    r1: 5
   tests/test_rl_v2_progress_898.py:
     r1: 4
     r2: 1
