@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 47175ddebbf9dcc929e575b8bb1c1757d3d1c494b7066724b362d2d18378cce5
+  references/_INDEX.md: 20f6f9a0679381fae48da25e19665dcd2e8176e9618c51de63fb7d7b5e830799
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -25,6 +25,10 @@ files:
   references/contracts/external-distilled/complexity-routed-model-tiers.md: 7164c6d5dfa3e0dc8950dcc30d5f7234730bea36ad2023532b6b236b2141eff3
   references/contracts/external-distilled/distillation-deviation-ledger.md: c96f205f6145590f1b7dbadfcf5af7753f793edfcce1e695d65b9240b602dfeb
   references/contracts/machine-check-contract.md: ee18ddcb78f20f1e6afb0759c51f0105db709e138291e0abf47f8ef138977b4a
+  references/contracts/rubrics/llm-eval-grading-rubric.md: 58774cc0fc9a2e7dc30b57ca3df25a4b832a904d80c0962432a27a13558c7f3c
+  references/contracts/rubrics/llm-redteam-rubric.md: 497dea687756d6537a4125594a71d0e0e5c631c12626e2472df1005a8fce63a3
+  references/contracts/rubrics/llm-settlement-rubric.md: 82cf48a3b2967943338ba3e84cd894eebf5daa8144814c03ca90f1ff36f29a5b
+  references/contracts/rubrics/llm-verdict-scorer-rubric.md: c99fee262008b078017a35378537c36e43b1ec5af9517591c4c4219b662c0dc0
   references/contracts/wal-protocol.md: 5cd7e23d333fa2c0420c920ed21e7f615ff3b3ee710fc3fa002cfaa4cf9c35ed
   references/contracts/xml-injection-standard.md: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   references/governance/decision-rights.md: df3711f0f534e54a04f6841f8e0c08bfc8a69ff8f287a5dd9760dac3053f4163
