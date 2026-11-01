@@ -17,7 +17,7 @@ from __future__ import annotations
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
 # the canonical kunglao_log.warn.
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
-from kunglao_log import warn
+from kunglao_log import debug, warn  # debug: the #944 absence-demotion face
 import json
 import sys
 from pathlib import Path
@@ -63,6 +63,11 @@ def _terminal_count(ws: Path) -> int:
             if len(parts) >= 3 and parts[0].startswith("F") \
                     and any(t in parts[1].upper() for t in _TERMINAL):
                 n += 1
+    except FileNotFoundError:
+        # #944: a fresh workspace has no fact index yet — the expected
+        # pre-signal absence, stderr-only DEBUG, never a ledger row. An
+        # index that exists but cannot be READ stays WARN below.
+        debug("_terminal_count", f"facts index absent: {index}")
     except OSError as exc:
         warn("_terminal_count", f"{type(exc).__name__}: {exc}")
     return n

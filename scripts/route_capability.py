@@ -63,7 +63,7 @@ from __future__ import annotations
 # the canonical kunglao_log.warn.
 from kunglao_log import emit
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
-from kunglao_log import warn
+from kunglao_log import debug, warn  # noqa: F401 — debug: the #944 demotion face
 import argparse
 import json
 import re
@@ -432,6 +432,11 @@ def load_workspace_state(ws) -> dict:
             encoding="utf-8"))
         state["mem_gate_verdict"] = (mg.get("verdict")
                                      if isinstance(mg, dict) else None)
+    except FileNotFoundError as exc:
+        # #944: the optional evidence file's absence is the normal
+        # pre-signal state — stderr-only DEBUG, never a ledger row. A
+        # file that exists but is corrupt stays WARN below.
+        debug("load_workspace_state", f"evidence file absent: {exc}")
     except (OSError, ValueError) as exc:
         warn("load_workspace_state", f"{type(exc).__name__}: {exc}")
     try:
@@ -439,6 +444,8 @@ def load_workspace_state(ws) -> dict:
             encoding="utf-8"))
         if isinstance(probes, dict):
             state["tool_probes"] = probes
+    except FileNotFoundError as exc:
+        debug("load_workspace_state_2", f"evidence file absent: {exc}")
     except (OSError, ValueError) as exc:
         warn("load_workspace_state_2", f"{type(exc).__name__}: {exc}")
     state["gitnexus_index"] = _valid_gitnexus_marker(

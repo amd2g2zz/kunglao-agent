@@ -121,7 +121,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 172
+  scripts/event_taxonomy.py: 175
   scripts/evidence_certify.py: 10
   scripts/exogenous.py: 7
   scripts/experience_triples.py: 2
@@ -149,7 +149,7 @@ files:
   scripts/hypothesis_store.py: 14
   scripts/incremental_telemetry.py: 4
   scripts/infeasible_proposal.py: 2
-  scripts/infeasible_signal.py: 6
+  scripts/infeasible_signal.py: 8
   scripts/init_channel_default.py: 10
   scripts/init_state.py: 10
   scripts/input_signature.py: 8
@@ -165,7 +165,7 @@ files:
   scripts/kunglao.py: 27
   scripts/kunglao_eval.py: 7
   scripts/kunglao_export.py: 6
-  scripts/kunglao_log.py: 61
+  scripts/kunglao_log.py: 74
   scripts/kunglao_record.py: 10
   scripts/kunglao_resume.py: 24
   scripts/kunglao_status.py: 10
@@ -232,7 +232,7 @@ files:
   scripts/review_gate.py: 1
   scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
-  scripts/rho_verifier.py: 11
+  scripts/rho_verifier.py: 12
   scripts/rlvr/action_params.py: 7
   scripts/rlvr/attribution.py: 4
   scripts/rlvr/censored_review.py: 8
@@ -247,7 +247,7 @@ files:
   scripts/rlvr/key_freeze.py: 2
   scripts/rlvr/l1_planner.py: 2
   scripts/rlvr/l1_value.py: 5
-  scripts/rlvr/learning_seal.py: 10
+  scripts/rlvr/learning_seal.py: 12
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/marl.py: 2
@@ -282,7 +282,7 @@ files:
   scripts/rollout_ledger.py: 2
   scripts/rollup.py: 43
   scripts/rotation_induction.py: 6
-  scripts/route_capability.py: 19
+  scripts/route_capability.py: 21
   scripts/runtime_facts.py: 3
   scripts/scalar_settlement.py: 2
   scripts/script_harvest.py: 5

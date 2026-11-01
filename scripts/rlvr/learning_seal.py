@@ -33,7 +33,7 @@ import os
 import time
 from pathlib import Path
 
-from kunglao_log import warn
+from kunglao_log import warn, warn_once_stateful
 from template_version import read_skill_version
 
 #: versioned schema stamp — rides every seal block (the #736 stamp face)
@@ -100,16 +100,33 @@ def armed() -> bool:
     return _key() is not None
 
 
+def _unarmed_state() -> str:
+    """The unarmed face's CONFIG-STATE fingerprint (#944): the key file's
+    absence and its shortness are DIFFERENT states — a state change
+    re-arms the notice even inside one workspace (the once-marker is
+    state-keyed, never a rate limit)."""
+    try:
+        data = keyfile().read_bytes()
+    except OSError:
+        return "unarmed:key-missing"
+    return f"unarmed:key-short:{len(data.strip())}"
+
+
 def _notice_once() -> None:
     """The unarmed face is legacy; the gap stays visible exactly once
-    per process (loud, never silent, never a crash)."""
+    per WORKSPACE STATE (#944 — the once-marker persists in the
+    workspace's runs/, so a second process in the same state is silent;
+    a CHANGED state re-arms). Without a resolvable workspace the
+    per-process face remains the honest fallback. Never a crash."""
     if _NOTICE["shown"]:
         return
     _NOTICE["shown"] = True
-    warn("learning_seal",
-         f"learning channel UNSEALED — provision {keyfile()} "
-         f"(>= {_KEY_MIN} bytes) to arm the #799 learning seal; rows "
-         f"and stashes ride legacy until then")
+    warn_once_stateful(
+        "learning_seal",
+        f"learning channel UNSEALED — provision {keyfile()} "
+        f"(>= {_KEY_MIN} bytes) to arm the #799 learning seal; rows "
+        f"and stashes ride legacy until then",
+        state_key=_unarmed_state())
 
 
 def record_sha(row: dict) -> str:

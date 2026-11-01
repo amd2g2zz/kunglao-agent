@@ -447,6 +447,17 @@ def research(ws: Path, formulation: str, *, max_depth: int = 3,
                        "new_conflicts": new_conflicts,
                        "converged": converged})
         queries = generate_queries(cognition)
+    # #944: the research completion milestone rides the #915 telemetry
+    # face (operator INFO selection) — the completion is a fact about
+    # the run's progress, deterministically encoded in the receipt.
+    try:
+        from state import telemetry as _telemetry  # noqa: PLC0415 — lazy
+        _telemetry.emit(ws, "distill", "DISTILL_COMPLETE",
+                        detail={"rounds_run": len(rounds),
+                                "converged": bool(converged)})
+    except Exception as exc:  # noqa: BLE001 — telemetry never blocks research
+        warn("distill.research",
+             f"completion milestone failed: {type(exc).__name__}: {exc}")
     return {"schema": RESEARCH_SCHEMA, "formulation": formulation,
             "max_depth": max_depth, "sources": list(sources),
             "budget_scale": float(budget_scale), "rounds": rounds,

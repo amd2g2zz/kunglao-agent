@@ -116,14 +116,16 @@ def _warn_workspace():
     return _discover_warn_workspace()
 
 
-def _caller_tag() -> str | None:
+def _caller_tag(depth: int = 2) -> str | None:
     """The caller's module token: the stem of the calling frame's
     __file__ (real for CLI runs, pytest imports, and by-path loads), or
     the frame module name as a fallback. Never raises, and deliberately
     exception-FREE (a try/except here would recurse through warn when
-    tagging itself fails under exotic interpreters)."""
+    tagging itself fails under exotic interpreters). Depth 2 = the API
+    function's direct caller; the #944 severity wrapper's shared tracer
+    sits one frame deeper, so it passes depth 3."""
     getter = getattr(sys, "_getframe", None)
-    frame = getter(2) if callable(getter) else None  # <- warn <- caller
+    frame = getter(depth) if callable(getter) else None  # <- api <- caller
     if frame is None:
         return None
     g = getattr(frame, "f_globals", None) or {}
@@ -178,6 +180,211 @@ def warn(op: str, reason: str, *, tag: str | None = None) -> None:
               f"{op}: {reason}",
               file=sys.stderr)
     _warn_to_ledger(op, reason, tag)
+
+
+# ------------------- #944: the severity wrapper -----------------------------
+# The audit (2026-11-01) measured the runtime log sample at 100% warn:
+# warn was the only severity API, so every diagnostic — including EXPECTED
+# absence on optional-file probes and per-process startup config state —
+# landed as WARN, drowning the real degradations. The taxonomy lives in
+# the LOG WRAPPER ONLY: the stderr prefix carries the severity, and the
+# severity classifies which rows are written/selected. The CORE event
+# schema stays unchanged (no level field — the telemetry rows are the
+# event source, the wrapper rows are the operator diagnostics face).
+#
+#   DEBUG  expected-absence diagnostics: stderr-only, NEVER a ledger row
+#          (the probe-storm demotion target — a fresh workspace missing
+#          its optional files is the normal pre-signal state).
+#   INFO   operator milestones; a row persists under the registered
+#          `info` action word. Milestone EVENTS with their own semantics
+#          land via the #915 telemetry face, never through this API.
+#   WARN   unchanged legacy face (dedupe + action=warn ledger row).
+#   ERROR  log-then-raise helper for guard boundaries: the wrapper logs
+#          the refusal (action=error row), the CALLER keeps the raise —
+#          the fail-closed wall discipline is never delegated here.
+LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
+
+#: severity -> the action word the wrapper's persisted row carries.
+#: DEBUG rows are never written, so DEBUG maps nowhere. The words are
+#: registered in event_taxonomy.EMIT_ACTIONS (the #459 controlled
+#: vocabulary — unregistered = red).
+SEVERITY_ACTIONS: dict[str, str] = {
+    "INFO": "info",
+    "WARN": WARN_LEDGER_ACTION,
+    "ERROR": "error",
+}
+
+#: action word -> severity class (the selection face's classification).
+#: Every row whose action is outside this map reads None — it is an
+#: event, not a diagnostic.
+ACTION_SEVERITY: dict[str, str] = {
+    v: k for k, v in SEVERITY_ACTIONS.items()}
+
+#: stderr prefix per severity — WARN keeps its legacy "(fail-open)" face.
+_STDERR_PREFIX: dict[str, str] = {
+    "DEBUG": "DEBUG",
+    "INFO": "INFO",
+    "WARN": "WARN (fail-open)",
+    "ERROR": "ERROR",
+}
+
+# per-(severity, op) dedupe — the warn() slot stays op-keyed (legacy
+# semantics, existing pins); the new levels key on (level, op).
+_LEVEL_LAST: dict[tuple[str, str], str] = {}
+
+# ------------------- #944: the workspace-state once-marker ------------------
+# Startup config-state warnings (learning_seal UNSEALED = 511 rows in the
+# audit sample) re-emitted per PROCESS because the once-slot was process
+# memory. The marker is a workspace file keyed by the config-state
+# fingerprint: the same state never re-warns, a CHANGED state re-arms the
+# notice (a state key, not a rate limit). Fail-open: an unreadable or
+# unwritable marker degrades to the per-process face.
+# (_ONCE_STATE_REL — the marker path constant — lives beside TRACE_STATE
+# below, where Path is already imported.)
+_ONCE_MEMO: dict = {"key": None, "state": {}}
+
+
+def _load_once_state(marker: Path) -> dict:
+    """The persisted once-marker, memoized per (path, mtime) — the same
+    read face current_trace/current_tick use (one stat on the hot path)."""
+    try:
+        key = (str(marker), marker.stat().st_mtime_ns)
+    except OSError:
+        key = (str(marker), None)
+    if _ONCE_MEMO["key"] == key:
+        return _ONCE_MEMO["state"]
+    state: dict = {}
+    try:
+        raw = json.loads(marker.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            state = {str(k): str(v) for k, v in raw.items()}
+    except (OSError, ValueError):
+        state = {}
+    _ONCE_MEMO["key"] = key
+    _ONCE_MEMO["state"] = state
+    return state
+
+
+def warn_once_stateful(op: str, reason: str, *, state_key: str,
+                       tag: str | None = None) -> bool:
+    """WARN once per WORKSPACE STATE (#944), not per process.
+
+    Engages ONLY on an explicitly pinned workspace (set_warn_workspace —
+    the caller that KNOWS its workspace pins it; a cwd walk-up guess is
+    never trusted for a persisted state marker). Suppressed when the
+    workspace's persisted marker already carries the same
+    (op, state_key); the warn fires and the marker is written on a NEW
+    or CHANGED state. Without a pinned workspace the honest fallback is
+    the per-process warn face (dedupe-limited) — never silence. Returns
+    True when the warn fired, False when suppressed."""
+    if not _WARN_WS_OVERRIDE:
+        # per-process fallback: warn()'s own dedupe decides the face;
+        # the receipt mirrors whether the line actually printed
+        fired = _WARN_LAST.get(op) != reason
+        warn(op, reason, tag=tag)
+        return fired
+    ws = _WARN_WS_OVERRIDE[0]
+    marker = Path(ws) / _ONCE_STATE_REL
+    if _load_once_state(marker).get(str(op)) == str(state_key):
+        return False
+    warn(op, reason, tag=tag)
+    # persist the state key (new dict — the memoized view is not mutated)
+    new_state = dict(_load_once_state(marker))
+    new_state[str(op)] = str(state_key)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps(new_state, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8")
+    except OSError as exc:
+        # the marker is best-effort visibility; the warn already fired
+        warn("warn_once_stateful",
+             f"marker write failed: {type(exc).__name__}: {exc}")
+    else:
+        _ONCE_MEMO.update(key=None, state={})  # next read re-stats
+    return True
+
+
+def _log_level(level: str, op: str, reason: str, *,
+               tag: str | None = None) -> None:
+    """The shared severity tracer: per-(level, op) dedupe, the stderr
+    prefix carries the severity, and a severity-classified ledger row
+    lands once per dedupe window (DEBUG rows never persist)."""
+    key = (level, op)
+    if _LEVEL_LAST.get(key) == reason:
+        return
+    _LEVEL_LAST[key] = reason
+    if tag is None:
+        tag = _caller_tag(depth=3)
+    prefix = _STDERR_PREFIX[level]
+    if tag:
+        print(f"[kunglao-agent] {tag} {prefix}: {op}: {reason}",
+              file=sys.stderr)
+    else:
+        print(f"[kunglao-agent] {prefix}: {op}: {reason}",
+              file=sys.stderr)
+    action = SEVERITY_ACTIONS.get(level)
+    if action:
+        _level_to_ledger(action, op, reason, tag)
+
+
+def _level_to_ledger(action: str, op: str, reason: str,
+                     tag: str | None) -> None:
+    """The severity-classified ledger face: ONE row per dedupe window,
+    into the resolvable workspace (if any). Never raises; the same
+    re-entrancy guard as the warn face stops the emit-failure warn from
+    recursing through the wrapper."""
+    global _WARN_LEDGER_ACTIVE
+    if _WARN_LEDGER_ACTIVE:
+        return
+    ws = _warn_workspace()
+    if ws is None:
+        return
+    _WARN_LEDGER_ACTIVE = True
+    try:
+        emit(ws, "telemetry", action,
+             detail=(f"{tag}: {op}: {reason}" if tag
+                     else f"{op}: {reason}"))
+    except Exception as exc:  # noqa: BLE001 — never break the wrapper
+        warn("warn_ledger", f"ledger row failed: {type(exc).__name__}: {exc}")
+    finally:
+        _WARN_LEDGER_ACTIVE = False
+
+
+def debug(op: str, reason: str, *, tag: str | None = None) -> None:
+    """The expected-absence face (#944): an optional-file probe missing
+    its target is the normal pre-signal state, not a warnable anomaly.
+    Stderr-only — NEVER a ledger row; dedupe per (DEBUG, op) until the
+    reason changes. Faces that CAN distinguish absence from real
+    degradation must route real degradation to warn() unchanged."""
+    _log_level("DEBUG", op, reason, tag=tag)
+
+
+def info(op: str, reason: str, *, tag: str | None = None) -> None:
+    """The operator-milestone face (#944): one stderr INFO line plus one
+    action=info ledger row per dedupe window. Milestone EVENTS (lap
+    boundaries, arbiter dispositions, research completions) belong on
+    the #915 telemetry face — this API is for milestone-grade diagnostics
+    that are not loop-telemetry-shaped."""
+    _log_level("INFO", op, reason, tag=tag)
+
+
+def error(op: str, reason: str, *, tag: str | None = None) -> None:
+    """The log-then-raise face (#944): log the refusal, then the CALLER
+    raises — the fail-closed wall keeps raising (the wall's discipline is
+    never delegated to the wrapper). One action=error row per dedupe
+    window lands beside the stderr line. Boundaries only: this is not a
+    general exception logger."""
+    _log_level("ERROR", op, reason, tag=tag)
+
+
+def severity_of(row) -> str | None:
+    """The severity class of one ledger row — wrapper-persisted rows
+    only (classification rides the action vocabulary; the core schema
+    has no level field). Event rows read None."""
+    if not isinstance(row, dict):
+        return None
+    return ACTION_SEVERITY.get(str(row.get("action") or ""))
 import argparse
 import json
 import os
@@ -198,6 +405,9 @@ DEFAULT_TAIL = 20
 # ledger). The seq disambiguates mission restarts on the same workspace name.
 TRACE_ID_RE = re.compile(r"^tr-[a-z0-9][a-z0-9._-]*-\d+$")
 TRACE_STATE = Path("runs") / ".trace-state.json"
+# #944: the startup-once marker — same runs/-relative shape as the trace
+# state; the once-marker is workspace-state-keyed (see warn_once_stateful)
+_ONCE_STATE_REL = Path("runs") / ".warn-once-state.json"
 _MISSION_MAX = 48
 
 # actor vocabulary (#879): the strict forms new emitters must use. `hook:<name>`
@@ -860,14 +1070,26 @@ def _all_rows(ws: Path) -> list[dict]:
     return rows
 
 
-def tail(ws, n: int = DEFAULT_TAIL) -> list[dict]:
+def tail(ws, n: int = DEFAULT_TAIL, *, level: str | None = None) -> list[dict]:
     """The most recent n events across ALL day files, chronological order.
 
     Read-only: creates/modifies nothing. Day files sort by name (= date), so
     file order is stream order; within a file, append order is stream order.
     Unparseable lines are skipped (same tolerance event_taxonomy applies).
-    n <= 0 returns [] (the CLI rejects it earlier; the function degrades)."""
-    return _all_rows(ws)[-n:] if n > 0 else []
+    n <= 0 returns [] (the CLI rejects it earlier; the function degrades).
+
+    #944: `level` selects by the wrapper's severity classification
+    (severity_of — action-vocabulary-mapped, the core schema has no level
+    field). None selects everything; a level outside LEVELS raises — a
+    typo'd level never reads as an honest empty selection."""
+    rows = _all_rows(ws)
+    if level is not None:
+        if level not in LEVELS:
+            raise ValueError(
+                f"tail: unknown level {level!r} (severity vocabulary: "
+                f"{', '.join(LEVELS)})")
+        rows = [r for r in rows if severity_of(r) == level]
+    return rows[-n:] if n > 0 else []
 
 
 # ------------------- #879 trace identity helpers ---------------------------
@@ -1035,6 +1257,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--tail", metavar="WORKSPACE", default=None,
                     help="print the most recent N events of this workspace "
                          f"(default {DEFAULT_TAIL}), JSON lines, read-only")
+    ap.add_argument("--level", choices=list(LEVELS), default=None,
+                    help="select only rows of this wrapper severity "
+                         "(#944 — severity-classified row selection; the "
+                         "event rows are never selected by level)")
     ap.add_argument("--check-actors", metavar="WORKSPACE", default=None,
                     help="scan the ledger for actor values outside the #879 "
                          "vocabulary (and not adopted); rc 1 on violations")
@@ -1070,7 +1296,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError) as exc:
         warn("cli.tail", f"{type(exc).__name__}: {exc}")
-    for row in tail(ws, args.n):
+    for row in tail(ws, args.n, level=args.level):
         # canonical form = the emit serialization (sort_keys, compact,
         # ensure_ascii=False) so tail output round-trips with the file bytes
         print(json.dumps(row, sort_keys=True, separators=(",", ":"),

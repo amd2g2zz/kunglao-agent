@@ -13,7 +13,7 @@ from __future__ import annotations
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
 # the canonical kunglao_log.warn.
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
-from kunglao_log import warn
+from kunglao_log import debug, warn
 import json
 import os
 import re
@@ -221,6 +221,12 @@ def sample_and_pair(ws, z=None, emit=True):
                 detail=json.dumps({**cs, "cost_spent": cost,
                                    "n_cost_events": len(events)},
                                   ensure_ascii=False, default=str))
+        except FileNotFoundError as exc:
+            # #944: the optional mission ledger's absence is the normal
+            # pre-signal state on a fresh workspace — stderr-only DEBUG,
+            # never a ledger row. A ledger that exists but is corrupt
+            # (YAMLError) or unreadable stays WARN below.
+            debug("sample_and_pair", f"mission ledger absent: {exc}")
         except Exception as exc:  # noqa: BLE001 — 持久化永不破坏采样
             warn("sample_and_pair", f"{type(exc).__name__}: {exc}")
     out["z"] = z

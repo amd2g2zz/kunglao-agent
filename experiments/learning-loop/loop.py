@@ -57,6 +57,7 @@ from loop_pins import (CORE_TASK, INTENTS, POLICY_VERSION, PHASES,  # noqa: E402
                        evidence_wall, fact_base_ids, infer_phase,
                        require_intent, situation_signature,
                        terminal_advantage)
+from kunglao_log import error, set_warn_workspace  # noqa: E402 — the #944 wrapper faces
 from loop_seams import (FAULT_LAP_DEFAULT, FAULT_MODES, NOISE_MARK,  # noqa: E402
                         OUT_OF_RAIL_CREDIT, PER_DISPATCH_BUDGET_S,
                         SeamMixin, _LoopStopped)
@@ -722,12 +723,21 @@ class DecisionLoop(SeamMixin):
         second run over a prior run's rows would join its drafts and
         terminal rows onto ANOTHER run's history — the residual-draft
         join that surfaces as a bare StopIteration from the credit
-        join. The guard reads before anything mutates."""
+        join. The guard reads before anything mutates. #944: the
+        refusal is LOGGED (ERROR wrapper face, one action=error row)
+        before the raise — the wall keeps raising (log-then-raise at
+        the loop entry boundary; the discipline stays with the wall)."""
         existing = q_cells.trajectory_rows(self._ws)
         if not existing:
             return
         actions = sum(1 for row in existing
                       if row.get("schema") == q_cells.SCHEMA_ACTION_V2)
+        error("used_workspace_guard",
+              f"loop913: {self._ws} already carries {len(existing)} "
+              f"ledger rows ({actions} action rows) from another run — "
+              f"one workspace, one run: re-running would join this "
+              f"run's deterministic rollout ids onto the residual rows; "
+              f"use a fresh workspace")
         raise LoopError(
             f"loop913: {self._ws} already carries {len(existing)} "
             f"ledger rows ({actions} action rows) from another run — "
@@ -736,11 +746,22 @@ class DecisionLoop(SeamMixin):
             f"use a fresh workspace")
 
     def run(self) -> tuple[dict, Path]:
+        # #944: pin the wrapper's ledger/once-marker faces to THIS
+        # workspace at the command entry (the once-marker mechanism is
+        # workspace-state-keyed; the loop's warn faces land here too).
+        set_warn_workspace(self._ws)
         self._guard_used_workspace()
         _bootstrap(self._ws)
         for lap_no in range(1, self._laps + 1):
             try:
                 self.report["per_lap"].append(self._run_lap(lap_no))
+                # #944: the lap boundary milestone — the audit's third
+                # amplifier was success paths logging nothing; the
+                # boundary rides the #915 telemetry face (INFO class,
+                # telemetry.MILESTONE_CODES), never a parallel stream.
+                _telemetry.emit(self._ws, "loop", "LAP_BOUNDARY",
+                                lap=lap_no,
+                                detail=f"lap {lap_no} complete")
             except _LoopStopped as stop:
                 self.report["per_lap"].append(
                     {"lap": lap_no, "fault": stop.args[0], "picks": [],
