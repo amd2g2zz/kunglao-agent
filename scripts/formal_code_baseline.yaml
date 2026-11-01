@@ -103,8 +103,8 @@ files:
   scripts/eval_chain_mint.py: 1
   scripts/eval_chain_render.py: 1
   scripts/eval_chain_targets.py: 1
-  scripts/eval_checker.py: 4
-  scripts/eval_contract.py: 3
+  scripts/eval_checker.py: 8
+  scripts/eval_contract.py: 5
   scripts/eval_control_arm.py: 4
   scripts/eval_corpus_lint.py: 10
   scripts/eval_crypto.py: 4
