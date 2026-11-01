@@ -638,7 +638,7 @@ files:
   tests/test_baksmali_index.py:
     r1: 1
   tests/test_bash_fact_guard_809.py:
-    r1: 1
+    r1: 2
   tests/test_bash_fact_guard_faces_818.py:
     r1: 1
     r2: 1
