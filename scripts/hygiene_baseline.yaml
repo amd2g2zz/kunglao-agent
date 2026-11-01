@@ -1711,7 +1711,7 @@ files:
   tests/test_silent_except_traces_275.py:
     r1: 1
   tests/test_silent_except_traces_275_batch3.py:
-    r1: 1
+    r1: 2
   tests/test_skill_contract.py:
     r1: 1
   tests/test_skill_invocation.py:
