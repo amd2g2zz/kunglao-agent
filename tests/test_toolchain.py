@@ -829,7 +829,7 @@ def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
     decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
     assert decomp["status"] == "PASS", decomp
     assert decomp["supply"] == "analyzeHeadless", decomp
-    assert decomp["skipped"] == ["ida-pro-vm", "idat64"], decomp
+    assert decomp["skipped"] == ["ida-pro-mcp", "idat64"], decomp
     assert "analyzeHeadless" in decomp["detail"], decomp
     assert "Ghidra" in decomp["detail"], decomp
 
@@ -850,16 +850,16 @@ def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
     decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
     assert decomp["status"] == "PASS", decomp
     assert decomp["supply"] == "idat64", decomp
-    assert decomp["skipped"] == ["ida-pro-vm", "analyzeHeadless"], decomp
+    assert decomp["skipped"] == ["ida-pro-mcp", "analyzeHeadless"], decomp
     assert "idat64" in decomp["detail"], decomp
     assert "PATH" in decomp["detail"], decomp
 
 
 def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
                                                      monkeypatch):
-    """#407/#474 + issue 210: sample with native .so + ida-pro-vm MCP
+    """#407/#474 + issue 210: sample with native .so + ida-pro-mcp MCP
     registered -> the ONE `decompiler` item is WARN 'capability unverified'
-    with supply=ida-pro-vm (registered supply defuses the native-so HARD
+    with supply=ida-pro-mcp (registered supply defuses the native-so HARD
     FAIL; honest capability verdict is #474's --capability business, not the
     registry read)."""
     _only_st_claude_json(kunglao_ws)
@@ -869,7 +869,7 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
         "mcpServers": {
             "sequential-thinking": {},
             "gitnexus": {},
-            "ida-pro-vm": {},
+            "ida-pro-mcp": {},
         },
     }), encoding="utf-8")
     monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
@@ -879,9 +879,9 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
     data = json.loads(r.stdout)
     decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
     assert decomp["status"] == "WARN", decomp
-    assert decomp["supply"] == "ida-pro-vm", decomp
+    assert decomp["supply"] == "ida-pro-mcp", decomp
     assert decomp["skipped"] == ["idat64", "analyzeHeadless"], decomp
-    assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
+    assert "via MCP (ida-pro-mcp)" in decomp["detail"], decomp
     assert "capability unverified" in decomp["detail"], decomp
     # the XOR family never emits a parallel ida/ghidra item
     assert not [c for c in data["checks"] if c["name"] in ("ida", "ghidra")]

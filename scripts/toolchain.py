@@ -138,7 +138,7 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "objdump": NextAction("install"),
     # ONE family entry, XOR semantics (issue 210): the decompiler face is
     # satisfied by exactly one of three supplies — local IDA (idat64), local
-    # Ghidra (analyzeHeadless), or the registered ida-pro-vm MCP. The fix
+    # Ghidra (analyzeHeadless), or the registered ida-pro-mcp MCP. The fix
     # string lists all three paths; `options` carries them machine-readably
     # (the exit-8 CHOICE offers the same paths).
     "decompiler": NextAction(
@@ -146,9 +146,9 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
         "install IDA Pro and put idat64 on PATH, OR install Ghidra "
         "(choco install ghidra -y / brew install --cask ghidra / "
         "apt-get install -y ghidra) and set GHIDRA_HOME, OR register the "
-        "ida-pro-vm MCP: `claude mcp add --transport http ida-pro-vm "
+        "ida-pro-mcp MCP: `claude mcp add --transport http ida-pro-mcp "
         "<ida-mcp-url>` — ONE supply satisfies the family (XOR)",
-        options=("idat64", "analyzeHeadless", "ida-pro-vm")),
+        options=("idat64", "analyzeHeadless", "ida-pro-mcp")),
     "aapt": NextAction("install",
                        "install Android SDK build-tools (aapt/aapt2)"),
     "jadx": NextAction("install"),
@@ -247,7 +247,7 @@ class OwnerTier(Enum):
 # tooling work to the user); the explicit exceptions are the HUMAN-ONLY
 # decisions and the LANE-CONDITIONAL decompiler face.
 # Issue 210: ONE family entry — the decompiler face is XOR (IDA XOR Ghidra
-# XOR ida-pro-vm MCP), so the family carries one tier, not three.
+# XOR ida-pro-mcp MCP), so the family carries one tier, not three.
 _OWNER_BY_NAME: dict[str, OwnerTier] = {
     "device_root": OwnerTier.HUMAN_ONLY,   # rooting = physical device decision
     "vm_reachable": OwnerTier.HUMAN_ONLY,  # operator picks the VM (#451)
@@ -281,7 +281,7 @@ class CheckResult:
     attempts: tuple[str, ...] = ()  # recorded AGENT-DO attempt commands
     pending_decision: decision_pending.PendingDecision | None = None  # issue 202
     # Issue 210 XOR-family evidence (decompiler item): which supply won
-    # (ida-pro-vm | idat64 | analyzeHeadless | none) and which sibling
+    # (ida-pro-mcp | idat64 | analyzeHeadless | none) and which sibling
     # candidates the winner pre-empted (informational — never FAIL, never a
     # separate item). None/() on every other check.
     supply: str | None = None
@@ -808,7 +808,7 @@ class McpServerSpec:
 
     task_spec `tools.mcp_servers` entries: a bare name string, or a mapping
     {name, transport, url} — the url is what makes `claude mcp add
-    --transport http ida-pro-vm <url>` a runnable AGENT-DO command."""
+    --transport http ida-pro-mcp <url>` a runnable AGENT-DO command."""
     name: str
     transport: str = "stdio"
     url: str | None = None
@@ -830,7 +830,7 @@ class Requirements:
         constraints.debug_flag: false); the debug_flag check then downgrades
         FAIL -> WARN instead of blocking an init that can never pass.
     decompiler_lane: the task's declared decompiler lane (issue 202
-        LANE-CONDITIONAL): "mcp" = the ida-pro-vm MCP lane (check
+        LANE-CONDITIONAL): "mcp" = the ida-pro-mcp MCP lane (check
         registration + reachability, NEVER a local IDA install/license);
         "local" = local scripting (the probe ladder); None = undeclared
         (the pre-rework combined behavior: MCP defusal, then the ladder).
@@ -976,7 +976,7 @@ def _concrete_register_argv(register_template: str,
                             url: str | None) -> list[str] | None:
     """Resolve a manifest register template into a runnable argv (issue 202).
 
-    `<placeholder>` tokens resolve from the task_spec url (ida-pro-vm);
+    `<placeholder>` tokens resolve from the task_spec url (ida-pro-mcp);
     a placeholder that cannot be resolved yields None — a literal
     `<ida-mcp-url>` never reaches a shell."""
     try:
@@ -1140,18 +1140,18 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
 # Registry keys checked by mcp_probe.registered_names: workspace .mcp.json +
 # plugin-carried manifest — the user ~/.claude.json surface is DELETED. A
 # registered MCP decompiler is PRIMARY for the UNDECLARED lane; CLI is ladder.
-_DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
+_DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-mcp")
 
 # Issue 210 — ONE decompiler family (`decompiler`), XOR semantics: exactly
 # one of three supplies satisfies the face; the winner's siblings are
 # SKIPPED (informational), never independent missing items.
-#   ida-pro-vm       the registered ida-pro-vm MCP (MCP lane / MCP-first)
+#   ida-pro-mcp       the registered ida-pro-mcp MCP (MCP lane / MCP-first)
 #   idat64           the local IDA probe ladder binary
 #   analyzeHeadless  Ghidra — the local analyzeHeadless binary OR the
 #                    registered ghidra MCP bridge (same XOR branch; the
 #                    item detail records which surface answered)
 # `none` is the no-supply outcome (FAIL, or the pure-DEX WARN).
-_DECOMPILER_SUPPLY_IDA_MCP = "ida-pro-vm"
+_DECOMPILER_SUPPLY_IDA_MCP = "ida-pro-mcp"
 _DECOMPILER_SUPPLY_IDA_CLI = "idat64"
 _DECOMPILER_SUPPLY_GHIDRA = "analyzeHeadless"
 _DECOMPILER_SUPPLY_NONE = "none"
@@ -1162,7 +1162,7 @@ _DECOMPILER_SUPPLIES: tuple[str, ...] = (
 )
 # MCP registration name -> canonical family supply name.
 _DECOMPILER_SUPPLY_BY_MCP = {
-    "ida-pro-vm": _DECOMPILER_SUPPLY_IDA_MCP,
+    "ida-pro-mcp": _DECOMPILER_SUPPLY_IDA_MCP,
     "ghidra": _DECOMPILER_SUPPLY_GHIDRA,
 }
 
@@ -1433,16 +1433,16 @@ def _decompiler_choice(
 
     Issue 210: the three options ARE the three supply paths of the XOR
     family — install-local-ida (idat64), install-ghidra (analyzeHeadless),
-    skip-decompiler-lane (no supply; the ida-pro-vm MCP path is agent-do and
+    skip-decompiler-lane (no supply; the ida-pro-mcp MCP path is agent-do and
     rides the MCP lane / MCP-first defusal instead of a human choice)."""
     return decision_pending.PendingDecision(
         decision_id="decompiler_lane",
         question=(
             "No decompiler supply found — the family is an XOR (exactly one "
             "of three paths satisfies it): (1) local IDA idat64, (2) Ghidra "
-            "analyzeHeadless, (3) the ida-pro-vm MCP registration "
+            "analyzeHeadless, (3) the ida-pro-mcp MCP registration "
             "(probed: PATH, mdfind, find bundle sweep, brew cask, known "
-            "dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-vm MCP). Choose: "
+            "dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-mcp MCP). Choose: "
             "install-local-ida (HUMAN-ONLY: license purchase), "
             "install-ghidra (agent-run #408 installer), or "
             "skip-decompiler-lane (static depth limited)."),
@@ -1460,9 +1460,9 @@ def _decompiler_choice(
 # it now is, not a blocker dump.
 _DECOMPILER_NEITHER_DETAIL = (
     "No decompiler supply found (probed: PATH, mdfind, find bundle sweep, "
-    "brew cask, known dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-vm "
+    "brew cask, known dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-mcp "
     "MCP) — ONE XOR family, three supply paths: local IDA (idat64), local "
-    "Ghidra (analyzeHeadless), or the ida-pro-vm MCP. This is a CHOICE, not "
+    "Ghidra (analyzeHeadless), or the ida-pro-mcp MCP. This is a CHOICE, not "
     "a blocker: install-local-ida (HUMAN-ONLY: license purchase) / "
     "install-ghidra (#408 installer) / skip-decompiler-lane (static depth "
     "limited). Ghidra OR IDA — either satisfies this check when present; "
@@ -1475,7 +1475,7 @@ _DECOMPILER_NEITHER_FIX = (
     "probe ladder: PATH, mdfind, find bundle sweep incl. "
     ".app/Contents/MacOS, brew cask, known dirs), (2) Ghidra "
     "(analyzeHeadless via GHIDRA_HOME, ghidra dirs, brew), (3) the "
-    "ida-pro-vm MCP — MCP lane (task_spec tools.decompiler_lane: mcp) "
+    "ida-pro-mcp MCP — MCP lane (task_spec tools.decompiler_lane: mcp) "
     "verifies registration + reachability and registers it itself via "
     "`claude mcp add`; never a local IDA install. One supply wins, the "
     "others are SKIPPED (informational). Neither -> exit-8 PendingDecision "
@@ -1510,22 +1510,22 @@ def _capability_probe_ghidra(ah: Path, timeout: int = 300) -> tuple[bool, str]:
 def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                                registered: dict[str, list[str]],
                                reqs: Requirements) -> None:
-    """MCP lane (LANE-CONDITIONAL): the task declared the ida-pro-vm
+    """MCP lane (LANE-CONDITIONAL): the task declared the ida-pro-mcp
     MCP lane — the face gates on registration + reachability and NEVER
     probes a local IDA install or license. Missing server -> the gate
     registers it itself (AGENT-DO, task_spec url) and re-verifies."""
-    spec = next((s for s in reqs.required_mcp if s.name == "ida-pro-vm"),
-                McpServerSpec(name="ida-pro-vm", transport="http"))
-    if "ida-pro-vm" not in registered:
-        register = (f"claude mcp add --transport http ida-pro-vm {spec.url}"
+    spec = next((s for s in reqs.required_mcp if s.name == "ida-pro-mcp"),
+                McpServerSpec(name="ida-pro-mcp", transport="http"))
+    if "ida-pro-mcp" not in registered:
+        register = (f"claude mcp add --transport http ida-pro-mcp {spec.url}"
                     if spec.url else
-                    "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"
+                    "claude mcp add --transport http ida-pro-mcp <ida-mcp-url>"
                     " (the url comes from task_spec tools.mcp_servers)")
-        detail = ("register layer: ida-pro-vm not registered (task "
-                  "declares the ida-pro-vm MCP lane)")
+        detail = ("register layer: ida-pro-mcp not registered (task "
+                  "declares the ida-pro-mcp MCP lane)")
         if _agent_do_enabled():
             argv = _concrete_register_argv(
-                "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
+                "claude mcp add --transport http ida-pro-mcp <ida-mcp-url>",
                 spec.url)
             if argv is not None:
                 allowed, why = _mcp_register_attempt_allowed()
@@ -1533,11 +1533,11 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                     ok, err = _attempt_mcp_register(argv)
                     attempts = (" ".join(argv),)
                     registered = mcp_probe.registered_names(ws)
-                    if "ida-pro-vm" in registered:
+                    if "ida-pro-mcp" in registered:
                         report.items.append(_decompiler_item(
                             status=Status.PASS,
                             supply=_DECOMPILER_SUPPLY_IDA_MCP,
-                            detail=("ida-pro-vm registered by agent "
+                            detail=("ida-pro-mcp registered by agent "
                                     "(`claude mcp add --transport http`) — "
                                     "MCP lane, no local IDA involved"),
                             owner=OwnerTier.AGENT_DO, attempts=attempts,
@@ -1548,7 +1548,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                         status=Status.FAIL,
                         supply=_DECOMPILER_SUPPLY_NONE,
                         detail=detail,
-                        fix=("verify the ida-pro-vm endpoint is up, then "
+                        fix=("verify the ida-pro-mcp endpoint is up, then "
                              "re-register: " + register),
                         attempts=attempts,
                     ))
@@ -1558,7 +1558,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
             detail=detail, fix=register,
         ))
         return
-    url = spec.url or _mcp_server_url("ida-pro-vm", ws)
+    url = spec.url or _mcp_server_url("ida-pro-mcp", ws)
     if url:
         parts = urllib.parse.urlsplit(url)
         port = parts.port or (443 if parts.scheme == "https" else 80)
@@ -1568,7 +1568,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
             report.items.append(_decompiler_item(
                 status=Status.PASS, supply=_DECOMPILER_SUPPLY_IDA_MCP,
                 probe=ProbeTier.LIVENESS,
-                detail=(f"via MCP lane (ida-pro-vm) — registered + endpoint "
+                detail=(f"via MCP lane (ida-pro-mcp) — registered + endpoint "
                         f"reachable ({host}:{port}); session capability "
                         f"unverified (tools register after connect_instance)"),
             ))
@@ -1576,11 +1576,11 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
         report.items.append(_decompiler_item(
             status=Status.FAIL, supply=_DECOMPILER_SUPPLY_NONE,
             probe=ProbeTier.LIVENESS,
-            detail=(f"connection layer: ida-pro-vm registered but endpoint "
+            detail=(f"connection layer: ida-pro-mcp registered but endpoint "
                     f"unreachable: {err} (url from task_spec/registry — "
                     f"repair at the connection layer; never a local IDA "
                     f"install, never a fallback-tool jump)"),
-            fix=("connection layer repair (agent-do): bring the ida-pro-vm "
+            fix=("connection layer repair (agent-do): bring the ida-pro-mcp "
                  "endpoint up (task_spec tools.mcp_servers url) — the lane "
                  "is the MCP surface, not a local IDA install"),
         ))
@@ -1588,7 +1588,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
     # registered, no url anywhere -> registry presence only (honesty)
     report.items.append(_decompiler_item(
         status=Status.WARN, supply=_DECOMPILER_SUPPLY_IDA_MCP,
-        detail=(f"via MCP lane (ida-pro-vm) — registered, {_UNVERIFIED} "
+        detail=(f"via MCP lane (ida-pro-mcp) — registered, {_UNVERIFIED} "
                 f"(no endpoint url in task_spec or registry to probe)"),
     ))
 
@@ -1600,13 +1600,13 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
     """Append the decompiler availability check — LANE-CONDITIONAL (issue 202).
 
     ONE item per init (issue 210): always named `decompiler`, carrying the
-    canonical winning `supply` (ida-pro-vm | idat64 | analyzeHeadless |
+    canonical winning `supply` (ida-pro-mcp | idat64 | analyzeHeadless |
     none) and the sibling candidates it pre-empted as `skipped` — the face
     is an XOR, so the loser is never a second missing item.
 
     Face branches on the task's declared lane (task_spec
     tools.decompiler_lane):
-      - "mcp": ida-pro-vm registration + reachability. NEVER a local IDA
+      - "mcp": ida-pro-mcp registration + reachability. NEVER a local IDA
         install/license demand, never the local probe ladder.
       - "local": the ordered probe ladder (PATH -> mdfind -> find bundle
         sweep -> brew cask -> known dirs) -> PASS with the wired binary
@@ -1677,7 +1677,7 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
         report.items.append(_decompiler_item(
             status=Status.WARN, supply=_DECOMPILER_SUPPLY_NONE,
             detail=("No decompiler supply found (idat64 / analyzeHeadless / "
-                    "ida-pro-vm MCP) — WARN for pure-DEX samples; HARD if "
+                    "ida-pro-mcp MCP) — WARN for pure-DEX samples; HARD if "
                     "the sample has .so (see the #408 installer)"),
         ))
         return
@@ -2784,7 +2784,7 @@ def _check_macos(report: ToolchainReport, ws: Path,
 # a completely different check set. Declared here (consumed by tests as the
 # contract surface; the checkers dict in check() is the execution source):
 #   * the decompiler face is ONE family key (`decompiler`, issue 210) —
-#     whichever supply wins (idat64 | analyzeHeadless | ida-pro-vm) is
+#     whichever supply wins (idat64 | analyzeHeadless | ida-pro-mcp) is
 #     reported as supply/skipped on that single item;
 #   * aapt surfaces as aapt or aapt2 (aapt2 wins if found);
 #   * mcp:<name> items are dynamic (mcp_probe.MANIFEST per type).

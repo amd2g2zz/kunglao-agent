@@ -88,6 +88,9 @@ sys.path.insert(0, str(SCRIPTS))
 # loop-enforcement bullet list (the core-section cap enforces the index
 # discipline) — the four fixtures re-rendered twice through the same
 # sentinel path (diff-guarded regen).
+# 2026-10-31 regen (#947 mcp manifest rename): the decompiler MCP row is
+# ida-pro-mcp (the live MCP's name — the ida-pro-vm-only scan was a false
+# negative); the rendered MCP table row changed accordingly.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

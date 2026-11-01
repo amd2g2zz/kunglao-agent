@@ -60,15 +60,15 @@ def _ctx(tmp_path, task):
 
 
 def test_arming_writes_ws_registration_and_flag(tmp_path):
-    task = _task(tmp_path, {"ida-pro-vm": "http://127.0.0.1:8745/mcp"})
+    task = _task(tmp_path, {"ida-pro-mcp": "http://127.0.0.1:8745/mcp"})
     ctx = _ctx(tmp_path, task)
     prefixes = cp._arm_mcp_supply(ctx, task)
     mcp = json.loads((ctx.ws / ".mcp.json").read_text(encoding="utf-8"))
-    assert "ida-pro-vm" in (mcp.get("mcpServers") or {}), mcp
+    assert "ida-pro-mcp" in (mcp.get("mcpServers") or {}), mcp
     settings = json.loads(
         (ctx.ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings.get("enableAllProjectMcpServers") is True
-    assert prefixes == ["mcp__ida-pro-vm"], prefixes
+    assert prefixes == ["mcp__ida-pro-mcp"], prefixes
 
 
 def test_arming_without_declaration_changes_nothing(tmp_path):
@@ -78,7 +78,7 @@ def test_arming_without_declaration_changes_nothing(tmp_path):
     prefixes = cp._arm_mcp_supply(ctx, task)
     assert prefixes == []
     assert not (ctx.ws / ".mcp.json").exists() or \
-        "ida-pro-vm" not in (
+        "ida-pro-mcp" not in (
             json.loads((ctx.ws / ".mcp.json").read_text(encoding="utf-8"))
             .get("mcpServers") or {})
 
@@ -89,9 +89,9 @@ def test_rack_carries_the_mcp_prefix(tmp_path):
     req = model.DispatchRequest(
         claim="C-004", workspace=str(tmp_path),
         prompt_file=str(tmp_path / "p.md"), run_id="r",
-        mcp_prefixes=("mcp__ida-pro-vm",))
+        mcp_prefixes=("mcp__ida-pro-mcp",))
     rack = llm_faces._rack_of(req)
-    assert any(r.startswith("mcp__ida-pro-vm") for r in rack), rack
+    assert any(r.startswith("mcp__ida-pro-mcp") for r in rack), rack
 
 
 def test_legacy_supply_honors_registered_mcp(tmp_path):
@@ -103,9 +103,9 @@ def test_legacy_supply_honors_registered_mcp(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / ".mcp.json").write_text(json.dumps(
-        {"mcpServers": {"ida-pro-vm": {
+        {"mcpServers": {"ida-pro-mcp": {
             "type": "http", "url": "http://127.0.0.1:8745/mcp"}}}),
         encoding="utf-8")
     status, msg = env_check.check_ghidra_typed(ws, "linux")
     assert status == "PASS", (status, msg)
-    assert "ida-pro-vm" in msg, msg
+    assert "ida-pro-mcp" in msg, msg

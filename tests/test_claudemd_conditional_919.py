@@ -130,7 +130,7 @@ def test_windows_render_keeps_desktop_vm_contract(tmp_path):
         assert f"| `{env_row}` |" in text
     for mcp_row in ("| `ghidra` |", "| `sequential-thinking` |",
                     "| `x64dbg` |", "| `volatility` |",
-                    "| `ida-pro-vm` |", "| `virustotal` |",
+                    "| `ida-pro-mcp` |", "| `virustotal` |",
                     "| `ssh-mcp` |"):
         assert mcp_row in text, f"windows MCP anchor row missing: {mcp_row}"
     assert "| `gitnexus` |" not in text

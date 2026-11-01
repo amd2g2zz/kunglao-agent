@@ -142,7 +142,7 @@ def test_no_hard_manifest_item_applies_to_web():
 
 def test_desktop_entries_pin_to_desktop_triple():
     desktop = ("windows", "linux", "android")
-    for name in ("ghidra", "sequential-thinking", "ida-pro-vm", "virustotal"):
+    for name in ("ghidra", "sequential-thinking", "ida-pro-mcp", "virustotal"):
         assert mcp_probe._BY_NAME[name].types == desktop, name
 
 

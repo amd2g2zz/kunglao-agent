@@ -87,11 +87,20 @@ _SHA = "b" * 64
 
 
 def _valid_fact_text(with_verify_status: bool) -> str:
-    """A schema-legal fact (lint_fact returns [] or warning-only)."""
+    """A schema-legal fact (lint_fact returns [] or warning-only).
+
+    #947: the stamps are DATE-RELATIVE (today minus a day) — absolute
+    stamps age past lint_facts' 30-day STALENESS_WARN_DAYS window and
+    the clean-pass pin then trips on the informational STALE_LAST_
+    REVIEWED note (a date bomb: the fixture was authored 2026-09-30,
+    the window expired 2026-10-31)."""
+    import datetime
+
+    fresh = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     fm = [
         ("id", "F001-x"), ("type", "fact"), ("title", "F001-x title"),
-        ("status", "INFERRED"), ("created", "2026-10-01"),
-        ("last_reviewed", "2026-10-01"), ("claim_id", "C-001"),
+        ("status", "INFERRED"), ("created", fresh),
+        ("last_reviewed", fresh), ("claim_id", "C-001"),
         ("claim", "imports resolved at runtime"),
         ("boundary_type", "observation"),
         ("promotion_gate", "resolve the loader stub under dynamic-trace"),

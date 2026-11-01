@@ -9,7 +9,7 @@ RED-first contract (SDD+TDD):
      case-insensitive.
    - Per-type checklist: all types require ghidra/sequential-thinking (HARD);
      windows(T3) x64dbg (HARD) + volatility (WARN);
-     optional IDA: ida-pro-vm (WARN, all types); android: gitnexus (HARD);
+     optional IDA: ida-pro-mcp (WARN, all types); android: gitnexus (HARD);
      CTI: virustotal (WARN).
    - Missing HARD → exit 1 + registration guidance (`claude mcp add ...`);
      only WARN missing → exit 2; all present → exit 0. CLI contract:
@@ -41,7 +41,7 @@ FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 ALL_MCP_NAMES = {
     "ghidra", "sequential-thinking", "x64dbg", "volatility",
-    "ida-pro-vm", "gitnexus", "virustotal",
+    "ida-pro-mcp", "gitnexus", "virustotal",
     "ssh-mcp",  # #698 ssh-channel execution control plane (static decl)
     # #728 web (labs): browser JS RE supply — WARN, web-only
     "camoufox-reverse",
@@ -194,7 +194,7 @@ def test_manifest_android_graph():
 
 
 def test_manifest_optional_ida_and_cti():
-    ida = _item("ida-pro-vm")
+    ida = _item("ida-pro-mcp")
     assert ida.tier == "WARN" and set(ida.types) == {"windows", "linux", "android"}
     vt = _item("virustotal")
     assert vt.tier == "WARN" and set(vt.types) == {"windows", "linux", "android"}
@@ -255,7 +255,7 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
         "mcpServers": {
             "Ghidra": reg("ghidra"),
             "sequential-thinking": reg("st"),
-            "ida-pro-vm": reg("ida"),
+            "ida-pro-mcp": reg("ida"),
             "virustotal": reg("vt"),
             "ssh-mcp": reg("sshm"),  # #698 linux channel control plane
         },
@@ -269,7 +269,7 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
     assert by_name["sequential-thinking"]["status"] == "PASS"
     # linux manifest does not include x64dbg/volatility/gitnexus
     assert {c["name"] for c in out["checks"]} == {
-        "ghidra", "sequential-thinking", "ida-pro-vm", "virustotal",
+        "ghidra", "sequential-thinking", "ida-pro-mcp", "virustotal",
         "ssh-mcp"}  # #698 ssh-channel control plane (WARN, windows/linux)
 
 
@@ -281,7 +281,7 @@ def test_user_claude_json_surfaces_ignored(fake_claude_json, ws):
     write_claude_json(
         fake_claude_json,
         servers={"ghidra": reg("ghidra"), "sequential-thinking": reg("st"),
-                 "ida-pro-vm": reg("ida"), "virustotal": reg("vt"),
+                 "ida-pro-mcp": reg("ida"), "virustotal": reg("vt"),
                  "ssh-mcp": reg("sshm")},
         project_servers={"x64dbg": reg("x64dbg"), "volatility": reg("vol")},
     )
@@ -439,25 +439,25 @@ def test_toolchain_mcp_fix_guidance_in_human_output(fake_claude_json, ws):
 
 # ---------- #407: MCP-first decompiler check ----------
 
-def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
-    """#407/#474: ida-pro-vm registered (ghidra absent) -> decompiler WARN
+def test_toolchain_decompiler_mcp_first_ida_pro_mcp(fake_claude_json, ws):
+    """#407/#474: ida-pro-mcp registered (ghidra absent) -> decompiler WARN
     'capability unverified' via MCP (registered supply defuses the HARD FAIL;
     a registry read is not capability), and the mcp:ghidra supply item is
-    satisfied by the ida-pro-vm provider."""
+    satisfied by the ida-pro-mcp provider."""
     write_ws_mcp(ws, {
         "sequential-thinking": reg("st"),
-        "ida-pro-vm": reg("ida"),
+        "ida-pro-mcp": reg("ida"),
     })
     r = run_toolchain(ws, "--type", "windows", "--json")
     assert r.returncode in (0, 1, 2), r.stdout + r.stderr
     out = json.loads(r.stdout)
     decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
     assert decomp["status"] == "WARN", decomp
-    assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
+    assert "via MCP (ida-pro-mcp)" in decomp["detail"], decomp
     assert "capability unverified" in decomp["detail"], decomp
     mcp_ghidra = next(c for c in out["checks"] if c["name"] == "mcp:ghidra")
     assert mcp_ghidra["status"] == "PASS", \
-        f"ghidra supply must be satisfied by the ida-pro-vm provider: {mcp_ghidra}"
+        f"ghidra supply must be satisfied by the ida-pro-mcp provider: {mcp_ghidra}"
 
 
 def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
@@ -508,29 +508,29 @@ def test_toolchain_decompiler_fail_with_install_guidance(fake_claude_json, ws):
     assert "#408" in decomp["fix"], decomp["fix"]
 
 
-# ---------- #407: ida-pro-vm tier semantics (mcp_probe) ----------
+# ---------- #407: ida-pro-mcp tier semantics (mcp_probe) ----------
 
-def test_ida_pro_vm_tier_sole_decompiler_provider_hard(fake_claude_json, ws):
-    """#407: ida-pro-vm is HARD when it is the sole decompiler provider
-    (ghidra absent); the ghidra supply item is satisfied via ida-pro-vm."""
-    write_ws_mcp(ws, {"ida-pro-vm": reg("ida")})
+def test_ida_pro_mcp_tier_sole_decompiler_provider_hard(fake_claude_json, ws):
+    """#407: ida-pro-mcp is HARD when it is the sole decompiler provider
+    (ghidra absent); the ghidra supply item is satisfied via ida-pro-mcp."""
+    write_ws_mcp(ws, {"ida-pro-mcp": reg("ida")})
     checks = mcp_probe.check_mcp(ws, "linux")
     by_name = {c.name: c for c in checks}
-    assert by_name["ida-pro-vm"].tier == "HARD"
-    assert by_name["ida-pro-vm"].status == "PASS"
+    assert by_name["ida-pro-mcp"].tier == "HARD"
+    assert by_name["ida-pro-mcp"].status == "PASS"
     assert by_name["ghidra"].status == "PASS"
-    assert "ida-pro-vm" in by_name["ghidra"].detail
+    assert "ida-pro-mcp" in by_name["ghidra"].detail
 
 
-def test_ida_pro_vm_tier_warn_when_ghidra_present(fake_claude_json, ws):
-    """#407: ida-pro-vm keeps the WARN default when ghidra MCP is registered."""
+def test_ida_pro_mcp_tier_warn_when_ghidra_present(fake_claude_json, ws):
+    """#407: ida-pro-mcp keeps the WARN default when ghidra MCP is registered."""
     write_ws_mcp(ws, {
-        "ida-pro-vm": reg("ida"), "ghidra": reg("ghidra"),
+        "ida-pro-mcp": reg("ida"), "ghidra": reg("ghidra"),
     })
     checks = mcp_probe.check_mcp(ws, "linux")
     by_name = {c.name: c for c in checks}
-    assert by_name["ida-pro-vm"].tier == "WARN"
-    assert by_name["ida-pro-vm"].status == "PASS"
+    assert by_name["ida-pro-mcp"].tier == "WARN"
+    assert by_name["ida-pro-mcp"].status == "PASS"
 
 
 # ---------- docs tables vs manifest ----------
