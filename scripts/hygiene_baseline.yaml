@@ -122,7 +122,7 @@ files:
   scripts/entropy_face.py:
     r1: 1
   scripts/env_check.py:
-    r1: 57
+    r1: 60
   scripts/env_manifest.py:
     r1: 22
   scripts/env_repair_l1.py:
@@ -296,7 +296,7 @@ files:
   scripts/loop_watchdog.py:
     r1: 3
   scripts/mcp_probe.py:
-    r1: 26
+    r1: 27
   scripts/mechanism_scheduler.py:
     r1: 16
   scripts/method_families.py:
@@ -638,7 +638,7 @@ files:
   tests/test_baksmali_index.py:
     r1: 1
   tests/test_bash_fact_guard_809.py:
-    r1: 1
+    r1: 2
   tests/test_bash_fact_guard_faces_818.py:
     r1: 1
     r2: 1
@@ -996,7 +996,7 @@ files:
   tests/test_env_ports_wiring.py:
     r1: 2
   tests/test_envcheck_modern_757.py:
-    r1: 18
+    r1: 21
   tests/test_epistemic_pricing_250.py:
     r1: 6
   tests/test_error_response.py:
@@ -1537,7 +1537,7 @@ files:
   tests/test_render_rl_visuals_818.py:
     r1: 1
   tests/test_renderer_unify.py:
-    r1: 4
+    r1: 5
   tests/test_renew_audit_619.py:
     r1: 1
   tests/test_replay_gate.py:
@@ -1590,6 +1590,8 @@ files:
     r2: 1
   tests/test_rl_v2_distill_action_938.py:
     r1: 4
+  tests/test_rl_v2_gap_formulation_943.py:
+    r1: 1
   tests/test_rl_v2_judge_933.py:
     r1: 2
   tests/test_rl_v2_ledger_879.py:

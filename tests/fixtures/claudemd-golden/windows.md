@@ -78,7 +78,7 @@ tool means you have left the orchestrator role — hand the work to an agent.
 | `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
 | `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
 | `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis (both the claim layer… | attack-test a claim before it is promoted to PROVEN |
-| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `verdict-scorer` | Deterministic PQ-coverage corridor — scoring itself is a script… | score verdict.json against task_spec primary_questions |
 | `kunglao-settler` | BLIND SETTLEMENT SUBAGENT — the independent settler that turns raw step artifacts into… | blind step settlement from raw artifacts (never producer narrative) |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
 | `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
@@ -218,7 +218,7 @@ Analysis correctness depends on registered MCP servers — a fresh machine deplo
 | `sequential-thinking` | HARD | all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
 | `x64dbg` | HARD | Windows T3 | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
 | `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `ida-pro-mcp` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |
 | `virustotal` | WARN | CTI | intelligence (family attribution) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
 

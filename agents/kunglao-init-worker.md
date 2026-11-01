@@ -108,7 +108,7 @@ type-aware initialization + toolchain readiness.
    human-install doctrine)**: every check carries an `owner` class, and you
    act on it, in this order:
    - **AGENT-DO — attempt it yourself, immediately**: `claude mcp add`
-     MCP registrations (the exact servers from task_spec, ida-pro-vm as
+     MCP registrations (the exact servers from task_spec, ida-pro-mcp as
      http), `adb shell` device configuration on the connected rooted device
      (root check, `su -c resetprop ro.debuggable 1`, frida/android_server
      bring-up + port forwards), and registered installers
@@ -120,7 +120,7 @@ type-aware initialization + toolchain readiness.
    - **HUMAN-ONLY — relay as blockers**: license purchase, physical device
      actions (rooting a device), credentials. Nothing else.
    - **LANE-CONDITIONAL — the decompiler face follows the task's declared
-     lane**: ida-pro-vm MCP lane -> registration + reachability, NEVER a
+     lane**: ida-pro-mcp MCP lane -> registration + reachability, NEVER a
      local IDA install/license demand; local lane -> the probe ladder
      (PATH, mdfind, find bundle sweep incl. `.app/Contents/MacOS`, brew
      cask, known dirs) then Ghidra. Neither supply -> exit-8

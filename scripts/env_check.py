@@ -338,15 +338,40 @@ def check_vm_channel(ctx: dict) -> tuple[str, str] | None:
 
 
 def _mcp_decompiler_supply(ws: Path) -> bool:
-    """MCP-first decompiler supply face (#407 口径): ghidra OR ida-pro-vm in
-    a #408 surface (workspace .mcp.json / plugin-carried). Fail-open on
-    config read errors."""
+    """MCP-first decompiler supply face (#407 口径): ghidra OR
+    ida-pro-vm/ida-pro-mcp in a #408 surface (workspace .mcp.json /
+    plugin-carried). Fail-open on config read errors. The owner's live
+    MCP registers as ida-pro-mcp — both names accepted (#947 fix: the
+    ida-pro-vm-only check was a false negative on a real supply)."""
     try:
         import mcp_probe
         registered = mcp_probe.registered_names(ws)
-        return "ghidra" in registered or "ida-pro-vm" in registered
+        # registered is a name→config dict — setify for the intersection
+        # (a dict & set raises TypeError, which the fail-open would swallow
+        # into a constant False — the #947 CI e2e failure's root cause)
+        return bool(set(registered) & {"ghidra", "ida-pro-vm", "ida-pro-mcp"})
     except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
         return False
+
+
+def _local_static_tooling() -> tuple[bool, str]:
+    """The local-static ladder probe (#947): python RE libraries in the
+    active env + local RE binaries on PATH — bash/python CAN reverse
+    (owner). Fail-open: any probe error counts as absent, never crashes
+    Phase 0."""
+    import shutil
+
+    found: list[str] = []
+    for mod in ("capstone", "lief", "pwn"):
+        try:
+            __import__(mod)
+            found.append(f"py:{mod}")
+        except ImportError:
+            continue
+    for bin_name in ("otool", "objdump", "radare2", "r2", "rabin2"):
+        if shutil.which(bin_name):
+            found.append(f"path:{bin_name}")
+    return (bool(found), ", ".join(found) or "none")
 
 
 def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
@@ -363,10 +388,12 @@ def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
                       pending-forever trap -> FAIL naming the sudo-free fix.
     - android       : NO hard MCP expectation -> PASS with info (gitnexus is
                       verified by the toolchain face).
-    - windows/linux : ghidra/ida-pro-vm either registered -> WARN "capability
-                      unverified" (#474 same口径: a registry read cannot reach
-                      into the MCP session; tools verify post-connect).
-                      Neither -> FAIL naming Ghidra install / ida-pro-vm MCP.
+    - windows/linux/macos : ghidra/ida-pro-vm/ida-pro-mcp either
+                      registered -> WARN "capability unverified" (#474
+                      same口径: a registry read cannot reach into the MCP
+                      session; tools verify post-connect). Local static RE
+                      tooling present -> WARN (the #947 local ladder).
+                      Neither -> FAIL naming Ghidra install / ida-pro-mcp MCP.
     Any workspace-scope registration without the approval flag FAILs on
     every type — pending-forever approval is a direct blocker, not a nit.
     """
@@ -405,15 +432,26 @@ def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
         return ("PASS",
                 f"no hard MCP requirement for android (gitnexus verified on "
                 f"the toolchain face); registered: {registered}")
-    desktop = sorted(n for n in ("ghidra", "ida-pro-vm") if n in found)
+    desktop = sorted(n for n in ("ghidra", "ida-pro-vm", "ida-pro-mcp")
+                     if n in found)
     if desktop:
         return ("WARN",
                 f"{', '.join(desktop)} registered — capability unverified "
                 "(#474口径: registry-only; tools verify post-connect)")
+    # the local-static ladder: bash/python RE tooling IS decompiler
+    # supply (#947 fix — the owner's channel): probe the env's python RE
+    # libs + the PATH's local RE binaries before declaring the supply dead.
+    local_ok, local_detail = _local_static_tooling()
+    if local_ok:
+        return ("WARN",
+                f"MCP decompiler supply unverified — local static RE "
+                f"tooling present, the static channel can proceed: "
+                f"{local_detail}")
     return ("FAIL",
-            "neither ghidra nor ida-pro-vm MCP registered — decompiler supply "
-            "unverified. Install Ghidra OR IDA, or register the ghidra/"
-            "ida-pro-vm MCP (#408 installer)")
+            "neither ghidra nor ida-pro-vm/ida-pro-mcp MCP registered and no "
+            "local static RE tooling found — decompiler supply unverified. "
+            "Install Ghidra OR IDA, or register the ida-pro-mcp MCP "
+            "(#408 installer)")
 
 
 def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
@@ -424,7 +462,7 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
                       .so sample (toolchain._probe_native_so — the #756
                       central-directory version) additionally requires SOME
                       decompiler supply (analyzeHeadless | idat64 | MCP
-                      ghidra/ida-pro-vm). Pure-DEX stays PASS.
+                      ghidra/ida-pro-mcp). Pure-DEX stays PASS.
     - web           : not applicable — callers omit the row entirely
                       ("decompiler trials meaningless for web", #728 D5);
                       defensively handled as PASS-info here.
@@ -435,13 +473,13 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
         # macos (#760): Mach-O decompiler expectation rides the same legacy
         # GHIDRA_HOME semantics; a FAIL stays DEGRADED (non-blocking, T3).
         # matrix4d: the 3-path OR contract holds on EVERY typed branch —
-        # a registered decompiler MCP (ghidra/ida-pro-vm in the
+        # a registered decompiler MCP (ghidra/ida-pro-mcp in the
         # workspace registry) satisfies the supply here too; the legacy
         # face only knew GHIDRA_HOME and silently dropped the MCP path
         # (native units died at the armed gate with the MCP registered).
         ok, msg = check_ghidra()
         if not ok and _mcp_decompiler_supply(ws):
-            return ("PASS", "decompiler supply: MCP ghidra/ida-pro-vm "
+            return ("PASS", "decompiler supply: MCP ghidra/ida-pro-mcp "
                             "(workspace registry)")
         return ("PASS" if ok else "FAIL"), msg
 
@@ -454,7 +492,7 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
         face for face in (
             f"analyzeHeadless at {GHIDRA_DEFAULT}" if GHIDRA_DEFAULT and GHIDRA_DEFAULT.exists() else "",
             f"idat64 at {ida}" if ida else "",
-            "MCP ghidra/ida-pro-vm" if _mcp_decompiler_supply(ws) else "",
+            "MCP ghidra/ida-pro-mcp" if _mcp_decompiler_supply(ws) else "",
         ) if face
     ]
     has_supply = bool(supply_items)

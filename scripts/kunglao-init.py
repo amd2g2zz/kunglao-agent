@@ -1849,9 +1849,9 @@ MCP_ROW_TEXT: dict[str, str] = {
     "volatility":
         "| `volatility` | WARN | Windows T3 | memory forensics "
         "| `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |\n",
-    "ida-pro-vm":
-        "| `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis "
-        "| `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |\n",
+    "ida-pro-mcp":
+        "| `ida-pro-mcp` | WARN | when IDA chosen | IDA remote analysis "
+        "| `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |\n",
     "gitnexus":
         "| `gitnexus` | HARD | Android graph flow | post-decompile knowledge "
         "graph | `claude mcp add gitnexus -- gitnexus mcp` |\n",
@@ -1874,7 +1874,7 @@ MCP_ROW_TEXT: dict[str, str] = {
 
 # Presentation order (pre-#919 template row order — golden-anchored).
 MCP_ROW_ORDER: tuple[str, ...] = (
-    "ghidra", "sequential-thinking", "x64dbg", "volatility", "ida-pro-vm",
+    "ghidra", "sequential-thinking", "x64dbg", "volatility", "ida-pro-mcp",
     "gitnexus", "virustotal", "ssh-mcp", "camoufox-reverse")
 
 

@@ -79,6 +79,9 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 state faces: loop_sim tracked-home precedent (#904)",
     "experiments/learning-loop/state/telemetry.py":
         "rl-v2 telemetry face: loop_sim tracked-home precedent (#915)",
+    "experiments/learning-loop/state/gap_formulation.py":
+        "rl-v2 gap-formulation perception face: loop_sim tracked-home "
+        "precedent (#943)",
     "experiments/learning-loop/state/statusline_feed.py":
         "rl-v2 statusline feed face: loop_sim tracked-home precedent (#914)",
     "experiments/learning-loop/state/judge.py":

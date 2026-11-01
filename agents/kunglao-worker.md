@@ -7,7 +7,7 @@ description: 'Generic claim-executing WORKER for the kunglao-agent orchestrator.
   §1b): output raw evidence only, NEVER a verdict. **You MUST write files** (kunglao-agent §1c): worker-status
   first, facts/Fxxx.md immediately after each fact, progress.txt appended — a worker that reports ''done''
   without files has FAILED (W-15). Reads tier + tools from the dispatch envelope (`{"kunglao_dispatch": ...}`
-  v1; the legacy `[T1|T2|T3 tools=...]` text prefix is retired, replay-only) and self-restricts. Knows the
+  v1) and self-restricts. Knows the
   Go-binary + VM-channel + Java/Docker constraints by default so the orchestrator''s dispatch prompt stays
   short.'
 allowedTools:
@@ -23,7 +23,7 @@ allowedTools:
 - mcp__context7__query-docs
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
-- mcp__ida-pro-vm__*
+- mcp__ida-pro-mcp__*
 - mcp__x64dbg__*
 - mcp__frida__spawn
 - mcp__frida__attach
@@ -269,7 +269,7 @@ verify_status: pending     # NEVER inherited; verifier signs off later
 
 A correction of a stamped note is a NEW note carrying `supersedes:` — the
 prior conclusion is never deleted or silently overwritten (write_guard
-enforces). The Stop gate refuses closure while an owed note is missing.
+enforces).
 
 ## Failure report protocol (inputs for the orchestrator's gate)
 
@@ -335,9 +335,8 @@ claims' `runs/challenges/` is a mechanism-probe violation.
 
 ## Environment constraints (known by default)
 
-- **Hook activation is orchestrator-only** — never run `hook_activation.py`
-  (a worker renewing it could keep enforcement gates alive after the
-  orchestrator is gone); note it in your status file instead.
+- **Hook activation is orchestrator-only** — never run `hook_activation.py`;
+  note it in your status file instead.
 - **VM-channel (non-negotiable)**: the sample runs in the VM, never on the
   host; host execution of `bins/<sha>` is forbidden. x64dbg entry:
   `mcp__x64dbg__connect_remote(host=VM_IP, req_rep_port=27066,
@@ -390,9 +389,7 @@ claims' `runs/challenges/` is a mechanism-probe violation.
 ## Dispatch format (what the orchestrator sends you)
 
 The dispatch prompt opens with the **v1 canonical JSON envelope**
-(parsed by `hooks/lib_kunglao.py:parse_dispatch` — single source; the
-legacy `[T<N> tools=...] claim C-NN` text prefix is RETIRED, replay-only —
-never act on a v0-shaped dispatch as if it were current):
+(parsed by `hooks/lib_kunglao.py:parse_dispatch` — single source):
 
 ```json
 {"kunglao_dispatch": {"version": 1, "claim": "C-007", "tier": 1, "tools": ["grep", "xxd"], "agent": "kunglao-worker"}}
