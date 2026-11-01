@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import re
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,8 +112,10 @@ def test_every_converted_file_carries_the_rate_limited_helper():
             and "_IMPORT_DEGRADED.append(" in src
         # The helper may be the canonical kunglao_log import —
         # ONE implementation (process-wide dedupe + ledger face), pinned by
-        # tests/test_logging_arch_406.py.
-        has_import = "from kunglao_log import warn" in src
+        # tests/test_logging_arch_406.py. #944: the import may carry
+        # multiple names (debug, warn) — match the form, not the literal.
+        has_import = re.search(r"from kunglao_log import [\w, ]*\bwarn\b",
+                               src) is not None
         assert has_warn or has_binding or has_sidecar or has_import, path
         assert ("_WARN_LAST" in src) or ("_B3_WARN_LAST" in src) \
             or has_binding or has_sidecar or has_import, path

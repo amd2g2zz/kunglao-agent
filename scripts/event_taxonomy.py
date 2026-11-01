@@ -215,6 +215,7 @@ EMIT_ACTIONS = [
     "envelope_timeout",   # P6 guards: tier-envelope TIMEOUT terminal step row (actual spend/calls ride detail; settlement triage feeds from it)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
+    "error",              # #944 the severity wrapper's log-then-raise row (guard boundaries; the caller keeps the raise)
     "evidence_certified",  # #803 evidence_certify: a claim's evidence chain certified (byte-exact+fresh-input row minted, sealed, replay-pinned)
     "evidence_pin_blocked",  # evidence_pin_guard: write refused on a checker-consumed sha-pinned artifact
     "evidence_replayed",  # #803 evidence_certify: a certification row re-executed its own replay instruction byte-consistently (the certify->replay->result pin, observed)
@@ -251,6 +252,7 @@ EMIT_ACTIONS = [
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
     "infeasible_filed",     # #815 gated INFEASIBLE proposal filed (DEFERRED)
     "infeasible_woken",     # #815 wake face: infeasible-DEFERRED revived
+    "info",               # #944 the severity wrapper's operator-milestone row (loop milestone EVENTS ride the #915 telemetry face, not this word)
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events

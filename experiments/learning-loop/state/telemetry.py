@@ -86,6 +86,12 @@ CODES: frozenset[str] = frozenset({
     # assigner — the step assignment and its candidate widening
     "assigner.ASSIGN_ASSIGNED",
     "assigner.ASSIGN_WIDENED",
+    # distill — the research driver's completion milestone (#944)
+    "distill.DISTILL_COMPLETE",
+    # loop — the lap boundary milestone (#944: success paths log nothing
+    # was the audit's third amplifier; the boundary is the loop's most
+    # basic progress fact)
+    "loop.LAP_BOUNDARY",
     # stagnation — the advisory receipt (re-plan advice, pre-death)
     "stagnation.STAG_ADVICE",
     # belief — the P(s) precursor snapshot landed / honest-empty
@@ -103,6 +109,19 @@ _SEAMS: frozenset[str] = frozenset(
 #: ΔP series is read from the ledger's own rows, never recomputed.
 progress_SOURCE = "state"
 _DELTA_PREFIX = "delta_p="
+
+#: the INFO-milestone codes (#944): the loop's lap boundary, the ΔP
+#: arbiter's commit/discard dispositions, the DISTILL research
+#: completion. The operator-facing selection over the telemetry ledger —
+#: the milestones face reads ONLY these codes (success paths no longer
+#: log nothing; the events remain the event source, this is the
+#: operator's INFO selection over them).
+MILESTONE_CODES: frozenset[str] = frozenset({
+    "loop.LAP_BOUNDARY",
+    "settlement.SETTLE_COMMITTED",
+    "settlement.SETTLE_DISCARDED",
+    "distill.DISTILL_COMPLETE",
+})
 
 
 def _fail(field: str, why: str) -> ValueError:
@@ -176,6 +195,15 @@ def events(ws) -> list[dict]:
     """Every landed loop-telemetry row, oldest first (the tolerant
     consolidated read)."""
     return _cl.read(ws, "telemetry", schema_prefix="loop-telemetry")
+
+
+def milestones(ws) -> list[dict]:
+    """The operator-facing INFO selection (#944): the telemetry rows
+    whose code is in MILESTONE_CODES, oldest first — the lap boundary,
+    the arbiter's commit/discard dispositions, the research completion.
+    Deterministic from the ledger alone."""
+    return [r for r in events(ws)
+            if str(r.get("event") or "") in MILESTONE_CODES]
 
 
 # ------------------------------------------------------ the read faces

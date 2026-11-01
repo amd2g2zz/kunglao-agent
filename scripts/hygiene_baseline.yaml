@@ -177,7 +177,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 132
+    r1: 134
     r2: 1
   scripts/evidence_certify.py:
     r1: 2
@@ -232,7 +232,7 @@ files:
   scripts/infeasible_proposal.py:
     r1: 2
   scripts/infeasible_signal.py:
-    r1: 3
+    r1: 5
   scripts/init_channel_default.py:
     r1: 4
   scripts/init_state.py:
@@ -266,7 +266,7 @@ files:
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 37
+    r1: 48
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -389,7 +389,7 @@ files:
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
-    r1: 9
+    r1: 10
   scripts/rlvr/action_params.py:
     r1: 2
   scripts/rlvr/attribution.py:
@@ -417,7 +417,7 @@ files:
   scripts/rlvr/l1_value.py:
     r1: 3
   scripts/rlvr/learning_seal.py:
-    r1: 6
+    r1: 8
   scripts/rlvr/ledger.py:
     r1: 1
   scripts/rlvr/liveness.py:
@@ -481,7 +481,7 @@ files:
   scripts/rotation_induction.py:
     r1: 3
   scripts/route_capability.py:
-    r1: 14
+    r1: 16
   scripts/runtime_facts.py:
     r1: 2
   scripts/scalar_settlement.py:
@@ -1310,6 +1310,8 @@ files:
     r1: 1
   tests/test_loader_delegation_863b.py:
     r1: 4
+  tests/test_log_levels_944.py:
+    r1: 3
   tests/test_log_setup_818.py:
     r1: 1
   tests/test_logging_arch_406.py:
@@ -1600,7 +1602,7 @@ files:
     r1: 4
     r2: 1
   tests/test_rl_v2_ranking_persistence_925.py:
-    r1: 1
+    r1: 2
   tests/test_rl_v2_redteam_933.py:
     r1: 1
   tests/test_rl_v2_redteam_constraints_939.py:
@@ -1709,7 +1711,7 @@ files:
   tests/test_silent_except_traces_275.py:
     r1: 1
   tests/test_silent_except_traces_275_batch3.py:
-    r1: 1
+    r1: 2
   tests/test_skill_contract.py:
     r1: 1
   tests/test_skill_invocation.py:
