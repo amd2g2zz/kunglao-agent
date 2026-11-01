@@ -1654,7 +1654,8 @@ def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
                     wall_cap_s: float, solo_fraction: float,
                     deliverable_rel: str, layer_paths: list[str],
                     probe_block: str,
-                    warm_context_from: Path | None = None
+                    warm_context_from: Path | None = None,
+                    workspace: Path | None = None
                     ) -> tuple[Path | None, str, dict | None]:
     """Workspace init + prompt build for one arm face. Returns
     (ws, prompt, skip_row): a non-None skip_row is the structured SKIP
@@ -1668,18 +1669,47 @@ def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
             # the experiment doc sec5 attribution arm (frozen text):
             prompt = _arm_prompt(arm, prompt, warm_context_from)
         else:
-            ws = init_workspace(tdir, out / "workspaces")
-            # #523 closure: seed the PQ spine + preflight BEFORE the
-            # session — a claim-less/oracle-less/unwired workspace burns
-            # the wall measuring nothing (the pilot's 0/3 class)
-            try:
-                seed_question_spine(ws, task)
-                pf_ok, pf_reasons = preflight(ws)
-            except (OSError, ValueError, yaml.YAMLError) as exc:
-                pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
-            if not pf_ok:
-                return ws, "", _preflight_skip_row(task, tdir, arm,
-                                                   pf_reasons, ws)
+            if workspace is not None:
+                # #888 operator flow: a PRE-ARMED workspace supplied by the
+                # caller — init happened BEFORE this invocation (the P6
+                # tick gate is unpassable on a fresh workspace because the
+                # cron can only tick a workspace that already exists).
+                # The spine seed stays on the reuse path (idempotent on
+                # question id) and preflight (read-only) still runs — an
+                # armed-but-never-seeded workspace is the #523 pilot
+                # failure class and must refuse, not sail through.
+                missing = [m for m in ("claim-register.yaml",
+                                       "task-oracle.yaml",
+                                       "goal-operationalization.yaml")
+                           if not (workspace / m).is_file()]
+                if missing:
+                    return workspace, "", _preflight_skip_row(
+                        task, tdir, arm,
+                        [f"workspace reuse: not a prepared kunglao "
+                         f"workspace — missing {', '.join(missing)}"],
+                        workspace)
+                ws = workspace
+                try:
+                    seed_question_spine(ws, task)
+                    pf_ok, pf_reasons = preflight(ws)
+                except (OSError, ValueError, yaml.YAMLError) as exc:
+                    pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+                if not pf_ok:
+                    return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                       pf_reasons, ws)
+            else:
+                ws = init_workspace(tdir, out / "workspaces")
+                # #523 closure: seed the PQ spine + preflight BEFORE the
+                # session — a claim-less/oracle-less/unwired workspace burns
+                # the wall measuring nothing (the pilot's 0/3 class)
+                try:
+                    seed_question_spine(ws, task)
+                    pf_ok, pf_reasons = preflight(ws)
+                except (OSError, ValueError, yaml.YAMLError) as exc:
+                    pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+                if not pf_ok:
+                    return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                       pf_reasons, ws)
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
                                        solo_fraction=solo_fraction,
@@ -1715,13 +1745,20 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
                   solo_fraction: float | None = None,
-                  warm_context_from: Path | None = None) -> dict:
+                  warm_context_from: Path | None = None,
+                  workspace: Path | None = None) -> dict:
     """One eval task through the FULL pipeline: init -> real session ->
     harvest -> mechanical check -> results row. ``arm`` selects the
     harness face: "loop" (kunglao-init + plugin session), "cc-default"
     (neutral cwd + plugin-less session), or "cc-warm-context" (the
     cc-default face + the train-store text render — the RL-vs-context
-    attribution arm) — same caps, extractor and checker either way."""
+    attribution arm) — same caps, extractor and checker either way.
+    ``workspace`` (#888): reuse a PRE-ARMED kunglao workspace instead of
+    initing a fresh one — the P6 tick gate verifies the heartbeat cron
+    BEFORE spawning, and a cron can only tick a workspace that already
+    exists, so the operator arms first (init + spine + preflight +
+    heartbeat registration) and passes the workspace in; the caller
+    owns the seed/preflight contract and the tick gate still runs."""
     out = Path(out)
     # ONE normalization site: everything downstream takes a plain float
     if solo_fraction is None:
@@ -1737,7 +1774,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
         tdir, task, out, arm=arm, wall_cap_s=wall_cap_s,
         solo_fraction=solo_fraction, deliverable_rel=deliverable_rel,
         layer_paths=layer_paths, probe_block=probe_block,
-        warm_context_from=warm_context_from)
+        warm_context_from=warm_context_from, workspace=workspace)
     if skip_row is not None:
         if skip_row["failures"][0]["code"] == "BAD_TASK":
             # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
@@ -1950,11 +1987,13 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
                   solo_fraction: float | None = None,
-                  warm_context_from: Path | None = None
+                  warm_context_from: Path | None = None,
+                  workspace: Path | None = None
                   ) -> tuple[int, dict]:
     """The tier face: one kunglao-eval-results/1 doc (arm=loop or
     arm=cc-default) — directly comparable with the #236 bare rows (same
-    row contract)."""
+    row contract). ``workspace`` (#888): one PRE-ARMED workspace reused
+    for the (single-task) run — see run_loop_task."""
     started = time.time()
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -1963,6 +2002,22 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
     except ValueError as exc:
         _fail(str(exc))
         return RC_REFUSED, {}
+    if workspace is not None:
+        # #888 review round: the reuse combinations that would silently
+        # mis-measure are refused at the tier face — the cc faces build
+        # their own neutral workspaces (the param would be ignored), and
+        # one workspace cannot serve a multi-task tier (task N+1's
+        # extract_candidate would find task N's stale deliverable and
+        # grade it without a session mattering)
+        if arm != ARM:
+            _fail("--workspace is loop-arm only (the cc faces build "
+                  "their own neutral workspaces)")
+            return RC_REFUSED, {}
+        if len(selected) > 1:
+            _fail(f"--workspace serves exactly ONE task "
+                  f"(got {len(selected)}: "
+                  f"{', '.join(t.name for t in selected)})")
+            return RC_REFUSED, {}
 
     rows: list[dict] = []
     for tdir in selected:
@@ -1972,7 +2027,7 @@ def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
             str(tdir), out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
             session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
             solo_fraction=solo_fraction,
-            warm_context_from=warm_context_from))
+            warm_context_from=warm_context_from, workspace=workspace))
 
     summary = {
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
@@ -2049,6 +2104,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="cc-warm-context arm: the train workspace whose "
                          "pattern cards + method-family log render into "
                          "the prompt (required for that arm)")
+    ap.add_argument("--workspace", default=None,
+                    help="#888: reuse a PRE-ARMED kunglao workspace instead "
+                         "of initing a fresh one — the caller owns init + "
+                         "PQ spine + preflight + heartbeat cron "
+                         "registration (the P6 tick gate then passes on "
+                         "the armed workspace); single-task runs")
     ap.add_argument("--out", default=str(
         ds.EVAL_ROOT.parent / "runs" / "eval-loop"),
         help="output dir (default: runs/eval-loop/)")
@@ -2061,7 +2122,8 @@ def main(argv: list[str] | None = None) -> int:
         arm=args.arm,
         solo_fraction=args.solo_fraction,
         warm_context_from=(Path(args.warm_context_from)
-                           if args.warm_context_from else None))
+                           if args.warm_context_from else None),
+        workspace=(Path(args.workspace) if args.workspace else None))
     return rc
 
 

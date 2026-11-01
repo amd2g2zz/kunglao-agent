@@ -154,7 +154,7 @@ files:
   scripts/eval_dataset.py:
     r1: 5
   scripts/eval_loop_runner.py:
-    r1: 12
+    r1: 16
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -997,6 +997,8 @@ files:
     r1: 2
   tests/test_envcheck_modern_757.py:
     r1: 21
+  tests/test_envelopes.py:
+    r1: 3
   tests/test_epistemic_pricing_250.py:
     r1: 6
   tests/test_error_response.py:
