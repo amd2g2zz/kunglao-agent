@@ -93,7 +93,7 @@ files:
   scripts/emit_gate.py: 12
   scripts/encoding_lint.py: 4
   scripts/entropy_face.py: 2
-  scripts/env_check.py: 114
+  scripts/env_check.py: 115
   scripts/env_manifest.py: 44
   scripts/env_repair_l1.py: 7
   scripts/env_state_probe.py: 19

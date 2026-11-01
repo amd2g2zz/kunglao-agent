@@ -122,7 +122,7 @@ files:
   scripts/entropy_face.py:
     r1: 1
   scripts/env_check.py:
-    r1: 59
+    r1: 60
   scripts/env_manifest.py:
     r1: 22
   scripts/env_repair_l1.py:
