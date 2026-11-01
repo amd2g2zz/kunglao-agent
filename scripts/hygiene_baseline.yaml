@@ -1602,7 +1602,7 @@ files:
     r1: 4
     r2: 1
   tests/test_rl_v2_ranking_persistence_925.py:
-    r1: 1
+    r1: 2
   tests/test_rl_v2_redteam_933.py:
     r1: 1
   tests/test_rl_v2_redteam_constraints_939.py:

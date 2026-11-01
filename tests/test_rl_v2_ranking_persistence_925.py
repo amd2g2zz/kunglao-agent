@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """tests/test_rl_v2_ranking_persistence_925.py — decision-time ranking
-distributions persisted to the ledger (card 925).
+distributions persisted to the ledger (card 925; reconciled onto the
+#924/#926 wave — the suite helper passes the required worker and
+spawn_slots explicitly per the #924 policy).
 
 The old loop's ranking face recorded every ranking COMPLETE (scores,
 full order, input fingerprint). The rl-v2 loop's decision-time
