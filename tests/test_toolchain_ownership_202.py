@@ -8,7 +8,7 @@ Field-reported failures are normative:
      CLI/device access). Escalation to the user happens ONLY on genuine
      failure, with the error attached.
   2. The decompiler face gated on LOCAL idat64 while the task declared the
-     ida-pro-vm MCP lane — the face must be LANE-CONDITIONAL: MCP lane checks
+     ida-pro-mcp MCP lane — the face must be LANE-CONDITIONAL: MCP lane checks
      registration + reachability and NEVER a local IDA install/license;
      the local lane probes IDA (ordered ladder: PATH -> mdfind -> find bundle
      sweep -> brew cask -> known dirs) then Ghidra; neither -> exit-8
@@ -97,7 +97,7 @@ class TestOwnershipTiers:
         lane-conditional — ONE family key (issue 210), never three
         per-supply tier assignments."""
         assert tc.owner_for("mcp:sequential-thinking") is tc.OwnerTier.AGENT_DO
-        assert tc.owner_for("mcp:ida-pro-vm") is tc.OwnerTier.AGENT_DO
+        assert tc.owner_for("mcp:ida-pro-mcp") is tc.OwnerTier.AGENT_DO
         assert tc.owner_for("adb") is tc.OwnerTier.AGENT_DO
         assert tc.owner_for("debug_flag") is tc.OwnerTier.AGENT_DO
         assert tc.owner_for("frida_server") is tc.OwnerTier.AGENT_DO
@@ -278,7 +278,7 @@ class TestDecompilerLaneConditional:
         tools: dict = {"decompiler_lane": "mcp"}
         if port is not None:
             tools["mcp_servers"] = [{
-                "name": "ida-pro-vm", "transport": "http",
+                "name": "ida-pro-mcp", "transport": "http",
                 "url": f"http://127.0.0.1:{port}",
             }]
         return {"constraints": {"dynamic_re": "forbidden"}, "tools": tools}
@@ -286,7 +286,7 @@ class TestDecompilerLaneConditional:
     def test_requirements_parse_lane_and_mcp(self):
         reqs = tc.requirements_from_task_spec(self._task_spec(13337))
         assert reqs.decompiler_lane == "mcp"
-        assert reqs.required_mcp[0].name == "ida-pro-vm"
+        assert reqs.required_mcp[0].name == "ida-pro-mcp"
         assert reqs.required_mcp[0].transport == "http"
         assert reqs.required_mcp[0].url == "http://127.0.0.1:13337"
         # absent field stays conservative None
@@ -295,17 +295,17 @@ class TestDecompilerLaneConditional:
 
     def test_mcp_lane_task_passes_with_no_local_ida(
             self, clean_env, ws, monkeypatch):
-        """Acceptance: a task declaring the ida-pro-vm MCP lane passes the
+        """Acceptance: a task declaring the ida-pro-mcp MCP lane passes the
         decompiler face with NO local IDA — and the local ladder is never
         even consulted (never a local install/license demand). #408: the
         registration rides the workspace .mcp.json."""
         srv, port = _listener()
         with srv:
             (ws / ".mcp.json").write_text(json.dumps(
-                {"mcpServers": {"ida-pro-vm": {}, "sequential-thinking": {}}}),
+                {"mcpServers": {"ida-pro-mcp": {}, "sequential-thinking": {}}}),
                 encoding="utf-8")
             monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(_isolated_registry(
-                ws.parent, {"ida-pro-vm": {}, "sequential-thinking": {}})))
+                ws.parent, {"ida-pro-mcp": {}, "sequential-thinking": {}})))
             monkeypatch.setattr(
                 tc, "_probe_local_ida",
                 lambda *a, **k: pytest.fail(
@@ -318,9 +318,9 @@ class TestDecompilerLaneConditional:
                               task_spec=self._task_spec(port))
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.PASS, decomp
-        assert decomp.supply == "ida-pro-vm", decomp
+        assert decomp.supply == "ida-pro-mcp", decomp
         assert decomp.skipped == ("idat64", "analyzeHeadless"), decomp
-        assert "ida-pro-vm" in decomp.detail
+        assert "ida-pro-mcp" in decomp.detail
         assert "reachable" in decomp.detail
         blob = json.dumps(tc.format_json(report))
         assert "install IDA" not in blob
@@ -335,13 +335,13 @@ class TestDecompilerLaneConditional:
         report = tc.check(ws, "windows", task_spec=self._task_spec(1))
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.FAIL, decomp
-        assert "ida-pro-vm" in decomp.detail
+        assert "ida-pro-mcp" in decomp.detail
         assert decomp.fix and "install IDA" not in decomp.fix
         assert decomp.owner is tc.OwnerTier.LANE_CONDITIONAL
 
     def test_mcp_lane_missing_server_agent_registers_it(
             self, clean_env, ws, monkeypatch, tmp_path):
-        """AGENT-DO: a missing ida-pro-vm on the MCP lane is registered by
+        """AGENT-DO: a missing ida-pro-mcp on the MCP lane is registered by
         the gate itself (claude mcp add --transport http with the task_spec
         url) and re-verified — the user is never handed the command."""
         srv, port = _listener()
@@ -363,7 +363,7 @@ class TestDecompilerLaneConditional:
             # stream — the re-verify face reads project scope only).
             data = json.loads((ws / ".mcp.json").read_text(
                 encoding="utf-8")) if (ws / ".mcp.json").exists() else {}
-            data.setdefault("mcpServers", {})["ida-pro-vm"] = {
+            data.setdefault("mcpServers", {})["ida-pro-mcp"] = {
                 "type": "http", "url": f"http://127.0.0.1:{port}"}
             (ws / ".mcp.json").write_text(json.dumps(data), encoding="utf-8")
             return True, ""
@@ -373,7 +373,7 @@ class TestDecompilerLaneConditional:
             report = tc.check(ws, "windows", task_spec=self._task_spec(port))
         assert attempts, "the gate must attempt the registration itself"
         assert attempts[0][:4] == ["claude", "mcp", "add", "--transport"]
-        assert "ida-pro-vm" in attempts[0]
+        assert "ida-pro-mcp" in attempts[0]
         assert f"http://127.0.0.1:{port}" in attempts[0]
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.PASS, decomp
@@ -403,7 +403,7 @@ class TestDecompilerLaneConditional:
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.PASS, decomp
         assert decomp.supply == "idat64", decomp
-        assert decomp.skipped == ("ida-pro-vm", "analyzeHeadless"), decomp
+        assert decomp.skipped == ("ida-pro-mcp", "analyzeHeadless"), decomp
         assert str(idat) in decomp.detail
         assert "PATH" in decomp.detail  # wiring/export record
 
@@ -489,12 +489,12 @@ class TestMcpAgentDoFace:
         templates run verbatim; unresolvable templates return None (never a
         literal `<ida-mcp-url>` reaches a shell)."""
         argv = tc._concrete_register_argv(
-            "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
+            "claude mcp add --transport http ida-pro-mcp <ida-mcp-url>",
             url="http://127.0.0.1:13337")
         assert argv == ["claude", "mcp", "add", "--transport", "http",
-                        "ida-pro-vm", "http://127.0.0.1:13337"]
+                        "ida-pro-mcp", "http://127.0.0.1:13337"]
         assert tc._concrete_register_argv(
-            "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
+            "claude mcp add --transport http ida-pro-mcp <ida-mcp-url>",
             url=None) is None
         assert tc._concrete_register_argv(
             "claude mcp add sequential-thinking -- "
@@ -825,7 +825,7 @@ class TestRenderFaceAndDoctrine:
     def test_fixes_decompiler_copy_is_lane_aware(self):
         from report_render import FIXES
         fix = FIXES["decompiler"].fix
-        assert "ida-pro-vm" in fix
+        assert "ida-pro-mcp" in fix
         assert "lane" in fix.lower()
         # the choice is a choice, not an install order
         assert "skip" in fix.lower()
@@ -834,7 +834,7 @@ class TestRenderFaceAndDoctrine:
         report = tc.check(ws, "windows", task_spec={
             "constraints": {"dynamic_re": "forbidden"},
             "tools": {"decompiler_lane": "mcp",
-                      "mcp_servers": [{"name": "ida-pro-vm",
+                      "mcp_servers": [{"name": "ida-pro-mcp",
                                        "transport": "http",
                                        "url": "http://127.0.0.1:1"}]}})
         decomp = next(i for i in report.items if i.name == "decompiler")

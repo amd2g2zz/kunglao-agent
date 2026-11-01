@@ -10,7 +10,7 @@ fix-string registry.
 
 Contract pinned here (issue acceptance):
   1. ONE logical family keyed `decompiler`; the candidate supplies are
-     `ida-pro-vm` (MCP), `idat64` (local IDA ladder), `analyzeHeadless`
+     `ida-pro-mcp` (MCP), `idat64` (local IDA ladder), `analyzeHeadless`
      (Ghidra, local binary or the registered ghidra MCP bridge).
   2. `_check_decompiler` emits ONE item per init, always named
      `decompiler`, carrying `supply` (canonical winner | `none`) and
@@ -41,7 +41,7 @@ SCRIPTS = ROOT / "scripts"
 import toolchain as tc  # noqa: E402  (pytest.ini pythonpath = scripts)
 
 FAMILY = "decompiler"
-SUPPLY_IDA_MCP = "ida-pro-vm"
+SUPPLY_IDA_MCP = "ida-pro-mcp"
 SUPPLY_IDA_CLI = "idat64"
 SUPPLY_GHIDRA = "analyzeHeadless"
 SUPPLY_NONE = "none"
@@ -142,7 +142,7 @@ class TestSupplyShapes:
         item = _only(report)
         assert item.supply == SUPPLY_IDA_MCP, item
         assert item.skipped == (SUPPLY_IDA_CLI, SUPPLY_GHIDRA), item
-        assert "via MCP (ida-pro-vm)" in item.detail
+        assert "via MCP (ida-pro-mcp)" in item.detail
         assert not ida_calls and not ghidra_calls, \
             "the local ladder must not run once an MCP supply won"
 
@@ -173,7 +173,7 @@ class TestSupplyShapes:
             self, monkeypatch, ws):
         report = _run(monkeypatch, ws)
         q = _only(report).pending_decision.question
-        assert "idat64" in q and "analyzeHeadless" in q and "ida-pro-vm" in q
+        assert "idat64" in q and "analyzeHeadless" in q and "ida-pro-mcp" in q
 
 
 # ---------- the pure-DEX free-skip nuance survives ----------
@@ -243,7 +243,7 @@ class TestRegistryCensus:
         assert set(na.options) == {SUPPLY_IDA_CLI, SUPPLY_GHIDRA,
                                    SUPPLY_IDA_MCP}
         blob = (na.command or "").lower()
-        assert "idat64" in blob and "ghidra" in blob and "ida-pro-vm" in blob
+        assert "idat64" in blob and "ghidra" in blob and "ida-pro-mcp" in blob
 
     def test_family_item_derives_next_action(self):
         """The FAIL face keeps a machine-parseable next action (no registry
@@ -301,7 +301,7 @@ class TestRenderFace:
     def test_family_fix_text_lists_three_paths(self):
         from report_render import FIXES
         fix = FIXES[FAMILY].fix.lower()
-        assert "idat64" in fix and "ghidra" in fix and "ida-pro-vm" in fix
+        assert "idat64" in fix and "ghidra" in fix and "ida-pro-mcp" in fix
         assert "x-or" in fix or "xor" in fix
 
 

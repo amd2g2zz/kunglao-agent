@@ -592,12 +592,12 @@ def register_ghidra_mcp() -> int:
 
 def register_ida_mcp_url(url: str) -> int:
     """Register an existing IDA MCP URL: `claude mcp add --transport http
-    ida-pro-vm <url>`. Never installs the IDA product (#408).
+    ida-pro-mcp <url>`. Never installs the IDA product (#408).
 
     #455: no longer called from ask_then_install (stdin URL collection
     removed); kept as the registration primitive the #451 negotiation menu
     (agent-collected URL -> this call) consumes."""
-    return _run_claude_mcp(["mcp", "add", "--transport", "http", "ida-pro-vm", url])
+    return _run_claude_mcp(["mcp", "add", "--transport", "http", "ida-pro-mcp", url])
 
 
 def prompt_yes_no(prompt: str, assume_yes: bool = False) -> bool:
@@ -835,7 +835,7 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             print(
                 "toolchain-install: IDA is not auto-installable — "
                 "register your existing IDA MCP URL manually: "
-                "`claude mcp add --transport http ida-pro-vm <ida-mcp-url>`, "
+                "`claude mcp add --transport http ida-pro-mcp <ida-mcp-url>`, "
                 "then re-run kunglao-init",
                 file=sys.stderr,
             )

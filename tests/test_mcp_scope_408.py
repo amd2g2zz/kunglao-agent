@@ -162,10 +162,10 @@ def test_registered_server_urls_reads_workspace_and_plugin_only(
     poison = _poison_claude_json(tmp_path)
     monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(poison))
     (ws / ".mcp.json").write_text(json.dumps(
-        {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:13337"}}}),
+        {"mcpServers": {"ida-pro-mcp": {"url": "http://127.0.0.1:13337"}}}),
         encoding="utf-8")
     urls = mcp_probe.registered_server_urls(ws)
-    assert urls == {"ida-pro-vm": "http://127.0.0.1:13337"}
+    assert urls == {"ida-pro-mcp": "http://127.0.0.1:13337"}
     assert no_user_global_read, "the loader spy must have observed the reads"
 
 

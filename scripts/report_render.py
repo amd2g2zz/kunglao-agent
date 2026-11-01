@@ -151,7 +151,7 @@ FIXES: dict[str, ToolMeta] = {
         repo="https://sourceware.org/git/binutils-gdb.git",
         package="binutils", verify_cmd="objdump --version"),
     # Issue 210: ONE family entry — the decompiler face is XOR (local IDA
-    # XOR local Ghidra XOR the ida-pro-vm MCP). The fix string lists all
+    # XOR local Ghidra XOR the ida-pro-mcp MCP). The fix string lists all
     # three paths; there is no separate `ghidra` / `ida` registry entry to
     # cross-reference (readers of the GHIDRA_HOME env face use THIS text).
     "decompiler": ToolMeta(

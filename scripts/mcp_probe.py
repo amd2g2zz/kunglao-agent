@@ -347,10 +347,10 @@ def registered_server_urls(ws: Path) -> dict[str, str]:
 
 # ---------- check ----------
 
-# #407: decompiler supply is MCP-first — a registered `ida-pro-vm` satisfies
+# #407: decompiler supply is MCP-first — a registered `ida-pro-mcp` satisfies
 # the HARD `ghidra` item (the decompiler need is met by IDA) and promotes
-# ida-pro-vm to HARD when it is the sole decompiler provider (ghidra absent);
-# otherwise ida-pro-vm keeps its WARN default.
+# ida-pro-mcp to HARD when it is the sole decompiler provider (ghidra absent);
+# otherwise ida-pro-mcp keeps its WARN default.
 
 
 def read_project_type(ws: Path) -> str | None:
@@ -368,8 +368,8 @@ def read_project_type(ws: Path) -> str | None:
 def check_mcp(ws: Path, project_type: str) -> list[MCPCheck]:
     """Probe the manifest items applicable to project_type.
 
-    #407: decompiler supply is MCP-first — a registered `ida-pro-vm` satisfies
-    the HARD `ghidra` item (detail names the provider), and `ida-pro-vm` is
+    #407: decompiler supply is MCP-first — a registered `ida-pro-mcp` satisfies
+    the HARD `ghidra` item (detail names the provider), and `ida-pro-mcp` is
     promoted to HARD when it is the sole decompiler provider (ghidra absent).
     """
     if project_type not in VALID_TYPES:
@@ -380,23 +380,23 @@ def check_mcp(ws: Path, project_type: str) -> list[MCPCheck]:
         )
     found = registered_names(ws)
     ghidra_registered = "ghidra" in found
-    ida_pro_vm_registered = "ida-pro-vm" in found
+    ida_pro_mcp_registered = "ida-pro-mcp" in found
     checks: list[MCPCheck] = []
     for item in MANIFEST:
         if project_type not in item.types:
             continue
         sources = found.get(item.name)
         tier = item.tier
-        if item.name == "ida-pro-vm" and not ghidra_registered:
-            # #407: ida-pro-vm is the sole decompiler provider -> HARD.
+        if item.name == "ida-pro-mcp" and not ghidra_registered:
+            # #407: ida-pro-mcp is the sole decompiler provider -> HARD.
             tier = "HARD"
-        if item.name == "ghidra" and not sources and ida_pro_vm_registered:
+        if item.name == "ghidra" and not sources and ida_pro_mcp_registered:
             # #407: the HARD ghidra supply item is satisfied by the IDA MCP
-            # decompiler provider — an operator with only ida-pro-vm must not
+            # decompiler provider — an operator with only ida-pro-mcp must not
             # be reported "ghidra missing".
             checks.append(MCPCheck(
                 name=item.name, status="PASS", tier=item.tier,
-                detail="satisfied via ida-pro-vm (MCP decompiler provider)",
+                detail="satisfied via ida-pro-mcp (MCP decompiler provider)",
             ))
             continue
         if sources:

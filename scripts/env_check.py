@@ -459,7 +459,7 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
                       .so sample (toolchain._probe_native_so — the #756
                       central-directory version) additionally requires SOME
                       decompiler supply (analyzeHeadless | idat64 | MCP
-                      ghidra/ida-pro-vm). Pure-DEX stays PASS.
+                      ghidra/ida-pro-mcp). Pure-DEX stays PASS.
     - web           : not applicable — callers omit the row entirely
                       ("decompiler trials meaningless for web", #728 D5);
                       defensively handled as PASS-info here.
@@ -470,13 +470,13 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
         # macos (#760): Mach-O decompiler expectation rides the same legacy
         # GHIDRA_HOME semantics; a FAIL stays DEGRADED (non-blocking, T3).
         # matrix4d: the 3-path OR contract holds on EVERY typed branch —
-        # a registered decompiler MCP (ghidra/ida-pro-vm in the
+        # a registered decompiler MCP (ghidra/ida-pro-mcp in the
         # workspace registry) satisfies the supply here too; the legacy
         # face only knew GHIDRA_HOME and silently dropped the MCP path
         # (native units died at the armed gate with the MCP registered).
         ok, msg = check_ghidra()
         if not ok and _mcp_decompiler_supply(ws):
-            return ("PASS", "decompiler supply: MCP ghidra/ida-pro-vm "
+            return ("PASS", "decompiler supply: MCP ghidra/ida-pro-mcp "
                             "(workspace registry)")
         return ("PASS" if ok else "FAIL"), msg
 
@@ -489,7 +489,7 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
         face for face in (
             f"analyzeHeadless at {GHIDRA_DEFAULT}" if GHIDRA_DEFAULT and GHIDRA_DEFAULT.exists() else "",
             f"idat64 at {ida}" if ida else "",
-            "MCP ghidra/ida-pro-vm" if _mcp_decompiler_supply(ws) else "",
+            "MCP ghidra/ida-pro-mcp" if _mcp_decompiler_supply(ws) else "",
         ) if face
     ]
     has_supply = bool(supply_items)
