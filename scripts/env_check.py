@@ -346,7 +346,10 @@ def _mcp_decompiler_supply(ws: Path) -> bool:
     try:
         import mcp_probe
         registered = mcp_probe.registered_names(ws)
-        return bool(registered & {"ghidra", "ida-pro-vm", "ida-pro-mcp"})
+        # registered is a name→config dict — setify for the intersection
+        # (a dict & set raises TypeError, which the fail-open would swallow
+        # into a constant False — the #947 CI e2e failure's root cause)
+        return bool(set(registered) & {"ghidra", "ida-pro-vm", "ida-pro-mcp"})
     except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
         return False
 
