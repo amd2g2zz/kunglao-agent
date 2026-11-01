@@ -576,3 +576,178 @@ class TestRunLoopTaskTickGate:
         assert row["loop"]["status"] == "harness_error"
         assert row["excluded_from_performance"] is True
         assert row["arm"] == ds.ARM if hasattr(ds, "ARM") else True
+
+
+# ----------------------- 6. --workspace reuse (#888) -------------------------
+
+class TestWorkspaceReuse888:
+    """#888: run_loop_task(workspace=<ws>) reuses a PRE-ARMED workspace
+    instead of initing a fresh one. The P6 tick gate verifies the
+    heartbeat cron BEFORE spawning, and a cron can only tick a workspace
+    that already exists — on a fresh timestamped workspace the gate is
+    unpassable by its own driver. The operator arms first (init + PQ
+    spine + preflight + heartbeat registration) and passes the workspace
+    in; the tick gate still runs, the seed/preflight contract is the
+    caller's. Units are synthesized in tmp (the eval corpus is
+    local-only material — worktrees and CI never carry it)."""
+
+    REUSE_TASK_YAML = """\
+schema: kunglao-eval-task/1
+task_id: unit-ws-reuse-pin-v1
+eval_version: eval-v1
+tier: smoke
+source: constructed
+family: py-derive
+seed: 7
+material_class: source-readable
+anchors:
+  goal_verbatim: "derive the 64-bit mix output for a given seed"
+  success_criterion: "checker PASS on the published pair set"
+  verification_method: reproduction
+workspace_scaffold:
+  language: python
+  files:
+  - target/derive.py
+  - toolbox/README.txt
+  - probes/stock-behavior.json
+  entry: target/derive.py
+  candidate_contract: "ONE python module exposing derive(seed) -> hex str"
+checker:
+  kind: pair-match
+  oracles: [pair-match]
+  entrypoint: checker.py
+  metrics: [ttc_seconds, dispatch_count, pass_at_k_contribution, converged]
+  thresholds:
+    min_pair_ratio: 1.0
+ground_truth:
+  file: ground_truth.json
+  space_bits: 32
+contamination:
+  held_out: true
+  distiller_excluded: true
+  provenance: constructed
+"""
+
+    def _make_unit(self, tmp_path: Path) -> Path:
+        unit = tmp_path / "unit-ws-reuse-pin-v1"
+        (unit / "target").mkdir(parents=True)
+        (unit / "toolbox").mkdir()
+        (unit / "probes").mkdir()
+        (unit / "target" / "derive.py").write_text(
+            "def derive(seed: int) -> str:\n"
+            "    return format((seed * 0x9E3779B97F4A7C15)"
+            " & ((1 << 64) - 1), '016x')\n",
+            encoding="utf-8")
+        (unit / "toolbox" / "README.txt").write_text(
+            "probes\n", encoding="utf-8")
+        (unit / "probes" / "stock-behavior.json").write_text(
+            "{}\n", encoding="utf-8")
+        (unit / "task.yaml").write_text(self.REUSE_TASK_YAML,
+                                        encoding="utf-8")
+        (unit / "ground_truth.json").write_text(json.dumps({
+            "schema": "kunglao-eval-ground-truth/1",
+            "task_id": "unit-ws-reuse-pin-v1",
+            "family": "py-derive",
+            "seed": 7,
+            "eval_version": "eval-v1",
+            "space_bits": 32,
+            "published_pairs": [],
+            "minted_probe_count": 0,
+            "constants": {},
+        }), encoding="utf-8")
+        return unit
+
+    def test_reuse_face_rejects_a_non_workspace_dir(self, tmp_path):
+        """The reuse validation: a dir without the kunglao markers lands
+        a structured HARNESS_PREFLIGHT row, never a session."""
+        bare = tmp_path / "bare"
+        bare.mkdir()
+        task = {"family": "py-derive", "checker": {"kind": "pair-match"}}
+        ws, prompt, row = lr._init_task_face(
+            tmp_path / "t1", task, tmp_path, arm=lr.ARM, wall_cap_s=60.0,
+            solo_fraction=0.5,
+            deliverable_rel="runs/deliverables/candidate.py",
+            layer_paths=[], probe_block="", workspace=bare)
+        assert row is not None and ws == bare
+        assert row["failures"][0]["code"] == "HARNESS_PREFLIGHT"
+        assert "workspace reuse" in row["failures"][0]["detail"]
+
+    def test_reuse_refuses_an_unarmed_workspace(self, tmp_path,
+                                                monkeypatch):
+        """The tick gate still runs on a reused workspace: registered but
+        never armed (loop_registered=false) refuses before any launch."""
+        from heartbeat import heartbeat_register
+
+        def _no_launch(*a, **k):
+            raise AssertionError("launch_session called on an unarmed "
+                                 "reused workspace — the gate leaked")
+
+        unit = self._make_unit(tmp_path)
+        ws = lr.init_workspace(unit, tmp_path / "workspaces")
+        heartbeat_register(ws)
+        monkeypatch.setattr(lr, "launch_session", _no_launch)
+        row = lr.run_loop_task(str(unit), tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0, session_cmd=None,
+                               workspace=ws)
+        assert row["verdict"] == "SKIP"
+        assert row["failures"][0]["code"] == lr.TICK_GATE_CODE
+        assert row["loop"]["workspace"] == str(ws)
+
+    def test_reuse_runs_the_pipeline_in_the_provided_workspace(
+            self, tmp_path, monkeypatch):
+        """Armed reuse: the session pipeline runs in the PROVIDED
+        workspace (no fresh init), through the real seed/preflight faces
+        the operator ran pre-arm, to the full harvest + row tail."""
+        from heartbeat import heartbeat_register, mark_loop_registered
+        from rlvr.liveness import append_tick_log
+
+        unit = self._make_unit(tmp_path)
+        ws = lr.init_workspace(unit, tmp_path / "workspaces")
+        task = lr.ds.load_task(unit)
+        lr.seed_question_spine(ws, task)
+        pf_ok, pf_reasons = lr.preflight(ws)
+        assert pf_ok, pf_reasons
+        heartbeat_register(ws)
+        mark_loop_registered(ws)
+        append_tick_log(ws, "tick", origin="cron")
+        append_tick_log(ws, "tick", origin="cron")
+
+        seen = {}
+
+        def _stub_launch(workspace, prompt, **kwargs):
+            seen["ws"] = Path(workspace)
+            return {"returncode": 0, "wall_s": 1.0, "timed_out": False,
+                    "session_cost": None}
+
+        monkeypatch.setattr(lr, "launch_session", _stub_launch)
+        row = lr.run_loop_task(str(unit), tmp_path, budget_usd=1.0,
+                               wall_cap_s=60.0, session_cmd=None,
+                               workspace=ws)
+        assert seen["ws"] == ws, "the session must run in the PROVIDED ws"
+        assert Path(row["loop"]["workspace"]) == ws
+        # the pipeline reached the session+harvest tail: a no-deliverable
+        # stub session lands the structured BAD_CANDIDATE row, not an
+        # init/harness skip
+        assert row["failures"][0]["code"] == "BAD_CANDIDATE"
+        assert row["loop"]["session"]["returncode"] == 0
+
+
+class TestWorkspaceReuseRefusals888:
+    """#888 review round: the reuse combination guards."""
+
+    def test_cc_arm_with_workspace_refuses(self, tmp_path):
+        unit = TestWorkspaceReuse888()._make_unit(tmp_path)
+        rc, _doc = lr.run_loop_tier(
+            [str(unit)], tmp_path / "out", tier="smoke", budget_usd=1.0,
+            wall_cap_s=60.0, session_cmd=None, arm="cc-default",
+            workspace=tmp_path / "ws")
+        assert rc == lr.RC_REFUSED
+
+    def test_multi_task_tier_with_workspace_refuses(self, tmp_path):
+        unit_a = TestWorkspaceReuse888()._make_unit(tmp_path / "a")
+        unit_b = TestWorkspaceReuse888()._make_unit(tmp_path / "b")
+        rc, _doc = lr.run_loop_tier(
+            [str(unit_a), str(unit_b)], tmp_path / "out", tier="smoke",
+            budget_usd=1.0, wall_cap_s=60.0, session_cmd=None,
+            workspace=tmp_path / "ws")
+        assert rc == lr.RC_REFUSED
