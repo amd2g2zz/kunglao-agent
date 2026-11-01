@@ -89,7 +89,7 @@ class MCPItem:
 MANIFEST_GROUPS: dict[str, list[str]] = {
     "required_all_types": ["ghidra", "sequential-thinking"],
     "windows_t3": ["x64dbg", "volatility"],
-    "optional_ida": ["ida-pro-vm"],
+    "optional_ida": ["ida-pro-mcp"],
     "android_graph": ["gitnexus"],
     "cti": ["virustotal"],
     # #698: supply-scaffold declaration (install guidance). WARN tier keeps
@@ -129,10 +129,12 @@ MANIFEST: tuple[MCPItem, ...] = (
         register="claude mcp add volatility -- python <path>/volatility_mcp_server.py",
     ),
     MCPItem(
-        name="ida-pro-vm", tier="WARN", types=DESKTOP_TYPES,
+        # #947: the live MCP registers as ida-pro-mcp (the owner's supply —
+        # the ida-pro-vm-only scan was a false negative on a real supply).
+        name="ida-pro-mcp", tier="WARN", types=DESKTOP_TYPES,
         purpose="IDA remote analysis (when IDA is chosen)",
         source="IDA MCP (http transport)",
-        register="claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
+        register="claude mcp add --transport http ida-pro-mcp <ida-mcp-url>",
     ),
     MCPItem(
         name="gitnexus", tier="HARD", types=("android",),

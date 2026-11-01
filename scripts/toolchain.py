@@ -146,9 +146,9 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
         "install IDA Pro and put idat64 on PATH, OR install Ghidra "
         "(choco install ghidra -y / brew install --cask ghidra / "
         "apt-get install -y ghidra) and set GHIDRA_HOME, OR register the "
-        "ida-pro-vm MCP: `claude mcp add --transport http ida-pro-vm "
+        "ida-pro-mcp MCP: `claude mcp add --transport http ida-pro-mcp "
         "<ida-mcp-url>` — ONE supply satisfies the family (XOR)",
-        options=("idat64", "analyzeHeadless", "ida-pro-vm")),
+        options=("idat64", "analyzeHeadless", "ida-pro-mcp")),
     "aapt": NextAction("install",
                        "install Android SDK build-tools (aapt/aapt2)"),
     "jadx": NextAction("install"),

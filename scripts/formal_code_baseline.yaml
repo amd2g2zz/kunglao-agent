@@ -93,7 +93,7 @@ files:
   scripts/emit_gate.py: 12
   scripts/encoding_lint.py: 4
   scripts/entropy_face.py: 2
-  scripts/env_check.py: 110
+  scripts/env_check.py: 114
   scripts/env_manifest.py: 44
   scripts/env_repair_l1.py: 7
   scripts/env_state_probe.py: 19
@@ -182,7 +182,7 @@ files:
   scripts/loop_scheduler.py: 16
   scripts/loop_state.py: 5
   scripts/loop_watchdog.py: 5
-  scripts/mcp_probe.py: 42
+  scripts/mcp_probe.py: 43
   scripts/mcp_repair.py: 1
   scripts/mechanism_scheduler.py: 22
   scripts/method_families.py: 8

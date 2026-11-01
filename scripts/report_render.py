@@ -161,17 +161,17 @@ FIXES: dict[str, ToolMeta] = {
             "mdfind/find bundle sweep/brew cask/known dirs); (2) local Ghidra "
             "— install Ghidra and set GHIDRA_HOME=<root> "
             "(support/analyzeHeadless must exist, platform-correct name "
-            "#409); (3) the ida-pro-vm MCP — `claude mcp add --transport "
-            "http ida-pro-vm <ida-mcp-url>` (task_spec tools.decompiler_lane: "
+            "#409); (3) the ida-pro-mcp MCP — `claude mcp add --transport "
+            "http ida-pro-mcp <ida-mcp-url>` (task_spec tools.decompiler_lane: "
             "mcp verifies registration + reachability, never a local IDA "
             "install). Ghidra OR IDA — either satisfies this check when "
-            "present; a ghidra/ida-pro-vm MCP registration covers the MCP "
+            "present; a ghidra/ida-pro-mcp MCP registration covers the MCP "
             "path, and the pre-empted sibling is recorded as skipped. None "
             "present -> exit-8 PendingDecision CHOICE: install-local-ida "
             "(license) / install-ghidra (#408 installer) / "
             "skip-decompiler-lane",
         description="headless decompiler supply — XOR family "
-                    "(IDA idat64 | Ghidra analyzeHeadless | ida-pro-vm MCP)",
+                    "(IDA idat64 | Ghidra analyzeHeadless | ida-pro-mcp MCP)",
         url="https://ghidra-sre.org/",
         repo="https://github.com/NationalSecurityAgency/ghidra",
         package="ghidra", verify_cmd="analyzeHeadless"),
