@@ -142,9 +142,9 @@ files:
   scripts/eval_chain_targets.py:
     r1: 1
   scripts/eval_checker.py:
-    r1: 3
+    r1: 7
   scripts/eval_contract.py:
-    r1: 1
+    r1: 3
   scripts/eval_control_arm.py:
     r1: 1
   scripts/eval_corpus_lint.py:
@@ -1004,6 +1004,8 @@ files:
   tests/test_eval_chain_370.py:
     r1: 3
   tests/test_eval_chain_render_818.py:
+    r1: 1
+  tests/test_eval_checker_snake_delegate_888.py:
     r1: 1
   tests/test_eval_contract_352.py:
     r1: 1

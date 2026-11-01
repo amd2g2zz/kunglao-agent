@@ -121,11 +121,14 @@ FAMILY_CONTRACT: dict[str, dict[str, str]] = {
                            "target_surface": "text"},
     "tf-hardwall-beacon": {"suffix": ".txt", "response_language": "Text answer document",
                            "target_surface": "text"},
-    # snake-trainer construction: the graded candidate is the PATCHED
-    # GAME BINARY itself (a runnable Mach-O, no suffix); the checker runs
-    # it headless on the grading seeds and grades the run logs.
+    # snake-trainer construction (#816): the graded candidate is the
+    # TRAINER (a runnable executable, no suffix) the loop delivers;
+    # grading is UNIT-ENTRYPOINT — the unit's own checker.py drives the
+    # GUI-only game with the candidate and grades the game's own run
+    # record (snake-gt/2, seed-honest + keyed tamper token), so the
+    # shared replay face has no purchase on this family (#888).
     "tf-snake": {"suffix": "", "response_language": "Binary Mach-O",
-                 "target_surface": "binary"},
+                 "target_surface": "binary", "grading": "unit-entrypoint"},
     # ---- chain tier (eval_chain registry, issue 370) ---------------------
     # multi-layer decryption-chain units: the analysis subject is the
     # committed obfuscated bundle (text surface); the graded candidate is
