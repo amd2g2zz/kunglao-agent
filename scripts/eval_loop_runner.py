@@ -130,6 +130,7 @@ SCRIPT_DIR = scripts_bootstrap()
 import eval_dataset as ds
 import eval_smoke_runner as rnr
 import tuition_curve
+from rlvr import family_playbook
 
 try:  # repo runtime dep (eval_dataset already requires it)
     import yaml
@@ -777,6 +778,23 @@ def prompt_injection_blocks(task_dir: Path,
     return layer_paths, self_check_block(task.get("family"))
 
 
+# ------------------------------------------------- family playbook (#960)
+ENV_PLAYBOOK = "KUNGLAO_PLAYBOOK"
+
+
+def playbook_injection_block(family: str | None) -> str:
+    """#960 the Type-2 injection seam: the family playbook injected WHOLE
+    into the loop brief (no retrieval layer — whole-file or nothing).
+    Gated by ``KUNGLAO_PLAYBOOK=1`` — the warm-vs-cold A/B switch for
+    the #888 measurement; unset (or any other value) keeps the prompt
+    byte-identical to the pre-playbook shape (default OFF, zero
+    behavior change). A family with no playbook file also degrades to
+    no block (cold arm), so the same env value is honest on both arms."""
+    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+        return ""
+    return family_playbook.session_block(str(family or ""))
+
+
 # ------------------------------------------------------- factor settle (I4)
 def settle_factor_sample(workspace: Path) -> bool:
     """I4 (exp8): append ONE final factor-vector history sample at session
@@ -1213,6 +1231,7 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       layer_paths: list[str] | None = None,
                       include_t1_direct: bool = True,
                       probe_block: str = "",
+                      playbook_block: str = "",
                       plan_block: str | None = None) -> str:
     """The loop brief: the anchors verbatim + the candidate contract + the
     mandated deliverable path, plus the injected contract blocks.
@@ -1238,7 +1257,10 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     never told. ``layer_paths`` (I2, exp8) injects the chain
     LAYER_CHECKPOINTS block (exact grader paths). ``probe_block`` (I3,
     exp8) injects the family SELF_CHECK block. ``include_t1_direct``
-    (I5, exp8) adds the T-1 affirmative one-liner. ``plan_block``
+    (I5, exp8) adds the T-1 affirmative one-liner. ``playbook_block``
+    (#960) injects the family playbook WHOLE (the Type-2 transfer
+    channel; KUNGLAO_PLAYBOOK=1 at the runner seam) — absent (empty)
+    the prompt is byte-identical to the pre-#960 shape. ``plan_block``
     (learning-loop program, card P1) injects the goal-backward plan /
     hypotheses block (backward_plan output) as a first-class section;
     absent (None) the prompt is byte-identical to the pre-P1 shape."""
@@ -1250,6 +1272,8 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
+    if playbook_block:
+        extras.append(playbook_block)
     if plan_block:
         extras.append(plan_block)
     if include_t1_direct:
@@ -1356,7 +1380,8 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       budget_usd: float,
                       solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
-                      probe_block: str = "") -> str:
+                      probe_block: str = "",
+                      playbook_block: str = "") -> str:
     """The gap-redo session's brief: same task (anchors + contract +
     deliverable path, the workspace ITSELF carries the prior session's
     state) + the CHECKER GAP block + the wall partition recomputed for
@@ -1364,14 +1389,18 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     prompt: anchors and contract only — the gap adds shape, not answers.
     I2/I3/I5 (exp8): the chain LAYER_CHECKPOINTS block, the family
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
-    same task under the same prompt contract. (issue 380 P3-1: the shared
-    tail renders through _render_task_prompt.)"""
+    same task under the same prompt contract; ``playbook_block`` (#960)
+    rides the same way so a redo session keeps the init-time playbook
+    visible. (issue 380 P3-1: the shared tail renders through
+    _render_task_prompt.)"""
     extras: list[str] = [wall_partition_block(
         wall_cap_s, solo_fraction=solo_fraction)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
+    if playbook_block:
+        extras.append(playbook_block)
     extras.append(T1_DIRECT_LINE)
     opening = (
         "/kunglao-agent GAP-REDO round in THIS workspace: the previous "
@@ -1818,6 +1847,7 @@ def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
                     wall_cap_s: float, solo_fraction: float,
                     deliverable_rel: str, layer_paths: list[str],
                     probe_block: str,
+                    playbook_block: str = "",
                     warm_context_from: Path | None = None,
                     workspace: Path | None = None
                     ) -> tuple[Path | None, str, dict | None]:
@@ -1878,7 +1908,8 @@ def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
                                        wall_cap_s=wall_cap_s,
                                        solo_fraction=solo_fraction,
                                        layer_paths=layer_paths,
-                                       probe_block=probe_block)
+                                       probe_block=probe_block,
+                                       playbook_block=playbook_block)
         return ws, prompt, None
     except RuntimeError as exc:
         # structured SKIP row, never a tier-wide crash: one unit's init
@@ -1933,11 +1964,13 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
 
     layer_paths, probe_block = prompt_injection_blocks(tdir, task)
+    playbook_block = playbook_injection_block(task.get("family"))
 
     ws, prompt, skip_row = _init_task_face(
         tdir, task, out, arm=arm, wall_cap_s=wall_cap_s,
         solo_fraction=solo_fraction, deliverable_rel=deliverable_rel,
         layer_paths=layer_paths, probe_block=probe_block,
+        playbook_block=playbook_block,
         warm_context_from=warm_context_from, workspace=workspace)
     if skip_row is not None:
         if skip_row["failures"][0]["code"] == "BAD_TASK":
@@ -2007,7 +2040,8 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             render_gap_block(extract_checker_gap(res)),
             wall_cap_s=redo_wall, budget_usd=redo_budget,
             solo_fraction=solo_fraction,
-            layer_paths=layer_paths, probe_block=probe_block)
+            layer_paths=layer_paths, probe_block=probe_block,
+            playbook_block=playbook_block)
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
               file=sys.stderr)
