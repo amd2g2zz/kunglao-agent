@@ -503,7 +503,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 209124af98203e4467a6f6cd42ff9604d8f40462eb65652336d16f7513e13063
+    sha256: 5c7539d986404699fa431e0fa9d60cd50e474deb478f77dbebe6f9ba7509d95c
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -1631,11 +1631,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: f4de82ea1c5ded0889abafee7a2058d0a9d6f220680a7fdb4b413c2d5cb6c95a
+    sha256: 49e7b957811a0aa7214958986b804694f2266c3d3a9156abd63dd2a9a48153d5
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 2a67ba9bb7f9e0184b07e405dba517c7472b09c4958715369041bdc1caa01304
+    sha256: e80dae40d548cb1eee62011a9fb809a460dd596daeb506c9c1afed3226ae496c
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2164,6 +2164,10 @@ files:
     dest: .claude/templates/frida/windowed-stalker.js.tmpl
     kind: asset
     sha256: 88d6a2cd7045de3ff4a6ee97021ef2cb27bf6fab9e1ae998f01d13bac1cfcb97
+  - src: templates/sandbox-denying-units.sb.tmpl
+    dest: .claude/templates/sandbox-denying-units.sb.tmpl
+    kind: asset
+    sha256: 7e66bea0ffd173265836b83abacfd92a747fb7f3f980f337cd5a8ba1a0999d44
   - src: templates/scripts/README.md
     dest: .claude/templates/scripts/README.md
     kind: asset
@@ -2239,7 +2243,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: a8b65fa13d01edef9b74474d4fb074849a8f5605c6478f35163c8023b47a52b2
+    sha256: 0e0c1ad802e8bed362e743595f26ab56251d152522b762a4941bedcc7dd248eb
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
