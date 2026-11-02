@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: aaca1d275f52c852928c9e5ef1e2a54dbffcabce419b8dbec3a5a63eadb86869
+    sha256: 11ed6840809f21a1eb2eba2f7a4d5a19a12978c60a1676682f62e8bb842ce041
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1404,6 +1404,10 @@ files:
     dest: .claude/scripts/rlvr/crystallize.py
     kind: scaffold
     sha256: 8dd4e5f8596a7efdd9c2f31382f4d1c0e08cc154f9181fe7af09c36068159005
+  - src: scripts/rlvr/direction.py
+    dest: .claude/scripts/rlvr/direction.py
+    kind: scaffold
+    sha256: 45d95588a7bb24def8e2a00df7fab3959ef7a3c9d049dcfd60d6212bc4edc452
   - src: scripts/rlvr/distill_dgate.py
     dest: .claude/scripts/rlvr/distill_dgate.py
     kind: scaffold
@@ -1439,7 +1443,7 @@ files:
   - src: scripts/rlvr/family_playbook.py
     dest: .claude/scripts/rlvr/family_playbook.py
     kind: scaffold
-    sha256: 6eed283b9f8d5c5d01635ef2e33f77a0f136c86d3bd3e782c5149ac3583545e2
+    sha256: 7c8591f8365884cb571a907229f7dd1bb1990471617d438ec2ea4f03eeae67eb
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
@@ -1527,7 +1531,7 @@ files:
   - src: scripts/rlvr/playbook_distill.py
     dest: .claude/scripts/rlvr/playbook_distill.py
     kind: scaffold
-    sha256: 57829512c91e4e3a68bf3c4e0f183623c57182f2036d0bf7454306357b42152d
+    sha256: f9a3adbdc9605f314ca0c84f09be10bacdce0d2e70dab4569e672df39fa8db04
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
@@ -1655,11 +1659,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: d196fc4e1f9a671d45f6cac71085f3e61298ed1b42c2ef75d1f56f72a3311977
+    sha256: ebc8d53b942a8304acad43aafe4153f16f8ee1e5ea09a6ccefe6fc482e9d9fc8
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 6f45ef3b4797f6222ec60851829a59c21dd8c7cca3936c757505357224fcb73c
+    sha256: f4a6500309dcbabb3d980238000436d452420a85d9321effb45f1489dbbbc825
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
