@@ -204,12 +204,15 @@ def check(workspace):
 
     # (f) #634: PARK legality — a suspended claim must carry a non-empty
     # wake_condition; a wake-less PARK is an unbounded wait in disguise.
+    # #955: PARKED (the censored-env escrow state) rides the same rule —
+    # its wake path is the env-repair ladder resume.
     for c in claims:
-        if str(c.get("status") or "").upper() != "PARK":
+        status = str(c.get("status") or "").upper()
+        if status not in ("PARK", "PARKED"):
             continue
         if not str(c.get("wake_condition") or "").strip():
             violations.append("(f) claim " + str(c.get("id") or "<unknown>")
-                              + " is PARK without wake_condition")
+                              + f" is {status} without wake_condition")
 
     # (g) #879: claim lineage edges — supersedes / superseded_by /
     # derived_from must reference EXISTING claims, never the claim itself,

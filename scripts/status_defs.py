@@ -77,11 +77,20 @@ IN_PROGRESS_STATUSES = {"IN_PROGRESS"}
 
 ACTIVE_STATUSES = {"OPEN", "IN_PROGRESS"}
 
-SUSPENDED = {"PARK"}
+SUSPENDED = {"PARK", "PARKED"}
 """#634: PARK = suspension on an external gate. NOT terminal (revivable via
 mission_stall.revive), NOT dispatchable (excluded from open-claim fronts;
 a PARK claim must carry a non-empty wake_condition — carrier-consistency
-rule (f) refuses wake-less PARKs)."""
+rule (f) refuses wake-less PARKs).
+
+#955: PARKED = suspension on an EXOGENOUS env death (the interruption
+classifier's censored_env): the claim's provisional mass is escrowed in
+runs/parked-mass.jsonl (rlvr/parking.py) and decays on the #667
+parameters. Same family semantics as PARK — NOT terminal (revivable via
+rlvr.parking.unpark_claim when the env-repair ladder clears), NOT
+dispatchable, NOT open-frontier work — and the same carrier-consistency
+rule (f): a PARKED claim must carry a non-empty wake_condition (the
+env-repair resume is the wake path)."""
 
 
 class LedgerLineType:
