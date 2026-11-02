@@ -1294,6 +1294,69 @@ def observe(ws, signature_hash: str, method_family: str,
 
 
 # ---------------------------------------------------------------------------
+# censored rows — the #955 interruption record
+# ---------------------------------------------------------------------------
+
+#: the #955 CENSORED(env, reason) row kind, riding the SAME consolidated
+#: experience substrate. NOT a trajectory row: a censored sample carries
+#: no (s, a, r) — it records that the rollout died exogenously and that
+#: the direction posterior must stay SILENT about it. The trajectory
+#: prefix filter above already keeps it out of the fold and the pandas
+#: projection by construction; censored_rows() is its read face.
+SCHEMA_CENSORED = "censored/1"
+
+
+def append_censored(ws, env: str, reason: str, *, source: str,
+                    claim: str | None = None,
+                    rollout_id: str | None = None,
+                    direction: str | None = None,
+                    ts: str | None = None) -> dict:
+    """Append one CENSORED(env, reason) row (the #955 schema face, the
+    standard append pattern: schema stamp + boundary validation + fail-
+    open append + the #799 seal). ``env`` MUST be one of the
+    interruption classifier's closed env classes (a foreign class is a
+    caller error — ValueError, the boundary never invents a vocabulary
+    entry). ``claim`` / ``rollout_id`` / ``direction`` ride only when
+    supplied (the additive-column discipline: a bare censored row is
+    byte-stable). The row NEVER feeds the fold or any posterior — that
+    is the censoring semantics, enforced by the trajectory prefix wall
+    plus rlvr.censoring.posterior_observations for the #954 seam."""
+    from rlvr import interruption as _itv  # noqa: PLC0415 — lazy, cycle-free
+    env_out = str(env or "").strip()
+    if env_out not in _itv.ENV_CLASSES:
+        raise ValueError(
+            f"q_cells.append_censored: env {env!r} not in the closed "
+            f"env-class vocabulary {list(_itv.ENV_CLASSES)}")
+    if not str(source or "").strip():
+        raise ValueError("q_cells.append_censored: source must be non-empty")
+    row: dict = {
+        "schema": SCHEMA_CENSORED,
+        "ts": ts or _now(),
+        "source": str(source),
+        "env": env_out,
+        "reason": str(reason or ""),
+        "censored": True,
+    }
+    if claim:
+        row["claim"] = str(claim)
+    if rollout_id:
+        row["rollout_id"] = str(rollout_id)
+    if direction:
+        row["direction"] = str(direction)
+    row = _seal.sign_row(row)  # #799: every q-cell row seals at write
+    appended = _cl.append(ws, "experience", row)
+    return {"appended": appended, "row": row}
+
+
+def censored_rows(ws) -> list[dict]:
+    """Every sealed censored/1 row, append order (the #955 link-12
+    cross-run read face: the censored record survives the process)."""
+    return _seal.trusted_rows(
+        _cl.read(ws, "experience", schema_prefix="censored"),
+        op="q_cells.censored_rows")
+
+
+# ---------------------------------------------------------------------------
 # v2 trajectory rows — the (s,a,r) ledger face (#878)
 # ---------------------------------------------------------------------------
 

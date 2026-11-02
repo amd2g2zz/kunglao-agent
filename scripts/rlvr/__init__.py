@@ -20,6 +20,7 @@ from . import commit_semantics
 from . import compose
 from . import consolidated_ledger
 from . import belief
+from . import censoring
 from . import constants_ref
 from . import crystallize
 from . import distill_dgate
@@ -35,6 +36,7 @@ from . import hypotheses
 from . import incremental_reward
 from . import invariants
 from . import l1_planner
+from . import interruption
 from . import key_freeze
 from . import l1_value
 from . import ledger
@@ -47,6 +49,7 @@ from . import meta_policy
 from . import meta_retrieval
 from . import meta_arms
 from . import obstacles
+from . import parking
 from . import phi_tree
 from . import playbook
 from . import policy_compare
@@ -56,6 +59,7 @@ from . import posteriors
 from . import pricing
 from . import prediction_ledger
 from . import priors
+from . import probe_face
 from . import q_cells
 from . import recipe_arms
 from . import refutation_fold
@@ -84,6 +88,7 @@ __all__ = [
     "attribution",
     "belief",
     "censored_review",
+    "censoring",
     "commit_semantics",
     "compose",
     "consolidated_ledger",
@@ -101,6 +106,7 @@ __all__ = [
     "hypotheses",
     "incremental_reward",
     "invariants",
+    "interruption",
     "l1_planner",
     "key_freeze",
     "l1_value",
@@ -113,6 +119,7 @@ __all__ = [
     "meta_policy",
     "meta_retrieval",
     "obstacles",
+    "parking",
     "phi_tree",
     "playbook",
     "policy_compare",
@@ -120,6 +127,7 @@ __all__ = [
     "pricing",
     "prediction_ledger",
     "priors",
+    "probe_face",
     "q_cells",
     "recipe_arms",
     "refutation_fold",

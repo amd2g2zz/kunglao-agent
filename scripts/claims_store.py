@@ -111,6 +111,16 @@ LEGAL_TRANSITIONS: dict[str, dict[str, str]] = {
     "park": {"OPEN": "PARK", "IN_PROGRESS": "PARK"},
     # mission_stall.revive
     "revive": {"PARK": "OPEN"},
+    # #955 censored-env escrow park (rlvr/parking.py) — the protocol
+    # writer goes through the ws_yaml single-writer seam; this edge
+    # declares the vocabulary for store-level callers. Same wake-
+    # condition rule (f), enforced in apply() alongside park.
+    "park_censored": {"OPEN": "PARKED", "IN_PROGRESS": "PARKED"},
+    # #955 env-repair resume: PARKED's outgoing edge (the unpark face).
+    # Restore-to-OPEN is the canonical edge; a claim parked from
+    # IN_PROGRESS restores its prior_status through rlvr.parking (the
+    # seam carries the exact value), never through this matrix.
+    "unpark": {"PARKED": "OPEN"},
     # claim_expiry / stale-blocker faces
     "stale": {"OPEN": "STALE", "IN_PROGRESS": "STALE",
               "PARTIALLY-VERIFIED": "STALE", "PARTIAL": "STALE",
@@ -224,7 +234,8 @@ def apply(ws, claim: str, event: str, actor: str, *, evidence: str = "",
                                 "actor": actor, "evidence": evidence,
                                 "outcome": "refused", "reason": reason})
         return res
-    if event == "park" and not (wake_condition or "").strip():
+    if event in ("park", "park_censored") \
+            and not (wake_condition or "").strip():
         reason = "wake-condition-required: a PARK must carry a wake_condition"
         _append_provenance(ws, {"claim": claim, "event": event,
                                 "from": from_status, "to": edge,
