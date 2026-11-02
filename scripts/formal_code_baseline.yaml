@@ -55,12 +55,12 @@ files:
   scripts/calibration_face.py: 10
   scripts/calibration_gate.py: 1
   scripts/capability_probe.py: 9
-  scripts/carrier_consistency.py: 3
+  scripts/carrier_consistency.py: 4
   scripts/case_bank.py: 22
   scripts/check_global_rule_subset.py: 1
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
-  scripts/claims_store.py: 20
+  scripts/claims_store.py: 22
   scripts/claims_view.py: 43
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
@@ -85,7 +85,7 @@ files:
   scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 109
+  scripts/e2e/checkpoints.py: 110
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 17
   scripts/e2e/model.py: 7
@@ -121,7 +121,7 @@ files:
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
   scripts/eval_toolflex.py: 6
-  scripts/event_taxonomy.py: 175
+  scripts/event_taxonomy.py: 177
   scripts/evidence_certify.py: 10
   scripts/exogenous.py: 7
   scripts/experience_triples.py: 2
@@ -236,6 +236,7 @@ files:
   scripts/rlvr/action_params.py: 7
   scripts/rlvr/attribution.py: 4
   scripts/rlvr/censored_review.py: 8
+  scripts/rlvr/censoring.py: 21
   scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
   scripts/rlvr/crystallize.py: 1
@@ -244,6 +245,7 @@ files:
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 42
+  scripts/rlvr/interruption.py: 7
   scripts/rlvr/key_freeze.py: 2
   scripts/rlvr/l1_planner.py: 2
   scripts/rlvr/l1_value.py: 5
@@ -256,13 +258,14 @@ files:
   scripts/rlvr/meta_policy.py: 1
   scripts/rlvr/meta_retrieval.py: 1
   scripts/rlvr/obstacles.py: 3
+  scripts/rlvr/parking.py: 21
   scripts/rlvr/phi_tree.py: 13
   scripts/rlvr/playbook.py: 2
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 165
+  scripts/rlvr/q_cells.py: 172
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/refutation_fold.py: 1
   scripts/rlvr/reward.py: 10

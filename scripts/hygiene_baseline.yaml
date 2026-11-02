@@ -53,7 +53,7 @@ files:
   scripts/capability_probe.py:
     r1: 5
   scripts/carrier_consistency.py:
-    r1: 3
+    r1: 4
   scripts/case_bank.py:
     r1: 9
   scripts/check_global_rule_subset.py:
@@ -61,7 +61,7 @@ files:
   scripts/claim_expiry.py:
     r1: 2
   scripts/claims_store.py:
-    r1: 11
+    r1: 13
   scripts/claims_view.py:
     r1: 26
   scripts/claudemd_frame.py:
@@ -108,7 +108,7 @@ files:
   scripts/e2e/audit.py:
     r1: 9
   scripts/e2e/checkpoints.py:
-    r1: 83
+    r1: 84
   scripts/e2e/llm_faces.py:
     r1: 14
   scripts/e2e/model.py:
@@ -177,7 +177,7 @@ files:
   scripts/eval_toolflex.py:
     r1: 2
   scripts/event_taxonomy.py:
-    r1: 134
+    r1: 136
     r2: 1
   scripts/evidence_certify.py:
     r1: 2
@@ -396,6 +396,8 @@ files:
     r1: 2
   scripts/rlvr/censored_review.py:
     r1: 6
+  scripts/rlvr/censoring.py:
+    r1: 8
   scripts/rlvr/commit_semantics.py:
     r1: 1
   scripts/rlvr/compose.py:
@@ -412,6 +414,8 @@ files:
     r1: 3
   scripts/rlvr/incremental_reward.py:
     r1: 22
+  scripts/rlvr/interruption.py:
+    r1: 2
   scripts/rlvr/l1_planner.py:
     r1: 1
   scripts/rlvr/l1_value.py:
@@ -432,6 +436,8 @@ files:
     r1: 1
   scripts/rlvr/meta_retrieval.py:
     r1: 1
+  scripts/rlvr/parking.py:
+    r1: 11
   scripts/rlvr/phi_tree.py:
     r1: 4
   scripts/rlvr/playbook.py:
@@ -443,7 +449,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 88
+    r1: 93
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/refutation_fold.py:
@@ -1632,6 +1638,8 @@ files:
     r2: 1
   tests/test_rl_v2_worker_885.py:
     r2: 1
+  tests/test_rl_v3_censoring_955.py:
+    r1: 5
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
