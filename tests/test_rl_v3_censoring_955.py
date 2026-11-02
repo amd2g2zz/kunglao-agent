@@ -7,6 +7,11 @@ Faces under test (the issue's chain links 1, 2, 4, 5, 12):
      session record × active env-class blocker files × liveness at exit
      (terminal / censored_env / agent_death; agent-death PROSE never
      enters — the #447/#497 Type E gate owns it);
+  1b. harness-side CORROBORATION of the censor channel (the round-2
+     review MEDIUM — claim-leg binding is self-satisfiable): a
+     mechanical-check pass pays on one binding leg, a refutation kills
+     the blocker even with both legs, uncorroboratable classes fall
+     back to BOTH binding legs;
   3. the PARKED claim state + minimal escrow stub — park/unpark round
      trip with mass conservation, deterministic decay on the #667
      parameters, register status through the ws_yaml single-writer seam;
@@ -15,6 +20,9 @@ Faces under test (the issue's chain links 1, 2, 4, 5, 12):
      streak freezes a direction at K;
   5. the CENSORED(env, reason) row type in the unified ledger append
      face (schema censored/1) + its closed env vocabulary;
+  6. the delivery gate's behavioral pin (#955 round-2 test gap): a
+     PARKED claim keeps _no_open_claims False (delivery blocked);
+     only-PROVEN registers deliver;
   lint: PARKED passes the claim-status machinery (status_defs SUSPENDED,
   open-claim fronts, carrier rule (f), the emit gate's double-ended
   vocabulary check).
@@ -37,6 +45,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop"):
 
 from rlvr import censoring, interruption, parking, q_cells  # noqa: E402
 import status_defs  # noqa: E402
+from e2e.checkpoints import _no_open_claims  # noqa: E402
 
 _SIG = "a" * 12
 
@@ -58,6 +67,22 @@ def _mk_blocker(ws: Path, text: str, name: str = "B-001.md") -> Path:
     path = bdir / name
     path.write_text(f"## observed\n{text}\n", encoding="utf-8")
     return path
+
+
+def _declare_missing_sample(ws: Path, sha: str = "c" * 64) -> None:
+    """The harness-side sample anchor a sample-missing claim is checked
+    against (the strict task_spec key) + NO file under bins/ — the
+    mechanical check's two facts."""
+    (ws / "task_spec.yaml").write_text(f"sample_sha256: {sha}\n",
+                                       encoding="utf-8")
+
+
+def _put_sample_on_disk(ws: Path, sha: str = "c" * 64) -> None:
+    """The refutation fixture: the declared sample is STILL THERE."""
+    _declare_missing_sample(ws, sha)
+    bins = ws / "bins"
+    bins.mkdir(exist_ok=True)
+    (bins / sha).write_bytes(b"\x7fELF" + b"\x00" * 60)
 
 
 def _bank_claim_mass(ws: Path, claim: str = "C-1") -> None:
@@ -90,16 +115,20 @@ class TestClassifierMapping:
         assert got["class"] == "terminal"
 
     def test_risk_control_blocker_censors_when_session_bound(self, tmp_path):
+        """risk-control has no mechanical check (uncorroboratable class):
+        BOTH binding legs are required — recency alone no longer pays
+        (the round-2 corroboration gate)."""
         ws = _mk_ws(tmp_path)
-        _mk_blocker(ws, "attributed: risk-control wall, account banned")
+        _mk_blocker(ws, "attributed: risk-control wall, C-1 account banned")
         got = interruption.classify(
             {"returncode": 1, "timed_out": False,
-             "started_ts": time.time() - 60}, ws)
+             "started_ts": time.time() - 60, "claim": "C-1"}, ws)
         assert got == {"class": "censored_env",
                        "reason_code": "env_risk_control"}
 
     def test_sample_missing_blocker_censors(self, tmp_path):
         ws = _mk_ws(tmp_path)
+        _declare_missing_sample(ws)   # the mechanical check's facts
         _mk_blocker(ws, "sample deleted from the drop dir mid-run")
         got = interruption.classify(
             {"returncode": -9, "started_ts": time.time() - 60}, ws)
@@ -107,15 +136,20 @@ class TestClassifierMapping:
                        "reason_code": "env_sample_missing"}
 
     def test_toolchain_blocker_censors_a_timeout(self, tmp_path):
+        """No binary named -> an uncorroboratable instance: BOTH binding
+        legs pay (the round-2 corroboration gate)."""
         ws = _mk_ws(tmp_path)
-        _mk_blocker(ws, "debugger broken; toolchain unavailable")
+        _mk_blocker(ws, "C-1: debugger broken; toolchain unavailable")
         got = interruption.classify(
             {"returncode": 1, "timed_out": True,
-             "started_ts": time.time() - 60}, ws)
+             "started_ts": time.time() - 60, "claim": "C-1"}, ws)
         assert got == {"class": "censored_env", "reason_code": "env_toolchain"}
 
     def test_claim_bound_blocker_censors_without_recency(self, tmp_path):
+        """The claim leg alone (the round-2 MEDIUM) pays ONLY with
+        harness corroboration: the declared sample is genuinely absent."""
         ws = _mk_ws(tmp_path)
+        _declare_missing_sample(ws)
         _mk_blocker(ws, "C-1 stalled: sample deleted")
         got = interruption.classify({"returncode": 1, "claim": "C-1"}, ws)
         assert got == {"class": "censored_env",
@@ -146,9 +180,13 @@ class TestClassifierMapping:
         got = interruption.classify({"returncode": 1, "claim": "C-2"}, ws)
         assert got == {"class": "agent_death", "reason_code": "nonzero_exit"}
 
-    def test_z_string_started_ts_binds(self, tmp_path):
+    def test_z_string_started_ts_binds(self, tmp_path, monkeypatch):
+        """Recency via the Z-string + a CORROBORATED claim (the named
+        jdk binary genuinely absent) — one leg suffices when the
+        mechanical check agrees."""
         ws = _mk_ws(tmp_path)
-        _mk_blocker(ws, "toolchain broken")
+        _mk_blocker(ws, "toolchain broken: jdk missing")
+        monkeypatch.setattr(interruption, "_which", lambda _name: None)
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                 time.gmtime(time.time() - 60))
         got = interruption.classify(
@@ -183,6 +221,121 @@ class TestClassifierMapping:
         got = interruption.classify({"returncode": 1},
                                     tmp_path / "no-such-ws")
         assert got["class"] == "agent_death"
+
+
+# -------------------------- 1b. harness-side corroboration (round-2 MEDIUM)
+
+class TestCorroboratedCensoring:
+    """The round-2 review MEDIUM: the session-binding legs are both
+    self-satisfiable (the agent knows its claim id; any blocker it
+    writes mid-session has a fresh mtime). The censor channel now pays
+    out only when a HARNESS-SIDE mechanical check agrees — or, for
+    uncorroboratable classes/instances, on BOTH binding legs."""
+
+    def test_corroborate_true_when_sample_genuinely_absent(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        _declare_missing_sample(ws)
+        blocker = _mk_blocker(ws, "sample deleted mid-run")
+        assert interruption.corroborate(blocker, ws) is True
+
+    def test_corroborate_refuted_while_sample_still_on_disk(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        _put_sample_on_disk(ws)
+        blocker = _mk_blocker(ws, "sample deleted mid-run")
+        assert interruption.corroborate(blocker, ws) is False
+
+    def test_refuted_fact_beats_even_both_binding_legs(self, tmp_path):
+        """The mechanical check REFUTES (the declared sample is still on
+        disk): the blocker is not evidence whatever the binding —
+        recency AND claim id together still do not censor."""
+        ws = _mk_ws(tmp_path)
+        _put_sample_on_disk(ws)
+        _mk_blocker(ws, "C-1 stalled: sample deleted")
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60,
+             "claim": "C-1"}, ws)
+        assert got == {"class": "agent_death", "reason_code": "nonzero_exit"}
+
+    def test_mechanical_pass_pays_on_one_leg(self, tmp_path):
+        """Mechanical-check pass -> censor allowed: the recency leg plus
+        the harness-observed absence is enough (no claim leg needed)."""
+        ws = _mk_ws(tmp_path)
+        _declare_missing_sample(ws)
+        _mk_blocker(ws, "sample deleted mid-run")
+        got = interruption.classify(
+            {"returncode": -9, "started_ts": time.time() - 60}, ws)
+        assert got == {"class": "censored_env",
+                       "reason_code": "env_sample_missing"}
+
+    def test_toolchain_corroborated_when_named_binary_absent(
+            self, tmp_path, monkeypatch):
+        ws = _mk_ws(tmp_path)
+        blocker = _mk_blocker(ws, "adb unavailable, device offline")
+        monkeypatch.setattr(interruption, "_which", lambda _name: None)
+        assert interruption.corroborate(blocker, ws) is True
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60}, ws)
+        assert got == {"class": "censored_env", "reason_code": "env_toolchain"}
+
+    def test_tool_binary_still_present_refutes_the_blocker(
+            self, tmp_path, monkeypatch):
+        """Mechanical-check fail -> censor refused even with BOTH binding
+        legs: the named adb binary still resolves on this host."""
+        ws = _mk_ws(tmp_path)
+        blocker = _mk_blocker(ws, "C-1: adb unavailable")
+        monkeypatch.setattr(interruption, "_which", lambda _n: "/usr/bin/adb")
+        assert interruption.corroborate(blocker, ws) is False
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60,
+             "claim": "C-1"}, ws)
+        assert got == {"class": "agent_death", "reason_code": "nonzero_exit"}
+
+    def test_corroborate_false_for_uncorroboratable_class(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        blocker = _mk_blocker(ws, "risk-control ban: account suspended")
+        assert interruption.corroborate(blocker, ws) is False
+
+    def test_uncorroboratable_class_refuses_one_leg(self, tmp_path):
+        """risk-control has no mechanical check: BOTH binding legs are
+        required — the recency leg alone (an agent-authored blocker
+        mid-session) no longer censors."""
+        ws = _mk_ws(tmp_path)
+        _mk_blocker(ws, "risk-control ban: account suspended")
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60}, ws)
+        assert got == {"class": "agent_death", "reason_code": "nonzero_exit"}
+
+    def test_uncorroboratable_class_pays_with_both_legs(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        _mk_blocker(ws, "C-1: risk-control ban, account suspended")
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60,
+             "claim": "C-1"}, ws)
+        assert got == {"class": "censored_env",
+                       "reason_code": "env_risk_control"}
+
+    def test_toolchain_instance_without_a_binary_is_uncorroboratable(
+            self, tmp_path):
+        """'debugger broken' names no known binary: no checkable fact —
+        the recency leg alone refuses; the fallback is BOTH legs."""
+        ws = _mk_ws(tmp_path)
+        _mk_blocker(ws, "debugger broken mid-session")
+        assert not interruption.corroborate(
+            ws / "blockers" / "B-001.md", ws)
+        got = interruption.classify(
+            {"returncode": 1, "started_ts": time.time() - 60}, ws)
+        assert got == {"class": "agent_death", "reason_code": "nonzero_exit"}
+
+    def test_invalidated_blocker_never_corroborates(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        _declare_missing_sample(ws)
+        blocker = _mk_blocker(ws, "sample deleted\nINVALIDATED 2026-11-02")
+        assert interruption.corroborate(blocker, ws) is False
+
+    def test_unreadable_blocker_corroborates_false(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        assert interruption.corroborate(ws / "blockers" / "nope.md",
+                                        ws) is False
 
 
 # ------------------------------- 3. PARKED + escrow: park/unpark round trip
@@ -518,3 +671,33 @@ class TestParkedStatusLint:
         scan = emit_gate.scan(ROOT)
         assert not scan["orphans"], scan["orphans"]
         assert not scan["unregistered"], scan["unregistered"]
+
+
+# ------------------------- 6. the delivery gate: PARKED blocks delivery
+
+class TestNoOpenClaimsDeliveryGate:
+    """The round-2 review test gap: the PARKED-blocks-delivery change had
+    no behavioral test. _no_open_claims reads the register directly (the
+    delivery face at checkpoints C6-pre/C6-loop), so a PARKED claim —
+    SUSPENDED vocabulary — must keep the run UNDELIVERED, while a
+    register holding only PROVEN claims is the terminal, deliverable
+    state."""
+
+    @staticmethod
+    def _ctx(ws: Path):
+        from types import SimpleNamespace  # noqa: PLC0415 — a test-local stand-in
+        return SimpleNamespace(ws=ws)   # _no_open_claims reads ctx.ws only
+
+    def test_parked_claim_blocks_delivery(self, tmp_path):
+        """A PARKED claim (produced by the real park face) is open work
+        the delivery check must not paper over."""
+        ws = _mk_ws(tmp_path)
+        parking.park_claim(ws, "C-1", "env_risk_control")
+        assert _no_open_claims(self._ctx(ws)) is False
+
+    def test_proven_only_register_delivers(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n- id: C-1\n  status: PROVEN\n"
+            "- id: C-2\n  status: PROVEN\n", encoding="utf-8")
+        assert _no_open_claims(self._ctx(ws)) is True

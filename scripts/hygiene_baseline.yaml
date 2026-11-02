@@ -417,7 +417,7 @@ files:
   scripts/rlvr/incremental_reward.py:
     r1: 22
   scripts/rlvr/interruption.py:
-    r1: 2
+    r1: 3
   scripts/rlvr/l1_planner.py:
     r1: 1
   scripts/rlvr/l1_value.py:
