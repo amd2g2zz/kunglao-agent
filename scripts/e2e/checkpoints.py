@@ -2267,17 +2267,23 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
 
 def _no_open_claims(ctx: RunContext) -> bool:
     """Delivery-face test (robust): the register holds no OPEN claims.
-    Deterministic register read — never a stdout-substring guess."""
+    Deterministic register read — never a stdout-substring guess.
+    Status vocabulary from status_defs (the owner; review fix 4):
+    PARKED (#955) rides SUSPENDED, so a parked claim never masquerades
+    as deliverable work; IN_PROGRESS counts as open the same way
+    convergence_check._open_claims treats it."""
     import yaml as _yaml
+    from status_defs import (  # noqa: PLC0415 — the vocabulary owner
+        IN_PROGRESS_STATUSES, SUSPENDED)
     reg = ctx.ws / "claim-register.yaml"
     try:
         doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
         return False
+    open_statuses = ({"OPEN", "PARTIALLY-VERIFIED", "STAMP", "UNVERIFIED"}
+                     | set(IN_PROGRESS_STATUSES) | set(SUSPENDED))
     for c in doc.get("claims") or []:
-        if str(c.get("status", "")).upper() in ("OPEN", "PARK",
-                                                "PARTIALLY-VERIFIED",
-                                                "STAMP", "UNVERIFIED"):
+        if str(c.get("status", "")).upper() in open_statuses:
             return False
     return bool(doc.get("claims"))
 

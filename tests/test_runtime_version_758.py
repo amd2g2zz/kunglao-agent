@@ -123,6 +123,14 @@ class TestG1bEnvCheckDrift:
 
     def test_row_is_registered_and_never_fails_overall(self, monkeypatch, tmp_path):
         import env_check as ec
+        # pre-import capstone BEFORE the 2.7 mock: env_check's static-
+        # tooling ladder imports it lazily, and the package's own py2
+        # shim (`if sys.version_info[0] < 3: range = xrange`) executes at
+        # import — a first import under the mock raises NameError
+        try:
+            import capstone  # noqa: F401
+        except ImportError:
+            pass
         monkeypatch.setattr(sys, "version_info", _fake_vi(2, 7))
         ws = _mini_ws(tmp_path)
         ec.run(ws)  # rc reflects overall; the row verdicts live in the snapshot

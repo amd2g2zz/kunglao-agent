@@ -11,6 +11,8 @@ mock shape.
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from pathlib import Path
 
 from lint_facts import (  # noqa: E402  (scripts/ on pytest path)
@@ -31,7 +33,8 @@ def _codes(fm: dict, body: str = "") -> set:
 def _base(**over) -> dict:
     fm = {
         "id": "F001-clean", "type": "fact", "title": "the IV source",
-        "created": "2026-10-01", "last_reviewed": "2026-10-02",
+        "created": (date.today() - timedelta(days=3)).isoformat(),
+        "last_reviewed": (date.today() - timedelta(days=1)).isoformat(),
         "boundary_type": "confirmed", "promotion_gate": None,
         "provenance": [{"role": "public_doc", "path": "facts/F001.md",
                         "content_sha256": "a" * 64, "credibility": "B2"}],
@@ -58,7 +61,8 @@ def test_bad_id_shapes() -> None:
 def test_bad_and_backdated_dates() -> None:
     assert "BAD_DATE" in _codes(_base(created="2026/01/02"))
     assert "BACKDATED" in _codes(
-        _base(created="2026-10-05", last_reviewed="2026-10-01"))
+        _base(created=(date.today() - timedelta(days=1)).isoformat(),
+          last_reviewed=(date.today() - timedelta(days=3)).isoformat()))
 
 
 def test_status_source_confidence_matrix() -> None:

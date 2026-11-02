@@ -253,6 +253,17 @@ the one-line pointer (name — the docstring's opening line):
 - `hypotheses` — rlvr.hypotheses — layer-scoped hypotheses + counterexample refinement
 - `incremental_reward` — rlvr/incremental_reward.py — potential-based per-act reward + the
 - `invariants` — rlvr.invariants — the invariant-pruning operator (entropy reduction).
+- `interruption` — rlvr/interruption.py — the interruption classifier (#955 link 1):
+  terminal / censored_env / agent_death, mechanical over session returncode +
+  timed_out + active env-class blocker files + liveness at exit; agent-death
+  prose stays owned by the #447/#497 Type E gate.
+- `censoring` — rlvr/censoring.py — censored posterior semantics (#955 links 4/5):
+  censored rows update NOTHING, per-direction trailing censor streaks, the
+  freeze-at-K predicate, and the #954 integration seam
+  (posterior_observations filter over runs/direction-state.jsonl).
+- `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
+  (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
+  register status via the ws_yaml single-writer seam, park/unpark round trip.
 - `marl` — marl.py — the MARL knowledge-transfer protocol (#705).
 - `meta_arms` — meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms,
 - `phi_tree` — rlvr/phi_tree.py — the Φ-tree economy (#796): decisive mass on the
