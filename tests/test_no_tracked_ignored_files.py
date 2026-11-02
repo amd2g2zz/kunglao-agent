@@ -184,6 +184,13 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # 2026-08-19-gate5.json is additionally pinned by
     # tests/test_subagent_injection.py::test_tracked_gate5_review_citations_resolve
     # -> allowlisted, NOT git rm --cached (local-green / fresh-CI-red landmine).
+    # coverage-floor.json (rule coverage-*.json) — the #807 ratchet POLICY
+    # anchor (schema/floor/min_floor/measured_set/baseline_measured), the
+    # committed floor the CI coverage pins enforce against regression —
+    # policy, not measurement output; the coverage-* class targets the
+    # measurement artifacts only.
+    "coverage-floor.json":
+        "#807 coverage-floor ratchet policy anchor: committed floor, not process output (#951)",
 }
 
 

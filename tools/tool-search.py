@@ -269,14 +269,39 @@ def resolve_workspace(start=None):
     else the cwd walk-up presence probe (first ancestor holding a
     workspace marker — tools-local / task_spec.yaml / runs). None
     outside any workspace: the fourth source then stays silent (the
-    other three remain fully queryable)."""
+    other three remain fully queryable).
+
+    The walk-up is bounded at the enclosing git toplevel: inside a
+    repo/worktree checkout, markers ABOVE the toplevel belong to a
+    foreign tree — adopting them pointed the run-local shelf and the
+    #812 negative cache at ANOTHER checkout's store (a sibling
+    worktree inherited the main checkout's poisoned escalated rows).
+    Outside any repo (tmp fixtures) the walk-up stays unbounded."""
     try:
         import os
         cur = Path(start) if start else Path(os.getcwd())
+        bound = _git_toplevel(cur)
         for cand in (cur, *cur.parents):
+            if bound is not None and not cand.is_relative_to(bound):
+                break
             if any((cand / m).exists() for m in WS_MARKERS):
                 return cand
     except OSError:
+        pass
+    return None
+
+
+def _git_toplevel(cur):
+    """The enclosing git toplevel, or None — fail-open: outside any
+    repo (or git unavailable) the walk-up stays unbounded as before."""
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(cur), capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return Path(r.stdout.strip()).resolve()
+    except Exception:  # noqa: BLE001 - the ws probe never blocks the query
         pass
     return None
 
@@ -656,12 +681,25 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     from _lib import negative_cache as _nc
     ws = resolve_workspace(args.ws)
     family = _nc.normalize_family(terms)
-    if family and ws is not None:
+    # the #812 cache describes the DEFAULT catalog only: an explicit
+    # --index scan (fixture/regression indexes) must not read or poison
+    # the default catalog's store (the cross-index poison class)
+    _cache_engaged = bool(family) and ws is not None and not args.index_path
+    ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
+    if _cache_engaged:
         cached = _nc.lookup(ws, family)
         if cached is not None:
-            _emit_negative_cached(cached, args.json)
-            return 0
-    ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
+            if (find_internal(tools, query) or find_ext(ext, query)
+                    or find_run_local(load_run_local(ws), query)):
+                # contradiction: the current catalog DOES carry the
+                # family — the row is a stale zero. An escalated row
+                # never self-heals (the count accrues past TTL), so a
+                # stale one dead-laned a live family across index
+                # updates; purge it and run the real scan.
+                _nc.purge_family(ws, family)
+            else:
+                _emit_negative_cached(cached, args.json)
+                return 0
     refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
     ref_paths = load_reference_paths(refs_index)
     repo_root = index_path.parent.parent
@@ -682,7 +720,7 @@ def _find_mode(args, tools: list[dict], index_path: Path) -> int:
     if args.type is not None:
         hits = [h for h in hits if h.get("type") == args.type]
     hits = _with_score(hits, terms)
-    if not hits and family and ws is not None:
+    if not hits and _cache_engaged:
         # record the negative fact (per-family occurrence counting,
         # Standard 11) — the NEXT identical query answers from cache
         _nc.record_negative(ws, family, flat)

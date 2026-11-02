@@ -139,3 +139,17 @@ def record_negative(ws, family: str, query: str, *, now=None,
             "occurrence": entry["occurrence"],
             "escalated": entry["escalated"],
             "cached_at": entry["last_ts"]}
+
+
+def purge_family(ws, family: str) -> bool:
+    """Drop a family row whose cached zero the current catalog
+    contradicts (the tool-search stale-row face): an escalated row
+    never self-heals (the count accrues past TTL by design), so the
+    consumer must be able to evict a row that describes a catalog
+    state that no longer exists. True when a row was dropped."""
+    doc = _load(ws)
+    fams = doc.get("families")
+    if isinstance(fams, dict) and fams.pop(family, None) is not None:
+        _save(ws, doc)
+        return True
+    return False
