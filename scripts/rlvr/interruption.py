@@ -17,11 +17,16 @@ is terminal > censored_env > agent_death):
   # | returncode | timed_out | SESSION-BOUND env blocker | liveness | class         | reason_code
   --+------------+-----------+---------------------------+----------+---------------+------------------
   1 | 0          | False     | any                       | any      | terminal      | completed
-  2 | any        | any       | bound match               | any      | censored_env  | env_<class>
+  2 | any        | any       | bound match + corrob*     | any      | censored_env  | env_<class>
   3 | any        | True      | none                      | any      | agent_death   | timeout_kill
   4 | not in (0, None) | any | none                      | any      | agent_death   | nonzero_exit
   5 | None       | any       | none                      | dead     | agent_death   | liveness_lost
   6 | None       | any       | none                      | other    | agent_death   | unknown_exit
+
+  * corroboration per the CORROBORATION table below: a mechanical-check
+    AGREES pays on either binding leg; a mechanical-check REFUTAL kills
+    that blocker; classes/instances with NO mechanical check pay only on
+    BOTH binding legs.
 
 SESSION BINDING (row 2, anti-forge): the agent writes blockers/*.md, so
 an unbound keyword match lets a dying agent LAUNDER a real failure into
@@ -41,15 +46,45 @@ dangerous-error direction: censoring requires evidence, not
 opportunity). Stale/other-session blockers stay in the workspace but
 classify nothing.
 
+CORROBORATION (the round-2 review MEDIUM: both binding legs above are
+self-satisfiable — the agent knows its claim id, and any blocker it
+writes mid-session has a fresh mtime, so binding alone attests only
+that the AGENT authored the blocker, never that the env fact is true).
+Before the censor channel pays out, the claimed env fact must agree
+with a HARNESS-SIDE mechanical check — the harness re-derives the fact
+from the filesystem itself; the blocker's text is a claim, never the
+evidence for its own claim:
+
+  class          | mechanical check (harness-observed, never blocker-supplied)
+  ---------------+-------------------------------------------------------------
+  sample-missing | the strict task_spec ``sample_sha256: <64-hex>`` anchor is
+                 | present AND no sample file remains under bins/
+  toolchain      | every tool binary the blocker names (jdk/docker/adb/
+                 | emulator) is genuinely absent from PATH (shutil.which)
+  risk-control   | none — an account ban leaves no harness-observable
+                 | on-disk shadow
+
+Payout per matched blocker: the check AGREES -> censor (either binding
+leg suffices — the harness fact is the second source); the check
+REFUTES (the fact is false on disk — the sample is still there, the
+binary still resolves) -> that blocker is not evidence, whatever the
+binding; NO check applies (risk-control, or a toolchain blocker naming
+no known binary) -> fall back to BOTH binding legs (recency AND claim
+id). Design goal: an agent-authored blocker alone must never censor —
+at least one harness-observable fact (or both binding legs together)
+must agree. The residual after this gate (an agent picking a class
+whose mechanical shadow happens to hold on this host) is the write
+gate's to police, not the classifier's.
+
 Rows 1 wins over a stale blocker: a clean exit is terminal even when the
 workspace still carries an env blocker from an earlier session (the
 ladder reads ACTIVE blockers only — the house convention: files under
 ``blockers/`` without the ``INVALIDATED`` marker, ``blockers/.resolved/``
 excluded — but active is not the same as fresh, and a completed rollout
-needs no excuse). Row 2 dominates any abnormal exit: a session-bound
-blocker file is the #340 evidence carrier (observed bytes + attributed
-diagnosis, linted at the write gate) — exogenous evidence beats the exit
-code's ambiguity, which is exactly the anti-bias direction
+needs no excuse). Row 2 dominates any abnormal exit: a session-bound,
+corroborated blocker file is the #340 evidence carrier (observed bytes +
+attributed diagnosis, linted at the write gate) — exogenous evidence
+beats the exit code's ambiguity, which is exactly the anti-bias direction
 (misclassifying an env death as agent death is the dangerous error).
 
 AGENT-DEATH CAVEAT: ``agent_death`` here is the mechanical RESIDUAL
@@ -73,6 +108,7 @@ caller's settle path.
 from __future__ import annotations
 
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -131,6 +167,32 @@ _INVALIDATED = "INVALIDATED"
 #: started_ts string form
 _TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
+#: the STRICT task_spec sample anchor — only a top-level
+#: ``sample_sha256: <64-hex>`` key is a record (prose that merely
+#: mentions sha256 is not; the convention owner is
+#: env_check.read_sample_sha256, NOT imported here — it drags the whole
+#: toolchain probe matrix at import time, too heavy for this
+#: dependency-light module, so the three-line shape is mirrored with
+#: this pointer as the drift alarm)
+_SAMPLE_SHA_KEY_RE = re.compile(
+    r"^\s*sample_sha256:\s*[\"\']?([0-9a-fA-F]{64})[\"\']?\s*$")
+
+#: the tool binaries a toolchain blocker can name, over the same token
+#: vocabulary the ENV_TOOLCHAIN patterns already key on (jdk, docker,
+#: adb, emulator); "toolchain"/"debugger" name no single binary, so a
+#: blocker naming only those is an UNCORROBORATABLE instance (both
+#: binding legs). The harness re-derives the absence itself — the
+#: blocker naming a tool is a claim, its PATH absence is the fact.
+_TOOL_BINARIES: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(r"\bjdk\b|\bjava\b", re.IGNORECASE), "java"),
+    (re.compile(r"\bdocker\b", re.IGNORECASE), "docker"),
+    (re.compile(r"\badb\b", re.IGNORECASE), "adb"),
+    (re.compile(r"\bemulator\b", re.IGNORECASE), "emulator"),
+)
+
+#: the PATH-resolution seam (hermetic pins monkeypatch this)
+_which = shutil.which
+
 
 def _epoch(ts) -> float | None:
     """A session-start timestamp (epoch seconds or the house Z-string)
@@ -144,11 +206,105 @@ def _epoch(ts) -> float | None:
     return dt.timestamp()
 
 
+def _sample_genuinely_absent(ws) -> bool:
+    """The sample-missing mechanical check: True only when the workspace
+    DECLARES a sample (the strict task_spec ``sample_sha256`` anchor)
+    AND no sample file remains under ``bins/``. No anchor -> not
+    corroborated (nothing declared, nothing to observe the absence of);
+    a file under bins/ -> the claimed absence is REFUTED on disk."""
+    try:
+        ws = Path(ws)
+        tspec = (ws / "task_spec.yaml").read_text(
+            encoding="utf-8", errors="replace")
+        if not any(_SAMPLE_SHA_KEY_RE.match(line)
+                   for line in tspec.splitlines()):
+            return False
+        bins = ws / "bins"
+        if not bins.is_dir():
+            return True
+        return not any(p.is_file() for p in bins.iterdir())
+    except OSError:
+        return False
+
+
+def _named_missing_tools(text: str) -> bool | None:
+    """The toolchain mechanical check: True when EVERY tool binary the
+    blocker names is genuinely absent from PATH (the harness re-derives
+    the absence); False when at least one named binary still resolves
+    (the claim is refuted on this host); None when the blocker names no
+    known binary (an uncorroboratable instance — the caller falls back
+    to BOTH binding legs)."""
+    named = sorted({b for pat, b in _TOOL_BINARIES if pat.search(text)})
+    if not named:
+        return None
+    return all(_which(b) is None for b in named)
+
+
+def _mechanical_check(cls: str, text: str, ws) -> bool | None:
+    """The harness-side mechanical check for a claimed env class.
+    True = the claimed fact is CORROBORATED; False = REFUTED (the
+    harness observed the opposite on disk); None = no check applies for
+    this class or this blocker instance (uncorroboratable — the caller
+    falls back to BOTH binding legs)."""
+    if cls == ENV_SAMPLE_MISSING:
+        return _sample_genuinely_absent(ws)
+    if cls == ENV_TOOLCHAIN:
+        return _named_missing_tools(text)
+    return None   # risk-control: an account ban has no on-disk shadow
+
+
+def corroborate(blocker, ws) -> bool:
+    """HARNESS-SIDE CORROBORATION (#955 review round 2, the claim-leg
+    MEDIUM): True only when a mechanical check for the env class this
+    blocker claims actually RUNS and AGREES — the sample path genuinely
+    absent, the named tool binary genuinely missing. The blocker's text
+    is a claim, never the evidence for its own claim; an uncorroboratable
+    class (or an instance naming no checkable fact) reads False here and
+    the classifier instead demands BOTH binding legs."""
+    try:
+        text = Path(blocker).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    if _INVALIDATED in text:
+        return False
+    for cls in ENV_CLASSES:
+        if any(p.search(text) for p in ENV_PATTERNS[cls]):
+            return _mechanical_check(cls, text, ws) is True
+    return False
+
+
+def _blocker_pays(cls: str, path: Path, text: str, ws,
+                  *, floor: float | None, claim: str) -> bool:
+    """One matched blocker's payout rule (the CORROBORATION table):
+    binding first (recency or claim leg), then the harness-side
+    mechanical check — check AGREES -> pays on the binding leg; check
+    REFUTES -> never evidence; NO check for the class/instance -> BOTH
+    binding legs required."""
+    try:
+        bound = floor is not None and path.stat().st_mtime >= floor
+    except OSError:
+        return False
+    named = bool(claim) and claim in text
+    if not (bound or named):
+        return False
+    verdict = _mechanical_check(cls, text, ws)
+    if verdict is True:
+        return True           # the harness fact agrees
+    if verdict is False:
+        return False          # refuted — never evidence
+    return bound and named    # uncorroboratable: BOTH legs
+
+
 def active_env_blocker(ws, *, started_ts=None, claim=None) -> str | None:
     """The FIRST env class matched by an ACTIVE blocker file BOUND to
     the dying session (recency: mtime >= started_ts; or claim: the
-    claim id names itself in the blocker text), in ``ENV_CLASSES``
-    order; None when no blocker carries a session-bound env class.
+    claim id names itself in the blocker text) AND CORROBORATED by a
+    harness-side mechanical check (see the module docstring's
+    CORROBORATION table: check agrees -> either binding leg pays; check
+    refutes -> that blocker is not evidence; no check for the class or
+    instance -> BOTH binding legs required), in ``ENV_CLASSES`` order;
+    None when no blocker carries a session-bound, corroborated env
+    class.
 
     No binding key supplied -> None ALWAYS (the anti-forge fail-closed:
     an unbound keyword match never censors — see the mapping table).
@@ -173,9 +329,8 @@ def active_env_blocker(ws, *, started_ts=None, claim=None) -> str | None:
                     continue  # resolved blocker — not active evidence
                 if not any(p.search(text) for p in ENV_PATTERNS[cls]):
                     continue
-                bound = (floor is not None and path.stat().st_mtime >= floor)
-                named = bool(claim) and claim in text
-                if bound or named:
+                if _blocker_pays(cls, path, text, ws,
+                                 floor=floor, claim=claim):
                     return cls
         return None
     except OSError as exc:

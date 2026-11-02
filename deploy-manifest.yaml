@@ -1459,7 +1459,7 @@ files:
   - src: scripts/rlvr/interruption.py
     dest: .claude/scripts/rlvr/interruption.py
     kind: scaffold
-    sha256: 1e102b3e9d82375e0e5fcc1108c7eeb077708fc1e339ad94e988eb613ad5cbaa
+    sha256: eb349cdd8072673c5f1244d65857a1fe9a24492e1493dd51f2589d3aa6486d96
   - src: scripts/rlvr/invariants.py
     dest: .claude/scripts/rlvr/invariants.py
     kind: scaffold
@@ -1659,11 +1659,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: ebc8d53b942a8304acad43aafe4153f16f8ee1e5ea09a6ccefe6fc482e9d9fc8
+    sha256: 3be4d0ea359ff67bf630c0e7ee4f794794ea55d3429aa5dc4f8fd8fc45bca598
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: f4a6500309dcbabb3d980238000436d452420a85d9321effb45f1489dbbbc825
+    sha256: 8ae414fef12bcab2d7f1b994a96b8f1bc431e80afa8a5a4e50958b0a935bcdf1
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
