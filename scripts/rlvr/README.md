@@ -40,6 +40,11 @@ scripts/rlvr/
 ├── scalar.py            # scalar_settlement — tiers, tuples, Normal-Gamma,
 │                        #   round credit, trajectory validator
 ├── priors.py            # compute_priors (U4 feed consumer) — aggregate prior
+├── probe_face.py        # #956 the mechanical V(s) probe-face contract —
+│                        #   run_probe(unit_dir, ws) through the unit-local
+│                        #   probe.py shim (checker.py's trust boundary,
+│                        #   mirrored) + probe_delta (the #954 ΔV seam);
+│                        #   fail-closed, deterministic, oracle-locked
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor

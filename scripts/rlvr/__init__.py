@@ -59,6 +59,7 @@ from . import posteriors
 from . import pricing
 from . import prediction_ledger
 from . import priors
+from . import probe_face
 from . import q_cells
 from . import recipe_arms
 from . import refutation_fold
@@ -126,6 +127,7 @@ __all__ = [
     "pricing",
     "prediction_ledger",
     "priors",
+    "probe_face",
     "q_cells",
     "recipe_arms",
     "refutation_fold",

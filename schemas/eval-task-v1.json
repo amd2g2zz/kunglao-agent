@@ -197,6 +197,28 @@
     }
    }
   },
+  "probe": {
+   "description": "#956 mechanical V(s) partial-credit probe face: the unit-local shim <unit>/probe.py <ws> emits one kunglao-probe-reading/1 doc (scalar in [0,1] + per-dimension vector + deterministic reason) — oracle-locked (workspace-state inputs only), deterministic, fail-closed. The registered interface and the #954 ΔV seam live in scripts/rlvr/probe_face.py. REQUIRED for units minted after #956 (validate_task enforces); the pre-#956 corpus is grandfathered as a corpus-lint WARN.",
+   "type": "object",
+   "required": [
+    "entrypoint",
+    "cadence"
+   ],
+   "properties": {
+    "entrypoint": {
+     "type": "string",
+     "const": "probe.py"
+    },
+    "cadence": {
+     "description": "cost class: instant (artifact-only, milliseconds), bounded (a short bounded run, seconds), unit-defined.",
+     "enum": [
+      "instant",
+      "bounded",
+      "unit-defined"
+     ]
+    }
+   }
+  },
   "ground_truth": {
    "type": "object",
    "required": [
