@@ -45,6 +45,14 @@ scripts/rlvr/
 │                        #   probe.py shim (checker.py's trust boundary,
 │                        #   mirrored) + probe_delta (the #954 ΔV seam);
 │                        #   fail-closed, deterministic, oracle-locked
+├── direction.py         # #954 the direction face (Type-3) — Beta
+│                        #   posterior (α, β) per direction over the shared
+│                        #   runs/direction-state.jsonl (sibling rows to the
+│                        #   #958 censor rows), per-step credit =
+│                        #   probe_face.probe_delta (the ΔV seam), racing
+│                        #   elimination gated on posterior collapse (no
+│                        #   failure evidence -> never eliminated);
+│                        #   KUNGLAO_DIRECTION=1, default OFF
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
@@ -261,6 +269,11 @@ the one-line pointer (name — the docstring's opening line):
   censored rows update NOTHING, per-direction trailing censor streaks, the
   freeze-at-K predicate, and the #954 integration seam
   (posterior_observations filter over runs/direction-state.jsonl).
+- `direction` — rlvr/direction.py — the oracle-probe density direction face (#954,
+  Type-3): Beta posterior per direction over the shared direction-state rows,
+  step credit = probe_face.probe_delta (the ΔV seam), racing elimination gated
+  on posterior collapse (zero failure evidence never eliminates), flag-gated
+  KUNGLAO_DIRECTION=1 loop faces (default OFF).
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.
