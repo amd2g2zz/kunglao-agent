@@ -89,7 +89,9 @@ def _warn(reason: str) -> None:
         # every submodule eagerly; kunglao_log stays out until needed)
         warn("playbook_distill", reason)
     except Exception:  # noqa: BLE001 — the warn must never become the crash
-        print(f"[kunglao-agent] playbook_distill WARN: {reason}",
+        # the fail-open fallback: kunglao_log itself failed, so raw stderr
+        # is the last resort (the logging-arch skip-set exempts fail-open)
+        print(f"[kunglao-agent] playbook_distill WARN (fail-open): {reason}",
               file=__import__("sys").stderr)
 
 

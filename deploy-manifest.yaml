@@ -1531,7 +1531,7 @@ files:
   - src: scripts/rlvr/playbook_distill.py
     dest: .claude/scripts/rlvr/playbook_distill.py
     kind: scaffold
-    sha256: f9a3adbdc9605f314ca0c84f09be10bacdce0d2e70dab4569e672df39fa8db04
+    sha256: f2a1dae221e1383ca58d289ec8dcd0ba5be26cfe3f49d72a4ce7d8bda1661366
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
