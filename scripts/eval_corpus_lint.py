@@ -43,6 +43,8 @@ from pathlib import Path
 
 import yaml
 
+from eval_dataset import PROBE_FACE_GRANDFATHERED
+
 MATERIAL_CLASSES: tuple[str, ...] = ("source-readable", "black-box")
 
 # family -> material class (the corpus registry; mirrors eval_contract
@@ -189,21 +191,26 @@ def lint_unit(task_path: Path) -> list[str]:
 
 
 def probe_block_warn(task: dict, uid: str) -> str | None:
-    """R4 (probe-face card, warn-only): every unit ships a V(s)
-    partial-credit probe face (task.yaml ``probe: {entrypoint,
-    cadence}``). The corpus predating the card is grandfathered — this
-    face is a WARN, never a violation; NEW units are a validate_task
-    ERROR instead (eval_dataset.py)."""
+    """R4 (probe-face card): every unit ships a V(s) partial-credit
+    probe face (task.yaml ``probe: {entrypoint, cadence}``). The corpus
+    predating the card is grandfathered — missing there is a WARN; a
+    NEW unit (not in the grandfather set) missing the block is a
+    CONTAMINATED violation (review round: validate_task is the grading
+    entry and cannot own this — the live corpus is where enforcement
+    has the grandfather context)."""
     probe = task.get("probe") if isinstance(task, dict) else None
     if isinstance(probe, dict) \
             and isinstance(probe.get("entrypoint"), str) \
             and probe["entrypoint"].strip() \
             and probe.get("cadence"):
         return None
-    return (f"PROBE[WARN] {uid}: no probe block — every unit ships a "
-            "V(s) partial-credit probe face (probe-face card; the corpus "
-            "predating it is grandfathered with this warn, new units "
-            "fail validate_task)")
+    if uid in PROBE_FACE_GRANDFATHERED:
+        return (f"PROBE[WARN] {uid}: no probe block — the corpus "
+                "predating the probe-face card is grandfathered with "
+                "this warn")
+    return (f"PROBE {uid}: no probe block — every unit minted after "
+            "the probe-face card ships a V(s) partial-credit probe "
+            "face (probe-face card)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -248,7 +255,11 @@ def main(argv: list[str] | None = None) -> int:
             classes[mc] += 1
         warn = probe_block_warn(task or {}, tp.parent.name)
         if warn:
-            probe_warns.append(warn)
+            if "PROBE[WARN]" in warn:
+                probe_warns.append(warn)
+            else:
+                # a NEW unit without the face: violation-grade (rc 1)
+                violations.append(warn)
 
     if violations:
         print("\n".join(violations))

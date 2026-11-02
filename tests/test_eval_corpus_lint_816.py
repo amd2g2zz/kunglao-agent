@@ -59,6 +59,8 @@ def _write_unit(corpus: Path, unit: str, family: str, tier: str = "release",
         "source": "constructed",
         "family": family,
         "seed": 1,
+        # units minted after the probe-face card ship the V(s) probe
+        "probe": {"entrypoint": "probe.py", "cadence": "instant"},
         "anchors": {"goal_verbatim": "g", "success_criterion": "s",
                     "verification_method": "reproduction"},
         "workspace_scaffold": {"language": "python", "files": ["a.bin"],

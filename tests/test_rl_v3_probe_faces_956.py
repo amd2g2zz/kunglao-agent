@@ -320,12 +320,24 @@ def test_probe_delta_seam_end_to_end_synthetic(tmp_path):
     assert _bytes(probe_face.run_probe(unit, ws0)) == _bytes(r0)
 
 
-# ---- G1: the validate_task gate ------------------------------------------
-def test_new_unit_without_probe_rejected():
+# ---- G1: the probe contract (review round 1 semantics) --------------------
+def test_new_unit_without_probe_passes_validate_task():
+    """validate_task is the GRADING entry: synthetic/test units ship
+    without a probe legitimately; the live-corpus enforcement is the
+    corpus lint's violation face (see the lint pins below)."""
     import eval_dataset
     ok, errors = eval_dataset.validate_task(_valid_task("tf-new-unit-956"))
+    assert ok, errors
+    assert not any("probe block" in e for e in errors)
+
+
+def test_new_unit_with_malformed_probe_rejected():
+    import eval_dataset
+    task = _valid_task("tf-new-unit-956", {
+        "entrypoint": "judge.py", "cadence": "whenever"})
+    ok, errors = eval_dataset.validate_task(task)
     assert not ok
-    assert any("#956" in e and "probe block missing" in e for e in errors)
+    assert any("#956" in e for e in errors)
 
 
 def test_new_unit_with_probe_passes():
@@ -410,12 +422,17 @@ def _run_lint(*roots: Path) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, text=True, timeout=60)
 
 
-def test_lint_warns_on_missing_probe_block(tmp_path):
+def test_lint_violation_on_new_unit_missing_probe(tmp_path):
     _lint_fixture_unit(tmp_path, "lint-956-a")
     out = _run_lint(tmp_path)
-    assert out.returncode == 0, out.stdout
-    assert "PROBE[WARN]" in out.stdout
-    assert "probe-face grandfather warn(s), #956" in out.stdout
+    assert out.returncode == 1, out.stdout
+    assert "PROBE lint-956-a" in out.stdout
+
+
+def test_lint_warns_on_grandfathered_unit_missing_probe(tmp_path):
+    _lint_fixture_unit(tmp_path, "py-derive-v1")  # in the grandfather set
+    out = _run_lint(tmp_path)
+    assert "PROBE[WARN] py-derive-v1" in out.stdout
 
 
 def test_lint_silent_with_declared_probe_block(tmp_path):

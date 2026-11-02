@@ -369,15 +369,19 @@ PROBE_FACE_GRANDFATHERED: frozenset[str] = frozenset({
 
 
 def _validate_probe(task: dict, errors: list[str]) -> None:
-    """Probe-face gate: new units MUST declare the face; grandfathered
-    units fall through to the corpus-lint WARN face."""
-    if task.get("task_id") in PROBE_FACE_GRANDFATHERED:
-        return
+    """Probe-face contract: a DECLARED probe block is shape-validated
+    (entrypoint + cadence). An ABSENT block is NOT an error here — the
+    enforcement lives on the live corpus (eval_corpus_lint R4: error for
+    new units, warn for the grandfathered set), because validate_task is
+    the GRADING entry and synthetic test units legitimately ship without
+    a probe (review round 1: the hard gate refused the #818 climb
+    fixtures)."""
     probe = task.get("probe")
+    if probe is None:
+        return
     if not isinstance(probe, dict):
         errors.append(
-            "probe block missing (every unit ships a V(s) partial-credit "
-            "probe face: entrypoint + cadence, #956)")
+            "probe block must be a mapping (entrypoint + cadence, #956)")
         return
     ep = probe.get("entrypoint")
     if ep != "probe.py":
