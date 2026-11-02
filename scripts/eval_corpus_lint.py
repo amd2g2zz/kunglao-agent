@@ -23,6 +23,11 @@ The lint also reports the black-box (RE-capability-admissible) unit
 count: RE capability metrics count black-box material ONLY (the
 source-readable face measures source-reading, not reverse engineering).
 
+R4 (probe-face card, warn-only): every unit ships a task.yaml
+``probe:`` block — the V(s) partial-credit probe face. The corpus that
+predates the card is grandfathered (this lint warns), new units are a
+validate_task error (scripts/eval_dataset.py).
+
 Usage:
   python scripts/eval_corpus_lint.py [--corpus-root <dir>] ...
 Exit codes: 0 clean / 1 contaminated-or-invalid.
@@ -81,6 +86,9 @@ FAMILY_MATERIAL_CLASS: dict[str, str] = {
     "tf-novelcipher": "black-box",
     "tf-hardwall-beacon": "black-box",
     "tf-hardwall-ledger": "black-box",
+    # blocked-path trainer units (operator-local): the analysis subject
+    # is a protected GUI Mach-O — black-box (the integrity ruling)
+    "tf-snake": "black-box",
     # chain (eval-v1.4) — the obfuscated bundle IS the subject
     "chain-js": "source-readable",
     "chain-py": "source-readable",
@@ -112,10 +120,14 @@ def corpus_roots(explicit: list[Path], repo: Path) -> list[Path]:
 
 def iter_units(roots: list[Path]) -> list[Path]:
     """Every directory carrying a task.yaml (any nesting depth below a
-    corpus root), sorted."""
+    corpus root), sorted. Dot-prefixed directories are NOT corpus — the
+    operator's scratch namespace (.rejected-*, .git, ...) never lints."""
     out: list[Path] = []
     for r in roots:
-        out += sorted(d for d in r.rglob("task.yaml"))
+        out += sorted(
+            d for d in r.rglob("task.yaml")
+            if not any(part.startswith(".") for part in d.relative_to(r)
+                       .parts[:-1]))
     return out
 
 
@@ -176,6 +188,24 @@ def lint_unit(task_path: Path) -> list[str]:
     return rows
 
 
+def probe_block_warn(task: dict, uid: str) -> str | None:
+    """R4 (probe-face card, warn-only): every unit ships a V(s)
+    partial-credit probe face (task.yaml ``probe: {entrypoint,
+    cadence}``). The corpus predating the card is grandfathered — this
+    face is a WARN, never a violation; NEW units are a validate_task
+    ERROR instead (eval_dataset.py)."""
+    probe = task.get("probe") if isinstance(task, dict) else None
+    if isinstance(probe, dict) \
+            and isinstance(probe.get("entrypoint"), str) \
+            and probe["entrypoint"].strip() \
+            and probe.get("cadence"):
+        return None
+    return (f"PROBE[WARN] {uid}: no probe block — every unit ships a "
+            "V(s) partial-credit probe face (probe-face card; the corpus "
+            "predating it is grandfathered with this warn, new units "
+            "fail validate_task)")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     repo = Path(__file__).resolve().parents[1]
@@ -205,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     violations: list[str] = []
+    probe_warns: list[str] = []
     classes: dict[str, int] = {"source-readable": 0, "black-box": 0}
     for tp in units:
         violations += lint_unit(tp)
@@ -215,14 +246,20 @@ def main(argv: list[str] | None = None) -> int:
         mc = (task or {}).get("material_class")
         if mc in classes:
             classes[mc] += 1
+        warn = probe_block_warn(task or {}, tp.parent.name)
+        if warn:
+            probe_warns.append(warn)
 
     if violations:
         print("\n".join(violations))
         return 1
+    if probe_warns:
+        print("\n".join(probe_warns))
     print(f"eval_corpus_lint: clean ({len(units)} units, "
           f"{classes['black-box']} black-box / "
           f"{classes['source-readable']} source-readable — RE capability "
-          "metrics count the black-box face only, #816)")
+          f"metrics count the black-box face only, #816; "
+          f"{len(probe_warns)} probe-face grandfather warn(s), #956)")
     return 0
 
 

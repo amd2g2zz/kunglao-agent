@@ -491,7 +491,7 @@ files:
   - src: scripts/eval_corpus_lint.py
     dest: .claude/scripts/eval_corpus_lint.py
     kind: scaffold
-    sha256: 74d72a40507d66cd5814969721dfca0162de392fef67cd6fcf4334e0f7323fc5
+    sha256: 28d1a8d9c58fd5aed1c88b3fb3d2a92d1927e55667fc78cff59693f8c47eda20
   - src: scripts/eval_crypto.py
     dest: .claude/scripts/eval_crypto.py
     kind: scaffold
@@ -499,7 +499,7 @@ files:
   - src: scripts/eval_dataset.py
     dest: .claude/scripts/eval_dataset.py
     kind: scaffold
-    sha256: ee0f6d818454860a39b72d43dda0b9171128e6bdefcad170ff4b0f28c16321a6
+    sha256: e78e6a33adadc53a38ee3844ac7416d059947f50beb5f95ea4f3047c4e034707
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: f6a75f73350abf08df947f7ce5d063f3ea0c18a2ae9c88fd27a72534115c6235
+    sha256: c512d264db94e50aa36595521d737e71e8b087815279d72de571cfee00dd0392
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1536,6 +1536,10 @@ files:
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
     sha256: 05553502132df67c5058a4f7e94f028bdc4ab39825e1124b28cbe3b7e7e4c853
+  - src: scripts/rlvr/probe_face.py
+    dest: .claude/scripts/rlvr/probe_face.py
+    kind: scaffold
+    sha256: 6accb9a99bbf763d0d2e90daad35a8178d2155a78ddf99b812e8d983447072ca
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
