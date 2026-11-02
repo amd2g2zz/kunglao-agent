@@ -1762,10 +1762,10 @@ def _sandbox_wrap(argv: list[str], profile: str) -> tuple[list[str], bool]:
     so the row can carry sandbox_wrap_failed=true — the session still
     runs (fail-loud, never silent, never a crash)."""
     if shutil.which(SANDBOX_BINARY) is None:
-        print(f"[kunglao-agent] eval_loop WARN sandbox_wrap: "
-              f"{SANDBOX_BINARY} not found on PATH — session launches "
-              f"UNWRAPPED, KUNGLAO_SANDBOX_PROFILE={profile} is INERT "
-              f"(row carries sandbox_wrap_failed=true)", file=sys.stderr)
+        from _boot import warn
+        warn("sandbox_wrap", f"{SANDBOX_BINARY} not found on PATH — "
+            f"session launches UNWRAPPED, KUNGLAO_SANDBOX_PROFILE="
+            f"{profile} is INERT (row carries sandbox_wrap_failed=true)")
         return argv, True
     return [SANDBOX_BINARY, "-f", profile, *argv], False
 
