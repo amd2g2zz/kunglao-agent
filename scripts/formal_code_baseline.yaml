@@ -109,7 +109,7 @@ files:
   scripts/eval_corpus_lint.py: 10
   scripts/eval_crypto.py: 4
   scripts/eval_dataset.py: 16
-  scripts/eval_loop_runner.py: 57
+  scripts/eval_loop_runner.py: 63
   scripts/eval_matrix_report.py: 4
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
@@ -244,6 +244,7 @@ files:
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
   scripts/rlvr/expansion.py: 4
+  scripts/rlvr/family_playbook.py: 6
   scripts/rlvr/feature_prior.py: 5
   scripts/rlvr/incremental_reward.py: 42
   scripts/rlvr/interruption.py: 8
@@ -262,6 +263,7 @@ files:
   scripts/rlvr/parking.py: 21
   scripts/rlvr/phi_tree.py: 13
   scripts/rlvr/playbook.py: 2
+  scripts/rlvr/playbook_distill.py: 1
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13

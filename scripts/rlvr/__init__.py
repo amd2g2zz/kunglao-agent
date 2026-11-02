@@ -32,6 +32,7 @@ from . import episode_pool
 from . import episode_schema
 from . import episode_settle
 from . import expansion
+from . import family_playbook
 from . import feature_prior
 from . import hypotheses
 from . import incremental_reward
@@ -53,6 +54,7 @@ from . import obstacles
 from . import parking
 from . import phi_tree
 from . import playbook
+from . import playbook_distill
 from . import policy_compare
 from . import pool_indexer
 from . import pool_scheduler
@@ -104,6 +106,7 @@ __all__ = [
     "episode_schema",
     "episode_settle",
     "expansion",
+    "family_playbook",
     "feature_prior",
     "hypotheses",
     "incremental_reward",
@@ -124,6 +127,7 @@ __all__ = [
     "parking",
     "phi_tree",
     "playbook",
+    "playbook_distill",
     "policy_compare",
     "posteriors",
     "pricing",

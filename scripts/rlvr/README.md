@@ -74,6 +74,18 @@ scripts/rlvr/
 │                        #   collapsed arms), feature-keyed novelty (the
 │                        #   anti-renaming wall), verifier-gated admission
 │                        #   scoring, runs/expansion/E-<n>.json receipts
+├── family_playbook.py  # #960 the Type-2 transfer store — family playbook
+│                        #   kunglao-playbook/1 schema (parse/serialize
+│                        #   byte-stable, hard line budget 60, capacity
+│                        #   culling 宁缺毋滥), operator-local root
+│                        #   (KUNGLAO_PLAYBOOK_ROOT), session_block()
+│                        #   whole-file init injection (no retrieval)
+├── playbook_distill.py # #960 the terminal distillation call — ONE
+│                        #   frozen-model call per rollout terminal
+│                        #   (claude -p bench seam, stub-injectable),
+│                        #   mechanical patch gate (evidence-ref
+│                        #   existence vs ws, shape, budget), fail-closed
+│                        #   (unchanged playbook on any fault)
 ├── pricing.py           # issue-760 pricing face — the unknown-set
 │                        #   projection (undecided PQs + open obstacles,
 │                        #   pure view over existing keys) + the
