@@ -1659,11 +1659,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 3be4d0ea359ff67bf630c0e7ee4f794794ea55d3429aa5dc4f8fd8fc45bca598
+    sha256: ff03f0f9220c5405c946d7d8d0dddafbf23462a23cb50e3fa8b63bff7bcec9e7
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 8ae414fef12bcab2d7f1b994a96b8f1bc431e80afa8a5a4e50958b0a935bcdf1
+    sha256: da8c323f3a64e411a7b3a727e06e794d7e863a0d70efc19c051fb732f5190220
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2319,7 +2319,7 @@ files:
   - src: tools/_lib/negative_cache.py
     dest: .claude/tools/_lib/negative_cache.py
     kind: asset
-    sha256: dec0e90da5f856fb9d203f2457086d0e9fa6f6bbcac4e183a261763a190c23f4
+    sha256: 2ce3a6e3fb014b3ad38e06b0c9d1a781f806a972988f06f8861bef5694b73b51
   - src: tools/_lib/stdio.py
     dest: .claude/tools/_lib/stdio.py
     kind: asset
@@ -2539,7 +2539,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 549cd57cd18649a896a09b0dd896add15768e07f0afd0cff9a8cf3f996d2b8e0
+    sha256: 1ba2682a1fbe3de6d1d083ea16a1e4f540a7692f16bd5de426ff473a2d27cf78
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset

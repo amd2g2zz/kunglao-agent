@@ -378,6 +378,6 @@ files:
   tools/static/web_gitnexus_demo.py: 3
   tools/static/yara-gen.py: 3
   tools/static/yara-scan.py: 3
-  tools/tool-search.py: 33
+  tools/tool-search.py: 35
   tools/validate_index.py: 36
   tools/web/jsvmp_triage.py: 5

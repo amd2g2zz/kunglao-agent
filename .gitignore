@@ -126,3 +126,10 @@ scripts/rlvr/patterns/posterior-store.jsonl
 coverage.xml
 coverage.json
 htmlcov/
+
+# harness process files (never tracked)
+.review-evidence-*
+.review-gate/
+.subagent-review/
+coverage-*.json
+.coverage

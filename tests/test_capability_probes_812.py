@@ -45,8 +45,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
-
 from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -613,3 +611,39 @@ class TestToolSearchNegativeFace:
         assert r.returncode == 0
         doc = json.loads(r.stdout) if r.stdout.strip() else {"count": 0}
         assert "negative_cache" not in doc
+
+    def test_stale_escalated_row_purged_on_contradiction(self, tmp_path) -> None:
+        """A cached zero CONTRADICTED by the current catalog is purged,
+        never served: an escalated row never self-heals (the count
+        accrues past TTL by design), so the CI poison — a stale `yara`
+        row dead-laning a live registry family for ten days — needs the
+        consumer-side eviction face."""
+        from negative_cache import lookup, record_negative
+        ws = _seed_ws(tmp_path)
+        for _ in range(3):  # drive it to the Standard-11 escalation
+            record_negative(ws, "yara", "yara")
+        assert lookup(ws, "yara") is not None, "seed row must be cache-fresh"
+        r = self._run("--find", "yara", "--ws", str(ws), "--json")
+        assert r.returncode == 0, r.stderr
+        doc = json.loads(r.stdout)
+        assert doc["count"] > 0, (
+            "the registry carries yara — the stale row must not answer")
+        assert "negative_cache" not in doc, "fresh scan, not a cache serve"
+        assert lookup(ws, "yara") is None, "contradicted row must be purged"
+
+    def test_true_negative_row_survives_no_contradiction(self, tmp_path) -> None:
+        """The eviction face is contradiction-gated: a genuine dead lane
+        (absent from the catalog) keeps its cache answer — the #812
+        re-probe prevention is not regressed by the stale-row purge."""
+        from negative_cache import lookup, record_negative
+        ws = _seed_ws(tmp_path)
+        record_negative(ws, "zzqq-true-dead-lane", "zzqq-true-dead-lane")
+        r = self._run("--find", "zzqq-true-dead-lane", "--ws", str(ws),
+                      "--json")
+        assert r.returncode == 0, r.stderr
+        doc = json.loads(r.stdout)
+        assert doc["count"] == 0
+        assert doc["negative_cache"]["family"] == "zzqq-true-dead-lane", (
+            "genuine dead lane still answers from cache")
+        assert lookup(ws, "zzqq-true-dead-lane") is not None, (
+            "an uncontradicted row must survive")

@@ -43,6 +43,18 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
     "experiments/learning-loop/sim/battery_v3_experiments.py":
         "rl-v2 battery experiments: loop_sim tracked-home precedent (#887)",
+    # the #951 dual-objective sim world: the rl-v3 direction layer's
+    # in-silico evidence gate (same declared sim tier, same tracked
+    # home — the #887 battery precedent).
+    "experiments/learning-loop/sim/dual_objective_world.py":
+        "rl-v3 direction-layer sim world: loop_sim tracked-home precedent (#951)",
+    "experiments/learning-loop/sim/dual_objective_battery.py":
+        "rl-v3 five-config battery: loop_sim tracked-home precedent (#951)",
+    # the #951 design doc: the issue's named deliverable path — the MDP
+    # definitions, judge contract, racing rules and the sim results that
+    # gate the rl-v3 production card (#953 opens only on PASS).
+    ".claude/PRPs/plans/rl-v3-direction-layer.plan.md":
+        "#951 design doc deliverable: PRPs plan tracked-home precedent (#951)",
     # rl-v2 core types (#878): the trajectory-semantics value objects
     # share the learning-loop tracked home (the loop_sim precedent) —
     # experiment code outside the deploy surface, deliberately.
@@ -172,6 +184,13 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # 2026-08-19-gate5.json is additionally pinned by
     # tests/test_subagent_injection.py::test_tracked_gate5_review_citations_resolve
     # -> allowlisted, NOT git rm --cached (local-green / fresh-CI-red landmine).
+    # coverage-floor.json (rule coverage-*.json) — the #807 ratchet POLICY
+    # anchor (schema/floor/min_floor/measured_set/baseline_measured), the
+    # committed floor the CI coverage pins enforce against regression —
+    # policy, not measurement output; the coverage-* class targets the
+    # measurement artifacts only.
+    "coverage-floor.json":
+        "#807 coverage-floor ratchet policy anchor: committed floor, not process output (#951)",
 }
 
 
