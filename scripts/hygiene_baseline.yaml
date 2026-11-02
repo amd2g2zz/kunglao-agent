@@ -154,7 +154,7 @@ files:
   scripts/eval_dataset.py:
     r1: 5
   scripts/eval_loop_runner.py:
-    r1: 16
+    r1: 27
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -1015,6 +1015,8 @@ files:
     r1: 1
   tests/test_eval_checker_snake_delegate_888.py:
     r1: 1
+  tests/test_eval_containment_952.py:
+    r1: 3
   tests/test_eval_contract_352.py:
     r1: 1
   tests/test_eval_control_arm_236.py:
