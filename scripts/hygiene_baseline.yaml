@@ -1382,7 +1382,7 @@ files:
   tests/test_no_cti_agents.py:
     r1: 1
   tests/test_no_tracked_ignored_files.py:
-    r1: 12
+    r1: 16
   tests/test_normalize_trace.py:
     r1: 1
   tests/test_notes_closure_762.py:
@@ -1642,6 +1642,8 @@ files:
     r2: 1
   tests/test_rl_v3_censoring_955.py:
     r1: 5
+  tests/test_rl_v3_sim_world_951.py:
+    r1: 2
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
