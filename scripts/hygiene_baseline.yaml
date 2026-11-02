@@ -404,6 +404,8 @@ files:
     r1: 5
   scripts/rlvr/crystallize.py:
     r1: 1
+  scripts/rlvr/direction.py:
+    r1: 14
   scripts/rlvr/episode_pool.py:
     r1: 3
   scripts/rlvr/episode_schema.py:
@@ -1642,6 +1644,8 @@ files:
     r2: 1
   tests/test_rl_v3_censoring_955.py:
     r1: 5
+  tests/test_rl_v3_direction_954.py:
+    r1: 4
   tests/test_rl_wiring_518.py:
     r1: 4
   tests/test_rlvr_bitexact.py:
