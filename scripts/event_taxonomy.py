@@ -190,8 +190,10 @@ EMIT_ACTIONS = [
     "case_vacuous",       # #132 cadence separation observation: a case greened under >=2 distinct candidate clients (outcome invariant across the hypothesis space — the empirical twin of #126's declared update_map)
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
+    "claim_park",         # #955 censored-env escrow park (rlvr/parking.py)
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
     "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
+    "claim_unpark",       # #955 env-repair resume: escrow release (rlvr/parking.py)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "cockpit_ratio_alarm",  # #801 Face 3: machine:analysis ratio > 1 — harness out-competing the analysis
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
