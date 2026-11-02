@@ -116,6 +116,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -291,6 +292,10 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     # wall/budget/solo; a hand-set env outside the runner would silently
     # diverge from the caps the prompt advertises
     child_env = dict(os.environ)
+    # #952 review round 1: the sandbox-wrapped session must not be told
+    # WHERE the grading oracle lives — the profile denies the path, the
+    # env would advertise it (a write-forge needs no read)
+    child_env.pop("KUNGLAO_GRADING_ROOT", None)
     child_env["KUNGLAO_SDK_BUDGET_USD"] = str(budget_usd)
     if wall_cap_s and solo_fraction:
         child_env["KUNGLAO_SOLO_CAP_S"] = str(
@@ -304,6 +309,14 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                                  budget_usd)
     else:
         argv = build_cc_default_argv(prompt, budget_usd)
+    # #952 Face C: the opt-in seatbelt wrap (KUNGLAO_SANDBOX_PROFILE).
+    # Unset = off, the argv is untouched. Set = the session binary is
+    # wrapped (sandbox-exec -f <profile> <original argv...>); a missing
+    # sandbox-exec launches UNWRAPPED with the flag raised (fail-loud).
+    sandbox_profile = os.environ.get(ENV_SANDBOX_PROFILE)
+    sandbox_wrap_failed = False
+    if sandbox_profile:
+        argv, sandbox_wrap_failed = _sandbox_wrap(argv, sandbox_profile)
     started = time.time()
     timed_out = False
     # start_new_session: the child leads its own process group so the
@@ -325,6 +338,7 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
             "stdout_tail": "",
             "stderr_tail": f"session launch failed: {exc}",
             "session_cost": None,
+            "sandbox_wrap_failed": sandbox_wrap_failed,
         }
     try:
         out, err = proc.communicate(timeout=wall_cap_s)
@@ -340,6 +354,7 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
         "stdout_tail": (out or "")[-4000:],
         "stderr_tail": (err or "")[-2000:],
         "session_cost": _session_cost(out or ""),
+        "sandbox_wrap_failed": sandbox_wrap_failed,
     }
 
 
@@ -1650,6 +1665,155 @@ def _arm_prompt(arm: str, prompt: str,
     return prompt
 
 
+# ------------------------------------------------- #952 containment faces
+# Issue #952's two repo-side construction defenses (the P8 round-1
+# invalidation: the cold arm READ the co-located grading oracle and
+# forged a PASS, and both sessions worked solo — loop_dispatch_count=0):
+#
+#   FACE A  leak scan   KUNGLAO_GRADING_ROOT set -> a harvest-time
+#           substring scan of the workspace's text artifacts for the
+#           grading-root path. A hit lands the row
+#           excluded_from_performance + an ORACLE_LEAK failure — the
+#           checker's verdict itself is NEVER rewritten (the marker, not
+#           a rewrite, disqualifies the row for the capability read).
+#           Unset = the face is OFF entirely: no key, no scan I/O, zero
+#           behavior change.
+#   FACE B  topology    loop arm only: the harvested dispatch_count is
+#           the orchestrator-economy compliance contract — 0 dispatches
+#           is a solo-only session that cannot answer the orchestrator
+#           question. The flag is the contract; consumers decide
+#           exclusion (this face never touches
+#           excluded_from_performance).
+#   FACE C  sandbox     KUNGLAO_SANDBOX_PROFILE set -> launch_session
+#           wraps the session binary: sandbox-exec -f <profile> ...
+#           (containment's prevention half; macOS-only,
+#           deprecated-but-functional, opt-in via the env, off by
+#           default). A missing binary launches UNWRAPPED and marks the
+#           row sandbox_wrap_failed=true (fail-loud, never silent). The
+#           deny-read TEMPLATE ships at templates/
+#           sandbox-denying-units.sb.tmpl — the operator materializes a
+#           real profile per run (the @KUNGLAO_GRADING_ROOT@ /
+#           @KUNGLAO_UNITS_ROOT@ slots are per-run substitutions); the
+#           runner never writes one.
+ENV_GRADING_ROOT = "KUNGLAO_GRADING_ROOT"
+ENV_SANDBOX_PROFILE = "KUNGLAO_SANDBOX_PROFILE"
+ORACLE_LEAK_CODE = "ORACLE_LEAK"
+SANDBOX_BINARY = "sandbox-exec"
+# the workspace text artifacts the leak scan reads (relative to the ws)
+# #952 review round 1: the scan covers EVERY session-writable artifact
+# surface (the deliverable itself is the most likely leak carrier — a
+# forged PASS citing the grader path in a comment), not just the three
+# note carriers. runs/ beyond deliverables is machine-channel telemetry.
+LEAK_SCAN_DIRS = ("facts", "notes", "scratch", "analyses", "evidence",
+                  os.path.join("runs", "deliverables"))
+# a text artifact larger than this is not a note — it is data; skip it
+LEAK_SCAN_FILE_CAP_BYTES = 2 * 1024 * 1024
+
+
+def leak_scan(workspace: Path, root: str | Path) -> dict:
+    """#952 Face A (the reusable core): substring-scan the workspace's
+    text artifacts (facts/ notes/ scratch/, files at or under
+    ``LEAK_SCAN_FILE_CAP_BYTES``) for the literal grading-root path
+    string. Byte-level search on purpose — it IS substring search, it is
+    fast, it parses nothing, and it cannot crash on non-UTF8 bytes.
+    Returns ``{"hit": True, "root": <path str>, "files": [<ws-relative
+    paths>]}`` on a hit and ``{"hit": False}`` on a miss; the row marker
+    is the caller's face (run_loop_task), never this function's."""
+    ws = Path(workspace)
+    root_str = str(Path(root))
+    needle = root_str.encode("utf-8")
+    if not needle:
+        return {"hit": False}
+    hits: list[str] = []
+    for d in LEAK_SCAN_DIRS:
+        base = ws / d
+        if not base.is_dir():
+            continue
+        # the ITERATION itself can raise (a session chmod-000s a
+        # subdirectory — review round 1): one unreadable subtree must
+        # degrade that subtree to a warn, never kill the paid task
+        try:
+            found = sorted(base.rglob("*"))
+        except OSError as exc:
+            _warn_fail_open("leak_scan_walk", exc)
+            continue
+        for p in found:
+            if not p.is_file():
+                continue
+            try:
+                if p.stat().st_size > LEAK_SCAN_FILE_CAP_BYTES:
+                    continue
+                blob = p.read_bytes()
+            except OSError as exc:
+                _warn_fail_open("leak_scan_read", exc)
+                continue
+            if needle in blob:
+                hits.append(p.relative_to(ws).as_posix())
+    if not hits:
+        return {"hit": False}
+    return {"hit": True, "root": root_str, "files": hits}
+
+
+def _sandbox_wrap(argv: list[str], profile: str) -> tuple[list[str], bool]:
+    """#952 Face C (the launch-side half): prefix the seatbelt wrap
+    ``sandbox-exec -f <profile>`` onto the session argv. Returns
+    (argv, sandbox_wrap_failed): a missing sandbox-exec binary keeps the
+    argv UNWRAPPED, leaves ONE loud stderr trace and reports the failure
+    so the row can carry sandbox_wrap_failed=true — the session still
+    runs (fail-loud, never silent, never a crash)."""
+    if shutil.which(SANDBOX_BINARY) is None:
+        print(f"[kunglao-agent] eval_loop WARN sandbox_wrap: "
+              f"{SANDBOX_BINARY} not found on PATH — session launches "
+              f"UNWRAPPED, KUNGLAO_SANDBOX_PROFILE={profile} is INERT "
+              f"(row carries sandbox_wrap_failed=true)", file=sys.stderr)
+        return argv, True
+    return [SANDBOX_BINARY, "-f", profile, *argv], False
+
+
+def _row_leak_marker(row: dict, ws: Path, task_name: str) -> None:
+    """#952 Face A, the row-assembly half: run the harvest-time
+    oracle-leak scan and mark the row. KUNGLAO_GRADING_ROOT unset = the
+    face is OFF entirely (no key, no scan I/O, zero behavior change); a
+    hit lands ``leak_scan`` + ``excluded_from_performance`` + an
+    ORACLE_LEAK failure — the checker's verdict is NEVER rewritten (the
+    marker, not a rewrite, disqualifies the row for the capability
+    read)."""
+    grading_root = os.environ.get(ENV_GRADING_ROOT)
+    if not grading_root:
+        return
+    leak = leak_scan(ws, grading_root)
+    row["leak_scan"] = leak
+    if not leak["hit"]:
+        return
+    row["excluded_from_performance"] = True
+    row["failures"].append({
+        "code": ORACLE_LEAK_CODE,
+        "detail": f"grading root {leak['root']} cited in workspace "
+                  f"artifacts: {', '.join(leak['files'])}"})
+    print(f"[kunglao-agent] eval_loop: {task_name} ORACLE_LEAK "
+          f"({leak['root']} visible in workspace artifacts) — row "
+          f"EXCLUDED from performance", file=sys.stderr)
+
+
+def _row_topology_marker(row: dict, *, arm: str, metrics: dict,
+                         task_name: str) -> None:
+    """#952 Face B, the row-assembly half: the orchestrator-economy
+    compliance marker. The loop arm's harvested dispatch_count is the
+    contract — 0 dispatches is a solo-only session that cannot answer
+    the orchestrator question (the #888 round-1 defect). The flag is
+    the contract; consumers decide exclusion (this face never touches
+    ``excluded_from_performance``). Non-loop arms carry no key at all."""
+    if arm != ARM:
+        return
+    dispatch_count = int(metrics.get("dispatch_count") or 0)
+    row["topology_compliant"] = dispatch_count > 0
+    if dispatch_count > 0:
+        return
+    print(f"[kunglao-agent] eval_loop: {task_name} TOPOLOGY solo-only "
+          f"run — excluded from the orchestrator-economy read",
+          file=sys.stderr)
+
+
 def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
                     wall_cap_s: float, solo_fraction: float,
                     deliverable_rel: str, layer_paths: list[str],
@@ -1917,6 +2081,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             "session_cost": rec["session_cost"],
             "harness_contaminated": contaminated,
             "harness_drift_files": drifted,
+            # #952 Face C: the launch was seatbelt-wrapped only when the
+            # operator set KUNGLAO_SANDBOX_PROFILE AND sandbox-exec was
+            # found; a True here means the profile env was set but the
+            # session ran UNWRAPPED (fail-loud, never silent)
+            "sandbox_wrap_failed": rec.get("sandbox_wrap_failed", False),
         },
         "workspace": str(ws),
         "deliverable": str(cand) if cand else None,
@@ -1924,6 +2093,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             prompt.encode("utf-8")).hexdigest(),
         "gap_redo": gap_redo,
     }
+    # ---- #952 Faces A + B: the row markers. Face A runs ONCE per task
+    # AFTER every session face (main + gap-redo) so the FINAL workspace
+    # state is what gets scanned — a pre-checker scan on the first
+    # session would miss a redo-session leak. Both markers are
+    # append-only row keys: the checker's verdict stands untouched.
+    _row_leak_marker(row, ws, tdir.name)
+    _row_topology_marker(row, arm=arm, metrics=metrics,
+                         task_name=tdir.name)
     for name, value in res["metrics"].items():
         print(ds.metric_line(f"{tdir.name}.{name}", value))
     print(f"METRIC {tdir.name}.rounds={metrics['rounds']}")

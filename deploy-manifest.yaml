@@ -503,7 +503,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 209124af98203e4467a6f6cd42ff9604d8f40462eb65652336d16f7513e13063
+    sha256: 775071e196faf1f487ed0e51b983ae59b014303e4f9ed900799811e739824ba6
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -2164,6 +2164,10 @@ files:
     dest: .claude/templates/frida/windowed-stalker.js.tmpl
     kind: asset
     sha256: 88d6a2cd7045de3ff4a6ee97021ef2cb27bf6fab9e1ae998f01d13bac1cfcb97
+  - src: templates/sandbox-denying-units.sb.tmpl
+    dest: .claude/templates/sandbox-denying-units.sb.tmpl
+    kind: asset
+    sha256: c4ce68bf56f68263e344cd198b57a3a0ef10b306a9229a3aee783edae17e84bd
   - src: templates/scripts/README.md
     dest: .claude/templates/scripts/README.md
     kind: asset
