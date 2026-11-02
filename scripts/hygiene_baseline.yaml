@@ -154,7 +154,7 @@ files:
   scripts/eval_dataset.py:
     r1: 6
   scripts/eval_loop_runner.py:
-    r1: 27
+    r1: 31
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -410,6 +410,8 @@ files:
     r1: 3
   scripts/rlvr/expansion.py:
     r1: 2
+  scripts/rlvr/family_playbook.py:
+    r1: 2
   scripts/rlvr/feature_prior.py:
     r1: 3
   scripts/rlvr/incremental_reward.py:
@@ -441,6 +443,8 @@ files:
   scripts/rlvr/phi_tree.py:
     r1: 4
   scripts/rlvr/playbook.py:
+    r1: 1
+  scripts/rlvr/playbook_distill.py:
     r1: 1
   scripts/rlvr/policy_compare.py:
     r1: 1

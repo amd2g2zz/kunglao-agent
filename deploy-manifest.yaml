@@ -503,7 +503,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 5c7539d986404699fa431e0fa9d60cd50e474deb478f77dbebe6f9ba7509d95c
+    sha256: 7df2c26165a7b83513b7b765babf0177610f58498843b0344d8c88e30a19ec1b
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 96375d993d46031b61ff6210ca3add0d59ddec42f08e0d52e3caf16973dfba6e
+    sha256: aaca1d275f52c852928c9e5ef1e2a54dbffcabce419b8dbec3a5a63eadb86869
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1436,6 +1436,10 @@ files:
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
     sha256: 0bb04d566fe6ab0485dec7629764ebb38946dc36091e95f67c7bd91ab509c4f2
+  - src: scripts/rlvr/family_playbook.py
+    dest: .claude/scripts/rlvr/family_playbook.py
+    kind: scaffold
+    sha256: 6eed283b9f8d5c5d01635ef2e33f77a0f136c86d3bd3e782c5149ac3583545e2
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
@@ -1520,6 +1524,10 @@ files:
     dest: .claude/scripts/rlvr/playbook.py
     kind: scaffold
     sha256: b3506055feacd2105c234a9bb22bc5a58a5384a11c480388fb81a32ac73e3a76
+  - src: scripts/rlvr/playbook_distill.py
+    dest: .claude/scripts/rlvr/playbook_distill.py
+    kind: scaffold
+    sha256: 57829512c91e4e3a68bf3c4e0f183623c57182f2036d0bf7454306357b42152d
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
@@ -1647,11 +1655,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: c88fe124436b39d57fc15f60951fb98a90aec6208fc4fc2caaf81c964f03735e
+    sha256: d196fc4e1f9a671d45f6cac71085f3e61298ed1b42c2ef75d1f56f72a3311977
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 7b30c2efc47eedd7d1cc4f208c42af853d70c69e4c42b6fc0580d4fc155778f8
+    sha256: 6f45ef3b4797f6222ec60851829a59c21dd8c7cca3936c757505357224fcb73c
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
