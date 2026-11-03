@@ -128,3 +128,11 @@ def test_gate_registry_lockstep_with_gate_functions() -> None:
             f"gate {num} name {gate_name!r} missing from quality_gates.py "
             "docstring — update the prose gate list when registering a gate"
         )
+
+def test_gate10_dispatch_tolerates_zero_arg_gate() -> None:
+    # _gate10_liveness takes no kwargs; the dispatcher must not force
+    # verbose=... onto it (regression: TypeError killed Gate 10 and the
+    # resident pre-commit hook with it).
+    r = _run_quality_gates("10")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "SKIP: KUNGLAO_LIVENESS_WS not set" in r.stdout
