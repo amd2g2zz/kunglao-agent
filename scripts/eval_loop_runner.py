@@ -138,6 +138,7 @@ import eval_dataset as ds
 import eval_smoke_runner as rnr
 import tuition_curve
 from rlvr import family_playbook
+from rlvr import playbook_distill
 
 try:  # repo runtime dep (eval_dataset already requires it)
     import yaml
@@ -800,6 +801,42 @@ def playbook_injection_block(family: str | None) -> str:
     if os.environ.get(ENV_PLAYBOOK, "") != "1":
         return ""
     return family_playbook.session_block(str(family or ""))
+
+
+def playbook_distill_face(ws: Path, family: str | None) -> dict | None:
+    """#969 the Type-2 WRITE seam: ONE terminal distillation call per
+    session terminal (issue #960's scripts/rlvr/playbook_distill.py —
+    the workspace's terminal material plus the current family playbook
+    go into ONE frozen-model call; the mechanically-gated patch lands
+    in the operator-local playbook store, keyed by the task family).
+
+    Gated by ``KUNGLAO_PLAYBOOK=1`` — the SAME switch as the read side
+    (playbook_injection_block above): unset (or any other value) spends
+    ZERO model calls and keeps the run byte-identical to the pre-#969
+    shape. A family-less task skips silently (the read side's cold
+    shape). Budget posture: exactly ONE call per terminal, NO retries —
+    the distill module owns the fail-closed posture (any fault -> ONE
+    loud stderr WARN + the store file byte-untouched); this wrapper
+    fails OPEN on top of that: anything that still escapes (e.g. a
+    store-write OSError) is one rate-limited WARN and never breaks the
+    run — the verdict row assembles exactly as before."""
+    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+        return None
+    fam = str(family or "").strip()
+    if not fam:
+        return None
+    try:
+        summary = playbook_distill.distill(ws, fam)
+    except Exception as exc:  # noqa: BLE001 — the write face fails open
+        _warn_fail_open("playbook_distill", exc)
+        return None
+    if summary.get("applied"):
+        # the success-side trace (smoke liveness: KUNGLAO_PLAYBOOK=1 must
+        # be OBSERVABLE — the #969 failure was three silent rounds)
+        print(f"[kunglao-agent] eval_loop: playbook_distill family={fam} "
+              f"applied ops={len(summary.get('patch') or [])}",
+              file=sys.stderr)
+    return summary
 
 
 # ------------------------------------------------------- factor settle (I4)
@@ -2233,6 +2270,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                                          verdict=res["verdict"],
                                          prompt=prompt)
                   if arm == ARM else None)
+
+    # ---- #969: the Type-2 WRITE face. ONE distill call per session
+    # terminal (the main session and any gap-redo are both done — the
+    # workspace state here is the terminal state), env-gated on the same
+    # KUNGLAO_PLAYBOOK switch as the read side, fail-open: the summary
+    # is telemetry only and the verdict row assembled below is never
+    # touched by a distill fault (one WARN, no raise, no retries).
+    playbook_distill_face(ws, task.get("family"))
 
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],

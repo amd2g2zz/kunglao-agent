@@ -154,7 +154,7 @@ files:
   scripts/eval_dataset.py:
     r1: 6
   scripts/eval_loop_runner.py:
-    r1: 38
+    r1: 41
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -590,7 +590,7 @@ files:
   tests/chain_test_harness.py:
     r1: 5
   tests/conftest.py:
-    r1: 2
+    r1: 3
   tests/experiment_difficulty_15.py:
     r1: 1
   tests/fixtures/experiments/ex3_bucket_calibration.py:
@@ -1456,6 +1456,8 @@ files:
     r1: 4
   tests/test_plan_stages_822.py:
     r1: 1
+  tests/test_playbook_distill_wiring_969.py:
+    r1: 2
   tests/test_plugin_manifest.py:
     r1: 13
     r2: 2
@@ -1650,6 +1652,8 @@ files:
     r1: 5
   tests/test_rl_v3_direction_954.py:
     r1: 4
+  tests/test_rl_v3_playbook_960.py:
+    r1: 1
   tests/test_rl_v3_sim_world_951.py:
     r1: 2
   tests/test_rl_wiring_518.py:
