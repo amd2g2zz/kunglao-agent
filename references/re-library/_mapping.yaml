@@ -66,6 +66,8 @@ when_to_read:
     signature or encryption recovery task and choosing where to enter.
   references/re-library/web/external-distilled/external-captcha-perception-methods.md: When choosing an
     attack route for an interactive-perception captcha.
+  references/re-library/web/external-distilled/external-captcha-perception-atlas.md: When a route is
+    chosen and its build parameters or tool addresses are needed.
   references/re-library/web/external-distilled/external-delivery-verification-gates.md: When a recovered
     signer or protocol is about to be declared working or delivered.
   references/re-library/web/external-distilled/external-env-stub-generation.md: When a recovered signer must

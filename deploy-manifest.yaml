@@ -1683,11 +1683,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 41e6e43cc6f3805c9f9954f10d3abe4bb1b45fa41652758ef95f0b1650933854
+    sha256: 91cfb2c02b6bffcbac6c85fae5a5c3e7921e570f139e0df3a588c85be0b648f4
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: ac9063ccc5412f46faefad23ed695a36cf77d304a4e2e201ef18f7b2249f5d3b
+    sha256: d1da91f6c3a485b0d5d64b648d264c88e23a12dab51de0fdd8182beed7676d8d
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1731,7 +1731,7 @@ files:
   - src: references/_index-web.md
     dest: .claude/references/_index-web.md
     kind: asset
-    sha256: 865322c3e66bea4354021d5c9abacbfe1557dcc3f2ccdb890b29f486a557f722
+    sha256: f18f62a2934bd7a0a9edce03579ee75230c9ef09c87ac58a264443534085061f
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
@@ -1875,7 +1875,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: bed3f66d31015734f5a61b48a6f15f0ee90248d781579f9200e6a2e7cc183f5c
+    sha256: 21319a6d1f79d7d7922297929e35b8d4abf463f1d506594cfd0124e42746a35c
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -2111,7 +2111,7 @@ files:
   - src: references/re-library/web/external-distilled/external-captcha-perception-atlas.md
     dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-atlas.md
     kind: asset
-    sha256: 6c20b6587f8e434add6e6f530262609cb3d56b2697b95fc5afc4b94b50a0d7a3
+    sha256: 776e969056850216d3192718ff7055ce9282e40d87e83a15ddbf9882e435f329
   - src: references/re-library/web/external-distilled/external-captcha-perception-methods.md
     dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-methods.md
     kind: asset

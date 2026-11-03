@@ -170,3 +170,29 @@ unverified. Full parameter sets in the linked family files.
 - Landing-face outcome for these prose cards: staged attempt
   `ws-sandbox/runs/distill-candidates/attempt-1-method-cards` — see
   [DISTILL-RUN-REPORT.md](DISTILL-RUN-REPORT.md).
+
+## Tool reference (canonical public addresses)
+
+The studied-source URLs live in the operator ledger (S-ids above). The
+TOOLS the routes build on are public packages — their canonical
+addresses are method infrastructure, not sources:
+
+| Tool | Canonical address | Role | Families |
+|---|---|---|---|
+| ddddocr | `pip install ddddocr` · github.com/sml2h3/ddddocr | zero-shot OCR (set_ranges) + slider gap (`slide_match`/`simple_target`) | var-length OCR, arithmetic, slider |
+| dddd_trainer | github.com/sml2h3/dddd_trainer | the training half of ddddocr (ImageHeight 64, SGD lr 0.01, early-stop acc 0.97) | var-length OCR fine-tune |
+| Ultralytics YOLO (v5/v8/v11/pose) | `pip install ultralytics` · github.com/ultralytics/ultralytics | locator / compound-label detector / keypoint mode | slider, all click families, spatial, obstacle, trajectory, 9-grid, arithmetic |
+| bubbliiiing/Siamese-pytorch | github.com/bubbliiiing/Siamese-pytorch | the Siamese match-vs-prompt-crop comparator (VGG-style backbone, ONNX export) | text-click, icon-click, difference-click, obstacle |
+| torchvision ResNet18/50/101 | pytorch.org/vision (torchvision.models) | position-as-class, per-crop classifiers, frozen feature extractor | jigsaw, font-style, match-3, word-order, difference-click |
+| rotate-captcha-crack | github.com/zhenglin-li/rotate-captcha-crack | the CSL-smoothed rotation CNN (RegNet_Y_3_2GF, self-supervised rotation labels) | image-rotation |
+| OpenCV | `pip install opencv-python` (docs: docs.opencv.org) | Canny/Sobel/warpAffine/matchTemplate/contours/Harris — the whole CV spine | slider, rotation, jigsaw, area, trajectory |
+| scikit-image | `pip install scikit-image` (`skimage.morphology.skeletonize`, `medial_axis`) | skeleton extraction (trajectory scheme 2) | trajectory, jigsaw |
+| Skan / FilFinder | `pip install skan` · `pip install fil_finder` | ordered branch extraction from the skeleton graph | trajectory |
+| FunASR + SenseVoiceSmall | `pip install funasr` · model id `iic/SenseVoiceSmall` (+ fsmn-vad) | sub-second ASR for short audio clips | audio |
+| faster-whisper | `pip install faster-whisper` | CPU-only ASR fallback (no-torch setups) | audio |
+| PaddleOCR | github.com/PaddlePaddle/PaddleOCR | prompt-text OCR (spatial reasoning instructions) | spatial |
+| jieba | `pip install jieba` | lexical resolution over click-order permutations | word-order |
+| AntiCAP | pypi: AntiCAP | packaged multi-type solver incl. math (baseline comparator) | arithmetic |
+| LabelImg | github.com/HumanSignal/labelImg | manual bounding-box annotation | slider, click families |
+| ONNX Runtime | `pip install onnxruntime` | CPU serving for detector+matcher exports | click families, font-style |
+| Roboflow keypoint recipe | notebook: train-yolov8-keypoint.ipynb | the standard keypoint training recipe | trajectory |
