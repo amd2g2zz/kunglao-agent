@@ -37,7 +37,7 @@ files:
   references/governance/mechanisms.md: 70c8771900fc9e47ee7179f1a8f1d8ee5a5a688be09faa0aade054e360bf997f
   references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/orchestration/anomaly-baseline.md: a0f5d4177803568f70e4693fcd32787e03e29e4a19a88ab15fb09b5036b84f89
-  references/orchestration/dispatch-protocol.md: 5d8bda3e283ba33f270324e20f1492b53ba808bfc220483c474eb5b6b633395d
+  references/orchestration/dispatch-protocol.md: 02c26b09a03d326ee0d20963c1945a508b5852f201b968a7d970aae79c31133f
   references/orchestration/dynamic-re-tool-priority.md: fa830c01acc31d4822a37ebedd647e222638e25ff254c9b73d77edc3bceb440d
   references/orchestration/failure-modes/case-book.md: 197a8143bd104094d9176dc4ba39c2a0ff36c82d0f967366479c5a77f7a257fc
   references/orchestration/failure-modes/failure-modes-lifecycle.md: 7e20c14c5cc8538d56898a63910ce21285d29b0b2716bf979f786eac019ca8a2

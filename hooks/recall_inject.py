@@ -558,6 +558,10 @@ def _guidance(queries: list[str], files: list[str]) -> str:
             f"<kunglao-facts>\n"
             f"recall_inject: need-driven recall - query: {query}\n"
             f"Before dispatching, read: {', '.join(rows)}\n"
+            f"If a range no longer matches (the file changed), re-anchor "
+            f"these reference cards by heading (`rg -n '^#{{1,6}} ' <path>`) "
+            f"and read the best-overlap section; if the file is gone, stop "
+            f"and report the GAP - never search the tree for a substitute.\n"
             f"</kunglao-facts>"
         )
 

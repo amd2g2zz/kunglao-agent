@@ -994,6 +994,35 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     return (None, mf_value, view)
 
 
+def _read_targets_advisory(paths: dict, prompt: str, cid) -> None:
+    """Coordinates-first dispatch (phase 1): log the read_targets status.
+
+    Advisory only — a missing/malformed block (or any loader trouble)
+    degrades to a ledger row / warn, never a reject. Adoption is measured
+    from the row's `status` field (ok / missing / opt_out / malformed).
+    """
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return
+    try:
+        lib = load_hooks_lib()
+        status, errors = lib.read_targets_status(
+            lib.parse_dispatch_json(prompt)[3], ws)
+        if status == 'not_dispatch':
+            return
+        try:
+            import kunglao_log
+            kunglao_log.emit(Path(ws), 'hook:worker_budget',
+                             'read_targets_advisory', claim=cid,
+                             detail=json.dumps({'status': status,
+                                                'errors': errors[:3]},
+                                               ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001 — logging never gates
+            warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
+    except Exception as exc:  # noqa: BLE001 — advisory never gates
+        warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
+
+
 def _gate_battery(checks: list, paths: dict, payload: dict,
                   prompt: str, cid) -> int | None:
     """Run the assembled gate battery: the registration prerequisite
@@ -1251,6 +1280,11 @@ def pre_check(payload: dict, paths: dict) -> int:
                                                    row_agent, tier, tools)
     if mf_rc is not None:
         return mf_rc
+    # read_targets advisory (coordinates-first dispatch, phase 1): logged
+    # after the LAST rejecting gate, so the adoption metric counts
+    # dispatches that actually proceed. Missing/malformed blocks are a
+    # ledger row, never a reject.
+    _read_targets_advisory(paths, prompt, cid)
     # issue 805: the battery's LIVENESS EVIDENCE — a full pass lands ONE
     # durable row (gate=worker_battery, msg=check names) so the per-check
     # fingerprints in devkit/liveness_fingerprints.json can distinguish
