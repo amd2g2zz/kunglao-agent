@@ -479,7 +479,7 @@ files:
   - src: scripts/eval_checker.py
     dest: .claude/scripts/eval_checker.py
     kind: scaffold
-    sha256: 5485f77898a6c0859f160a816a9f68f2626183e002e1720ecba279abe9b5a45e
+    sha256: 1e6bb17205e224374e2fccf7278840eb3b71d0559ff62e7c0cc3534e9df2272b
   - src: scripts/eval_contract.py
     dest: .claude/scripts/eval_contract.py
     kind: scaffold

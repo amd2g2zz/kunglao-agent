@@ -234,7 +234,7 @@ def load_unit(task_ref: str, tier: str | None = None) -> tuple[Path, dict, dict]
 # (ds.CHECKER_KINDS) on every validated unit; the map is the record of
 # the correspondence (reproduction == replay the construction).
 _LANGUAGE_TOOLCHAINS: dict[str, str] = {
-    "python": "python3",
+    "python": "python3",  # toolchain NAMES, not invocation commands
     "javascript": "node",
     "go": "go",
 }
