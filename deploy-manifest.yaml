@@ -47,7 +47,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: c86f27195f48bfbac22766063f642d633958365ae2edeefb66f7270c0ef401f0
+    sha256: b6bb3a1f69df24e03cc52ca2deff4dc163090d1c98e9907f8a661bc032d0ec72
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook

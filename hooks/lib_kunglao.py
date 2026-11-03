@@ -192,7 +192,7 @@ def _envelope_payload(text: str) -> dict | None:
 def dispatch_protocol_version(text: str) -> int | None:
     """The envelope version (1 or 2), or None when no valid envelope.
 
-    v2 is the action-tuple envelope (#804); read_targets enforcement is
+    v2 is the action-tuple envelope; read_targets enforcement is
     version-scoped: v1 stays advisory, v2 is a hard gate.
     """
     payload = _envelope_payload(text)
