@@ -139,6 +139,20 @@ executing. The plan carries:
   domain map: task → languages-go.md; dynamic/VM →
   dynamic-re-tool-priority.md + tools-dynamic.md; disasm →
   anti-analysis.md; failure → failure-modes-*.md).
+- `read_targets:` when the dispatch envelope carries `read_targets`, those
+  coordinates are the TASK-target reads and come BEFORE the recall cards.
+  Each item carries `path` + (`symbol` or `lines`). If a range no longer
+  matches (the file moved), apply the envelope's `read_fallback`:
+  `symbol-first` (re-resolve via `node .gitnexus/run.cjs context <symbol>
+  -f <path>`), `heading-first` (`rg -n '^#{1,6} ' <path>`, read the
+  best-overlap section), or `exact-or-gap` (stop and record the GAP in the
+  plan). Never search the tree for a substitute file.
+  If the coordinates READ FINE but the content does not address the current
+  question/scenario, that is a RELEVANCE failure, not a locate failure: do
+  not keep searching for something that merely looks related — decide per
+  the envelope's `relevance_fallback` (default `semantic-decide`): revise
+  the plan, request a corrected target from the orchestrator, or record the
+  GAP with your reasoning.
 - `goal:` one sentence. `preflight:` verify-first checklist. Check
   `tools/_INDEX.yaml` FIRST — a matching registered tool is tried via its
   CLI before any new script. T1_DIRECT: if a registered tool directly

@@ -47,7 +47,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: c90f75ef40fe2384747daf1abe0e835056f9f2302516b555712b547b4ce87597
+    sha256: b0a515dc13667fa83266fea143773f3ea9570ed31086690d7dda796019f5c9ea
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -55,7 +55,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: a6147bc0717af8835c29bc96e565dadc040c08ddfcc54e17787b9d9894e7fe39
+    sha256: 8ee227d246959bf603b709ef242a60131e9acb7a51a229ece9bfe209b3b270a7
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: a007d096a5a1b0bc7494355bdc5f8eae9b1fbf43ec7475f4aec81de602e28d9d
+    sha256: b2a61ce0ab8b9281d44eb3e21f7f60f376e050145ec98cecfc41ffa5907cff0a
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -143,7 +143,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 839566901659944631a5b78976fa35c0b9473456491a9e36a5804012cde2bf36
+    sha256: 9046871851e51dd273340833029ac6b62cf7760b39cd4fc054ba174f804fa285
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -555,7 +555,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 25b4c7bbecb765f64a20f23c1b9efdeb61603a355f2955d6307232fbc7447b9d
+    sha256: 888c0ed316a0399676dcab94ec403660e45e8ccca221e853c12114724bcfc203
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1687,7 +1687,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 27f22019bd9afdce9cd04b59832e565391a4cbcc855e26aaea1616e7feafde41
+    sha256: 95e3ba1e8ae33c9b0291ed80e308eabbed6f2def6cef0c08044107a937e1aa8a
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1827,7 +1827,7 @@ files:
   - src: references/orchestration/dispatch-protocol.md
     dest: .claude/references/orchestration/dispatch-protocol.md
     kind: asset
-    sha256: 5d8bda3e283ba33f270324e20f1492b53ba808bfc220483c474eb5b6b633395d
+    sha256: 02c26b09a03d326ee0d20963c1945a508b5852f201b968a7d970aae79c31133f
   - src: references/orchestration/dynamic-re-tool-priority.md
     dest: .claude/references/orchestration/dynamic-re-tool-priority.md
     kind: asset

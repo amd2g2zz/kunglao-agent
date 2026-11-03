@@ -307,6 +307,7 @@ EMIT_ACTIONS = [
     "probe_price_fail_open",  # issue-760 pricing face: the price read's outage trace (never gates)
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157/#792 priority_ratio per-RUN case-value feeds + input fingerprint (claims/evidence/posterior hashes; rng_base retired as null) — replayable ranking
+    "read_targets_advisory",  # coordinates-first dispatch (phase 1): read_targets block status (ok/missing/opt_out/malformed) — logged, never gating
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
     "recipe_deviation",   # #695 declared tool-chain recipe != the gate's own arm draw (recorded decision, never a reject; registered/unregistered + reason ride detail)
