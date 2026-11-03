@@ -199,3 +199,12 @@ def claims_seed():
 def bins_seed():
     """Factory seeding bins/ with a synthetic sample (plain fn)."""
     return seed_bins
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_playbook_channel(monkeypatch):
+    """#969: the distill write face spends a real model call and writes
+    the operator playbook store — an ambient KUNGLAO_PLAYBOOK=1 must not
+    turn unrelated e2e tests into live distillers. Tests that NEED the
+    channel set it explicitly (monkeypatch.setenv after this fixture)."""
+    monkeypatch.delenv("KUNGLAO_PLAYBOOK", raising=False)
