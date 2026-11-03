@@ -250,10 +250,10 @@ def test_retry_idempotent_after_cleanup(gate_ws):
     assert "project_type=windows" in state
 
 
-# ---------- #407: MCP-first decompiler gate (ida-pro-vm provider) ----------
+# ---------- #407: MCP-first decompiler gate (ida-pro-mcp provider) ----------
 
-def test_init_decompiler_passes_via_ida_pro_vm_mcp(gate_ws, tmp_path):
-    """#407: ida-pro-vm registered -> the decompiler + mcp:ghidra HARD checks
+def test_init_decompiler_passes_via_ida_pro_mcp_mcp(gate_ws, tmp_path):
+    """#407: ida-pro-mcp registered -> the decompiler + mcp:ghidra HARD checks
     PASS (MCP-first): the toolchain gate must NOT refuse on them, even in the
     hostile env where every CLI tool is absent. #408: the registration rides
     the workspace .mcp.json (the user-global surface is deleted)."""
@@ -261,15 +261,15 @@ def test_init_decompiler_passes_via_ida_pro_vm_mcp(gate_ws, tmp_path):
         "mcpServers": {
             "sequential-thinking": {"type": "stdio", "command": "st",
                                     "args": []},
-            "ida-pro-vm": {"type": "http", "url": "http://localhost:13337"},
+            "ida-pro-mcp": {"type": "http", "url": "http://localhost:13337"},
         },
     }), encoding="utf-8")
     r = _run_init(gate_ws, ["--type", "windows"])
     out = r.stdout + r.stderr
     assert "[FAIL] decompiler" not in out, \
-        f"decompiler must PASS via ida-pro-vm MCP: {out}"
+        f"decompiler must PASS via ida-pro-mcp MCP: {out}"
     assert "[FAIL] mcp:ghidra" not in out, \
-        f"ghidra supply must be satisfied by ida-pro-vm: {out}"
+        f"ghidra supply must be satisfied by ida-pro-mcp: {out}"
 
 
 def test_init_still_refuses_without_any_decompiler(gate_ws, tmp_path):

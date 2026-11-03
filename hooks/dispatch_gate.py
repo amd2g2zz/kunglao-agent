@@ -64,7 +64,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -77,6 +78,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+try:  # #801 Face 2: the gate-layering authority (hooks/, same directory)
+    import gate_policy
+except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
+    # subprocess-driver pattern (the same shape as the _path_hygiene
+    # bootstrap below). Self-bootstrap by path under the canonical name.
+    import importlib.util as _ilg
+    _gp_spec = _ilg.spec_from_file_location(
+        "gate_policy", Path(__file__).resolve().parent / "gate_policy.py")
+    gate_policy = _ilg.module_from_spec(_gp_spec)
+    sys.modules["gate_policy"] = gate_policy
+    _gp_spec.loader.exec_module(gate_policy)
 
 try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
     from _path_hygiene import load_hooks_lib, on_path, scripts_on_path  # #671 authority
@@ -404,12 +417,21 @@ STRATEGY_LOG_MAX = 200
 
 
 def _reject_with_guidance(name: str, msg: str, fix: str,
-                          issue: str = "496") -> int:
+                          issue: str = "496", ws: Path | None = None,
+                          gate_class: str = "format") -> int:
     """#496: REJECT with guidance — the exact structure worker_budget._reject
     and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
-    hookSpecificOutput.additionalContext carrying a concrete fix path +
-    exit 2 (block the Agent call). `issue` attributes the face to its own
-    issue (default keeps the four #496-era call sites byte-identical)."""
+    hookSpecificOutput.additionalContext carrying a concrete fix path.
+    `issue` attributes the face to its own issue (default keeps the four
+    #496-era call sites byte-identical).
+
+    #801 Face 2 layering: the rejection CLASS decides the verdict
+    (hooks/gate_policy). The default class is `format` — admission-discipline
+    rejections DEMOTE to WARN + telemetry sidecar (runs/gate-rejections.jsonl,
+    exit_code 0) and return rc 0: the fix path rides the tool result, so the
+    orchestrator corrects in-turn instead of burning a full context re-read
+    per rc=2 loop (#741 shape). Hard classes (execution_surface here) keep
+    exit 2 — pass gate_class= explicitly at such sites."""
     print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
     print(json.dumps({
         "hookSpecificOutput": {
@@ -420,6 +442,11 @@ def _reject_with_guidance(name: str, msg: str, fix: str,
             ),
         },
     }, ensure_ascii=False), flush=True)
+    if not gate_policy.should_block(gate_class):
+        # #801: demote() is the SINGLE entry — sidecar row + `gate_warn`
+        # ledger row + the R2a bounded-repetition counter all ride it.
+        return gate_policy.demote("dispatch_gate", gate_class, name, msg,
+                                  ws=ws)
     return 2
 
 
@@ -447,26 +474,25 @@ def _gate_error_reject(ws: Path | None, gate: str, claim_id: str | None,
             _emit_trace(ws, "capability_gate_error", claim_id,
                         f"reason=gate_error; exc={type(exc).__name__}: {exc}",
                         trace_id=trace_id)
-        try:
-            row = {
-                "ts": datetime.now(tz=timezone.utc).isoformat(
-                    timespec="seconds").replace("+00:00", "Z"),
-                "gate": gate,
-                "claim": claim_id,
-                "msg": msg,
-                "exit_code": 2,
-            }
-            ledger = ws / GATE_REJECTIONS_LOG
-            ledger.parent.mkdir(parents=True, exist_ok=True)
-            with open(ledger, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError as ledger_exc:
-            print(f"dispatch_gate: gate-rejections append failed "
-                  f"({ledger_exc!r})", file=sys.stderr, flush=True)
-    return _reject_with_guidance(
-        gate, msg,
-        f"{fix}\n(the gate error is fail-closed per the 2026-09-28 owner "
-        "ruling: a gate that cannot see must not wave the action through)")
+    # #801 Face 2: the gate-error face is SELF-HEALTH class — a crashed
+    # gate must never block the action (the 51job FATAL shape: a gate
+    # crash locked the claim-register and stopped the mission). This
+    # SUPERSEDES the 2026-09-28 fail-closed ruling for self-health per
+    # #801; the loud WARN + the sidecar row + the gate_error traces are
+    # the compensating observability.
+    print(f"REJECT {gate}: {msg}", file=sys.stderr, flush=True)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": _gate_verdict(
+                f"dispatch_gate: WARN {gate} (self-health demoted, #801). "
+                f"{msg}\n\nThe gate crashed — proceeding WITHOUT its "
+                f"verdict; fix:\n{fix}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return gate_policy.demote("dispatch_gate", "self_health", gate, msg,
+                              ws=ws)
 
 
 def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
@@ -585,7 +611,8 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
         return None
     # #459: the REJECT face reaches the unified log too (the excused side
     # already traces; a blocked deviation is the event the post-mortem needs)
-    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2,
+    _emit_trace(ws, "top1_reject", claim_id, msg,
+                exit_code=0,  # #801: format-class demotion — actual rc
                 trace_id=trace_id)
     # #603: a REJECT must be DURABLE, not trace-only. Pre-#603 this face
     # emitted a stderr/stdout trace and nothing else — an orchestrator
@@ -609,7 +636,9 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
             "gate": "top1",
             "claim": claim_id,
             "msg": msg,
-            "exit_code": 2,
+            # #801: format-class demotion — the face still rejects (loud
+            # REJECT + guidance), the actual call exit is 0.
+            "exit_code": 0,
         }
         ledger = ws / GATE_REJECTIONS_LOG
         ledger.parent.mkdir(parents=True, exist_ok=True)
@@ -662,7 +691,8 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
                 "mcp_prefix", reason,
                 "use only mcp__kunglao__* MCP tools in this workspace — "
                 "add new MCP namespaces to lib_kunglao.MCP_FORBIDDEN_PREFIXES "
-                "intentionally, never bypass via unknown prefixes.")
+                "intentionally, never bypass via unknown prefixes.",
+                gate_class="execution_surface")
     return None
 
 
@@ -814,7 +844,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
     # pivots must be visible in the event stream, not stderr-only)
     _emit_trace(ws, "capability_reject", claim_id,
                 f"validated={v['validated_families']} "
-                f"dispatch={v['dispatch_families']}", exit_code=2,
+                f"dispatch={v['dispatch_families']}",
+                exit_code=0,  # #801: format-class demotion — actual rc
                 trace_id=trace_id)
     return _reject_with_guidance(
         "capability",
@@ -1548,6 +1579,330 @@ def _pq_dispatched_before(ws: Path, qid: str,
     return False
 
 
+def _emit_probe_price(ws: Path, claim_id: str,
+                      trace_id: str | None = None) -> None:
+    """issue-760: the supply-admission face's price read — ONE advisory
+    `probe_price` trace with the claim's PQ probe price (expected gain
+    decayed by the issue-800 dispatch-ledger repeat count). A pricing
+    outage degrades to the `probe_price_fail_open` trace; neither word
+    ever gates (this face's verdict is returned before/after,
+    unchanged)."""
+    try:
+        with scripts_on_path():  # scoped membership
+            from rlvr import pricing as _pricing760
+        priced = _pricing760.price_for_claim(ws, claim_id)
+        if priced is not None:
+            _emit_trace(ws, "probe_price", claim_id,
+                        f"target={priced['target']}; "
+                        f"status={priced['status']}; "
+                        f"gain_bits={priced['gain_bits']:.3f}; "
+                        f"repeat={priced['repeat']}; "
+                        f"price={priced['price']:.6f}",
+                        trace_id=trace_id)
+    except Exception as exc:  # noqa: BLE001 — pricing must never gate
+        _emit_trace(ws, "probe_price_fail_open", claim_id,
+                    f"reason={type(exc).__name__}: {exc}",
+                    trace_id=trace_id)
+
+
+def _capability_probe_gate(ws: Path, claim_id: str, prompt_text: str,
+                           trace_id: str | None = None,
+                           verifier_remediation: bool = False,
+                           payload: dict | None = None) -> int | None:
+    """#812 dispatch-gate capability probes: the dispatch's METHOD family
+    (matched from the prompt's android keywords) consults its REQUIRED
+    capability facts AT the gate. A probe FAIL refuses the dispatch
+    (execution_surface class — a dead tool/device surface) with the
+    family's alternative arm; a SKIP/absent fact never fabricates a
+    refusal (the conservative rule — and the incident's anti-pattern:
+    refusing on a channel-absent skip is exactly how "host frida missing"
+    became "device has no root").
+
+    Facts, not commands: the gate consults the TTL fact cache
+    (capability_probe.facts — fresh env-state.json snapshot first, then
+    runs/.capability-probe-cache.json, one on-demand probe when both are
+    stale) so the #475 narrow+low-IO dispatch shape survives while the
+    facts are TTL-fresh. Verifier-remediation dispatches pass (the D2
+    honest path) — the exemption SELF-RESOLVES from the payload when the
+    caller did not pass the resolved flag (the _supply_admission
+    sleep-face contract: the honest path must never depend on a call-site
+    remembering the flag, and it must sleep BEFORE any probe cost; the
+    CI interaction pin test_verifier_remediation_passes holds both).
+    Resolver outages fail open there — production's authoritative main()
+    flag still governs. Any probe-infrastructure outage fails open too
+    (WARN + capability_probe_fail_open trace) — a broken cache must not
+    brick dispatch."""
+    if verifier_remediation:
+        return None
+    if payload is not None:
+        try:
+            if _is_verifier_remediation_dispatch(
+                    ws, claim_id, payload, prompt_text):
+                return None
+        except Exception as exc:  # noqa: BLE001 — the exemption never blocks
+            # one rate-limited trace, never silence: a broken resolver must
+            # be VISIBLE while the honest path still proceeds (fail-open;
+            # production's authoritative main() flag still governs)
+            from kunglao_log import warn
+            warn("capability_probe_d2_resolve",
+                 f"{type(exc).__name__}: {exc}")
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            import capability_probe as cp
+            from init_state import read_project_type
+        ptype = read_project_type(ws)
+        if ptype is None:
+            return None  # undeclared lane — the android vocabulary sleeps
+        matched = cp.match_required(prompt_text or "", ptype)
+        if not matched:
+            return None
+        required = sorted({cap for _fam, caps in matched for cap in caps})
+        try:
+            facts = cp.facts(ws, required)
+        except Exception as exc:  # noqa: BLE001 — outage tiering: fail-open
+            _emit_trace(ws, "capability_probe_fail_open", claim_id,
+                        f"reason=facts_read_failed; "
+                        f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+            return None
+        failed = {name: entry for name, entry in facts.items()
+                  if str(entry.get("status")) == "fail"}
+        if not failed:
+            unverified = sorted(name for name, entry in facts.items()
+                                if str(entry.get("status")) == "skip")
+            if unverified:
+                # the incident's visibility face: a REQUIRED fact skipped
+                # means the root/tool check did NOT execute — say so in
+                # the machine log instead of silence
+                _emit_trace(ws, "capability_probe_unverified", claim_id,
+                            f"required={required}; skip={unverified} "
+                            f"(check did not execute — no device verdict "
+                            f"exists)", trace_id=trace_id)
+            return None
+        failed_words = ", ".join(
+            f"{name} FAIL ({(entry.get('detail') or '')[:60]})"
+            for name, entry in sorted(failed.items()))
+        alternatives = "; ".join(
+            f"{family} -> {cp.alternative_for(family)}"
+            for family, caps in matched
+            if any(cap in failed for cap in caps) and cp.alternative_for(family))
+        _emit_trace(ws, "capability_probe_reject", claim_id,
+                    f"failed={sorted(failed)}; required={required}",
+                    exit_code=2, trace_id=trace_id)
+        return _reject_with_guidance(
+            "capability_probe",
+            f"{claim_id} dispatches into a dead capability lane: "
+            f"{failed_words}. These are SEPARATE facts — a host-side face "
+            f"failing says NOTHING about the device-side face (and vice "
+            f"versa); no device verdict exists from this evidence.",
+            f"pivot to the proven alternative arm — {alternatives} — or "
+            f"repair the surface (install/restore the missing capability, "
+            f"the init gate's AGENT-DO ladder owns the repair commands) "
+            f"and re-dispatch. Facts surface: runs/env-state.json + "
+            f"runs/.capability-probe-cache.json (TTL "
+            f"{cp.PROBE_TTL_SECONDS}s).",
+            issue="812", ws=ws, gate_class="execution_surface")
+    except Exception as exc:  # noqa: BLE001 — the gate must never brick dispatch
+        try:
+            from kunglao_log import warn
+            warn("capability_probe_gate", f"{type(exc).__name__}: {exc}")
+        except Exception:  # noqa: BLE001 — logging failure keeps the fallthrough
+            print(f"dispatch_gate: capability-probe gate error ({exc!r})",
+                  file=sys.stderr, flush=True)
+        return None
+
+
+def _supply_admission(ws: Path, claim_id: str, payload: dict,
+                      trace_id: str | None = None,
+                      verifier_remediation: bool = False) -> int | None:
+    """Supply admission (teeth): a claim cannot reach dispatch without
+    >= 1 OPEN hypothesis linked to it carrying >= 1 non-empty candidate.
+    The supply floor that makes the exploration layer un-ignorable —
+    claim birth stubs it (scripts/hypothesis_bridge.py ensure_claim_stub
+    via the mint/split paths); this face refuses what was born without
+    one (the production shape: real workspaces holding claims with zero
+    H-* files).
+
+    Linkage faces (the sanctioned claim-binding vocabulary):
+      - a hypotheses/<H-ID>.md whose claim_id == the dispatched claim; or
+      - the register row's hypothesis_ref -> an OPEN family hypothesis
+        (the arm-bridge shape: an arm claim IS a hypothesis candidate,
+        the family names the parent).
+
+    Teeth scope (owner task directive alongside the logs-panel findings;
+    the design-phase panel's Phase-1 advisory is superseded for THIS
+    face — the pricing card brings the incentive layer, the supply floor
+    is structural): store READABLE + no linked open hypothesis -> REJECT
+    with guidance naming the one-command fix. The rejection rides the
+    HARD evidence class (a charter face: the competing-explanations
+    requirement is evidence protocol, not input formatting — the
+    gate-layering authority's format demotion keeps the PQ-neighborhood
+    face advisory; THIS face is the floor under it). Fail-open (the
+    outage tiering) retained ONLY for an unreadable carrier: a
+    hypothesis-store outage WARNs + traces hypothesis_supply_fail_open
+    and proceeds — a broken store must not brick a mission (the
+    self-health shape).
+
+    Sleeping faces: hypotheses/ carrier absent (a pre-carrier workspace —
+    same arming shape as the PQ face's task_spec guard), claim not found
+    in the register (not this face's contract), and verifier-remediation
+    dispatches (the D2 honest trust path must never be blocked on
+    supply)."""
+    if verifier_remediation:
+        return None
+    hyp_dir = ws / "hypotheses"
+    if not hyp_dir.is_dir():
+        return None  # pre-carrier workspace — not scaffolded yet
+    try:
+        with scripts_on_path():  # scoped membership
+            import hypothesis_store as hs
+        hyps = hs.HypothesisStore(hyp_dir).list_all()
+    except Exception as exc:  # noqa: BLE001 — outage tiering: carrier down
+        print(
+            f"dispatch_gate: WARN hypothesis-supply fail-open — "
+            f"hypothesis carrier unreadable ({type(exc).__name__}), supply "
+            f"admission not enforced for {claim_id}",
+            file=sys.stderr, flush=True,
+        )
+        _emit_trace(ws, "hypothesis_supply_fail_open", claim_id,
+                    f"reason=carrier_read_failed; "
+                    f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+        return None
+    try:
+        reg = (yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8"))
+            or {})
+    except Exception:  # noqa: BLE001 — unreadable register: claim unknown
+        return None  # not this face's contract (other faces own it)
+    row = next((c for c in (reg.get("claims") or [])
+                if isinstance(c, dict)
+                and str(c.get("id") or "") == claim_id), None)
+    if row is None:
+        return None
+
+    def _live(h) -> bool:
+        return (getattr(h, "status", "") == "open"
+                and any(str(c).strip() for c in (h.candidates or [])))
+
+    linked = any(h.claim_id == claim_id and _live(h) for h in hyps)
+    if not linked:
+        # the arm-bridge shape: the arm claim IS the candidate (its
+        # minted row carries the arm_key/statement), so the register's
+        # hypothesis_ref face counts the family hypothesis on OPEN alone —
+        # a drained scaffold (candidates=[]) is the lint-clean state.
+        ref = str(row.get("hypothesis_ref") or "").strip()
+        if ref:
+            linked = any(h.id == ref and h.status == "open" for h in hyps)
+    if linked:
+        # issue-760 pricing face — the dispatch qualification read
+        # (advisory telemetry, never a gate decision): the claim's PQ
+        # probe price rides the unified log at the approval point, so the
+        # repeat-probe pathology (a dead path re-probed N times) is
+        # visible where dispatches are minted. Fail-open both ways.
+        _emit_probe_price(ws, claim_id, trace_id=trace_id)
+        return None
+    # the REJECT face reaches the unified log like top1/capability.
+    _emit_trace(ws, "hypothesis_supply_reject", claim_id,
+                f"linked_open=0; hyps={len(hyps)}", exit_code=2,
+                trace_id=trace_id)
+    return _reject_with_guidance(
+        "hypothesis_supply",
+        f"{claim_id} carries no OPEN hypothesis — the claim cannot reach "
+        f"dispatch without >= 1 linked open hypothesis holding a real "
+        f"candidate (the supply floor: the exploration layer was built "
+        f"and wired but never fed; a claim with zero rival explanations "
+        f"is how edge findings get chased as major ones).",
+        f"file the birth stub: `python scripts/hypothesis_bridge.py "
+        f"--ensure-stub {ws} {claim_id}` (or mint the family arms via "
+        f"`hypothesis_bridge.py --mint`), then re-dispatch. The stub "
+        f"carries the claim's stated mechanism as H1 — name the rival(s) "
+        f"and the discriminating observation before the first dispatch "
+        f"into the PQ neighborhood.",
+        issue="794", ws=ws, gate_class="evidence")
+
+
+
+# ===================== R2 capability axis: lane capability gate =====================
+
+# The env floor under dispatch eligibility (the live-run logs review:
+# frida missing was known and only warned, dynamic-trace still went 9x —
+# lane capability never gated dispatch). Representation vs execution
+# split: the init face owns the capability STATE (lane_profile vocabulary +
+# runs/env-state.json); the probe-execution card owns probing. This gate
+# only READS the state: a dispatch whose declared tools mechanically
+# require an env capability that the near-time env-state records DOWN is
+# REJECTED with the wake condition — zero capability-fabricated
+# dispatches. skip/absent/stale/unreadable state = no opinion (fail-open;
+# the gate never fabricates a capability from silence).
+_LANE_CAPABILITY_PROXIMITY_FALLBACK_MINUTES = 30
+
+
+def _lane_capability_gate(ws: Path, claim_id: str, prompt_text: str,
+                          trace_id: str | None = None) -> int | None:
+    """Refuse a dispatch into a capability the env-state records DOWN.
+
+    Requirement mapping is mechanical: declared tools -> priority_ratio
+    tool families -> lane_profile.CAPABILITY_TOOL_FAMILIES reverse map.
+    A family with no capability dependency is unconstrained here; a
+    DOWN entry REJECTs (exit 2) with the component + the wake
+    condition in the guidance; a healthy/skipped/absent entry passes.
+    State sourcing: runs/env-state.json via exogenous.state_at (the
+    same proximity contract the exogenous classifier uses — one state
+    semantics, two consumers). Fail-open on ANY state outage (the
+    outage tiering: a broken monitor must not brick a mission)."""
+    try:
+        tools = load_hooks_lib().parse_dispatch(prompt_text or "")[1]
+    except Exception:  # noqa: BLE001 — payload contract is the rack gate's face
+        return None
+    if not tools:
+        return None
+    try:
+        with scripts_on_path():  # scoped membership
+            import priority_ratio as pr
+            import lane_profile
+            import exogenous
+        fams = pr.tool_families_from_tools(tools)
+        required: list[str] = []
+        for fam in sorted(fams):
+            for cap in lane_profile.capabilities_for_family(fam):
+                if cap not in required:
+                    required.append(cap)
+        if not required:
+            return None
+        caps = exogenous.state_at(ws, None)
+    except Exception as exc:  # noqa: BLE001 — state face outage: fail-open
+        print(f"dispatch_gate: WARN lane-capability fail-open — env-state "
+              f"unreadable ({type(exc).__name__}: {exc})", file=sys.stderr,
+              flush=True)
+        return None
+    if not caps:
+        return None  # no near-time state: silence is not evidence of DOWN
+    down = []
+    for cap in required:
+        entry = caps.get(cap)
+        if isinstance(entry, dict) and str(entry.get("status")) == "fail":
+            down.append((cap, str(entry.get("detail") or "")))
+    if not down:
+        return None
+    detail = "; ".join(f"{cap}: {text[:80]}" for cap, text in down)
+    _emit_trace(ws, "lane_capability_reject", claim_id, f"down={detail}",
+                exit_code=2, trace_id=trace_id)
+    wake = "; ".join(exogenous.wake_condition(cap) for cap, _ in down)
+    return _reject_with_guidance(
+        "lane_capability",
+        f"{claim_id} declares tools whose method requires "
+        f"{', '.join(cap for cap, _ in down)} — the near-time env-state "
+        f"records it DOWN ({detail}). Dispatching into a DOWN capability "
+        f"is how a run burns attempts on an environment failure that was "
+        f"already known (the 9x dynamic-trace pathology).",
+        f"repair the capability first (self-recovery L1->L3, "
+        f"scripts/env_repair_l1.py) or dispatch a claim whose method "
+        f"matches the capabilities that are actually up; the claim wakes "
+        f"when the component recovers ({wake}). Do NOT narrate a device/"
+        f"environment state the env-state file contradicts — check "
+        f"runs/env-state.json per_capability first.",
+        issue="791", ws=ws, gate_class="evidence")
+
+
 def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
                           trace_id: str | None = None) -> int | None:
     """#109: PQ-neighborhood first-dispatch admission (framework-rigidity
@@ -1620,7 +1975,7 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
     # #459: the REJECT face reaches the unified log like top1/capability.
     _emit_trace(ws, "hypothesis_admission_reject", claim_id,
                 f"qid={qid}; candidates={len(candidates)}; arms={len(arms)}; "
-                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
+                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=0,  # #801: format-class demotion — the face still rejects, the call proceeds
                 trace_id=trace_id)
     return _reject_with_guidance(
         "hypothesis_admission",
@@ -1836,30 +2191,24 @@ def main() -> int:
     # an earlier hook in the chain (worker_budget) stamps on ITS approval
     # point, so any rc=2 from THIS gate rejects an attempt whose row may
     # already be on disk. Undo it (fresh-tail match) before exiting.
+    # #800: the approval point's side effects live in a claims_store
+    # journal — a REJECT unwinds through ONE journal-driven abort (the
+    # fail-open triple undo — undo_dispatch_anchor -> reopen_claim_no_worker
+    # -> cancel_step_open — is deleted), and an APPROVED dispatch confirms
+    # the journal so its work stands.
     rc = _main_inner()
-    if rc == 2 and _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
+    if _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
         try:
-            _lib = load_hooks_lib()
-            _lib.undo_dispatch_anchor(_ATTEMPT["ws"], _ATTEMPT["cid"])
-            # #624: roll back this rejected attempt's approval-point
-            # OPEN->IN_PROGRESS flip (no fresh worker exists for it).
-            _lib.reopen_claim_no_worker(_ATTEMPT["ws"], _ATTEMPT["cid"])
+            from _path_hygiene import ensure_scripts_path as _esp800
+            _esp800()
+            import claims_store as _cstore800
+            if rc == 2:
+                _cstore800.abort_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"],
+                                          actor="hook:dispatch_gate")
+            elif rc == 0:
+                _cstore800.confirm_dispatch(_ATTEMPT["ws"], _ATTEMPT["cid"])
         except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
-            warn("undo_dispatch_anchor", f"{type(exc).__name__}: {exc}")
-        # #690 review HIGH: cancel the step this rejected attempt opened
-        # at the approval point (worker_budget._open_step) — the launch
-        # stash is consumed (the settle->update->decide barrier lifts at
-        # once instead of riding out the stale TTL, and no phantom settle
-        # banks a dispatch that never ran) and the dispatch_count bump is
-        # rolled back (the branch retries budget is not charged). Fail-open:
-        # never changes the verdict.
-        try:
-            from _path_hygiene import ensure_scripts_path as _esp690
-            _esp690()
-            from rlvr import step_grain as _sg690
-            _sg690.cancel_step_open(_ATTEMPT["ws"], _ATTEMPT["cid"])
-        except Exception as exc:  # noqa: BLE001 — undo trouble never changes the verdict
-            warn("cancel_step_open", f"{type(exc).__name__}: {exc}")
+            warn("claims_store_abort", f"{type(exc).__name__}: {exc}")
     return rc
 
 
@@ -1979,7 +2328,12 @@ def _main_inner() -> int:
     # remediation; the B1o blocker must allow it, not reject it (the honest
     # path was structurally absent and self-minting became the only exit).
     # Observed, fail-open: the trace row lands in the unified log.
-    if _is_verifier_remediation_dispatch(ws, claim_id, payload, prompt_text):
+    # D2: resolve ONCE — the drift pass-through and the supply face
+    # share the same verifier-remediation exemption (the honest trust
+    # path must never be blocked on supply).
+    verifier_remediation = _is_verifier_remediation_dispatch(
+        ws, claim_id, payload, prompt_text)
+    if verifier_remediation:
         _pt_agent = _resolve_dispatch_agent(payload, prompt_text) or "?"
         _emit_trace(ws, "drift_verifier_passthrough", claim_id,
                     f"verifier dispatch allowed through the drift gate "
@@ -1988,6 +2342,34 @@ def _main_inner() -> int:
         rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
         if rc is not None:
             return rc
+
+    # #812 capability-probe gate — the environment's SEPARATE facts are
+    # consulted BEFORE the paperwork teeth: a dead-lane dispatch (host
+    # frida gone, device root unverified-then-needed) must not burn the
+    # supply/hypothesis faces first. execution_surface class (hard);
+    # skip/absent facts and infra outages fail open.
+    rc = _capability_probe_gate(ws, claim_id, prompt_text,
+                                trace_id=trace_id,
+                                verifier_remediation=verifier_remediation,
+                                payload=payload)
+    if rc is not None:
+        return rc
+
+    # Supply admission (the floor UNDER the PQ first-dispatch face): the
+    # claim must carry >= 1 linked OPEN hypothesis before it reaches
+    # dispatch. Teeth on the readable-carrier case; fail-open on carrier
+    # outages; asleep for pre-carrier workspaces and verifier dispatches.
+    rc = _supply_admission(ws, claim_id, payload, trace_id=trace_id,
+                           verifier_remediation=verifier_remediation)
+    if rc is not None:
+        return rc
+
+    # R2 capability axis: the env floor — a dispatch into a capability the near-time
+    # env-state records DOWN is refused before any strategy tooth (the
+    # 9x dynamic-trace pathology: known-DOWN, dispatched anyway).
+    rc = _lane_capability_gate(ws, claim_id, prompt_text, trace_id=trace_id)
+    if rc is not None:
+        return rc
 
     # #109 hypothesis admission — same enforcement layer as must-stop/top1
     # (activated main flow, REJECT-capable). Protocol completeness precedes

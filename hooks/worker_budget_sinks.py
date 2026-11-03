@@ -7,7 +7,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -31,6 +32,7 @@ from worker_budget_gates import (
     check_max_retries,  # #427: the #604 breaker wired into live enforcement
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_tier_consistency,  # #680: envelope tier == action_tier(claim)
+    check_tier_envelope,  # P6 guards: tier wall/call/spend envelope TIMEOUT gate
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     check_claim_granularity,  # #241: plan-size / domain-span gate
     check_tool_search_citation,  # issue 243: tool-search citation beat (plan-check point)
@@ -43,7 +45,6 @@ from worker_budget_gates import (
     check_step_settled,  # #690: settle->update->decide sync barrier
     check_branch_budget,  # #690: branch_budget.retries hard constraint
     register_worker, remove_worker,
-    stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
@@ -125,6 +126,20 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'then re-dispatch. If the worker is gone (crash/kill) the '
             'barrier self-admits after the stale TTL '
             '(liveness_policy.STEP_SETTLE_TTL_MINUTES) with a warn.'
+        ),
+    },
+    'envelope': {
+        'additionalContext': (
+            'a P6 tier-envelope TIMEOUT: an active worker exceeded its own '
+            'tier caps (wall / tool calls / USD) - further dispatches stay '
+            'rejected until it is settled. Fix: stop the over-envelope '
+            'worker (its envelope_timeout terminal row is already in the '
+            'trajectory with the actual spend/calls for settlement triage: '
+            'granularity / envelope / method), reconcile the worker list '
+            'runs/analysis_state.txt [active_workers], then re-dispatch. '
+            'Repeated zero-output TIMEOUTs flip the forced-split marker '
+            '(runs/.granularity-faults.json) - decompose the oversized '
+            'claim at plan review via claim_granularity --split.'
         ),
     },
     'branchbudget': {
@@ -228,6 +243,21 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'claim actually in progress?); SPINNING: STOP dispatching and '
             'reconcile what is being re-done (usually a missing '
             'verify/promote step) - collapse the spin, then resume.'
+        ),
+    },
+    'batteryreg': {
+        'additionalContext': (
+            'hook battery registry gate (issue 805, fail-closed): the '
+            'battery cannot prove its own registration, so the dispatch '
+            'is refused instead of silently ungated. Fix: make '
+            'hooks/battery.yaml load + validate — run '
+            'python -c "import battery_registry; '
+            'print(battery_registry.validate_registry())" from hooks/ and '
+            'repair the listed registry error(s); if a NEW check was added '
+            'to the pre_check battery, REGISTER it in hooks/battery.yaml '
+            'first (entry + trigger.gate + cost_class + telemetry_word + '
+            'liveness_fingerprint in devkit/liveness_fingerprints.json — '
+            '不入册不许跑).'
         ),
     },
     'backtrack': {
@@ -644,7 +674,10 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 
 def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
-                           agent_name: str) -> None:
+                           agent_name: str,
+                           dispatch_id: str | None = None,
+                           tier=None, tools=None,
+                           sampler_view: dict | None = None) -> None:
     """#429 §4: record the (signature_hash, method_family) observation
     at the dispatch ALLOW tail — the Q-cell data spine for the TS
     envelope sampler (scripts/rlvr/q_cells.py).
@@ -666,7 +699,8 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
             meta = None
         _qc429.record_dispatch_observation(
             paths.get('workspace'), prompt, envelope_meta=meta,
-            claim=cid, agent=agent_name)
+            claim=cid, agent=agent_name, dispatch_id=dispatch_id,
+            tier=tier, tools=tools, sampler_view=sampler_view)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('qcell_record', f'{type(exc).__name__}: {exc}')
 
@@ -674,7 +708,9 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         cid: str | None, agent_name: str,
                         prompt: str = '',
-                        method_family: str | None = None) -> None:
+                        method_family: str | None = None,
+                        dispatch_id: str | None = None,
+                        sampler_view: dict | None = None) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -711,7 +747,9 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
     # method_family declared on the envelope) — the sampler's data spine.
     # Fail-open inside; rejected dispatches above never reach this line.
-    _qcell_record_dispatch(paths, prompt, cid, agent_name)
+    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id,
+                           tier=tier, tools=tools,
+                           sampler_view=sampler_view)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -761,6 +799,18 @@ def _sample_reconciliation(ws, declared: str | None) -> dict:
         return gap
 
 
+def _override_reason(prompt: str) -> str | None:
+    """The recorded-decision reason face: an ``agent-reasoning:`` line is
+    the dispatch's own logged override rationale — shared by the
+    deviation record and the sampled-binds check (a deviation without
+    this line is SILENT, and silence is not a decision)."""
+    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
+                  re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip()[:200] or None
+
+
 def _emit_sample_deviation(ws, cid, declared, view: dict,
                            prompt: str) -> None:
     """#691: the deviation from the sampler's draw is a RECORDED
@@ -772,11 +822,7 @@ def _emit_sample_deviation(ws, cid, declared, view: dict,
     declared one (``agent-reasoning:`` — the prefix that excuses the
     top-1 claim rank elsewhere never silences this record). Fail-open: a
     logging failure never blocks the dispatch (one stderr note)."""
-    reason = None
-    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
-                  re.IGNORECASE)
-    if m:
-        reason = m.group(1).strip()[:200] or None
+    reason = _override_reason(prompt)
     detail = json.dumps({
         'declared': str(declared),
         'sampled': view.get('sampled_family'),
@@ -821,7 +867,8 @@ def _gate_sample(ws) -> dict:
 
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
-                        tools: list) -> tuple[int | None, str | None]:
+                        tools: list) -> tuple[int | None, str | None,
+                                              dict | None]:
     """#432: the method-family vocabulary gate — the single validation
     chokepoint for the dispatch's method_family declaration (v1 envelope
     field or v0 prose marker; ONE contract, two declaration faces).
@@ -834,23 +881,27 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     validator cannot read (2026-09-28 owner ruling posture); the
     other(<one-line>) escape passes and is quarantined for triage.
     Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
-    turns an ALLOW into anything else. Returns (rc, token): rc=2 means
-    REJECT already emitted; token feeds the lifecycle row so the unified
-    log is replay-re-indexable. Callers pass cid=None to skip (the leg
-    fires only on a recognized dispatch shape — a plain Agent prompt is
-    not a kunglao dispatch and keeps the pre-#432 behavior).
+    turns an ALLOW into anything else. Returns (rc, token, view):
+    rc=2 means REJECT already emitted; token feeds the lifecycle row so
+    the unified log is replay-re-indexable; view is the #691 sampler
+    reconciliation view (None on every reject path) — since the #804
+    usage merge it rides the dispatch observation row, not a side
+    ledger. Callers pass cid=None to skip (the leg fires only on a
+    recognized dispatch shape — a plain Agent prompt is not a kunglao
+    dispatch and keeps the pre-#432 behavior).
 
     #691: the validated declaration is ALSO reconciled against the
-    gate's own sampler draw (see _sample_reconciliation) — the usage
-    row carries propensity + sampled_family + prior_source, and a
-    deviation emits the recorded-decision ``sample_deviation`` event.
+    gate's own sampler draw (see _sample_reconciliation) — the
+    reconciliation triple (propensity + sampled_family + prior_source)
+    rides the dispatch observation row since the #804 usage merge, and
+    a deviation emits the recorded-decision ``sample_deviation`` event.
     The reconciliation NEVER rejects for a DECLARED family (fail-open
     + warn: deviation = recorded decision, 2026-10-14 amendment) — the
     one #773 W2 exception is the UNDECLARED case: with sampler material
     the gate rejects once so the sampled family becomes the exit
     (silence is not an override; owner directive 2026-10-18)."""
     if cid is None:
-        return (None, None)
+        return (None, None, None)
     if _mf432 is None:
         # partial deployment without the registry module — the gate cannot
         # see, so it must not wave the dispatch through (fail-closed)
@@ -858,7 +909,7 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
             'methodfamily',
             'method-family registry module unavailable (scripts/'
             'method_families.py not importable) — fail-closed per the '
-            '2026-09-28 owner ruling; repair the deployment.', paths), None)
+            '2026-09-28 owner ruling; repair the deployment.', paths), None, None)
     mf_meta = None
     try:
         mf_meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
@@ -885,22 +936,54 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                 f"{sampled.get('propensity')}, prior "
                 f"{sampled.get('prior_source')}): declaring it makes the "
                 "sampled exit durable in the usage row.",
-                paths), None)
+                paths), None, None)
     # the ws threads the overlay admission path: a discovered arm
     # validates only when THIS workspace carries its expansion receipt
     mf_ok, mf_msg = _mf432.validate_method_family(
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
-        return (_reject('methodfamily', mf_msg, paths), None)
+        return (_reject('methodfamily', mf_msg, paths), None, None)
     # #691: the declaration reconciliation view (fail-open gap on any
     # miss) rides the usage row — the recorded sample-vs-declared pair
     # the issue measured absent from runs/method-family-log.jsonl.
     view = _sample_reconciliation(paths.get('workspace'), mf_value)
-    _mf432.append_usage_row(paths.get('workspace'), cid, mf_value,
-                            row_agent, tier, tools,
-                            propensity=view.get('propensity'),
-                            sampled_family=view.get('sampled_family'),
-                            prior_source=view.get('prior_source'))
+    # Sampled-binds-to-dispatch (owner directive, the logs-panel card):
+    # the sampler's draw is the dispatch CONTRACT. The logs panel
+    # measured the failure shape in production — 17/17 deviation rows
+    # joined to dispatches that ran the DECLARED family, never the
+    # sampled one, and 6/16 carried propensity 0.0 (a probability-0 draw
+    # is invalid for IPS; the propensity-coherence family). So a
+    # deviation is an EXPLICIT RECORDED decision with a COHERENT
+    # propensity: silent deviation -> REJECT with the sampled family as
+    # the exit (deterministic compliance in one retry, the undeclared
+    # exit's shape); reasoned deviation with propensity <= 0 -> REJECT
+    # (the declared family was never in the policy's support). This
+    # narrows the older "recorded, never rejected" amendment: the record
+    # RIDES the pass (reason + propensity on the row), it no longer
+    # substitutes for a decision. The off-registry other(...) escape
+    # keeps its quarantine face (triage, not a bind-contract
+    # declaration). A rejected dispatch writes no usage row — the
+    # gate-rejections ledger is the audit face.
+    if (view.get('deviates')
+            and _mf432.parse_other_detail(mf_value) is None):
+        prop = view.get('propensity')
+        coherent = (isinstance(prop, (int, float))
+                    and not isinstance(prop, bool)
+                    and float(prop) > 0.0)
+        if not _override_reason(prompt) or not coherent:
+            return (_reject(
+                'methodfamily',
+                f"declared family '{mf_value}' deviates from the sampler's "
+                f"draw '{view.get('sampled_family')}' (propensity "
+                f"{view.get('propensity')}) without a coherent recorded "
+                "decision — sampling binds the dispatch (#794 R2): declare "
+                "the sampled family, or record the override with an "
+                "`agent-reasoning:` line AND declare a family the current "
+                "policy actually supports (propensity > 0).",
+                paths), None, None)
+    # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
+    # #691 reconciliation view rides the dispatch observation row (the
+    # ALLOW tail's lifecycle record), never a parallel ledger.
     mf_other = _mf432.parse_other_detail(mf_value)
     if mf_other is not None:
         _mf432.append_quarantine_row(paths.get('workspace'), cid,
@@ -908,7 +991,92 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     if view.get('deviates'):
         _emit_sample_deviation(paths.get('workspace'), cid, mf_value,
                                view, prompt)
-    return (None, mf_value)
+    return (None, mf_value, view)
+
+
+def _read_targets_advisory(paths: dict, prompt: str, cid) -> None:
+    """Coordinates-first dispatch (phase 1): log the read_targets status.
+
+    Advisory only — a missing/malformed block (or any loader trouble)
+    degrades to a ledger row / warn, never a reject. Adoption is measured
+    from the row's `status` field (ok / missing / opt_out / malformed).
+    """
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return
+    try:
+        lib = load_hooks_lib()
+        status, errors = lib.read_targets_status(
+            lib.parse_dispatch_json(prompt)[3], ws)
+        if status == 'not_dispatch':
+            return
+        try:
+            import kunglao_log
+            kunglao_log.emit(Path(ws), 'hook:worker_budget',
+                             'read_targets_advisory', claim=cid,
+                             detail=json.dumps({'status': status,
+                                                'errors': errors[:3]},
+                                               ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001 — logging never gates
+            warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
+    except Exception as exc:  # noqa: BLE001 — advisory never gates
+        warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
+
+
+def _gate_battery(checks: list, paths: dict, payload: dict,
+                  prompt: str, cid) -> int | None:
+    """Run the assembled gate battery: the registration prerequisite
+    (a broken/uncovered registry REFUSES the dispatch — fail-closed),
+    the per-check rejection loop, the facts-snapshot hard marker
+    (anti state-loss spoof) and the best-first priority audit
+    (deviation-reasoning anti-spoof). Returns the reject rc when a gate
+    fires, None when the dispatch survives."""
+    # issue 805: registration is a LAUNCH PREREQUISITE — the battery may
+    # not run one check that is not registered (hooks/battery.yaml, with
+    # its telemetry word + liveness fingerprint). A broken/uncovered
+    # registry REFUSES the dispatch (fail-closed: the gate battery's
+    # native direction — silently ungating would be the B4 posture).
+    try:
+        import battery_registry
+        _unregistered = battery_registry.launch_gate(
+            {n for n, _ in checks} | {'snapshot', 'priority',
+                                      'methodfamily'})
+        if _unregistered:
+            return _reject('batteryreg', _unregistered, paths)
+    except Exception as _exc:  # noqa: BLE001 — a registry-module trouble
+        # must not silently ungate either: refuse with the reason.
+        return _reject('batteryreg',
+                       f'hook battery registry unreadable: '
+                       f'{type(_exc).__name__}: {_exc}', paths)
+    for name, (ok, msg) in checks:
+        if not ok:
+            return _reject(name, msg, paths)
+    # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
+    # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
+    # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
+    # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
+    desc = payload.get('tool_input', {}).get('prompt', '')
+    if 'facts-snapshot:' not in desc:
+        return _reject('snapshot',
+                       'dispatch prompt lacks `facts-snapshot:` marker '
+                       '(S1c v1.9.24 - checkpoint state before dispatch).', paths)
+    # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
+    # check_priority returns (ok, msg, deviated). If the dispatch deviates from
+    # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
+    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
+    # dispatching a different claim without recording why).
+    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
+    if deviated:
+        desc = payload.get('tool_input', {}).get('prompt', '')
+        if 'agent-reasoning:' not in prompt:
+            return _reject('devreason',
+                           'dispatch deviates from priority #1 but has no '
+                           '`agent-reasoning:` field (v1.9.24 anti-spoof). '
+                           f'PRIORITY: {pmsg}', paths)
+        print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
+    elif pmsg:
+        print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    return None
 
 
 def pre_check(payload: dict, paths: dict) -> int:
@@ -947,13 +1115,25 @@ def pre_check(payload: dict, paths: dict) -> int:
         paths.get('workspace'), cid, payload, prompt)
     # #690: the v2 action tuple — branch_budget ({wall_s, retries}, the
     # branch ACT budget) normalized through the ONE consumer face
-    # (envelope_v2_defaults): a v1 envelope back-fills to {} — the budget
-    # dims below treat absence as unconstrained, never as zero.
+    # (envelope_v2_defaults). #804 de-compat: the v1-envelope back-fill
+    # support is retired — the schema defaults still apply (the budget
+    # dims treat absence as unconstrained, never as zero), but a parsed
+    # envelope MISSING any v2 action field is a LOUD emitter defect (one
+    # rate-limited warn naming the gaps), never a silently served shape.
     _budget = {}
     try:
         _pm = load_hooks_lib().parse_dispatch_json(prompt)
         if isinstance(_pm, tuple) and len(_pm) == 4:
-            _budget = (load_hooks_lib().envelope_v2_defaults(_pm[3] or {})
+            _meta = _pm[3] or {}
+            _missing = [f for f in ('action_type', 'context_recipe',
+                                    'verification_mode', 'control')
+                        if not str(_meta.get(f) or '').strip()]
+            if _missing:
+                warn('gate_error:envelope_v1_shape',
+                     f"dispatch envelope lacks the v2 action field(s) "
+                     f"{_missing} — the v1 back-fill support retired "
+                     f"(#804): the emitter must declare the action tuple")
+            _budget = (load_hooks_lib().envelope_v2_defaults(_meta)
                        .get('branch_budget') or {})
     except Exception:  # noqa: BLE001 - budget parse is advisory, fail-open
         _budget = {}
@@ -986,6 +1166,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
         ('deadline', check_deadline(paths['state'])),
+        # P6 guards: tier envelopes — every ACTIVE worker audited against
+        # its own tier's wall/call/spend caps; an over-envelope worker REJECTS
+        # with its one envelope_timeout terminal row (actual spend/calls)
+        # until settled (the P2 triage feeds from it).
+        ('envelope', check_tier_envelope(paths, tier)),
         # #680: tier consistency BEFORE the tier ladder gate — on the C-007
         # shape (declared tier=2, eta=0) both would reject; this one carries
         # the ACTIONABLE message (the correct tier = action_tier), while the
@@ -1084,42 +1269,36 @@ def pre_check(payload: dict, paths: dict) -> int:
         # with guidance pointing at the characterization reference card.
         ('rotation', check_rotation_experiment(paths, cid, prompt)),
     ]
-    for name, (ok, msg) in checks:
-        if not ok:
-            return _reject(name, msg, paths)
-    # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
-    # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
-    # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
-    # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
-    desc = payload.get('tool_input', {}).get('prompt', '')
-    if 'facts-snapshot:' not in desc:
-        return _reject('snapshot',
-                       'dispatch prompt lacks `facts-snapshot:` marker '
-                       '(S1c v1.9.24 - checkpoint state before dispatch).', paths)
-    # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
-    # check_priority returns (ok, msg, deviated). If the dispatch deviates from
-    # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
-    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
-    # dispatching a different claim without recording why).
-    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), cid, paths.get('workspace'))
-    if deviated:
-        desc = payload.get('tool_input', {}).get('prompt', '')
-        if 'agent-reasoning:' not in prompt:
-            return _reject('devreason',
-                           'dispatch deviates from priority #1 but has no '
-                           '`agent-reasoning:` field (v1.9.24 anti-spoof). '
-                           f'PRIORITY: {pmsg}', paths)
-        print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
-    elif pmsg:
-        print(f'PRIORITY: {pmsg}', file=sys.stderr)
+    rc = _gate_battery(checks, paths, payload, prompt, cid)
+    if rc is not None:
+        return rc
     # #432 method-family vocabulary gate — the single validation
     # chokepoint (see _method_family_gate). Placed as the LAST validation
     # leg before the ALLOW-tail side effects: dispatches REJECTED by any
     # battery gate keep their pre-#432 faces byte-identical.
-    mf_rc, mf_value = _method_family_gate(paths, prompt, cid, row_agent,
-                                          tier, tools)
+    mf_rc, mf_value, mf_view = _method_family_gate(paths, prompt, cid,
+                                                   row_agent, tier, tools)
     if mf_rc is not None:
         return mf_rc
+    # read_targets advisory (coordinates-first dispatch, phase 1): logged
+    # after the LAST rejecting gate, so the adoption metric counts
+    # dispatches that actually proceed. Missing/malformed blocks are a
+    # ledger row, never a reject.
+    _read_targets_advisory(paths, prompt, cid)
+    # issue 805: the battery's LIVENESS EVIDENCE — a full pass lands ONE
+    # durable row (gate=worker_battery, msg=check names) so the per-check
+    # fingerprints in devkit/liveness_fingerprints.json can distinguish
+    # 'battery ran' from 'battery absent' (absence of evidence = FAIL;
+    # rejects carry their own #683 rows). Fail-open: evidence never
+    # flips the ALLOW verdict.
+    try:
+        import gate_telemetry as _gt805
+        _gt805.append_row(
+            paths.get('workspace'), 'worker_battery', 0,
+            msg=','.join(sorted(n for n, _ in checks) +
+                        ['methodfamily', 'priority', 'snapshot']))
+    except Exception as _exc:  # noqa: BLE001 — evidence never gates
+        warn('battery_pass_row', f'{type(_exc).__name__}: {_exc}')
     worker_id = agent_name or f'w{int(time.time())}'
     # #880: the toolfirst PASS face fires here (approval point) with the
     # (keyword->tool) attribution payload, and a MATCHED evaluation persists
@@ -1141,36 +1320,35 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #237 H1: the row carries the shared-resolver identity (row_agent), so
     # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
     # — the marker plan_drift_detector's D3 corroboration matches.
+    # #800 R2: the ONE dispatch id — minted at the approval point, it
+    # lands on the dispatch ledger (begin_dispatch), foreign-keys the
+    # q-cell pending row, and survives to settlement attribution
+    # (production 2026-10-21/22: rows were claim-alias keyed, the key
+    # NULL on 100% of settlement rows). Fail-open telemetry.
+    _did800 = None
+    try:
+        from _path_hygiene import ensure_scripts_path as _esp8
+        _esp8()
+        import claims_store as _cstore8
+        _did800 = _cstore8.mint_dispatch_id()
+    except Exception as exc:  # noqa: BLE001 — telemetry face, never the verdict
+        print(f'[kunglao-agent] dispatch-id mint WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
-                        method_family=mf_value)
-    # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
-    # approval point — it is what arms the plan-author gate on this claim's
-    # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
-    # Fail-open; after the lifecycle line the dispatch is already approved.
-    stamp_dispatch_anchor(paths, cid, prompt, agent_name)
-    # #624 local-fix: the claim flip lives at the SAME approval point as the
-    # anchor stamp (single writer); a later REJECT in the chain rolls it
-    # back (dispatch_gate -> reopen_claim_no_worker).
-    _flip_claim_in_progress(paths, cid)
-    # #680: the MISSING evidence_tier_attempted writer. check_tier_gate's
-    # ladder requires eta >= tier-1 for tier>=2 dispatches, but before this
-    # line NOTHING ever wrote eta — the ladder could never climb (C-007
-    # self-deadlock: declared tier=2, gate rejects on eta=0, nobody does
-    # tier-1 work to raise eta). Dispatch-time write = ATTEMPTED semantics
-    # (design D-680.1: the worker is being sent out to attempt this tier NOW;
-    # a settle-time write would let a silently-dead worker leave eta
-    # unclimbed and re-deadlock the next dispatch). Monotonic max(eta,
-    # tier) — a cheaper re-dispatch never lowers attempt history.
-    # Single-writer: canonical register write via ws_yaml renderer (same
-    # shape as _flip_claim_in_progress). Fail-open — the dispatch verdict
-    # is already decided at this point.
-    _write_eta_at_dispatch(paths, cid, tier)
-    # #690: open the step at the approval point — (a) the launch stash
-    # (the settle face's claim mapping + the phi_before state; the
-    # branch_budget rides it for the wall_s pricing) and (b) the claim's
-    # independent dispatch_count accrual. Fail-open telemetry: never
-    # flips an already-approved dispatch.
-    _open_step(paths, cid, _budget, mf_value)
+                        method_family=mf_value, dispatch_id=_did800,
+                        sampler_view=mf_view)
+    # #800: the approval-point side effects are ONE claims_store
+    # transaction — intent journal first, then the steps (anchor nonce,
+    # launch stash, ONE atomic register rewrite carrying the #624 flip +
+    # the #680 eta raise + the #690 dispatch_count accrual). A later
+    # REJECT in the gate chain unwinds through the journal
+    # (dispatch_gate -> claims_store.abort_dispatch); a crash between
+    # steps is recovered on the next store open — no partial state, no
+    # fail-open saga. Fail-open here: the dispatch verdict is already
+    # decided at this line.
+    _claims_dispatch_txn(paths, cid=cid, prompt=prompt, agent=agent_name,
+                         tier=tier, method_family=mf_value, budget=_budget,
+                         actor=row_agent or worker_id)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -1181,93 +1359,31 @@ def pre_check(payload: dict, paths: dict) -> int:
     return 0
 
 
-def _flip_claim_in_progress(paths: dict, cid: str | None) -> bool:
-    """#624 local-fix: flip the dispatched claim OPEN -> IN_PROGRESS at the
-    approval point (status_defs: an in-flight claim is NOT dispatchable — no
-    auto writer existed, so the orchestrator had to patch it by hand and the
-    turn-exit gate fought the claim's own in-flight worker). Only OPEN flips
-    (PARK/terminal untouched); canonical register write via ws_yaml (the
-    single-writer renderer). Fail-open — never changes the dispatch verdict."""
-    ws = paths.get('workspace') if isinstance(paths, dict) else None
-    if not ws or not cid:
-        return False
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import ws_yaml as _wsy
-        p = Path(ws) / 'claim-register.yaml'
-        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        for c in (doc.get('claims') or []):
-            if c.get('id') == cid and str(c.get('status') or '').upper() == 'OPEN':
-                c['status'] = 'IN_PROGRESS'
-                p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
-                return True
-        return False
-    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
-        return False
-
-
-def _write_eta_at_dispatch(paths: dict, cid: str | None, tier: int) -> bool:
-    """#680: raise the dispatched claim's evidence_tier_attempted to
-    max(current_eta, tier) at the ALLOW tail (the tier-ladder writer that
-    never existed).
-
-    Dispatch-time = ATTEMPTED semantics (design D-680.1): the worker is
-    being sent out to attempt this tier now; the attempt history — not the
-    outcome — is what check_tier_gate prices. Monotonic (max) so a cheaper
-    re-dispatch can never erase deeper attempt history. Canonical register
-    write via ws_yaml renderer (single-writer, same shape as
-    _flip_claim_in_progress). Fail-open — never changes the dispatch
-    verdict; an absent register / unknown claim is a no-op."""
-    ws = paths.get('workspace') if isinstance(paths, dict) else None
-    if not ws or not cid or tier not in (1, 2, 3):
-        return False
-    try:
-        from _path_hygiene import ensure_scripts_path
-        ensure_scripts_path()
-        import ws_yaml as _wsy
-        p = Path(ws) / 'claim-register.yaml'
-        doc = _wsy.yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        for c in (doc.get('claims') or []):
-            if c.get('id') != cid:
-                continue
-            try:
-                eta = int(c.get('evidence_tier_attempted', 0))
-            except (TypeError, ValueError):
-                eta = 0  # dirty value degrades to 0 (#103 tolerance) — max still climbs
-            new_eta = max(eta, int(tier))
-            if new_eta == eta:
-                return False  # nothing to raise (monotonic no-op)
-            c['evidence_tier_attempted'] = new_eta
-            p.write_text(_wsy.canonical_dump(doc), encoding='utf-8')
-            return True
-        return False
-    except Exception:  # noqa: BLE001 — fail-open (verdict already decided)
-        return False
-
-
-def _open_step(paths: dict, cid: str | None, budget: dict,
-               method_family: str | None) -> None:
-    """#690: the approval-point step opener — record_launch stashes the
-    dispatch's phi_before + branch_budget (the settle face maps the
-    SubagentStop back to THIS claim through it) and bump_dispatch_count
-    accrues the claim's independent dispatch counter (register field the
-    rank feed surfaces). Fail-open with a stderr WARN: an approved
-    dispatch is never flipped by telemetry (the settle face degrades to
-    a no-stash warn, and the orphan sweep still sees nothing to eat)."""
+def _claims_dispatch_txn(paths: dict, *, cid: str | None, prompt: str,
+                         agent: str, tier: int, method_family: str | None,
+                         budget: dict, actor: str,
+                         dispatch_id: str | None = None) -> None:
+    """#800: the approval-point dispatch transaction through the ONE
+    semantic owner (scripts/claims_store.py). begin (intent journal) ->
+    commit (anchor nonce + launch stash + ONE register rewrite: status
+    flip, eta raise, dispatch_count accrual). Fail-open with a stderr
+    WARN — never flips an already-approved dispatch verdict; a journalled
+    intent that never commits is recovered (rolled back) on the next
+    store open."""
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     if not ws or not cid:
         return
     try:
         from _path_hygiene import ensure_scripts_path
         ensure_scripts_path()
-        from rlvr import incremental_reward as _ir690
-        from rlvr import step_grain as _sg690
-        _ir690.record_launch(ws, cid, method_family or 'dispatch',
-                             branch_budget=budget or None)
-        _sg690.bump_dispatch_count(ws, cid)
-    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
-        print(f'[kunglao-agent] step-open WARN (fail-open): '
+        import claims_store as _cstore
+        _cstore.begin_dispatch(ws, cid, actor=actor, tier=tier, prompt=prompt,
+                               agent=agent, method_family=method_family,
+                               branch_budget=budget or None,
+                               dispatch_id=dispatch_id)
+        _cstore.commit_dispatch(ws, cid)
+    except Exception as exc:  # noqa: BLE001 — fail-open (verdict decided)
+        print(f'[kunglao-agent] claims-txn WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 

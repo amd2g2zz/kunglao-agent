@@ -16,8 +16,10 @@ File format — one markdown file per hypothesis, frontmatter + body:
     claim_id: C-001
     competitor_group: prng-vs-cipher
     candidates: [AES, ChaCha20]
-    status: open            # open | refuted | superseded
-    schema_rev: 1
+    status: open            # open | refuted | superseded | confirmed
+    schema_rev: 2           # v2 (#796): + parent_id / critical_path /
+                            # posterior / resolved_evidence / resolved_ref
+                            # / resolved_step_ref (closure-tree fields)
     ---
 
     # H-001 …motivation body…
@@ -48,7 +50,18 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
+
+# issue-796 schema v2: the closure hypothesis TREE. Additive frontmatter
+# fields over v1 (v1 files parse with honest-absent defaults):
+#   parent_id          tree edge — the mechanism assertion this refines
+#   critical_path      the trunk flag (on the path toward closure)
+#   posterior          pinned mass (written at decisive resolution)
+#   resolved_evidence  the decisive-evidence KIND (machine-witness |
+#                      referee-confirm; worker assertions never persist)
+#   resolved_ref       the mechanical/replay evidence ref
+#   resolved_step_ref  the proposing-step attribution (the clawback
+#                      address — #796's valuation+attribution pairing)
 
 # The state machine vocabulary. Order matters for error messages only.
 HYPOTHESIS_STATUSES = ("open", "refuted", "superseded", "confirmed")
@@ -119,6 +132,14 @@ class InvalidTransition(ValueError):
     """A hypothesis state change violated the state machine."""
 
 
+def _float_or(raw: str | None, default: float) -> float:
+    """Tolerant frontmatter float parse (absent/garbage -> default)."""
+    try:
+        return float(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class Hypothesis:
     id: str
@@ -130,6 +151,14 @@ class Hypothesis:
     superseded_by: str | None = None
     predicted_observation: str = ""   # #711: falsifiable bet — what a probe should show
     confirming_fact_id: str | None = None  # #711: evidence that confirmed the bet
+    # issue-796 schema v2: the closure-tree face (honest-absent defaults;
+    # v1 files carry none of these and parse unchanged)
+    parent_id: str = ""
+    critical_path: bool = False
+    posterior: float = 0.0
+    resolved_evidence: str = ""
+    resolved_ref: str = ""
+    resolved_step_ref: str = ""
     body: str = ""
     path: Path | None = None
 
@@ -152,6 +181,21 @@ class Hypothesis:
             lines.append(f"confirming_fact_id: {self.confirming_fact_id}")
         if self.superseded_by:
             lines.append(f"superseded_by: {self.superseded_by}")
+        # v2 tree fields ride ONLY when set — a v1-shaped hypothesis
+        # round-trips byte-identically through v2 writers (the additive
+        # frontmatter contract; empty means honest absence)
+        if self.parent_id:
+            lines.append(f"parent_id: {self.parent_id}")
+        if self.critical_path:
+            lines.append("critical_path: true")
+        if self.posterior > 0.0:
+            lines.append(f"posterior: {round(self.posterior, 6)}")
+        if self.resolved_evidence:
+            lines.append(f"resolved_evidence: {self.resolved_evidence}")
+        if self.resolved_ref:
+            lines.append(f"resolved_ref: {self.resolved_ref}")
+        if self.resolved_step_ref:
+            lines.append(f"resolved_step_ref: {self.resolved_step_ref}")
         return "\n".join(lines) + "\n---\n"
 
 
@@ -239,6 +283,33 @@ class HypothesisStore:
         self._write(h)
         return h
 
+    def record_resolution(
+        self,
+        hyp_id: str,
+        *,
+        evidence_kind: str,
+        evidence_ref: str,
+        step_ref: str,
+        posterior: float,
+    ) -> Hypothesis:
+        """issue-796: persist the decisive-resolution fields on a
+        CONFIRMED hypothesis — the evidence kind/ref, the pinned
+        posterior mass, and the proposing-step attribution (the
+        clawback address). Only a confirmed node carries resolution
+        fields; anything else raises InvalidTransition (the economy
+        face refuses before this — a producer bug is loud here)."""
+        h = self.get(hyp_id)
+        if h.status != "confirmed":
+            raise InvalidTransition(
+                f"{hyp_id} is {h.status!r} — resolution fields persist "
+                f"only on confirmed nodes")
+        h.posterior = float(posterior)
+        h.resolved_evidence = str(evidence_kind)
+        h.resolved_ref = str(evidence_ref)
+        h.resolved_step_ref = str(step_ref)
+        self._write(h)
+        return h
+
     # ---------- internals ----------
 
     def _parse(self, path: Path) -> Hypothesis:
@@ -270,6 +341,12 @@ class HypothesisStore:
             superseded_by=fields.get("superseded_by") or None,
             predicted_observation=fields.get("predicted_observation", ""),
             confirming_fact_id=fields.get("confirming_fact_id") or None,
+            parent_id=fields.get("parent_id", ""),
+            critical_path=fields.get("critical_path", "") == "true",
+            posterior=_float_or(fields.get("posterior"), 0.0),
+            resolved_evidence=fields.get("resolved_evidence", ""),
+            resolved_ref=fields.get("resolved_ref", ""),
+            resolved_step_ref=fields.get("resolved_step_ref", ""),
             body=body.strip(),
             path=path,
         )

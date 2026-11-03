@@ -179,6 +179,9 @@ EMIT_ACTIONS = [
     "candidate_landed",   # online distillation: a distilled candidate landed in the run-local tool shelf (tools-local, with provenance manifest)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_gate_error",  # owner ruling 2026-09-28: _capability_guard gate ERROR -> durable fail-closed REJECT
+    "capability_probe_fail_open",  # #812: the probe consultation itself failed (infra) — fail-open trace, never gates
+    "capability_probe_reject",  # #812: dispatch-gate capability probe FAIL — the family's required fact is down, dispatch refused with an alternative arm
+    "capability_probe_unverified",  # #812: a REQUIRED family fact is skip/unprobed — dispatch proceeds, the zero-root-check visibility face (the incident: logs showed none)
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
@@ -187,9 +190,12 @@ EMIT_ACTIONS = [
     "case_vacuous",       # #132 cadence separation observation: a case greened under >=2 distinct candidate clients (outcome invariant across the hypothesis space — the empirical twin of #126's declared update_map)
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
+    "claim_park",         # #955 censored-env escrow park (rlvr/parking.py)
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
     "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
+    "claim_unpark",       # #955 env-repair resume: escrow release (rlvr/parking.py)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
+    "cockpit_ratio_alarm",  # #801 Face 3: machine:analysis ratio > 1 — harness out-competing the analysis
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
     "compact_continuity",  # issue 434 PreCompact strategy-continuity injection face
     "constitution_injected",  # issue 434 SessionStart constitution injection (once per session)
@@ -203,13 +209,18 @@ EMIT_ACTIONS = [
     "dispatch",
     "distill_attempt",    # online distillation: a distillation act dispatched (phase=dispatched) or the production closure's trigger signal (phase=triggered)
     "distill_result",     # online distillation: per-attempt validation + sample-as-oracle outcome (rejections and phase=refused budget refusals included)
+    "distill_rollout",    # issue-365 the distillation engine: one `distill-rollout/1` attempt or consumption settlement row (item/strategy/score/product/reward in the detail)
     "drift_verifier_passthrough",  # dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "env_premise_contradiction",  # premise gate: env premise contradicts a liveness PASS — probe wins (SUSPECT + one-shot re-probe)
+    "envelope_timeout",   # P6 guards: tier-envelope TIMEOUT terminal step row (actual spend/calls ride detail; settlement triage feeds from it)
     "epistemic_claims_minted",  # issue 293 plan_epistemics mint face: epistemic claims + PQ seeds
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
+    "error",              # #944 the severity wrapper's log-then-raise row (guard boundaries; the caller keeps the raise)
+    "evidence_certified",  # #803 evidence_certify: a claim's evidence chain certified (byte-exact+fresh-input row minted, sealed, replay-pinned)
     "evidence_pin_blocked",  # evidence_pin_guard: write refused on a checker-consumed sha-pinned artifact
+    "evidence_replayed",  # #803 evidence_certify: a certification row re-executed its own replay instruction byte-consistently (the certify->replay->result pin, observed)
     "fact_status_synced",  # the promotion write-back row: a PROVEN settlement synced the citing facts' frontmatter (synced + fully named skips ride the detail)
     "failure_blocked",
     "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
@@ -219,9 +230,11 @@ EMIT_ACTIONS = [
     "family_superseded",   # issue 252 family ledger sync: competing hypothesis superseded
     "family_sync_failed",  # issue 252 guarded sync failure WARN (claim_migrator post-settlement face)
     "gate_sample_failed",  # #773 W2: the gate's sampler draw hiccuped (fail-open cold gap)
+    "gate_warn",  # #801 Face 2: a format/self_health-class gate rejection DEMOTED to WARN (no block)
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
+    "granularity_fault",  # P6 guards sizing discipline: a TIMEOUT whose window produced nothing (zero artifacts x zero fan-out) — the forced-split counter face
     "granularity_reject",  # issue 293 claim_granularity --check monolithic verdict face
     "guard_dormant",  # issue 304 fix-as-guard: a wired guard with zero fire records across the settlement window (WARN-level finding, ledger-deduped)
     "guard_fired",  # issue 304 fix-as-guard fire record: a wired guard's check FIRED (detail JSON carries the guard identity: check_reference)
@@ -236,9 +249,12 @@ EMIT_ACTIONS = [
     "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
+    "hypothesis_supply_fail_open",  # supply-admission carrier-outage WARN face — not enforced, dispatch proceeds
+    "hypothesis_supply_reject",  # supply-admission REJECT face: claim without a linked open hypothesis
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
     "infeasible_filed",     # #815 gated INFEASIBLE proposal filed (DEFERRED)
     "infeasible_woken",     # #815 wake face: infeasible-DEFERRED revived
+    "info",               # #944 the severity wrapper's operator-milestone row (loop milestone EVENTS ride the #915 telemetry face, not this word)
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events
@@ -248,6 +264,7 @@ EMIT_ACTIONS = [
     "investment_arc_open",   # issue 293 hypothesis-campaign arc open: budget/max_runs/stop_condition face
     "ladder_reject",      # issue 293 target_ladder settlement-gate block face (walk/inventory/siblings)
     "ladder_required",
+    "lane_capability_reject",  # R2 env floor: dispatch into a DOWN capability refused
     "lesson_burn",
     "lesson_citation",
     "lesson_deprecated",
@@ -263,6 +280,7 @@ EMIT_ACTIONS = [
     "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
     "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
     "mint_refused",       # issue 293 guarded-mint refusal face (hypothesis_bridge / target_ladder / claim_granularity)
+    "missing_rollout",    # #800 R2 dispatch-ledger gap face: committed dispatch + terminal claim, no banked settlement (production C-005 silent lie)
     "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
@@ -279,13 +297,17 @@ EMIT_ACTIONS = [
     "plan_repair_verified",  # issue-281 drift amendment landed within the window (verification face)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
+    "platform_run_start",  # the run-start support-matrix row: host class declared (duties proceed) or undeclared (loud refusal, closure duties refused)
     "policy_state_projected",  # #769 the round close projected runs/policy-state.json (scripts/policy_state; the statusline policy face's producer row)
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
     "probe_infra_dead",  # issue 303 D2 dead-instrument routing: a probe that cannot prove liveness produced NO evidence — infra repair item, never a business observation
+    "probe_price",  # issue-760 pricing face: the supply-admission read's advisory price trace at the approval point
+    "probe_price_fail_open",  # issue-760 pricing face: the price read's outage trace (never gates)
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
-    "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
+    "rank_feeds",        # #157/#792 priority_ratio per-RUN case-value feeds + input fingerprint (claims/evidence/posterior hashes; rng_base retired as null) — replayable ranking
+    "read_targets_advisory",  # coordinates-first dispatch (phase 1): read_targets block status (ok/missing/opt_out/malformed) — logged, never gating
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
     "recipe_deviation",   # #695 declared tool-chain recipe != the gate's own arm draw (recorded decision, never a reject; registered/unregistered + reason ride detail)
@@ -299,6 +321,7 @@ EMIT_ACTIONS = [
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollout_settled",    # unified-reward tick face: adapters + settlement summary per rollup run
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "route_abstained",    # the tool-chain router's abstention face: no rule fired for the lane/state — the agent self-disposes (detail carries lane + reason; the abstention IS the learning corpus)
     "rt_read_blocked",    # rt_read_barrier: maker-face read refused for a red-team act
     "runtime_value_rotation",  # #341 same-slot value-join induction: >=2 distinct value_fingerprints under one (claim, subject_slot)
     "sample_deviation",   # #691 the declaration-vs-sampler deviation record: declared family != the gate's own draw (recorded decision, never a reject; reason rides detail)
@@ -308,6 +331,7 @@ EMIT_ACTIONS = [
     "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
     "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
+    "signal_routed",         # intent router decision face (user-signal surface)
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "split_units_minted",  # issue 293 claim_granularity split fan-out mint face (parent SUPERSEDED rides detail)
     "stale_plan_on_new_evidence",
@@ -316,6 +340,7 @@ EMIT_ACTIONS = [
     "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "task_terminal_settlement",
+    "tick_gate_refused",  # P6 guards tick-arming gate: a LOOP-arm launch on an unarmed workspace refused (structured refusal row + stderr, no session)
     "timeline_render_skipped",  # issue 293 progress_timeline render skip decisions (view write declined)
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolbox_promotion_proposed",  # issue 243 promotion flag: a workspace script's `promotion: <why>` note reaching the lesson/settlement channel
@@ -333,10 +358,12 @@ EMIT_ACTIONS = [
     "user_signal",           # #868 UserPromptSubmit capture face
     "user_signal_processed", # #868 four-route processing result
     "uv_sync",            # #755 A7 install-venv sync face (WARN-only)
+    "verifier_calibration_broken",  # per-verifier BROKEN face: a verifier one-sided across the whole sample
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
     "warn",               # the centralized warn()'s ledger face (one row per dedupe window, actor=telemetry)
+    "warn_breaker_tripped",  # #801 R2a: a warn family crossed the repetition bound — ownership action taken (circuit-break/escalate/downgrade)
     "worker_dismissed",   # #244 settle→dispose stop signal (settlement-confirmed dismissal face)
     "write_blocked",
     "write_escalated",  # bash_fact_guard repeat-block ladder crossing (cap-and-escalate; carries file + rules + streak so the orchestrator can reroute)

@@ -3,10 +3,14 @@
 """tests/test_gate_failclosed.py — owner ruling 2026-09-28: a gate that
 ERRORS must NOT pass the action.
 
-For every converted gate site, a fixture forces the gate to throw and
-asserts (a) the action is REJECTED, (b) the reason carries the gate
-error, (c) there is no silent pass. Companions to the #417 record-only
-batch: the warn stays, the verdict flips.
+#801 Face 2 SUPERSESSION (scoped): for the DISPATCH-GATE sites below, a
+gate ERROR is the self_health class — it DEMOTES to a loud WARN (REJECT
+banner + cause on stderr + a gate-rejections sidecar row, exit_code=0)
+and the action PROCEEDS (rc 0), because a crashed harness gate locking
+the mission was the rc1 FATAL shape. The ruling still holds verbatim for
+the worker_budget/completion_gate/write-guard-liveness sites (termination
+and budget = HARD classes, out of #801's scope). Demotion pins assert
+(a') rc 0, (b) the cause on stderr, (c) a durable sidecar row.
 
 Converted sites covered here:
   worker_budget_gates.check_workers_lt_3          (audited #417 site)
@@ -175,20 +179,24 @@ def _ws_with_runs(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_top1_scorer_unavailable_rejects(tmp_path, monkeypatch, capsys):
+def test_top1_scorer_unavailable_demotes(tmp_path, monkeypatch, capsys):
+    """#801: a crashed top1 scorer is self_health — WARN + sidecar, rc 0
+    (a crashed gate must not re-read 120k context per rc=2 loop)."""
     import dispatch_gate as dg
     ws = _ws_with_runs(tmp_path)
     monkeypatch.setitem(sys.modules, "worker_budget", None)
     rc = dg._top1_enforcement(ws, "C-1", "prompt text")
     err = _stderr(capsys)  # single read: capsys consumes on readouterr
-    assert rc == 2  # (a) rejected
-    assert "REJECT top1" in err
+    assert rc == 0  # (a') demoted, not blocked (#801 self-health)
+    assert "REJECT top1" in err  # still LOUD
     assert "ModuleNotFoundError" in err  # (b) cause surfaced
     ledger = ws / "runs" / "gate-rejections.jsonl"
     rows = [json.loads(line) for line in
             ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert rows and rows[-1]["gate"] == "top1"  # (c) durable, not silent
+    assert rows and rows[-1]["name"] == "top1"  # (c) durable, not silent
     assert "ModuleNotFoundError" in rows[-1]["msg"]
+    assert rows[-1]["gate_class"] == "self_health"
+    assert rows[-1]["exit_code"] == 0
 
 
 def test_top1_audit_crash_rejects(tmp_path, monkeypatch, capsys):
@@ -203,7 +211,7 @@ def test_top1_audit_crash_rejects(tmp_path, monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "worker_budget", fake)
     ws = _ws_with_runs(tmp_path)
     rc = dg._top1_enforcement(ws, "C-1", "prompt text")
-    assert rc == 2
+    assert rc == 0  # #801: self-health crash demotes (loud, unblocking)
     err = _stderr(capsys)
     assert "REJECT top1" in err
     assert "audit exploded" in err
@@ -221,7 +229,9 @@ def test_mcp_prefix_helper_unavailable_rejects(monkeypatch, capsys):
 
     monkeypatch.setattr(dg, "load_hooks_lib", _boom)
     rc = dg._mcp_prefix_gate("prompt with tools")
-    assert rc == 2
+    assert rc == 0  # #801: the gate CRASH is self_health (demoted); a
+    # VALID mcp_prefix rejection stays execution_surface rc 2 (pinned in
+    # tests/test_economics_801.py::test_execution_surface_still_blocks).
     err = _stderr(capsys)
     assert "REJECT mcp_prefix" in err
     assert "OSError" in err
@@ -241,7 +251,7 @@ def test_mcp_prefix_unparseable_payload_rejects(monkeypatch, capsys):
 
     monkeypatch.setattr(dg, "load_hooks_lib", lambda: _Lib)
     rc = dg._mcp_prefix_gate("prompt with tools")
-    assert rc == 2
+    assert rc == 0  # #801: payload-parse crash = self_health demotion
     err = _stderr(capsys)
     assert "REJECT mcp_prefix" in err
     assert "payload garbage" in err
@@ -253,13 +263,13 @@ def test_capability_scorer_unavailable_rejects(tmp_path, monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "priority_ratio", None)
     rc = dg._capability_guard(ws, "C-1", "prompt text")
     err = _stderr(capsys)  # single read: capsys consumes on readouterr
-    assert rc == 2
+    assert rc == 0  # #801: scorer crash = self_health demotion (rc 0)
     assert "REJECT capability" in err
     assert "ModuleNotFoundError" in err
     ledger = ws / "runs" / "gate-rejections.jsonl"
     rows = [json.loads(line) for line in
             ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert rows and rows[-1]["gate"] == "capability"
+    assert rows and rows[-1]["name"] == "capability"
 
 
 def test_capability_unparseable_payload_rejects(tmp_path, monkeypatch, capsys):
@@ -273,7 +283,7 @@ def test_capability_unparseable_payload_rejects(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(dg, "load_hooks_lib", lambda: _Lib)
     ws = _ws_with_runs(tmp_path)
     rc = dg._capability_guard(ws, "C-1", "prompt text")
-    assert rc == 2
+    assert rc == 0  # #801: parse crash = self_health demotion (rc 0)
     assert "no tools readable" in _stderr(capsys)
 
 
@@ -298,7 +308,7 @@ def test_capability_evidence_scan_error_rejects(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(dg, "load_hooks_lib", lambda: _Lib)
     ws = _ws_with_runs(tmp_path)
     rc = dg._capability_guard(ws, "C-1", "prompt text")
-    assert rc == 2
+    assert rc == 0  # #801: evidence-scan crash = self_health demotion
     err = _stderr(capsys)
     assert "REJECT capability" in err
     assert "artifact scan detonated" in err
@@ -316,7 +326,7 @@ def test_tools_rack_unparseable_payload_rejects(monkeypatch, capsys):
 
     monkeypatch.setattr(dg, "load_hooks_lib", lambda: _Lib)
     rc = dg._tools_rack_gate({"agent_name": "kunglao-worker"}, "prompt")
-    assert rc == 2
+    assert rc == 0  # #801: rack parse crash = self_health demotion (rc 0)
     err = _stderr(capsys)
     assert "REJECT tools_rack" in err
     assert "rack garbage" in err

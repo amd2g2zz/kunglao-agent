@@ -24,7 +24,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _ledger(ws, action, artifact, detail):

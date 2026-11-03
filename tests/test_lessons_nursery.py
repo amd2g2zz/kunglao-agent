@@ -312,7 +312,7 @@ def test_blocked_retrieval_tags_draft_lessons(tmp_path):
     _write_register(ws, [_claim("C-7", attempts=3, statement="frida attach fails on vm")])
     # #146: arm the gate the live way — a linked case carrying red
     # settlements in the #106 ledger (the counter no longer arms).
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-7.yaml").write_text(

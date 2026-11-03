@@ -7,8 +7,10 @@ cost 口径（#873 起）：rho_pair 行携带真实 cost（cost_events 最新
 amount，会话累计口径）；无 cost 字段的行不入样。stratum 暂固定 "default"。
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import json
 from pathlib import Path
 

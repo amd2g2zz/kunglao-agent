@@ -199,27 +199,6 @@ WEB_CLAIM = (
 
 
 class TestJ1RecallInjectDictionary:
-    @pytest.mark.skip(reason="issue 771: category query expansion retired "
-                              "(queries derive from question keywords)")
-    def test_web_signals_extend_queries(self) -> None:
-        from recall_inject import queries_for_features
-
-        q = queries_for_features(WEB_CLAIM, tier=2)
-        assert q[0] == "risk control", q
-        assert "crawler" in q
-        # existing defaults survive the extension (append-only semantics)
-        assert q[-1] == "static analysis"
-
-    @pytest.mark.skip(reason="issue 771: category query expansion retired "
-                              "(queries derive from question keywords)")
-    def test_non_web_claim_gets_no_web_query(self) -> None:
-        from recall_inject import queries_for_features
-
-        plain = ('{"kunglao_dispatch": {"version": 1, "claim": "C-102", '
-                 '"tier": 2, "tools": ["ghidra"]}}\n'
-                 "disassemble and decode the sample")
-        assert "risk control" not in queries_for_features(plain, tier=2)
-
     def test_web_risk_claim_injects_new_doc(self, tmp_path, monkeypatch) -> None:
         """Fixture walks the real references_recall subprocess (the actual
         injection path): a web 风控 claim must surface web-risk-control.md.

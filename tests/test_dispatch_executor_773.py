@@ -67,8 +67,12 @@ def _bare_ws(tmp_path: Path) -> Path:
     return ws
 
 
-DECLARED = ("dispatch C-001 per the ranked plan\n"
-            "method-family: static-decompile\n")
+# #804 de-compat: the envelope field is the ONE declaration face (the
+# v0 prose marker is retired)
+DECLARED = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
+            '"tier": 1, "tools": ["grep"], '
+            '"method_family": "static-decompile"}}\n'
+            "facts-snapshot: 1 facts\n")
 UNDECLARED = "dispatch C-001 per the ranked plan"
 
 
@@ -83,9 +87,10 @@ def test_undeclared_reject_carries_the_sampled_family(
         sinks, tmp_path, capsys, monkeypatch):
     """The wiring pin (#773 W2): an undeclared dispatch's methodfamily
     reject carries the gate's own sampled family in the guidance — the
-    retry declares it and the #691 usage row makes the sampled exit
-    durable. (The draw's warm-fill belongs to the strategy_store suite;
-    here the sampler is pinned, the guidance is proven.)"""
+    retry declares it and the #691 reconciliation view rides the
+    dispatch observation row (the #804 usage merge). (The draw's
+    warm-fill belongs to the strategy_store suite; here the sampler is
+    pinned, the guidance is proven.)"""
     ws = _bare_ws(tmp_path)
     import rlvr.strategy_store
     monkeypatch.setattr(rlvr.strategy_store, "gate_sample",
@@ -93,8 +98,8 @@ def test_undeclared_reject_carries_the_sampled_family(
                                     "propensity": 0.62,
                                     "prior_source": "store"})
     paths = {"workspace": str(ws)}
-    rc, value = sinks._method_family_gate(paths, UNDECLARED, "C-001",
-                                          "kunglao-worker", 1, [])
+    rc, value, _view = sinks._method_family_gate(
+        paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
     assert rc == 2 and value is None
     out = capsys.readouterr().out
     assert "static-decompile" in out and "propensity" in out
@@ -111,22 +116,23 @@ def test_declared_dispatch_records_the_sample_view(
                             "propensity": 0.62, "prior_source": "store",
                             "deviates": False})
     paths = {"workspace": str(ws)}
-    rc, value = sinks._method_family_gate(paths, DECLARED, "C-001",
-                                          "kunglao-worker", 1, [])
+    rc, value, view = sinks._method_family_gate(
+        paths, DECLARED, "C-001", "kunglao-worker", 1, [])
     assert rc is None and value == "static-decompile"
-    usage = ws / "runs" / "method-family-log.jsonl"
-    assert usage.exists(), "the usage row is the sampled-exit evidence"
-    row = json.loads(usage.read_text(encoding="utf-8").splitlines()[0])
-    assert row["sampled_family"] == "static-decompile"
-    assert row["propensity"] == 0.62
+    # #804 usage merge: the gate RETURNS the reconciliation view; the
+    # ALLOW tail's lifecycle record lands it on the dispatch observation
+    # row (the side usage ledger is closed — no file is written here)
+    assert view["sampled_family"] == "static-decompile"
+    assert view["propensity"] == 0.62
+    assert not (ws / "runs" / "method-family-log.jsonl").exists()
 
 
 def test_cold_sampler_rejects_without_a_fabricated_family(
         sinks, tmp_path, capsys):
     ws = _bare_ws(tmp_path)
     paths = {"workspace": str(ws)}
-    rc, value = sinks._method_family_gate(paths, UNDECLARED, "C-001",
-                                          "kunglao-worker", 1, [])
+    rc, value, _view = sinks._method_family_gate(
+        paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
     assert rc == 2
     out = capsys.readouterr().out
     assert "sampler draw" not in out, ("a cold sampler must never "

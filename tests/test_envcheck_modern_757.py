@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import types
 import pytest
 
 import toolchain as tc  # pytest.ini pythonpath = . hooks scripts tools
@@ -490,9 +491,51 @@ class TestT2McpRegistered:
             assert status == "WARN", (servers, detail)
             assert "unverified" in detail.lower()
 
+    def test_desktop_ida_pro_mcp_name_accepted(self, monkeypatch, tmp_path):
+        """#947: the live MCP registers as ida-pro-mcp — the supply scan
+        accepts BOTH names (the ida-pro-vm-only scan was a false negative
+        on a real supply, the owner's live case)."""
+        import env_check
+        ws = _mk_ws(tmp_path, "windows")
+        (ws / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {
+                "ida-pro-mcp": {"url": "http://x"}}}), encoding="utf-8")
+        settings = ws / ".claude" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps(
+            {"enableAllProjectMcpServers": True}), encoding="utf-8")
+        status, detail = env_check.check_mcp_registered(ws, "windows")
+        assert status == "WARN", detail
+        assert "ida-pro-mcp" in detail
+
+    def test_local_static_tooling_ladder_softens_the_fail(
+            self, monkeypatch, tmp_path):
+        """#947: no MCP + local static RE tooling present (capstone
+        importable) → WARN with the tooling detail, NOT FAIL — bash/
+        python CAN reverse (owner)."""
+        import env_check
+        ws = _mk_ws(tmp_path, "windows")
+        _claude_json(monkeypatch, tmp_path, {})
+        real_import = __builtins__["__import__"] if isinstance(
+            __builtins__, dict) else __import__
+
+        def fake_import(name, *a, **k):
+            if name == "capstone":
+                return types.ModuleType("capstone")
+            return real_import(name, *a, **k)
+
+        import builtins
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        status, detail = env_check.check_mcp_registered(ws, "windows")
+        assert status == "WARN", detail
+        assert "local static RE tooling present" in detail
+        assert "py:capstone" in detail
+
     def test_desktop_none_registered_fail_with_alternatives(
             self, monkeypatch, tmp_path):
         import env_check
+        monkeypatch.setattr(env_check, "_local_static_tooling",
+                            lambda: (False, "none"))
         ws = _mk_ws(tmp_path, "linux")
         _claude_json(monkeypatch, tmp_path, {})
         status, detail = env_check.check_mcp_registered(ws, "linux")
@@ -582,8 +625,11 @@ class TestT3Grading:
         assert vm["detail"].startswith("T3-restricted:")
         assert vm["blocking"] is False
         assert snap["overall"] == "PASS"
-        # mcp_registered ALSO degrades (isolated empty claude.json) — both ride
-        assert {"vm_reachability", "mcp_registered"} == set(snap["degraded"])
+        # #947 ladder: local static RE tooling present → mcp_registered
+        # reads WARN (not FAIL) → it leaves the degraded set; only the vm
+        # row rides (isolated empty claude.json would add it back).
+        assert "mcp_registered" not in set(snap["degraded"])
+        assert set(snap["degraded"]) == {"vm_reachability"}
         # #757 schema: context rides along
         assert snap["context"]["project_type"] == "windows"
         assert snap["context"]["channel"] == "vmr"

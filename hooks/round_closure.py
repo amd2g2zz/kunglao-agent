@@ -172,6 +172,72 @@ def process_event(payload: dict) -> int:
     return 0
 
 
+def _blind_settlement_face(ws: Path, wire, pending) -> dict:
+    """The issue-802 blind face at the stop boundary: PARK the pending step's
+    blind input doc (the production writer — the kunglao-settler
+    dispatch read face consumes it), then SETTLE every parked claim that
+    has a ruling. The step window (since the launch, until now) feeds
+    the artifact scan; the scorer's exclusion wall filters it. Fail-open
+    inside its own cage — a parking failure is ONE warn and never the
+    settle; the unblinded judgment is NEVER a fallback."""
+    out: dict = {}
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        parked: list[str] = []
+        if pending:
+            claim = str(pending.get("claim") or "")
+            artifacts = wire.step_window_artifacts(
+                ws, str(pending.get("ts") or ""), until=now)
+            try:
+                res = wire.park_blind_input(ws, claim, artifacts)
+                if res.get("parked") or not res.get("reason"):
+                    parked = [claim]
+                else:
+                    warn("round_closure_blind_park",
+                         f"{claim}: {res.get('reason')}")
+            except ValueError as exc:
+                warn("round_closure_blind_park",
+                     f"{claim}: {exc}")
+        settled = wire.settle_face(ws)
+        # the row-shape contract: a stop with nothing parked and nothing
+        # settled reports NOTHING (a non-worker stop stays plain)
+        if not parked and not settled:
+            return {}
+        out["parked_claims"] = parked
+        if settled:
+            out["settled"] = [
+                {"claim": r.get("claim"), "settled": r.get("settled"),
+                 "reason": r.get("reason")} for r in settled]
+        return out
+    except Exception as exc:  # noqa: BLE001 — the blind face never blocks
+        warn("round_closure_blind_face", f"{type(exc).__name__}: {exc}")
+        return out
+
+
+def _distill_trigger_face(ws: Path) -> None:
+    """Online distillation trigger face (its own fail-open cage): scan
+    the just-completed worker's report surface for miss signals and
+    emit/stamp the production trigger rows."""
+    try:
+        with scripts_on_path():
+            import online_distill
+            triggers = online_distill.scan_triggers(ws)
+            for t in triggers:
+                reason = online_distill.refuse_reason(ws, t.token)
+                online_distill.emit_trigger_row(
+                    ws, t, allowed=(not reason), reason=reason)
+            # #487: the stamp carries the problem formulation + the
+            # per-facet coverage matrix (fail-open — a formulation
+            # failure stamps the pre-#487 shape and warns once)
+            formulation = (online_distill.formulate_for_trigger(
+                ws, triggers[0]) if triggers else None)
+            online_distill.stamp_trigger(ws, triggers,
+                                         formulation=formulation)
+    except Exception as exc:  # noqa: BLE001 — capability, never blocks
+        warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
+
+
 def _kernel_faces(ws: Path, session_id: str = "",
                   agent_id: str = "") -> dict | None:
     """The production round-closure kernel faces (step settlement +
@@ -229,16 +295,48 @@ def _kernel_faces(ws: Path, session_id: str = "",
     # #690: the step settlement — SubagentStop IS the step boundary, and
     # it runs FIRST so every decision face below sees post-settlement
     # state (settle -> update -> decide). Silent when no step is pending.
+    # issue-802: production defaults to the BLIND face — the unblinded
+    # step-level credit judgment is eval-only (KUNGLAO_EVAL_SETTLE=1 is
+    # the explicit
+    # opt-back-in, rlvr.settlement_wire.eval_settle_enabled). Blind mode
+    # keeps the hash-only mechanical bookkeeping (the act closure), skips
+    # the producer-surface credit legs, PARKS the blind input doc for the
+    # kunglao-settler subagent, and settles any ruling that arrived. The
+    # wire face rides its own cage: a wire failure never disturbs the
+    # stop path and never falls back INTO the unblinded judgment.
+    # issue 805: the closure battery registers too — the launch gate
+    # here is WARN-ONLY (the closure's fail-open double cage is
+    # contractual: a registry trouble is one rate-limited warn and never
+    # disturbs the subagent's stop path; the dispatch battery's gate is
+    # the fail-closed one).
+    try:
+        import battery_registry
+        _bat = battery_registry.launch_gate(
+            battery_registry.registered_names("closure"),
+            battery="closure")
+        if _bat:
+            warn(battery_registry.LAUNCH_WARN_OP, _bat)
+    except Exception as _exc:  # noqa: BLE001 — cage, never the stop path
+        warn("battery_registry_launch",
+             f"{type(_exc).__name__}: {_exc}")
     receipt = None
+    blind_receipt: dict = {}
     try:
         with scripts_on_path():
             from rlvr import step_grain
+            from rlvr import settlement_wire
+            _eval = settlement_wire.eval_settle_enabled()
             pending = step_grain.pending_step(ws)
             receipt = step_grain.settle_step(
                 ws, session_id, outcome=_worker_outcome(ws, pending),
-                agent_id=agent_id or None)
+                agent_id=agent_id or None, blind=not _eval)
+            if not _eval:
+                blind_receipt = _blind_settlement_face(
+                    ws, settlement_wire, pending) or {}
     except Exception as exc:  # noqa: BLE001 — settle face, never blocks
         warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
+    if blind_receipt:
+        receipt = dict(receipt or {}, blind_settlement=blind_receipt)
     # #769: the policy-state projection — ONE runs/policy-state.json per
     # round close, projected from the same plan receipts the dispatch
     # gate lands (candidates / admitted / chosen / posterior summary /
@@ -280,23 +378,7 @@ def _kernel_faces(ws: Path, session_id: str = "",
             verification_ladder.drain_t2_queue(ws)
     except Exception as exc:  # noqa: BLE001 — kernel face, never blocks
         warn("round_closure_t2", f"{type(exc).__name__}: {exc}")
-    try:
-        with scripts_on_path():
-            import online_distill
-            triggers = online_distill.scan_triggers(ws)
-            for t in triggers:
-                reason = online_distill.refuse_reason(ws, t.token)
-                online_distill.emit_trigger_row(
-                    ws, t, allowed=(not reason), reason=reason)
-            # #487: the stamp carries the problem formulation + the
-            # per-facet coverage matrix (fail-open — a formulation
-            # failure stamps the pre-#487 shape and warns once)
-            formulation = (online_distill.formulate_for_trigger(
-                ws, triggers[0]) if triggers else None)
-            online_distill.stamp_trigger(ws, triggers,
-                                         formulation=formulation)
-    except Exception as exc:  # noqa: BLE001 — capability, never blocks
-        warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
+    _distill_trigger_face(ws)
 
     return receipt if isinstance(receipt, dict) else None
 

@@ -40,6 +40,13 @@ no mocked telemetry. The runner's ONLY jobs:
                          and terminal (see _record_experience): tc journal,
                          situation snapshot, triples.csv — pure recording,
                          zero decision impact.
+    7. SETTLEMENT        issue #966: the runner-native settlement face
+                         (LOOP arm) — a solo session never dispatches, so
+                         the runner writes the pending dispatch row itself
+                         and settles the graded credit through the same
+                         scalar handler a worker settlement uses (see
+                         runner_settlement_face). Fail-open; the verdict
+                         row is unaffected.
 
 Budget/cancellation: budget exhaustion is a TERMINAL metric row
 (loop.status=exhausted), never a crash, on BOTH kill faces — the runner's
@@ -116,6 +123,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -129,6 +137,8 @@ SCRIPT_DIR = scripts_bootstrap()
 import eval_dataset as ds
 import eval_smoke_runner as rnr
 import tuition_curve
+from rlvr import family_playbook
+from rlvr import playbook_distill
 
 try:  # repo runtime dep (eval_dataset already requires it)
     import yaml
@@ -276,7 +286,8 @@ def build_cc_default_argv(prompt: str, budget_usd: float) -> list[str]:
 def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                    wall_cap_s: float, session_cmd: str | None = None,
                    plugin_dir: Path | None = None,
-                   plugin: bool = True) -> dict:
+                   plugin: bool = True,
+                   solo_fraction: float | None = None) -> dict:
     """THE adapter (harness-neutral): start the real analysis session in
     ``workspace`` cwd under the budget caps, wait, return the session
     record. The production face is `claude -p`; an explicit session
@@ -286,6 +297,18 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     CC-DEFAULT face (build_cc_default_argv): same caps, no kunglao
     plugin — the harness-capability-variable arm."""
     workspace = Path(workspace)
+    # the session driver's caps travel as child env — the runner OWNS
+    # wall/budget/solo; a hand-set env outside the runner would silently
+    # diverge from the caps the prompt advertises
+    child_env = dict(os.environ)
+    # #952 review round 1: the sandbox-wrapped session must not be told
+    # WHERE the grading oracle lives — the profile denies the path, the
+    # env would advertise it (a write-forge needs no read)
+    child_env.pop("KUNGLAO_GRADING_ROOT", None)
+    child_env["KUNGLAO_SDK_BUDGET_USD"] = str(budget_usd)
+    if wall_cap_s and solo_fraction:
+        child_env["KUNGLAO_SOLO_CAP_S"] = str(
+            int(round(wall_cap_s * solo_fraction)))
     if session_cmd is None:
         session_cmd = os.environ.get(ENV_SESSION_CMD) or None
     if session_cmd:
@@ -295,6 +318,14 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
                                  budget_usd)
     else:
         argv = build_cc_default_argv(prompt, budget_usd)
+    # #952 Face C: the opt-in seatbelt wrap (KUNGLAO_SANDBOX_PROFILE).
+    # Unset = off, the argv is untouched. Set = the session binary is
+    # wrapped (sandbox-exec -f <profile> <original argv...>); a missing
+    # sandbox-exec launches UNWRAPPED with the flag raised (fail-loud).
+    sandbox_profile = os.environ.get(ENV_SANDBOX_PROFILE)
+    sandbox_wrap_failed = False
+    if sandbox_profile:
+        argv, sandbox_wrap_failed = _sandbox_wrap(argv, sandbox_profile)
     started = time.time()
     timed_out = False
     # start_new_session: the child leads its own process group so the
@@ -302,7 +333,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     try:
         proc = subprocess.Popen(
             argv, cwd=str(workspace), stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, start_new_session=True)
+            stderr=subprocess.PIPE, text=True, start_new_session=True,
+            env=child_env)
     except OSError as exc:
         # a session that cannot even start is a TERMINAL record, never a
         # crash: the run_loop_task face turns this into session_error
@@ -315,6 +347,7 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
             "stdout_tail": "",
             "stderr_tail": f"session launch failed: {exc}",
             "session_cost": None,
+            "sandbox_wrap_failed": sandbox_wrap_failed,
         }
     try:
         out, err = proc.communicate(timeout=wall_cap_s)
@@ -330,6 +363,7 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
         "stdout_tail": (out or "")[-4000:],
         "stderr_tail": (err or "")[-2000:],
         "session_cost": _session_cost(out or ""),
+        "sandbox_wrap_failed": sandbox_wrap_failed,
     }
 
 
@@ -508,11 +542,102 @@ def _harness_drift_event(out: Path, task: str, drifted: list[str],
         fh.write(json.dumps(row) + "\n")
 
 
+# ------------------------------------------------------- tick-arming gate
+# P6 guards card: the orchestrator can stall silently when the tick loop was never
+# armed (live incident: 19 minutes of orchestrator silence while a worker
+# ran). The launch path therefore verifies the workspace heartbeat's cron
+# registration BEFORE spawning a LOOP-arm session. The verdict is the ONE
+# canonical check (heartbeat_loop_prompt.verify_loop — the HARD
+# registration-acceptance face), reused, never re-implemented. The refusal is loud and
+# structured: a harness-events row + stderr + a structured SKIP row, and
+# NO session launch. cc-default / cc-warm-context arms are never gated
+# (neutral workspaces carry no kunglao heartbeat), and the session-cmd
+# seam is never gated (the documented test/operator channel — the stub
+# harness cannot carry a live cron by construction; the production face
+# is the real claude argv this seam replaces).
+TICK_GATE_CODE = "TICK_GATE"
+TICK_GATE_REFUSED_ACTION = "tick_gate_refused"  # event_taxonomy.EMIT_ACTIONS
+
+
+def tick_arm_gate(ws: Path) -> tuple[bool, str]:
+    """The tick-arming verdict: (armed, message). Armed = the reused
+    verify_loop face returns 0 (loop_registered=true AND the continuous-
+    tick standard); anything else carries that face's own stderr guidance
+    (registration repair, not a gate invention)."""
+    import contextlib
+    import io
+    try:
+        import heartbeat_loop_prompt as _hlp
+    except Exception as exc:  # noqa: BLE001 — partial-deploy lifeline
+        _warn_fail_open("tick_gate_import", exc)
+        return (True, "heartbeat_loop_prompt unavailable — tick gate "
+                      "fail-open (partial deploy)")
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err), \
+            contextlib.redirect_stdout(io.StringIO()):
+        rc = _hlp.verify_loop(str(ws))
+    return (rc == 0, err.getvalue().strip())
+
+
+def _tick_gate_skip_row(ws: Path, task: dict, tdir: Path, out: Path, *,
+                        arm: str, session_cmd: str | None) -> dict | None:
+    """The launch-path guard: None when the session may launch; otherwise
+    the structured refusal row (mirrors _preflight_skip_row — a harness
+    precondition failed, no wall burned, excluded from performance)."""
+    if arm != ARM or session_cmd is not None:
+        return None
+    ok, why = tick_arm_gate(ws)
+    if ok:
+        return None
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    event = {
+        "schema": "harness-event/1",
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "task": tdir.name,
+        "action": TICK_GATE_REFUSED_ACTION,
+        "arm": arm,
+        "detail": why[-800:],
+        "remedy": "arm the loop first: heartbeat_loop_prompt.py <ws> -> "
+                  "CronCreate (or /loop 5m); the loop's first action marks "
+                  "loop_registered=true — then re-run",
+    }
+    with (out / "harness-events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event) + "\n")
+    print(f"TICK_GATE task={tdir.name} REFUSED ({arm}): no verified "
+          f"armed loop — no session launched", file=sys.stderr)
+    print(f"[kunglao-agent] eval_loop: {tdir.name} REFUSED by the tick "
+          f"gate: {why.splitlines()[-1] if why else 'unarmed'}",
+          file=sys.stderr)
+    print(f"VERDICT {tdir.name} SKIP ({arm}: {TICK_GATE_CODE} — no "
+          f"verified armed loop; no session launched)")
+    row = ds.results_row(
+        task_id=tdir.name, family=task["family"],
+        checker_kind=task["checker"]["kind"],
+        metrics={m: 0 for m in ds.REQUIRED_METRICS},
+        verdict="SKIP",
+        failures=[{"code": TICK_GATE_CODE, "detail": why[:1500]}],
+        evidence_ref="", arm=arm)
+    row["loop"] = {"status": "harness_error", "metrics": {},
+                   "checker_rc": 2, "session": {
+                       "returncode": None, "wall_s": 0.0,
+                       "timed_out": False,
+                       "session_cost": None,
+                       "harness_contaminated": False,
+                       "harness_drift_files": []},
+                   "workspace": str(ws), "deliverable": None,
+                   "prompt_sha256": None}
+    row["governance"] = governance_block({}, "harness_error", 0)
+    row["excluded_from_performance"] = True
+    return row
+
+
 def run_session_guarded(workspace: Path, prompt: str, out: Path,
                         task_name: str, *, budget_usd: float,
                         wall_cap_s: float, session_cmd: str | None = None,
                         plugin_dir: Path | None = None,
                         plugin: bool = True,
+                        solo_fraction: float | None = None,
                         note: str = "") -> tuple[dict, list[str], list[str]]:
     """issue 380 P3-2: THE one guarded spawn — both faces (main + gap-redo)
     route through here so the harness-drift handling can no longer
@@ -525,7 +650,8 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
     pre = integrity_surface_hashes()
     rec = launch_session(workspace, prompt, budget_usd=budget_usd,
                          wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-                         plugin_dir=plugin_dir, plugin=plugin)
+                         plugin_dir=plugin_dir, plugin=plugin,
+                         solo_fraction=solo_fraction)
     drifted = harness_drift(pre, integrity_surface_hashes())
     restored: list[str] = []
     if drifted:
@@ -541,7 +667,9 @@ def run_session_guarded(workspace: Path, prompt: str, out: Path,
 
 
 # ---------------------------------------------------------- wall partition
-def wall_partition_block(wall_cap_s: float) -> str:
+def wall_partition_block(wall_cap_s: float,
+                         solo_fraction: float | None = None
+                         ) -> str:
     """M1 (exp5) + I1 (exp8): the WALL_BUDGET_PARTITION contract block.
     The runner owns the wall cap and kills the session tree at it — a
     session that was never told the cap cannot partition its own budget.
@@ -554,8 +682,10 @@ def wall_partition_block(wall_cap_s: float) -> str:
     delivered its candidate AT budget death (0/16 graded on a rush job) —
     so the block now mandates an early on-disk draft that is continuously
     improved; at the cap the CURRENT on-disk state is what gets graded."""
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
     total = int(round(wall_cap_s))
-    solo_cap = int(round(wall_cap_s * SOLO_PARTITION_FRACTION))
+    solo_cap = int(round(wall_cap_s * solo_fraction))
     due = max(int(round(wall_cap_s - DELIVERABLE_RESERVE_S)), 0)
     return (
         "WALL_BUDGET_PARTITION (harness contract — the runner enforces "
@@ -654,6 +784,59 @@ def prompt_injection_blocks(task_dir: Path,
     layer_paths = (chain_layer_paths(task_dir)
                    if task.get("tier") == "chain" else [])
     return layer_paths, self_check_block(task.get("family"))
+
+
+# ------------------------------------------------- family playbook (#960)
+ENV_PLAYBOOK = "KUNGLAO_PLAYBOOK"
+
+
+def playbook_injection_block(family: str | None) -> str:
+    """#960 the Type-2 injection seam: the family playbook injected WHOLE
+    into the loop brief (no retrieval layer — whole-file or nothing).
+    Gated by ``KUNGLAO_PLAYBOOK=1`` — the warm-vs-cold A/B switch for
+    the #888 measurement; unset (or any other value) keeps the prompt
+    byte-identical to the pre-playbook shape (default OFF, zero
+    behavior change). A family with no playbook file also degrades to
+    no block (cold arm), so the same env value is honest on both arms."""
+    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+        return ""
+    return family_playbook.session_block(str(family or ""))
+
+
+def playbook_distill_face(ws: Path, family: str | None) -> dict | None:
+    """#969 the Type-2 WRITE seam: ONE terminal distillation call per
+    session terminal (issue #960's scripts/rlvr/playbook_distill.py —
+    the workspace's terminal material plus the current family playbook
+    go into ONE frozen-model call; the mechanically-gated patch lands
+    in the operator-local playbook store, keyed by the task family).
+
+    Gated by ``KUNGLAO_PLAYBOOK=1`` — the SAME switch as the read side
+    (playbook_injection_block above): unset (or any other value) spends
+    ZERO model calls and keeps the run byte-identical to the pre-#969
+    shape. A family-less task skips silently (the read side's cold
+    shape). Budget posture: exactly ONE call per terminal, NO retries —
+    the distill module owns the fail-closed posture (any fault -> ONE
+    loud stderr WARN + the store file byte-untouched); this wrapper
+    fails OPEN on top of that: anything that still escapes (e.g. a
+    store-write OSError) is one rate-limited WARN and never breaks the
+    run — the verdict row assembles exactly as before."""
+    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+        return None
+    fam = str(family or "").strip()
+    if not fam:
+        return None
+    try:
+        summary = playbook_distill.distill(ws, fam)
+    except Exception as exc:  # noqa: BLE001 — the write face fails open
+        _warn_fail_open("playbook_distill", exc)
+        return None
+    if summary.get("applied"):
+        # the success-side trace (smoke liveness: KUNGLAO_PLAYBOOK=1 must
+        # be OBSERVABLE — the #969 failure was three silent rounds)
+        print(f"[kunglao-agent] eval_loop: playbook_distill family={fam} "
+              f"applied ops={len(summary.get('patch') or [])}",
+              file=sys.stderr)
+    return summary
 
 
 # ------------------------------------------------------- factor settle (I4)
@@ -772,7 +955,8 @@ def init_workspace(task_dir: Path, work_root: Path,
 
 def init_cc_default_workspace(task_dir: Path,
                               work_root: Path,
-                              *, wall_cap_s: float | None = None
+                              *, wall_cap_s: float | None = None,
+                              solo_fraction: float | None = None
                               ) -> tuple[Path, str]:
     """The CC-DEFAULT arm's neutral cwd: NO kunglao-init, no plugin
     scaffold — ONLY the unit's material at its task-relative paths
@@ -799,7 +983,9 @@ def init_cc_default_workspace(task_dir: Path,
     prompt = (
         "Solve the reverse-engineering task in THIS working directory. "
         "Work fully autonomously: no questions, no user input.\n\n"
-        + (wall_partition_block(wall_cap_s) + "\n\n"
+        + (wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction)
+           + "\n\n"
            if wall_cap_s is not None else "")
         + f"GOAL (verbatim): {anchors['goal_verbatim']}\n\n"
         f"SUCCESS CRITERION (verbatim): {anchors['success_criterion']}\n\n"
@@ -934,20 +1120,11 @@ def preflight(ws: Path, *, run_selfcheck=None) -> tuple[bool, list[str]]:
 def _q_cell_face(ws: Path) -> int:
     """Armed q-cell observation rows — the learning-spine engagement
     organ. #721: the consolidated runs/experience.jsonl (stamp-filtered)
-    plus the legacy runs/q-cell-log.jsonl archive during the compat
-    window; absent = 0 (a missing organ is a zero metric, never a
-    crash). A partial deploy without the rlvr core degrades to the
-    legacy line count (the except body IS the fallback)."""
-    try:
-        from rlvr import q_cells  # noqa: PLC0415 — partial-deploy lifeline
-        return len(q_cells.JSONLQStore(ws).observations())
-    except ImportError:
-        path = Path(ws) / "runs" / "q-cell-log.jsonl"
-        if not path.is_file():
-            return 0
-        return sum(1 for line in path.read_text(
-            encoding="utf-8", errors="replace").splitlines()
-            if line.strip())
+    — the ONE home; absent = 0 (a missing organ is a zero metric, never
+    a crash). #804 de-compat: the legacy q-cell-log.jsonl line-count
+    fallback is retired; a missing rlvr core is an ImportError LOUD."""
+    from rlvr import q_cells  # noqa: PLC0415
+    return len(q_cells.JSONLQStore(ws).observations())
 
 
 def classify_harness_failure(metrics: dict, q_cell_rows: int) -> \
@@ -978,6 +1155,164 @@ def governance_block(metrics: dict, status: str, q_cell_rows: int) -> dict:
     }
 
 
+# ---- #966: the runner-native settlement face ------------------------------
+# A solo eval session never invokes the Agent tool (single-session
+# topology), so hooks/dispatch_gate.py's ALLOW tail — the production
+# writer of pending dispatch rows — never fires; every live session
+# accumulated ZERO credit and the settlement→Q-bank→store chain was
+# structurally dead (#966). Option (a): the runner saw the whole loop
+# session and grades it at terminal, so the RUNNER writes the dispatch
+# row itself and settles the graded credit through the same scalar
+# handler a worker settlement uses.
+
+#: the context_recipe dim the runner face declares on its dispatch row
+#: (the runner feeds the facts snapshot whole — a solo session has no
+#: other context source).
+RUNNER_SETTLEMENT_RECIPE = "facts_snapshot"
+
+
+def runner_settlement_face(ws: Path, *, task: dict, verdict: str,
+                           prompt: str = "") -> dict:
+    """One terminal settlement for a solo eval session (issue #966).
+
+    Writes ONE pending dispatch row (rlvr.q_cells.record_dispatch_
+    observation — the envelope-declaration face the ALLOW tail normally
+    drives) keyed by a session-stable id, then settles the graded
+    credit through ``scalar._bank_q_cell_credit`` — the same handler a
+    worker settlement uses, so the Q-cell bank AND the cross-task store
+    row (rlvr.strategy_store.append_store_row) land exactly as they do
+    in the multi-session topology.
+
+    Credit semantics (the ladder limitation, named): the #433 ladder's
+    per-artifact decomposition (credited/demoted/waste) lives in the
+    SETTLER domain — scalar.round_credit consumes artifact rows the
+    runner never sees. The runner owns only the terminal checker
+    verdict, so the runner-native credit is the two-point endpoint:
+    PASS banks the ladder's full-credit endpoint (ROUND_CREDIT_FULL =
+    1.0) and FAIL banks the honest 0.0 — the FAIL face must also
+    settle, so the fold's failure mass moves (the point of #966). The
+    append boundary rail-clamps into [0, 1] either way.
+
+    Retry safety: the dispatch id is deterministic per (arm, task id) —
+    never random — and the face refuses when the q-cell log already
+    carries it (any row, dispatch or settlement source). THAT PRE-SCAN
+    IS THE SOLE GUARD: the Q-bank match itself has no one-shot
+    semantics (`_match_pending_dispatch` matches any credit=None row,
+    and dispatch rows stay credit=None forever), and the worker path's
+    settlement-presence guard (scalar.run) is bypassed here — a direct
+    re-call with a wiped log would double-bank. Consequence also named:
+    this face writes NO settlement-ledger row, so the reconcile pass
+    (`_reconcile_q_cell_bank`, ledger-driven) cannot rescue a
+    bank-crash pending row — such a row stays unbanked until manual
+    repair. And the #718 claim-terminal rollout-return leg
+    (`_bank_l1_rollout_return`, fired by every worker first-settlement)
+    is deliberately NOT fired here — the L1 feed stays settler-domain
+    until a card wires it for solo sessions. Holdout units are refused
+    at the store's firewall filter exactly as for worker settlements —
+    that wall sits downstream and holds.
+
+    Fail-open: any exception is one _warn_fail_open WARN and a
+    ``settled: False`` result; the verdict row is never touched. The
+    caller gates on arm == ARM and counts the q-cell face BEFORE this
+    face runs, so the harness-failure classifier keeps seeing the
+    spine's own engagement, never the runner's backfill."""
+    verdict = str(verdict or "").strip().upper()
+    if verdict not in ("PASS", "FAIL"):
+        # no graded work (SKIP — no gradeable deliverable): no row,
+        # never a fabricated credit
+        return {"settled": False,
+                "reason": f"ungraded:{verdict or 'none'}",
+                "dispatch_id": None, "credit": None}
+    try:
+        from rlvr import q_cells  # noqa: PLC0415 — lazy (mirrors _q_cell_face)
+        from rlvr import scalar  # noqa: PLC0415
+
+        family = str(task.get("family") or "").strip()
+        if not family:
+            # the #432 posture: an undeclared family is the honest gap
+            return {"settled": False, "reason": "undeclared",
+                    "dispatch_id": None, "credit": None}
+        # session-stable identity: deterministic per (arm, task id) — a
+        # retried workspace hits the one-shot guard below, not a second
+        # bank.
+        task_id = str(task.get("task_id") or ws.name)
+        did = f"runner-{ARM}-{task_id}"
+        if any(str(r.get("dispatch_id") or "") == did
+               or str(r.get("claim") or "") == did
+               for r in q_cells.JSONLQStore(ws).observations()):
+            return {"settled": False, "reason": "already-settled",
+                    "dispatch_id": did, "credit": None}
+        # (a) the pending dispatch row — the runner stands in for the
+        # ALLOW tail; the envelope dims mirror the dispatch envelope
+        # fields (the string task tier buckets to 0 in the arm key, the
+        # boundary's own coercion).
+        opened = q_cells.record_dispatch_observation(
+            ws, prompt or "", envelope_meta={
+                "method_family": family,
+                "tier": task.get("tier"),
+                "context_recipe": RUNNER_SETTLEMENT_RECIPE,
+                "verification_mode": str((task.get("anchors") or {}).get(
+                    "verification_method") or "none"),
+            },
+            claim=did, dispatch_id=did)
+        if not opened.get("appended"):
+            return {"settled": False,
+                    "reason": f"dispatch-row:{opened.get('reason')}",
+                    "dispatch_id": did, "credit": None}
+        # (b)+(c) the graded credit settles through the SAME scalar
+        # handler a worker settlement uses: the Q bank matches the
+        # pending row, banks the credit, and the store row rides the
+        # matched arm key — one call, no second scan. (Underscore-
+        # private, but it is the seam #966 names as sanctioned.)
+        credit = 1.0 if verdict == "PASS" else 0.0
+        bank = scalar._bank_q_cell_credit(
+            ws, {"dispatch_id": did, "r": credit, "credited": []})
+        banked = bool(bank and bank.get("appended"))
+        return {"settled": banked,
+                "reason": None if banked else "bank-unmatched",
+                "dispatch_id": did, "credit": credit,
+                "arm_key": (bank or {}).get("arm_key"),
+                "method_family": (bank or {}).get("method_family")}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        _warn_fail_open("runner_settlement", exc)
+        return {"settled": False, "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": None, "credit": None}
+
+
+def _family_usage_counts(source: Path, lines: list[str]) -> dict:
+    """green/total per family from the consolidated experience dispatch
+    rows (the usage-merge columns): total = dispatches per family, green =
+    settled credits > 0.5 for the family the dispatch declared (the
+    former latent-dead read of runs/method-family-log.jsonl counted
+    fields that shape never carried). A cold/corrupt store renders cold
+    (note appended to ``lines``, empty counts returned)."""
+    fams: dict[str, list[int]] = {}
+    try:
+        from rlvr import q_cells as _qc_elr  # noqa: PLC0415 — lazy
+        obs = _qc_elr.JSONLQStore(source).observations()
+    except Exception as exc:  # noqa: BLE001 — a cold/corrupt store renders cold
+        obs = []
+        lines.append(f"  (experience unreadable: "
+                     f"{type(exc).__name__}: {exc})")
+    for row in obs:
+        if not isinstance(row, dict):
+            continue
+        fam = str(row.get("method_family") or "")
+        if not fam:
+            continue
+        fams.setdefault(fam, [0, 0])
+        src = str(row.get("source") or "")
+        if src == "dispatch":
+            fams[fam][1] += 1
+        elif src == "settlement":
+            credit = row.get("credit")
+            if (isinstance(credit, (int, float))
+                    and not isinstance(credit, bool)
+                    and float(credit) > 0.5):
+                fams[fam][0] += 1
+    return fams
+
+
 def warm_context_block(source_ws: Path) -> str:
     """The CC+warm-context arm's context: the SAME train-derived material
     the K-warm loop reads, rendered as plain text — pattern/anti-hint
@@ -990,7 +1325,14 @@ def warm_context_block(source_ws: Path) -> str:
     from the LIVE store — that difference is the measurement. A source
     without train material renders a marked COLD block (differential
     zero — the arm still runs, the receipt shows why it carries no
-    warm signal)."""
+    warm signal).
+
+    #804 usage merge: the family summary reads the consolidated
+    experience dispatch rows (the usage-ledger columns ride them) —
+    total = dispatches per family, green = settled credits > 0.5 for
+    the family the dispatch declared (the former latent-dead read of
+    runs/method-family-log.jsonl counted fields that shape never
+    carried)."""
     from rlvr.compose import load_cards, render_card_block
 
     source = Path(source_ws)
@@ -1009,21 +1351,7 @@ def warm_context_block(source_ws: Path) -> str:
             lines.append("  " + render_card_block(card))
         except Exception as exc:  # noqa: BLE001 — one bad card skips itself
             lines.append(f"  (card skipped: {type(exc).__name__})")
-    fam_log = source / "runs" / "method-family-log.jsonl"
-    fams: dict[str, list[int]] = {}
-    if fam_log.is_file():
-        for line in fam_log.read_text(encoding="utf-8",
-                                      errors="replace").splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            fam = str(row.get("method_family") or "")
-            if fam:
-                fams.setdefault(fam, [0, 0])
-                fams[fam][1] += 1
-                if row.get("outcome") in ("green", "pass", "settled"):
-                    fams[fam][0] += 1
+    fams = _family_usage_counts(source, lines)
     if fams:
         lines.append("  method-family summary (green/total from the train "
                      "log):")
@@ -1067,9 +1395,12 @@ def _render_task_prompt(opening: str, task: dict, deliverable_rel: str,
 
 def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       *, wall_cap_s: float | None = None,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
                       include_t1_direct: bool = True,
-                      probe_block: str = "") -> str:
+                      probe_block: str = "",
+                      playbook_block: str = "",
+                      plan_block: str | None = None) -> str:
     """The loop brief: the anchors verbatim + the candidate contract + the
     mandated deliverable path, plus the injected contract blocks.
 
@@ -1094,14 +1425,25 @@ def build_loop_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     never told. ``layer_paths`` (I2, exp8) injects the chain
     LAYER_CHECKPOINTS block (exact grader paths). ``probe_block`` (I3,
     exp8) injects the family SELF_CHECK block. ``include_t1_direct``
-    (I5, exp8) adds the T-1 affirmative one-liner."""
+    (I5, exp8) adds the T-1 affirmative one-liner. ``playbook_block``
+    (#960) injects the family playbook WHOLE (the Type-2 transfer
+    channel; KUNGLAO_PLAYBOOK=1 at the runner seam) — absent (empty)
+    the prompt is byte-identical to the pre-#960 shape. ``plan_block``
+    (learning-loop program, card P1) injects the goal-backward plan /
+    hypotheses block (backward_plan output) as a first-class section;
+    absent (None) the prompt is byte-identical to the pre-P1 shape."""
     extras: list[str] = []
     if wall_cap_s is not None:
-        extras.append(wall_partition_block(wall_cap_s))
+        extras.append(wall_partition_block(
+            wall_cap_s, solo_fraction=solo_fraction))
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
+    if playbook_block:
+        extras.append(playbook_block)
+    if plan_block:
+        extras.append(plan_block)
     if include_t1_direct:
         extras.append(T1_DIRECT_LINE)
     opening = (
@@ -1204,8 +1546,10 @@ def gap_redo_decision(verdict: str | None, session_record: dict, *,
 def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
                       gap_block: str, *, wall_cap_s: float,
                       budget_usd: float,
+                      solo_fraction: float | None = None,
                       layer_paths: list[str] | None = None,
-                      probe_block: str = "") -> str:
+                      probe_block: str = "",
+                      playbook_block: str = "") -> str:
     """The gap-redo session's brief: same task (anchors + contract +
     deliverable path, the workspace ITSELF carries the prior session's
     state) + the CHECKER GAP block + the wall partition recomputed for
@@ -1213,13 +1557,18 @@ def build_redo_prompt(task_dir: Path, task: dict, deliverable_rel: str,
     prompt: anchors and contract only — the gap adds shape, not answers.
     I2/I3/I5 (exp8): the chain LAYER_CHECKPOINTS block, the family
     SELF_CHECK block and the T1_DIRECT line ride along — the redo is the
-    same task under the same prompt contract. (issue 380 P3-1: the shared
-    tail renders through _render_task_prompt.)"""
-    extras: list[str] = [wall_partition_block(wall_cap_s)]
+    same task under the same prompt contract; ``playbook_block`` (#960)
+    rides the same way so a redo session keeps the init-time playbook
+    visible. (issue 380 P3-1: the shared tail renders through
+    _render_task_prompt.)"""
+    extras: list[str] = [wall_partition_block(
+        wall_cap_s, solo_fraction=solo_fraction)]
     if layer_paths:
         extras.append(layer_checkpoints_block(layer_paths))
     if probe_block:
         extras.append(probe_block)
+    if playbook_block:
+        extras.append(playbook_block)
     extras.append(T1_DIRECT_LINE)
     opening = (
         "/kunglao-agent GAP-REDO round in THIS workspace: the previous "
@@ -1425,6 +1774,10 @@ def extract_candidate(workspace: Path, task: dict) -> Path | None:
         if not base.is_dir():
             continue
         for p in sorted(base.rglob(f"*{suffix}")):
+            # empty suffix = the binary-candidate face: the fallback only
+            # accepts an executable file, not any stray artifact
+            if suffix == "" and not os.access(p, os.X_OK):
+                continue
             if not p.is_file() or p.stat().st_size == 0:
                 continue
             if p.name.startswith(_EXCLUDE_PREFIXES):
@@ -1469,74 +1822,263 @@ def _session_status(rec: dict, budget_usd: float) -> str:
     return _post_cap_status(rec, budget_usd)
 
 
-def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
-                  = DEFAULT_BUDGET_USD, wall_cap_s: float
-                  = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
-                  plugin_dir: Path | None = None,
-                  arm: str = ARM,
-                  warm_context_from: Path | None = None) -> dict:
-    """One eval task through the FULL pipeline: init -> real session ->
-    harvest -> mechanical check -> results row. ``arm`` selects the
-    harness face: "loop" (kunglao-init + plugin session), "cc-default"
-    (neutral cwd + plugin-less session), or "cc-warm-context" (the
-    cc-default face + the train-store text render — the RL-vs-context
-    attribution arm) — same caps, extractor and checker either way."""
-    out = Path(out)
-    tdir = ds.resolve_task_dir(task_ref)
-    task = ds.load_task(tdir)
-    suffix = _candidate_suffix(task)
-    deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
+def _preflight_skip_row(task: dict, tdir: Path, arm: str,
+                        pf_reasons: list[str], ws: Path) -> dict:
+    """Structured SKIP row for a workspace whose PQ spine failed to seed
+    (the spine-seed closure): a claim-less/oracle-less/unwired workspace
+    burns the wall measuring nothing — SKIP before the session starts."""
+    row = ds.results_row(
+        task_id=tdir.name, family=task["family"],
+        checker_kind=task["checker"]["kind"],
+        metrics={m: 0 for m in ds.REQUIRED_METRICS},
+        verdict="SKIP",
+        failures=[{"code": "HARNESS_PREFLIGHT",
+                   "detail": "; ".join(pf_reasons)}],
+        evidence_ref="", arm=arm)
+    row["loop"] = {"status": "harness_error", "metrics": {},
+                   "checker_rc": 2, "session": {
+                       "returncode": None, "wall_s": 0.0,
+                       "timed_out": False,
+                       "session_cost": None,
+                       "harness_contaminated": False,
+                       "harness_drift_files": []},
+                   "workspace": str(ws), "deliverable": None,
+                   "prompt_sha256": None}
+    row["governance"] = governance_block({}, "harness_error", 0)
+    row["excluded_from_performance"] = True
+    print(f"VERDICT {tdir.name} SKIP ({arm}: harness_error — "
+          f"{'; '.join(pf_reasons)})")
+    return row
 
-    layer_paths, probe_block = prompt_injection_blocks(tdir, task)
 
+def _arm_prompt(arm: str, prompt: str,
+                warm_context_from: Path | None) -> str:
+    """The cc arm's prompt tail: the warm-context attribution arm appends
+    the SAME train-derived context K-warm reads, as frozen text (no
+    hooks, no posterior sampling -- that difference IS the arm's
+    question)."""
+    if arm == "cc-warm-context":
+        prompt = (prompt + "\n\n" + warm_context_block(warm_context_from))
+    return prompt
+
+
+# ------------------------------------------------- #952 containment faces
+# Issue #952's two repo-side construction defenses (the P8 round-1
+# invalidation: the cold arm READ the co-located grading oracle and
+# forged a PASS, and both sessions worked solo — loop_dispatch_count=0):
+#
+#   FACE A  leak scan   KUNGLAO_GRADING_ROOT set -> a harvest-time
+#           substring scan of the workspace's text artifacts for the
+#           grading-root path. A hit lands the row
+#           excluded_from_performance + an ORACLE_LEAK failure — the
+#           checker's verdict itself is NEVER rewritten (the marker, not
+#           a rewrite, disqualifies the row for the capability read).
+#           Unset = the face is OFF entirely: no key, no scan I/O, zero
+#           behavior change.
+#   FACE B  topology    loop arm only: the harvested dispatch_count is
+#           the orchestrator-economy compliance contract — 0 dispatches
+#           is a solo-only session that cannot answer the orchestrator
+#           question. The flag is the contract; consumers decide
+#           exclusion (this face never touches
+#           excluded_from_performance).
+#   FACE C  sandbox     KUNGLAO_SANDBOX_PROFILE set -> launch_session
+#           wraps the session binary: sandbox-exec -f <profile> ...
+#           (containment's prevention half; macOS-only,
+#           deprecated-but-functional, opt-in via the env, off by
+#           default). A missing binary launches UNWRAPPED and marks the
+#           row sandbox_wrap_failed=true (fail-loud, never silent). The
+#           deny-read TEMPLATE ships at templates/
+#           sandbox-denying-units.sb.tmpl — the operator materializes a
+#           real profile per run (the @KUNGLAO_GRADING_ROOT@ /
+#           @KUNGLAO_UNITS_ROOT@ slots are per-run substitutions); the
+#           runner never writes one.
+ENV_GRADING_ROOT = "KUNGLAO_GRADING_ROOT"
+ENV_SANDBOX_PROFILE = "KUNGLAO_SANDBOX_PROFILE"
+ORACLE_LEAK_CODE = "ORACLE_LEAK"
+SANDBOX_BINARY = "sandbox-exec"
+# the workspace text artifacts the leak scan reads (relative to the ws)
+# #952 review round 1: the scan covers EVERY session-writable artifact
+# surface (the deliverable itself is the most likely leak carrier — a
+# forged PASS citing the grader path in a comment), not just the three
+# note carriers. runs/ beyond deliverables is machine-channel telemetry.
+LEAK_SCAN_DIRS = ("facts", "notes", "scratch", "analyses", "evidence",
+                  os.path.join("runs", "deliverables"))
+# a text artifact larger than this is not a note — it is data; skip it
+LEAK_SCAN_FILE_CAP_BYTES = 2 * 1024 * 1024
+
+
+def leak_scan(workspace: Path, root: str | Path) -> dict:
+    """#952 Face A (the reusable core): substring-scan the workspace's
+    text artifacts (facts/ notes/ scratch/, files at or under
+    ``LEAK_SCAN_FILE_CAP_BYTES``) for the literal grading-root path
+    string. Byte-level search on purpose — it IS substring search, it is
+    fast, it parses nothing, and it cannot crash on non-UTF8 bytes.
+    Returns ``{"hit": True, "root": <path str>, "files": [<ws-relative
+    paths>]}`` on a hit and ``{"hit": False}`` on a miss; the row marker
+    is the caller's face (run_loop_task), never this function's."""
+    ws = Path(workspace)
+    root_str = str(Path(root))
+    needle = root_str.encode("utf-8")
+    if not needle:
+        return {"hit": False}
+    hits: list[str] = []
+    for d in LEAK_SCAN_DIRS:
+        base = ws / d
+        if not base.is_dir():
+            continue
+        # the ITERATION itself can raise (a session chmod-000s a
+        # subdirectory — review round 1): one unreadable subtree must
+        # degrade that subtree to a warn, never kill the paid task
+        try:
+            found = sorted(base.rglob("*"))
+        except OSError as exc:
+            _warn_fail_open("leak_scan_walk", exc)
+            continue
+        for p in found:
+            if not p.is_file():
+                continue
+            try:
+                if p.stat().st_size > LEAK_SCAN_FILE_CAP_BYTES:
+                    continue
+                blob = p.read_bytes()
+            except OSError as exc:
+                _warn_fail_open("leak_scan_read", exc)
+                continue
+            if needle in blob:
+                hits.append(p.relative_to(ws).as_posix())
+    if not hits:
+        return {"hit": False}
+    return {"hit": True, "root": root_str, "files": hits}
+
+
+def _sandbox_wrap(argv: list[str], profile: str) -> tuple[list[str], bool]:
+    """#952 Face C (the launch-side half): prefix the seatbelt wrap
+    ``sandbox-exec -f <profile>`` onto the session argv. Returns
+    (argv, sandbox_wrap_failed): a missing sandbox-exec binary keeps the
+    argv UNWRAPPED, leaves ONE loud stderr trace and reports the failure
+    so the row can carry sandbox_wrap_failed=true — the session still
+    runs (fail-loud, never silent, never a crash)."""
+    if shutil.which(SANDBOX_BINARY) is None:
+        from _boot import warn
+        warn("sandbox_wrap", f"{SANDBOX_BINARY} not found on PATH — "
+            f"session launches UNWRAPPED, KUNGLAO_SANDBOX_PROFILE="
+            f"{profile} is INERT (row carries sandbox_wrap_failed=true)")
+        return argv, True
+    return [SANDBOX_BINARY, "-f", profile, *argv], False
+
+
+def _row_leak_marker(row: dict, ws: Path, task_name: str) -> None:
+    """#952 Face A, the row-assembly half: run the harvest-time
+    oracle-leak scan and mark the row. KUNGLAO_GRADING_ROOT unset = the
+    face is OFF entirely (no key, no scan I/O, zero behavior change); a
+    hit lands ``leak_scan`` + ``excluded_from_performance`` + an
+    ORACLE_LEAK failure — the checker's verdict is NEVER rewritten (the
+    marker, not a rewrite, disqualifies the row for the capability
+    read)."""
+    grading_root = os.environ.get(ENV_GRADING_ROOT)
+    if not grading_root:
+        return
+    leak = leak_scan(ws, grading_root)
+    row["leak_scan"] = leak
+    if not leak["hit"]:
+        return
+    row["excluded_from_performance"] = True
+    row["failures"].append({
+        "code": ORACLE_LEAK_CODE,
+        "detail": f"grading root {leak['root']} cited in workspace "
+                  f"artifacts: {', '.join(leak['files'])}"})
+    print(f"[kunglao-agent] eval_loop: {task_name} ORACLE_LEAK "
+          f"({leak['root']} visible in workspace artifacts) — row "
+          f"EXCLUDED from performance", file=sys.stderr)
+
+
+def _row_topology_marker(row: dict, *, arm: str, metrics: dict,
+                         task_name: str) -> None:
+    """#952 Face B, the row-assembly half: the orchestrator-economy
+    compliance marker. The loop arm's harvested dispatch_count is the
+    contract — 0 dispatches is a solo-only session that cannot answer
+    the orchestrator question (the #888 round-1 defect). The flag is
+    the contract; consumers decide exclusion (this face never touches
+    ``excluded_from_performance``). Non-loop arms carry no key at all."""
+    if arm != ARM:
+        return
+    dispatch_count = int(metrics.get("dispatch_count") or 0)
+    row["topology_compliant"] = dispatch_count > 0
+    if dispatch_count > 0:
+        return
+    print(f"[kunglao-agent] eval_loop: {task_name} TOPOLOGY solo-only "
+          f"run — excluded from the orchestrator-economy read",
+          file=sys.stderr)
+
+
+def _init_task_face(tdir: Path, task: dict, out: Path, *, arm: str,
+                    wall_cap_s: float, solo_fraction: float,
+                    deliverable_rel: str, layer_paths: list[str],
+                    probe_block: str,
+                    playbook_block: str = "",
+                    warm_context_from: Path | None = None,
+                    workspace: Path | None = None
+                    ) -> tuple[Path | None, str, dict | None]:
+    """Workspace init + prompt build for one arm face. Returns
+    (ws, prompt, skip_row): a non-None skip_row is the structured SKIP
+    row for a failed init (BAD_TASK) or failed preflight — the caller
+    returns it without running a session."""
     try:
         if arm in ("cc-default", "cc-warm-context"):
             ws, prompt = init_cc_default_workspace(tdir, out / "workspaces",
-                                                   wall_cap_s=wall_cap_s)
-            if arm == "cc-warm-context":
-                # the experiment doc §5's attribution arm: the SAME
-                # train-derived context K-warm reads, as frozen text —
-                # no hooks, no posterior sampling (that difference IS
-                # the arm's question)
-                prompt = (prompt + "\n\n"
-                          + warm_context_block(warm_context_from))
+                                                   wall_cap_s=wall_cap_s,
+                                                   solo_fraction=solo_fraction)
+            # the experiment doc sec5 attribution arm (frozen text):
+            prompt = _arm_prompt(arm, prompt, warm_context_from)
         else:
-            ws = init_workspace(tdir, out / "workspaces")
-            # #523 closure: seed the PQ spine + preflight BEFORE the
-            # session — a claim-less/oracle-less/unwired workspace burns
-            # the wall measuring nothing (the pilot's 0/3 class)
-            try:
-                seed_question_spine(ws, task)
-                pf_ok, pf_reasons = preflight(ws)
-            except (OSError, ValueError, yaml.YAMLError) as exc:
-                pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
-            if not pf_ok:
-                row = ds.results_row(
-                    task_id=tdir.name, family=task["family"],
-                    checker_kind=task["checker"]["kind"],
-                    metrics={m: 0 for m in ds.REQUIRED_METRICS},
-                    verdict="SKIP",
-                    failures=[{"code": "HARNESS_PREFLIGHT",
-                               "detail": "; ".join(pf_reasons)}],
-                    evidence_ref="", arm=arm)
-                row["loop"] = {"status": "harness_error", "metrics": {},
-                               "checker_rc": 2, "session": {
-                                   "returncode": None, "wall_s": 0.0,
-                                   "timed_out": False,
-                                   "session_cost": None,
-                                   "harness_contaminated": False,
-                                   "harness_drift_files": []},
-                               "workspace": str(ws), "deliverable": None,
-                               "prompt_sha256": None}
-                row["governance"] = governance_block({}, "harness_error", 0)
-                row["excluded_from_performance"] = True
-                print(f"VERDICT {tdir.name} SKIP ({arm}: harness_error — "
-                      f"{'; '.join(pf_reasons)})")
-                return row
+            if workspace is not None:
+                # #888 operator flow: a PRE-ARMED workspace supplied by the
+                # caller — init happened BEFORE this invocation (the P6
+                # tick gate is unpassable on a fresh workspace because the
+                # cron can only tick a workspace that already exists).
+                # The spine seed stays on the reuse path (idempotent on
+                # question id) and preflight (read-only) still runs — an
+                # armed-but-never-seeded workspace is the #523 pilot
+                # failure class and must refuse, not sail through.
+                missing = [m for m in ("claim-register.yaml",
+                                       "task-oracle.yaml",
+                                       "goal-operationalization.yaml")
+                           if not (workspace / m).is_file()]
+                if missing:
+                    return workspace, "", _preflight_skip_row(
+                        task, tdir, arm,
+                        [f"workspace reuse: not a prepared kunglao "
+                         f"workspace — missing {', '.join(missing)}"],
+                        workspace)
+                ws = workspace
+                try:
+                    seed_question_spine(ws, task)
+                    pf_ok, pf_reasons = preflight(ws)
+                except (OSError, ValueError, yaml.YAMLError) as exc:
+                    pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+                if not pf_ok:
+                    return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                       pf_reasons, ws)
+            else:
+                ws = init_workspace(tdir, out / "workspaces")
+                # #523 closure: seed the PQ spine + preflight BEFORE the
+                # session — a claim-less/oracle-less/unwired workspace burns
+                # the wall measuring nothing (the pilot's 0/3 class)
+                try:
+                    seed_question_spine(ws, task)
+                    pf_ok, pf_reasons = preflight(ws)
+                except (OSError, ValueError, yaml.YAMLError) as exc:
+                    pf_ok, pf_reasons = False, [f"spine seeding failed: {exc}"]
+                if not pf_ok:
+                    return ws, "", _preflight_skip_row(task, tdir, arm,
+                                                       pf_reasons, ws)
             prompt = build_loop_prompt(tdir, task, deliverable_rel,
                                        wall_cap_s=wall_cap_s,
+                                       solo_fraction=solo_fraction,
                                        layer_paths=layer_paths,
-                                       probe_block=probe_block)
+                                       probe_block=probe_block,
+                                       playbook_block=playbook_block)
+        return ws, prompt, None
     except RuntimeError as exc:
         # structured SKIP row, never a tier-wide crash: one unit's init
         # failure must not take the other units' measurement with it
@@ -1557,21 +2099,72 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
                            "harness_drift_files": []},
                        "workspace": None, "deliverable": None,
                        "prompt_sha256": None}
-        # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
-        # stdout file for the pass@k arithmetic — a parsed downstream
-        # face. The mirror on stderr records the SKIP reason on the
-        # diagnostics channel (record-only batch).
-        print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
-        print(f"[kunglao-agent] eval_loop WARN (fail-open): "
-              f"verdict_skip_init_failed: {tdir.name} ({arm}) "
-              f"[mirrored on stdout per the autoresearch.sh contract]",
-              file=sys.stderr)
-        return row
+        return None, "", row
+
+
+def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
+                  = DEFAULT_BUDGET_USD, wall_cap_s: float
+                  = DEFAULT_WALL_CAP_S, session_cmd: str | None = None,
+                  plugin_dir: Path | None = None,
+                  arm: str = ARM,
+                  solo_fraction: float | None = None,
+                  warm_context_from: Path | None = None,
+                  workspace: Path | None = None) -> dict:
+    """One eval task through the FULL pipeline: init -> real session ->
+    harvest -> mechanical check -> results row. ``arm`` selects the
+    harness face: "loop" (kunglao-init + plugin session), "cc-default"
+    (neutral cwd + plugin-less session), or "cc-warm-context" (the
+    cc-default face + the train-store text render — the RL-vs-context
+    attribution arm) — same caps, extractor and checker either way.
+    ``workspace`` (#888): reuse a PRE-ARMED kunglao workspace instead of
+    initing a fresh one — the P6 tick gate verifies the heartbeat cron
+    BEFORE spawning, and a cron can only tick a workspace that already
+    exists, so the operator arms first (init + spine + preflight +
+    heartbeat registration) and passes the workspace in; the caller
+    owns the seed/preflight contract and the tick gate still runs."""
+    out = Path(out)
+    # ONE normalization site: everything downstream takes a plain float
+    if solo_fraction is None:
+        solo_fraction = SOLO_PARTITION_FRACTION
+    tdir = ds.resolve_task_dir(task_ref)
+    task = ds.load_task(tdir)
+    suffix = _candidate_suffix(task)
+    deliverable_rel = f"{Path(*DELIVERABLE_DIR)}/candidate{suffix}"
+
+    layer_paths, probe_block = prompt_injection_blocks(tdir, task)
+    playbook_block = playbook_injection_block(task.get("family"))
+
+    ws, prompt, skip_row = _init_task_face(
+        tdir, task, out, arm=arm, wall_cap_s=wall_cap_s,
+        solo_fraction=solo_fraction, deliverable_rel=deliverable_rel,
+        layer_paths=layer_paths, probe_block=probe_block,
+        playbook_block=playbook_block,
+        warm_context_from=warm_context_from, workspace=workspace)
+    if skip_row is not None:
+        if skip_row["failures"][0]["code"] == "BAD_TASK":
+            # KEEP on stdout: autoresearch.sh greps ^VERDICT from each unit's
+            # stdout file for the pass@k arithmetic — a parsed downstream
+            # face. The mirror on stderr records the SKIP reason on the
+            # diagnostics channel (record-only batch).
+            print(f"VERDICT {tdir.name} SKIP ({arm}: init_failed)")
+            print(f"[kunglao-agent] eval_loop WARN (fail-open): "
+                  f"verdict_skip_init_failed: {tdir.name} ({arm}) "
+                  f"[mirrored on stdout per the autoresearch.sh contract]",
+                  file=sys.stderr)
+        return skip_row
+    # P6 guards tick-arming gate: the production LOOP-arm launch verifies the
+    # workspace heartbeat is armed BEFORE spawning the session (the cc
+    # arms and the stub seam pass through ungated — see the guard).
+    tick_skip = _tick_gate_skip_row(ws, task, tdir, out, arm=arm,
+                                    session_cmd=session_cmd)
+    if tick_skip is not None:
+        return tick_skip
     baseline_rounds = count_snapshot_rows(ws)
     rec, drifted, _restored = run_session_guarded(
         ws, prompt, out, tdir.name, budget_usd=budget_usd,
         wall_cap_s=wall_cap_s, session_cmd=session_cmd,
-        plugin_dir=plugin_dir, plugin=(arm == ARM))
+        plugin_dir=plugin_dir, plugin=(arm == ARM),
+        solo_fraction=solo_fraction)
     contaminated = bool(drifted)
     status = _session_status(rec, budget_usd)
 
@@ -1614,7 +2207,9 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             tdir, task, deliverable_rel,
             render_gap_block(extract_checker_gap(res)),
             wall_cap_s=redo_wall, budget_usd=redo_budget,
-            layer_paths=layer_paths, probe_block=probe_block)
+            solo_fraction=solo_fraction,
+            layer_paths=layer_paths, probe_block=probe_block,
+            playbook_block=playbook_block)
         print(f"GAP_REDO task={tdir.name} starting "
               f"(wall={redo_wall:.0f}s budget={redo_budget:.2f}usd)",
               file=sys.stderr)
@@ -1622,7 +2217,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             ws, redo_prompt, out, tdir.name, budget_usd=redo_budget,
             wall_cap_s=redo_wall, session_cmd=session_cmd,
             plugin_dir=plugin_dir, plugin=(arm == ARM),
-            note=" (gap-redo session)")
+            solo_fraction=solo_fraction, note=" (gap-redo session)")
         status = _session_status(redo_rec, redo_budget)
         gap_redo["ran"] = True
         gap_redo["session"] = {
@@ -1661,6 +2256,29 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     # the harness class rides excluded_from_performance + governance,
     # never as a status rewrite
 
+    # ---- #966: the runner-native settlement face (LOOP arm only). A
+    # solo session never dispatches (single-session topology), so the
+    # ALLOW tail's pending dispatch row never lands and the
+    # settlement→Q-bank→store chain was structurally dead. The runner
+    # saw the whole loop session and grades it at terminal: it writes
+    # the dispatch row and settles the graded credit through the same
+    # scalar handler a worker settlement uses. Runs AFTER the q-cell-
+    # face read above so the harness-failure classifier keeps seeing
+    # the spine's own engagement, never the runner's backfill.
+    # Fail-open: one WARN, the verdict row unaffected.
+    settlement = (runner_settlement_face(ws, task=task,
+                                         verdict=res["verdict"],
+                                         prompt=prompt)
+                  if arm == ARM else None)
+
+    # ---- #969: the Type-2 WRITE face. ONE distill call per session
+    # terminal (the main session and any gap-redo are both done — the
+    # workspace state here is the terminal state), env-gated on the same
+    # KUNGLAO_PLAYBOOK switch as the read side, fail-open: the summary
+    # is telemetry only and the verdict row assembled below is never
+    # touched by a distill fault (one WARN, no raise, no retries).
+    playbook_distill_face(ws, task.get("family"))
+
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
         checker_kind=res["checker_kind"], metrics=res["metrics"],
@@ -1674,6 +2292,9 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             gov["harness_failure_reason"] = hf_reason
         row["governance"] = gov
         row["excluded_from_performance"] = harness_failure
+        # #966: the face's own receipt rides the row (additive telemetry
+        # — the verdict/checker columns stand untouched).
+        row["runner_settlement"] = settlement
         if harness_failure:
             print(f"[kunglao-agent] eval_loop: {tdir.name} EXCLUDED from "
                   f"performance ({hf_reason})", file=sys.stderr)
@@ -1688,6 +2309,11 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             "session_cost": rec["session_cost"],
             "harness_contaminated": contaminated,
             "harness_drift_files": drifted,
+            # #952 Face C: the launch was seatbelt-wrapped only when the
+            # operator set KUNGLAO_SANDBOX_PROFILE AND sandbox-exec was
+            # found; a True here means the profile env was set but the
+            # session ran UNWRAPPED (fail-loud, never silent)
+            "sandbox_wrap_failed": rec.get("sandbox_wrap_failed", False),
         },
         "workspace": str(ws),
         "deliverable": str(cand) if cand else None,
@@ -1695,6 +2321,14 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             prompt.encode("utf-8")).hexdigest(),
         "gap_redo": gap_redo,
     }
+    # ---- #952 Faces A + B: the row markers. Face A runs ONCE per task
+    # AFTER every session face (main + gap-redo) so the FINAL workspace
+    # state is what gets scanned — a pre-checker scan on the first
+    # session would miss a redo-session leak. Both markers are
+    # append-only row keys: the checker's verdict stands untouched.
+    _row_leak_marker(row, ws, tdir.name)
+    _row_topology_marker(row, arm=arm, metrics=metrics,
+                         task_name=tdir.name)
     for name, value in res["metrics"].items():
         print(ds.metric_line(f"{tdir.name}.{name}", value))
     print(f"METRIC {tdir.name}.rounds={metrics['rounds']}")
@@ -1711,34 +2345,94 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     return row
 
 
+def _select_task_dirs(tasks: list[str], *, tier: str) -> list[Path]:
+    """Corpus ids against the tier, plus explicit task-dir paths — the
+    blocked-path units (#816) live outside eval/v1/tasks/. A path counts
+    only when it carries its own task.yaml; anything else is refused by
+    id."""
+    all_dirs = ds.iter_task_dirs(tier=tier)
+    known = {d.name for d in all_dirs}
+    picked: list[Path] = []
+    unknown: list[str] = []
+    # order-preserving dedupe on the resolved dir — every entry is a real
+    # paid session, so "a,a" or id+path of the same unit must run once
+    seen: set[str] = set()
+    for t in tasks:
+        p = Path(t)
+        if (p / "task.yaml").is_file():
+            d, key = p, str(p.resolve())
+        elif t in known:
+            d = next(x for x in all_dirs if x.name == t)
+            key = str(d.resolve())
+        else:
+            unknown.append(t)
+            continue
+        if key not in seen:
+            seen.add(key)
+            picked.append(d)
+    if unknown:
+        raise ValueError(f"unknown task(s): {unknown}")
+    return _pool_order(picked if tasks else list(all_dirs))
+
+
+def _pool_order(dirs: list[Path]) -> list[Path]:
+    """P5 wiring, order only: the tier's task dirs by pool value when
+    the pool's derived view has data at the repo root; the caller's
+    order byte-identically when it has none. Membership, the dedupe and
+    the refusal contract above are untouched."""
+    from rlvr.pool_indexer import value_table  # noqa: PLC0415 — lazy: optional face
+    from rlvr.pool_scheduler import order_task_dirs  # noqa: PLC0415
+    return order_task_dirs(dirs, value_table(ds.ROOT))
+
+
 def run_loop_tier(tasks: list[str], out: Path, *, tier: str = "smoke",
                   budget_usd: float = DEFAULT_BUDGET_USD,
                   wall_cap_s: float = DEFAULT_WALL_CAP_S,
                   session_cmd: str | None = None,
                   plugin_dir: Path | None = None,
                   arm: str = ARM,
-                  warm_context_from: Path | None = None
+                  solo_fraction: float | None = None,
+                  warm_context_from: Path | None = None,
+                  workspace: Path | None = None
                   ) -> tuple[int, dict]:
     """The tier face: one kunglao-eval-results/1 doc (arm=loop or
     arm=cc-default) — directly comparable with the #236 bare rows (same
-    row contract)."""
+    row contract). ``workspace`` (#888): one PRE-ARMED workspace reused
+    for the (single-task) run — see run_loop_task."""
     started = time.time()
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    all_dirs = ds.iter_task_dirs(tier=tier)
-    known = {d.name for d in all_dirs}
-    unknown = [t for t in tasks if t not in known]
-    if unknown:
-        _fail(f"unknown task(s): {unknown}")
+    try:
+        selected = _select_task_dirs(tasks, tier=tier)
+    except ValueError as exc:
+        _fail(str(exc))
         return RC_REFUSED, {}
-    selected = [d for d in all_dirs if not tasks or d.name in tasks]
+    if workspace is not None:
+        # #888 review round: the reuse combinations that would silently
+        # mis-measure are refused at the tier face — the cc faces build
+        # their own neutral workspaces (the param would be ignored), and
+        # one workspace cannot serve a multi-task tier (task N+1's
+        # extract_candidate would find task N's stale deliverable and
+        # grade it without a session mattering)
+        if arm != ARM:
+            _fail("--workspace is loop-arm only (the cc faces build "
+                  "their own neutral workspaces)")
+            return RC_REFUSED, {}
+        if len(selected) > 1:
+            _fail(f"--workspace serves exactly ONE task "
+                  f"(got {len(selected)}: "
+                  f"{', '.join(t.name for t in selected)})")
+            return RC_REFUSED, {}
 
     rows: list[dict] = []
     for tdir in selected:
+        # the resolved DIR, never the basename — an external unit's name
+        # is not a corpus id and would re-resolve to FileNotFoundError
         rows.append(run_loop_task(
-            tdir.name, out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
+            str(tdir), out, budget_usd=budget_usd, wall_cap_s=wall_cap_s,
             session_cmd=session_cmd, plugin_dir=plugin_dir, arm=arm,
-            warm_context_from=warm_context_from))
+            solo_fraction=solo_fraction,
+            warm_context_from=warm_context_from, workspace=workspace))
 
     summary = {
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
@@ -1794,6 +2488,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wall-cap-s", type=float, default=DEFAULT_WALL_CAP_S,
                     help="session wall-clock cap (the runner kills the "
                          "session tree past it; exhausted = terminal row)")
+    ap.add_argument("--solo-fraction", type=float, default=None,
+                    help="solo/direct recon window as a fraction of the "
+                         "wall (default 0.5, the smoke-tier economics; "
+                         "hard units want a short window, e.g. 0.15)")
     ap.add_argument("--session-cmd", default=None,
                     help="TEST/OVERRIDE ONLY: replacement session command "
                          "(prompt appended as the positional); the "
@@ -1811,6 +2509,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="cc-warm-context arm: the train workspace whose "
                          "pattern cards + method-family log render into "
                          "the prompt (required for that arm)")
+    ap.add_argument("--workspace", default=None,
+                    help="#888: reuse a PRE-ARMED kunglao workspace instead "
+                         "of initing a fresh one — the caller owns init + "
+                         "PQ spine + preflight + heartbeat cron "
+                         "registration (the P6 tick gate then passes on "
+                         "the armed workspace); single-task runs")
     ap.add_argument("--out", default=str(
         ds.EVAL_ROOT.parent / "runs" / "eval-loop"),
         help="output dir (default: runs/eval-loop/)")
@@ -1821,8 +2525,10 @@ def main(argv: list[str] | None = None) -> int:
         wall_cap_s=args.wall_cap_s, session_cmd=args.session_cmd,
         plugin_dir=Path(args.plugin_dir) if args.plugin_dir else None,
         arm=args.arm,
+        solo_fraction=args.solo_fraction,
         warm_context_from=(Path(args.warm_context_from)
-                           if args.warm_context_from else None))
+                           if args.warm_context_from else None),
+        workspace=(Path(args.workspace) if args.workspace else None))
     return rc
 
 

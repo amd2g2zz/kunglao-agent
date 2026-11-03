@@ -38,7 +38,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import oracle_runner as orun  # noqa: E402  (RED: module does not exist yet)
-import posteriors as po  # noqa: E402
+import posteriors_case as po  # noqa: E402
 
 
 # ---------------------------------------------------------------- fixtures

@@ -77,7 +77,9 @@ class TestTop1FailOpenEmit:
 
     def test_top1_scorer_unavailable_emits(self, tmp_path, monkeypatch):
         """Face (a): worker_budget cannot be imported (ImportError) — the
-        gate REJECTS (rc 2) AND emits top1_gate_error + a ledger row."""
+        gate emits top1_gate_error + a ledger row. #801 SUPERSESSION: the
+        gate-error face is self_health — DEMOTED to rc 0 (loud WARN +
+        telemetry), never an rc=2 block."""
         # Sabotage: hide worker_budget. The hook does
         #   `sys.path.insert(0, str(SKILL_DIR / "hooks"))` then
         #   `from worker_budget import check_priority`
@@ -102,8 +104,8 @@ class TestTop1FailOpenEmit:
             # restore real worker_budget for subsequent tests in this process
             monkeypatch.delitem(sys.modules, "worker_budget", raising=False)
 
-        assert rc == 2, (
-            f"fail-closed face must REJECT with rc 2; got {rc!r}")
+        assert rc == 0, (
+            f"#801: self-health face must demote to rc 0; got {rc!r}")
         rows = [c for c in calls if c["action"] == "top1_gate_error"]
         assert rows, (
             f"top1_gate_error must be emitted on scorer-unavailable; "
@@ -116,12 +118,17 @@ class TestTop1FailOpenEmit:
         ledger_rows = [json.loads(line) for line in
                        ledger.read_text(encoding="utf-8").splitlines()
                        if line.strip()]
-        assert ledger_rows and ledger_rows[-1]["gate"] == "top1"
+        # #801 sidecar shape: face identity in gate+name, self_health class
+        assert ledger_rows and ledger_rows[-1]["gate"] == "dispatch_gate"
+        assert ledger_rows[-1]["name"] == "top1"
+        assert ledger_rows[-1]["gate_class"] == "self_health"
+        assert ledger_rows[-1]["exit_code"] == 0
         assert "ImportError" in ledger_rows[-1]["msg"]
 
     def test_top1_audit_crash_emits(self, tmp_path, monkeypatch):
         """Face (b): worker_budget imports fine but check_priority() raises —
-        gate REJECTS (rc 2) AND emits top1_gate_error."""
+        gate emits top1_gate_error. #801 SUPERSESSION: self-health face
+        DEMOTED to rc 0 (loud WARN + telemetry, no block)."""
         import worker_budget as wb  # the real one
 
         def _boom(*a, **kw):
@@ -137,8 +144,8 @@ class TestTop1FailOpenEmit:
         importlib.reload(dg)
         rc = dg._top1_enforcement(ws, "C-3", '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 1, "tools": ["grep"]}}\n')
 
-        assert rc == 2, (
-            f"audit-crash face must REJECT with rc 2; got {rc!r}")
+        assert rc == 0, (
+            f"#801: self-health face must demote to rc 0; got {rc!r}")
         rows = [c for c in calls if c["action"] == "top1_gate_error"]
         assert rows, (
             f"top1_gate_error must be emitted on audit crash; got {calls}")
@@ -151,10 +158,9 @@ class TestTop1FailOpenEmit:
             f"detail must carry the exception class; got {detail!r}")
 
     def test_top1_fail_open_via_subprocess(self, tmp_path):
-        """Hook-side subprocess shape: sabotage worker_budget by replacing
-        hooks/worker_budget.py with a stub that raises ImportError, run the
-        gate, and assert the fail-closed REJECT (rc 2) — flipped from the
-        legacy FAIL_OPEN (None) by the owner ruling 2026-09-28."""
+        """Hook-side subprocess shape: sabotage worker_budget with a stub
+        that raises ImportError, run the gate, and assert the #801
+        self-health demotion (rc 0 — loud WARN + telemetry, unblocking)."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
         # Sabotage the import by hiding worker_budget from sys.modules inside
@@ -177,14 +183,14 @@ class TestTop1FailOpenEmit:
             "import pathlib\n"
             f"ws = pathlib.Path({str(ws)!r})\n"
             "rc = dg._top1_enforcement(ws, 'C-2', 'test prompt')\n"
-            "sys.exit(0 if rc == 2 else 1)\n",
+            "sys.exit(0 if rc == 0 else 1)  # #801 self-health demotion\n",
             encoding="utf-8")
         r = subprocess.run(
             [sys.executable, str(driver)],
             capture_output=True, text=True, timeout=60,
             cwd=str(REPO_ROOT), errors="replace")
         assert r.returncode == 0, (
-            f"driver must observe the fail-closed REJECT (rc 2); "
+            f"driver must observe the #801 demoted proceed (rc 0); "
             f"rc={r.returncode} stderr={r.stderr!r}")
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "top1_gate_error"]

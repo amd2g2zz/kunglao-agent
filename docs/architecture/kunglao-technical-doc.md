@@ -480,7 +480,7 @@ flowchart TD
 | `active_intervention.py` | active_intervention.py - enforce orchestrator responds to worker help requests. | parse_iso(), find_help_requests(), find_responses(), check(), main() | 1/1 |
 | `adversarial_gate.py` | adversarial_gate — mechanical teeth for verdict-scorer sign-off. | check_adversarial_gate() | 0/2 |
 | `adversarial_loop.py` | adversarial_loop — orchestrator-side process layer of #909. | default_keyfile(), load_key(), run_falsifier(), cmd_begin(), cmd_append() | 0/1 |
-| `anomaly_detector.py` | anomaly_detector.py — anomaly scoring against a baseline corpus (#663). | BaselineCorpus, score_fact(), scan_anomalies(), check_fact_anomaly(), observe_taint() | 1/2 |
+| `anomaly_detector.py` | anomaly_detector.py — anomaly scoring against a baseline corpus (#663). | BaselineCorpus, score_fact(), scan_anomalies(), observe_taint() | 1/2 |
 | `apkid_scanner.py` | apkid_scanner.py — T1 pre-scan for android intake (#669). | run(), main() | 1/2 |
 | `approach_demotion.py` | approach_demotion.py — D1 (issue 302): approach-class demotion on | normalize_signature(), normalize_attempt(), signature_key(), demotion_state(), demotion_round() | 1/1 |
 | `arm_oracle_cases.py` | arm_oracle_cases.py — compile the intake anchors into armed oracle | compile_cases(), arm(), main() | 1/1 |
@@ -490,7 +490,7 @@ flowchart TD
 | `backtrack_loop.py` | backtrack_loop.py — #882 retrospective-loop host: three touchpoints, four | scene_operation_key(), lag(), record_settlement(), micro_lessons(), micro_lessons_context() | 5/4 |
 | `bench_analyze.py` | bench_analyze.py — statistics pipeline (B7, #823 AB-VALUE). | mcnemar_exact(), wilcoxon_signed_rank(), summarize(), hypotheses(), format_report() | 0/1 |
 | `bench_answer_key.py` | bench_answer_key.py — answer-key compiler (B2, #823 AB-VALUE). | normalize_ioc(), validate_key(), match(), task_spec_pqs(), main() | 1/1 |
-| `bench_grade.py` | bench_grade.py — L1 mechanical scoring + z_self + arm blinding (B5, #823). | grade(), z_self_of(), seal(), unseal(), grade_selfcheck() | 0/1 |
+| `bench_grade.py` | bench_grade.py — L1 mechanical scoring + arm blinding (B5, #823). | grade(), seal(), unseal(), grade_selfcheck() | 0/1 |
 | `bench_intake.py` | bench_intake.py — kunglao-bench manifest gate (B1, #823 AB-VALUE). | check(), check_safety(), main() | 0/2 |
 | `bench_redteam.py` | bench_redteam.py — L2 arm-blind red-team pipeline (B6, #823 AB-VALUE). | divergent_items(), build_task_brief(), dispatch_stub(), merge_verdicts(), main() | 0/1 |
 | `bench_runner.py` | bench_runner.py — lane runner (B4, #823 AB-VALUE). | build_plan(), run_plan(), main() | 0/1 |
@@ -528,7 +528,7 @@ flowchart TD
 | `detector_liveness.py` | detector_liveness.py — #127 detector utilization evidence: eval/fire | liveness_report(), dormant_warn(), main() | 2/3 |
 | `difficulty_calibration.py` | difficulty_calibration.py — #15 sample difficulty calibration (easy/medium/hard/max). | CalibrationMountError, features_from_evidence(), calibrate(), resolve_evidence_dir(), calibrate_workspace() | 4/3 |
 | `difficulty_thresholds.py` | difficulty_thresholds.py — #16 difficulty-gated success thresholds. | get_thresholds(), thresholds_for_workspace(), count_verifications(), guidance_line(), main() | 3/1 |
-| `digest_build.py` | digest_build.py — mechanical digest generation (issue #3, design-spec §3.6). | build_sec_g(), build_sec_h(), build_digest(), write_digest(), digest_completeness() | 3/8 |
+| `digest_build.py` | digest_build.py — mechanical digest generation (issue #3, design-spec §3.6). | build_sec_g(), build_sec_h(), build_digest(), write_digest() | 3/8 |
 | `dispatch_context.py` | dispatch_context.py — issue #527 派单 context 块机械化. | build_dispatch_context(), validate_context_shape(), apply_dispatch_context(), dispatch_inject(), verifier_dispatch_view() | 2/5 |
 | `distill_spine.py` | distill_spine.py — the ONE distillation T-pass + source-trust gate | SpineOrderError, content_hash(), validate_product(), de_case(), promote_form() | 0/2 |
 | `dual_gate.py` | dual_gate.py — #868 双门验证引擎（worker claim 与用户事实信号对称）。 | open_case(), file_redteam(), file_verifier(), resolve(), replan() | 2/2 |
@@ -735,6 +735,8 @@ flowchart TD
 | `tuition_curve.py` | tuition_curve.py — #823-P4 学费曲线聚合器 + 座舱 V/D/ETA 数据面。 | cost_state(), missions_from_ledger(), curve(), got_cheaper(), summarize() | 7/7 |
 | `update_index.py` | update_index — atomic facts/_INDEX.md maintenance (DESIGN §13.6). | count_by_status(), upsert(), main() | 0/4 |
 | `user_signal.py` | user_signal.py — #868 用户信号捕获/分类/路由核心。 | classify(), apply_volition(), file_factual(), ingest(), cockpit_face() | 1/1 |
+| `signal_router.py` | signal_router.py — #811 意图路由器（六类意图 + 否定转折先行 + commit 对齐 + 遥测）。 | classify_intent(), route_health(), _post_pivot(), _scan() | 0/0 |
+| `status_narration.py` | status_narration.py — #811 状态叙事面（四要素只读投影 + 中文叙事）。 | build_view(), render_zh(), main() | 0/0 |
 | `value_replay.py` | value_replay.py — P1 offline replay settlement (#823, AB-VALUE arm N). | verify_rows(), detect_reopen(), gate_interceptions(), z_self(), ws_score() | 2/1 |
 | `verification_ladder.py` | verification_ladder.py — the three-tier verification ladder's mechanical | t1_state(), note_write(), pending_writes(), t1_due(), fire_t1() | 3/2 |
 | `verifier_identity.py` | verifier_identity.py — #825 verifier machine-identity extraction + anchor. | session_tag(), extract_from_md(), extract_from_json(), anchors_for(), anchor() | 2/0 |
@@ -806,7 +808,7 @@ flowchart TD
 | `kunglao-settler` | BLIND SETTLEMENT SUBAGENT for the kunglao-agent orchestrator — the independent settler that turns raw step artifacts into settlement rows, isolated from the producer. Input is the blind input doc only (schema … |
 | `kunglao-worker` | Generic claim-executing WORKER for the kunglao-agent orchestrator. Takes ONE claim (C-NN), gathers byte/dynamic evidence, and WRITES the fact file — nothing else. The orchestrator dispatches this agent by default for any claim … |
 | `pefile-signature` | Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write … |
-| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and `fact_contradiction_gate.py` output. For each primary_question, find the answering fact via answers_question, verify PROVEN status + … |
+| `verdict-scorer` | The DETERMINISTIC verdict executor (scripts/verdict_scorer.py — the #886 scripting): C0a/C0b band gates over the canonical PQ parse, replay-equivalence reproduction refusal, fail-closed on contradiction; the adversarial gate stays orchestrator-side at signing. |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER for the kunglao-agent orchestrator (mirrors the specialist shape of ghidra-light). Takes ONE web-domain claim and drives the quickref five-section methodology loop: unpack -> … |
 
 ### (5) 账本面（runs/ 下代码写入的文件）
@@ -864,7 +866,7 @@ flowchart TD
 | `runs/plan-stages.yaml` | `scripts/plan_stages.py` |
 | `runs/planning-actions.jsonl` | `scripts/planning_actions.py` |
 | `runs/posterior-store.jsonl` | `scripts/rlvr/posteriors.py` |
-| `runs/posteriors.yaml` | `scripts/posteriors.py` |
+| `runs/posteriors.yaml` | `scripts/posteriors_case.py` |
 | `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/prediction_ledger.py` |
 | `runs/q-cell-log.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
 | `runs/roi-intents.jsonl` | `hooks/dispatch_gate.py`, `scripts/roi_settlement.py` |

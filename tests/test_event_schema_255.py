@@ -149,7 +149,9 @@ def test_rank_feeds_carries_the_selected_arm(tmp_path):
                   tier=1, attempts=0, cost=0.0),
     ]
     evidence = pr.EvidenceView()
-    pr._emit_rank_feeds(ws, claims=[], evidence=evidence, rng_base=0,
+    pr._emit_rank_feeds(ws, claims=[], evidence=evidence,
+                        rank_inputs={"claims_hash": "0", "evidence_hash": "0",
+                                     "posterior_hash": "0"},
                         actions=actions, round_no=5)
     row = _rows(ws)[0]
     assert row["action"] == "rank_feeds"
@@ -163,7 +165,9 @@ def test_rank_feeds_without_actions_keeps_arm_honestly_null(tmp_path):
     import priority_ratio as pr
     ws = tmp_path / "ws"
     ws.mkdir()
-    pr._emit_rank_feeds(ws, claims=[], evidence=pr.EvidenceView(), rng_base=0,
+    pr._emit_rank_feeds(ws, claims=[], evidence=pr.EvidenceView(),
+                        rank_inputs={"claims_hash": "0", "evidence_hash": "0",
+                                     "posterior_hash": "0"},
                         actions=[], round_no=0)
     row = _rows(ws)[0]
     assert row["arm"] is None

@@ -230,6 +230,18 @@ def _validate_identity(task: dict, errors: list[str]) -> None:
         errors.append("seed must be generator-stamped (int)")
 
 
+def _validate_material_class(task: dict, errors: list[str]) -> None:
+    """#816: the measurement-integrity class. Optional here (the corpus
+    lint owns presence + registry consistency on the live corpus); when
+    declared it must be one of the two enum values — a typo must not
+    silently demote a black-box unit to unclassified."""
+    mc = task.get("material_class")
+    if mc is not None and mc not in ("source-readable", "black-box"):
+        errors.append(
+            f"material_class must be 'source-readable' or 'black-box', "
+            f"got {mc!r} (#816)")
+
+
 def _validate_anchors(task: dict, errors: list[str]) -> None:
     anchors = task.get("anchors")
     if not isinstance(anchors, dict):
@@ -313,6 +325,75 @@ def _validate_checker(task: dict, errors: list[str]) -> None:
     _validate_candidate_decl(checker, errors)
 
 
+# ---- probe-face contract --------------------------------------------------
+# Every unit ships a mechanical V(s) partial-credit probe (the
+# probe-face construction card):
+# the unit-local ``probe.py <ws>`` shim (checker.py's trust boundary and
+# stdlib-only rule, mirrored) emits one kunglao-probe-reading/1 doc —
+# scalar in [0, 1] + per-dimension vector + deterministic reason;
+# oracle-locked (workspace-state inputs only), fail-closed. The
+# registered interface and the ΔV seam live in scripts/rlvr/probe_face.py
+# (the direction face consumes that seam and nothing else).
+PROBE_CADENCES: tuple[str, ...] = ("instant", "bounded", "unit-defined")
+
+# Units on disk BEFORE the probe-face card: their missing probe block is
+# a corpus-lint WARN (scripts/eval_corpus_lint.py), never a validate_task
+# error — the existing corpus must keep validating. Anything minted from
+# now on is NEW and MUST declare the face.
+PROBE_FACE_GRANDFATHERED: frozenset[str] = frozenset({
+    # operator-local blocked-path units (experiments/blocked-path-units)
+    "tf-snake-trainer-v1", "tf-snake-trainer-v2",
+    "tf-novelvm-rust-v1", "tf-novelvm-rust-v2",
+    "tf-novelcipher-c-v1",
+    "tf-hardwall-ledger-py-v1", "tf-hardwall-beacon-py-v1",
+    # eval-root corpus (eval/v1/tasks — operator-local tree, never tracked)
+    "chain-l1-js-v1", "chain-l1-py-v1", "chain-l2-go-v1", "chain-l2-js-v1",
+    "chain-l2-py-v1", "chain-l3-js-v1", "chain-l3-py-v1",
+    "m1-execperm-v1", "m1-fileperm-v1", "m1-net403-v1", "m2-request-v1",
+    "m2-session-v1", "m2-timer-v1", "m3-antidebug-js-v1",
+    "m3-keystring-js-v1", "m3-sbox-go-v1", "m3-sbox-js-v1",
+    "apk-static-license-v1", "apk-webview-attest-v2", "arm-kdf-l0",
+    "arm-kdf-l1", "arm-kdf-l2", "mod-crypto-js-l1a-v1",
+    "mod-crypto-js-l1b-v1", "mod-crypto-js-l2-v1", "mod-crypto-js-l3-v1",
+    "mod-crypto-l1", "mod-crypto-l2", "net-verify-license-l1a-v1",
+    "net-verify-license-l1b-v1", "net-verify-license-l2-v1",
+    "req-sign-l1a-v1", "req-sign-l1b-v1", "req-sign-l2-v1",
+    "rust-apk-beacon-v1", "smc-x86-l0", "smc-x86-l1", "smc-x86-l2",
+    "web-anticrawl-v2", "web-pack-sign-l0-v1", "web-pack-sign-l1a-v1",
+    "web-pack-sign-l1b-v1", "web-pack-sign-l2-v1", "web-pack-sign-l3-v1",
+    "web-pow-lite-v1", "web-token-v1", "win-kdf-l0", "win-kdf-l1",
+    "win-kdf-l2", "win-kdf-l2p",
+    "go-arx-v1", "js-sign-v1", "py-derive-v1",
+    "tf-chain2-py-v1", "tf-chain3-js-v1", "tf-chain4-py-v1",
+})
+
+
+def _validate_probe(task: dict, errors: list[str]) -> None:
+    """Probe-face contract: a DECLARED probe block is shape-validated
+    (entrypoint + cadence). An ABSENT block is NOT an error here — the
+    enforcement lives on the live corpus (eval_corpus_lint R4: error for
+    new units, warn for the grandfathered set), because validate_task is
+    the GRADING entry and synthetic test units legitimately ship without
+    a probe (review round 1: the hard gate refused the #818 climb
+    fixtures)."""
+    probe = task.get("probe")
+    if probe is None:
+        return
+    if not isinstance(probe, dict):
+        errors.append(
+            "probe block must be a mapping (entrypoint + cadence, #956)")
+        return
+    ep = probe.get("entrypoint")
+    if ep != "probe.py":
+        errors.append(
+            f"probe.entrypoint must be 'probe.py' (the unit-local shim "
+            f"mirroring checker.py's shape), got {ep!r} (#956)")
+    if probe.get("cadence") not in PROBE_CADENCES:
+        errors.append(
+            f"probe.cadence must be one of {PROBE_CADENCES}, "
+            f"got {probe.get('cadence')!r} (#956)")
+
+
 def _validate_truth_and_contamination(task: dict, errors: list[str]) -> None:
     gt = task.get("ground_truth")
     if not isinstance(gt, dict):
@@ -343,10 +424,12 @@ def validate_task(task: dict) -> tuple[bool, list[str]]:
         return False, ["task unit is not a mapping"]
     errors: list[str] = []
     _validate_identity(task, errors)
+    _validate_material_class(task, errors)
     _validate_anchors(task, errors)
     _validate_scaffold(task, errors)
     _validate_checker(task, errors)
     _validate_truth_and_contamination(task, errors)
+    _validate_probe(task, errors)
     return not errors, errors
 
 

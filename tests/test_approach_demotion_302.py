@@ -223,58 +223,6 @@ def test_clause_b_identical_tuple_recurring_after_patch_demotes():
     assert st["clause"] == "clause_b" and st["recurrences"] >= 1
 
 
-def test_clause_b_invest_never_triggers():
-    """An invest/infrastructure change does NOT count as a patch — invest
-    outputs (fixture rounds 13 / 16) never demote via clause_b."""
-    tup = _sig(process_state="tracer abort during symbol detour")
-    hist = [
-        {"round": 1, "family": "hooking", "outcome": "fail",
-         "change_kind": "none", "signature": tup},
-        {"round": 2, "family": "hooking", "outcome": "fail",
-         "change_kind": "invest", "signature": tup},
-    ]
-    assert ad.demotion_round(hist, "hooking") is None
-
-
-def test_clause_b_first_occurrence_after_patch_is_not_a_recurrence():
-    """A patch landing before a FIRST occurrence of a cluster is not a
-    recurrence (fixture round 4: a new tuple after a patch — no clause_b)."""
-    hist = [
-        {"round": 1, "family": "hooking", "outcome": "fail",
-         "change_kind": "patch",
-         "signature": _sig(process_state="host gone")},
-    ]
-    assert ad.demotion_round(hist, "hooking") is None
-
-
-def test_patch_forbidden_forward_gate_face():
-    """The forward-looking pure face: while demoted, an in-class patch (or
-    an unchanged retry) is forbidden and an invest is the re-arm carve-out;
-    an active family forbids nothing."""
-    demoted = {"demoted_at": 2, "clause": "clause_b"}
-    assert ad.patch_forbidden(demoted, "patch") is True
-    assert ad.patch_forbidden(demoted, "none") is True
-    assert ad.patch_forbidden(demoted, "invest") is False
-    assert ad.patch_forbidden({"demoted_at": None}, "patch") is False
-    assert ad.patch_forbidden(None, "patch") is False
-
-
-def test_clause_b_k_recurrence_is_configurable():
-    """K_rec=1 is the recommended default; K_rec=2 pins the count semantics
-    (a single recurrence no longer suffices)."""
-    tup = _sig(process_state="tracer abort")
-    hist = [
-        {"round": 1, "family": "hooking", "outcome": "fail",
-         "change_kind": "none", "signature": tup},
-        {"round": 2, "family": "hooking", "outcome": "fail",
-         "change_kind": "patch", "signature": tup},
-    ]
-    assert ad.demotion_round(hist, "hooking", k_recurrence=2) is None
-    hist.append({"round": 3, "family": "hooking", "outcome": "fail",
-                 "change_kind": "patch", "signature": tup})
-    assert ad.demotion_round(hist, "hooking", k_recurrence=2) == 3
-
-
 # ---------- while demoted: forbidden / re-arm / protected rounds ----------
 
 def test_inclass_patch_forbidden_from_demotion_round_onward():

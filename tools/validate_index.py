@@ -84,6 +84,7 @@ _CAPABILITY_TAGS = frozenset({
     # aux: — seeded from the #340 category contract test (auxiliary must be
     # a legal category with at least one routable capability tag)
     "aux:sanitize",
+    "aux:distill-engine",  # knowledge-distillation engine (hybrid_distill)
     # web: — #728 (js recovery pipelines) + #884 (JSVMP/VMP triage CLI)
     "js:deobfuscate",
     "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
@@ -135,7 +136,7 @@ _CAPABILITY_TAGS = frozenset({
     "static:yara-scan",
     # ghidra: — #866-b registration of the Ghidra Version Tracking binary diff
     "ghidra:diff",
-    # ida: — issue #46 unlock: the ida-pro-vm MCP bridge (native IDA
+    # ida: — issue #46 unlock: the ida-pro-mcp MCP bridge (native IDA
     # decompilation) joins the routing vocabulary, mirroring ghidra:decompile.
     # One tool = one tag; the ida-decompile entry's primary capability.
     "ida:decompile",

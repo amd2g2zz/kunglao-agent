@@ -782,6 +782,24 @@ def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
             round(target_f - (int(step_n) - float(step_sum)), 6))
 
 
+def _real_did(ws, did: str) -> str:
+    """#800 R2: resolve the REAL dispatch id from the dispatch ledger.
+    The settlement rows are claim-grained (the #433 ladder's artifact
+    attribution joins the facts' creator=C-NN); the q-cell bank is
+    rollout-grained (the ONE keyed ledger's identity). Soft face: no
+    ledger row keeps the row's own id — the claim-grained run() pass
+    already excludes off-ledger claims (no-backcompat), and non-claim
+    settlement kinds keep their identity untouched."""
+    try:
+        import claims_store as _cstore  # noqa: PLC0415 — lazy sibling
+        led = _cstore.latest_committed_dispatch(ws, did)
+        if led:
+            return str(led.get("dispatch_id") or did)
+    except Exception as exc:  # noqa: BLE001 — fail-open, never the bank
+        warn("q_cell_bank", f"dispatch-ledger resolve failed: {exc}")
+    return did
+
+
 def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     """The bank tracks the LEDGER, not the first write. Two faces
     behind one guard: a bank that never landed (no settlement-source
@@ -793,7 +811,7 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     break."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = str(row["dispatch_id"])
+        did = _real_did(ws, str(row["dispatch_id"]))
         mass = _qc.banked_mass(ws, did)
         if mass is None:
             # an unreadable log is not an empty one — amending against a
@@ -804,7 +822,9 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
         if n_rows == 0:
             step_sum, step_n = _qc.step_credit_totals(ws, did)
             if step_n == 0:
-                bank = _qc.observe_settlement(ws, did, row["r"])
+                bank = _qc.observe_settlement(
+                    ws, did, row["r"], reward=float(row["r"]),
+                    confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
             else:
                 d_s, d_f = _calibration_delta(
                     row["r"], step_sum, step_n,
@@ -839,15 +859,18 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     not the raw ladder — one signed ``observe_step_calibration`` row so
     cumulative success lands on the ladder value (over-credit clawed
     back, under-credit topped up) and cumulative failure on 1 − L.
-    n == 0 keeps the legacy observe_settlement face byte-identically
-    (the backward-compatibility acceptance: claims that settled before
-    this change work unchanged)."""
+    n == 0 is the NORMAL claim-shape under the real-id key (#804
+    restatement, not a compat acceptance): a claim with no banked step
+    credit settles whole through ``observe_settlement`` — the ladder
+    value IS the terminal mass, there is nothing to residualize."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = str(row["dispatch_id"])
+        did = _real_did(ws, str(row["dispatch_id"]))
         step_sum, step_n = _qc.step_credit_totals(ws, did)
         if step_n == 0:
-            bank = _qc.observe_settlement(ws, did, row["r"])
+            bank = _qc.observe_settlement(
+                ws, did, row["r"], reward=float(row["r"]),
+                confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
         else:
             delta_success, delta_failure = _calibration_delta(
                 row["r"], step_sum, step_n,
@@ -857,7 +880,9 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
         return None
-    _bank_strategy_store_row(ws, row, bank)
+    # #800 R2: the store row carries the SAME real dispatch id the Q
+    # bank matched (the rollout key), never the claim-grained row id
+    _bank_strategy_store_row(ws, {**row, "dispatch_id": did}, bank)
     return bank
 
 

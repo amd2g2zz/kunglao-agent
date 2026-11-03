@@ -60,7 +60,8 @@ from __future__ import annotations
 # so op is the key).
 import sys
 _IMPORT_DEGRADED: list[str] = []
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -408,12 +409,6 @@ def build_schtasks_command(task_name: str, interval_min: int, python_exe: str,
     """D5: Windows schtasks registration args. Manual one-time step; never run by code."""
     return ["schtasks", "/create", "/tn", task_name, "/sc", "minute", "/mo",
             str(interval_min), "/tr", f'"{python_exe}" "{script}" "{workspace}"', "/f"]
-
-
-def build_crontab_line(interval_min: int, python_exe: str, script: str,
-                       workspace: str) -> str:
-    """D5: POSIX crontab line for the same schedule."""
-    return f"*/{interval_min} * * * * {python_exe} {script} {workspace}"
 
 
 # ---------- D6: interval gate ----------

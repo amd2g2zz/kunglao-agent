@@ -160,6 +160,25 @@ mechanisms:
       session_is_dead (heartbeat missing or both last_tick_ts + activity_ts
       stale). Out-of-session by definition — host=os, never tick-dispatched.
 
+  - name: wake_gate
+    entry: scripts/heartbeat_tick.py
+    channel: os
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: os
+    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + rc3/0 from --wake-gate"
+    owner: scripts/heartbeat_tick.py
+    description: >
+      The pre-LLM wake gate (#801 Face 1): the OS scheduler (cron/schtasks)
+      runs heartbeat_tick.py <ws> --origin cron --wake-gate DIRECTLY — zero
+      LLM. A quiet verdict (watchdog silent, no wake-class bus events, park
+      below expiry) exits 0 and injects NOTHING (idle burn 750k tok/h -> 0);
+      a wake verdict exits 3 and the wrapper injects the loop prompt.
+      Out-of-session like dead_session_kicker — declared here so the
+      cockpit answer stays complete; never tick-dispatched.
+
   - name: decide_cli
     entry: scripts/kunglao-decide.py
     channel: cli
@@ -409,3 +428,31 @@ mechanisms:
       emits the registered `oracle_probe_t1` word. Settlement accepts T0/T1
       immediately; the T2 rung upgrades settled rows via the ledger
       amendment path.
+
+  # ---- the distillation engine (issue-365; event-driven ONLY — the
+  # restraint ruling: no tick, no cron) -------------------------------------
+  - name: distill_engine
+    entry: tools/auxiliary/hybrid_distill.py
+    channel: cli
+    trigger:
+      type: event
+      gate: always
+      events: [settlement]
+    cost_class: medium
+    depth: workspace
+    cockpit_signal: "runs/settlement.jsonl distill-rollout/1 rows + runs/episodes/episode-D-*.md (the scored item library)"
+    owner: tools/auxiliary/hybrid_distill.py
+    description: >
+      The knowledge-distillation engine (issue #365): standardized
+      StandardDistillItem products, 0-1 scoring (generality 0.3 /
+      self-inspiring 0.25 / methodology-shape 0.25 / novelty 0.2),
+      distill_rollout settlement rows, and the 3-strike
+      optimize-then-remove ladder — the unified model's distillation
+      domain (A2: items ride the episode pool's write gate, no parallel
+      store). --strategy self collects from D-gate-passing notes +
+      lessons + facts + env-state; --strategy hybrid adds the
+      hypothesis-driven research loop with the SNR gate (two barren
+      rounds abandon; search action injected, never one-shot). EVENT-
+      DRIVEN ONLY (settlement event class — the restraint ruling lives
+      as the trigger type); CLI channel is the declaration face, the
+      scheduler never polls it.

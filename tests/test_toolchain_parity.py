@@ -3,7 +3,7 @@
 gate.
 
 Field evidence (matrix4c, asl): the android row already probes the
-3-path OR supply (analyzeHeadless | idat64 | MCP ghidra/ida-pro-vm)
+3-path OR supply (analyzeHeadless | idat64 | MCP ghidra/ida-pro-mcp)
 when a native lib is present — and correctly recorded FAIL — but
 DEGRADED_CHECKS unconditionally waives the row, so toolless analysis
 proceeded on native units. The gap is not detection, it is arming.

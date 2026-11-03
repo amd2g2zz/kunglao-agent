@@ -461,7 +461,7 @@ uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 | `sequential-thinking` | HARD | 全类型必装 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
 | `x64dbg` | HARD | Windows T3 动态 | 动态调试（VM 远程） | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
 | `volatility` | WARN | Windows T3 | 内存取证 | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `ida-pro-mcp` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |
 | `gitnexus` | HARD | Android 图谱构建 | 反编译后知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
 | `ssh-mcp` | WARN | 通道 | ssh 执行控制面 | `claude mcp add ssh-mcp -- ssh-mcp` |
 | `virustotal` | WARN | CTI | 威胁情报（家族归因假设） | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |

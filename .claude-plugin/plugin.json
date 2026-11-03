@@ -9,7 +9,7 @@
   "license": "AGPL-3.0-only",
   "mcpServers": {
     "camoufox-reverse": {
-      "command": "uv",
+      "command": "/usr/local/bin/uv",
       "args": [
         "run",
         "--no-project",

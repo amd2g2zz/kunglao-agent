@@ -129,6 +129,13 @@ def build_entries() -> list[dict]:
     ents: list[dict] = []
     for p in sorted((ROOT / "hooks").glob("*.py")):
         ents.append({"src": f"hooks/{p.name}", "kind": "hook"})
+    # issue 805: hooks/*.yaml are RUNTIME DATA the deployed hooks read —
+    # battery.yaml is the hook battery's registration face (the launch
+    # gate REFUSES when it cannot read it, fail-closed). Same class as
+    # the scripts/*.yaml runtime data above (#432): data assets belong
+    # to the mirror, trimming is forbidden.
+    for p in sorted((ROOT / "hooks").glob("*.yaml")):
+        ents.append({"src": f"hooks/{p.name}", "kind": "hook"})
     for p in sorted((ROOT / "agents").glob("*.md")):
         ents.append({"src": f"agents/{p.name}", "kind": "agent"})
     for p in sorted(SKILL_SCRIPTS.glob("*.py")):

@@ -207,13 +207,18 @@ def test_warm_context_renders_train_material_and_cold_marker(tmp_path):
         "diffing\n"
         "backing_refs: [settle-1, settle-2]\n",
         encoding="utf-8")
-    fam_log = train / "runs" / "method-family-log.jsonl"
-    fam_log.parent.mkdir(parents=True, exist_ok=True)
-    fam_log.write_text(
-        '{"method_family": "constant-diffing", "outcome": "green"}\n'
-        '{"method_family": "constant-diffing", "outcome": "red"}\n'
-        '{"method_family": "strings-probe", "outcome": "green"}\n',
-        encoding="utf-8")
+    # the family summary reads the consolidated experience rows (#804
+    # usage merge): total = dispatches per family, green = settled
+    # credits > 0.5 for the declared family
+    from rlvr import q_cells
+    for _ in range(2):
+        q_cells.append_observation(train, "ffff00000000",
+                                   "constant-diffing", None,
+                                   source="dispatch", claim="C-cd")
+    q_cells.append_observation(train, "ffff00000000", "constant-diffing",
+                               0.8, source="settlement", claim="C-cd")
+    q_cells.append_observation(train, "ffff00000000", "strings-probe",
+                               None, source="dispatch", claim="C-sp")
     block = elr.warm_context_block(train)
     assert "CONTEXT CARDS" in block
     assert "anti-hint" in block and "constant diffing" in block

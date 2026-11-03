@@ -201,18 +201,30 @@ def test_t2_weights_reflect_in_ranking(tmp_path):
     assert [a.claim_id for a in out] == ["C-RCE", "C-DOS"], out
 
 
-def test_t2_score_is_exact_multiplier_of_unweighted_formula():
-    """#107+#294: the composite is (Thompson sample + W_DOWNSTREAM*term) *
-    worth — the worth multiplier stays an exact identity over the raw
-    sample (score is stored at 6dp, the json face still rounds to 3)."""
-    import random
+def test_t2_score_is_exact_multiplier_of_unweighted_formula(tmp_path):
+    """#792 (was #107+#294): the composite is (posterior-mean case value +
+    W_DOWNSTREAM*term) * worth — the worth multiplier stays an exact
+    identity over the raw mean (score is stored at 6dp, the json face
+    still rounds to 3)."""
+    import yaml
 
     import priority_ratio as pr
-    claims = [{"id": "C-X", "status": "OPEN", "statement": "pure rce path"}]
-    ev_w = pr.EvidenceView(value_class_weights={"rce": 4})
+    claims = [{"id": "C-X", "status": "OPEN", "statement": "pure rce path",
+               "answers_question": "q1"}]
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-1.yaml").write_text(
+        yaml.safe_dump({"id": "case-1", "target_pq": "q1"}), encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(
+        yaml.safe_dump({"schema": "posteriors-schema/1",
+                        "cases": {"case-1": {"alpha": 3.0, "beta": 1.0,
+                                             "pending_entries": 0}},
+                        "pqs": {}}),
+        encoding="utf-8")
+    ev_w = pr.EvidenceView(value_class_weights={"rce": 4}, ws=ws)
     s_w = pr.priority_ratio(claims, {}, ev_w)[0]
-    base = random.Random(0).getrandbits(64)
-    raw = random.Random(f"thompson/{base}/C-X").betavariate(1.0, 1.0)
+    raw = 3.0 / 4.0  # the Beta posterior mean, no draw (#792)
     assert s_w.weight == 4.0
     assert s_w.score == round(raw * 4.0, 6)
 

@@ -14,9 +14,9 @@ harness closes it, READ-ONLY against the source workspace:
      claims on old rows — both are "in flight", which is all the sim needs).
   3. simulate(config)  — serial-dispatch counterfactual: per tick, complete
      due completions, rank the dispatchable frontier with priority_ratio
-     under the config (seed = case_face_seed(posteriors_at_tick, tick) —
-     the #251 f(posterior_state, round) contract with the REPLAY tick as
-     the round axis), dispatch the head, completion at tick + the claim's
+     under the config (#792: the deterministic evidence rank — no seed
+     axis; the tick is bookkeeping only), dispatch the head, completion at
+     tick + the claim's
      OBSERVED historical duration. TTC = first tick with nothing pending
      or running (the CONVERGED face: open_claims == 0), capped.
   4. D_t + relevance coupling — D_t = w_oracle*oracle_pass_norm +
@@ -59,7 +59,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import random
 import re
 import shutil
 import sys
@@ -434,8 +433,6 @@ def _rank_under_config(config: dict, claims: list[dict],
     This is the ONLY sanctioned runtime mutator of a ranker constant in
     the tree (ADR-001 §2.3: the harness may evaluate, never write back;
     pinned by tests/test_replay_ruler_294.py::TestNoRuntimeSelfTuning)."""
-    ledger = pr.PosteriorLedger.load(sandbox)
-    rng = random.Random(pr.case_face_seed(ledger, tick))
     # validate-then-assign: the conversion completes before the module
     # constant moves — a bad value ("abc") raises with nothing assigned.
     # (#295: the lambda_dh axis is consumed — see DEFAULT_CONFIGS.)
@@ -445,7 +442,7 @@ def _rank_under_config(config: dict, claims: list[dict],
     try:
         evidence = pr.EvidenceView(
             terminal_fact_claims=frozenset(done), ws=sandbox)
-        return pr.priority_ratio(claims, deps_face, evidence, rng=rng,
+        return pr.priority_ratio(claims, deps_face, evidence,
                                  round_no=tick)
     finally:
         pr.W_DOWNSTREAM = saved

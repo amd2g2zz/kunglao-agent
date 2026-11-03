@@ -38,7 +38,8 @@ from kunglao_log import iter_jsonl
 
 SCHEMA = "tc-journal/1"
 JOURNAL_REL = "runs/tc-journal.jsonl"
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _now() -> str:

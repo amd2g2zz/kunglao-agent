@@ -79,7 +79,8 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 

@@ -27,6 +27,140 @@ ROOT = Path(__file__).resolve().parents[1]
 # Legitimate tracked-but-ignored files. Each entry must carry its
 # justification; the allowlist hygiene test below fails on stale entries.
 TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
+    # Experiment CODE deliberately tracked under the ignored experiments/
+    # tree (owner-approved 2026-10-29 restructure: the learning-loop
+    # driver lives next to its experiment records, outside the deploy
+    # surface; the 110 rule was scoped to local-only artifacts).
+    # the declared sim tier modules relocated into the sim/ subpackage
+    # (same tracked home, one tier deeper).
+    "experiments/learning-loop/sim/__init__.py":
+        "declared sim tier package marker: loop_sim tracked-home precedent (#936)",
+    "experiments/learning-loop/sim/loop_sim.py":
+        "experiment driver: owner-approved tracked home (restructure #865)",
+    "experiments/learning-loop/sim/counterfactual_analysis.py":
+        "rl-v2 counterfactual analysis: loop_sim tracked-home precedent (#905)",
+    "experiments/learning-loop/sim/loop_sim_v3.py":
+        "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
+    "experiments/learning-loop/sim/battery_v3_experiments.py":
+        "rl-v2 battery experiments: loop_sim tracked-home precedent (#887)",
+    # the #951 dual-objective sim world: the rl-v3 direction layer's
+    # in-silico evidence gate (same declared sim tier, same tracked
+    # home — the #887 battery precedent).
+    "experiments/learning-loop/sim/dual_objective_world.py":
+        "rl-v3 direction-layer sim world: loop_sim tracked-home precedent (#951)",
+    "experiments/learning-loop/sim/dual_objective_battery.py":
+        "rl-v3 five-config battery: loop_sim tracked-home precedent (#951)",
+    # the #951 design doc: the issue's named deliverable path — the MDP
+    # definitions, judge contract, racing rules and the sim results that
+    # gate the rl-v3 production card (#953 opens only on PASS).
+    ".claude/PRPs/plans/rl-v3-direction-layer.plan.md":
+        "#951 design doc deliverable: PRPs plan tracked-home precedent (#951)",
+    # rl-v2 core types (#878): the trajectory-semantics value objects
+    # share the learning-loop tracked home (the loop_sim precedent) —
+    # experiment code outside the deploy surface, deliberately.
+    "experiments/learning-loop/core/__init__.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/actions.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/events.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/results.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    "experiments/learning-loop/core/state.py":
+        "rl-v2 core types: loop_sim tracked-home precedent (#878)",
+    # the ledger's pandas projection (#879): analysis face over the
+    # store — kept OUT of the deployed package because the dep-surface
+    # gate (#467) pins deployed imports to the framework env project;
+    # same tracked home as the core types.
+    "experiments/learning-loop/ledger_frame.py":
+        "rl-v2 ledger projection: tracked home, dep-gate exemption (#879)",
+    # the rl-v2 structured subgoal-state faces (#898): the P(s)
+    # progress function + evaluation contract + stagnation trigger —
+    # same tracked home as the policy and credit faces.
+    "experiments/learning-loop/state/__init__.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
+    "experiments/learning-loop/state/progress.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
+    "experiments/learning-loop/state/evaluation.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
+    "experiments/learning-loop/state/stagnation.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#898)",
+    "experiments/learning-loop/state/belief.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#903)",
+    "experiments/learning-loop/state/channel_pins.py":
+        "rl-v2 state faces: loop_sim tracked-home precedent (#904)",
+    "experiments/learning-loop/state/telemetry.py":
+        "rl-v2 telemetry face: loop_sim tracked-home precedent (#915)",
+    "experiments/learning-loop/state/gap_formulation.py":
+        "rl-v2 gap-formulation perception face: loop_sim tracked-home "
+        "precedent (#943)",
+    "experiments/learning-loop/state/statusline_feed.py":
+        "rl-v2 statusline feed face: loop_sim tracked-home precedent (#914)",
+    "experiments/learning-loop/state/judge.py":
+        "rl-v2 gated judge face: loop_sim tracked-home precedent (#933)",
+    "experiments/learning-loop/loop.py":
+        "rl-v2 unified decision loop: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_pins.py":
+        "rl-v2 carried-pin faces: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_seams.py":
+        "rl-v2 loop seam methods: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/loop_worker.py":
+        "rl-v2 flat mock worker: loop_sim tracked-home precedent (#913)",
+    "experiments/learning-loop/distill.py":
+        "rl-v2 distill round driver: loop_sim tracked-home precedent (#938)",
+    # the rl-v2 policy faces (#880-#882): the sampling decision modules
+    # share the learning-loop tracked home (the loop_sim precedent) —
+    # experiment code outside the deploy surface, deliberately.
+    "experiments/learning-loop/policy/__init__.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
+    "experiments/learning-loop/policy/selector.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#880)",
+    "experiments/learning-loop/policy/terminator.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#882)",
+    "experiments/learning-loop/policy/assigner.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
+    "experiments/learning-loop/policy/prober.py":
+        "rl-v2 policy faces: loop_sim tracked-home precedent (#881)",
+    "experiments/learning-loop/policy/redteam.py":
+        "rl-v2 redteam faces: loop_sim tracked-home precedent (#933)",
+    "experiments/learning-loop/policy/redteam_constraints.py":
+        "rl-v2 redteam planning constraints: loop_sim tracked-home precedent (#939)",
+    # the rl-v2 construction-style worker faces (#885): same tracked
+    # home as the policy and credit faces.
+    "experiments/learning-loop/workers/__init__.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/workers/spawner.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/workers/brief.py":
+        "rl-v2 worker faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/__init__.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/observer.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    "experiments/learning-loop/hooks/budget_tracker.py":
+        "rl-v2 hook faces: loop_sim tracked-home precedent (#885)",
+    # the rl-v2 settlement faces (#884): per-dispatch pricing +
+    # draft/commit two-phase — same tracked home.
+    "experiments/learning-loop/settlement/__init__.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/per_dispatch.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/rollout_agg.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/draft_commit.py":
+        "rl-v2 settlement faces: loop_sim tracked-home precedent (#884)",
+    "experiments/learning-loop/settlement/judge_cap.py":
+        "rl-v2 judge-cap face: loop_sim tracked-home precedent (#933)",
+    # the rl-v2 credit faces (#883): pure numpy credit assignment —
+    # same tracked home as the policy faces.
+    "experiments/learning-loop/credit/__init__.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/returns.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/advantage.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
+    "experiments/learning-loop/credit/lineage.py":
+        "rl-v2 credit faces: loop_sim tracked-home precedent (#883)",
     # Golden-master fixtures: byte-for-byte replay inputs for
     # tests/test_suite_health.py::test_golden_replay (manifest.yaml cases
     # F-03/F-06). The bare `runs/` rule (.gitignore:32) matches directories
@@ -50,6 +184,13 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # 2026-08-19-gate5.json is additionally pinned by
     # tests/test_subagent_injection.py::test_tracked_gate5_review_citations_resolve
     # -> allowlisted, NOT git rm --cached (local-green / fresh-CI-red landmine).
+    # coverage-floor.json (rule coverage-*.json) — the #807 ratchet POLICY
+    # anchor (schema/floor/min_floor/measured_set/baseline_measured), the
+    # committed floor the CI coverage pins enforce against regression —
+    # policy, not measurement output; the coverage-* class targets the
+    # measurement artifacts only.
+    "coverage-floor.json":
+        "#807 coverage-floor ratchet policy anchor: committed floor, not process output (#951)",
 }
 
 

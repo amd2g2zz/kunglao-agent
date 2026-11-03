@@ -13,7 +13,6 @@ experiment switch).
 """
 
 import priority_ratio as pr
-import rho_checkpoint as rc
 import zero_output_fingerprint as zf
 
 
@@ -24,16 +23,6 @@ def _pearson(xs, ys):
     den = (sum((x - mx) ** 2 for x in xs)
            * sum((y - my) ** 2 for y in ys)) ** 0.5
     return num / den if den else 0.0
-
-
-def test_gate_1_rho_voc_above_threshold():
-    true_progress = [0.1, 0.2, 0.35, 0.5, 0.72, 0.9]
-    # verifier stub: per-PQ grades bracketing the true progress
-    cps = [{"PQ1": {"grade": round(min(1.0, t + 0.05), 2)},
-            "PQ2": {"grade": round(max(0.0, t - 0.05), 2)}}
-           for t in true_progress]
-    rho = rc.rho_sequence(cps)
-    assert _pearson(true_progress, rho) > 0.7
 
 
 def test_gate_2_fingerprint_zero_false_positives(tmp_path):

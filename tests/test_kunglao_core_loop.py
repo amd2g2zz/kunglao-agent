@@ -100,7 +100,7 @@ def test_convergence_check(tmp: Path) -> None:
     # C-2 arms via a fail settlement on a target_pq-linked oracle case
     # (#146: settlement-derived arming — promotion_attempts is not a
     # writer-backed signal)
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-2.yaml").write_text(

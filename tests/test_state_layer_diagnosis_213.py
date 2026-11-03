@@ -60,7 +60,7 @@ def test_skill_md_carries_the_state_layer_rules():
 def _registered_mcp_item():
     import toolchain as tc
     return tc.CheckResult(
-        name="mcp:ida-pro-vm", status=tc.Status.PASS, tier=tc.Tier.HARD,
+        name="mcp:ida-pro-mcp", status=tc.Status.PASS, tier=tc.Tier.HARD,
         detail="registered (workspace)")
 
 
@@ -76,13 +76,13 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
     # 2026-09-29): the face no longer accepts the poison path at all.
     claude_json = tmp_path / "claude.json"
     claude_json.write_text(json.dumps(
-        {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
+        {"mcpServers": {"ida-pro-mcp": {"url": "http://127.0.0.1:1"}}}),
         encoding="utf-8")
     (tmp_path / ".mcp.json").write_text(json.dumps(
-        {"mcpServers": {"ida-pro-vm": {"url": "http://127.0.0.1:1"}}}),
+        {"mcpServers": {"ida-pro-mcp": {"url": "http://127.0.0.1:1"}}}),
         encoding="utf-8")
     item = tc._mcp_reachability_face(
-        _registered_mcp_item(), "ida-pro-vm", tmp_path)
+        _registered_mcp_item(), "ida-pro-mcp", tmp_path)
     assert item.status is tc.Status.WARN
     assert item.detail.startswith("connection layer"), item.detail
     assert "user-global" not in item.detail, "poison seed must stay invisible"
@@ -99,7 +99,7 @@ def test_registered_but_unreachable_names_connection_layer(monkeypatch,
 def test_unregistered_task_spec_item_names_register_layer(tmp_path):
     import toolchain as tc
     checks = tc._task_spec_mcp_checks(
-        (tc.McpServerSpec(name="ida-pro-vm", transport="http",
+        (tc.McpServerSpec(name="ida-pro-mcp", transport="http",
                           url="http://127.0.0.1:1"),),
         tmp_path)
     assert len(checks) == 1 and checks[0].status == "FAIL"

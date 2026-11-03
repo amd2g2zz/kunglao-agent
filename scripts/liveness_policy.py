@@ -210,3 +210,44 @@ MISSION_SETTLE_MIN = 30
 # its barrier waived, short enough that a dead branch recovers within one
 # operator coffee. NEW in #690, not a surveyed constant.
 STEP_SETTLE_TTL_MINUTES = 120
+
+# ---------------------------------------------------------------------------
+# Derived watchdog reap/keep window (#770): from observed liveness, bounded
+# ---------------------------------------------------------------------------
+
+# owner ruling 2026-10-19 (card comment): CONDITION-TRIGGERED + LONG-BASELINE —
+# the watchdog's reap/keep window defaults to a long calm period; observed
+# stall/poor-progress evidence TIGHTENS it; the wall-clock constant demotes to
+# a BOUND (the floor) / cold-start fallback, and the PRIMARY liveness signal
+# is the progress ledger (the worker's own write cadence). NOT adaptive
+# shortening as the primary posture.
+#
+# #597 discipline: the values below are COMPUTED from the existing
+# single-source constants — never copied literals — so a future adjudication
+# of STUCK_MINUTES / TICK_INTERVAL_DEFAULT_MIN / DEAD_WORKER_MINUTES moves
+# this family with them. Consumers (scripts/watchdog_interval.py — the
+# documented formula; loop_watchdog.py — the reap-window reason face) MUST
+# import these, never re-derive them.
+WATCHDOG_MIN_MINUTES = TICK_INTERVAL_DEFAULT_MIN / 5
+# 1 — the floor (Standard 11: a bounded derivation; a derivation that can
+# drift to pathological values is a bug factory). It must sit strictly BELOW
+# the retired fixed window (5) or the card's wedge pin — reaped well before
+# the old window — is unsatisfiable; one fifth of a tick is the fastest a
+# sub-minute-cadence worker may legitimately be judged wedged.
+WATCHDOG_BASELINE_MINUTES = STUCK_MINUTES + TICK_INTERVAL_DEFAULT_MIN
+# 25 — the long-calm norm (stuck line + one tick margin). Doubles as the
+# cold-start fallback: nothing observed yet = no evidence to tighten on.
+WATCHDOG_MAX_MINUTES = DEAD_WORKER_MINUTES - TICK_INTERVAL_DEFAULT_MIN
+# 35 — the cap: the reap face must fire strictly inside the death line
+# (DEAD_WORKER_MINUTES = 40 owns the GONE verdict; a window at or past it
+# would be redundant with worker_death). The retired fixed 5 is not a bound
+# anymore — it demotes to the cold-start fallback's role entirely.
+WATCHDOG_CADENCE_TOLERANCE = 4.0
+# silence beyond 4x the worker's own write cadence = stall evidence.
+WATCHDOG_TIGHTEN_FACTOR = 2.0
+# stalled window = 2x the observed cadence (then clamped).
+WATCHDOG_ROUNDS_FAIL_TRIGGER = 2
+# consecutive failed rounds = poor-progress evidence.
+WATCHDOG_BURN_RATE_TIGHTEN = 2.0
+# budget burning >= 2x its wall-time share while the newest write is stale
+# (> BASELINE / CADENCE_TOLERANCE) = stall evidence.

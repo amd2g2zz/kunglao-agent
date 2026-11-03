@@ -19,14 +19,26 @@ Concretely, per dispatchable claim (the candidate filter is UNCHANGED:
 OPEN + promotion_attempts<3 + every depends_on parent holding a terminal
 fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
 
-  case face — the claim's oracle cases (workspace `oracle/cases/*.yaml`,
-  each `target_pq` == the claim's `answers_question`) are Bernoulli
-  posteriors (#106 CasePosterior, runs/posteriors.yaml). ONE Thompson Beta
-  sample per linked case, summed; a claim with no linked case samples the
-  Beta(1,1) prior once — cold start is uniform-random WITHIN a round (the
-  per-round seed itself advances with the ledger row count), which is Thompson's
-  intrinsic exploration: an uncertain arm occasionally ranks first with no
-  threshold gate, and bad priors recover by evidence.
+  case face — #792: the value face is the posterior MEAN, never a draw.
+  The claim's oracle cases (workspace `oracle/cases/*.yaml`, each
+  `target_pq` == the claim's `answers_question`) are Bernoulli posteriors
+  (#106 CasePosterior, runs/posteriors.yaml — the SAME store the strategy
+  sampler consumes). value = sum(alpha_i / (alpha_i + beta_i)) over the
+  linked cases: deterministic given data, monotone in evidence, moving
+  only when evidence moves. A claim with NO linked case has no value
+  channel by definition — zero is not fabricated for it; it is DEMOTED
+  below every value-bearing claim, ordered by the declared deterministic
+  default (downstream_term, tier, worth), and its feeds say
+  `unlinked — no value channel (arm oracle cases / set answers_question)`
+  so the linkage gap is the visible actionable signal. The retired draw
+  faces (the round-seeded `thompson/{base}/{cid}` Beta re-draw and the
+  Beta(1,1) unlinked fallback) simulated exploration while doing none of
+  its work: nothing fed the draw back, nothing learned from it. Real
+  exploration lives in the strategy sampler (method_sample) — and at
+  this face only as the EXPLICIT exploration slot (EXPLORE_EVERY_N_ROUNDS,
+  default 0 = off): when enabled, every Nth round promotes the best
+  unlinked/lowest-attempts claim, labeled `exploration_arm` in feeds,
+  never conflated with the value column.
 
   PQ face — REMOVED (#295, the first ADR-001 governed application). The
   #106/#107 ΔH_PQ face (case_face + LAMBDA_DH·ΔH) died on replay
@@ -52,21 +64,20 @@ fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
   — a sanctioned exogenous multiplier, not a formula DOF; absent
   weights → 1.0.
 
-  rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
-  random.Random(0): same inputs → same ranking (anchor-deterministic).
-  Live callers (kunglao-decide, worker_budget.check_priority) share ONE
-  seed source, posterior_rng(ws) — the #251 f(posterior_state, round)
-  digest: sha256 of the canonical CASES posterior payload plus the round
-  (the convergence ledger's RAW snapshot-row count, round_index). The
-  sample moves when evidence moves OR the round advances — static
-  posteriors can no longer freeze Thompson (the #251 defect: 5/5
-  identical rankings on one rng_base; 53 consecutive in the wild) — while
-  the determinism clause survives per-round ("same rank given the same
-  posterior state and round", no wall clock anywhere: the round axis is
-  an append-order counter, machine-independent) and DECIDE + the dispatch
-  gate can never disagree about rank #1 (#100/#101 die at the root). The
-  per-claim rng is forked from ONE base draw keyed by claim_id, so a
-  register reorder never reshuffles dispatch order.
+  determinism — #792: same (ledger, claims, weights) → byte-identical
+  ranking, ANY round. The #251 per-round seed (case_face_seed /
+  posterior_rng / posterior_seed_state — the f(posterior_state, round)
+  digest) is RETIRED together with the draw it seeded: a ranking column
+  whose numbers move because the round counter advanced is ordering
+  noise, not signal (the same claim re-ranked across rounds while no
+  data changed). The rank is a pure function of the inputs; the emit
+  fingerprint pins (claims_hash, evidence_hash, posterior_hash, round)
+  so the event tail stays exactly replayable. DECIDE + the dispatch gate
+  share the ONE deterministic ranker — an authority mismatch stays
+  structurally impossible (#100/#101 die at the root, now seed-free).
+  The #266 frozen-sampling observable is defined out at the source: new
+  rank_feeds fingerprints carry rng_base=null (the detector remains for
+  historical tails, where it still reads the retired integer face).
 
   flip potential (diagnostic, feeds["case_flip_potential"]) — the
   conservative P(cflip) reading: 0.5 at cold start, decayed by the claim's
@@ -93,25 +104,57 @@ Usage:
   python priority_ratio.py <workspace> [--json]
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import argparse
 import hashlib
 import json
 import math
 import random
-import re
 import sys
 from typing import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED  # noqa: F401  (re-export: replay_ruler reads pr.TERMINAL)
 import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
 import rank_face  # noqa: E402  (issue 218: the emit-failure marker)
-from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
+from posteriors_case import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
+
+# #886 preparation: the claim/evidence view utilities moved to
+# claims_view.py (verbatim relocation). The names are re-imported here so
+# this module's ordering face below and every straggler consumer keep the
+# exact pre-move surface; deleting this file stays gated on the #886
+# ruling.
+from claims_view import (DOWNSTREAM_CAP, DOWNSTREAM_DECAY, W_DOWNSTREAM,
+                         Action, EvidenceView, _int_flag,
+                         _load_oracle_cases, action_cost, action_tier,
+                         attempts_of, claim_value_weight, classify_action,
+                         dispatch_count_of, downstream_term, is_open,
+                         round_index, strikes_of)
+# pure re-export surface — no in-module caller anymore; the names exist so
+# straggler consumers keep importing them from here until #886 lands:
+from claims_view import CONV_LEDGER_NAME  # noqa: F401  (re-export surface)
+from claims_view import DEFAULT_ACTION  # noqa: F401  (re-export surface)
+from claims_view import ORACLE_CASES_REL  # noqa: F401  (re-export surface)
+from claims_view import VALUE_WEIGHTS_FILE  # noqa: F401  (re-export surface)
+from claims_view import _DISPROOF_RE  # noqa: F401  (re-export surface)
+from claims_view import _KEYWORD_MAP  # noqa: F401  (re-export surface)
+from claims_view import _TIER_COST  # noqa: F401  (re-export surface)
+from claims_view import _TOOL_FAMILY_BY_TOKEN  # noqa: F401  (re-export surface)
+from claims_view import _VALUE_CLASS_TOKENS  # noqa: F401  (re-export surface)
+from claims_view import _positive_weights  # noqa: F401  (re-export surface)
+from claims_view import _reverse_deps  # noqa: F401  (re-export surface)
+from claims_view import _scan_failure_artifacts  # noqa: F401  (re-export surface)
+from claims_view import capability_switch_violation  # noqa: F401  (re-export surface)
+from claims_view import classify_value_class  # noqa: F401  (re-export surface)
+from claims_view import load_value_weights  # noqa: F401  (re-export surface)
+from claims_view import tool_families_from_text  # noqa: F401  (re-export surface)
+from claims_view import tool_families_from_tools  # noqa: F401  (re-export surface)
 
 # #295: LAMBDA_DH is DELETED (the first governed application of
 # docs/adr-001-strategy-parameter-governance.md — see the module
@@ -120,623 +163,39 @@ from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 FLIP_POTENTIAL_BASE = 0.5       # P(cflip) at cold start
 FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
 
-# #294 downstream-blocker term: a claim others depend on is worth starting
-# earlier — its sample unblocks a subtree, a leaf's unblocks only itself.
-# THREE named free parameters under the ADR-001 governance procedure
-# (docs/adr-001-strategy-parameter-governance.md — the discipline the
-# removed LAMBDA_DH embodied, now codified). The values
-# below carry their #295 earn-in evidence FROM THE REPLAY RULER
-# (scripts/replay_ruler.py, run 2026-09-21 against three real historical
-# workspaces — offline policy evaluation, read-only):
-#
-#   earn-in evidence (TTC = replayed ticks to drain, serial dispatch,
-#   same-seed configs; anti-starvation: every claim dispatched, zero
-#   stalls attributable to the term):
-#     cc-case    (25 claims, 215 snaps): base TTC 149 -> term 146 (delta -3)
-#     doubao_web (16 claims, 152 snaps): base TTC 142 -> term 137 (delta -5)
-#     wbtest     ( 6 claims,  39 snaps): base TTC  32 -> term  32 (delta  0)
-#   order digests changed on cc-case/doubao_web (the term reorders real
-#   history); identical on wbtest (frontier too small to differentiate).
-#
-#   W_DOWNSTREAM  — the term's weight inside the composite (bounded lift:
-#                   max lift = W_DOWNSTREAM * DOWNSTREAM_CAP < one cold-start
-#                   prior draw, so a leaf is never systematically starved).
-#                   CHANGING THIS VALUE REQUIRES THE ADR-001 GOVERNED
-#                   PROCEDURE — value pins + attached replay evidence; the
-#                   pins are tests/test_replay_ruler_294.py hard asserts
-#                   and silent drift goes red;
-#   DOWNSTREAM_DECAY — geometric decay per dependency-graph level (direct
-#                   dependents count 1, grandchildren DECAY, ...);
-#   DOWNSTREAM_CAP   — hard clamp on the weighted count (a hub cannot
-#                   dominate the sample face no matter how wide its subtree).
-DOWNSTREAM_DECAY = 0.5
-DOWNSTREAM_CAP = 4.0
-W_DOWNSTREAM = 0.1
+
+# #792 explicit exploration slot (design 3 — structural, never smuggled):
+# every Nth round promotes the best unlinked/lowest-attempts claim and
+# LABELS it `exploration_arm` in feeds. 0 = OFF (the default: the value
+# column is then the whole rank, byte-identical across rounds). A nonzero
+# value is a DECLARED exploration face — auditable, tunable, removable —
+# never a hidden draw inside the score.
+EXPLORE_EVERY_N_ROUNDS = 0
 
 # #266 frozen-sampling marker: K CONSECUTIVE rank runs whose recorded
 # rng_base is EQUAL while the recorded round ADVANCES. The #251 contract
-# makes the seed move whenever the round moves — a run of advancing rounds
-# with a static base is exactly the old frozen-sampler defect re-emerging
-# (the 53-consecutive wild audit), detectable from the event tail alone.
-# Equal base with EQUAL rounds is the contract's deterministic replay of
-# an unchanged tick, never freezing. The consumer is a pure tail function:
-# no state, idempotent under tail replay.
+# made the seed move whenever the round moved — a run of advancing rounds
+# with a static base was the old frozen-sampler defect (the 53-consecutive
+# wild audit). #792 retires the seed at the SOURCE (ranker output is
+# round-invariant), so new fingerprints carry rng_base=null and the
+# detector reads them as the honest gap; the consumer remains a pure tail
+# function for HISTORICAL tails (the retired integer face) — no state,
+# idempotent under tail replay.
 FROZEN_SAMPLE_K = 3
 
-_TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 
-ORACLE_CASES_REL = "oracle/cases"
-
-
-@dataclass(frozen=True)
-class EvidenceView:
-    """Evidence view (derived from facts/_INDEX, immutable).
-
-    #107 rebuild: the view carries the record faces OTHER consumers need
-    (capability cards, terminal facts, #759 worth weights) plus the
-    workspace root (`ws`) the ranker loads #106 posteriors + oracle cases
-    from. The weighted-era scoring feeds (mission dynamics, difficulty
-    multiplier, novelty proxies, prior_p) are deleted with their formula.
-    """
-
-    terminal_fact_claims: frozenset[str] = frozenset()
-    verified_fact_count: int = 0
-    fact_count_by_category: dict[str, int] = field(default_factory=dict)
-    raw_lines: tuple[str, ...] = ()
-    validated_capabilities: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
-    identified_obstacles: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
-    # #759 H2: structured user worth ruling (fail-open loaded)
-    value_class_weights: dict[str, float] = field(default_factory=dict)
-    value_claim_overrides: dict[str, float] = field(default_factory=dict)
-    # #107: workspace root — the ranker reads runs/posteriors.yaml and
-    # oracle/cases/*.yaml through it. None (bare construction, tests) → no
-    # posteriors: every action samples the Beta(1,1) prior. (#295: the
-    # PQ-categorical surface no longer feeds any score term.)
-    ws: Path | None = None
-
-    @classmethod
-    def from_workspace(cls, ws: Path) -> "EvidenceView":
-        """Parse facts/_INDEX.md lines "F<id> | <status> | <claim_id> | <conclusion>".
-
-        terminal_fact_claims: claims cited by facts whose status contains any
-        TERMINAL token;
-        verified_fact_count:  count of facts whose status contains
-        PROVEN/VERIFIED;
-        fact_count_by_category: left empty — the view has no claim
-        statements, so it cannot self-classify.
-
-        Also scans the #495 record face (analyses/failure-*.yaml) — each
-        file individually fail-open, a broken artifact never breaks the
-        ranking."""
-        index = ws / "facts" / "_INDEX.md"
-        if not index.exists():  # fixture-layout fallback
-            index = ws / "_INDEX.md"
-        terminal_claims: set[str] = set()
-        verified = 0
-        lines: tuple[str, ...] = ()
-        if index.exists():
-            lines = tuple(
-                ln for ln in index.read_text(encoding="utf-8", errors="replace").splitlines()
-                if "|" in ln
-            )
-            for line in lines:
-                parts = [p.strip() for p in line.split("|")]
-                if len(parts) < 3:
-                    continue
-                status, claim_id = parts[1].upper(), parts[2]
-                if any(t in status for t in TERMINAL):
-                    terminal_claims.add(claim_id)
-                if "PROVEN" in status or "VERIFIED" in status:
-                    verified += 1
-        # #594: a fresh workspace's _INDEX.md carries only the version stamp —
-        # zero terminal rows emptying the dispatchability gate. Fall back to
-        # the register's PROVEN claims (index rows still win when present).
-        if not terminal_claims:
-            reg = ws / "claim-register.yaml"
-            if reg.exists():
-                try:
-                    for c in (yaml.safe_load(reg.read_text(encoding="utf-8"))
-                              or {}).get("claims") or []:
-                        if str(c.get("status", "")).upper() in TERMINAL:
-                            terminal_claims.add(c.get("id"))
-                except (yaml.YAMLError, OSError) as exc:
-                    warn("from_workspace", f"{type(exc).__name__}: {exc}")
-        caps, obstacles = _scan_failure_artifacts(ws)
-        classes, overrides = load_value_weights(ws)
-        return cls(frozenset(terminal_claims), verified, {}, lines,
-                   caps, obstacles, classes, overrides, Path(ws))
-
-
-@dataclass(frozen=True)
-class Action:
-    """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1).
-
-    #107+#294: score = (Thompson case face + W_DOWNSTREAM·downstream_term)
-    · worth (the #295 governed removal deleted the LAMBDA_DH·ΔH_PQ face —
-    docs/adr-001-strategy-parameter-governance.md). The
-    weighted-era term fields (leverage/discriminator/novelty and the old
-    lexicographic sort head) are deleted; feeds carries the new diagnostics."""
-
-    claim_id: str
-    action: str
-    score: float
-    skill: str | None
-    tier: int
-    attempts: int
-    cost: float
-    weight: float = 1.0  # #759 H2 worth multiplier (exogenous, not a DOF)
-    # #107/#294 diagnostics: thompson_sample / case_flip_potential / downstream
-    feeds: dict[str, str] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        # feeds stay object-level diagnostics, NOT a json face key:
-        # consumers compare full to_dict() payloads across workspaces where
-        # feed STATES legitimately differ while scores do not.
-        return {"claim_id": self.claim_id, "action": self.action,
-                "score": round(self.score, 3), "skill": self.skill,
-                "weight": round(self.weight, 3), "tier": self.tier}
-
-
-def is_open(claim: dict) -> bool:
-    """Not terminal, not IN_PROGRESS, not PARK (#634: suspended claims exit
-    the dispatch frontier; revival is explicit via mission_stall.revive)."""
-    st = claim.get("status")
-    return (st not in TERMINAL and st not in IN_PROGRESS_STATUSES
-            and st not in SUSPENDED)
-
-
-# ---------- action classification (feeds the Action.category + worker hints) ----------
-
-# The claim-category vocabulary is REGISTRY-OWNED (scripts/action_space.py,
-# the action-vocabulary issue). Verbatim move (same tuples, same order): the
-# rank output stays byte-identical under default weights, pinned by the
-# frozen capture in tests/test_action_space_12.py. The legacy module names
-# stay as aliases for the existing consumers (value_replay, think_seat, tests).
-import action_space  # noqa: E402  (registry-sourced action field)
-
-_KEYWORD_MAP = action_space.CLAIM_ACTION_KEYWORDS
-DEFAULT_ACTION = action_space.DEFAULT_CLAIM_ACTION
-
-
-def classify_action(claim: dict) -> str:
-    """statement + answers_question keywords → action category; no hit →
-    evidence_collection. Single scoring authority:
-    action_space.classify_claim_action (the action registry)."""
-    return action_space.classify_claim_action(claim)
-
-
-# ---------- per-claim int guards (#103, unchanged) ----------
-
-def _int_flag(value) -> tuple[int, bool]:
-    """int conversion with a dirty flag (#103 per-claim tolerance).
-
-    A register field that fails to parse ("two", a mapping, None) degrades
-    to (0, True) — never a ValueError/TypeError escaping one claim's row
-    into the whole-workspace conservative BLOCKED. The dirty flag feeds the
-    Action.feeds diagnostic instead of a crash.
-    """
-    try:
-        return int(value), False
-    except (TypeError, ValueError):
-        return 0, True
-
-
-def attempts_of(claim: dict) -> int:
-    """Total attempt mass at a claim: max(dispatch_count,
-    promotion_attempts). Every dispatch accrues dispatch_count; a failed
-    dispatch ALSO strikes promotion_attempts — max counts the attempt
-    once, never double-counting a failure. Legacy registers without the
-    dispatch_count field read the strikes alone (pre-wiring behavior).
-    Feeds the flip-potential decay and Action.attempts — the churn
-    visibility the strike counter alone never had (a claim dispatched
-    7x with zero failures read 0)."""
-    return max(dispatch_count_of(claim), strikes_of(claim))
-
-
-def strikes_of(claim: dict) -> int:
-    """promotion_attempts → int; the DLQ failure-STRIKE face (dirty
-    tolerance, same guard as attempts_of). The candidate filter and the
-    must-ask lane key on THIS — dispatch churn alone never evicts a
-    claim from the frontier."""
-    return _int_flag(claim.get("promotion_attempts", 0))[0]
-
-
-def dispatch_count_of(claim: dict) -> int:
-    """dispatch_count → int; every dispatch accrues here (dirty
-    tolerance, same guard as attempts_of). Absent field → 0 (legacy
-    register)."""
-    return _int_flag(claim.get("dispatch_count", 0))[0]
-
-
-def action_tier(claim: dict) -> int:
-    """Action tier = min(evidence_tier_attempted + 1, 3); dirty value → tier 1 (#103)."""
-    return min(_int_flag(claim.get("evidence_tier_attempted", 0))[0] + 1, 3)
-
-
-def action_cost(claim: dict) -> float:
-    """cost = tier cost (diagnostic field since #107 — the score no longer
-    divides by it; the Thompson sample + ΔH carry the value)."""
-    return _TIER_COST[action_tier(claim)]
-
-
-def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
-    """depends_on {child: [parents]} → reverse edges {parent: [dependents]}."""
-    rev: dict[str, list[str]] = {}
-    for child, parents in (depends_on or {}).items():
-        for p in parents:
-            rev.setdefault(p, []).append(child)
-    return rev
-
-
-def downstream_term(claim_id: str, depends_on: dict,
-                    claims: Iterable | None = ()) -> float:
-    """#294: bounded, decaying downstream_count for one claim.
-
-    Reverse edges over claim_deps/depends_on {child: [parents]} PLUS the
-    register's `obstacle_for` fields (the ladder-mint face writes the same
-    edge into claim_deps.yaml, but a register-only row must still count —
-    the graph, not the file layout, is the signal). BFS from claim_id:
-    each dependent at graph distance d contributes DECAY**d; the sum is
-    clamped to DOWNSTREAM_CAP. Deterministic pure function of the dep
-    inputs — no rng, no wall clock (the seed contract is untouched);
-    cycles are cut by a visited set.
-
-    The count is deliberately STATUS-BLIND (settled dependents still
-    count): filtering live-only would need the whole register threaded
-    through every score and would make the term drift mid-round as
-    statuses flip. The cap keeps a stale hub bounded; the replay ruler is
-    where a status-aware variant must EARN its place on data.
-    """
-    rev: dict[str, list[str]] = _reverse_deps(depends_on or {})
-    for c in claims or ():
-        parent = str(c.get("obstacle_for") or "").strip()
-        cid_ = c.get("id")
-        if parent and cid_:
-            rev.setdefault(parent, []).append(str(cid_))
-    if claim_id not in rev:
-        return 0.0
-    total = 0.0
-    seen = {claim_id}
-    frontier = [claim_id]
-    level = 0
-    while frontier:
-        level += 1
-        nxt: list[str] = []
-        for node in frontier:
-            for dep in rev.get(node, ()):
-                if dep in seen:
-                    continue
-                seen.add(dep)
-                total += DOWNSTREAM_DECAY ** (level - 1)
-                nxt.append(dep)
-        if total >= DOWNSTREAM_CAP:
-            break
-        frontier = nxt
-    return min(total, DOWNSTREAM_CAP)
-
-
-# ===================== #496 typed-fact consumption (capability cards) =====================
-
-def _scan_failure_artifacts(ws: Path) -> tuple[tuple[tuple[str, str], ...],
-                                               tuple[tuple[str, str], ...]]:
-    """Read-only scan of the #495 record face: analyses/failure-*.yaml.
-
-    Returns (validated_capabilities, identified_obstacles) — the dispatch-
-    gate capability card + strategy_metrics inputs. One file per claim
-    (record_analysis overwrites) — the file content IS the latest analysis.
-    Each file individually fail-open: an unreadable or malformed analysis is
-    not evidence, it is skipped without a crash."""
-    adir = ws / "analyses"
-    caps: list[tuple[str, str]] = []
-    obstacles: list[tuple[str, str]] = []
-    if not adir.is_dir():
-        return tuple(caps), tuple(obstacles)
-    for p in sorted(adir.glob("failure-*.yaml")):
-        try:
-            entry = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001 — unreadable analysis is not evidence
-            continue
-        if not isinstance(entry, dict):
-            continue
-        cid = str(entry.get("claim") or "").strip()
-        if not cid:
-            continue
-        cap = str(entry.get("validated_capability") or "").strip()
-        obs = str(entry.get("identified_obstacle") or "").strip()
-        if cap:
-            caps.append((cid, cap))
-        if obs:
-            obstacles.append((cid, obs))
-    return tuple(caps), tuple(obstacles)
-
-
-# #496: tool-family vocabulary for the capability card. A token maps a
-# DECLARED tool name (protocol field, part-split) or a capability TEXT
-# mention (ASCII word-bounded) to a canonical family. Unknown words never
-# match — the judgment is mechanical, no natural-language inference.
-_TOOL_FAMILY_BY_TOKEN: dict[str, str] = {
-    "frida": "frida", "rev-frida": "frida",
-    "xposed": "xposed", "lsposed": "xposed",
-    "ghidra": "ghidra",
-    "x64dbg": "x64dbg", "ollydbg": "x64dbg",
-    "ida": "ida", "idapython": "ida",
-    "volatility": "volatility",
-    "vmr-shell": "vm", "vmrun": "vm",
-    "qiling": "qiling", "malware-framework": "qiling",
-}
-
-_DISPROOF_RE = re.compile(r"capability-disproof:\s*([A-Za-z0-9_-]+)", re.IGNORECASE)
-
-
-def tool_families_from_tools(tools: list[str]) -> set[str]:
-    """Families of DECLARED dispatch tool names.
-
-    Part-split matching (mcp__ghidra__import_file -> {mcp, ghidra, import,
-    file}) so a token never substring-false-positives inside an unrelated
-    tool name (the reason 'ida' cannot match 'pe-validate')."""
-    fams: set[str] = set()
-    for t in tools or []:
-        name = str(t).lower().strip()
-        if not name:
-            continue
-        parts = {p for p in re.split(r"[^a-z0-9]+", name) if p}
-        parts.add(name)
-        for token, fam in _TOOL_FAMILY_BY_TOKEN.items():
-            if token in parts:
-                fams.add(fam)
-    return fams
-
-
-def tool_families_from_text(text: str) -> set[str]:
-    """Families mentioned in free text (the capability card's only channel —
-    #495 records it as prose). ASCII word-bounded, case-insensitive: a
-    hyphen/underscore-attached mention still matches ('frida-server' ->
-    frida) but a token inside a longer word never does."""
-    fams: set[str] = set()
-    for token, fam in _TOOL_FAMILY_BY_TOKEN.items():
-        if re.search(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])",
-                     text or "", re.IGNORECASE):
-            fams.add(fam)
-    return fams
-
-
-def capability_switch_violation(claim_ids, dispatch_tools: list[str],
-                                prompt_text: str,
-                                evidence: "EvidenceView") -> dict | None:
-    """#496 ②(a): a validated capability in hand constrains tool choice.
-
-    Card scope is the UNION over ALL in-scope analysis cards (the claim +
-    its obstacle_for parent chain). from_workspace yields cards in sorted
-    filename order and an obstacle child's id is always greater than its
-    parent's, so the pre-F1 `caps[-1]` single-last-card read let the
-    child's card shadow the parent's — masking the parent's constraint
-    (leak) and falsely blocking a return to the parent's validated family
-    (false block). Union semantics: ANY validated family intersecting the
-    declared dispatch families = capability in hand, not a switch.
-
-    Violation iff ALL of:
-      - at least one in-scope analysis carries a validated_capability
-        whose text mentions a known tool family (the cards);
-      - the dispatch DECLARES at least one known tool family;
-      - the two family sets are disjoint (a genuine switch);
-      - some validated family is still in force after the
-        `capability-disproof: <family>` exemptions (declaration over
-        inference, #447 doctrine: the escape is the orchestrator SHOWING
-        the card failed — trajectory-1 replay: switching from validated
-        frida to xposed requires showing frida failed). Exemption is per
-        family: disproving one family leaves the others in force.
-
-    Returns the violation dict (claim_ids / validated_families /
-    dispatch_families / capability) or None (= allowed / fail-open)."""
-    ids = {str(c) for c in (claim_ids or [])}
-    cards = [cap for cid, cap in evidence.validated_capabilities if cid in ids]
-    if not cards:
-        return None
-    per_card: list[tuple[set[str], str]] = []  # (families, card text)
-    cap_fams: set[str] = set()
-    for text in cards:
-        fams = tool_families_from_text(text)
-        per_card.append((fams, text))
-        cap_fams |= fams
-    disp_fams = tool_families_from_tools(dispatch_tools)
-    if not cap_fams or not disp_fams or (cap_fams & disp_fams):
-        return None
-    named = {m.group(1).lower() for m in _DISPROOF_RE.finditer(prompt_text or "")}
-    in_force = {f for f in cap_fams if f.lower() not in named}
-    if not in_force:
-        return None
-    capability = " | ".join(t for fams, t in per_card if fams & in_force)
-    return {"claim_ids": sorted(ids), "validated_families": sorted(in_force),
-            "dispatch_families": sorted(disp_fams), "capability": capability}
-
-
-# ===================== #759 H2 value function (worth channel) =====================
-
-VALUE_WEIGHTS_FILE = "runs/value-weights.yaml"
-
-# Mechanical claim→impact-class vocabulary (word-bounded ASCII tokens +
-# literal CJK phrases — no natural-language inference, mirroring
-# tool_families_from_text's posture). Map order is tie-break priority.
-_VALUE_CLASS_TOKENS: list[tuple[str, tuple[str, ...]]] = [
-    ("rce", ("rce", "remote code execution", "代码执行", "deserialization")),
-    ("dos", ("dos", "denial of service", "拒绝服务")),
-    ("sandbox_escape", ("sandbox escape", "逃逸", "escape")),
-    ("c2_extract", ("c2", "回连")),
-    ("credential_theft", ("credential theft", "凭据窃取", "credential")),
-    ("info_disclosure", ("information disclosure", "信息泄露")),
-]
-
-
-def _positive_weights(raw) -> dict[str, float]:
-    """Keep only strictly-positive numeric entries; anything else is
-    ignored per-entry (fail-open: a bad row must not neutralize the file)."""
-    out: dict[str, float] = {}
-    for k, v in (raw or {}).items():
-        if isinstance(v, bool):
-            continue
-        try:
-            w = float(v)
-        except (TypeError, ValueError):
-            continue
-        if w > 0:
-            out[str(k)] = w
-    return out
-
-
-def load_value_weights(ws: Path) -> tuple[dict[str, float], dict[str, float]]:
-    """(claim_class_weights, per_claim_overrides) from runs/value-weights.yaml.
-
-    Fail-open at every level: missing file → ({}, {}); unparsable YAML or a
-    non-mapping root → ({}, {}); illegal entries dropped individually."""
-    path = ws / VALUE_WEIGHTS_FILE
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}, {}
-    except Exception:  # noqa: BLE001 — corrupt weights never break ranking
-        return {}, {}
-    if not isinstance(data, dict):
-        return {}, {}
-    classes = data.get("claim_classes")
-    overrides = data.get("overrides")
-    return (_positive_weights(classes if isinstance(classes, dict) else None),
-            _positive_weights(overrides if isinstance(overrides, dict) else None))
-
-
-def classify_value_class(claim: dict) -> str | None:
-    """Statement + answers_question keyword match against the mechanical
-    vocabulary; no hit → None (weight stays 1.0)."""
-    text = " ".join([str(claim.get("statement", "")),
-                     str(claim.get("answers_question", ""))]).lower()
-    for cls_, tokens in _VALUE_CLASS_TOKENS:
-        for tok in tokens:
-            if re.search(r"(?<![A-Za-z0-9])" + re.escape(tok.lower())
-                         + r"(?![A-Za-z0-9])", text, re.IGNORECASE):
-                return cls_
-    return None
-
-
-def claim_value_weight(claim: dict,
-                       classes: dict[str, float],
-                       overrides: dict[str, float]) -> float:
-    """Resolution order: per-claim override > explicit value_class field >
-    keyword classification > 1.0."""
-    cid = str(claim.get("id") or "")
-    if cid and cid in overrides:
-        return overrides[cid]
-    cls_ = str(claim.get("value_class") or "").strip().lower() \
-        or classify_value_class(claim)
-    if cls_ and cls_ in classes:
-        return classes[cls_]
-    return 1.0
-
-
-# ===================== #107 Thompson rebuild =====================
-
-def _load_oracle_cases(ws: Path | None) -> list[tuple[str, str]]:
-    """(case_id, target_pq) pairs from `<ws>/oracle/cases/*.yaml`, sorted by
-    filename (deterministic). Fail-open per file: a broken case doc is not
-    signal, it is skipped. No workspace / no dir → [] (cold start)."""
-    if not ws:
-        return []
-    cdir = Path(ws) / ORACLE_CASES_REL
-    if not cdir.is_dir():
-        return []
-    out: list[tuple[str, str]] = []
-    for p in sorted(cdir.glob("*.yaml")):
-        try:
-            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001 — unreadable case is not evidence
-            continue
-        if not isinstance(doc, dict):
-            continue
-        case_id = str(doc.get("id") or p.stem).strip()
-        target_pq = str(doc.get("target_pq") or "").strip()
-        if case_id:
-            out.append((case_id, target_pq))
-    return out
-
-
-# ===================== Thompson seed contract (EXP-1) =====================
-
-# The round axis reads the convergence ledger by name (the writer's own
-# constant, scripts/convergence_check.py — pinned equal by
-# tests/test_priority_ratio.py::test_251_accessor_ledger_name_matches_the_writer;
-# a local constant avoids importing the whole checker into every ranker
-# consumer).
-CONV_LEDGER_NAME = ".convergence_ledger.jsonl"
-
-
-def round_index(ws) -> int:
-    """round := RAW snapshot-row count in `<ws>/.convergence_ledger.jsonl`.
-
-    The writer (convergence_check._append_ledger) stores no round field —
-    the index IS the row count. The filter mirrors
-    convergence_health.assess's snapshot face: a snapshot row has no
-    "type" key and carries "open_count" (OPERATOR_ACTION / rollup rows are
-    events, not snapshots); unparseable dirty lines are skipped (#103
-    tolerance, via the kunglao_log tolerant reader — #863 Family K).
-    Deliberately the RAW count, never assess()["rounds"]:
-    _dedup_consecutive collapses same-turn rows on wall-clock proximity
-    (SAME_TURN_WINDOW_SEC), and a deduped index would leak the clock into
-    the seed, breaking machine-independent replay."""
-    p = Path(ws) / CONV_LEDGER_NAME
-    if not p.exists():
-        return 0
-    # a dirty row can also parse to a non-dict ("5", "[1,2]") — only a
-    # mapping can carry the snapshot face
-    return sum(1 for e in kunglao_log.iter_jsonl(
-                   p.read_text(encoding="utf-8", errors="replace").splitlines())
-               if isinstance(e, dict)
-               and "type" not in e and "open_count" in e)
-
-
-def case_face_seed(ledger: PosteriorLedger, round_no: int) -> int:
-    """Deterministic seed digest of (CASES posterior state, round) — the
-    seed contract f(posterior_state, tick).
-
-    Only the cases namespace enters the posterior half: a PQ-categorical
-    update must move the ΔH term, not reshuffle the Thompson case samples
-    (one signal, one channel). The ROUND half is round_index(ws) — the
-    convergence ledger's raw snapshot-row count — mixed INSIDE the hashed
-    doc ({"cases": ..., "round": n}, one canonical payload), so a runner
-    verdict (new alpha/beta) OR a round advance moves the seed: static
-    posteriors no longer freeze Thompson (the frozen-sample defect). No wall clock
-    anywhere: v1's "no clock and no counter file" claim is retired — there
-    IS a counter file (the ledger), and the clock was never needed."""
+def posterior_digest(ledger: PosteriorLedger) -> str:
+    """Canonical digest of the CASES posterior state (#792 fingerprint
+    component). Only the cases namespace enters: a PQ-categorical update
+    must not move the case-value face (one signal, one channel — the same
+    scoping the retired case_face_seed used). The digest pins the ledger
+    state in the rank_feeds fingerprint, so the event tail stays exactly
+    replayable without any seed: same (claims, evidence, posteriors) →
+    the identical ranking, recomputeable from the tail alone."""
     doc = {"cases": {k: ledger.cases[k].to_dict()
-                     for k in sorted(ledger.cases)},
-           "round": int(round_no)}
+                     for k in sorted(ledger.cases)}}
     payload = json.dumps(doc, sort_keys=True, ensure_ascii=False)
-    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
-
-
-def posterior_rng(ws) -> random.Random:
-    """THE shared per-tick Thompson seed source — DECIDE (kunglao-decide)
-    and the dispatch gate (worker_budget.check_priority) both rank through
-    this, so they can never disagree about rank #1 (#100/#101 die at the
-    root: one ranker, one seed).
-
-    Seed = case_face_seed(runs/posteriors.yaml, round_index(ws)) — the
-    f(posterior_state, round) contract. The empty/absent-posteriors
-    cold start is the SAME hash face ({"cases": {}, "round": n}) — v1
-    short-circuited to constant Random(0) BEFORE any hashing and froze the
-    cold start forever, regardless of round; that branch is gone. A
-    PosteriorSchemaError (unknown ledger version — the #106 version wall)
-    propagates LOUD: DECIDE lands in its conservative-BLOCKED path, the
-    gate fails open with a trace. Never a silent wrong-schema read."""
-    return posterior_seed_state(ws)[0]
-
-
-def posterior_seed_state(ws) -> tuple[random.Random, int]:
-    """posterior_rng PLUS the round it was seeded at (adversarial review):
-    telemetry callers must thread THIS round — a second round_index(ws)
-    read races a concurrent _append_ledger append and would record round
-    n+1 beside an rng_base derived from round n (tail replay mismatch,
-    frozen-delta miscounts)."""
-    rnd = round_index(ws)
-    ledger = PosteriorLedger.load(ws)
-    return random.Random(case_face_seed(ledger, rnd)), rnd
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------- #266 frozen-sampling consumer (pure tail function) -------------
@@ -846,7 +305,7 @@ def _view_stats(actions: list) -> dict:
 
 
 def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
-                     rng_base: int, actions: list[Action],
+                     rank_inputs: dict, actions: list[Action],
                      round_no: int | None,
                      planner: dict | None = None) -> None:
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
@@ -854,13 +313,15 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     evidence-view digest, rng base draw, #251 round). Given the seed inputs,
     the ranking is exactly replayable from the event tail.
 
-    Frozen-sampling observable: the THREADED seed round rides the
-    fingerprint doc next to ``rng_base``, so frozen sampling (equal rng_base
-    across advancing rounds — the 53-consecutive wild audit) is detectable
-    from the event tail in a one-line delta. The fingerprint hash covers the
-    round key. Never re-read round_index(ws) here when the round is
-    THREADED — the None fallback re-read (static-fixture callers only)
-    lives inside the fail-open try. See posterior_seed_state.
+    #792 fingerprint: (claims_hash, evidence_hash, posterior_hash, round)
+    — the FULL ranking input face, so the event tail is exactly replayable
+    without any seed: same inputs → recompute the identical ranking from
+    the tail alone. The retired ``rng_base`` ride stays as an explicit
+    null (the #266 detector reads it as the honest gap; historical tails
+    keep their integer face). The fingerprint hash covers the round key.
+    Never re-read round_index(ws) here when the round is THREADED — the
+    None fallback re-read (static-fixture callers only) lives inside the
+    fail-open try.
 
     SILENT FAIL-OPEN for the ranking (the decide_fail_open contract, #569):
     a crash in payload build or emit never reaches the ranking result. Issue
@@ -889,13 +350,13 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     view keys), so an all-empty run emits the pre-#718 payload
     byte-identically."""
     try:
-        claims_hash = hashlib.sha256(json.dumps(
-            claims, sort_keys=True, ensure_ascii=False, default=repr)
-            .encode("utf-8")).hexdigest()
-        evidence_hash = _evidence_digest(evidence)
-        fp_doc = {"claims_hash": claims_hash,
-                  "evidence_hash": evidence_hash,
-                  "rng_base": rng_base,
+        fp_doc = {"claims_hash": rank_inputs["claims_hash"],
+                  "evidence_hash": rank_inputs["evidence_hash"],
+                  "posterior_hash": rank_inputs["posterior_hash"],
+                  # #792: the per-round seed draw is retired — the null
+                  # keeps the key face stable for tail readers while the
+                  # frozen-sampling detector reads it as the honest gap.
+                  "rng_base": None,
                   "round": int(round_no) if round_no is not None
                   else round_index(ws)}
         fingerprint = hashlib.sha256(json.dumps(
@@ -911,6 +372,12 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             # additive-when-present (#718): no factors -> no key at all
             **({"planner": dict(planner)} if planner else {}),
         }
+        # #801 R2b NOTE: rank_feeds stays PER-RUN (no value gate) — the
+        # #157 replay spine ("the ranking is exactly replayable from the
+        # event tail") and the #218 last-attempt health bit both pin the
+        # emit attempt itself; a suppressed identical ranking would erase
+        # the round-advance marker the replay needs. The R2b gate applies
+        # to the detector_eval and statusline faces only.
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                             arm=(actions[0].claim_id if actions else None),
                             detail=json.dumps(payload, sort_keys=True,
@@ -931,17 +398,23 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
 
 
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
-                   rng: random.Random | None = None,
                    round_no: int | None = None) -> list[Action]:
-    """#107 Thompson ranking (purely mechanical, zero LLM).
+    """#792 deterministic evidence ranking (purely mechanical, zero LLM).
 
     Input: claims (claim-register claims[]), deps (claim_deps.yaml {depends_on, competitor_groups}),
           evidence (EvidenceView; `ws` present → #106 posteriors + oracle cases load),
-          rng (injected; None → random.Random(0) — deterministic),
-          round_no (the round the rng was seeded at — threaded to the emit;
-          None → re-read round_index(ws), fine for static test fixtures only)
-    Output: the sorted Action list (Thompson sample descending, stable
-          tie-break by claim_id — the #107 spec sort).
+          round_no (the calling tick — threaded to the emit fingerprint and
+          the exploration slot ONLY; the ranking itself never reads it).
+    Output: the sorted Action list — value-bearing claims by composite
+          score descending; unlinked claims DEMOTED below every value-
+          bearing one, ordered by the declared deterministic default
+          (downstream_term, tier, worth); stable tie-break claim_id.
+
+    Value face (issue #792): score = (case_value + W_DOWNSTREAM ·
+    downstream_term) · worth, where case_value = Σ αᵢ/(αᵢ+βᵢ) over the
+    linked oracle-case posteriors — deterministic given data, monotone in
+    evidence. Unlinked claims carry no fabricated value (the Beta(1,1)
+    fallback is gone); the linkage gap is their feeds-visible signal.
 
     Candidate filter UNCHANGED from the pre-#107 ranker: OPEN + attempts<3
     + all depends_on parents holding a terminal fact (#594/#596 per-claim
@@ -990,45 +463,54 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
               if evidence.ws is not None else PosteriorLedger())
     oracle_cases = _load_oracle_cases(evidence.ws)
 
-    # ONE base draw; per-claim forks key on claim_id, so a register reorder
-    # never reshuffles the dispatch order (the reorder-stability property).
-    if rng is None:
-        rng = random.Random(0)  # #107 default: same inputs → same ranking
-    base = rng.getrandbits(64)
+    # #792 rank-input digests: the emit fingerprint's input face and the
+    # L1 planner fork seed BOTH derive from these — inputs, never a round
+    # counter (the planner block must not reintroduce round-dependence).
+    claims_hash = hashlib.sha256(json.dumps(
+        claims, sort_keys=True, ensure_ascii=False, default=repr)
+        .encode("utf-8")).hexdigest()
+    evidence_hash = _evidence_digest(evidence)
+    posterior_hash = posterior_digest(ledger)
 
     actions: list[Action] = []
+    # #792: the unlinked demotion metadata — cid -> (dterm, tier, worth)
+    # for the declared deterministic default ordering of the no-value band.
+    unlinked_meta: dict[str, tuple[float, int, float]] = {}
     for c in candidates:
         cid = c["id"]
         pq = str(c.get("answers_question") or "").strip()
         linked = [case_id for case_id, tpq in oracle_cases
                   if tpq and tpq == pq]
-        child = random.Random(f"thompson/{base}/{cid}")
-        # case face: ONE Thompson Beta sample per linked oracle case, summed;
-        # no linkage → a single Beta(1,1) prior sample (cold start = uniform
-        # random WITHIN a round — the per-round seed advances: Thompson's
-        # intrinsic exploration, no threshold gate).
+        # case value: the posterior MEAN of each linked oracle case, summed
+        # (#792). No linkage → NO fabricated value (the Beta(1,1) fallback
+        # is retired): case_value stays 0.0 and the claim is demoted by the
+        # partition sort below; the linkage gap is the feeds signal.
         if linked:
-            case_face = 0.0
+            case_value = 0.0
+            linked_names: list[str] = []
             for case_id in linked:
                 post = ledger.cases.get(case_id) or CasePosterior(case_id)
-                case_face += child.betavariate(post.alpha, post.beta)
+                case_value += post.alpha / (post.alpha + post.beta)
+                linked_names.append(case_id)
             fp = FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c))
-            thompson_state = (f"Thompson Beta over {len(linked)} linked oracle "
-                              f"case(s) [{', '.join(linked)}] -> "
-                              f"sample={round(case_face, 6)}")
+            value_state = (f"posterior mean over {len(linked)} linked oracle "
+                           f"case(s) [{', '.join(linked_names)}] -> "
+                           f"value={round(case_value, 6)}")
         else:
-            case_face = child.betavariate(1.0, 1.0)
+            case_value = 0.0
             fp = min(FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c)),
                      FLIP_POTENTIAL_FALLBACK)
-            thompson_state = (f"no linked oracle case (oracle/cases/ target_pq "
-                              f"!= '{pq or '-'}') -> Beta(1,1) prior sample="
-                              f"{round(case_face, 6)} (cold-start exploration)")
+            value_state = ("unlinked — no value channel (arm oracle cases / "
+                           f"set answers_question): oracle/cases/ target_pq "
+                           f"!= '{pq or '-'}'")
         # ΔH_PQ face REMOVED (#295 governed application, ADR-001): the
         # PQ categorical is no longer read, no entropy is computed, and
         # no dh_pq feed is emitted. On all real ledgers the removed term
         # contributed LAMBDA_DH × 0 ≡ 0 at every tick (EXP-B: 612/612
         # rank events dh_pq=0; #294: λ=0.25 vs λ=0 order digests
         # byte-identical), so ordering is unchanged byte-for-byte.
+        # #792 keeps the removal intact — the mean face never reads the
+        # PQ categorical either.
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
@@ -1038,9 +520,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # stored at 6dp (sort precision; the to_dict/json face still rounds
         # to 3) so the #759 worth multiplier stays an exact identity.
         score = round(
-            (case_face + W_DOWNSTREAM * dterm) * weight, 6)
+            (case_value + W_DOWNSTREAM * dterm) * weight, 6)
         feeds = {
-            "thompson_sample": thompson_state,
+            "case_value": value_state,
             "case_flip_potential": (
                 f"P(flip)={round(fp, 3)} (base {FLIP_POTENTIAL_BASE} decayed "
                 f"by attempts={attempts_of(c)} [dispatches="
@@ -1076,6 +558,8 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             tier=action_tier(c), attempts=attempts_of(c), cost=action_cost(c),
             weight=weight, feeds=feeds,
         ))
+        if not linked:
+            unlinked_meta[cid] = (dterm, action_tier(c), weight)
     # #718 additive L1 planner signal: while the value store is empty
     # `advisory_factors` returns {} and nothing here runs (the ranking
     # above stays byte-identical — the frozen-capture contract). Once
@@ -1083,7 +567,9 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # verified answer already exists — reuse dominates its ratio) is
     # dragged by the dispatch SHARE; exact-1.0 claims keep their score
     # and their feeds untouched. Fail-open: a broken planner never
-    # touches the ranking result.
+    # touches the ranking result. #792: the planner fork seed derives
+    # from the rank INPUT digests (never the round), so the planner face
+    # cannot reintroduce round-dependence into the rank.
     planner_block: dict | None = None
     if evidence.ws is not None:
         factors: dict = {}
@@ -1091,7 +577,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
             from rlvr import l1_planner as _l1p  # noqa: PLC0415 — lazy
             factors = _l1p.advisory_factors(
                 evidence.ws, [(a.claim_id, a.cost) for a in actions],
-                rng=random.Random(f"l1rank/{base}"))
+                rng=random.Random(f"l1rank/{claims_hash}/{evidence_hash}"))
         except Exception as exc:  # noqa: BLE001 — the rank never breaks
             warn("priority_ratio.planner",
                  f"{type(exc).__name__}: {exc}")
@@ -1109,8 +595,25 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                                     f"beats the replay's)"))
                 if a.claim_id in moves else a
                 for a in actions]
-    # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
-    actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # #792 partition sort: value-bearing claims by composite score
+    # descending; unlinked claims DEMOTED below every value-bearing one,
+    # ordered by the declared deterministic default (downstream_term, tier,
+    # worth); stable tie-break by claim id — the sort key is a pure
+    # function of the actions and their unlinked metadata (no rng, no
+    # round, no clock).
+    def _rank_key(a: Action) -> tuple:
+        meta = unlinked_meta.get(a.claim_id)
+        if meta is None:
+            return (0, -a.score, 0, 0.0, a.claim_id)
+        dterm_u, tier_u, weight_u = meta
+        return (1, -dterm_u, tier_u, -weight_u, a.claim_id)
+
+    actions.sort(key=_rank_key)
+    # #792 design 3: the explicit exploration slot (default OFF — see
+    # EXPLORE_EVERY_N_ROUNDS). When enabled and the round hits the slot,
+    # the best unlinked (or lowest-attempts) claim is promoted and
+    # LABELED, never conflated with the value column.
+    actions = _apply_exploration_slot(actions, unlinked_meta, round_no)
     # The emit below reads actions[0] as the event's arm — valid only
     # because this sort already ran: actions[0] IS the selected arm.
     # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
@@ -1119,11 +622,39 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     # tests/test_algorithm_event_log_157.py). No ws -> pure in-memory
     # surface, nothing to log to (bare-EvidenceView calls stay pure).
     if evidence.ws is not None:
-        _emit_rank_feeds(evidence.ws, claims, evidence, base, actions,
-                         round_no=round_no, planner=planner_block)
+        _emit_rank_feeds(evidence.ws, claims, evidence,
+                         {"claims_hash": claims_hash,
+                          "evidence_hash": evidence_hash,
+                          "posterior_hash": posterior_hash},
+                         actions, round_no=round_no, planner=planner_block)
     return actions
 
 
+def _apply_exploration_slot(actions: list[Action],
+                            unlinked_meta: dict[str, tuple[float, int, float]],
+                            round_no: int | None) -> list[Action]:
+    """#792 design 3 — the DECLARED epsilon slot. Disabled (the default,
+    EXPLORE_EVERY_N_ROUNDS == 0) this is the identity. Enabled, every Nth
+    round promotes the best unlinked claim (or, with none, the
+    lowest-attempts claim) to the front and labels it `exploration_arm` in
+    feeds — the value scores of every row are untouched, so the promotion
+    is never conflated with the value column. Pure: same inputs -> the
+    same promoted arm (ties break by the incoming sort order)."""
+    n = EXPLORE_EVERY_N_ROUNDS
+    if n <= 0 or round_no is None or len(actions) < 2 \
+            or round_no % n != 0:
+        return actions
+    pick = next((a for a in actions if a.claim_id in unlinked_meta), None)
+    if pick is None:
+        pick = min(actions, key=lambda a: (a.attempts, a.claim_id))
+    if pick is actions[0]:
+        return actions
+    labeled = replace(pick, feeds=dict(
+        pick.feeds,
+        exploration_arm=(f"exploration arm: round {round_no} slot "
+                         f"(every {n}) — coverage promotion; value column "
+                         f"untouched (#792 design 3)")))
+    return [labeled] + [a for a in actions if a is not pick]
 
 
 # ---------- strategy convergence four metrics ----------

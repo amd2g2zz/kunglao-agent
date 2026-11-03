@@ -30,8 +30,10 @@ nobody gave it a replacement). This script gives the wait a SEAT:
 Usage: python think_seat.py <workspace>
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import argparse
 import datetime
 import json
@@ -40,7 +42,8 @@ from pathlib import Path
 
 import yaml
 
-from priority_ratio import EvidenceView, classify_action, is_open, priority_ratio
+from claims_view import EvidenceView, classify_action, is_open  # #886 prep: view utilities
+from priority_ratio import priority_ratio  # the ranker (ordering face)
 from hypothesis_store import HypothesisStore, Hypothesis  # #711: bets
 
 # H3 knob: consecutive zero-progress waiting ticks before retrieval is forced.

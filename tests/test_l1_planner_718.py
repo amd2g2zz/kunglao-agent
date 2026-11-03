@@ -459,9 +459,11 @@ def test_rank_consumes_planner_additively(tmp_path):
     from test_algorithm_event_log_157 import _rank_inputs, _rank_ws
     import priority_ratio as pr
 
-    ws = _rank_ws(tmp_path)
+    # link a value-bearing case so the multiplicative planner drag is
+    # observable on the score (an unlinked claim is honestly 0.0 under #792)
+    ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, evidence = _rank_inputs(ws)
-    base = pr.priority_ratio(claims, deps, evidence, rng=random.Random(9))
+    base = pr.priority_ratio(claims, deps, evidence)
     assert lp.advisory_factors(evidence.ws, []) == {}
     # empty store: no planner feed anywhere
     assert all("planner" not in a.feeds for a in base)
@@ -472,7 +474,7 @@ def test_rank_consumes_planner_additively(tmp_path):
     solved = next(c["id"] for c in claims if c.get("status") == "OPEN")
     (ws / "facts" / "_INDEX.md").parent.mkdir(exist_ok=True)
     _index_row(ws, "F731", "PROVEN", solved)
-    got = pr.priority_ratio(claims, deps, evidence, rng=random.Random(9))
+    got = pr.priority_ratio(claims, deps, evidence)
     by_id = {a.claim_id: a for a in base}
     moved = [a for a in got if "planner" in a.feeds]
     assert [a.claim_id for a in moved] == [solved]

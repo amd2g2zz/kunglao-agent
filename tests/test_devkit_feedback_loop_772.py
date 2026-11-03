@@ -51,7 +51,12 @@ def _live_ws(tmp_path: Path) -> Path:
         json.dumps({"action": "dispatch", "admitted": ["dispatch/C-001"],
                     "claim": "C-001"}) + "\n" +
         json.dumps({"action": "task_terminal_settlement",
-                    "claim": "C-001"}) + "\n", encoding="utf-8")
+                    "claim": "C-001"}) + "\n" +
+        # issue 805: the closure battery's T2 + distill faces ride the
+        # unified stream as their fired evidence
+        json.dumps({"action": "t2_queue_built", "queued": 1}) + "\n" +
+        json.dumps({"action": "distill_attempt", "phase": "triggered"})
+        + "\n", encoding="utf-8")
     (ws / "runs" / "posterior-store.jsonl").write_text(
         json.dumps({"schema": "posterior-store/1", "arm": "method:static"})
         + "\n", encoding="utf-8")
@@ -68,11 +73,43 @@ def _live_ws(tmp_path: Path) -> Path:
                     "chosen": "dispatch/C-001",
                     "posterior": {}, "ts": "2026-10-18T00:00:00Z"})
         + "\n", encoding="utf-8")
+    # issue-802: the live-workspace contract grew the
+    # blind-settlement-wired fingerprint — a settlement-wire/1 row
+    # carrying the settler identity (the blind face fired)
+    (ws / "runs" / "settlement.jsonl").write_text(
+        json.dumps({"schema": "settlement-wire/1",
+                    "ts": "2026-10-24T00:00:00Z", "claim": "C-001",
+                    "identity": "kunglao-settler", "settled": True})
+        + "\n", encoding="utf-8")
     cases = ws / "oracle" / "cases"
     cases.mkdir(parents=True)
     (cases / "case-001.yaml").write_text(
         "channel: repl\nhypothesis_ref: H-001\nupdate_map: {}\n",
         encoding="utf-8")
+    # issue 805: the live-workspace contract grew the HOOK battery
+    # faces — ONE worker_battery pass row (every registered dispatch
+    # check) is the per-check fingerprints' evidence; the closure
+    # faces prove themselves on their own artifacts.
+    checks = ",".join(sorted(
+        ["stepsettled", "workers", "max_retries", "cap", "branchbudget",
+         "tools", "hostchan", "deadline", "envelope", "tiercons", "tier",
+         "selfcap", "heartbeat", "drift", "health", "envfresh",
+         "envpremise", "backtrack", "zerooutput", "plan", "granularity",
+         "toolfirst", "toolsearch", "handroll", "agenttype", "rotation",
+         "methodfamily", "priority", "snapshot"]))
+    (ws / "runs" / "gate-telemetry.jsonl").write_text(
+        json.dumps({"gate": "worker_battery", "rc": 0, "msg": checks})
+        + "\n", encoding="utf-8")
+    (ws / "runs" / "step-ledger.jsonl").write_text(
+        json.dumps({"schema": "step-record/2", "claim_ref": "C-001",
+                    "outcome": "completed"}) + "\n", encoding="utf-8")
+    strategy = ws / "runs" / "round-strategy"
+    strategy.mkdir(parents=True)
+    (strategy / "tick-0001.yaml").write_text(
+        "schema: round-strategy/1\ntick: 1\n", encoding="utf-8")
+    (ws / "runs" / ".rl-digest.json").write_text(
+        json.dumps({"schema": "rl-digest/1", "round": 1,
+                    "lead": None}) + "\n", encoding="utf-8")
     return ws
 
 
@@ -105,6 +142,46 @@ def test_liveness_ledger_red_on_decorative_workspace(lg, tmp_path):
         json.dumps({"action": "tick"}) + "\n", encoding="utf-8")
     rc = lg.run_ledger(ws)
     assert rc == 1
+
+
+def test_posterior_sentinel_is_family_level(lg, tmp_path):
+    """INV-003 is a FAMILY-level signal (the liveness upgrade card).
+
+    The production-broadcast shape (both 2026-10 runs: settlement rows
+    with arm=NULL broadcast same-value mass to case cells) must NOT
+    satisfy rl-posterior-moved — key-less posterior movement is exactly
+    the decorative case the sentinel exists to catch. The same store
+    with ONE arm-keyed row passes: family attribution is the signal.
+    """
+    spec = next(f for f in lg.load_fingerprints()["fingerprints"]
+                if f["id"] == "rl-posterior-moved")
+
+    def _ws(name: str, rows: list[dict]) -> Path:
+        ws = tmp_path / name
+        (ws / "runs").mkdir(parents=True)
+        (ws / "runs" / "posterior-store.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return ws
+
+    # case-level movement: rows exist but carry NO arm attribution
+    bare = _ws("bare", [
+        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
+         "credit": 1.0, "claim": "C-001"},
+        {"schema": "posterior-store/1", "arm": None, "state": "sig",
+         "gamma": 0.8, "outcome": 1, "alpha_add": 1, "beta_add": 0},
+    ])
+    ok, detail = lg.evaluate_fingerprint(bare, spec)
+    assert not ok, f"key-less rows satisfied the sentinel: {detail}"
+
+    # the identical store, one row arm-keyed: family-level movement
+    keyed = _ws("keyed", [
+        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
+         "credit": 1.0, "claim": "C-001"},
+        {"schema": "posterior-store/1", "arm_key": "static",
+         "method_family": "static", "credit": 1.0, "claim": "C-002"},
+    ])
+    ok, detail = lg.evaluate_fingerprint(keyed, spec)
+    assert ok, f"arm-keyed movement did not pass: {detail}"
 
 
 def test_liveness_missing_ledger_is_fail_not_skip(lg, tmp_path):
