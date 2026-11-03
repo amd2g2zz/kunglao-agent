@@ -234,7 +234,11 @@ is discarded as untrusted. Write in this order:
    without it the settlement cannot attribute the fact to its dispatch,
    and `lint_facts` warns `MISSING_CREATOR` when the claim has dispatch
    anchors.
-2. **IMMEDIATELY after deriving each fact** — write `facts/F<NNN>.md`
+2. **IMMEDIATELY after deriving each fact** — write `facts/<FNNN>-<slug>.md`
+   (the fact id is `F<NNN>-<slug>`: `F` immediately followed by 3+ digits
+   then a lowercase-hyphenated slug, e.g. `F001-first-finding` — the
+   `F-001` shape is REFUSED by the lint; the full frontmatter contract is
+   `.claude/templates/fact-frontmatter.md`
    (crash-safe partial state; `self_caveat: "unverified — needs
    independent verifier pass"` by default).
 3. **Report** — `runs/<YYYY-MM-DD-HHMMSS>-<task>.md` (NOT `verify-*` —
@@ -457,7 +461,7 @@ schemas:
 
 ```yaml
 ---
-id: F<NNN>
+id: F<NNN>-<slug>                        # e.g. F001-first-finding — the lint refuses `F-001`
 title: "<one-line claim>"
 type: fact
 status: VERIFIED-BY-W<n>-<method>     # NEVER 'PROVEN' — that's the verifier's call
