@@ -1683,11 +1683,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 91cfb2c02b6bffcbac6c85fae5a5c3e7921e570f139e0df3a588c85be0b648f4
+    sha256: b87731efe510c49125983e2f14af8eb2cb28d8bb961f90103545d7531fcb06bf
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: f0798b064829d19f05b0b5b5204169f9405b7451398715ab14e12afd7f4ce83b
+    sha256: 27f22019bd9afdce9cd04b59832e565391a4cbcc855e26aaea1616e7feafde41
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -2111,7 +2111,7 @@ files:
   - src: references/re-library/web/external-distilled/external-captcha-perception-atlas.md
     dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-atlas.md
     kind: asset
-    sha256: e6287df8bde077a54f53b7591fb984493d3ec7616bddeafe1898b638a112fc67
+    sha256: 114c2bed3e616bbe73c0a5d0c0258119d356bd70cbe58fb4efcd012bb69e9468
   - src: references/re-library/web/external-distilled/external-captcha-perception-methods.md
     dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-methods.md
     kind: asset

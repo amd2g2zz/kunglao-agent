@@ -96,7 +96,7 @@ measured on held-out test sets; **claim** = practitioner-reported,
 unverified.
 
 | Family | Route | Tools | Accuracy band | When this route wins | Sources |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | **slider** | template match (Canny 100/200 + `TM_CCOEFF_NORMED`, alpha-aware via `slide_match`/`simple_target`) | ddddocr / OpenCV | claim 90%+; fails on icon decoys | default first try; needs the piece PNG | S9, S10, S25 |
 | | state-pair 1-D strip diff (vertical max-pool → binarize ~48 → 4 transitions) | numpy/OpenCV | live 86% (43/50), decays after bursts | art-heavy vendors; no piece PNG; both states obtainable | S12, S11 |
 | | single-class YOLO on ~200 labeled gap boxes | YOLOv3/v8 + LabelImg | bench conf 0.9999 | decoy-laden vendors (icon fills, rotated decoys) | S14, S13, S25 |
