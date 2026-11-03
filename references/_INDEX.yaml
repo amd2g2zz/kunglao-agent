@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 900fc8dfd0a6c2d0da3378aad362c09fc86a928421fb9a01348f0fa36070e9a5
+  references/_INDEX.md: b87731efe510c49125983e2f14af8eb2cb28d8bb961f90103545d7531fcb06bf
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -14,7 +14,7 @@ files:
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   references/_index-research.md: 2a9f7aca1353aded49c13b4fedb9bb61ad83d5fc62940218fc058181e05271d5
   references/_index-tools.md: 5f1d7d7c8a9d7a9a26e471278cbb561fbc083dd0e0cc8628506995fb92b740f9
-  references/_index-web.md: 865322c3e66bea4354021d5c9abacbfe1557dcc3f2ccdb890b29f486a557f722
+  references/_index-web.md: f18f62a2934bd7a0a9edce03579ee75230c9ef09c87ac58a264443534085061f
   references/contracts/agent-three-state-charter.md: 8719241ce2e1479d770b317598cad3acfd453899dda4b02015851a7acea2cfce
   references/contracts/cli-script-checklist.md: 5119b9be3a005d8a55a73df276eacf3298dfbbea121fe72867fe663a475fc5a5
   references/contracts/cold-start-contract.md: d7766aa74effcfa771e258f7bb83f978554f924ff165126c3cce2bb2aa39fd13
@@ -107,6 +107,8 @@ files:
   references/re-library/web/crawler/web-crawler-engineering.md: 04f3c932064810e003ef1fa819be40df26b41a27f623b49b38815af12de21a78
   references/re-library/web/external-distilled/_GAP-REPORT.md: 2cee9b4aed1e9aaaf1eb027ae0ffff82eab8d21e6c5167d6f89ca72bc561f780
   references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
+  references/re-library/web/external-distilled/external-captcha-perception-atlas.md: 114c2bed3e616bbe73c0a5d0c0258119d356bd70cbe58fb4efcd012bb69e9468
+  references/re-library/web/external-distilled/external-captcha-perception-methods.md: 3a8f0545ad5d3e9c61dfd24fefd3c6e2aa6e28e5dcef490807f54ea5e7511de7
   references/re-library/web/external-distilled/external-delivery-verification-gates.md: 2ceda5a3d365003edccb14876b950a3d9709be97d79d6701d12ecab361037bbc
   references/re-library/web/external-distilled/external-env-stub-generation.md: 3689222e622fe7e608e9a54ebaaffac71038a61c84fc4bf0e8689a0b2fc9e25d
   references/re-library/web/external-distilled/external-minimal-intervention-observation.md: 3d7b5437ad12df2dbc4a5ea0642de8c555cde23c3301a66f2bc8c40f75df9b6f
