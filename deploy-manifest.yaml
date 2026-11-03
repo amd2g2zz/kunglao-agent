@@ -1683,11 +1683,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 900fc8dfd0a6c2d0da3378aad362c09fc86a928421fb9a01348f0fa36070e9a5
+    sha256: 5f1f4458ce9eda407fbea28ad8aa85691289b7cda4fae79461e7f454a5478396
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 0b29364c4718170d25e694b4192b6b51ac519f11b186f60461ca8742c980e0fa
+    sha256: 8e19144d58c374ecf965ef01667c06844acc2911e224741aae64c4b132c99df4
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1875,7 +1875,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 9d0a7c8fb746de3ac780868e2ab395c59c3b7ae7898a423536b7810066c589b0
+    sha256: af97bae599ba3618b2c2f04a3548cde508d57b0b30e6468ea84703e705d662c8
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -2108,6 +2108,10 @@ files:
     dest: .claude/references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
     kind: asset
     sha256: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
+  - src: references/re-library/web/external-distilled/external-captcha-perception-methods.md
+    dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-methods.md
+    kind: asset
+    sha256: 63e2db5428cca3fb7c63c739a220115b73583ccefc0cff3470c0c73042a42079
   - src: references/re-library/web/external-distilled/external-delivery-verification-gates.md
     dest: .claude/references/re-library/web/external-distilled/external-delivery-verification-gates.md
     kind: asset
@@ -2271,7 +2275,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 0e0c1ad802e8bed362e743595f26ab56251d152522b762a4941bedcc7dd248eb
+    sha256: 59098c8e29d25519423e1f8a7f65010c38646c60d317e2e3a83d2fd257a674d1
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
