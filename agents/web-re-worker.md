@@ -177,8 +177,10 @@ headfull visual browser. Every escalation records one plan line stating which si
 
 <!-- contract: status-sync -->
 WRITE the deliverables yourself, in this order: `runs/worker-status-web-re-<task>.md`
-(one appended status line per state change), `facts/F<NNN>.md` immediately after
-each fact with the standard frontmatter schema (never `PROVEN`, always
+(one appended status line per state change), `facts/<FNNN>-<slug>.md` immediately after
+each fact (fact id `F<NNN>-<slug>` — `F` + 3+ digits + lowercase-hyphen slug, e.g.
+`F001-captcha-param-source`; the `F-001` shape is REFUSED by the lint; full contract:
+`.claude/templates/fact-frontmatter.md`) with the standard frontmatter schema (never `PROVEN`, always
 `self_caveat`), the final report under `runs/`, and one appended `progress.txt`
 line (progress.txt is regenerated from the event ledger at checkpoints —
 appended lines are preserved and mirrored into

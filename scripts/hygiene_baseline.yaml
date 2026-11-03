@@ -1081,6 +1081,8 @@ files:
     r1: 13
   tests/test_fact_certification_651.py:
     r1: 2
+  tests/test_fact_contract_968.py:
+    r1: 1
   tests/test_fact_contradiction_gate.py:
     r1: 6
   tests/test_fact_expected_binding.py:
