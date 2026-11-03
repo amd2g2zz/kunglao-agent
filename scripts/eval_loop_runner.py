@@ -40,6 +40,13 @@ no mocked telemetry. The runner's ONLY jobs:
                          and terminal (see _record_experience): tc journal,
                          situation snapshot, triples.csv — pure recording,
                          zero decision impact.
+    7. SETTLEMENT        issue #966: the runner-native settlement face
+                         (LOOP arm) — a solo session never dispatches, so
+                         the runner writes the pending dispatch row itself
+                         and settles the graded credit through the same
+                         scalar handler a worker settlement uses (see
+                         runner_settlement_face). Fail-open; the verdict
+                         row is unaffected.
 
 Budget/cancellation: budget exhaustion is a TERMINAL metric row
 (loop.status=exhausted), never a crash, on BOTH kill faces — the runner's
@@ -1111,6 +1118,130 @@ def governance_block(metrics: dict, status: str, q_cell_rows: int) -> dict:
     }
 
 
+# ---- #966: the runner-native settlement face ------------------------------
+# A solo eval session never invokes the Agent tool (single-session
+# topology), so hooks/dispatch_gate.py's ALLOW tail — the production
+# writer of pending dispatch rows — never fires; every live session
+# accumulated ZERO credit and the settlement→Q-bank→store chain was
+# structurally dead (#966). Option (a): the runner saw the whole loop
+# session and grades it at terminal, so the RUNNER writes the dispatch
+# row itself and settles the graded credit through the same scalar
+# handler a worker settlement uses.
+
+#: the context_recipe dim the runner face declares on its dispatch row
+#: (the runner feeds the facts snapshot whole — a solo session has no
+#: other context source).
+RUNNER_SETTLEMENT_RECIPE = "facts_snapshot"
+
+
+def runner_settlement_face(ws: Path, *, task: dict, verdict: str,
+                           prompt: str = "") -> dict:
+    """One terminal settlement for a solo eval session (issue #966).
+
+    Writes ONE pending dispatch row (rlvr.q_cells.record_dispatch_
+    observation — the envelope-declaration face the ALLOW tail normally
+    drives) keyed by a session-stable id, then settles the graded
+    credit through ``scalar._bank_q_cell_credit`` — the same handler a
+    worker settlement uses, so the Q-cell bank AND the cross-task store
+    row (rlvr.strategy_store.append_store_row) land exactly as they do
+    in the multi-session topology.
+
+    Credit semantics (the ladder limitation, named): the #433 ladder's
+    per-artifact decomposition (credited/demoted/waste) lives in the
+    SETTLER domain — scalar.round_credit consumes artifact rows the
+    runner never sees. The runner owns only the terminal checker
+    verdict, so the runner-native credit is the two-point endpoint:
+    PASS banks the ladder's full-credit endpoint (ROUND_CREDIT_FULL =
+    1.0) and FAIL banks the honest 0.0 — the FAIL face must also
+    settle, so the fold's failure mass moves (the point of #966). The
+    append boundary rail-clamps into [0, 1] either way.
+
+    Retry safety: the dispatch id is deterministic per (arm, task id) —
+    never random — and the face refuses when the q-cell log already
+    carries it (any row, dispatch or settlement source). THAT PRE-SCAN
+    IS THE SOLE GUARD: the Q-bank match itself has no one-shot
+    semantics (`_match_pending_dispatch` matches any credit=None row,
+    and dispatch rows stay credit=None forever), and the worker path's
+    settlement-presence guard (scalar.run) is bypassed here — a direct
+    re-call with a wiped log would double-bank. Consequence also named:
+    this face writes NO settlement-ledger row, so the reconcile pass
+    (`_reconcile_q_cell_bank`, ledger-driven) cannot rescue a
+    bank-crash pending row — such a row stays unbanked until manual
+    repair. And the #718 claim-terminal rollout-return leg
+    (`_bank_l1_rollout_return`, fired by every worker first-settlement)
+    is deliberately NOT fired here — the L1 feed stays settler-domain
+    until a card wires it for solo sessions. Holdout units are refused
+    at the store's firewall filter exactly as for worker settlements —
+    that wall sits downstream and holds.
+
+    Fail-open: any exception is one _warn_fail_open WARN and a
+    ``settled: False`` result; the verdict row is never touched. The
+    caller gates on arm == ARM and counts the q-cell face BEFORE this
+    face runs, so the harness-failure classifier keeps seeing the
+    spine's own engagement, never the runner's backfill."""
+    verdict = str(verdict or "").strip().upper()
+    if verdict not in ("PASS", "FAIL"):
+        # no graded work (SKIP — no gradeable deliverable): no row,
+        # never a fabricated credit
+        return {"settled": False,
+                "reason": f"ungraded:{verdict or 'none'}",
+                "dispatch_id": None, "credit": None}
+    try:
+        from rlvr import q_cells  # noqa: PLC0415 — lazy (mirrors _q_cell_face)
+        from rlvr import scalar  # noqa: PLC0415
+
+        family = str(task.get("family") or "").strip()
+        if not family:
+            # the #432 posture: an undeclared family is the honest gap
+            return {"settled": False, "reason": "undeclared",
+                    "dispatch_id": None, "credit": None}
+        # session-stable identity: deterministic per (arm, task id) — a
+        # retried workspace hits the one-shot guard below, not a second
+        # bank.
+        task_id = str(task.get("task_id") or ws.name)
+        did = f"runner-{ARM}-{task_id}"
+        if any(str(r.get("dispatch_id") or "") == did
+               or str(r.get("claim") or "") == did
+               for r in q_cells.JSONLQStore(ws).observations()):
+            return {"settled": False, "reason": "already-settled",
+                    "dispatch_id": did, "credit": None}
+        # (a) the pending dispatch row — the runner stands in for the
+        # ALLOW tail; the envelope dims mirror the dispatch envelope
+        # fields (the string task tier buckets to 0 in the arm key, the
+        # boundary's own coercion).
+        opened = q_cells.record_dispatch_observation(
+            ws, prompt or "", envelope_meta={
+                "method_family": family,
+                "tier": task.get("tier"),
+                "context_recipe": RUNNER_SETTLEMENT_RECIPE,
+                "verification_mode": str((task.get("anchors") or {}).get(
+                    "verification_method") or "none"),
+            },
+            claim=did, dispatch_id=did)
+        if not opened.get("appended"):
+            return {"settled": False,
+                    "reason": f"dispatch-row:{opened.get('reason')}",
+                    "dispatch_id": did, "credit": None}
+        # (b)+(c) the graded credit settles through the SAME scalar
+        # handler a worker settlement uses: the Q bank matches the
+        # pending row, banks the credit, and the store row rides the
+        # matched arm key — one call, no second scan. (Underscore-
+        # private, but it is the seam #966 names as sanctioned.)
+        credit = 1.0 if verdict == "PASS" else 0.0
+        bank = scalar._bank_q_cell_credit(
+            ws, {"dispatch_id": did, "r": credit, "credited": []})
+        banked = bool(bank and bank.get("appended"))
+        return {"settled": banked,
+                "reason": None if banked else "bank-unmatched",
+                "dispatch_id": did, "credit": credit,
+                "arm_key": (bank or {}).get("arm_key"),
+                "method_family": (bank or {}).get("method_family")}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        _warn_fail_open("runner_settlement", exc)
+        return {"settled": False, "reason": f"error:{type(exc).__name__}",
+                "dispatch_id": None, "credit": None}
+
+
 def _family_usage_counts(source: Path, lines: list[str]) -> dict:
     """green/total per family from the consolidated experience dispatch
     rows (the usage-merge columns): total = dispatches per family, green =
@@ -2088,6 +2219,21 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     # the harness class rides excluded_from_performance + governance,
     # never as a status rewrite
 
+    # ---- #966: the runner-native settlement face (LOOP arm only). A
+    # solo session never dispatches (single-session topology), so the
+    # ALLOW tail's pending dispatch row never lands and the
+    # settlement→Q-bank→store chain was structurally dead. The runner
+    # saw the whole loop session and grades it at terminal: it writes
+    # the dispatch row and settles the graded credit through the same
+    # scalar handler a worker settlement uses. Runs AFTER the q-cell-
+    # face read above so the harness-failure classifier keeps seeing
+    # the spine's own engagement, never the runner's backfill.
+    # Fail-open: one WARN, the verdict row unaffected.
+    settlement = (runner_settlement_face(ws, task=task,
+                                         verdict=res["verdict"],
+                                         prompt=prompt)
+                  if arm == ARM else None)
+
     row = ds.results_row(
         task_id=res["task_id"], family=res["family"],
         checker_kind=res["checker_kind"], metrics=res["metrics"],
@@ -2101,6 +2247,9 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
             gov["harness_failure_reason"] = hf_reason
         row["governance"] = gov
         row["excluded_from_performance"] = harness_failure
+        # #966: the face's own receipt rides the row (additive telemetry
+        # — the verdict/checker columns stand untouched).
+        row["runner_settlement"] = settlement
         if harness_failure:
             print(f"[kunglao-agent] eval_loop: {tdir.name} EXCLUDED from "
                   f"performance ({hf_reason})", file=sys.stderr)

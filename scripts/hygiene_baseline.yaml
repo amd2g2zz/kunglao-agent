@@ -154,7 +154,7 @@ files:
   scripts/eval_dataset.py:
     r1: 6
   scripts/eval_loop_runner.py:
-    r1: 31
+    r1: 38
   scripts/eval_matrix_report.py:
     r1: 2
   scripts/eval_native_sources.py:
@@ -1682,6 +1682,8 @@ files:
     r2: 1
   tests/test_rt_read_barrier_652.py:
     r1: 4
+  tests/test_runner_settlement_face_966.py:
+    r1: 2
   tests/test_runtime_fact_gate_341.py:
     r1: 1
   tests/test_runtime_version_758.py:
