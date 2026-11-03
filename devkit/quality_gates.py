@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import json
 import subprocess
 import sys
@@ -539,7 +540,10 @@ def main(argv: list[str] | None = None) -> int:
         name, fn = GATES[g]
         print(f"\n=== Gate {g}: {name} ===")
         try:
-            ok = fn(verbose=verbose)
+            if "verbose" in inspect.signature(fn).parameters:
+                ok = fn(verbose=verbose)
+            else:
+                ok = fn()
         except Exception as exc:
             print(f"  [fail] Gate {g} raised: {exc}", file=sys.stderr)
             ok = False
