@@ -351,6 +351,9 @@ def distill(ws, family: str, playbook_path: Path | None = None,
     material = collect_material(ws)
     if not material:
         return fail("no-terminal-material")
+    # the cost contract counts the ATTEMPT: a spent-but-faulted call is
+    # real money — calls=1 from the moment the executor is invoked
+    result["calls"] = 1
     try:
         raw = executor(build_prompt(ws, str(family),
                                     fpb.serialize(current),
@@ -358,7 +361,6 @@ def distill(ws, family: str, playbook_path: Path | None = None,
     except Exception as exc:  # noqa: BLE001 — the model face fails closed
         return fail(f"executor-fault:{type(exc).__name__}:"
                     f"{str(exc)[:200]}")
-    result["calls"] = 1
     try:
         patch = parse_patch(raw)
     except (ValueError, json.JSONDecodeError) as exc:

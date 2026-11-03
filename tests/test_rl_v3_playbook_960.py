@@ -389,7 +389,10 @@ class TestDistillCall:
         out = pd.distill(ws, "tf-snake", path, executor=boom)
         assert out["applied"] is False
         assert out["patch"] == []
-        assert out["calls"] == 0
+        # #969 cost-contract restatement: the ATTEMPT is the spend — a
+        # faulted call still went out and costs money (pre-call refusals
+        # like no-terminal-material stay calls=0)
+        assert out["calls"] == 1
         assert path.read_bytes() == before, "file byte-untouched"
         assert "playbook_distill" in capsys.readouterr().err
 
