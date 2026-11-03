@@ -2155,7 +2155,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 6c2675565ae920ec2c5e3ccb66b2966e257e45aa88c233d93a2d95047610fac5
+    sha256: 404532038fa34cfa2e98ee46cf9ecfb79e41272fcaa8061604af139ca1f01be0
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
