@@ -135,7 +135,7 @@ failed tries — the same idea renamed is refused.
 **3. Where to double-check.** States where verifiers keep getting refuted
 learn to schedule verification more tightly there — and relax when the
 streak turns honest.
-**4. Which tools to route.** Tool and provider choices are learned too: a tool that fails gets demoted for a while and is reinstated the moment it works again - routing follows the recorded outcomes, not the registry order.
+**4. Which tools to route.** Tool and provider choices are learned too: a tool that fails gets demoted for a while and is reinstated the moment it works again — routing follows the recorded outcomes, not the registry order.
 
 ### How the learning works
 
@@ -161,14 +161,18 @@ targets, and every number traces to an append-only ledger row.
   than the first; the notes persist across tasks in the deployment.
 - **Budget stops bleeding.** Dead methods are benched before they drain
   the clock; the discovery layer replaces vocabulary nobody wrote.
-![Win rate rises, steps to solve falls - the loop's own ledger is the evidence](docs/assets/rl-curves.gif)
-
 - **The model is frozen.** Capability does not grow - scheduling does:
   the right method, in the right order, at the right moment.
 - **Honesty is not learned - it is enforced.** The checker pays only for
   results it can re-verify; a worker's own words never count as proof.
   RL optimizes efficiency on top of that honest currency; it can never
   mint credit by fiction.
+
+![One chart, two measures: win rate climbs on the left axis while steps to settle fall on the right](docs/assets/rl-curves.gif)
+
+One chart, two measures — win rate on the left axis, steps to settle on the right.
+Both are read off the same append-only ledger, so the improvement is auditable,
+not asserted.
 
 ![The checker pays only for verifiable results](docs/assets/rl-pricing.gif)
 
