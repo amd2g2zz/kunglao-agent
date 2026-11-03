@@ -47,7 +47,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: b0a515dc13667fa83266fea143773f3ea9570ed31086690d7dda796019f5c9ea
+    sha256: c86f27195f48bfbac22766063f642d633958365ae2edeefb66f7270c0ef401f0
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: b2a61ce0ab8b9281d44eb3e21f7f60f376e050145ec98cecfc41ffa5907cff0a
+    sha256: 72a19104eb1b89d4448bd96472e86b09403a49a0fcf39ad92222e77f73df44c1
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -555,7 +555,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 888c0ed316a0399676dcab94ec403660e45e8ccca221e853c12114724bcfc203
+    sha256: 53302d11812c202f46a7340ff19acbe34154200c477df0363506a293f375b1f1
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1687,7 +1687,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 95e3ba1e8ae33c9b0291ed80e308eabbed6f2def6cef0c08044107a937e1aa8a
+    sha256: 3eb70198360ddbda6b8424d40d37038891b78bd0e08c95ff925db70d82a929f3
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1827,7 +1827,7 @@ files:
   - src: references/orchestration/dispatch-protocol.md
     dest: .claude/references/orchestration/dispatch-protocol.md
     kind: asset
-    sha256: 02c26b09a03d326ee0d20963c1945a508b5852f201b968a7d970aae79c31133f
+    sha256: cd9741d16ce77601f38710a50fca00af10add4deeaf02a40f1ab95536a8a8be7
   - src: references/orchestration/dynamic-re-tool-priority.md
     dest: .claude/references/orchestration/dynamic-re-tool-priority.md
     kind: asset

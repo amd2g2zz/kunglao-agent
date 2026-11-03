@@ -173,24 +173,46 @@ def _balanced_json_at(text: str, start: int) -> int:
     return -1  # unbalanced
 
 
-def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | None]:
-    """Parse v1 protocol JSON prefix.
-
-    Returns (tier, tools, claim_id, raw_metadata). (0, [], None, None) on
-    failure — the only recognized protocol is v1.
-    """
+def _envelope_payload(text: str) -> dict | None:
+    """The `kunglao_dispatch` payload dict, or None (the ONE parse face)."""
     m = DISPATCH_JSON_START_RE.search(text)
     if not m:
-        return (0, [], None, None)
+        return None
     end = _balanced_json_at(text, m.start())
     if end < 0:
-        return (0, [], None, None)
+        return None
     try:
         payload_obj = json.loads(text[m.start():end])
     except (json.JSONDecodeError, ValueError):
-        return (0, [], None, None)
+        return None
     payload = payload_obj.get("kunglao_dispatch")
-    if not isinstance(payload, dict):
+    return payload if isinstance(payload, dict) else None
+
+
+def dispatch_protocol_version(text: str) -> int | None:
+    """The envelope version (1 or 2), or None when no valid envelope.
+
+    v2 is the action-tuple envelope (#804); read_targets enforcement is
+    version-scoped: v1 stays advisory, v2 is a hard gate.
+    """
+    payload = _envelope_payload(text)
+    if payload is None:
+        return None
+    try:
+        version = int(payload.get("version", 0))
+    except (TypeError, ValueError):
+        return None
+    return version if version in DISPATCH_PROTOCOL_VERSIONS else None
+
+
+def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | None]:
+    """Parse the dispatch JSON envelope.
+
+    Returns (tier, tools, claim_id, raw_metadata). (0, [], None, None) on
+    failure — the recognized protocol versions are v1 and v2.
+    """
+    payload = _envelope_payload(text)
+    if payload is None:
         return (0, [], None, None)
     if int(payload.get("version", 0)) not in DISPATCH_PROTOCOL_VERSIONS:
         return (0, [], None, None)

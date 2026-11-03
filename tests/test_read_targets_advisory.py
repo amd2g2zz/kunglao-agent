@@ -5,9 +5,10 @@ The v1 dispatch envelope grows an ADVISORY ``read_targets`` block: the
 orchestrator resolves each task target to ``path`` + (``symbol`` or
 ``lines``) and declares a ``read_fallback`` strategy for the case where
 the coordinates no longer match at execution time (file revised, heading
-moved, path gone). Phase 1 is OBSERVABLE but never gates: a
-missing/malformed block leaves a ``read_targets_advisory`` ledger row
-and the dispatch proceeds.
+moved, path gone). Enforcement is version-scoped: v1 envelopes stay
+ADVISORY (a ``read_targets_advisory`` row, no reject), while v2 envelopes —
+the action-tuple protocol — REJECT a missing/malformed block unless the
+orchestrator declares ``"read_targets": "none (reasoning: ...)"``.
 
 Contract under test:
   - ``lib_kunglao.read_targets_status(meta, workspace)`` — the single
@@ -39,6 +40,18 @@ def _env(**fields) -> dict:
     meta = {"version": 1, "claim": "C-001", "tier": 1,
             "tools": ["grep"], "agent": "w-test",
             "method_family": "static-decompile"}
+    meta.update(fields)
+    return meta
+
+
+def _env_v2(**fields) -> dict:
+    """A v2 envelope meta dict — the action-tuple protocol requires the
+    four action fields, and read_targets is ENFORCED at this version."""
+    meta = {"version": 2, "claim": "C-001", "tier": 1,
+            "tools": ["grep"], "agent": "w-test",
+            "method_family": "static-decompile",
+            "action_type": "dispatch", "context_recipe": "default",
+            "verification_mode": "static", "control": "budget=1"}
     meta.update(fields)
     return meta
 
@@ -348,6 +361,90 @@ def test_advisory_emit_failure_still_proceeds(tmp_path, capsys, monkeypatch):
     ws = tmp_path / 'ws'
     rc = pre_check(_dispatch_payload(_prompt(_env())), _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
+
+
+# ---------- version-scoped enforcement: v2 gates, v1 stays advisory ----------
+
+def test_dispatch_protocol_version_reads_both_versions():
+    lib = load_hooks_lib()
+    assert lib.dispatch_protocol_version(_prompt(_env())) == 1
+    assert lib.dispatch_protocol_version(_prompt(_env_v2())) == 2
+    assert lib.dispatch_protocol_version("no envelope here") is None
+
+
+def test_dispatch_protocol_version_rejects_unknown_versions():
+    lib = load_hooks_lib()
+    assert lib.dispatch_protocol_version(_prompt(_env(version=3))) is None
+    assert lib.dispatch_protocol_version(
+        _prompt(_env(version="two"))) is None
+
+
+def test_v1_with_action_tuple_stays_advisory(tmp_path, capsys):
+    """The boundary is the VERSION, not the presence of the action fields."""
+    ws = tmp_path / 'ws'
+    meta = _env(action_type='dispatch', context_recipe='default',
+                verification_mode='static', control='budget=1')
+    rc = pre_check(_dispatch_payload(_prompt(meta)), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+    assert 'read_targets_advisory' in _ledger_actions(ws)
+
+
+def test_v2_malformed_opt_out_rejects(tmp_path, capsys):
+    ws = tmp_path / 'ws'
+    for bad in ('none', 'none (no reasoning)'):
+        rc = pre_check(_dispatch_payload(_prompt(_env_v2(read_targets=bad))),
+                       _min_paths(ws))
+        assert rc == 2, bad
+        assert 'REJECT readtargets' in capsys.readouterr().err
+
+
+def test_v2_missing_read_targets_rejects(tmp_path, capsys):
+    ws = tmp_path / 'ws'
+    rc = pre_check(_dispatch_payload(_prompt(_env_v2())), _min_paths(ws))
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert 'REJECT readtargets' in err
+    rows = [json.loads(ln)
+            for p in (ws / 'runs' / 'logs').glob('kunglao-*.jsonl')
+            for ln in p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+    rows = [r for r in rows if r.get('action') == 'read_targets_gate']
+    assert rows and json.loads(rows[-1]['detail'])['status'] == 'missing'
+    assert json.loads(rows[-1]['detail'])['version'] == 2
+
+
+def test_v2_malformed_read_targets_rejects(tmp_path, capsys):
+    ws = tmp_path / 'ws'
+    meta = _env_v2(read_targets=[{'path': 'a.py'}],
+                   read_fallback='symbol-first')
+    rc = pre_check(_dispatch_payload(_prompt(meta)), _min_paths(ws))
+    assert rc == 2
+    assert 'REJECT readtargets' in capsys.readouterr().err
+
+
+def test_v2_valid_targets_pass(tmp_path, capsys):
+    ws = tmp_path / 'ws'
+    (ws / 'hooks').mkdir(parents=True)
+    (ws / 'hooks' / 'demo.py').write_text('one\ntwo\n', encoding='utf-8')
+    meta = _env_v2(read_targets=[{'path': 'hooks/demo.py', 'lines': [1, 2]}],
+                   read_fallback='symbol-first')
+    rc = pre_check(_dispatch_payload(_prompt(meta)), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_v2_opt_out_passes(tmp_path, capsys):
+    ws = tmp_path / 'ws'
+    meta = _env_v2(read_targets='none (reasoning: prose-only task)')
+    rc = pre_check(_dispatch_payload(_prompt(meta)), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_v1_missing_read_targets_stays_advisory(tmp_path, capsys):
+    """The version boundary is the rollout lever: v1 keeps phase-1
+    behaviour (a row, no reject) while v2 is enforced."""
+    ws = tmp_path / 'ws'
+    rc = pre_check(_dispatch_payload(_prompt(_env())), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+    assert 'read_targets_advisory' in _ledger_actions(ws)
 
 
 # ---------- injected recall carries the fallback rule ----------
