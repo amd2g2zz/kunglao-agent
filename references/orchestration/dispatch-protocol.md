@@ -47,7 +47,7 @@ Fields:
   fact frontmatter `trace_id:` (same channel as the claim id). Unattributed rate = share of ledger lines missing
   trace_id (`kunglao_log.unattributed_rate`).
 
-- **`read_targets` + `read_fallback`: optional (ADVISORY, phase 1)** — the coordinates the worker
+- **`read_targets` + `read_fallback`: version-scoped** — the coordinates the worker
   reads FIRST, resolved by the orchestrator BEFORE dispatch (GitNexus `context <symbol>` for code,
   `rg -n` for non-code), plus the re-anchor strategy used when a coordinate no longer matches at
   execution time (file revised, heading moved, path gone). Shape:
@@ -76,10 +76,15 @@ Fields:
     request a corrected target, or record the GAP with its reasoning. Never keep searching the
     tree for something that merely looks related.
 
-  Phase 1 is advisory: `hooks/worker_budget_sinks.py:pre_check` (after the method-family
-  gate — the last rejecting gate) emits a `read_targets_advisory` ledger row
-  (`status` = ok / missing / opt_out / malformed) and the dispatch proceeds. Explicit opt-out:
-  `"read_targets": "none (reasoning: ...)"`.
+  Enforcement is version-scoped: **v1 envelopes stay ADVISORY** — `hooks/worker_budget_sinks.py:pre_check`
+  (placed BEFORE the method-family audit writes its sampler/quarantine rows) emits a
+  `read_targets_advisory` row (ok / missing / opt_out / malformed) and the dispatch proceeds.
+  **v2 envelopes** (the action-tuple protocol: `action_type` / `context_recipe` /
+  `verification_mode` / `control`) **REQUIRE the block**: a missing/malformed `read_targets`
+  REJECTs (`REJECT readtargets`) and emits a `read_targets_gate` row. Explicit opt-out in both
+  versions: `"read_targets": "none (reasoning: ...)"`. Precondition: an envelope whose
+  `claim` / `tier` does not parse as `C-\d+` / 1-3 is a non-claim prompt (`not_dispatch`) and is
+  not enforced.
 
 ## Protocol v0 (compat)
 

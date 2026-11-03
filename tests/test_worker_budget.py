@@ -797,6 +797,7 @@ REJECT_NAMES = [
     'branchbudget',  # #690: the branch act budget (retries)
     'batteryreg',  # issue 805: the hook battery registration launch gate
     'envelope',  # P6 guards: tier wall/call/spend envelope TIMEOUT gate
+    'readtargets',  # coordinates-first v2 gate: read_targets is required
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -827,6 +828,7 @@ REJECT_FIX_KEYWORDS = {
     'stepsettled': 'SubagentStop',  # #690: the settle face that lifts the barrier
     'branchbudget': 'branch_budget',  # #690: the exhausted budget names itself
     'envelope': 'envelope_timeout',  # P6 guards: the terminal row names the repair
+    'readtargets': 'read_targets',  # coordinates-first v2 gate names the field
 }
 
 

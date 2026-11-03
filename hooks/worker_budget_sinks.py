@@ -352,6 +352,20 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'makes the pre-dispatch checkpoint verifiable - then re-dispatch.'
         ),
     },
+    'readtargets': {
+        'additionalContext': (
+            'a v2 dispatch envelope must carry `read_targets`. Fix: resolve '
+            'each task target BEFORE dispatch (GitNexus `context <symbol>` '
+            'for code, `rg -n` for non-code) and add '
+            '`"read_targets": [{"path": "...", "symbol": "<name>"}]` (or '
+            '`{"path": "...", "lines": [start, end]}`) plus `"read_fallback"` '
+            '(locate: symbol-first / heading-first / exact-or-gap) to the '
+            'envelope. When the task genuinely has no file coordinate, '
+            'declare `"read_targets": "none (reasoning: <why>)"`. v1 '
+            'envelopes stay advisory; v2 makes the coordinate contract '
+            'enforced.'
+        ),
+    },
     'devreason': {
         'additionalContext': (
             'priority deviation without justification (anti-spoof v1.9.24). '
@@ -994,33 +1008,47 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     return (None, mf_value, view)
 
 
-def _read_targets_advisory(paths: dict, prompt: str, cid) -> None:
-    """Coordinates-first dispatch (phase 1): log the read_targets status.
+def _read_targets_gate(paths: dict, prompt: str, cid) -> int | None:
+    """Coordinates-first dispatch: version-scoped enforcement.
 
-    Advisory only — a missing/malformed block (or any loader trouble)
-    degrades to a ledger row / warn, never a reject. Adoption is measured
-    from the row's `status` field (ok / missing / opt_out / malformed).
+    v1 envelopes stay ADVISORY (a ledger row, no reject). v2 envelopes —
+    the action-tuple protocol — REQUIRE the block: a missing/malformed
+    `read_targets` without a `none (reasoning: ...)` opt-out is a REJECT.
+    Any loader trouble stays fail-open: observability never breaks a
+    dispatch.
     """
     ws = paths.get('workspace') if isinstance(paths, dict) else None
     if not ws:
-        return
+        return None
     try:
         lib = load_hooks_lib()
         status, errors = lib.read_targets_status(
             lib.parse_dispatch_json(prompt)[3], ws)
         if status == 'not_dispatch':
-            return
+            return None
+        version = lib.dispatch_protocol_version(prompt)
+        enforced = version is not None and version >= 2
         try:
             import kunglao_log
-            kunglao_log.emit(Path(ws), 'hook:worker_budget',
-                             'read_targets_advisory', claim=cid,
-                             detail=json.dumps({'status': status,
-                                                'errors': errors[:3]},
-                                               ensure_ascii=False))
+            kunglao_log.emit(
+                Path(ws), 'hook:worker_budget',
+                'read_targets_gate' if enforced else 'read_targets_advisory',
+                claim=cid,
+                detail=json.dumps({'status': status,
+                                   'errors': errors[:3],
+                                   'version': version},
+                                  ensure_ascii=False))
         except Exception as exc:  # noqa: BLE001 — logging never gates
-            warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
-    except Exception as exc:  # noqa: BLE001 — advisory never gates
-        warn('read_targets_advisory', f'{type(exc).__name__}: {exc}')
+            warn('read_targets_gate', f'{type(exc).__name__}: {exc}')
+        if enforced and status in ('missing', 'malformed'):
+            detail = '; '.join(errors[:3]) or 'read_targets is missing'
+            return _reject(
+                'readtargets',
+                f'v2 dispatch envelope lacks a valid `read_targets` block '
+                f'({status}): {detail}', paths)
+    except Exception as exc:  # noqa: BLE001 — never crash the hook
+        warn('read_targets_gate', f'{type(exc).__name__}: {exc}')
+    return None
 
 
 def _gate_battery(checks: list, paths: dict, payload: dict,
@@ -1272,6 +1300,14 @@ def pre_check(payload: dict, paths: dict) -> int:
     rc = _gate_battery(checks, paths, payload, prompt, cid)
     if rc is not None:
         return rc
+    # read_targets (coordinates-first dispatch): version-scoped — v1 logs
+    # only, v2 REJECTs a missing/malformed block. Placed BEFORE the
+    # method-family audit because that audit writes sampler/quarantine
+    # rows: a dispatch rejected for coordinates must not be counted there
+    # (a fixed retry would duplicate the rows).
+    _rt_rc = _read_targets_gate(paths, prompt, cid)
+    if _rt_rc is not None:
+        return _rt_rc
     # #432 method-family vocabulary gate — the single validation
     # chokepoint (see _method_family_gate). Placed as the LAST validation
     # leg before the ALLOW-tail side effects: dispatches REJECTED by any
@@ -1280,11 +1316,6 @@ def pre_check(payload: dict, paths: dict) -> int:
                                                    row_agent, tier, tools)
     if mf_rc is not None:
         return mf_rc
-    # read_targets advisory (coordinates-first dispatch, phase 1): logged
-    # after the LAST rejecting gate, so the adoption metric counts
-    # dispatches that actually proceed. Missing/malformed blocks are a
-    # ledger row, never a reject.
-    _read_targets_advisory(paths, prompt, cid)
     # issue 805: the battery's LIVENESS EVIDENCE — a full pass lands ONE
     # durable row (gate=worker_battery, msg=check names) so the per-check
     # fingerprints in devkit/liveness_fingerprints.json can distinguish

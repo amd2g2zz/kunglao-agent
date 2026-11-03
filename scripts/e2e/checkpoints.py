@@ -861,7 +861,11 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "tools": ["grep", "python3"],
         "agent": "kunglao-worker",
         "action_type": "dispatch",
-        **_DISPATCH_ARM_CONTEXT}
+        **_DISPATCH_ARM_CONTEXT,
+        # v2 enforces read_targets; the harness dispatch targets a
+        # synthetic sample, not a repo coordinate — declare the opt-out.
+        "read_targets": "none (reasoning: e2e checkpoint harness - "
+                        "synthetic sample, no repo coordinate)"}
     if method_family:
         dispatch_meta["method_family"] = method_family
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
@@ -1535,7 +1539,9 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
             "agent": "kunglao-verifier",
             "action_type": "verify",
             "context_recipe": "facts_snapshot",
-            "verification_mode": "replay_probe"}})
+            "verification_mode": "replay_probe",
+            "read_targets": "none (reasoning: e2e checkpoint harness - "
+                            "synthetic sample, no repo coordinate)"}})
         + "\n\n"
         + _verifier_dispatch_text(
             claim, _stamp, llm_faces.CLAUDE_ACT_TIMEOUT_S,
@@ -1924,7 +1930,9 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
                 "agent": "kunglao-worker",
                 "action_type": "expand",
                 "context_recipe": "facts_snapshot",
-                "verification_mode": "none"}})
+                "verification_mode": "none",
+                "read_targets": "none (reasoning: e2e checkpoint harness - "
+                                "synthetic sample, no repo coordinate)"}})
             + "\n\ndiscovery contract (#546): the tried families have "
             "collapsed. Generate "
             + str(ex.EXPAND_HYPOTHESES_N)
