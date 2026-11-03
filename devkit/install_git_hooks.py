@@ -57,6 +57,20 @@ PLACEHOLDER = "__KUNGLAO_DEVKIT_ROOT__"
 DEVKIT_HOOK_MARKER = "# devkit-installed:"
 REVIEW_KEY_MARKER = "# devkit-review-key:"
 
+# Canonical warn (#459): this devkit CLI has no scripts/ import surface by
+# default, so bootstrap it for the ONE telemetry face. A partial deploy
+# degrades to the fail-open stderr lifeline — an installer must never be
+# blocked by its own telemetry.
+_SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+try:
+    from kunglao_log import warn  # noqa: E402
+except Exception:  # noqa: BLE001 — partial-deploy lifeline
+    def warn(op: str, reason: str) -> None:
+        print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
+              file=sys.stderr)
+
 
 def _find_git_dir(start: Path) -> Path | None:
     """Locate the .git directory (or common-dir if worktrees)."""
@@ -182,9 +196,9 @@ def cmd_install(args: argparse.Namespace) -> int:
 
     print(f"install_git_hooks: devkit={DEVKIT_ROOT} hooks={hooks_dir}")
     if ".worktrees" in DEVKIT_ROOT.parts:
-        print("install_git_hooks: WARNING devkit lives in a worktree — the "
-              "stamp dies with that worktree; reinstall from the main "
-              "checkout after merging.", file=sys.stderr)
+        warn("install_git_hooks",
+             "devkit lives in a worktree — the stamp dies with that "
+             "worktree; reinstall from the main checkout after merging.")
     review_key = Path(args.review_key).expanduser().resolve()
     for src in sources:
         dst = hooks_dir / src.name
