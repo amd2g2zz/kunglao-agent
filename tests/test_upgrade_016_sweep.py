@@ -732,8 +732,9 @@ def test_camoufox_required_on_web_lane(tmp_path, monkeypatch):
     assert cam1.status == "FAIL" and cam1.tier == "HARD"
     assert cam1.fix == ("ships with the kunglao-agent plugin "
                         "(.claude-plugin/plugin.json mcpServers) — enable "
-                        "the plugin; install dep: uv pip install "
-                        "camoufox-reverse-mcp")
+                        "the plugin; dep auto-installs from the pinned "
+                        "source git+https://github.com/WhiteNightShadow/"
+                        "camoufox-reverse-mcp.git@v1.1.1")
     assert "claude mcp add" not in cam1.fix  # user-scope surface deleted
     # workspace .mcp.json alone also satisfies (project-scope path)
     (ws / ".mcp.json").write_text(json.dumps(
@@ -767,7 +768,8 @@ def test_init_refuses_web_without_camoufox(tmp_path, capsys, monkeypatch):
     err = capsys.readouterr().err
     assert rc == 4, err
     assert "ships with the kunglao-agent plugin" in err, err[-600:]
-    assert "pip install camoufox-reverse-mcp" in err, err[-600:]
+    assert ("git+https://github.com/WhiteNightShadow/"
+            "camoufox-reverse-mcp.git@v1.1.1") in err, err[-600:]
     assert "claude mcp add" not in err  # user-scope surface deleted (#408)
     assert "AGENT-DO" in err
     # registered in the workspace .mcp.json -> satisfied

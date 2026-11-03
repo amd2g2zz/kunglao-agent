@@ -1,0 +1,586 @@
+{
+  "schema": "drawio-skill/diagram-ir/v1",
+  "metadata": {
+    "title": "hooks",
+    "created": "2026-10-19T05:33:40+00:00",
+    "source": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks",
+    "importer": "python"
+  },
+  "nodes": [
+    {
+      "id": "write_guard",
+      "label": "write_guard",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/write_guard.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "lib_kunglao",
+      "label": "lib_kunglao",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/lib_kunglao.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "user_signal_capture",
+      "label": "user_signal_capture",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/user_signal_capture.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "violation_capture",
+      "label": "violation_capture",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/violation_capture.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "rt_read_barrier",
+      "label": "rt_read_barrier",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/rt_read_barrier.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "worker_budget_gates",
+      "label": "worker_budget_gates",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_gates.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "recall_inject",
+      "label": "recall_inject",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/recall_inject.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "_path_hygiene",
+      "label": "_path_hygiene",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/_path_hygiene.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "worker_budget_core",
+      "label": "worker_budget_core",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_core.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "bash_fact_guard",
+      "label": "bash_fact_guard",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/bash_fact_guard.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "orchestrator_tool_guard",
+      "label": "orchestrator_tool_guard",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/orchestrator_tool_guard.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "step_record_capture",
+      "label": "step_record_capture",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/step_record_capture.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "round_closure",
+      "label": "round_closure",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/round_closure.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "worker_pulse",
+      "label": "worker_pulse",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_pulse.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "state_anchor",
+      "label": "state_anchor",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/state_anchor.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "heartbeat_touch",
+      "label": "heartbeat_touch",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/heartbeat_touch.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "session_start",
+      "label": "session_start",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/session_start.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "workguard_gate",
+      "label": "workguard_gate",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/workguard_gate.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "completion_gate",
+      "label": "completion_gate",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/completion_gate.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "compact_continuity",
+      "label": "compact_continuity",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/compact_continuity.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "evidence_pin_guard",
+      "label": "evidence_pin_guard",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/evidence_pin_guard.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "env_check_gate",
+      "label": "env_check_gate",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/env_check_gate.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "cost_input_capture",
+      "label": "cost_input_capture",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/cost_input_capture.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "dispatch_gate",
+      "label": "dispatch_gate",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/dispatch_gate.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "worker_budget_sinks",
+      "label": "worker_budget_sinks",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_sinks.py",
+        "importer": "python"
+      }
+    },
+    {
+      "id": "worker_budget",
+      "label": "worker_budget",
+      "kind": "module",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget.py",
+        "importer": "python"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "bash_fact_guard--_path_hygiene",
+      "source": "bash_fact_guard",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/bash_fact_guard.py",
+        "line": 59
+      }
+    },
+    {
+      "id": "compact_continuity--_path_hygiene",
+      "source": "compact_continuity",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/compact_continuity.py",
+        "line": 41
+      }
+    },
+    {
+      "id": "completion_gate--_path_hygiene",
+      "source": "completion_gate",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/completion_gate.py",
+        "line": 81
+      }
+    },
+    {
+      "id": "cost_input_capture--_path_hygiene",
+      "source": "cost_input_capture",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/cost_input_capture.py",
+        "line": 23
+      }
+    },
+    {
+      "id": "dispatch_gate--lib_kunglao",
+      "source": "dispatch_gate",
+      "target": "lib_kunglao",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/dispatch_gate.py",
+        "line": 1266
+      }
+    },
+    {
+      "id": "dispatch_gate--worker_budget",
+      "source": "dispatch_gate",
+      "target": "worker_budget",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/dispatch_gate.py",
+        "line": 560
+      }
+    },
+    {
+      "id": "lib_kunglao--_path_hygiene",
+      "source": "lib_kunglao",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/lib_kunglao.py",
+        "line": 22
+      }
+    },
+    {
+      "id": "worker_budget--worker_budget_sinks",
+      "source": "worker_budget",
+      "target": "worker_budget_sinks",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget.py",
+        "line": 36
+      }
+    },
+    {
+      "id": "env_check_gate--_path_hygiene",
+      "source": "env_check_gate",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/env_check_gate.py",
+        "line": 63
+      }
+    },
+    {
+      "id": "evidence_pin_guard--_path_hygiene",
+      "source": "evidence_pin_guard",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/evidence_pin_guard.py",
+        "line": 50
+      }
+    },
+    {
+      "id": "heartbeat_touch--_path_hygiene",
+      "source": "heartbeat_touch",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/heartbeat_touch.py",
+        "line": 46
+      }
+    },
+    {
+      "id": "orchestrator_tool_guard--_path_hygiene",
+      "source": "orchestrator_tool_guard",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/orchestrator_tool_guard.py",
+        "line": 63
+      }
+    },
+    {
+      "id": "recall_inject--_path_hygiene",
+      "source": "recall_inject",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/recall_inject.py",
+        "line": 75
+      }
+    },
+    {
+      "id": "round_closure--_path_hygiene",
+      "source": "round_closure",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/round_closure.py",
+        "line": 59
+      }
+    },
+    {
+      "id": "rt_read_barrier--_path_hygiene",
+      "source": "rt_read_barrier",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/rt_read_barrier.py",
+        "line": 90
+      }
+    },
+    {
+      "id": "session_start--compact_continuity",
+      "source": "session_start",
+      "target": "compact_continuity",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/session_start.py",
+        "line": 125
+      }
+    },
+    {
+      "id": "state_anchor--_path_hygiene",
+      "source": "state_anchor",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/state_anchor.py",
+        "line": 73
+      }
+    },
+    {
+      "id": "step_record_capture--_path_hygiene",
+      "source": "step_record_capture",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/step_record_capture.py",
+        "line": 24
+      }
+    },
+    {
+      "id": "user_signal_capture--_path_hygiene",
+      "source": "user_signal_capture",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/user_signal_capture.py",
+        "line": 20
+      }
+    },
+    {
+      "id": "violation_capture--_path_hygiene",
+      "source": "violation_capture",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/violation_capture.py",
+        "line": 68
+      }
+    },
+    {
+      "id": "worker_budget_core--_path_hygiene",
+      "source": "worker_budget_core",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_core.py",
+        "line": 30
+      }
+    },
+    {
+      "id": "worker_budget_gates--worker_budget_core",
+      "source": "worker_budget_gates",
+      "target": "worker_budget_core",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_gates.py",
+        "line": 16
+      }
+    },
+    {
+      "id": "worker_budget_sinks--worker_budget_gates",
+      "source": "worker_budget_sinks",
+      "target": "worker_budget_gates",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_sinks.py",
+        "line": 29
+      }
+    },
+    {
+      "id": "worker_pulse--_path_hygiene",
+      "source": "worker_pulse",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_pulse.py",
+        "line": 68
+      }
+    },
+    {
+      "id": "workguard_gate--_path_hygiene",
+      "source": "workguard_gate",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/workguard_gate.py",
+        "line": 45
+      }
+    },
+    {
+      "id": "write_guard--_path_hygiene",
+      "source": "write_guard",
+      "target": "_path_hygiene",
+      "label": "",
+      "kind": "relation",
+      "properties": {},
+      "provenance": {
+        "path": "/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/write_guard.py",
+        "line": 65
+      }
+    }
+  ],
+  "views": []
+}

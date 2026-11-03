@@ -14,12 +14,14 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
     accepts). Matches the v1 canonical dispatch envelope
     `{"kunglao_dispatch": {"version": 1, "claim": "C-NN", ...}}` (the v0
     text prefix is retired).
-  - Claim features -> tier via scripts/tier_rules.tier_for_claim (single
-    source for T3 VM/dynamic vs T2 static-depth signals), then -> recall
-    queries: go signals -> "go" (languages-go.md); tier 3 -> "vm" + "dynamic"
-    (dynamic-debugging scene / verify-static-vs-dynamic.md); tier 2 + default ->
-    "static analysis" (disasm/static-analysis scene — "disasm" itself matches nothing
-    in the index).
+  - Injection admission (owner directive): recall queries are NEED-DRIVEN — derived
+    from the dispatch question's keywords (queries_for_question); the
+    category tables (GO_SIGNALS / WEB_SIGNALS / WEB_QUERIES) and the
+    tier fallbacks are retired. Injected items carry FRESH section
+    anchors `path:L<start>~L<end>` (anchored on headings at query
+    time), and the injection is budget-capped (<= 3 files, <= 5 items,
+    <= 1200 chars). The face is DEFAULT-OFF: KUNGLAO_RECALL=1 opts in;
+    a keywordless question closes the demand gate.
   - All queries of a dispatch are answered IN-PROCESS: the layered index
     is parsed once per process and memoized (first recall in a process
     pays ~2.5 s, every later query is milliseconds), and the per-query
@@ -73,7 +75,6 @@ import sys
 from pathlib import Path
 
 from _path_hygiene import (  # #671 sys.path hygiene authority
-    ensure_scripts_path,
     load_hooks_lib,
     load_module_by_path,
 )
@@ -97,14 +98,11 @@ RECALL_BATCH_TIMEOUT = 20.0
 # (resolved path, mtime_ns, size) so a changed index file re-parses.
 _RECALL_MODULE = None
 _INDEX_CACHE: dict = {}
-FILES_PER_QUERY = 4           # top hits only — guidance stays compact;
-# four keeps the verification-method file reachable for VM-class claims
 # NOTE (#357): ranking below is token-overlap scoring, which is
 # language-sensitive — translating a recall data source (references/_INDEX.md,
 # references/_index-<domain>.md) shifts scores. Guarded by
 # tests/test_recall_inject.py + tests/test_vm_claim_injects_recall_guidance.py
 # (the recall-ranking pin); move data source and pin in the same commit.
-MAX_FILES = 8                 # global cap across all queries
 
 def _is_claim_dispatch(text: str) -> bool:
     """v1-first claim-dispatch detection — single source (#861).
@@ -116,53 +114,99 @@ def _is_claim_dispatch(text: str) -> bool:
     return lib.parse_dispatch(text)[2] is not None
 
 
-# Go-binary signals (tier_rules has no go signals — those live here). Substring
-# matches; "go" alone is too noisy ("goal", "google", "cargo") so signals are
-# compound or language-typed.
-GO_SIGNALS = (
-    "golang", "go binary", "go 二进制", "go 程序", "go 语言",
-    "go runtime", "go symbol", "go function", "go 1.",
-)
+# ---- injection admission: need-driven, section-located, budgeted ----
+# Owner directives on record (rc2 feedback): recall must be NEED-DRIVEN
+# (queries derived from the active claim's question keywords — the category
+# tables GO_SIGNALS / WEB_SIGNALS / WEB_QUERIES and the tier fallbacks are
+# RETIRED: a category query the question never asked for is noise),
+# SECTION-LOCATED (items carry path:L<start>~L<end>, anchored on headings
+# FRESH at query time — never a stale stored offset) and BUDGET-CAPPED
+# (MAX_INJECT_* below). Demand gate: no extractable question keywords ->
+# no queries -> no injection.
 
-# Web-domain signals (#761 J1, ruling: 风控/爬虫知识 web 域专用): a claim that
-# mentions the anti-bot / crawler surface gets the two web-dictionary queries
-# prepended (web-risk-control.md / web-crawler-engineering.md top hits), before
-# the tier-based default. All anchors are compound/CJK — deliberately noise-
-# safe so legacy dispatch prompts never gain the extra queries (the pinned
-# test_recall_inject.py fixtures hit none of these).
-WEB_SIGNALS = (
-    "风控", "反爬", "风险控制", "爬虫", "验证码", "滑块", "点选",
-    "risk control", "risk-control", "anti-bot", "antibot",
-    "crawler", "captcha", "web target", "--type web", "camoufox",
-)
-
-# Recalled queries for a web-signal claim (#761 J1). "risk control" ranks
-# re-library/web/risk-control/web-risk-control.md first (name+domain+purpose CJK tokens);
-# "crawler" surfaces web-crawler-engineering.md via its bilingual purpose row.
-WEB_QUERIES = ("risk control", "crawler")
-
-# Red-team dispatch detection (#761 J4 second trigger face): adversarial
-# knowledge injected BEFORE the checker plans its attacks — same FAIL_OPEN,
-# rc-always-0 semantics as the claim face. Claim-shaped prompts keep the
-# original flow; a red-team prompt without a `[T<N>] claim` shape takes this
-# branch.
 REDTEAM_RE = re.compile(r"(?:red[\s_-]*team|redteam|verify-redteam)", re.IGNORECASE)
 
+_STOPWORDS = frozenset((
+    "a", "all", "an", "and", "any", "are", "as", "at", "be", "but", "by",
+    "can", "did", "do", "does", "for", "from", "had", "has", "have",
+    "how", "in", "into", "is", "it", "its", "may", "might", "must",
+    "no", "not", "of", "on", "or", "our", "per", "shall", "should",
+    "so", "than", "that", "the", "their", "then", "there", "this",
+    "to", "was", "were", "what", "when", "which", "who", "why",
+    "will", "with", "without", "would", "you", "your",
+))
 
-def queries_for_redteam(prompt_text: str) -> list[str]:
-    """Red-team recall queries (#761 J4): failure-modes domain by default
-    (how past checks failed -> attack angles); web signals add the anti-bot
-    doctrine so an adversarial pass on a web claim carries the decision tree."""
-    text = (prompt_text or "").lower()
-    queries = ["failure analysis"]
-    if any(s in text for s in WEB_SIGNALS):
-        queries.extend(WEB_QUERIES)
-    return queries
+MAX_INJECT_FILES = 3          # distinct files per injection
+MAX_INJECT_ITEMS = 5          # located section items per injection
+MAX_INJECT_CHARS = 1200       # chars for the whole recall block
 
-# tier_rules is the single source for T3/T2 feature detection (#241).
-# #671: module-level membership via the hygiene authority (was bare insert).
-ensure_scripts_path()
-from tier_rules import tier_for_claim  # noqa: E402
+_WORD_RE = re.compile(r"[a-z0-9_][a-z0-9_.-]*|[一-鿿]+")
+_SECTION_TOKEN_RE = re.compile(r"[a-z0-9_]{2,}|[一-鿿]")
+
+
+def _question_text(prompt_text: str) -> str:
+    """The question half of a dispatch: the v1 JSON envelope line and the
+    red-team role marker are dispatch META, not question content."""
+    lines = prompt_text.splitlines()
+    if lines and lines[0].lstrip().startswith("{") \
+            and "kunglao_dispatch" in lines[0]:
+        lines = lines[1:]
+    return REDTEAM_RE.sub(" ", "\n".join(lines))
+
+
+def queries_for_question(prompt_text: str) -> list[str]:
+    """Need-driven query derivation: ONE query — the distilled
+    question. ASCII keywords (len>=3, stopword-filtered, dispatch meta
+    stripped) plus CJK runs, original order, capped at 8 tokens. Empty
+    when nothing extractable: the demand gate closes and the dispatch
+    gets no injection (no category defaults, no tier fallbacks)."""
+    words = _WORD_RE.findall(_question_text(prompt_text).lower())
+    keep: list[str] = []
+    for w in words:
+        if any("一" <= c <= "鿿" for c in w):
+            keep.append(w)
+        else:
+            w = w.strip("._-")
+            if len(w) >= 3 and w not in _STOPWORDS and w not in keep:
+                keep.append(w)
+        if len(keep) >= 8:
+            break
+    if not keep:
+        return []
+    return [" ".join(keep)]
+
+
+def _section_anchor(rel_path: str, query: str) -> str:
+    """`path:L<start>~L<end>` of the heading-delimited section that best
+    matches the query — computed FRESH at query time (never a stored
+    offset; a revised file re-anchors on the next dispatch). Fail-open:
+    unreadable file -> bare path; no headings -> whole file; no overlap
+    -> earliest section (stable)."""
+    try:
+        lines = (REFERENCES_DIR / rel_path).read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return rel_path
+    if not lines:
+        return f"{rel_path}:L1~L1"
+    qtok = set(_SECTION_TOKEN_RE.findall(query.lower()))
+    heads = [i for i, l in enumerate(lines) if re.match(r"#{1,6}\s", l)]
+    starts = heads if heads and heads[0] == 0 else [0] + heads
+    sections = [(starts[i], (starts[i + 1] - 1) if i + 1 < len(starts)
+                 else len(lines) - 1) for i in range(len(starts))]
+
+    def hits(sec: tuple[int, int]) -> int:
+        text = "\n".join(lines[sec[0]:sec[1] + 1]).lower()
+        return len(qtok & set(_SECTION_TOKEN_RE.findall(text)))
+
+    best = max(range(len(sections)),
+               key=lambda i: (hits(sections[i]), -sections[i][0]))
+    a, b = sections[best]
+    return f"{rel_path}:L{a + 1}~L{b + 1}"
+
+# tier_rules is the single source for T3/T2 feature detection (#241) —
+# consumed by dispatch_gate; recall_inject no longer maps tiers to
+# queries (recall is need-driven; tier fallbacks retired).
 
 
 # ---- H1a (autoresearch thin-base): dispatch-scoped recall + content dedup --
@@ -290,31 +334,6 @@ def _dispatch_text(payload: dict) -> str | None:
         if isinstance(v, str) and v.strip():
             return v
     return None
-
-
-def queries_for_features(prompt_text: str, tier: int) -> list[str]:
-    """Deterministic claim-feature -> recall query mapping (#268).
-
-    go signals -> "go" (languages-go.md is the top hit); tier 3 (VM/dynamic
-    intent, via tier_rules) -> "vm" + "dynamic" (dynamic-debugging scene +
-    verify-static-vs-dynamic.md); tier 2 (static-depth/disasm) and the tier 1
-    default -> "static analysis" (disasm/static-analysis scene — "disasm" itself
-    matches nothing in the layered index).
-    #761 J1: web-domain signals prepend "risk control" + "crawler" (the two new
-    web reference docs) — append-only semantics: every pre-existing mapping is
-    unchanged for prompts without web signals.
-    """
-    text = prompt_text.lower()
-    queries: list[str] = []
-    if any(s in text for s in WEB_SIGNALS):
-        queries.extend(WEB_QUERIES)
-    if any(s in text for s in GO_SIGNALS):
-        queries.append("go")
-    if tier == 3:
-        queries.extend(("vm", "dynamic"))
-    else:
-        queries.append("static analysis")
-    return queries
 
 
 def _parse_files(stdout: str) -> tuple[str, ...]:
@@ -524,13 +543,31 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     # <kunglao-facts> — never <external-tools>. Marks, never gates:
     # rc stays 0 and the payload shape is unchanged
     # (references/contracts/xml-injection-standard.md).
-    return (
-        f"<kunglao-facts>\n"
-        f"recall_inject: claim dispatch knowledge recall (#268) - "
-        f"queries: {', '.join(queries)}\n"
-        f"Before dispatching, read: {', '.join(files)}\n"
-        f"</kunglao-facts>"
-    )
+    # Injection budget: one located item per file, at most MAX_INJECT_FILES
+    # files / MAX_INJECT_ITEMS items, whole block <= MAX_INJECT_CHARS —
+    # over-budget items are DROPPED whole, never truncated mid-item.
+    query = " ".join(queries)
+    items: list[str] = []
+    for f in files[:MAX_INJECT_FILES]:
+        items.append(_section_anchor(f, query))
+        if len(items) >= MAX_INJECT_ITEMS:
+            break
+
+    def render(rows: list[str]) -> str:
+        return (
+            f"<kunglao-facts>\n"
+            f"recall_inject: need-driven recall - query: {query}\n"
+            f"Before dispatching, read: {', '.join(rows)}\n"
+            f"If a range no longer matches (the file changed), re-anchor "
+            f"these reference cards by heading (`rg -n '^#{{1,6}} ' <path>`) "
+            f"and read the best-overlap section; if the file is gone, stop "
+            f"and report the GAP - never search the tree for a substitute.\n"
+            f"</kunglao-facts>"
+        )
+
+    while len(items) > 1 and len(render(items)) > MAX_INJECT_CHARS:
+        items.pop()
+    return render(items)
 
 
 def _collect_gap_notes(ws: Path, claim_id: str) -> list[tuple[str, str]]:
@@ -577,7 +614,7 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
     try:
         mod = load_module_by_path(
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
-        mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
+        mod.emit(ws, "hook:recall_inject", action, tool="Agent", detail=detail)
     except Exception as exc:  # noqa: BLE001
         warn("recall_inject.trace_emit", f"{type(exc).__name__}: {exc}")
     try:
@@ -627,9 +664,9 @@ def _injection_context(ws: Path, prompt_text: str, is_claim: bool,
     _record_injection(ws, key, injected_set)
     blocks: list[str] = []
     if files:
-        blocks.append(_guidance(queries, files[:MAX_FILES]))
+        blocks.append(_guidance(queries, files))
         _trace(ws, "injected", "recall_injected",
-               "files:" + ",".join(files[:MAX_FILES]), files=len(files))
+               "files:" + ",".join(files), files=len(files))
     if notes:
         blocks.append(_gap_note_guidance(notes))
         _trace(ws, "injected", "gap_notes_injected",
@@ -657,12 +694,21 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     advisory <kunglao-facts> block — context supply only, never a reward
     kind; the settlement matcher ignores advisory carriers.
 
-    Ablation: RECALL_DISABLE_ENV set to exactly "0" short-circuits here —
-    pass-through with no injection, before any workspace or dispatch
-    parsing (the five-arm matrix's no-L1 arm; recall OFF is the arm's
-    declared state, not a failure).
+    Default OFF + demand gate: RECALL_DISABLE_ENV="KUNGLAO_RECALL"
+    must be exactly "1" to arm the face — unset/any other value passes
+    through with no injection, before any workspace or dispatch parsing
+    (the H2H receipt demoted the default face; the ws5 no-L1 arm
+    declares "0", the warm arms declare "1"). Opted in, queries derive
+    from the dispatch question's keywords ONLY; a keywordless question
+    closes the demand gate (recall_skip trace, no injection). Every
+    injected item carries a fresh `path:L<start>~L<end>` section anchor,
+    and the block is budget-capped (<= 3 files / <= 5 items / 1200
+    chars).
     """
-    if os.environ.get(RECALL_DISABLE_ENV, "").strip() == "0":
+    if os.environ.get(RECALL_DISABLE_ENV, "").strip() != "1":
+        # Default OFF (opt-in via KUNGLAO_RECALL=1): the H2H
+        # receipt (zero improvement, +46% cost) demoted the default face;
+        # recall fires only when the operator arms it. Silent fast path.
         return 0, "", None
     ws = _resolve_workspace(payload)
     if ws is None:
@@ -679,18 +725,24 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
                "not_a_claim_or_redteam_dispatch")
         return 0, "", None  # neither a claim nor a red-team dispatch
 
-    if is_claim:
-        tier = tier_for_claim({"statement": prompt_text})
-        queries = queries_for_features(prompt_text, tier)
-    else:
-        queries = queries_for_redteam(prompt_text)
+    # Demand gate: the question IS the query source. No extractable
+    # question keywords -> no queries -> no injection (no category
+    # defaults, no tier fallbacks — the retired GO_SIGNALS / WEB_QUERIES
+    # expansions and "static analysis" tier fallback lived here).
+    queries = queries_for_question(prompt_text)
+    if not queries:
+        _trace(ws, "skipped", "recall_skip",
+               "demand_gate_closed_no_question_keywords")
+        return 0, "", None
 
     files: list[str] = []
     seen: set[str] = set()
     per_query = recall_files_batch(queries, cwd=ws,
                                    recall_runner=recall_runner)
     for batch_files in per_query:
-        for f in batch_files[:FILES_PER_QUERY]:
+        for f in batch_files:
+            if len(files) >= MAX_INJECT_FILES:
+                break
             if f not in seen:
                 seen.add(f)
                 files.append(f)

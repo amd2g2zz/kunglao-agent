@@ -42,23 +42,13 @@ REGISTER_FAIL = frozenset({"REFUTED", "NEGATIVE"})
 
 
 def resolve_method(ws, claim: str) -> dict | None:
-    """The claim's declared method from its LAST usage row: {family,
-    tools}. None when the claim never dispatched through the usage log
-    (the honest gap — no fabricated method)."""
+    """The claim's declared method from its LAST dispatch observation
+    row: {family, tools}. None when the claim never dispatched (the
+    honest gap — no fabricated method). #804 usage merge: the former
+    usage-log read projects the consolidated substrate."""
     try:
-        from method_families import read_usage  # noqa: PLC0415 — lazy
-        cid = str(claim or "")
-        found = None
-        for row in read_usage(ws):
-            if str(row.get("claim") or "") != cid:
-                continue
-            family = str(row.get("family") or "").strip()
-            if not family:
-                continue
-            found = {"family": family,
-                     "tools": [str(t) for t in (row.get("tools") or [])
-                               if str(t).strip()]}
-        return found
+        from rlvr import q_cells  # noqa: PLC0415 — lazy
+        return q_cells.dispatch_method(ws, str(claim or ""))
     except Exception as exc:  # noqa: BLE001 — fail-open, loud
         warn("crystallize.resolve_method",
              f"{type(exc).__name__}: {exc}")

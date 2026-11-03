@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import failure_analysis_gate as fag  # noqa: E402
-import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
+import posteriors_case as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 import yaml  # noqa: E402
 
 

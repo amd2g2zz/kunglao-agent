@@ -47,6 +47,40 @@ Fields:
   fact frontmatter `trace_id:` (same channel as the claim id). Unattributed rate = share of ledger lines missing
   trace_id (`kunglao_log.unattributed_rate`).
 
+- **`read_targets` + `read_fallback`: optional (ADVISORY, phase 1)** — the coordinates the worker
+  reads FIRST, resolved by the orchestrator BEFORE dispatch (GitNexus `context <symbol>` for code,
+  `rg -n` for non-code), plus the re-anchor strategy used when a coordinate no longer matches at
+  execution time (file revised, heading moved, path gone). Shape:
+
+  ```json
+  "read_targets": [
+    {"path": "hooks/recall_inject.py", "symbol": "_section_anchor",
+     "why": "the anchor rule under change"},
+    {"path": "runs/plan-C409.md", "lines": [1, 40], "missing": true}
+  ],
+  "read_fallback": "symbol-first",
+  "relevance_fallback": "semantic-decide"
+  ```
+
+  Validation (`hooks/lib_kunglao.py:read_targets_status`): each target carries `path` + exactly ONE
+  of `symbol` / `lines` (`1 <= start <= end`); the path must stay INSIDE the workspace and be a
+  regular file (`missing: true` declares a to-be-created file); `read_fallback` is REQUIRED
+  whenever targets are present. The two fallbacks cover two orthogonal failure classes:
+  - **locate failure** (file/range no longer matches) — `read_fallback`:
+    `symbol-first` (re-resolve the line range from the symbol), `heading-first` (reference cards:
+    `rg -n '^#{1,6} ' <path>` then the best-overlap section), `exact-or-gap` (no match → stop and
+    record the GAP).
+  - **relevance failure** (the coordinates read fine but the content does NOT address the current
+    question/scenario) — `relevance_fallback`, optional, default `semantic-decide`: no mechanical
+    rule can resolve this, so the decision is delegated to the worker's LLM: revise the plan,
+    request a corrected target, or record the GAP with its reasoning. Never keep searching the
+    tree for something that merely looks related.
+
+  Phase 1 is advisory: `hooks/worker_budget_sinks.py:pre_check` (after the method-family
+  gate — the last rejecting gate) emits a `read_targets_advisory` ledger row
+  (`status` = ok / missing / opt_out / malformed) and the dispatch proceeds. Explicit opt-out:
+  `"read_targets": "none (reasoning: ...)"`.
+
 ## Protocol v0 (compat)
 
 `[T<N> tools=a,b] claim C-NN ...` — the existing regex form, **still supported**.

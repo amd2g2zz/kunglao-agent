@@ -11,7 +11,7 @@ have to count notes/*.md by hand.
 
 RED contract (3 cases, all must fail before GREEN implementation):
   1. workspace has 3 notes with `boundary_type: anomaly` (YAML block form,
-     the canonical _write_anomaly_note output) + 1 plain note → output
+     the canonical anomaly-note output) + 1 plain note → output
      contains `## Anomalies: 3 observation notes`.
   2. workspace has NO notes/ directory → output contains `## Anomalies: 0`
      and the report does NOT raise.

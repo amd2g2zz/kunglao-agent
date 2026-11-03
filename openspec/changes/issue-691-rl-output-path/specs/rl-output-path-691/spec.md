@@ -44,6 +44,12 @@ dispatch still passes. The reconciliation adds no REJECT face and
 no new prefix bypass; vocabulary validation remains the gate's only
 REJECT (2026-10-14 acceptance amendment).
 
+> **AMENDMENT 2026-10-19 (W2, §8.2 M3.4):** the never-reject scope above is
+> now the DECLARED case only. For the UNDECLARED case with sampler material,
+> the gate draws once and REJECTs with the sampled family in the guidance
+> (owner directive 2026-10-18; code hooks/worker_budget_sinks.py:869-889).
+> Full semantics: the W2 Amendment section in this change's proposal.md.
+
 #### Scenario: a plain deviation is recorded, not silent
 
 - **WHEN** the declared family differs from the sampled family and the

@@ -97,6 +97,11 @@ def _register(ws: Path, claims: list[dict]) -> None:
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}, allow_unicode=True),
         encoding="utf-8")
+    # #800 R2: ledger rows (this suite's shape keeps NO pending q-cell
+    # rows — the amend legs reconcile from the register)
+    from _dispatch_fixture import mint_dispatches
+
+    mint_dispatches(ws, claims, pending=False)
 
 
 def _armed_case(ws: Path, cid: str, pq: str) -> None:

@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -245,6 +246,35 @@ class TestLaunchShape:
         rec = lr.launch_session(tmp_path, "P", budget_usd=1.0,
                                 wall_cap_s=30.0)
         assert rec["argv"][:2] == [sys.executable, str(stub)]
+
+    def test_session_caps_travel_as_child_env(self, tmp_path):
+        """The runner OWNS the caps: the session driver's budget and solo
+        cap ride the child env, derived from the runner's own typed
+        params — no hand-set env var can silently diverge from the caps
+        the prompt advertises."""
+        probe = tmp_path / "env-probe.py"
+        probe.write_text(
+            "import os, pathlib\n"
+            "p = pathlib.Path('child-env.json')\n"
+            "p.write_text(__import__('json').dumps({\n"
+            "    'budget': os.environ.get('KUNGLAO_SDK_BUDGET_USD'),\n"
+            "    'solo': os.environ.get('KUNGLAO_SOLO_CAP_S')}),\n"
+            "    encoding='utf-8')\n", encoding="utf-8")
+        lr.launch_session(
+            tmp_path, "P", budget_usd=5.0, wall_cap_s=5400.0,
+            session_cmd=f'"{sys.executable}" "{probe}"',
+            solo_fraction=0.15)
+        env = json.loads(
+            (tmp_path / "child-env.json").read_text("utf-8"))
+        assert env["budget"] == "5.0"
+        assert env["solo"] == "810"  # 5400 * 0.15
+        # no solo fraction -> no solo cap advertised
+        lr.launch_session(
+            tmp_path, "P", budget_usd=5.0, wall_cap_s=5400.0,
+            session_cmd=f'"{sys.executable}" "{probe}"')
+        env2 = json.loads(
+            (tmp_path / "child-env.json").read_text("utf-8"))
+        assert env2["solo"] is None
 
     def test_missing_session_binary_is_terminal_record_not_crash(
             self, tmp_path):
@@ -630,7 +660,7 @@ class TestCcDefaultArm:
         would spawn a real claude session inside a unit test."""
         monkeypatch.setenv("K334_STUB_MODE", "candidate")
 
-        def _ccd_stub(task_dir, root, *, wall_cap_s=None):
+        def _ccd_stub(task_dir, root, *, wall_cap_s=None, solo_fraction=None):
             ws = lr.init_workspace(_task_dir(PY), root)
             return ws, "solve it; deliver to runs/deliverables/candidate.py"
 
@@ -941,6 +971,28 @@ class TestWallPartitionBlock:
         assert "TOTAL WALL CAP: 7200s" in block2
         assert "SOLO/DIRECT ATTEMPT HARD CAP: 3600s" in block2
         assert "FINAL DELIVERABLE DUE BY 6900s" in block2
+
+    def test_solo_fraction_override_scales_the_recon_window(self):
+        """#816 re-run face: hard black-box units need a SHORT bounded
+        recon window with a long orchestrated tail — the fraction is
+        runner-parameterized. Default stays the toy-tuned 0.5 (the
+        exp5/exp8 smoke-tier economics)."""
+        block = lr.wall_partition_block(5400.0, solo_fraction=0.15)
+        assert "TOTAL WALL CAP: 5400s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 810s" in block, \
+            "5400s wall x 0.15 = 810s recon cap"
+        assert "FINAL DELIVERABLE DUE BY 5100s" in block
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 1800s" in \
+            lr.wall_partition_block(3600.0), \
+            "no override means the 50% default, byte-identical render"
+
+    def test_solo_fraction_threads_through_all_prompt_faces(self):
+        tdir = _task_dir(PY)
+        task = ds.load_task(tdir)
+        prompt = lr.build_loop_prompt(
+            tdir, task, "runs/deliverables/candidate.py",
+            wall_cap_s=5400.0, solo_fraction=0.15)
+        assert "SOLO/DIRECT ATTEMPT HARD CAP: 810s" in prompt
 
     def test_loop_prompt_carries_partition_prominently(self):
         tdir = _task_dir(PY)
@@ -1684,3 +1736,150 @@ class TestFailOpenWarnIdiom:
         warns = [ln for ln in self._lines(capsys)
                  if "claim_register" in ln and "WARN" in ln]
         assert len(warns) == 1
+
+
+# ------------------------------------------- (j) binary-candidate extract
+class TestBinaryCandidateExtract:
+    """Empty family suffix (tf-snake grades the PATCHED GAME BINARY):
+    the primary path is the mandated deliverable; the fallback scan
+    only accepts an EXECUTABLE file — a stray non-executable artifact
+    in a scan dir must not become the candidate."""
+
+    def _task(self):
+        return {"family": "tf-snake"}
+
+    def test_primary_path_still_resolves(self, tmp_path):
+        cand = tmp_path / "runs" / "deliverables" / "candidate"
+        cand.parent.mkdir(parents=True)
+        cand.write_text("#!/bin/sh\n", encoding="utf-8")
+        assert lr.extract_candidate(tmp_path, self._task()) == cand
+
+    def test_fallback_rejects_nonexecutable(self, tmp_path):
+        stray = tmp_path / "scratch"
+        stray.mkdir()
+        (stray / "trainer-notes").write_text("text", encoding="utf-8")
+        assert lr.extract_candidate(tmp_path, self._task()) is None
+
+    def test_fallback_accepts_executable(self, tmp_path):
+        d = tmp_path / "scratch"
+        d.mkdir()
+        exe = d / "trainer"
+        exe.write_text("#!/bin/sh\n", encoding="utf-8")
+        exe.chmod(0o755)
+        assert lr.extract_candidate(tmp_path, self._task()) == exe
+
+
+# ------------------------------------------------- (i) #816 task-dir paths
+class TestExplicitTaskDirPaths:
+    """The #816 blocked-path units live OUTSIDE eval/v1/tasks/
+    (experiments/blocked-path-units/) — run_loop_tier must accept an
+    explicit task-dir path next to corpus ids: a directory carrying its
+    own task.yaml selects that directory; anything else is refused by
+    id, with the tier-level BAD_TASK refusal shape unchanged."""
+
+    def test_unknown_id_refusal_shape_unchanged(self, tmp_path, capsys):
+        rc, doc = lr.run_loop_tier(["no-such-task-816"], tmp_path / "out")
+        assert rc == lr.RC_REFUSED
+        assert doc == {}
+        assert "unknown task(s): ['no-such-task-816']" in capsys.readouterr().err
+
+    def test_bare_directory_without_task_yaml_is_refused(self, tmp_path):
+        bare = tmp_path / "blocked-units" / "tf-bare816"
+        bare.mkdir(parents=True)
+        rc, doc = lr.run_loop_tier([str(bare)], tmp_path / "out")
+        assert rc == lr.RC_REFUSED
+        assert doc == {}
+
+    def test_explicit_task_dir_path_outside_corpus_is_selected(
+            self, tmp_path, monkeypatch):
+        unit = tmp_path / "blocked-units" / "tf-pinv816-v1"
+        unit.mkdir(parents=True)
+        (unit / "task.yaml").write_text("id: tf-pinv816-v1\n",
+                                        encoding="utf-8")
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task_id": Path(name).name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, doc = lr.run_loop_tier([str(unit)], tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert [Path(s).name for s in seen] == ["tf-pinv816-v1"], \
+            "the explicit path's own directory basename is the task name"
+        assert doc["rows"][0]["task_id"] == "tf-pinv816-v1"
+        assert doc["summary"]["pass"] == 1
+
+    def test_mixed_corpus_id_and_external_path_run_in_given_order(
+            self, tmp_path, monkeypatch):
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        unit = tmp_path / "blocked-units" / "tf-pinv816-v1"
+        unit.mkdir(parents=True)
+        (unit / "task.yaml").write_text("id: tf-pinv816-v1\n",
+                                        encoding="utf-8")
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task_id": Path(name).name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, _doc = lr.run_loop_tier([str(unit), corpus[0].name],
+                                    tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert [Path(s).name for s in seen] == [
+            "tf-pinv816-v1", corpus[0].name], \
+            "caller order is preserved across the path and id faces"
+
+    def test_duplicate_entries_run_once(self, tmp_path, monkeypatch):
+        """Every selected entry is a real paid session — 'a,a' (and an id
+        plus the same unit's explicit path) must select the task once."""
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        first = corpus[0]
+        seen: list[str] = []
+
+        def fake_run_loop_task(name, _out, **_kw):
+            seen.append(name)
+            return {"task_id": Path(name).name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        rc, _doc = lr.run_loop_tier(
+            [first.name, str(first), first.name], tmp_path / "out")
+        assert rc == lr.RC_OK
+        assert [Path(s).name for s in seen] == [first.name]
+
+    def test_external_unit_runs_the_real_pipeline(self, tmp_path):
+        """The #816 face END-TO-END: a unit outside the corpus tree flows
+        through the REAL run_loop_task (stub session) — a name-only
+        re-resolution downstream crashed the tier in the first live
+        re-run attempt, so the tier loop must hand over the resolved
+        directory, not the basename."""
+        unit = tmp_path / "external" / "tf-ext816-copy-v1"
+        shutil.copytree(_task_dir(PY), unit)
+        rc, doc = lr.run_loop_tier([str(unit)], tmp_path / "out",
+                                   session_cmd=_stub_session_cmd(tmp_path))
+        assert rc == lr.RC_OK
+        assert doc["rows"][0]["task_id"] == "tf-ext816-copy-v1"
+        assert doc["rows"][0]["verdict"] in ("PASS", "FAIL", "SKIP")
+
+    def test_solo_fraction_threads_from_tier_to_task(self, tmp_path,
+                                                     monkeypatch):
+        seen: dict = {}
+
+        def fake_run_loop_task(ref, out, **kw):
+            seen.update(kw)
+            return {"task_id": Path(ref).name, "verdict": "PASS"}
+
+        monkeypatch.setattr(lr, "run_loop_task", fake_run_loop_task)
+        corpus = ds.iter_task_dirs(tier="smoke")
+        if not corpus:
+            pytest.skip("no smoke corpus in this checkout")
+        rc, _doc = lr.run_loop_tier([corpus[0].name], tmp_path / "out",
+                                    solo_fraction=0.15)
+        assert rc == lr.RC_OK
+        assert seen.get("solo_fraction") == 0.15, \
+            "the CLI/tier face must reach the prompt builders"

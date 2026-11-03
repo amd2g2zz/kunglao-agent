@@ -1,29 +1,38 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""tests/test_coverage_policy_564.py — issue #564 drift guard.
+"""tests/test_coverage_policy_564.py — issue #564 drift guard, #807 amendment.
 
-Coverage is OBSERVATION-only per #463 (4-gate quality framework):
-  - pytest.ini MUST NOT carry `--cov-fail-under`
-  - release-check.yml MUST NOT carry `--cov-fail-under`
-  - pyproject.toml MUST NOT carry a cov config that fails on %
-  - Gate 4 (the recorded mutation baseline, #663) is the primary metric, NOT
-    a coverage line %. pytest-cov is wired only so the report lands
-    in CI artifacts and can be inspected manually.
+Coverage policy (AMENDED 2026-10-23 by #807):
+  - OBSERVATION at the pytest.ini / local level: pytest.ini MUST NOT carry
+    `--cov-fail-under`; running pytest locally never fails on a percentage.
+  - ENFORCED FLOOR on the MEASURED SET in CI: scripts/ + hooks/ production
+    faces are gated at the raise-only ratchet floor in coverage-floor.json
+    via scripts/coverage_floor.py (check + monotone steps in
+    release-check.yml). The ratchet may only move UP; its absolute minimum
+    (70.0) and raise-only semantics are pinned in
+    tests/test_coverage_floor_ratchet_807.py.
+  - The raw `--cov-fail-under` flag stays banned EVERYWHERE: enforcement
+    goes through the ratchet file, which is strictly stronger because it
+    cannot silently move down.
+  - Gate 4 (the recorded mutation baseline, #663) REMAINS the primary
+    effectiveness metric, NOT a coverage line %. pytest-cov is wired so the
+    report lands in CI artifacts and feeds the #807 floor check.
 
-This file is the regression guard: if a future change re-introduces
-an enforcement threshold somewhere, this test fails loudly with the
-exact location and rationale (so the change is conscious, not silent).
+This file is the regression guard: if a future change re-introduces an
+enforcement threshold as a raw flag, or drops the #807 amendment markers
+from the policy surfaces, this test fails loudly with the exact location
+and rationale (so the change is conscious, not silent).
 
 Reconciliation: tests/test_coverage_floor_520.py uses --cov at pytest
 runtime but asserts a buffered floor (FLOOR=60, target 75) as a
 NORMAL assertion, not via --cov-fail-under. That stays literally true.
 
 Truth sources (verified here):
-  1. pytest.ini line ~6-8: comment block declaring observation-only
-  2. release-check.yml line ~54-60: #463 rationale comment
+  1. pytest.ini: #463 observation basis + #807 amendment note
+  2. release-check.yml: #807 floor steps (coverage_floor.py check/monotone)
   3. pyproject.toml dev dep comment: pytest-cov w/o threshold gate
   4. CHANGELOG.md / release-manifest.yaml / AGENTS.md: documented
-     policy, no enforcement
+     policy, amended by #807
 """
 from __future__ import annotations
 
@@ -103,25 +112,35 @@ def _scan(path: Path) -> list[str]:
 
 
 def test_pytest_ini_has_no_cov_fail_under() -> None:
-    """pytest.ini MUST NOT carry --cov-fail-under (#463, #564)."""
+    """pytest.ini MUST NOT carry --cov-fail-under (#463; #807 keeps this)."""
     hits = _scan(ROOT / "pytest.ini")
     assert hits == [], (
         f"pytest.ini carries an active --cov-fail-under: {hits}. "
-        f"Per #463, coverage is OBSERVATION-only — remove it."
+        f"Per #463 (kept by #807), local pytest is observation-only — "
+        f"enforcement lives in the CI measured-set floor step."
     )
 
 
 def test_release_check_workflow_has_no_cov_fail_under() -> None:
-    """.github/workflows/release-check.yml MUST NOT add --cov-fail-under."""
+    """.github/workflows/release-check.yml MUST NOT add --cov-fail-under.
+
+    Amendment: release-check DOES enforce coverage — through the
+    raise-only ratchet (scripts/coverage_floor.py + coverage-floor.json),
+    never through a static flag that could be quietly lowered.
+    """
     hits = _scan(ROOT / ".github" / "workflows" / "release-check.yml")
     assert hits == [], (
         f"release-check.yml carries --cov-fail-under: {hits}. "
-        f"#564 decision: keep coverage as observation, do not fail the gate."
+        f"#807: enforcement is the ratchet file (coverage-floor.json), "
+        f"which can only move UP — do not replace it with a static flag."
     )
 
 
 def test_pyproject_toml_has_no_cov_fail_under() -> None:
-    """pyproject.toml MUST NOT carry a [tool.coverage.*] fail_under."""
+    """pyproject.toml MUST NOT carry a [tool.coverage.*] fail_under.
+
+    The floor is the ratchet file, not a coverage-config constant.
+    """
     p = ROOT / "pyproject.toml"
     if not p.is_file():
         return
@@ -134,7 +153,8 @@ def test_pyproject_toml_has_no_cov_fail_under() -> None:
     ):
         pytest.fail(
             "pyproject.toml [tool.coverage.report] fail_under is set. "
-            "#463: coverage is observation, not a gate."
+            "#807: enforcement is coverage-floor.json (raise-only ratchet), "
+            "not a coverage-config constant."
         )
 
 
@@ -145,25 +165,31 @@ def test_ci_workflow_has_no_cov_fail_under() -> None:
         pytest.skip("ci.yml absent — surface does not exist yet (#564)")
     hits = _scan(p)
     assert hits == [], (
-        f"ci.yml carries --cov-fail-under: {hits}. #564: observation-only."
+        f"ci.yml carries --cov-fail-under: {hits}. "
+        f"#807: enforcement is the raise-only ratchet, not a static flag."
     )
 
 
-# ---- documentation-truth tests -------------------------------------------
+# ---- documentation-truth tests (amended) ----------------------------------
 
 
 def test_pytest_ini_documents_observation_policy() -> None:
-    """pytest.ini MUST carry a comment block declaring the policy."""
+    """pytest.ini MUST carry the observation basis AND the amendment
+    note (measured-set floor enforced in CI)."""
     text = (ROOT / "pytest.ini").read_text(encoding="utf-8")
-    # The #463 comment block anchors on the #463 / 4-gate phrase.
     assert "#463" in text and "coverage" in text.lower(), (
         "pytest.ini lost its #463 coverage-policy comment block. "
         "Re-add per #564."
     )
+    assert "#807" in text, (
+        "pytest.ini lost its #807 amendment note (measured-set floor). "
+        "Re-add per the #807 policy amendment."
+    )
 
 
 def test_release_check_workflow_documents_observation_policy() -> None:
-    """release-check.yml MUST carry a #463 rationale comment in pytest step."""
+    """release-check.yml MUST carry the #463 rationale AND the #807 floor
+    wiring (coverage_floor.py check step)."""
     text = (
         ROOT / ".github" / "workflows" / "release-check.yml"
     ).read_text(encoding="utf-8")
@@ -171,13 +197,22 @@ def test_release_check_workflow_documents_observation_policy() -> None:
         "release-check.yml lost its #463 coverage-rationale comment. "
         "Re-add per #564."
     )
+    assert "#807" in text and "coverage_floor.py check" in text, (
+        "release-check.yml lost its #807 measured-set floor step. "
+        "Re-add per the #807 policy amendment."
+    )
 
 
 def test_pyproject_toml_documents_observation_policy() -> None:
-    """pyproject.toml MUST carry an `#463 observation` comment near pytest-cov."""
+    """pyproject.toml MUST carry the #463 observation comment AND the #807
+    amendment marker near pytest-cov."""
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "#463" in text and "observation" in text.lower(), (
         "pyproject.toml lost its #463 observation comment. Re-add per #564."
+    )
+    assert "#807" in text, (
+        "pyproject.toml lost its #807 amendment marker. Re-add per the "
+        "#807 policy amendment."
     )
 
 
@@ -203,12 +238,13 @@ def test_guard_scans_the_canonical_config_set() -> None:
 
 
 def test_consistent_policy_across_all_truth_sources() -> None:
-    """All four policy documents must agree on OBSERVATION-only stance.
+    """All policy documents must agree on the AMENDED stance.
 
-    This is the ultimate integration check: if any single source
-    contradicts the others (e.g., someone adds --cov-fail-under to
-    release-check.yml while pytest.ini still says observation-only),
-    this test catches the drift.
+    Amended policy (#807): observation at the pytest/local level; enforced
+    floor on the measured set in CI via the raise-only ratchet. Every
+    source keeps its OBSERVATION basis marker; the three config surfaces
+    additionally carry the #807 amendment marker. If any single source
+    contradicts the others, this test catches the drift.
     """
     sources = {
         "pytest.ini": ROOT / "pytest.ini",
@@ -217,12 +253,19 @@ def test_consistent_policy_across_all_truth_sources() -> None:
         "test_coverage_floor_520.py": ROOT / "tests" / "test_coverage_floor_520.py",
     }
     observed_phrase = "OBSERVATION"
+    amended_sources = ("pytest.ini", "release-check.yml", "pyproject.toml")
     for label, path in sources.items():
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
         assert observed_phrase.lower() in text.lower(), (
             f"{label} lost its OBSERVATION marker. "
-            f"Source must explicitly say coverage is observation-only "
-            f"per #463/#564."
+            f"Source must explicitly carry the #463 observation basis "
+            f"(amended by #807: enforced floor on the measured set in CI)."
         )
+        if label in amended_sources:
+            assert "#807" in text, (
+                f"{label} lost its #807 amendment marker. The policy text "
+                f"must name the amendment: enforced floor on the measured "
+                f"set (scripts/ + hooks/) via coverage-floor.json."
+            )

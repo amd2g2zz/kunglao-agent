@@ -117,6 +117,50 @@ from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
+# #801 Face 1: the pre-LLM wake gate. A quiet 5-min cron wake re-read the
+# whole session context to conclude "no-op" — ~750k input tok/h at 60k
+# context, ZERO analysis output. The wake verdict is now computed HOST-SIDE
+# (wake_verdict below) and the OS scheduler runs the tick DIRECTLY: a prompt
+# is injected ONLY on watchdog.fired / wake-class bus events / park-expiry.
+# In --wake-gate mode a quiet verdict exits 0 with a `QUIET:` marker (the
+# cron injects nothing); a wake verdict exits 3 with `WAKE:` (inject the
+# loop prompt). Silence is the honest idle.
+PARK_EXPIRY_TICKS_DEFAULT = 36  # ~3h at the 5m cadence: one honest re-proof
+WAKE_STATE_REL = Path("runs") / ".wake-gate.json"
+
+
+def wake_verdict(*, watchdog_fired: bool = False,
+                 watchdog_reasons: list | None = None,
+                 tick_events: 'set | list | tuple' = (),
+                 quiet_streak: int = 0,
+                 expiry_ticks: int | None = None) -> dict:
+    """The #801 wake predicate (pure; main() owns persistence + rc).
+
+    Wake iff ANY of:
+      - the watchdog fired (cadence gap / stuck worker / failed step);
+      - this pass consumed fresh wake-class bus events
+        (settlement/stall/plan_review — the analysis moved);
+      - park-expiry: the zero-work park has held >= expiry_ticks
+        consecutive quiet passes (one periodic honest re-proof; prevents
+        an eternal latch).
+
+    Returns {"needed": bool, "reasons": [str, ...]}. A quiet verdict is
+    the zero-token idle: nothing gets injected.
+    """
+    reasons: list[str] = []
+    if watchdog_fired:
+        wr = [str(r) for r in (watchdog_reasons or [])]
+        if wr:
+            reasons.extend(f"watchdog:{r}" for r in wr)
+        else:
+            reasons.append("watchdog:fired")
+    if tick_events:
+        reasons.append("events:" + ",".join(sorted(set(tick_events))))
+    expiry = PARK_EXPIRY_TICKS_DEFAULT if expiry_ticks is None else expiry_ticks
+    if not reasons and expiry > 0 and quiet_streak >= expiry:
+        reasons.append(f"park-expiry:{quiet_streak}-quiet-ticks")
+    return {"needed": bool(reasons), "reasons": reasons}
+
 
 def run(script: str, ws: Path, *extra: str) -> dict:
     try:
@@ -417,6 +461,14 @@ def main(argv: list[str] | None = None) -> int:
              "those are real stalls (or unknown provenance), and the "
              "bounded re-arm chain is the remedy — a recovered cadence "
              "clears the stale gap within one window of on-cadence ticks.")
+    parser.add_argument(
+        "--wake-gate", action="store_true",
+        help="#801 Face 1: pre-LLM wake-gate mode for the OS scheduler — "
+             "the cron runs the tick DIRECTLY (zero LLM). Quiet verdict -> "
+             "stdout QUIET: + exit 0 (inject nothing); wake verdict "
+             "(watchdog fired / wake-class events / park-expiry) -> stdout "
+             "WAKE: + exit 3 (inject the loop prompt). rc=2 breaker stop "
+             "still wins.")
     parsed = parser.parse_args(args)
     ws_arg = parsed.workspace or None
     # A path-shaped positional must EXIST: the tick writes telemetry into the
@@ -608,6 +660,46 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 - watchdog never fails the tick
         warn("loop_watchdog", f"{type(exc).__name__}: {exc}")
 
+    # #801 Face 1: the wake verdict rides every report; main() owns the
+    # park-expiry streak persistence (runs/.wake-gate.json). The streak
+    # accrues ONLY across parked passes; any wake reason resets it (the
+    # wake happened).
+    _prev_streak = 0
+    try:
+        _wstate = json.loads(
+            (ws / WAKE_STATE_REL).read_text(encoding="utf-8"))
+        _prev_streak = int(_wstate.get("quiet_streak", 0))
+    except Exception:  # noqa: BLE001 — absent/corrupt streak = fresh counter
+        _prev_streak = 0
+    _wd = report.get("watchdog") or {}
+    _streak_incl = (_prev_streak + 1) if parked else 0
+    wake = wake_verdict(
+        watchdog_fired=bool(_wd.get("fired")),
+        watchdog_reasons=list(_wd.get("reasons") or []),
+        tick_events=tick_events,
+        quiet_streak=_streak_incl)
+    report["wake"] = dict(wake, quiet_streak=_streak_incl)
+    try:
+        (ws / WAKE_STATE_REL).write_text(json.dumps({
+            "quiet_streak": 0 if wake["needed"] else _streak_incl,
+            "ts": utc_now()}), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — streak write never fails the tick
+        warn("wake_state_write", f"{type(exc).__name__}: {exc}")
+
+    # #801 R2a: tripped warn families surface in EVERY tick report — an
+    # owned-noise state (circuit-break/escalate/downgrade per family) must
+    # never live in an unread file again (the 41h-nobody-called shape).
+    _wb_path = ws / Path("runs") / ".warn-breaker.json"
+    if _wb_path.exists():  # absent state is the quiet normal — no warn spam
+        try:
+            _wb = json.loads(_wb_path.read_text(encoding="utf-8"))
+            if _wb.get("families"):
+                report["warn_breaker"] = _wb
+        except (OSError, ValueError) as exc:
+            warn("warn_breaker_state",
+                 f"corrupt breaker state ignored: {type(exc).__name__}: "
+                 f"{exc}")
+
     out = ws / "runs" / ".heartbeat-tick.json"
     try:
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -664,6 +756,14 @@ def main(argv: list[str] | None = None) -> int:
                     action="cockpit_sample",
                     detail=json.dumps(cockpit_summary(ws),
                                       ensure_ascii=False))
+                # #801 Face 3: the machine:analysis ratio rides the tick
+                # report when the capture hook has persisted a face.
+                _cr = Path(ws) / "runs" / ".cockpit-ratio.json"
+                if _cr.exists():
+                    report["cockpit_ratio"] = json.loads(
+                        _cr.read_text(encoding="utf-8"))
+                    out.write_text(json.dumps(report, indent=2),
+                                   encoding="utf-8")
         except Exception as exc:  # noqa: BLE001 — cockpit 采样永不打断 tick
             warn("cockpit_sample", f"{type(exc).__name__}: {exc}")
 
@@ -755,6 +855,15 @@ def main(argv: list[str] | None = None) -> int:
     # import, failed rebuild) must fail the tick, not ride it silently.
     if breaker_rc is not None:
         return breaker_rc
+    # #801 Face 1: the OS-scheduler face — the verdict decides injection.
+    if parsed.wake_gate:
+        if wake["needed"]:
+            print("WAKE: " + "; ".join(wake["reasons"])
+                  + " — inject the loop prompt (exit 3)")
+            return 3
+        print("QUIET: no LLM action needed — idle ≈ 0 tokens (report: "
+              f"{out})")
+        return 0
     return 0 if rc_hb == 0 and rc_renew == 0 and rc_sc == 0 else 1
 
 

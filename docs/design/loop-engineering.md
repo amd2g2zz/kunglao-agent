@@ -201,7 +201,7 @@ session's STALE=5267 is the empirical proof of that path.
 
 | # | Fix | Change site | Nature |
 |---|---|---|---|
-| **F1** | the gate reads `activity_ts` (or `max(last_tick_ts, activity_ts)`) | `worker_budget.py::check_heartbeat_alive` L530 | **core** — actually kills the STALE false positive; liveness = tool activity, independent of cron cognition |
+| **F1** | the gate reads `activity_ts` (or `max(last_tick_ts, activity_ts)`) | `worker_budget.py::check_heartbeat_alive` L530 | **core** — actually kills the STALE false positive; liveness = tool activity, independent of cron cognition. **[SUPERSEDED 2026-10-19 — see the amendment below the table]** |
 | F2 | `heartbeat_touch` replaces bare `write_text` with `_atomic_write` | `heartbeat_touch.py` | removes the RC3 race |
 | F3 | `heartbeat_tick` gains a cycle-in-progress lock (`fcntl.flock` on `.heartbeat.lock` or a PID file) | `heartbeat_tick.py` | removes overlapping RC4 ticks |
 | F4 (optional) | split the `/loop` registration check out of the dispatch gate into an advisory warning (no block) | `worker_budget.py` | unblocks the RC5 platform limitation |
@@ -212,6 +212,21 @@ direct liveness signal, less prone to false negatives, than the cron tick (the
 cron tick is itself driven by the orchestrator session). Splitting `/loop
 registration` into an advisory (F4) preserves the original intent of
 "reminding to register the cron" without using it to block dispatch.
+
+> **AMENDMENT (2026-10-19) — F1 is SUPERSEDED, deliberately not implemented
+> (§8.2 M1.6 of docs/architecture/kunglao-technical-doc.md).** The as-built
+> gate does NOT read `activity_ts`. `check_heartbeat_alive`
+> (hooks/worker_budget_sinks.py:421-485) is CONTINUITY-based via the shared
+> evaluator `evaluate_tick_continuity` (scripts/rlvr/liveness.py:261): >= 2
+> ticks, adjacent gaps <= 2x interval_min, newest <= 35 min. The docstring
+> pins the posture: "#533 F-H2 semantics kept: TICK data only — activity_ts
+> stays the kicker's signal" (hooks/worker_budget_sinks.py:440-441). The
+> supersession is the #754 incident ruling: single-tick liveness was blind —
+> `last_tick_ts == started_ts` for a whole session with no cron behind it
+> still passed inside the window. A bare activity_ts read validates session
+> activity, not that registered monitoring machinery is actually ticking —
+> continuity is the stronger liveness claim. This design doc's one "must-do"
+> is therefore recorded as replaced-by-design, not as an unimplemented debt.
 
 ### 6.6 TDD list (F1+F2)
 
@@ -259,7 +274,7 @@ feels better".
 
 | # | Item | Nature | Decision | Implementation |
 |---|---|---|---|---|
-| **1** | heartbeat F1+F2 (gate reads activity_ts + atomic write) | correctness bug (live symptom) | **must-do** | §6.5, small focused PR |
+| **1** | heartbeat F1+F2 (gate reads activity_ts + atomic write) | correctness bug (live symptom) | **must-do — SUPERSEDED 2026-10-19: F1 replaced by the #754 tick-continuity evaluator (see the §6.5 amendment); F2 landed as `_atomic_write`** | §6.5 amendment |
 | 2 | triage-quality measurement (E4.1 concretized) | evaluation blind spot | do | §7, measurement only, no code change |
 | — | heartbeat F3 (cycle-lock) | prevents overlapping ticks | optional | RC4, if overlap persists after F1 |
 | — | heartbeat F4 (/loop advisory) | unblocks platform limitation | optional | RC5 |

@@ -10,15 +10,20 @@ settlement credit gives ordinary tool success zero signal (the owner's
 attribution gap). This module is pure instrumentation — no behavior
 change, no sampling change, no critic.
 
-Reward form (design doc docs/design/external-smdp-phase-b.md §2):
+Reward form (design doc docs/design/external-smdp-phase-b.md §2, as
+amended by issue-796's Φ-v2):
 
     r_t = ALPHA * [Φ(s') - Φ(s)] - LAMBDA * cost_t
-    Φ(s) = W_FACTS * graded_fact_fraction + W_ORACLE * oracle_green_rate
+    Φ(s) = W_TREE * tree_phi(s) + W_ORACLE * oracle_green_rate
 
-(the facts term is fact_face's graded ``weighted_fraction`` since
-issue-678 D-678.5 — certified 1.0 / present 0.5 / draft 0.25; the
-binary verified-count it replaced made Φ degenerate in live
-workspaces)
+(#796: the facts term is REPLACED by the closure-hypothesis-tree mass —
+``W_FACTS·graded_fraction`` was dilution-dominated, punishing discovery
+because every new fact grew the denominator before certification grew
+the numerator; the tree Φ carries mass only on DECISIVELY-resolved
+nodes, so discovery can never move it. The oracle term rides unchanged
+behind the #799 seal. rlvr/phi_tree.py owns the tree face, the policy
+constants, and the ``PHI_REGIME`` version stamp every transition row
+carries — the ledger survives a Φ swap without retroactive corruption.)
 
 Φ is a potential function — potential-based shaping (Ng, Harada & Russell
 1999) preserves the optimal-policy order, so layering it over the
@@ -48,8 +53,10 @@ import uuid
 from _common import utc_now_z
 from pathlib import Path
 
-from rlvr.state import fact_face, _oracle_status_progress
+from rlvr.state import _oracle_status_progress
+from rlvr import learning_seal as _seal  # #799: the learning-channel seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
+from rlvr import phi_tree as _phi  # #796: the Φ-tree economy face
 
 # #721: the row stamp inside runs/experience.jsonl (the legacy
 # runs/transitions.jsonl rel lives in the consolidated_ledger LEGACY
@@ -75,27 +82,29 @@ _STASH_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 # ---- policy constants (design doc §2; NOT fitted) ------------------------
 ALPHA = 1.0          # potential-difference weight
 LAMBDA_COST = 1.0    # cost weight
-W_FACTS = 0.3        # Φ: verified-facts fraction weight
+W_TREE = 0.5         # Φ: decisive closure-tree mass weight (#796)
 W_ORACLE = 0.5       # Φ: oracle green-rate weight
 COST_TOKENS_DIV = 10_000.0   # normalize: 10k tokens = 1 cost unit
 COST_SECONDS_DIV = 3_600.0   # normalize: 1 wall hour = 1 cost unit
 
 
 def potential(ws) -> float:
-    """Φ(s) ∈ [0, 1]: verified-facts fraction + oracle green rate,
-    renormalized over PRESENT dims (a missing organ drops its dim —
-    the honest-absence doctrine, state.py precedent). The facts term
-    reads fact_face's GRADED ``weighted_fraction`` (issue-678 D-678.5:
-    certified terminal 1.0 / present non-terminal 0.5 / draft 0.25), so
-    partially-verified workspaces produce INTERMEDIATE potentials — the
-    binary verified-count made Φ degenerate ({0.0, 1.0} in live
-    workspaces) and the transition ledger recorded no partial progress."""
+    """Φ(s) ∈ [0, 1]: the closure-tree decisive mass (#796) + the
+    oracle green rate, renormalized over PRESENT dims (a missing organ
+    drops its dim — the honest-absence doctrine, state.py precedent).
+    #796 replaces the graded-fact-fraction term: it was
+    dilution-dominated (discovery grew the denominator before
+    certification grew the numerator — discovery steps banked r_t < 0);
+    the tree Φ moves only on decisive resolution/refutation, so
+    discovery is Φ-neutral by construction. A workspace without a tree
+    rides the oracle dim alone (the dim is honest-absent, never
+    fabricated)."""
     ws = Path(ws)
     parts: list[tuple[float, float]] = []  # (weight, value)
-    ff = fact_face(ws)
-    if ff["count"] > 0:
-        parts.append((W_FACTS, float(ff.get("weighted_fraction", 0.0))))
-    oracle = _oracle_status_progress(ws)
+    tree = _phi.tree_phi(ws)
+    if tree is not None:
+        parts.append((W_TREE, float(tree)))
+    oracle = _oracle_progress_sealed(ws)
     if oracle is not None:
         passed, total = oracle
         parts.append((W_ORACLE, passed / total if total else 0.0))
@@ -103,6 +112,31 @@ def potential(ws) -> float:
         return 0.0
     wsum = sum(w for w, _ in parts)
     return sum(w * v for w, v in parts) / wsum
+
+
+def _oracle_progress_sealed(ws) -> tuple[int, int] | None:
+    """#799/#601-L7: Φ's oracle dim trusts only a SEAL-VALID
+    oracle-status doc when the learning channel is armed — the state.py
+    residual (a forger copying the full canonical shape) dies here: the
+    shape alone is never sufficient, the host seal is. Unarmed = the
+    legacy shape-validated face, byte-identical."""
+    if not _seal.armed():
+        return _oracle_status_progress(ws)
+    p = Path(ws) / "runs" / "oracle-status.json"
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        doc = None
+    ok, why = (False, "doc unreadable/absent") if not isinstance(doc, dict) \
+        else _seal.verify_row(doc)
+    if not ok:
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("incremental_reward.potential",
+             f"oracle-status unsealed/invalid ({why}) — Φ's oracle dim "
+             f"dropped as honest absence (#799/#601-L7; the canonical "
+             f"writer must seal the doc)")
+        return None
+    return _oracle_status_progress(ws)
 
 
 def incremental_reward(phi_before: float, phi_after: float, *,
@@ -194,6 +228,7 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
                                   dict(branch_budget).items()}}
                if branch_budget else {}),
         }
+        doc = _seal.sign_row(doc)  # #799: the stash is sealed at write
         p.write_text(json.dumps(doc), encoding="utf-8")
         return doc
     except (OSError, ValueError) as exc:  # telemetry, never the producer
@@ -272,6 +307,20 @@ def append_transition(ws, claim: str, outcome: str, *,
                  f"{launch.get('attempt_id')!r} (a re-dispatch owns this "
                  f"stash — 1-F2)")
             return None
+        if _seal.armed():
+            ok, why = _seal.verify_row(launch)
+            if not ok:
+                from kunglao_log import warn  # noqa: PLC0415
+                warn("incremental_reward.append_transition",
+                     f"refused settle for {claim!r} "
+                     f"(action_type={action_type or 'dispatch'!r}): "
+                     f"launch-stash seal invalid ({why}) — no transition "
+                     f"row banked, stash left intact (#799)")
+                return None
+        prop = launch.get("propensity")
+        if prop is not None and not _propensity_receipted(
+                ws, str(launch.get("claim") or claim), float(prop)):
+            prop = None  # SNIPS defense: a fiat propensity never rides
         phi_after = potential(ws)
         r_incr = incremental_reward(
             float(launch.get("phi", 0.0)), phi_after,
@@ -293,6 +342,9 @@ def append_transition(ws, claim: str, outcome: str, *,
                      if absorbed_from_disk else {})},
             "s_prime_phi": round(phi_after, 6),
             "phi_before": round(float(launch.get("phi", 0.0)), 6),
+            # #796 pre-condition 2: the row stamps its Φ formula version
+            # so the append-only ledger survives a Φ swap uncorrupted
+            "phi_regime": _phi.PHI_REGIME,
             # issue-678 T4: the EXPLICIT Φ movement (the #548 tiebreaker
             # raw material was previously only derivable by subtraction)
             # plus the launch stash's claim/action provenance — the row
@@ -307,20 +359,69 @@ def append_transition(ws, claim: str, outcome: str, *,
             "done": bool(done),
             **({"lift": round(float(lift), 6)}
                if lift is not None else {}),
-            **({"propensity": launch["propensity"]}
-               if launch.get("propensity") is not None else {}),
+            **({"propensity": prop} if prop is not None else {}),
         }
+        row = _seal.sign_row(row)  # #799: every transition row seals
         if not _cl.append(ws, "experience", row):
             # append-only refusal (ONE warn already emitted by the core):
             # the row never banked — the stash stays for a later settle
             return None
         launch_p.unlink(missing_ok=True)  # stash consumed
+        if done:
+            # #796: the claim's terminal close fires the proxy-vs-truth
+            # reconciliation pass (calibration triples + escrow release);
+            # fail-open telemetry, the row above already banked
+            try:
+                _phi.reconcile_claim(
+                    ws, str(launch.get("claim") or claim),
+                    oracle_outcome=str(outcome))
+            except Exception as exc:  # noqa: BLE001 — loud, never fatal
+                from kunglao_log import warn  # noqa: PLC0415
+                warn("incremental_reward.append_transition",
+                     f"phi reconcile failed for {claim!r}: "
+                     f"{type(exc).__name__}: {exc}")
         return row
     except (OSError, ValueError, TypeError) as exc:  # loud telemetry (#275)
         from kunglao_log import warn  # noqa: PLC0415
         warn("incremental_reward.append_transition",
              f"{type(exc).__name__}: {exc}")
         return None  # telemetry, never the producer
+
+
+def _propensity_receipted(ws, claim: str, propensity: float) -> bool:
+    """#799/#601-L8 SNIPS mixing defense: a stash propensity rides the
+    transition row ONLY when it matches the sealed sampler receipt —
+    the source=dispatch q-cell row for this claim (its
+    ``recipe_propensity`` column). No receipt, an unsealed receipt, or
+    a value mismatch drops the column with ONE loud warn: π is never
+    1.0 by fiat. Unarmed = legacy (the column rides as before)."""
+    if not _seal.armed():
+        return True
+    receipt = None
+    for row in reversed(_cl.read(ws, "experience",
+                                 schema_prefix="q-cell-obs")):
+        if not isinstance(row, dict) \
+                or str(row.get("source") or "") != "dispatch":
+            continue
+        if claim and (str(row.get("claim") or "") == claim
+                      or str(row.get("dispatch_id") or "") == claim):
+            if _seal.verify_row(row)[0]:
+                receipt = row
+            break
+    rp = (receipt or {}).get("recipe_propensity")
+    if isinstance(rp, bool) or not isinstance(rp, (int, float)):
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("incremental_reward.append_transition",
+             f"propensity {propensity} dropped for {claim!r}: no sealed "
+             f"sampler receipt matches (SNIPS defense, #799/#601-L8)")
+        return False
+    if round(float(rp), 6) != round(float(propensity), 6):
+        from kunglao_log import warn  # noqa: PLC0415
+        warn("incremental_reward.append_transition",
+             f"propensity {propensity} dropped for {claim!r}: sampler "
+             f"receipt carries {rp} (cross-check mismatch, #799)")
+        return False
+    return True
 
 
 def _stash_identity(path: Path) -> tuple[str, str] | None:
@@ -404,4 +505,6 @@ def read_transitions(ws) -> list[dict]:
     []. #721: backed by the consolidated experience file, with the
     legacy archive (runs/transitions.jsonl) riding the compat window —
     archive rows come first, they predate the live file."""
-    return _cl.read(ws, "experience", schema_prefix="transition")
+    return _seal.trusted_rows(
+        _cl.read(ws, "experience", schema_prefix="transition"),
+        op="incremental_reward.read_transitions")

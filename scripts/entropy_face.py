@@ -20,8 +20,10 @@ max-entropy PQ. Fail-open everywhere: an empty/unreadable posterior ledger
 is ``h_bits=None`` / ``trend="unknown"``, never an exception.
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import json
 from pathlib import Path
 
@@ -71,7 +73,7 @@ def frontier_entropy(ws: Path) -> tuple[float | None, str | None]:
     Frontier without a posterior -> deterministic max-entropy PQ fallback;
     empty/unreadable ledger -> (None, None)."""
     try:
-        from posteriors import PosteriorLedger
+        from posteriors_case import PosteriorLedger
         led = PosteriorLedger.load(ws)
         if not led.pqs:
             return None, None

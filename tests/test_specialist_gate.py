@@ -61,11 +61,12 @@ def _desc(task: str = 'do the task') -> str:
 def _prompt(task: str = 'do the task') -> str:
     # canonical prompt = 形状行 + facts-snapshot 标记行（S1c 门要求两者）
     # v1 canonical envelope (the v0 text prefix is retired, compat-rot
-    # sweep 2026-09-29); method-family stays a prose declaration line
+    # sweep 2026-09-29); the envelope field is the ONE declaration face
+    # (the v0 prose marker retired, #804)
     return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-            '"tier": 1, "tools": ["grep"]}}\n' + task + chr(10)
-            + 'facts-snapshot: 1 facts' + chr(10)
-            + 'method-family: static-decompile')
+            '"tier": 1, "tools": ["grep"], '
+            '"method_family": "static-decompile"}}\n' + task + chr(10)
+            + 'facts-snapshot: 1 facts')
 
 
 PROMPT = 'facts-snapshot: 1 facts'

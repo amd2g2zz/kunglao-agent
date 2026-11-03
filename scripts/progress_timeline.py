@@ -51,7 +51,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from kunglao_log import iter_jsonl  # (kunglao_log Family-K single source)
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 try:  # advisory cross-process lock; POSIX faces only — on platforms without
     # fcntl the re-check-before-write loop below still guards no-append-lost.

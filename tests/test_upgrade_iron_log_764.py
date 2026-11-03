@@ -67,7 +67,7 @@ def test_foreign_actor_append_passes_window(up, tmp_path):
                       [_log_row("orchestrator", "analysis_started")])
     pre_logs: dict = {}
     pre = up.user_data_digest(ws, log_lines_out=pre_logs)
-    _append(ws, _log_row("bash_fact_guard", "guard_tripped"))
+    _append(ws, _log_row("hook:bash_fact_guard", "guard_tripped"))
     post = up.user_data_digest(ws)
     assert pre != post, "the append must change the naive digest"
     assert up._iron_violations(pre, post, pre_logs, ws) == []

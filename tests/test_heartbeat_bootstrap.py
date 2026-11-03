@@ -171,9 +171,8 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"]}}\nstrings' + chr(10) +
-                      "facts-snapshot: 1 facts" + chr(10) +
-                      "method-family: static-decompile"),
+def _dispatch_payload(prompt: str = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "method_family": "static-decompile"}}\nstrings' + chr(10) +
+                      "facts-snapshot: 1 facts"),
                       desc: str = "w-test bootstrap dispatch") -> dict:
     # #862: dispatch 形状走合同通道（prompt 前缀）——description 通道在
     # budget 归一后不再武装 cid 门（fixture 同步到 canonical 通道）。

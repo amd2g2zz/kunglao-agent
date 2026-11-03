@@ -410,7 +410,11 @@ class TestRulesDeclareTheLadder:
     def test_version_bumped_for_the_semantic_change(self):
         doc = rs.load_rules(RULES_PATH)
         assert doc["schema"] == "reward-rules/1"
-        assert doc["version"] == 3
+        # version 3 -> 4 (issue 796): the hypothesis rule classes
+        # (decisive-resolution + churn) are a semantic change and bump
+        # the versioned file per the issue-379 precedent; the v3
+        # round-credit section folds unchanged below.
+        assert doc["version"] == 4
 
     def test_prior_version_faces_still_foldable(self):
         """The pre-existing round_credit pins keep folding: attribution,

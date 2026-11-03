@@ -85,39 +85,33 @@ def test_arm_key_agent_dim_is_additive():
     assert qc.agent_of_action(f"{FAM}|facts_snapshot|none|1") is None
 
 
-def _bare_family_row(sig: str, credit: float) -> dict:
-    """A PRE-#539 legacy row: NO arm_key, so its consumption key IS the
-    bare method_family — the only cell the #545 pooling tolerance reads."""
-    row = dict(_settle_row(sig, "", credit))
-    row["arm_key"] = None
-    return row
+def test_5dim_read_never_forces_family_mass_into_local():
+    """Design D2 / the R3 carve-out: a 5-dim agent read leaves every
+    OTHER cell of the family in the leave-one-out ANCHOR — forced
+    pooling into the agent's own local mass is forbidden (owner: sharing
+    happens through warm-start priors, never forced pooling).
 
-
-def test_5dim_read_never_forces_legacy_family_mass_into_local():
-    """Design D2 / the R3 carve-out: a 5-dim agent read leaves the
-    BARE-family legacy cell in the leave-one-out ANCHOR — forced pooling
-    into the agent's own local mass is forbidden (owner: sharing happens
-    through warm-start priors, never forced pooling).
-
-    The fixture MUST be a bare-family row: a same-arm 4-dim
-    family|recipe|verif|tier cell never pools under either version, so a
-    fixture holding only 4-dim rows would stay green even regressed."""
+    #804 de-compat: the fixture was 3 PRE-#539 bare-family rows (a shape
+    that no longer banks — the unkeyed gap, pinned in
+    test_decompat_804.py); the carve-out is now pinned with a same-arm
+    4-dim row (the untyped pool), which under NO version may pool into a
+    5-dim local read."""
     ak5 = qc.arm_key(FAM, "facts_snapshot", "none", 1, "analyst")
-    legacy = [_bare_family_row(SIG, 1.0) for _ in range(3)]
-    view = _fold(legacy)
+    ak4 = qc.arm_key(FAM, "facts_snapshot", "none", 1, None)
+    rows = [_settle_row(SIG, ak4, 1.0) for _ in range(3)]
+    view = _fold(rows)
 
     a, b = qc.cell_posterior(view, SIG, FAM, arm_key=ak5)
-    # REGRESSED (guard removed): the 3 legacy successes pool into local,
-    # the anchor empties out, -> (1+3, 1+0) = (4.0, 1.0).
+    # REGRESSED (guard removed): the 3 untyped successes pool into the
+    # agent's local, the anchor empties out -> (1+3, 1+0) = (4.0, 1.0).
     # CORRECT: local stays (0,0), the mass rides the anchor
     # -> (1 + 3*(4/5), 1 + 3*(1/5)) = (3.4, 1.6).
     assert a == pytest.approx(3.4, abs=1e-9)
     assert b == pytest.approx(1.6, abs=1e-9)
     assert b > 1.0                     # β untouched by the pooled mass
 
-    # the FAMILY-keyed read (no agent) still takes it as local — the
-    # carve-out is specific to agent keys, not to key-addressed reads.
-    a_f, b_f = qc.cell_posterior(view, SIG, FAM)
+    # the untyped 4-dim read takes its own cell as local.
+    a_f, b_f = qc.cell_posterior(view, SIG, FAM, arm_key=ak4)
     assert a_f == pytest.approx(4.0, abs=1e-9)
     assert b_f == pytest.approx(1.0, abs=1e-9)
 

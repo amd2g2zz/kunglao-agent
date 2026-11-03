@@ -1,0 +1,39 @@
+{
+  "schema": "drawio-skill/diagram-ir/v1",
+  "metadata": {"title": "RL 学习回路（as-wired, #773/#776 merged）"},
+  "nodes": [
+    {"id": "intake", "label": "intake 锚点（task_spec/goal-op）", "kind": "service"},
+    {"id": "arm", "label": "arm_oracle_cases → oracle/cases（#773 W1）", "kind": "service"},
+    {"id": "state", "label": "rlvr.state.snapshot → 签名", "kind": "service"},
+    {"id": "belief", "label": "rlvr.belief（settle 步记录，declared_unknown → bf 维）", "kind": "service"},
+    {"id": "sampler", "label": "strategy_store.gate_sample（DTS 抽样+倾向）", "kind": "service"},
+    {"id": "familygate", "label": "sinks._method_family_gate：未声明→带采样家族拒绝（W2）", "kind": "service"},
+    {"id": "usage", "label": "method-family-log 使用行（sampled_family+倾向）", "kind": "store"},
+    {"id": "planner", "label": "l1_planner.plan_for_claim（准入：dispatch/park/reuse/distill）", "kind": "service"},
+    {"id": "receipt", "label": "plan-receipts.jsonl（W3）", "kind": "store"},
+    {"id": "dispatch", "label": "worker 证据生产", "kind": "service"},
+    {"id": "settle", "label": "step_grain.settle → 信用 + belief", "kind": "service"},
+    {"id": "cases", "label": "武装 oracle cases → 案例后验更新", "kind": "service"},
+    {"id": "crystallize", "label": "crystallize（负知识+解法广播）", "kind": "service"},
+    {"id": "w4", "label": "W4 冒烟：五指纹翻绿（待跑，预算门）", "kind": "service", "properties": {"state": "pending"}}
+  ],
+  "edges": [
+    {"id": "f1", "source": "intake", "target": "arm", "label": "锚点编译（W1）"},
+    {"id": "f2", "source": "arm", "target": "cases", "label": "武装案例"},
+    {"id": "f3", "source": "state", "target": "sampler", "label": "Q(签名,家族)"},
+    {"id": "f4", "source": "sampler", "target": "familygate", "label": "抽样+倾向"},
+    {"id": "f5", "source": "familygate", "target": "usage", "label": "重试声明→使用行（样本出口持久化）"},
+    {"id": "f6", "source": "familygate", "target": "planner", "label": "家族定→准入"},
+    {"id": "f7", "source": "planner", "target": "receipt", "label": "admitted 集合（W3）"},
+    {"id": "f8", "source": "receipt", "target": "dispatch", "label": "envelope 携带准入"},
+    {"id": "f9", "source": "dispatch", "target": "settle", "label": "SubagentStop 结算"},
+    {"id": "f10", "source": "settle", "target": "belief", "label": "belief/1 行"},
+    {"id": "f11", "source": "settle", "target": "cases", "label": "武装案例结算→后验更新（W1 后活）"},
+    {"id": "f12", "source": "cases", "target": "sampler", "label": "后验→下次抽样（学习闭环）"},
+    {"id": "f13", "source": "settle", "target": "crystallize", "label": "负知识/广播"},
+    {"id": "f14", "source": "usage", "target": "w4", "label": "指纹 rl-sampler-exit"},
+    {"id": "f15", "source": "receipt", "target": "w4", "label": "指纹 rl-admission-consumed"},
+    {"id": "f16", "source": "cases", "target": "w4", "label": "指纹 oracle-armed + posterior-moved"}
+  ],
+  "views": []
+}

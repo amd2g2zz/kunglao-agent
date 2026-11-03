@@ -1,0 +1,132 @@
+{
+ "schema": "production-shape/1",
+ "id": "web-2026-10-22-shape",
+ "synthetic": true,
+ "source": "SHAPE-ONLY distillation of a 2026-10 production run (logs-panel review archive; READ-ONLY reference). Zero user content: event counts, field names and ordering faces only; every literal below is a template token.",
+ "shape": {
+  "events_total": 4106,
+  "action_counts": {
+   "statusline_snapshot": 1167,
+   "rank_feeds": 720,
+   "warn": 476,
+   "detector_eval": 331,
+   "cockpit_sample": 148,
+   "detector_fired": 142,
+   "dispatch": 111,
+   "renew": 110,
+   "mech_run": 83,
+   "rho_pair": 65,
+   "rho_checkpoint": 65,
+   "decision_snapshot": 65,
+   "result_digest": 64,
+   "converge": 46,
+   "intent_unparsed": 46,
+   "priority_deviation": 35,
+   "write_blocked": 34,
+   "verify": 32,
+   "mission_stall": 31,
+   "rollout_settled": 31,
+   "rollup_sweep": 31,
+   "claim_settled": 21,
+   "retro_report": 21,
+   "retro_policy": 19,
+   "t2_queue_built": 18
+  },
+  "warn_families": {
+   "q_cells": 392,
+   "round_closure": 36,
+   "compose": 18,
+   "l1_value": 16,
+   "dispatch_gate": 7,
+   "strategy_store": 5
+  },
+  "dispatches": 111,
+  "sampled_dispatches": 0,
+  "settled_rows": 52,
+  "settled_rows_with_arm": 0,
+  "orphan_settled_claims": 15,
+  "verify_rows": 32,
+  "verify_rejects": 17
+ },
+ "anchors": {
+  "801": "warn family q_cells repeats the same honest-gap message 392x with no per-family bound — the unbounded-warn circuit-breaker face (owned by #807/#801 assertion, registered later)",
+  "800": "claim_settled rows whose claim never had a dispatch row (orphan settlement / missing_rollout face, owned by #800)",
+  "809": "verify rows exiting non-zero immediately followed by settlement-grade rows for the same claim (false-reject face, owned by #809)"
+ },
+ "events": [
+  {
+   "action": "dispatch",
+   "claim": "C-001",
+   "arm": null,
+   "strategy": "default"
+  },
+  {
+   "action": "dispatch",
+   "claim": "C-002",
+   "arm": null,
+   "strategy": "default"
+  },
+  {
+   "action": "verify",
+   "claim": "C-002",
+   "exit": 1
+  },
+  {
+   "action": "claim_settled",
+   "claim": "C-002",
+   "actor": "reward_settlement",
+   "detail": "{\"settled\": 1}"
+  },
+  {
+   "action": "warn",
+   "actor": "q_cells",
+   "claim": null,
+   "detail": "q_cells: q_cells.observe_settlement: no pending dispatch row for 'C-001' — credit not banked (the honest gap)"
+  },
+  {
+   "action": "claim_settled",
+   "claim": "C-090",
+   "actor": "reward_settlement",
+   "detail": "{\"settled\": 1}"
+  },
+  {
+   "action": "warn",
+   "actor": "strategy_store",
+   "claim": null,
+   "detail": "strategy_store WARN (fail-open): telemetry failure"
+  },
+  {
+   "action": "rollout_settled",
+   "claim": "C-001",
+   "arm": null
+  },
+  {
+   "action": "mission_stall",
+   "claim": null,
+   "detail": "stall tick"
+  }
+ ],
+ "artifacts": {
+  "runs/posterior-store.jsonl": [
+   {
+    "schema": "posterior-store/1",
+    "arm_key": "",
+    "method_family": "",
+    "credit": 1.0,
+    "claim": "C-001",
+    "status": "round_credit"
+   },
+   {
+    "schema": "posterior-store/1",
+    "arm_key": "",
+    "method_family": "",
+    "credit": 0.0,
+    "claim": "C-002",
+    "status": "round_credit"
+   }
+  ]
+ },
+ "expectations": {
+  "rl-posterior-moved": "FAIL"
+ }
+}

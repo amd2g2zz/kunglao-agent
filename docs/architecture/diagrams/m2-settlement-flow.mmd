@@ -1,0 +1,12 @@
+flowchart TD
+  A[SubagentStop worker 完成] --> B[round_closure 宿主]
+  B --> C[completion_gate 判定 worker_status]
+  C --> D[step_grain.settle_step]
+  D --> D1[belief.settle 写 belief.jsonl bf 维]
+  D --> D2[step_credit 交叉验证 1.0 未验证 0.3 反驳 0.0]
+  D --> E[settle_round_credit.run]
+  E --> F{oracle cases 武装}
+  F -->|是| G[案例结算 PQCategorical ±1 案例后验更新]
+  F -->|否| H[WARN posteriors never move]
+  E --> I[q_cells.observe_step_credit Beta 更新]
+  E --> J[crystallize_settlement 负知识与方法广播]

@@ -1,0 +1,167 @@
+<mxfile host="drawio-skill" agent="diagram-ir" version="3.0.0">
+  <diagram id="system" name="System">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cc-session" value="Claude Code 会话（编排模型）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="cc-session" data-kind="service" data-properties="{&quot;role&quot;:&quot;orchestrator&quot;,&quot;substrate&quot;:&quot;Claude Code + plugin&quot;}" data-source-properties="{&quot;role&quot;:&quot;orchestrator&quot;,&quot;substrate&quot;:&quot;Claude Code + plugin&quot;}" data-source-label="Claude Code 会话（编排模型）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="0" y="110" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="plugin" value="kunglao-agent 插件面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="plugin" data-kind="service" data-properties="{&quot;faces&quot;:&quot;hooks/agents/skills/commands/.mcp&quot;}" data-source-properties="{&quot;faces&quot;:&quot;hooks/agents/skills/commands/.mcp&quot;}" data-source-label="kunglao-agent 插件面" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="90" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="hook-battery" value="Hook 电池（PreToolUse/SubagentStop/Stop）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="hook-battery" data-kind="service" data-properties="{&quot;order&quot;:&quot;worker_budget.pre_check → dispatch_gate 牙齿 → recall_inject → …&quot;,&quot;count&quot;:&quot;26 hooks&quot;}" data-source-properties="{&quot;order&quot;:&quot;worker_budget.pre_check → dispatch_gate 牙齿 → recall_inject → …&quot;,&quot;count&quot;:&quot;26 hooks&quot;}" data-source-label="Hook 电池（PreToolUse/SubagentStop/Stop）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="180" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-fleet" value="Worker 舰队（子代理）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker-fleet" data-kind="service" data-properties="{&quot;agents&quot;:&quot;kunglao-worker/init-worker/redteam/verdict-scorer/ghidra-light/go-symbols/pefile-signature/floss-filter/web-re-worker&quot;}" data-source-properties="{&quot;agents&quot;:&quot;kunglao-worker/init-worker/redteam/verdict-scorer/ghidra-light/go-symbols/pefile-signature/floss-filter/web-re-worker&quot;}" data-source-label="Worker 舰队（子代理）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="90" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr" value="RL 基座 scripts/rlvr（39 模块）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr" data-kind="service" data-properties="{&quot;core&quot;:&quot;state/posteriors/q_cells/strategy_store/l1_planner/belief/step_grain/crystallize/scalar&quot;}" data-source-properties="{&quot;core&quot;:&quot;state/posteriors/q_cells/strategy_store/l1_planner/belief/step_grain/crystallize/scalar&quot;}" data-source-label="RL 基座 scripts/rlvr（39 模块）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="270" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="reward" value="奖励通道" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="reward" data-kind="service" data-properties="{&quot;faces&quot;:&quot;task-oracle → oracle_runner → oracle_cadence → settle_round_credit → case posteriors&quot;}" data-source-properties="{&quot;faces&quot;:&quot;task-oracle → oracle_runner → oracle_cadence → settle_round_credit → case posteriors&quot;}" data-source-label="奖励通道" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="360" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="knowledge" value="知识供应（references/ + recall）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="knowledge" data-kind="service" data-properties="{&quot;state&quot;:&quot;默认关（#771：KUNGLAO_RECALL=1 opt-in）&quot;}" data-source-properties="{&quot;state&quot;:&quot;默认关（#771：KUNGLAO_RECALL=1 opt-in）&quot;}" data-source-label="知识供应（references/ + recall）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="270" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ledger" value="账本面 runs/*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="ledger" data-kind="store" data-properties="{&quot;files&quot;:&quot;kunglao-*.jsonl / strategy-log / plan-receipts / posterior-store / method-family-log / cost_events / mission_ledger&quot;}" data-source-properties="{&quot;files&quot;:&quot;kunglao-*.jsonl / strategy-log / plan-receipts / posterior-store / method-family-log / cost_events / mission_ledger&quot;}" data-source-label="账本面 runs/*" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="360" y="530" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="eval" value="评估矩阵（本地语料）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="eval" data-kind="service" data-properties="{&quot;faces&quot;:&quot;eval_loop_runner / eval_matrix_runner / 数据集+checker（eval/ 不入仓）&quot;}" data-source-properties="{&quot;faces&quot;:&quot;eval_loop_runner / eval_matrix_runner / 数据集+checker（eval/ 不入仓）&quot;}" data-source-label="评估矩阵（本地语料）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="450" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="init-deploy" value="Init/部署面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="init-deploy" data-kind="service" data-properties="{&quot;faces&quot;:&quot;kunglao-init（锚点/脚手架/hook 部署/武装 oracle）+ hook_activation + deploy_manifest&quot;}" data-source-properties="{&quot;faces&quot;:&quot;kunglao-init（锚点/脚手架/hook 部署/武装 oracle）+ hook_activation + deploy_manifest&quot;}" data-source-label="Init/部署面" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="180" y="110" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="upgrade" value="升级面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="upgrade" data-kind="service" data-properties="{&quot;faces&quot;:&quot;kunglao_upgrade（锚点/快照/铁律/回滚/迁移项）+ 七步合同（#774，未完全落地）&quot;}" data-source-properties="{&quot;faces&quot;:&quot;kunglao_upgrade（锚点/快照/铁律/回滚/迁移项）+ 七步合同（#774，未完全落地）&quot;}" data-source-label="升级面" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="180" y="0" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="devkit" value="devkit 质量机制（不随产品发布）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="devkit" data-kind="service" data-properties="{&quot;faces&quot;:&quot;quality_gates×10 / liveness_gate / escape_rate / verification / deferral / invariants / spec_coverage&quot;}" data-source-properties="{&quot;faces&quot;:&quot;quality_gates×10 / liveness_gate / escape_rate / verification / deferral / invariants / spec_coverage&quot;}" data-source-label="devkit 质量机制（不随产品发布）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="620" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="review-gate" value="Review Gate（提交审查）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="review-gate" data-kind="service" data-properties="{&quot;face&quot;:&quot;HMAC mint + evidence，stale 即拦&quot;}" data-source-properties="{&quot;face&quot;:&quot;HMAC mint + evidence，stale 即拦&quot;}" data-source-label="Review Gate（提交审查）" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/docs/architecture/diagrams/d1-layers.ir.json&quot;}">
+          <mxGeometry x="620" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e0" value="加载" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="cc-session" target="plugin" data-model-id="e1" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="加载">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="180" />
+              <mxPoint x="120" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1" value="注册（默认休眠，Phase 0 激活+TTL）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="plugin" target="hook-battery" data-model-id="e2" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="注册（默认休眠，Phase 0 激活+TTL）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="210" y="280" />
+              <mxPoint x="210" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" value="放行/拒绝派遣（envelope）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="hook-battery" target="worker-fleet" data-model-id="e3" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="放行/拒绝派遣（envelope）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="210" y="390" />
+              <mxPoint x="210" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" value="消费采样/规划/账本" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="hook-battery" target="rlvr" data-model-id="e4" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="消费采样/规划/账本">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="390" />
+              <mxPoint x="290" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="facts/evidence/status 写入" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker-fleet" target="ledger" data-model-id="e5" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="facts/evidence/status 写入">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="170" y="530" />
+              <mxPoint x="170" y="560" />
+              <mxPoint x="170" y="560" />
+              <mxPoint x="170" y="560" />
+              <mxPoint x="340" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="武装 oracle → 案例后验更新（#773 W1）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="reward" target="rlvr" data-model-id="e6" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="武装 oracle → 案例后验更新（#773 W1）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="390" />
+              <mxPoint x="390" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" value="采样家族/准入 receipt（#773 W2/W3）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="hook-battery" data-model-id="e7" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="采样家族/准入 receipt（#773 W2/W3）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="420" />
+              <mxPoint x="310" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" value="belief/plan-receipt/后验写入" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="ledger" data-model-id="e8" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="belief/plan-receipt/后验写入">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="490" />
+              <mxPoint x="390" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="opt-in 注入（默认关）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="knowledge" target="hook-battery" data-model-id="e9" data-kind="sync" data-properties="{&quot;state&quot;:&quot;dashed&quot;}" data-source-properties="{&quot;state&quot;:&quot;dashed&quot;}" data-source-label="opt-in 注入（默认关）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="280" />
+              <mxPoint x="300" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="脚手架+hook 部署+武装 oracle" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="init-deploy" target="plugin" data-model-id="e10" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="脚手架+hook 部署+武装 oracle">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="210" y="180" />
+              <mxPoint x="210" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" value="迁移项/部署刷新/铁律" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="upgrade" target="init-deploy" data-model-id="e11" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="迁移项/部署刷新/铁律">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="70" />
+              <mxPoint x="260" y="90" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" value="活体指纹审计（#775）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="devkit" target="ledger" data-model-id="e12" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="活体指纹审计（#775）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="530" />
+              <mxPoint x="700" y="560" />
+              <mxPoint x="700" y="560" />
+              <mxPoint x="700" y="560" />
+              <mxPoint x="530" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="提交拦截（HMAC 证据）" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="review-gate" target="devkit" data-model-id="e13" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="提交拦截（HMAC 证据）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="390" />
+              <mxPoint x="700" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="结果行/矩阵" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="eval" target="ledger" data-model-id="e14" data-kind="sync" data-properties="{}" data-source-properties="{}" data-source-label="结果行/矩阵">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="490" />
+              <mxPoint x="480" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

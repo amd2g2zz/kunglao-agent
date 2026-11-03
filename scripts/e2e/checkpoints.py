@@ -1364,11 +1364,14 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
     # banks one keyed-store row (the credit mapping rides inside the
     # leaf) so a second workspace with the same feature signature
     # inherits the raised verification density. Fail-open telemetry, the
-    # transition above is the authoritative local record.
+    # transition above is the authoritative local record. #796 L9: the
+    # absorbed marker rides through — a kill-banked verdict is censored
+    # in the shared store, never clean cross-workspace evidence.
     try:
         _rf = _load_repo_module(ctx.repo, "rlvr.refutation_fold")
         _rf.record_verify_outcome(str(ctx.ws), verdict=str(verdict or ""),
-                                  boundary=str(variant or ""))
+                                  boundary=str(variant or ""),
+                                  absorbed=bool(absorbed_from_disk))
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud
         kunglao_log.warn("e2e.refutation_store",
                          f"{type(exc).__name__}: {exc}")
@@ -2264,17 +2267,23 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
 
 def _no_open_claims(ctx: RunContext) -> bool:
     """Delivery-face test (robust): the register holds no OPEN claims.
-    Deterministic register read — never a stdout-substring guess."""
+    Deterministic register read — never a stdout-substring guess.
+    Status vocabulary from status_defs (the owner; review fix 4):
+    PARKED (#955) rides SUSPENDED, so a parked claim never masquerades
+    as deliverable work; IN_PROGRESS counts as open the same way
+    convergence_check._open_claims treats it."""
     import yaml as _yaml
+    from status_defs import (  # noqa: PLC0415 — the vocabulary owner
+        IN_PROGRESS_STATUSES, SUSPENDED)
     reg = ctx.ws / "claim-register.yaml"
     try:
         doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
         return False
+    open_statuses = ({"OPEN", "PARTIALLY-VERIFIED", "STAMP", "UNVERIFIED"}
+                     | set(IN_PROGRESS_STATUSES) | set(SUSPENDED))
     for c in doc.get("claims") or []:
-        if str(c.get("status", "")).upper() in ("OPEN", "PARK",
-                                                "PARTIALLY-VERIFIED",
-                                                "STAMP", "UNVERIFIED"):
+        if str(c.get("status", "")).upper() in open_statuses:
             return False
     return bool(doc.get("claims"))
 

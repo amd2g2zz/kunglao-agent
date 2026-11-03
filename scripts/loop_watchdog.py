@@ -16,6 +16,11 @@ state):
   stuck-worker    an in-progress worker whose pulse went quiet (mtime
                   past the stuck window) — the expected worker event
                   never landed;
+  reap-window     a worker NOT yet past the stuck line whose DERIVED
+                  liveness window (#770, from its own write cadence)
+                  blew — the additive tightened face: an actively
+                  writing worker never trips it, a wedged one is
+                  flagged minutes earlier than any fixed window;
   step-failure    a mechanical tick step failed (selfcheck / renew /
                   heartbeat) — the maintenance event the loop relies on
                   did not arrive green.
@@ -109,6 +114,46 @@ def _stuck_workers(ws: Path) -> list[str]:
         return []
 
 
+def _reap_windows(ws: Path, now: datetime, stuck: list[str]) -> list[str]:
+    """#770: the additive tightened face — workers NOT yet past the stuck
+    line whose DERIVED liveness window (from their own write cadence) blew.
+
+    The observation is built mechanically from the progress ledger each
+    worker already writes (worker-status step-line timestamps) plus its
+    file mtime; rounds/budget arms stay injected-elsewhere (None/0 here —
+    the formula documents them as optional). Workers already reported by
+    the stuck face are skipped (no double narration); the canonical
+    STUCK_MINUTES line itself is untouched (#597: the derived value
+    extends the policy family, it does not bypass the stuck scan)."""
+    try:
+        import watchdog_interval as wi
+        from _hooks_path import load_hooks_lib
+        mod = load_hooks_lib()
+        states = mod.iter_worker_states(ws)
+    except Exception as exc:  # noqa: BLE001 — the watchdog never crashes
+        warn("loop_watchdog_reap_window", f"{type(exc).__name__}: {exc}")
+        return []
+    stuck_set = set(stuck)
+    terminal = set(getattr(mod, "TERMINAL_WORKER_STATUSES", ()) or ())
+    waiting = getattr(mod, "WAITING_WORKER_STATUS", None)
+    out: list[str] = []
+    for s in states:
+        stem = s["file"].stem
+        if stem in stuck_set or s["status"] == waiting \
+                or s["status"] in terminal:
+            continue
+        try:
+            text = s["file"].read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        obs = wi.observation_from_status(text, s["mtime"].timestamp(), now=now)
+        v = wi.reap_verdict(obs)
+        if v["reap"]:
+            out.append(f"reap-window:{stem}:{v['basis']}:"
+                       f"{v['window_min']:.0f}min")
+    return out
+
+
 def evaluate(ws: Path, *, failed_steps=(), now: datetime | None = None,
              activity: datetime | None = None) -> dict:
     """The missed-event verdict: {"fired": bool, "reasons": [str, ...]}.
@@ -119,7 +164,7 @@ def evaluate(ws: Path, *, failed_steps=(), now: datetime | None = None,
     stamp captured BEFORE its own row append, so the tick's bookkeeping
     cannot mask a real gap; None means 'read it live'). Reasons are
     stable tokens: heartbeat-gap:<n>min / stuck-worker:<ids> /
-    step-failure:<names>."""
+    reap-window:<worker>:<basis>:<n>min (#770) / step-failure:<names>."""
     ws = Path(ws)
     now = now or datetime.now(timezone.utc)
     reasons: list[str] = []
@@ -134,6 +179,7 @@ def evaluate(ws: Path, *, failed_steps=(), now: datetime | None = None,
     stuck = _stuck_workers(ws)
     if stuck:
         reasons.append("stuck-worker:" + ",".join(sorted(stuck)))
+    reasons.extend(_reap_windows(ws, now, stuck))
 
     failed = [str(s) for s in failed_steps if str(s)]
     if failed:

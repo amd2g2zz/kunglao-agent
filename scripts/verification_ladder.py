@@ -64,7 +64,6 @@ the unified log when a batch fires).
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sys
@@ -483,17 +482,21 @@ def round_close(ws, *, now: datetime | None = None) -> dict:
     # the shape and rebuilds.
     shape = [[e["claim_id"], e["status"], e["stalled"], e["priority"]]
              for e in built["queue"]]
-    sig = hashlib.sha1(json.dumps(shape, sort_keys=True).encode(
-        "utf-8")).hexdigest()
-    if _persisted_sig(ws) == sig:
+    # issue 805: the #750 gate is now the SHARED primitive
+    # (input_signature.signature — the same canonical sha1); the
+    # suppression read and the stamp flow through it too, so the other
+    # periodic faces inherit this discipline instead of re-growing it.
+    import input_signature
+    sig = input_signature.signature(shape)
+    if input_signature.unchanged_doc(ws / T2_QUEUE_REL, sig):
         return {"built": True, "queued": len(built["queue"]),
                 "stalled": stalled, "unchanged": True,
                 "path": str(ws / T2_QUEUE_REL)}
-    doc = {"schema": T2_QUEUE_SCHEMA,
-           "ts": built.get("ts"),
-           "stall_min": built.get("stall_min"),
-           "sig": sig,
-           "queue": built["queue"]}
+    doc = input_signature.stamped(
+        {"schema": T2_QUEUE_SCHEMA,
+         "ts": built.get("ts"),
+         "stall_min": built.get("stall_min"),
+         "queue": built["queue"]}, sig)
     ok = _persist_queue(ws, doc)
     try:
         import kunglao_log
@@ -508,18 +511,6 @@ def round_close(ws, *, now: datetime | None = None) -> dict:
         warn("t2_emit", f"{type(exc).__name__}: {exc}")
     return {"built": True, "queued": len(built["queue"]),
             "stalled": stalled, "path": str(ws / T2_QUEUE_REL)}
-
-
-def _persisted_sig(ws: Path) -> str:
-    """The input signature stored with the last persisted queue — empty
-    when absent/unreadable (the first build always persists)."""
-    try:
-        doc = json.loads(
-            (ws / T2_QUEUE_REL).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ""
-    sig = doc.get("sig") if isinstance(doc, dict) else None
-    return str(sig) if sig else ""
 
 
 # ===========================================================================

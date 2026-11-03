@@ -16,6 +16,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# #767: the pinned installable source for the camoufox-reverse dep.
+CAMOUFOX_PIN = ("git+https://github.com/WhiteNightShadow/"
+                "camoufox-reverse-mcp.git@v1.1.1")
+
 MANDATE_DOCS = (
     ROOT / "CLAUDE.md",
     ROOT / "SKILL.md",
@@ -54,10 +58,12 @@ def test_no_doc_teaches_bare_pip():
 def test_install_guidance_strings_are_uv_prefixed():
     init = (ROOT / "scripts" / "kunglao-init.py").read_text(encoding="utf-8")
     probe = (ROOT / "scripts" / "mcp_probe.py").read_text(encoding="utf-8")
-    assert "uv pip install camoufox-reverse-mcp" in init
-    assert "uv run python -m camoufox_reverse_mcp --help" in init
-    assert "uv pip install camoufox-reverse-mcp" in probe
-    assert "uv pip install -e ." in probe
+    # #767 ruling: the camoufox dep is NOT on any public index — guidance
+    # names the pinned installable source, resolved by uv itself.
+    assert CAMOUFOX_PIN in init
+    assert (f"uv run --no-project --with {CAMOUFOX_PIN} "
+            "python -m camoufox_reverse_mcp --help") in init
+    assert CAMOUFOX_PIN in probe
 
 
 def test_base_template_carries_the_full_discipline():

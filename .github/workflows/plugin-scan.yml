@@ -11,7 +11,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: hashgraph-online/ai-plugin-scanner-action@9595abbd8f48e618f45414e8b78e870371f715d4 # v1.2.712
+      # #767 supply gate: every declared face (plugin.json mcpServers,
+      # agents entries, mcp_probe MANIFEST env-table rows) must resolve to
+      # an in-tree artifact or a pinned installable source. One step, the
+      # lightest job in the repo; the gate is stdlib-only so --no-project
+      # skips the venv sync. Static command — no untrusted interpolation.
+      - name: Supply gate — every declared face resolves (#767)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          "$HOME/.local/bin/uv" run --no-project python devkit/supply_gate.py
+      - uses: hashgraph-online/ai-plugin-scanner-action@d777b580805f6fadb19a03f84daf0974c53c6d38 # v1.2.786
         with:
           plugin_dir: "."
           min_score: 80

@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
-"""tests/test_priority_ratio.py — the #107 Thompson ranker (issue #97 formula).
+"""tests/test_priority_ratio.py — the deterministic evidence ranker
+(#792: value = posterior mean; exploration explicit).
 
-RED: the weighted formula score = [0.45·L + 0.30·D + 0.25·N]/cost is
-DISCARDED (owner ruling, issue #107). The rebuilt value function:
+HISTORY: the weighted formula score = [0.45·L + 0.30·D + 0.25·N]/cost was
+DISCARDED (owner ruling, issue #107); #792 retired the round-seeded
+Thompson draw face and the Beta(1,1) unlinked fallback. The live value
+function:
 
-    score = (Thompson case face + W_DOWNSTREAM · downstream_term) · worth
-    rank by Thompson sample; stable tie-break claim_id
+    score = (posterior-mean case value + W_DOWNSTREAM · downstream_term) · worth
+    rank value-bearing claims by score; unlinked claims DEMOTED below every
+    value-bearing one by the declared default (downstream_term, tier, worth);
+    stable tie-break claim_id; same inputs -> byte-identical ranking, ANY round
 
 (#295 governed removal, ADR-001 docs/adr-001-strategy-parameter-
 governance.md: the LAMBDA_DH·ΔH_PQ face is GONE — EXP-B proved ΔH ≡ 0 on
@@ -19,9 +24,7 @@ dispatch frontier.
 """
 from __future__ import annotations
 
-import hashlib
 import json
-import random
 import sys
 from pathlib import Path
 
@@ -57,14 +60,6 @@ def _deps(depends_on=None):
     return {"depends_on": depends_on or {}, "competitor_groups": {}}
 
 
-def _replica_sample(cid, alpha=1.0, beta=1.0):
-    """Recompute the ranker's Thompson draw from outside (same fork scheme:
-    ONE base draw from Random(0), per-claim child keyed by claim_id)."""
-    base = random.Random(0).getrandbits(64)
-    child = random.Random(f"thompson/{base}/{cid}")
-    return child.betavariate(alpha, beta)
-
-
 def _posteriors_ws(base, name="ws", cases=(), pqs=None):
     """Workspace with runs/posteriors.yaml (+ optional oracle case files)."""
     ws = base / name
@@ -83,15 +78,16 @@ def _posteriors_ws(base, name="ws", cases=(), pqs=None):
 
 # ---------- the rebuilt formula ----------
 
-def test_thompson_composite_formula_not_weighted():
-    """score == (Thompson case face + W_DOWNSTREAM·downstream_term)·worth
-    exactly (no ΔH face — #295 removal); the weighted-era term fields are
-    gone (owner ruling: 之前的不要了)."""
-    claims = [_claim("C-1", statement="c2 config extract")]
-    out = pr.priority_ratio(claims, _deps(), _evidence())
+def test_composite_formula_not_weighted():
+    """score == (posterior-mean case value + W_DOWNSTREAM·downstream_term)·worth
+    exactly (no ΔH face — #295 removal; no draw face — #792); the
+    weighted-era term fields are gone (owner ruling: 之前的不要了)."""
+    claims = [_claim("C-1", answers_question="q1")]
+    ws = _posteriors_ws(_tmp_base(), cases=[("case-1", "q1", 6.0, 1.0)])
+    out = pr.priority_ratio(claims, _deps(), _evidence(ws))
     assert len(out) == 1
     a = out[0]
-    expected = round(_replica_sample("C-1"), 6)
+    expected = round((6.0 / 7.0 + pr.W_DOWNSTREAM * 0.0) * 1.0, 6)
     assert a.score == expected
     assert a.weight == 1.0
     for stale in ("leverage", "discriminator", "novelty", "gap_bucket",
@@ -99,15 +95,31 @@ def test_thompson_composite_formula_not_weighted():
         assert not hasattr(a, stale), f"Action must not carry {stale}"
 
 
+def test_unlinked_claim_has_no_fabricated_value():
+    """#792: a claim with no oracle linkage has NO value channel — its
+    score is exactly 0.0 (the Beta(1,1) fallback draw is retired), and the
+    feeds say so with the arm-oracle-cases hint."""
+    claims = [_claim("C-1", statement="c2 config extract")]
+    a = pr.priority_ratio(claims, _deps(), _evidence())[0]
+    assert a.score == 0.0
+    assert "unlinked — no value channel" in a.feeds["case_value"]
+    assert "arm oracle cases" in a.feeds["case_value"]
+    a2 = pr.priority_ratio(claims, _deps(), _evidence())[0]
+    assert a2.score == 0.0
+
+
 def test_pq_categorical_entropy_is_rank_inert():
-    """#295 removal pin: a populated PQ categorical (uniform 2-candidate,
-    H=1 bit) does NOT move the score — the ΔH face is gone (ADR-001).
-    The Thompson sample is invariant (the seed digest covers cases only),
-    so the score is byte-identical to the no-categorical case."""
+    """#295 removal pin (kept under #792): a populated PQ categorical
+    (uniform 2-candidate, H=1 bit) does NOT move the score — the ΔH face
+    is gone (ADR-001) and the #792 mean face never reads the categorical
+    either, so the score is byte-identical to the no-categorical case."""
     claims = [_claim("C-1", answers_question="q1")]
-    ws = _posteriors_ws(_tmp_base(), pqs={"q1": {"candidates": {"a": 1, "b": 1}}})
-    a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
-    bare = pr.priority_ratio(claims, _deps(), _evidence())[0]
+    cases = [("case-1", "q1", 6.0, 1.0)]
+    ws_cat = _posteriors_ws(_tmp_base(), cases=cases,
+                            pqs={"q1": {"candidates": {"a": 1, "b": 1}}})
+    ws_bare = _posteriors_ws(_tmp_base(), cases=cases)
+    a = pr.priority_ratio(claims, _deps(), _evidence(ws_cat))[0]
+    bare = pr.priority_ratio(claims, _deps(), _evidence(ws_bare))[0]
     assert "dh_pq" not in a.feeds, "the dh_pq feed was removed by #295"
     assert a.score == bare.score, "no ΔH lift may survive the #295 removal"
 
@@ -158,24 +170,26 @@ def test_terminal_status_claims_never_ranked():
 
 def test_case_posterior_linked_via_target_pq():
     """oracle/cases/*.yaml target_pq == claim answers_question links the
-    case; its Beta posterior is the Thompson sampling distribution."""
+    case; its Beta posterior MEAN is the value face (#792)."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _posteriors_ws(_tmp_base(), cases=[("case-1", "q1", 6.0, 1.0)])
     a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
-    assert a.score == round(_replica_sample("C-1", 6.0, 1.0), 6)
-    assert "case-1" in a.feeds["thompson_sample"]
+    assert a.score == round(6.0 / 7.0, 6)
+    assert "case-1" in a.feeds["case_value"]
+    assert "posterior mean" in a.feeds["case_value"]
     assert "P(flip)=0.5" in a.feeds["case_flip_potential"]
 
 
 def test_case_posterior_without_ledger_entry_uses_prior():
-    """An oracle case file with no runner verdict yet samples Beta(1,1)."""
+    """An oracle case file with no runner verdict yet folds the NEUTRAL
+    prior mean 0.5 — a declared prior, never a fabricated draw (#792)."""
     claims = [_claim("C-1", answers_question="q1")]
     ws = _posteriors_ws(_tmp_base())
     (ws / "oracle" / "cases" / "case-9.yaml").write_text(
         yaml.safe_dump({"id": "case-9", "target_pq": "q1"}), encoding="utf-8")
     a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
-    assert a.score == round(_replica_sample("C-1"), 6)
-    assert "case-9" in a.feeds["thompson_sample"]
+    assert a.score == 0.5
+    assert "case-9" in a.feeds["case_value"]
 
 
 def test_flip_potential_decays_and_falls_back():
@@ -197,22 +211,48 @@ def test_flip_potential_decays_and_falls_back():
 
 def test_worth_weight_multiplies_the_composite():
     """#759 worth channel survives as the exogenous multiplier."""
-    claims = [_claim("C-1", statement="rce chain")]
+    claims = [_claim("C-1", answers_question="q1", statement="rce chain")]
+    ws = _posteriors_ws(_tmp_base(), cases=[("case-1", "q1", 6.0, 1.0)])
     worth = pr.priority_ratio(
-        claims, _deps(), pr.EvidenceView(value_class_weights={"rce": 4.0}))[0]
+        claims, _deps(),
+        pr.EvidenceView(value_class_weights={"rce": 4.0}, ws=ws))[0]
     assert worth.weight == 4.0
-    assert worth.score == round(_replica_sample("C-1") * 4.0, 6)
+    assert worth.score == round((6.0 / 7.0) * 4.0, 6)
 
 
 # ---------- ordering properties ----------
 
-def test_sorted_by_sample_then_claim_id():
-    """Thompson sample descending; the sort key is stable (-score, claim_id)
-    even when rounding collides."""
-    claims = [_claim(f"C-{i}", statement="work") for i in range(1, 8)]
-    out = pr.priority_ratio(claims, _deps(), _evidence())
+def test_sorted_by_value_then_claim_id():
+    """Value-bearing claims by score descending; the sort key is stable
+    (-score, claim_id) even when rounding collides. All-linked register:
+    means differ, so the order must follow the means exactly."""
+    cases = [(f"case-{i}", f"q{i}", 1.0 + i, 1.0) for i in range(1, 8)]
+    claims = [_claim(f"C-{i}", answers_question=f"q{i}", statement="work")
+              for i in range(1, 8)]
+    ws = _posteriors_ws(_tmp_base(), cases=cases)
+    out = pr.priority_ratio(claims, _deps(), _evidence(ws))
     keys = [(-a.score, a.claim_id) for a in out]
     assert keys == sorted(keys)
+    scores = [a.score for a in out]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_unlinked_band_orders_by_declared_default():
+    """#792: within the demoted unlinked band the order is the declared
+    deterministic default (downstream_term, tier, worth) — here tier and
+    worth differentiate (all dterms are 0 with no deps)."""
+    claims = [_claim("C-hub", statement="work", eta=2),
+              _claim("C-leaf", statement="rce chain"),
+              _claim("C-mid", statement="work", eta=1)]
+    out = pr.priority_ratio(claims, _deps(),
+                            pr.EvidenceView(value_class_weights={"rce": 4.0}))
+    tiers = {a.claim_id: a.tier for a in out}
+    ids = [a.claim_id for a in out]
+    assert set(ids) == {"C-hub", "C-leaf", "C-mid"}
+    # tier ascending then worth descending (dterm ties at 0): C-leaf (tier1,
+    # worth 4) first; C-mid (tier2) before C-hub (tier3)
+    assert ids == ["C-leaf", "C-mid", "C-hub"], ids
+    assert tiers["C-leaf"] == 1
 
 
 def test_register_reorder_never_reshuffles():
@@ -227,19 +267,18 @@ def test_register_reorder_never_reshuffles():
     assert a == b
 
 
-def test_seed_injection_varies_the_sample():
-    """A different tick seed may reorder arms (Thompson's intrinsic
-    exploration) while staying self-consistent for that seed."""
+def test_no_seed_axis_exists():
+    """#792 (the retired #107 face): there is no rng parameter and no
+    Thompson draw — a ranking column may not move because a counter or a
+    seed moved. The cross-round identity is pinned by
+    tests/test_ranker_determinism_792.py on linked and mixed registers."""
+    import inspect
+    assert "rng" not in inspect.signature(pr.priority_ratio).parameters
     claims = [_claim(f"C-{i}", statement="work") for i in range(1, 7)]
     ev = _evidence()
-    s0 = [x.to_dict() for x in pr.priority_ratio(
-        claims, _deps(), ev, rng=random.Random(0))]
-    s0b = [x.to_dict() for x in pr.priority_ratio(
-        claims, _deps(), ev, rng=random.Random(0))]
-    s7 = [x.to_dict() for x in pr.priority_ratio(
-        claims, _deps(), ev, rng=random.Random(7))]
+    s0 = [x.to_dict() for x in pr.priority_ratio(claims, _deps(), ev)]
+    s0b = [x.to_dict() for x in pr.priority_ratio(claims, _deps(), ev)]
     assert s0 == s0b
-    assert {d["claim_id"] for d in s7} == {d["claim_id"] for d in s0}
 
 
 # ---------- pure function / zero LLM (unchanged intent) ----------
@@ -261,10 +300,11 @@ def test_cost_field_is_tier_diagnostic_only():
     out = {a.claim_id: a for a in pr.priority_ratio(claims, _deps(), _evidence())}
     assert out["C-cheap"].cost == 1.0 and out["C-deep"].cost == 10.0
     for a in out.values():
-        assert a.score == round(_replica_sample(a.claim_id), 6)
+        assert a.score == 0.0  # unlinked: no value channel (#792)
+        assert a.cost in (1.0, 10.0)
 
 
-# ---------- Thompson seed contract (EXP-1: seed = f(posterior_state, round)) ----------
+# ---------- the retired seed contract (#251 -> #792 inversion) ----------
 
 CASES_251 = [   # (case_id, target_pq, alpha, beta) — means .667 / .500 / .250
     ("case-alpha", "pq.net", 4.0, 2.0),
@@ -290,10 +330,13 @@ def _append_round(ws, open_count=3, ts="2026-09-18T00:00:00"):
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def _rank_with_rng(ws, rng):
+def _rank_at(ws, rnd):
     """Rank the three linked claims through the real production ranker."""
-    return tuple(a.claim_id for a in pr.priority_ratio(
-        [dict(c) for c in CLAIMS_251], _deps(), _evidence(ws=ws), rng=rng))
+    return json.dumps(
+        [a.to_dict() for a in pr.priority_ratio(
+            [dict(c) for c in CLAIMS_251], _deps(), _evidence(ws=ws),
+            round_no=rnd)],
+        sort_keys=True)
 
 
 def test_251_round_index_counts_convergence_snapshots_only(tmp_path):
@@ -317,8 +360,9 @@ def test_251_round_index_counts_convergence_snapshots_only(tmp_path):
 def test_251_round_index_is_raw_count_not_dedup_rounds(tmp_path):
     """The ruling's edge: two same-open_count snapshots inside the dedup
     wall-clock window collapse in convergence_health (rounds=1) but MUST
-    advance the raw round (2) — wiring assess()["rounds"] would leak the
-    clock into the seed and break machine-independent replay."""
+    advance the raw round (2) — the round axis stays an append-order
+    counter, machine-independent (it is bookkeeping under #792, never a
+    rank input)."""
     import convergence_health as ch
     ws = tmp_path
     for i in range(2):
@@ -336,102 +380,40 @@ def test_251_accessor_ledger_name_matches_the_writer():
     assert pr.CONV_LEDGER_NAME == convergence_check.LEDGER_NAME
 
 
-def test_251_p1_same_posteriors_same_round_is_replayable(tmp_path):
-    """P1: f(posterior_state, round) is deterministic — same inputs give
-    the identical seed, identical rng base draw AND identical ranking."""
+def test_792_p1_same_inputs_same_ranking(tmp_path):
+    """P1 (inverted from the seed face): same inputs give the identical
+    ranking — twice in a row, at the same round or any other."""
     ws = _posteriors_ws(tmp_path, cases=CASES_251)
-    s1 = pr.case_face_seed(pr.PosteriorLedger.load(ws), 7)
-    s2 = pr.case_face_seed(pr.PosteriorLedger.load(ws), 7)
-    assert s1 == s2
-    assert random.Random(s1).getrandbits(64) == random.Random(s2).getrandbits(64)
-    assert _rank_with_rng(ws, random.Random(s1)) == _rank_with_rng(ws, random.Random(s2))
+    r1 = _rank_at(ws, 7)
+    r2 = _rank_at(ws, 7)
+    r3 = _rank_at(ws, 8)
+    assert r1 == r2 == r3
 
 
-def test_251_p2_static_posteriors_advancing_round_moves_rng_base(tmp_path):
-    """P2 seed liveness (the hard, deterministic half): STATIC posteriors +
-    advancing round -> every posterior_rng base draw distinct. v1 froze
-    5/5 rounds onto ONE rng_base (the frozen defect; 53 consecutive in the
-    wild)."""
-    ws = _posteriors_ws(tmp_path, cases=CASES_251)
-    bases = []
-    for _ in range(5):
-        _append_round(ws)
-        bases.append(pr.posterior_rng(ws).getrandbits(64))
-    assert len(set(bases)) == 5
-
-
-def test_251_p2_static_posteriors_advancing_round_unfreezes_ranking(tmp_path):
-    """P2 ranking liveness (the separate observable — seed liveness does
-    not imply ranking liveness on a coarse register): the ranking
-    trajectory over advancing rounds is not one frozen order."""
+def test_792_p2_static_posteriors_advancing_round_is_byte_identical(tmp_path):
+    """P2 INVERTED (#792 — the #251 seed-liveness pin is retired): STATIC
+    posteriors + advancing rounds -> BYTE-IDENTICAL ranking every round.
+    A ranking column whose numbers move because the round counter moved
+    was ordering noise, not signal (issue #792 diagnosis 1)."""
     ws = _posteriors_ws(tmp_path, cases=CASES_251)
     ranks = []
     for _ in range(5):
         _append_round(ws)
-        ranks.append(_rank_with_rng(ws, pr.posterior_rng(ws)))
-    assert len(set(ranks)) >= 2
+        ranks.append(_rank_at(ws, pr.round_index(ws)))
+    assert len(set(ranks)) == 1
 
 
-def test_251_p3_posterior_change_moves_seed_and_ranking(tmp_path):
-    """P3: a runner verdict (case-beta alpha 2 -> 6, mean .5 -> .75) moves
-    the seed AND the ranking at the same round."""
+def test_792_p3_posterior_change_moves_the_ranking(tmp_path):
+    """P3 (inverted from the seed face): a runner verdict (case-beta
+    alpha 2 -> 6, mean .5 -> .75) moves the VALUE at the same round —
+    evidence, not the round axis, is what moves the rank."""
     ws_a = _posteriors_ws(tmp_path, name="a", cases=CASES_251)
     ws_b = _posteriors_ws(tmp_path, name="b", cases=[
         ("case-alpha", "pq.net", 4.0, 2.0),
         ("case-beta", "pq.crypto", 6.0, 2.0),   # green verdict: mean .5 -> .75
         ("case-gamma", "pq.pack", 1.0, 3.0)])
-    s_a = pr.case_face_seed(pr.PosteriorLedger.load(ws_a), 0)
-    s_b = pr.case_face_seed(pr.PosteriorLedger.load(ws_b), 0)
-    assert s_a != s_b
-    assert _rank_with_rng(ws_a, random.Random(s_a)) != _rank_with_rng(ws_b, random.Random(s_b))
-
-
-def test_251_cold_start_seed_moves_with_round():
-    """Cold start unfreeze (direct seed face): the empty cases doc hashes
-    WITH the round — v1's docstring presented the constant cold seed as a
-    feature ("no clock and no counter file")."""
-    assert pr.case_face_seed(pr.PosteriorLedger(), 0) != \
-        pr.case_face_seed(pr.PosteriorLedger(), 1)
-    assert len({pr.case_face_seed(pr.PosteriorLedger(), r)
-                for r in range(5)}) == 5
-
-
-def test_251_cold_start_production_rng_not_constant(tmp_path):
-    """Cold start unfreeze (production face): posterior_rng must not
-    short-circuit to Random(0) on an empty/absent posteriors ledger — a
-    workspace with a live convergence ledger but no verdicts yet still
-    moves its Thompson base draw every round."""
-    ws = _posteriors_ws(tmp_path)   # posteriors.yaml exists, zero cases
-    frozen = random.Random(0).getrandbits(64)
-    bases = []
-    for _ in range(5):
-        _append_round(ws)
-        bases.append(pr.posterior_rng(ws).getrandbits(64))
-    assert len(set(bases)) == 5
-    assert frozen not in bases
-
-
-def test_251_rank_feeds_fingerprint_carries_round(tmp_path, monkeypatch):
-    """Frozen sampling OBSERVABLE (owner ruling): the rank_feeds
-    input_fingerprint doc carries the round next to rng_base — a tail
-    reader detects frozen sampling as equal rng_base across advancing
-    rounds in a one-line delta. The fingerprint hash covers the round."""
-    import kunglao_log
-    calls: list[dict] = []
-
-    def _fake_emit(ws, actor, action, **kw):
-        calls.append({"ws": ws, "actor": actor, "action": action, **kw})
-        return True
-
-    monkeypatch.setattr(kunglao_log, "emit", _fake_emit)
-    ws = _posteriors_ws(tmp_path, cases=CASES_251)
-    _append_round(ws)
-    _append_round(ws)
-    _rank_with_rng(ws, pr.posterior_rng(ws))
-    rows = [json.loads(c["detail"]) for c in calls if c["action"] == "rank_feeds"]
-    assert len(rows) == 1
-    fp = rows[0]["input_fingerprint"]
-    assert fp["round"] == 2
-    canon = {k: v for k, v in fp.items() if k != "fingerprint"}
-    assert fp["fingerprint"] == hashlib.sha256(json.dumps(
-        canon, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    s_a = {a.claim_id: a.score for a in pr.priority_ratio(
+        [dict(c) for c in CLAIMS_251], _deps(), _evidence(ws=ws_a))}
+    s_b = {a.claim_id: a.score for a in pr.priority_ratio(
+        [dict(c) for c in CLAIMS_251], _deps(), _evidence(ws=ws_b))}
+    assert s_b["C2"] > s_a["C2"]

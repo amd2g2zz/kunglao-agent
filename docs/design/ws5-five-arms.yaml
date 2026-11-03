@@ -106,7 +106,9 @@ arms:
     description: >
       The full kunglao loop against a materialized EMPTY posterior
       store: the framework's machinery with zero cross-task memory.
-    env: {}
+    env:
+      # #771: recall is default-OFF — kunglao loop arms opt in explicitly.
+      KUNGLAO_RECALL: "1"
 
   - id: kunglao-uniform
     runner_face: loop
@@ -123,6 +125,8 @@ arms:
       B3 - B0 isolates the ARCHITECTURE's value.
     env:
       KUNGLAO_SCHEDULER: "uniform"
+      # #771: recall is default-OFF — kunglao loop arms opt in explicitly.
+      KUNGLAO_RECALL: "1"
 
   - id: kunglao-warm
     runner_face: loop
@@ -130,7 +134,9 @@ arms:
     description: >
       The full kunglao loop reading the LAMBDA-tempered cross-task
       store (the warm start). The arm the win condition is about.
-    env: {}
+    env:
+      # #771: recall is default-OFF — kunglao loop arms opt in explicitly.
+      KUNGLAO_RECALL: "1"
 
   - id: kunglao-warm-no-l1
     runner_face: loop

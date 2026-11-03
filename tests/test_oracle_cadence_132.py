@@ -49,7 +49,7 @@ if str(SCRIPTS) not in sys.path:
 import kunglao_log  # noqa: E402
 import oracle_cadence as cad  # noqa: E402  (RED: module absent)
 import outcome_capture as oc  # noqa: E402
-import posteriors as po  # noqa: E402
+import posteriors_case as po  # noqa: E402
 import roi_settlement as roi  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
 

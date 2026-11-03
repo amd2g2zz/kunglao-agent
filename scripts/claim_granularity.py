@@ -436,6 +436,12 @@ def mint_split_claims(ws: Path | str, claim_id: str) -> dict:
         }
         if (parent or {}).get("answers_question"):
             sub["answers_question"] = parent["answers_question"]
+        # Supply discipline (claim birth = hypothesis birth): the unit
+        # is born with its stub hypothesis (BEFORE the register write: a
+        # failed stub refuses the mint cleanly, never half-mints).
+        from hypothesis_bridge import ensure_claim_stub
+        ensure_claim_stub(ws, claim_id=new_id, statement=sub["statement"],
+                          qid=sub.get("answers_question"))
         claims.append(sub)
         reg["claims"] = claims
         p.write_text(

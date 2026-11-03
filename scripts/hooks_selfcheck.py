@@ -24,8 +24,10 @@ them from global; they must live in the project settings) but never rewrites it.
 
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import json
 import subprocess
 import sys
@@ -595,6 +597,30 @@ def main_with_ws(ws: Path, strict: bool = False) -> int:
     return main(argv)
 
 
+def _status_line(proj_check: dict, sl_check: dict,
+                 migration_warning: str | None, report: dict,
+                 components: dict) -> str:
+    """The one-line selfcheck status: project hooks segment, the
+    statusline keep-alive, template stamp faults and the component
+    activation table — all non-fatal faces."""
+    proj_ok = proj_check.get("hooks_segment") and not proj_check.get("missing")
+    status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"
+    # #142: statusline keep-alive rides the status line (non-fatal).
+    status += f" statusline={'OK' if sl_check.get('ok') else 'MISSING'}"
+    if migration_warning:
+        status += " (global has leftover kunglao hooks — migrate)"
+    # #536: stamp faults ride the status line (non-fatal here — see
+    # check_stamp_version docstring).
+    stamp_faults = report["template_version_stamps"].get("faults") or {}
+    if stamp_faults:
+        status += (f" (template_version stamp faults: "
+                   f"{', '.join(f'{k}={v}' for k, v in sorted(stamp_faults.items()))})")
+    status += " components=" + json.dumps(
+        {k: v.get("state") for k, v in components.items()},
+        ensure_ascii=False, sort_keys=True)
+    return status
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:]) if argv is None else list(argv)
     strict = "--strict" in args
@@ -689,23 +715,8 @@ def main(argv: list[str] | None = None) -> int:
         warn("main", f"{type(exc).__name__}: {exc}")
 
     proj_ok = proj_check.get("hooks_segment") and not proj_check.get("missing")
-    status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"
-    # #142: statusline keep-alive rides the status line (non-fatal).
-    status += f" statusline={'OK' if sl_check.get('ok') else 'MISSING'}"
-    if migration_warning:
-        status += " (global has leftover kunglao hooks — migrate)"
-    # #536: stamp faults ride the status line (non-fatal here — see
-    # check_stamp_version docstring).
-    stamp_faults = report["template_version_stamps"].get("faults") or {}
-    if stamp_faults:
-        status += (f" (template_version stamp faults: "
-                   f"{', '.join(f'{k}={v}' for k, v in sorted(stamp_faults.items()))})")
-    # #412: the component table rides the status line; strict mode gates on
-    # the blockers (exit clean only when green, else the structured
-    # remediation list — the init/upgrade closure face).
-    status += " components=" + json.dumps(
-        {k: v.get("state") for k, v in components.items()},
-        ensure_ascii=False, sort_keys=True)
+    status = _status_line(proj_check, sl_check, migration_warning, report,
+                          components)
     print(f"hooks_selfcheck: {status}")
     for b in blockers:
         fix = b.get("fix_command") or b.get("fix_file") or ""

@@ -66,3 +66,86 @@ Issue #496 (milestone v0.1.2, #498 架构脊柱 C 类 "决策无牙"): 价值算
 
 需求源: issue #496 (github.com/amd2g2zz/kunglao-agent/issues/496);
 架构约束: #498;前置裁决: #499(priority_ratio 是唯一权威 scorer)。
+
+## Amendments (2026-10-19 — spec text synced to the as-built code per the §8.2 audit, docs/architecture/kunglao-technical-doc.md)
+
+The two amendments below record owner rulings the frozen proposal text
+predates. The frozen ①/③ text above is preserved verbatim as the
+change-of-record; the semantics BELOW are the operative ones.
+
+### Amendment 1 — ③ the strategy log is an always-on recorder (§8.2 M1.4)
+
+**Frozen text**: ③ "机制留接口,不强制使用(无标记 = 行为不变)" — the
+`[strategy <id>]` marker was opt-in and a markerless pass wrote nothing.
+
+**Owner ruling (review 2026-10-10)**, as recorded in the implementing
+docstring: "the marker was an OPT-IN gate with no emitting side — the
+orchestrator was never told to carry `[strategy <id>]`, so the log stayed
+empty, round-strategy's compose had no input, and the strand cycled in
+degraded mode."
+
+**New semantics**: every PASSING dispatch writes one
+`runs/strategy-log.jsonl` row. A markerless pass lands
+`strategy: "default", declared: false` (honest: no strategy was declared);
+a marker keeps its richer row (`strategy: <id>, declared: true`). The
+write stays fail-open (an unreadable register snapshots 0; an unwritable
+log warns on stderr and never blocks the dispatch). Row shape is the
+frozen one plus the additive `declared` key: `{ts, event: "dispatch",
+strategy, declared, claim, attempts_at_snapshot}`.
+
+**Implementing code**: `hooks/dispatch_gate.py:975-1023`
+(`_log_strategy_dispatch`; ruling comment at 981-985, the default-row face
+at 989-999, the capped write at 1009-1023).
+
+**Invariant**: INV-001 (`loop-sampler-exit`) — "default strategy rows are
+anomalies, never the norm". The default row is the anomaly *signal* the
+invariant speaks of: with the #773 W2 sampler exit (see the issue-691 W2
+amendment) a markerless dispatch is rejected once and retried with the
+sampled family, so a healthy loop shows default rows only at the
+rejection-retry seam, never as the steady state.
+
+**Integration contract**: caller = the dispatch ALLOW tail of
+`hooks/dispatch_gate.py` main (after the #496 teeth, before the worker
+starts); trigger = every passing kunglao dispatch; firing fingerprint =
+one `runs/strategy-log.jsonl` dispatch row per pass (`event: "dispatch"`),
+consumed by the `rl-sampler-exit` liveness fingerprint
+(devkit/liveness_fingerprints.json).
+
+### Amendment 2 — ① the teeth are FAIL_CLOSED (§8.2 M1.5)
+
+**Frozen text**: ① "FAIL_OPEN: scorer 不可用 / register 缺失 / rank-None
+… 时静默或仅 stderr ADVISORY" and design D1 key-decision 4 ("check_priority
+不可 import、register 缺失、actions 为空 → 静默放行").
+
+**Owner ruling (2026-09-28)**, verbatim: "a gate that cannot see must not
+wave the dispatch through."
+
+**New semantics**: scorer/audit ERRORS reject instead of waving through.
+In `_top1_enforcement`, an unimportable `worker_budget.check_priority` or
+a raised audit returns `_gate_error_reject` (REJECT `top1`, exit 2, repair
+guidance, trace event) — rank-None on a HEALTHY audit still does not
+reject (that face of the frozen text stands; the failure-blocked slice
+keeps its #495 injection path). `_capability_guard` follows the same
+ruling: scorer/card errors reject, while an unreadable register only
+narrows the card scope to the claim (best-effort scope, kept). The same
+2026-09-28 ruling is cited at the method-family gate's registry-unavailable
+reject (`hooks/worker_budget_sinks.py:854-862`), making fail-closed the
+shared doctrine of every dispatch-ranking gate.
+
+**Implementing code**: `hooks/dispatch_gate.py:544-585`
+(`_top1_enforcement`; ruling docstring 555-557; the two FAIL_CLOSED
+returns at 563-566 and 573-576; `_gate_error_reject` at 426-471);
+`hooks/dispatch_gate.py:736-791` (`_capability_guard`; ruling at 745;
+error rejects at 759-762, 769-772, 788-791).
+
+**Invariant**: no registered invariant owns the top-1/capability teeth
+directly; the amendment is recorded under INV-001's gate posture (the
+2026-09-28 fail-closed ruling that INV-001's method-family exit also
+cites) so the ruling is traceable from the registry namespace.
+
+**Integration contract**: caller = `hooks/dispatch_gate.py` PreToolUse
+main chain (order: must-stop → failure-blocked → top1 → capability →
+strategy-log); trigger = every Agent-tool dispatch inside the activation
+TTL; firing fingerprint = `REJECT top1` / `REJECT capability` stderr +
+exit 2 + the `top1_reject` / `gate_error` trace events in
+`runs/logs/kunglao-*.jsonl`.

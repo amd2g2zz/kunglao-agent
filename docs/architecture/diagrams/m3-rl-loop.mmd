@@ -1,0 +1,24 @@
+flowchart TD
+  subgraph 奖励源
+    A[intake 锚点 task_spec goal-op] -->|W1 arm_oracle_cases| B[oracle cases 武装]
+  end
+  subgraph 决策
+    C[state.snapshot 签名 bf 维] --> D[strategy_store.gate_sample DTS 抽样]
+    D --> E{_method_family_gate}
+    E -->|未声明+有料| F[拒 携带采样家族]
+    F --> G[重试声明 family]
+    G --> H[l1_planner.plan_for_claim 准入]
+    E -->|已声明| H
+    H --> I[plan-receipts admitted]
+    I --> J[worker 证据生产]
+  end
+  subgraph 学习
+    J --> K[step_grain.settle belief + 步信用]
+    K --> L[settle_round_credit 武装案例结算]
+    L --> M[q_cells Beta 更新 gamma 折叠 SHRINK cap]
+    K --> N[crystallize 负知识 广播]
+    M -.->|后验驱动下次抽样| D
+  end
+  L -.->|指纹 oracle-armed posterior-moved| V[W4 活体验证]
+  F -.->|指纹 rl-sampler-exit| V
+  I -.->|指纹 rl-admission-consumed| V

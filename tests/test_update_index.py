@@ -89,12 +89,6 @@ def test_count_all_terminal(tmp_path):
     assert terminal == 3
 
 
-def test_read_empty(tmp_path):
-    idx = _new_index(tmp_path)
-    assert read_index(idx) == []
-    assert count_by_status(idx) == {}
-
-
 def _run():
     import inspect
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith('test_')]

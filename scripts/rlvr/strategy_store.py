@@ -56,6 +56,7 @@ from pathlib import Path
 
 from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
 
+from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import ledger as rl
 from rlvr import posteriors as dts
 from rlvr import q_cells
@@ -152,6 +153,15 @@ def feature_key_of(ws) -> str:
         return "none"
 
 
+def _holdout_hit(row: dict) -> str | None:
+    """The firewall predicate — the holdout unit-id a row's serialized
+    form carries, or None (the holdout filter, shared by both append
+    faces; the same predicate eval_split_lint enforces)."""
+    payload = json.dumps(row, ensure_ascii=False).lower()
+    return next((u for u in sorted(holdout_unit_ids())
+                 if u in payload), None)
+
+
 def append_row(row: dict) -> dict:
     """Filter-and-append one store row. THE HOLDOUT FILTER PRECEDES THE
     APPEND: any row whose serialized form carries a holdout unit-id is
@@ -159,15 +169,13 @@ def append_row(row: dict) -> dict:
     enforces — belt and suspenders). Fail-open telemetry: a store
     failure never breaks settlement."""
     try:
-        payload = json.dumps(row, ensure_ascii=False).lower()
-        hit = next((u for u in sorted(holdout_unit_ids())
-                    if u in payload), None)
+        hit = _holdout_hit(row)
         if hit is not None:
             warn("strategy_store.append_row",
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        ok = q_cells._append_row(store_path(), row)
+        ok = q_cells._append_row(store_path(), _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -175,7 +183,7 @@ def append_row(row: dict) -> dict:
         return {"appended": False, "reason": f"error:{type(exc).__name__}"}
 
 
-def append_store_row(ws=None, *, method_family: str, status: str,
+def _build_store_row(ws=None, *, method_family: str, status: str,
                      credit, censored: bool = False, facts_citing: int = 0,
                      propensity=None, phi_delta=None,
                      dispatch_id: str | None = None, arm_key: str | None
@@ -186,22 +194,9 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                      credit_kind: str | None = None,
                      outcome_class: str = "",
                      ts: str | None = None) -> dict:
-    """Build and append one ``posterior-store/1`` row (the settlement
-    hook's face): schema stamp, ts, workspace identity, feature key
-    (ws-derived defaults), the 4-dim arm key, the settled credit, the
-    censoring flag, the fact signal, the OPE propensity, and the Φ
-    tiebreaker — one field, no new machinery (the #548 verdict's fix
-    rides the row). Delegates to ``append_row`` (filter + fail-open).
-
-    #705 MARL: ``agent_type`` rides the row (the agent-conditioned
-    store), ``claim`` carries the claim ID for the solution-broadcast
-    face, and ``credit_kind`` marks solve vs verification. All three
-    absent → the row is byte-identical to pre-#705.
-
-    #689 settlement fairness: ``outcome_class`` (strategy|infra|censored
-    — the rlvr.scalar.classify_outcome vocabulary) rides the row
-    additively: warm_pools excludes infra rows, an environment refusal
-    is not strategy evidence."""
+    """THE ``posterior-store/1`` row builder — one shape, two writers
+    (the cross-task store and the workspace-local credit series). Every
+    column and boundary validation lives here exactly once."""
     from harness_common import utc_now_z  # noqa: PLC0415
     row = {
         "schema": STORE_SCHEMA,
@@ -234,7 +229,81 @@ def append_store_row(ws=None, *, method_family: str, status: str,
                      ("credit_kind", credit_kind)):
         if val:
             row[key] = str(val)
-    return append_row(row)
+    return row
+
+
+def append_store_row(ws=None, *, method_family: str, status: str,
+                     credit, censored: bool = False, facts_citing: int = 0,
+                     propensity=None, phi_delta=None,
+                     dispatch_id: str | None = None, arm_key: str | None
+                     = None, feature_key: str | None = None,
+                     fingerprint: str | None = None,
+                     agent_type: str | None = None,
+                     claim: str | None = None,
+                     credit_kind: str | None = None,
+                     outcome_class: str = "",
+                     ts: str | None = None) -> dict:
+    """Build and append one ``posterior-store/1`` row (the settlement
+    hook's face): schema stamp, ts, workspace identity, feature key
+    (ws-derived defaults), the 4-dim arm key, the settled credit, the
+    censoring flag, the fact signal, the OPE propensity, and the Φ
+    tiebreaker — one field, no new machinery (the #548 verdict's fix
+    rides the row). Delegates to ``append_row`` (filter + fail-open).
+
+    #705 MARL: ``agent_type`` rides the row (the agent-conditioned
+    store), ``claim`` carries the claim ID for the solution-broadcast
+    face, and ``credit_kind`` marks solve vs verification. All three
+    absent → the row is byte-identical to pre-#705.
+
+    #689 settlement fairness: ``outcome_class`` (strategy|infra|censored
+    — the rlvr.scalar.classify_outcome vocabulary) rides the row
+    additively: warm_pools excludes infra rows, an environment refusal
+    is not strategy evidence."""
+    return append_row(_build_store_row(
+        ws, method_family=method_family, status=status, credit=credit,
+        censored=censored, facts_citing=facts_citing,
+        propensity=propensity, phi_delta=phi_delta,
+        dispatch_id=dispatch_id, arm_key=arm_key, feature_key=feature_key,
+        fingerprint=fingerprint, agent_type=agent_type, claim=claim,
+        credit_kind=credit_kind, outcome_class=outcome_class, ts=ts))
+
+
+def append_workspace_credit_row(ws=None, *, method_family: str,
+                                status: str, credit,
+                                claim: str | None = None,
+                                dispatch_id: str | None = None,
+                                credit_kind: str | None = None,
+                                ts: str | None = None) -> dict:
+    """The workspace credit-series face (the learning→decision bridge's
+    breaker contract): append one credit row to the WORKSPACE-LOCAL store
+    (``<ws>/runs/posterior-store.jsonl``) — the file
+    ``rlvr.signal_guard.recent_credits`` reads for the degeneracy series
+    and the rl-posterior-moved fingerprint counts. The row is the SAME
+    ``posterior-store/1`` shape as the cross-task store's (one builder,
+    ``_build_store_row``), so a credit is byte-consistent whichever file
+    carries it; the holdout filter precedes the append exactly as on the
+    cross-task face. Fail-open telemetry: a failure is one counted
+    result, never a settle break."""
+    row = _build_store_row(ws, method_family=method_family, status=status,
+                           credit=credit, claim=claim,
+                           dispatch_id=dispatch_id, credit_kind=credit_kind,
+                           ts=ts)
+    try:
+        hit = _holdout_hit(row)
+        if hit is not None:
+            warn("strategy_store.workspace_credit",
+                 f"holdout unit-id {hit!r} refused — the firewall "
+                 f"filter precedes the append")
+            return {"appended": False, "reason": f"holdout-filter:{hit}"}
+        target = (Path(ws) if ws is not None else Path(".")) \
+            / "runs" / "posterior-store.jsonl"
+        ok = q_cells._append_row(target, _seal.sign_row(row))
+        return {"appended": bool(ok),
+                "reason": None if ok else "write-failed"}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
+        warn("strategy_store.workspace_credit",
+             f"{type(exc).__name__}: {exc}")
+        return {"appended": False, "reason": f"error:{type(exc).__name__}"}
 
 
 def load_rows(ws=None) -> list[dict]:
@@ -249,6 +318,7 @@ def load_rows(ws=None) -> list[dict]:
     rows = [r for r in iter_jsonl(text.splitlines())
             if isinstance(r, dict)
             and str(r.get("schema") or "") == STORE_SCHEMA]
+    rows = _seal.trusted_rows(rows, op="strategy_store.load_rows")
     if ws is not None:
         mine = workspace_id_of(ws)
         rows = [r for r in rows
@@ -319,13 +389,63 @@ def _registered_only(counts: dict[str, int]) -> dict[str, int]:
     return {fam: n for fam, n in counts.items() if fam in registered}
 
 
-def _share(counts: dict[str, int]) -> dict[str, float]:
-    """Normalize a family -> count face into a proposal prior over the
+def _share(counts: dict[str, int | float]) -> dict[str, float]:
+    """Normalize a family → weight face into a proposal prior over the
     retained mass ({} when nothing survives) — deterministic order."""
     total = sum(counts.values())
-    if total <= 0:
+    float_ok = all(isinstance(w, (int, float)) and not isinstance(w, bool)
+                   for w in counts.values())
+    if total <= 0 or not float_ok:
         return {}
-    return {fam: n / total for fam, n in sorted(counts.items())}
+    return {fam: float(w) / total for fam, w in sorted(counts.items())}
+
+
+def _hypothesis_claims(ws) -> dict[str, str]:
+    """Hypothesis id → claim id (the update_map join's middle hop).
+    HypothesisStore is fail-open on store content (list_all skips
+    unparseable files); a missing dir maps nothing."""
+    try:
+        from hypothesis_store import HypothesisStore  # noqa: PLC0415
+        store = HypothesisStore(Path(ws) / "hypotheses")
+        return {h.id: h.claim_id for h in store.list_all()}
+    except Exception as exc:  # noqa: BLE001 — fail-open, loud
+        warn("strategy_store.hypothesis_claims",
+             f"{type(exc).__name__}: {exc} — no case→claim join")
+        return {}
+
+
+def _case_update_maps(ws) -> dict[str, list[str]]:
+    """Case id → the update_map's joined hypothesis ids (green_up ∪
+    red_up). Retired cases and docs without a non-empty mapping join
+    nothing. Tolerant read (an unreadable/non-mapping doc is skipped —
+    a broken case never blocks the prior)."""
+    import yaml  # noqa: PLC0415 — lazy
+
+    cdir = Path(ws) / "oracle" / "cases"
+    out: dict[str, list[str]] = {}
+    if not cdir.is_dir():
+        return out
+    for path in sorted(cdir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(
+                path.read_text(encoding="utf-8", errors="replace")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if str(doc.get("status") or "").strip().lower() == "retired":
+            continue
+        raw = doc.get("update_map")
+        if not isinstance(raw, dict):
+            continue
+        ids = [str(h).strip() for direction in ("green_up", "red_up")
+               for h in (raw.get(direction) or []) if str(h).strip()]
+        if not ids:
+            continue
+        cid = str(doc.get("id") or path.stem).strip()
+        if cid:
+            out[cid] = ids
+    return out
 
 
 class PosteriorStrategyStore:
@@ -357,11 +477,12 @@ class PosteriorStrategyStore:
     def method_sample(self, state_fingerprint: str) -> dict | None:
         """#691: the full draw receipt behind ``method_lead`` — the SAME
         prior chain (measured history → the explicit intake llm-prior →
-        the cross-task store), the SAME ``q_cells_seed_state`` seed, the
-        SAME sampler kwargs, plus the additive ``prior_source`` label
-        (history | llm_prior | store) so receipts distinguish a prior
-        the workspace earned from one it was TOLD. None = no candidates
-        anywhere — the honest cold gap, never a fabricated draw."""
+        the case posteriors → the cross-task store), the SAME
+        ``q_cells_seed_state`` seed, the SAME sampler kwargs, plus the
+        additive ``prior_source`` label (history | llm_prior | case |
+        store) so receipts distinguish a prior the workspace earned from
+        one it was TOLD or LEARNED. None = no candidates anywhere — the
+        honest cold gap, never a fabricated draw."""
         prior, source = self.proposal_prior_labeled()
         if not prior:
             prior = self._store_prior()
@@ -381,11 +502,14 @@ class PosteriorStrategyStore:
 
     def proposal_prior_labeled(self) -> tuple[dict[str, float], str]:
         """#691 T3 — ``_proposal_prior``'s labeled face: (prior, source),
-        source ∈ {``history``, ``llm_prior``, ``none``}. ``history`` is
-        the workspace's measured declaration shares (the prior it
-        earned); ``llm_prior`` is the explicit runs/llm-prior.json
-        intake doc when no history exists (the prior it was TOLD) —
-        retired tokens filtered by the same registry wall as every other
+        source ∈ {``history``, ``llm_prior``, ``case``, ``none``}.
+        ``history`` is the workspace's measured declaration shares (the
+        prior it earned); ``llm_prior`` is the explicit
+        runs/llm-prior.json intake doc when no history exists (the prior
+        it was TOLD); ``case`` is the learning→decision bridge — the
+        runs/posteriors.yaml case Betas folded into family weights
+        through the update_map join (the prior the oracle TAUGHT it).
+        Retired tokens filtered by the same registry wall as every other
         prior face, share-normalized like any candidate set. Fail-open:
         the #544 tolerant read face maps a missing/corrupt intake doc to
         empty silently (never a raise); only an unexpected failure at
@@ -402,7 +526,65 @@ class PosteriorStrategyStore:
                  f"{type(exc).__name__}: {exc} (fail-open: no llm prior)")
             seeded = {}
         prior = _share(_registered_only(seeded or {}))
-        return (prior, "llm_prior") if prior else ({}, "none")
+        if prior:
+            return prior, "llm_prior"
+        try:
+            prior = self._case_prior()
+        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
+            warn("strategy_store.case_prior",
+                 f"{type(exc).__name__}: {exc} (fail-open: no case prior)")
+            prior = {}
+        return (prior, "case") if prior else ({}, "none")
+
+    # ------------------------------------------------ the case source
+
+    def _case_prior(self) -> dict[str, float]:
+        """The case-posterior prior source (the learning→decision
+        bridge's Face 3). ``runs/posteriors.yaml`` case Betas
+        fold into family weights; the join is the case doc's
+        ``update_map`` (green_up ∪ red_up hypothesis ids) → the
+        hypothesis's ``claim_id`` (hypotheses/*.md) → the method-family
+        usage row keyed by that claim (the dispatch's declared family).
+
+        Each OBSERVED case folds its evidence over the Beta(1,1)
+        support — ``e = (alpha−1, beta−1)``; an unobserved case folds
+        nothing (a wide prior teaches nothing). The fold is
+        SHRINK-capped like every anchor source (contract
+        rl-signal-contract/1 §1.1: counts are bounded by folding, never
+        normalized): ``w = min(SHRINK_CAP, evidence mass)`` and the
+        family gains ``w · (e_alpha / e_mass)`` — success mass; a
+        red-dominated case folds zero upward weight (failure is not a
+        proposal). Retired cases and docs without an update_map join
+        nothing. The registered-vocabulary wall + share normalization
+        are the same faces as every other prior source."""
+        import posteriors_case as po  # noqa: PLC0415 — the ws posterior ledger
+
+        led = po.PosteriorLedger.load(self.ws)
+        if not led.cases:
+            return {}
+        hyp_claims = _hypothesis_claims(self.ws)
+        usage = q_cells.usage_family_map(self.ws)
+        maps = _case_update_maps(self.ws)
+        if not hyp_claims or not usage or not maps:
+            return {}
+        weights: dict[str, float] = {}
+        for cid, cp in led.cases.items():
+            e_a = float(cp.alpha) - float(po._ALPHA0)
+            e_b = float(cp.beta) - float(po._BETA0)
+            e_mass = e_a + e_b
+            if e_mass <= 0.0:
+                continue          # unobserved case — Beta(1,1) support
+            fams = {usage.get(hyp_claims.get(hid, ""), "")
+                    for hid in maps.get(str(cid), ())}
+            w = min(q_cells.SHRINK_CAP, e_mass)
+            mass = w * (e_a / e_mass)
+            if mass <= 0.0:
+                continue          # red-dominated — nothing rises on red
+            for fam in fams:
+                if fam:
+                    weights[fam] = weights.get(fam, 0.0) + mass
+        weights = {fam: w for fam, w in weights.items() if w > 0.0}
+        return _share(_registered_only(weights))
 
     def _store_prior(self) -> dict[str, float]:
         """The cross-task fallback candidate channel: families the keyed
@@ -522,7 +704,8 @@ class PosteriorStrategyStore:
     def cell_count(self, state_fingerprint: str) -> int | None:
         """Q-cell rows at this signature; None while the spine has no
         data at all (compose falls back to the settled-ledger total)."""
-        rows = self._qstore.observations()
+        rows = _seal.trusted_rows(self._qstore.observations(),
+                                  op="strategy_store.cell_count")
         if not rows:
             return None
         fp = str(state_fingerprint)
@@ -556,7 +739,8 @@ class PosteriorStrategyStore:
         the store's). Deterministic in workspace state; empty when
         nothing was ever declared."""
         counts: dict[str, int] = {}
-        for row in self._qstore.observations():
+        for row in _seal.trusted_rows(self._qstore.observations(),
+                                      op="strategy_store.prior"):
             if not isinstance(row, dict) \
                     or str(row.get("source") or "") != "dispatch":
                 continue

@@ -47,7 +47,7 @@ skill's setup.sh? Dispatched a worker to fix it?"
 - x64dbg stepping → the x64dbg-specialist worker (`kunglao-worker` with `tools=x64dbg`)
 - String extraction → `floss-filter`
 - Authenticode / packer → `pefile-signature`
-- Verdict scoring → `verdict-scorer`
+- Verdict scoring → `verdict_scorer.py` (deterministic; the `verdict-scorer` agent is the corridor residue)
 
 `general-purpose` is allowed ONLY when no specialist fits.
 

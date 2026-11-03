@@ -72,9 +72,11 @@ def test_freeze_emits_blocker_and_returns_true(tmp_path):
     logs.mkdir(parents=True)
     (logs / "kunglao-2026-10-19.jsonl").write_text("", encoding="utf-8")
     assert freeze_if_degenerate(ws, [1.0] * 5) is True
-    rows = [json.loads(l) for l in
-            (logs / "kunglao-2026-10-19.jsonl")
-            .read_text(encoding="utf-8").splitlines() if l.strip()]
+    # emit() lands on the CURRENT UTC day file (kunglao_log._day_file
+    # owns the naming) — read every day file, never a hardcoded calendar
+    # date (a pinned date rots the day after it was written).
+    rows = [json.loads(l) for p in sorted(logs.glob("kunglao-*.jsonl"))
+            for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert any(r.get("action") == "signal_degenerate" for r in rows)
 
 
@@ -86,14 +88,12 @@ def test_freeze_varied_returns_false(tmp_path):
 
 def test_settle_freezes_on_degenerate_series(tmp_path):
     import settle_round_credit as src
+    from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "facts").mkdir()
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": [
-            {"id": "C-1", "status": "PROVEN",
-             "verification": {"method": "reproduction"}}]}),
-        encoding="utf-8")
+    mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
+                          "verification": {"method": "reproduction"}}])
     _seed_store(ws, [1.0] * 5)
     out = src.run(ws)
     assert out.get("signal_frozen") is True, out
@@ -102,14 +102,12 @@ def test_settle_freezes_on_degenerate_series(tmp_path):
 
 def test_settle_unfrozen_when_signal_varied(tmp_path):
     import settle_round_credit as src
+    from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "facts").mkdir()
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": [
-            {"id": "C-1", "status": "PROVEN",
-             "verification": {"method": "reproduction"}}]}),
-        encoding="utf-8")
+    mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
+                          "verification": {"method": "reproduction"}}])
     _seed_store(ws, [1.0, 0.3, 1.0])
     out = src.run(ws)
     assert out.get("signal_frozen") is None

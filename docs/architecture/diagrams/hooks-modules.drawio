@@ -1,0 +1,350 @@
+<mxfile host="drawio-skill" agent="diagram-ir" version="3.0.0">
+  <diagram id="system" name="System">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="write_guard" value="write_guard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="write_guard" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="write_guard" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/write_guard.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="0" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="lib_kunglao" value="lib_kunglao" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="lib_kunglao" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="lib_kunglao" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/lib_kunglao.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="70" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="user_signal_capture" value="user_signal_capture" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="user_signal_capture" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="user_signal_capture" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/user_signal_capture.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="390" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="violation_capture" value="violation_capture" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="violation_capture" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="violation_capture" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/violation_capture.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="570" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rt_read_barrier" value="rt_read_barrier" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rt_read_barrier" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="rt_read_barrier" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/rt_read_barrier.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="750" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_budget_gates" value="worker_budget_gates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker_budget_gates" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="worker_budget_gates" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_gates.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="230" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="recall_inject" value="recall_inject" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="recall_inject" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="recall_inject" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/recall_inject.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="930" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="_path_hygiene" value="_path_hygiene" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="_path_hygiene" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="_path_hygiene" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/_path_hygiene.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1550" y="530" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_budget_core" value="worker_budget_core" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker_budget_core" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="worker_budget_core" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_core.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="220" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="bash_fact_guard" value="bash_fact_guard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="bash_fact_guard" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="bash_fact_guard" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/bash_fact_guard.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1110" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="orchestrator_tool_guard" value="orchestrator_tool_guard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="orchestrator_tool_guard" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="orchestrator_tool_guard" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/orchestrator_tool_guard.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1280" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="step_record_capture" value="step_record_capture" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="step_record_capture" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="step_record_capture" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/step_record_capture.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1460" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="round_closure" value="round_closure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="round_closure" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="round_closure" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/round_closure.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1640" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_pulse" value="worker_pulse" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker_pulse" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="worker_pulse" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_pulse.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1820" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="state_anchor" value="state_anchor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="state_anchor" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="state_anchor" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/state_anchor.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2000" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="heartbeat_touch" value="heartbeat_touch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="heartbeat_touch" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="heartbeat_touch" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/heartbeat_touch.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2170" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="session_start" value="session_start" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="session_start" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="session_start" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/session_start.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2710" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="workguard_gate" value="workguard_gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="workguard_gate" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="workguard_gate" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/workguard_gate.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2350" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="completion_gate" value="completion_gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="completion_gate" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="completion_gate" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/completion_gate.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2530" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="compact_continuity" value="compact_continuity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="compact_continuity" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="compact_continuity" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/compact_continuity.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2710" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="evidence_pin_guard" value="evidence_pin_guard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="evidence_pin_guard" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="evidence_pin_guard" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/evidence_pin_guard.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2890" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="env_check_gate" value="env_check_gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="env_check_gate" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="env_check_gate" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/env_check_gate.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="3060" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cost_input_capture" value="cost_input_capture" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="cost_input_capture" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="cost_input_capture" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/cost_input_capture.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="3240" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch_gate" value="dispatch_gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="dispatch_gate" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="dispatch_gate" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/dispatch_gate.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="160" y="0" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_budget_sinks" value="worker_budget_sinks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker_budget_sinks" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="worker_budget_sinks" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget_sinks.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="250" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_budget" value="worker_budget" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="worker_budget" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="worker_budget" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/hooks/worker_budget.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="230" y="110" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e0" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="bash_fact_guard" target="_path_hygiene" data-model-id="bash_fact_guard--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="520" />
+              <mxPoint x="1190" y="540" />
+              <mxPoint x="1190" y="540" />
+              <mxPoint x="1190" y="540" />
+              <mxPoint x="1540" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="compact_continuity" target="_path_hygiene" data-model-id="compact_continuity--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2790" y="530" />
+              <mxPoint x="2790" y="570" />
+              <mxPoint x="2790" y="570" />
+              <mxPoint x="2790" y="570" />
+              <mxPoint x="1720" y="570" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="completion_gate" target="_path_hygiene" data-model-id="completion_gate--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2610" y="530" />
+              <mxPoint x="2610" y="560" />
+              <mxPoint x="2610" y="560" />
+              <mxPoint x="2610" y="560" />
+              <mxPoint x="1720" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="cost_input_capture" target="_path_hygiene" data-model-id="cost_input_capture--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3320" y="530" />
+              <mxPoint x="3320" y="590" />
+              <mxPoint x="3320" y="590" />
+              <mxPoint x="3320" y="590" />
+              <mxPoint x="1720" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="dispatch_gate" target="lib_kunglao" data-model-id="dispatch_gate--lib_kunglao" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="70" />
+              <mxPoint x="200" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="dispatch_gate" target="worker_budget" data-model-id="dispatch_gate--worker_budget" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="280" y="70" />
+              <mxPoint x="280" y="90" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="lib_kunglao" target="_path_hygiene" data-model-id="lib_kunglao--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="190" y="370" />
+              <mxPoint x="190" y="590" />
+              <mxPoint x="190" y="590" />
+              <mxPoint x="190" y="590" />
+              <mxPoint x="1540" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker_budget" target="worker_budget_sinks" data-model-id="worker_budget--worker_budget_sinks" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="180" />
+              <mxPoint x="320" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="env_check_gate" target="_path_hygiene" data-model-id="env_check_gate--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3140" y="530" />
+              <mxPoint x="3140" y="590" />
+              <mxPoint x="3140" y="590" />
+              <mxPoint x="3140" y="590" />
+              <mxPoint x="1720" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="evidence_pin_guard" target="_path_hygiene" data-model-id="evidence_pin_guard--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2970" y="530" />
+              <mxPoint x="2970" y="580" />
+              <mxPoint x="2970" y="580" />
+              <mxPoint x="2970" y="580" />
+              <mxPoint x="1720" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="heartbeat_touch" target="_path_hygiene" data-model-id="heartbeat_touch--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2250" y="520" />
+              <mxPoint x="2250" y="550" />
+              <mxPoint x="2250" y="550" />
+              <mxPoint x="2250" y="550" />
+              <mxPoint x="1720" y="550" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="orchestrator_tool_guard" target="_path_hygiene" data-model-id="orchestrator_tool_guard--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1360" y="510" />
+              <mxPoint x="1360" y="540" />
+              <mxPoint x="1360" y="540" />
+              <mxPoint x="1360" y="540" />
+              <mxPoint x="1540" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="recall_inject" target="_path_hygiene" data-model-id="recall_inject--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1010" y="520" />
+              <mxPoint x="1010" y="550" />
+              <mxPoint x="1010" y="550" />
+              <mxPoint x="1010" y="550" />
+              <mxPoint x="1540" y="550" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="round_closure" target="_path_hygiene" data-model-id="round_closure--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1680" y="490" />
+              <mxPoint x="1680" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rt_read_barrier" target="_path_hygiene" data-model-id="rt_read_barrier--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="520" />
+              <mxPoint x="830" y="560" />
+              <mxPoint x="830" y="560" />
+              <mxPoint x="830" y="560" />
+              <mxPoint x="1540" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="session_start" target="compact_continuity" data-model-id="session_start--compact_continuity" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2790" y="390" />
+              <mxPoint x="2790" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="state_anchor" target="_path_hygiene" data-model-id="state_anchor--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2080" y="520" />
+              <mxPoint x="2080" y="540" />
+              <mxPoint x="2080" y="540" />
+              <mxPoint x="2080" y="540" />
+              <mxPoint x="1720" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="step_record_capture" target="_path_hygiene" data-model-id="step_record_capture--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1590" y="490" />
+              <mxPoint x="1590" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="user_signal_capture" target="_path_hygiene" data-model-id="user_signal_capture--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="530" />
+              <mxPoint x="470" y="570" />
+              <mxPoint x="470" y="570" />
+              <mxPoint x="470" y="570" />
+              <mxPoint x="1540" y="570" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="violation_capture" target="_path_hygiene" data-model-id="violation_capture--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="530" />
+              <mxPoint x="650" y="560" />
+              <mxPoint x="650" y="560" />
+              <mxPoint x="650" y="560" />
+              <mxPoint x="1540" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker_budget_core" target="_path_hygiene" data-model-id="worker_budget_core--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="530" />
+              <mxPoint x="300" y="580" />
+              <mxPoint x="300" y="580" />
+              <mxPoint x="300" y="580" />
+              <mxPoint x="1540" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e21" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker_budget_gates" target="worker_budget_core" data-model-id="worker_budget_gates--worker_budget_core" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="390" />
+              <mxPoint x="300" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker_budget_sinks" target="worker_budget_gates" data-model-id="worker_budget_sinks--worker_budget_gates" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="280" />
+              <mxPoint x="320" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="worker_pulse" target="_path_hygiene" data-model-id="worker_pulse--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1900" y="510" />
+              <mxPoint x="1900" y="540" />
+              <mxPoint x="1900" y="540" />
+              <mxPoint x="1900" y="540" />
+              <mxPoint x="1720" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e24" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="workguard_gate" target="_path_hygiene" data-model-id="workguard_gate--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2430" y="520" />
+              <mxPoint x="2430" y="560" />
+              <mxPoint x="2430" y="560" />
+              <mxPoint x="2430" y="560" />
+              <mxPoint x="1720" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="write_guard" target="_path_hygiene" data-model-id="write_guard--_path_hygiene" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="80" y="530" />
+              <mxPoint x="80" y="590" />
+              <mxPoint x="80" y="590" />
+              <mxPoint x="80" y="590" />
+              <mxPoint x="1540" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

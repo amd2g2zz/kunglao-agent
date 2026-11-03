@@ -17,8 +17,10 @@ C-006 实录）。本模块只做加载/选择/注入块渲染，零运行时打
                                                 ws 计数同时驱动链序与档内工具序
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 from pathlib import Path
 
 import yaml

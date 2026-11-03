@@ -71,7 +71,10 @@ class TestRulesFileV2:
         bumps the versioned file per the issue-379 precedent."""
         doc = rs.load_rules(RULES_PATH)
         assert doc["schema"] == "reward-rules/1"  # fold contract unchanged
-        assert doc["version"] == 3
+        # version 3 -> 4 (issue 796): the hypothesis rule classes are a
+        # semantic change and bump the versioned file; the /1 rows (and
+        # the v2/v3 sections) remain foldable in the same table.
+        assert doc["version"] == 4
         rule_ids = {r["rule_id"] for r in doc["rules"]}
         assert {"task/oracle-green", "task/oracle-red",
                 "self_distill/adverse", "self_distill/helped"} <= rule_ids
@@ -148,7 +151,11 @@ class TestRulesFileV2:
                  # the shared leaf-utility home (numpy+stdlib only, zero
                  # repo imports — seq_sum/utc_now_z). Not a model-call
                  # path; the U3 wall is unchanged.
-                 "_common"}
+                 "_common",
+                # #800 R2: the dispatch-ledger resolver (pure stdlib-only
+                # state machine, no model-call path) resolves the REAL
+                # dispatch id at the scalar bank seam. Same U3 wall.
+                "claims_store"}
         tree = ast.parse(
             (SCRIPTS / "rlvr" / "scalar.py").read_text(encoding="utf-8"))
         imported: list[str] = []

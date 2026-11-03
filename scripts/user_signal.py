@@ -9,8 +9,10 @@
   meta / unrouted                      → 只记录（一级兜底）
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+from kunglao_log import warn  # canonical warn: ONE implementation
+# (process-wide dedupe + ledger face)
 import json
 import re
 from pathlib import Path
@@ -19,6 +21,7 @@ import yaml
 
 import kunglao_log
 import mission_ledger as ml
+import signal_router
 
 SIGNALS_DIR = "runs/user-signals"
 
@@ -161,15 +164,47 @@ def file_factual(ws, sig: dict) -> dict:
 def ingest(ws, prompt: str) -> dict:
     """hook 唯一入口：分类 → 路由 → 落账。任何异常由调用方双笼。"""
     sig = classify(prompt)
+    routing = signal_router.classify_intent(prompt)
+    if (sig["ontype"] == "factual"
+            and sig["classified_by"] == "keyword"
+            and routing["intent"] is not None):
+        # 生产误路由钉：否定转折形态「不是要X，是要Y」被
+        # keyword "fix" 劫走——路由到意图层（开新方向等），不再立案修复。
+        # prefix 显式分类与无意图的转折（真事实纠正）不受影响。
+        sig = {**sig, "ontype": "unrouted", "route": "unrouted",
+               "classified_by": "intent_deferred"}
     if sig["ontype"] == "volition":
         return {"ontype": "volition", **apply_volition(ws, sig)}
     if sig["ontype"] == "factual":
         return {"ontype": "factual", **file_factual(ws, sig)}
-    # meta / unrouted：一级兜底——只记录（进上下文的账本可见），不路由
-    sig_id = _save_signal(ws, sig, {"routed": False})
+    # meta / unrouted：意图路由——分类只路由，本体层不变
+    # （route 仍是 unrouted；意图字段是附加投影，分错不丢信号）
+    routed = routing["intent"] is not None
+    extra = {"routed": routed, "intent": routing["intent"],
+             "action": routing["action"],
+             "commit_action": routing["commit_action"],
+             "new_episode": routing["new_episode"],
+             "route_target": routing["route_target"],
+             "intent_classified_by": routing["classified_by"]}
+    sig_id = _save_signal(ws, sig, extra)
     _emit(ws, "user_signal", sig, {"signal_id": sig_id})
-    return {"ontype": sig["ontype"], "signal_id": sig_id,
-            "routed": False}
+    if routed:
+        _emit(ws, "signal_routed", sig, {"signal_id": sig_id, **extra})
+    out = {"ontype": sig["ontype"], "signal_id": sig_id,
+           "routed": routed, "intent": routing["intent"],
+           "action": routing["action"],
+           "commit_action": routing["commit_action"],
+           "new_episode": routing["new_episode"],
+           "route_target": routing["route_target"]}
+    if routing["route_target"] == "narration":
+        # 接线：状态查询直达叙事面（四要素只读投影，fail-open）
+        try:
+            import status_narration
+            out["view"] = status_narration.build_view(ws)
+        except Exception as exc:  # noqa: BLE001 — 路由面不阻塞用户输入
+            warn("ingest.narration", f"{type(exc).__name__}: {exc}")
+            out["view"] = None
+    return out
 
 
 # ---------- 座舱数据面 ----------

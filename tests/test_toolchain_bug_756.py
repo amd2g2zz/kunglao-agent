@@ -70,7 +70,7 @@ def _run_toolchain(ws: Path, *extra: str) -> dict:
 
     PATH is REPLACED with an empty dir (decompiler/idat64/GHIDRA_HOME probes
     must miss regardless of host installs) and KUNGLAO_CLAUDE_JSON pins an
-    MCP registry WITHOUT ghidra / ida-pro-vm.
+    MCP registry WITHOUT ghidra / ida-pro-mcp.
     """
     empty_bin = ws.parent / "empty-bin"
     empty_bin.mkdir(exist_ok=True)
@@ -189,7 +189,7 @@ def test_decompiler_fail_copy_ida_ghidra_equal(tmp_path):
     assert "Ghidra OR IDA" in fix, fix
     assert "either satisfies this check" in fix, fix
     assert "#408" in fix, fix               # test_init_toolchain_gate pin
-    assert "ghidra/ida-pro-vm" in fix, fix  # MCP path still listed
+    assert "ghidra/ida-pro-mcp" in fix, fix  # MCP path still listed
     assert "claude mcp add" in fix, fix
 
 

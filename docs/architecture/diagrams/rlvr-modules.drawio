@@ -1,0 +1,675 @@
+<mxfile host="drawio-skill" agent="diagram-ir" version="3.0.0">
+  <diagram id="system" name="System">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="rlvr.crystallize" value="crystallize" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.crystallize" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="crystallize" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/crystallize.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1720" y="0" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.step_credit" value="step_credit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.step_credit" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="step_credit" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/step_credit.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2440" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.l1_value" value="l1_value" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.l1_value" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="l1_value" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/l1_value.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="180" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.liveness" value="liveness" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.liveness" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="liveness" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/liveness.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="80" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.compose" value="compose" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.compose" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="compose" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/compose.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2800" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.source_reliability" value="source_reliability" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.source_reliability" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="source_reliability" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/source_reliability.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2440" y="530" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.step_grain" value="step_grain" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.step_grain" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="step_grain" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/step_grain.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2120" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.meta_arms" value="meta_arms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.meta_arms" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="meta_arms" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/meta_arms.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2440" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.feature_prior" value="feature_prior" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.feature_prior" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="feature_prior" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/feature_prior.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2260" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.l1_planner" value="l1_planner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.l1_planner" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="l1_planner" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/l1_planner.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1670" y="110" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.triples" value="triples" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.triples" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="triples" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/triples.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1500" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.refutation_fold" value="refutation_fold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.refutation_fold" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="refutation_fold" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/refutation_fold.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1940" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.scalar" value="scalar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.scalar" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="scalar" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/scalar.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="180" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.policy_compare" value="policy_compare" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.policy_compare" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="policy_compare" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/policy_compare.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1750" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.termination" value="termination" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.termination" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="termination" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/termination.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2620" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.ledger" value="ledger" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.ledger" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="ledger" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/ledger.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1400" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr" value="rlvr" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr" data-kind="library" data-properties="{}" data-source-properties="{}" data-source-label="rlvr" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/__init__.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1320" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.strategy_store" value="strategy_store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.strategy_store" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="strategy_store" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/strategy_store.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2350" y="640" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.belief" value="belief" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.belief" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="belief" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/belief.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2080" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.step_ledger" value="step_ledger" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.step_ledger" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="step_ledger" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/step_ledger.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2260" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.hypotheses" value="hypotheses" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.hypotheses" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="hypotheses" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/hypotheses.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="250" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.recipe_arms" value="recipe_arms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.recipe_arms" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="recipe_arms" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/recipe_arms.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1250" y="950" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.obstacles" value="obstacles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.obstacles" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="obstacles" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/obstacles.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2440" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.prediction_ledger" value="prediction_ledger" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.prediction_ledger" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="prediction_ledger" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/prediction_ledger.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2980" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.constants_ref" value="constants_ref" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.constants_ref" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="constants_ref" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/constants_ref.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="430" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.expansion" value="expansion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.expansion" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="expansion" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/expansion.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="610" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.verification_debt" value="verification_debt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.verification_debt" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="verification_debt" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/verification_debt.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2800" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.posteriors" value="posteriors" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.posteriors" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="posteriors" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/posteriors.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2260" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.priors" value="priors" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.priors" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="priors" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/priors.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1910" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.q_cells" value="q_cells" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.q_cells" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="q_cells" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/q_cells.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2620" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.censored_review" value="censored_review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.censored_review" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="censored_review" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/censored_review.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="790" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.incremental_reward" value="incremental_reward" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.incremental_reward" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="incremental_reward" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/incremental_reward.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1750" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.reward" value="reward" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.reward" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="reward" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/reward.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="0" y="850" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.settlement_scorer" value="settlement_scorer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.settlement_scorer" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="settlement_scorer" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/settlement_scorer.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="970" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.consolidated_ledger" value="consolidated_ledger" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.consolidated_ledger" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="consolidated_ledger" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/consolidated_ledger.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2150" y="530" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.state" value="state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.state" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="state" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/state.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1580" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.invariants" value="invariants" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.invariants" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="invariants" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/invariants.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1140" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.marl" value="marl" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.marl" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="marl" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/marl.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="2090" y="740" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rlvr.winrate" value="winrate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1" data-model-id="rlvr.winrate" data-kind="module" data-properties="{}" data-source-properties="{}" data-source-label="winrate" data-provenance="{&quot;path&quot;:&quot;/Users/mikenike/workprojects/kunglao-agent/.worktrees/feat-773-executor/scripts/rlvr/winrate.py&quot;,&quot;importer&quot;:&quot;python&quot;}">
+          <mxGeometry x="1320" y="320" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e0" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.censored_review" data-model-id="rlvr--rlvr.censored_review" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1170" y="260" />
+              <mxPoint x="870" y="260" />
+              <mxPoint x="870" y="260" />
+              <mxPoint x="870" y="260" />
+              <mxPoint x="870" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.constants_ref" data-model-id="rlvr--rlvr.constants_ref" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1100" y="240" />
+              <mxPoint x="510" y="240" />
+              <mxPoint x="510" y="240" />
+              <mxPoint x="510" y="240" />
+              <mxPoint x="510" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.expansion" data-model-id="rlvr--rlvr.expansion" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1130" y="250" />
+              <mxPoint x="660" y="250" />
+              <mxPoint x="660" y="250" />
+              <mxPoint x="660" y="250" />
+              <mxPoint x="660" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.hypotheses" data-model-id="rlvr--rlvr.hypotheses" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="230" />
+              <mxPoint x="330" y="230" />
+              <mxPoint x="330" y="230" />
+              <mxPoint x="330" y="230" />
+              <mxPoint x="330" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.invariants" data-model-id="rlvr--rlvr.invariants" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1270" y="280" />
+              <mxPoint x="1220" y="280" />
+              <mxPoint x="1220" y="280" />
+              <mxPoint x="1220" y="280" />
+              <mxPoint x="1220" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.liveness" data-model-id="rlvr--rlvr.liveness" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1050" y="220" />
+              <mxPoint x="160" y="220" />
+              <mxPoint x="160" y="220" />
+              <mxPoint x="160" y="220" />
+              <mxPoint x="160" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.policy_compare" data-model-id="rlvr--rlvr.policy_compare" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1600" y="260" />
+              <mxPoint x="1790" y="260" />
+              <mxPoint x="1790" y="260" />
+              <mxPoint x="1790" y="260" />
+              <mxPoint x="1790" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.settlement_scorer" data-model-id="rlvr--rlvr.settlement_scorer" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1220" y="270" />
+              <mxPoint x="1070" y="270" />
+              <mxPoint x="1070" y="270" />
+              <mxPoint x="1070" y="270" />
+              <mxPoint x="1070" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.step_grain" data-model-id="rlvr--rlvr.step_grain" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1680" y="230" />
+              <mxPoint x="2180" y="230" />
+              <mxPoint x="2180" y="230" />
+              <mxPoint x="2180" y="230" />
+              <mxPoint x="2180" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.triples" data-model-id="rlvr--rlvr.triples" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1530" y="280" />
+              <mxPoint x="1580" y="280" />
+              <mxPoint x="1580" y="280" />
+              <mxPoint x="1580" y="280" />
+              <mxPoint x="1580" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr" target="rlvr.winrate" data-model-id="rlvr--rlvr.winrate" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1400" y="280" />
+              <mxPoint x="1400" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.belief" target="rlvr" data-model-id="rlvr.belief--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2100" y="360" />
+              <mxPoint x="2100" y="230" />
+              <mxPoint x="2100" y="230" />
+              <mxPoint x="2100" y="230" />
+              <mxPoint x="1490" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.compose" target="rlvr.prediction_ledger" data-model-id="rlvr.compose--rlvr.prediction_ledger" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3000" y="780" />
+              <mxPoint x="3030" y="780" />
+              <mxPoint x="3030" y="780" />
+              <mxPoint x="3030" y="780" />
+              <mxPoint x="3030" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.compose" target="rlvr.verification_debt" data-model-id="rlvr.compose--rlvr.verification_debt" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2880" y="810" />
+              <mxPoint x="2880" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.consolidated_ledger" target="rlvr" data-model-id="rlvr.consolidated_ledger--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2120" y="560" />
+              <mxPoint x="2080" y="560" />
+              <mxPoint x="2080" y="560" />
+              <mxPoint x="2080" y="560" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="1490" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.crystallize" target="rlvr.l1_planner" data-model-id="rlvr.crystallize--rlvr.l1_planner" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1780" y="70" />
+              <mxPoint x="1780" y="90" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.expansion" target="rlvr" data-model-id="rlvr.expansion--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="290" />
+              <mxPoint x="720" y="250" />
+              <mxPoint x="720" y="250" />
+              <mxPoint x="720" y="250" />
+              <mxPoint x="1310" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.feature_prior" target="rlvr.refutation_fold" data-model-id="rlvr.feature_prior--rlvr.refutation_fold" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2260" y="780" />
+              <mxPoint x="2260" y="780" />
+              <mxPoint x="2260" y="780" />
+              <mxPoint x="2260" y="780" />
+              <mxPoint x="2260" y="880" />
+              <mxPoint x="2260" y="880" />
+              <mxPoint x="2260" y="880" />
+              <mxPoint x="2120" y="880" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.incremental_reward" target="rlvr" data-model-id="rlvr.incremental_reward--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1750" y="460" />
+              <mxPoint x="1740" y="460" />
+              <mxPoint x="1740" y="460" />
+              <mxPoint x="1740" y="460" />
+              <mxPoint x="1740" y="270" />
+              <mxPoint x="1740" y="270" />
+              <mxPoint x="1740" y="270" />
+              <mxPoint x="1490" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.l1_planner" target="rlvr" data-model-id="rlvr.l1_planner--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1700" y="200" />
+              <mxPoint x="1700" y="220" />
+              <mxPoint x="1700" y="220" />
+              <mxPoint x="1700" y="220" />
+              <mxPoint x="1490" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.l1_value" target="rlvr" data-model-id="rlvr.l1_value--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="380" y="880" />
+              <mxPoint x="420" y="880" />
+              <mxPoint x="420" y="880" />
+              <mxPoint x="420" y="880" />
+              <mxPoint x="420" y="230" />
+              <mxPoint x="420" y="230" />
+              <mxPoint x="420" y="230" />
+              <mxPoint x="1310" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e21" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.marl" target="rlvr" data-model-id="rlvr.marl--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2080" y="780" />
+              <mxPoint x="2080" y="780" />
+              <mxPoint x="2080" y="780" />
+              <mxPoint x="2080" y="780" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="2080" y="240" />
+              <mxPoint x="1490" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.policy_compare" target="rlvr.incremental_reward" data-model-id="rlvr.policy_compare--rlvr.incremental_reward" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1830" y="390" />
+              <mxPoint x="1830" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.prediction_ledger" target="rlvr" data-model-id="rlvr.prediction_ledger--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3080" y="710" />
+              <mxPoint x="3080" y="220" />
+              <mxPoint x="3080" y="220" />
+              <mxPoint x="3080" y="220" />
+              <mxPoint x="1490" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e24" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.priors" target="rlvr" data-model-id="rlvr.priors--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1970" y="620" />
+              <mxPoint x="1970" y="250" />
+              <mxPoint x="1970" y="250" />
+              <mxPoint x="1970" y="250" />
+              <mxPoint x="1490" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.q_cells" target="rlvr.recipe_arms" data-model-id="rlvr.q_cells--rlvr.recipe_arms" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2700" y="950" />
+              <mxPoint x="2700" y="990" />
+              <mxPoint x="2700" y="990" />
+              <mxPoint x="2700" y="990" />
+              <mxPoint x="1420" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e26" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.recipe_arms" target="rlvr" data-model-id="rlvr.recipe_arms--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1310" y="810" />
+              <mxPoint x="1310" y="240" />
+              <mxPoint x="1310" y="240" />
+              <mxPoint x="1310" y="240" />
+              <mxPoint x="1310" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e27" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.refutation_fold" target="rlvr" data-model-id="rlvr.refutation_fold--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2070" y="710" />
+              <mxPoint x="2070" y="250" />
+              <mxPoint x="2070" y="250" />
+              <mxPoint x="2070" y="250" />
+              <mxPoint x="1490" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e28" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.reward" target="rlvr" data-model-id="rlvr.reward--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="40" y="710" />
+              <mxPoint x="40" y="220" />
+              <mxPoint x="40" y="220" />
+              <mxPoint x="40" y="220" />
+              <mxPoint x="1310" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e29" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.scalar" target="rlvr.l1_value" data-model-id="rlvr.scalar--rlvr.l1_value" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="810" />
+              <mxPoint x="260" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e30" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.scalar" target="rlvr.reward" data-model-id="rlvr.scalar--rlvr.reward" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="780" />
+              <mxPoint x="120" y="780" />
+              <mxPoint x="120" y="780" />
+              <mxPoint x="120" y="780" />
+              <mxPoint x="120" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e31" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.settlement_scorer" target="rlvr" data-model-id="rlvr.settlement_scorer--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="290" />
+              <mxPoint x="1020" y="270" />
+              <mxPoint x="1020" y="270" />
+              <mxPoint x="1020" y="270" />
+              <mxPoint x="1310" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e32" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.source_reliability" target="rlvr.strategy_store" data-model-id="rlvr.source_reliability--rlvr.strategy_store" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2480" y="600" />
+              <mxPoint x="2480" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e33" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.state" target="rlvr" data-model-id="rlvr.state--rlvr" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1660" y="370" />
+              <mxPoint x="1660" y="270" />
+              <mxPoint x="1660" y="270" />
+              <mxPoint x="1660" y="270" />
+              <mxPoint x="1490" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e34" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_credit" target="rlvr.source_reliability" data-model-id="rlvr.step_credit--rlvr.source_reliability" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2520" y="490" />
+              <mxPoint x="2520" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e35" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_grain" target="rlvr.belief" data-model-id="rlvr.step_grain--rlvr.belief" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2180" y="390" />
+              <mxPoint x="2180" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e36" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_grain" target="rlvr.crystallize" data-model-id="rlvr.step_grain--rlvr.crystallize" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2230" y="230" />
+              <mxPoint x="2230" y="30" />
+              <mxPoint x="2230" y="30" />
+              <mxPoint x="2230" y="30" />
+              <mxPoint x="1890" y="30" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e37" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_grain" target="rlvr.step_credit" data-model-id="rlvr.step_grain--rlvr.step_credit" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2380" y="350" />
+              <mxPoint x="2520" y="350" />
+              <mxPoint x="2520" y="350" />
+              <mxPoint x="2520" y="350" />
+              <mxPoint x="2520" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e38" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_grain" target="rlvr.step_ledger" data-model-id="rlvr.step_grain--rlvr.step_ledger" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2270" y="390" />
+              <mxPoint x="2270" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e39" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.step_ledger" target="rlvr.consolidated_ledger" data-model-id="rlvr.step_ledger--rlvr.consolidated_ledger" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2290" y="490" />
+              <mxPoint x="2290" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e40" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.compose" data-model-id="rlvr.strategy_store--rlvr.compose" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2640" y="660" />
+              <mxPoint x="2880" y="660" />
+              <mxPoint x="2880" y="660" />
+              <mxPoint x="2880" y="660" />
+              <mxPoint x="2880" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e41" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.feature_prior" data-model-id="rlvr.strategy_store--rlvr.feature_prior" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2390" y="710" />
+              <mxPoint x="2390" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e42" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.marl" data-model-id="rlvr.strategy_store--rlvr.marl" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2290" y="690" />
+              <mxPoint x="2200" y="690" />
+              <mxPoint x="2200" y="690" />
+              <mxPoint x="2200" y="690" />
+              <mxPoint x="2200" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e43" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.meta_arms" data-model-id="rlvr.strategy_store--rlvr.meta_arms" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2480" y="710" />
+              <mxPoint x="2480" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e44" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.priors" data-model-id="rlvr.strategy_store--rlvr.priors" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2230" y="670" />
+              <mxPoint x="2020" y="670" />
+              <mxPoint x="2020" y="670" />
+              <mxPoint x="2020" y="670" />
+              <mxPoint x="2020" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e45" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.scalar" data-model-id="rlvr.strategy_store--rlvr.scalar" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1970" y="650" />
+              <mxPoint x="300" y="650" />
+              <mxPoint x="300" y="650" />
+              <mxPoint x="300" y="650" />
+              <mxPoint x="300" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e46" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.strategy_store" target="rlvr.termination" data-model-id="rlvr.strategy_store--rlvr.termination" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2590" y="680" />
+              <mxPoint x="2700" y="680" />
+              <mxPoint x="2700" y="680" />
+              <mxPoint x="2700" y="680" />
+              <mxPoint x="2700" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e47" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.termination" target="rlvr.obstacles" data-model-id="rlvr.termination--rlvr.obstacles" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2620" y="780" />
+              <mxPoint x="2610" y="780" />
+              <mxPoint x="2610" y="780" />
+              <mxPoint x="2610" y="780" />
+              <mxPoint x="2610" y="880" />
+              <mxPoint x="2610" y="880" />
+              <mxPoint x="2610" y="880" />
+              <mxPoint x="2610" y="880" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e48" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.termination" target="rlvr.posteriors" data-model-id="rlvr.termination--rlvr.posteriors" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2670" y="820" />
+              <mxPoint x="2670" y="830" />
+              <mxPoint x="2670" y="830" />
+              <mxPoint x="2670" y="830" />
+              <mxPoint x="2340" y="830" />
+              <mxPoint x="2340" y="830" />
+              <mxPoint x="2340" y="830" />
+              <mxPoint x="2340" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e49" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.termination" target="rlvr.q_cells" data-model-id="rlvr.termination--rlvr.q_cells" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2730" y="810" />
+              <mxPoint x="2730" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e50" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.triples" target="rlvr.ledger" data-model-id="rlvr.triples--rlvr.ledger" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1530" y="390" />
+              <mxPoint x="1530" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e51" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="rlvr.triples" target="rlvr.state" data-model-id="rlvr.triples--rlvr.state" data-kind="relation" data-properties="{}" data-source-properties="{}" data-source-label="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1620" y="390" />
+              <mxPoint x="1620" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

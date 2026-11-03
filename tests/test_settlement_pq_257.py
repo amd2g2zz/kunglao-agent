@@ -23,7 +23,7 @@ import pytest
 import event_taxonomy
 import kunglao_log
 import oracle_runner
-from posteriors import PQCategorical, PosteriorLedger
+from posteriors_case import PQCategorical, PosteriorLedger
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "exp3_delta_h.json").read_text(

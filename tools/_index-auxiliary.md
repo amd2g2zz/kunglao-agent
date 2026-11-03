@@ -11,6 +11,7 @@
 | `measure-blind-coverage` | BLIND blind-verification coverage measurement | Read when evaluating blind-verification coverage; not otherwise |
 | `measure-cold-start` | Cold-start token baseline measurement | Read when measuring the cold-start token baseline; not for non-baseline measurement |
 | `sanitize-text` | Prompt-injection sanitization of sample-derived text (zero-width/homoglyph/instruction markers) | Read before feeding sample-derived text to an LLM worker; not when the text is not consumed by an LLM |
+| `hybrid-distill` | Knowledge-distillation engine (issue #365): D-gate notes + lessons -> scored StandardDistillItem pool items, distill-rollout settlement, 3-strike lifecycle | Read when collecting/distilling methodology knowledge in a workspace; not for tool acquisition (online_distill) |
 
 ## Contract entries
 
@@ -73,3 +74,15 @@
 - **Outputs**: Sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + `--reproduce` field=value lines.
 - **exit code**: 0 positive finding (injection detected) / 1 negative finding (nothing detected) / 2 error.
 - **when_not**: Not needed when the text is not consumed by an LLM worker.
+
+### hybrid-distill
+
+- **Purpose**: The knowledge-distillation engine (#365, unified model's distillation domain): D-gate-passing notes + active lessons + facts/env-state -> cleaned StandardDistillItem blocks -> 0-1 score (generality 0.3 / self-inspiring 0.25 / methodology-shape 0.25 / novelty 0.2) -> conflict flags (never silent overwrite; external-derived never supersedes evidence-derived) -> the episode pool's write gate -> `distill-rollout/1` settlement rows. `--strategy hybrid` adds a hypothesis-driven research loop with an SNR gate (two barren rounds abandon; the search action is injected — the module performs no network IO of its own).
+- **Usage**:
+  ```bash
+  python tools/auxiliary/hybrid_distill.py <workspace> --strategy self --json
+  ```
+- **Inputs**: Workspace root (positional) + `--strategy self|hybrid` + optional `--lessons-library DIR`; hybrid via CLI additionally requires `--research-file` (scripted pages JSON).
+- **Outputs**: `runs/episodes/episode-D-*.md` (scored pool items), `runs/verification-D-*.md` (scorecards), `runs/settlement.jsonl` `distill-rollout/1` rows.
+- **exit code**: 0 success / 2 error (argparse, hybrid without --research-file).
+- **when_not**: Not for tool acquisition (that is `online_distill`, #458); not for tick-scheduled runs (event-driven only per the mechanisms.yaml entry).

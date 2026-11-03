@@ -50,7 +50,7 @@ import case_bank as cb  # noqa: E402
 import event_taxonomy as et  # noqa: E402
 import failure_analysis_gate as fag  # noqa: E402
 import oracle_runner as orun  # noqa: E402
-import posteriors as po  # noqa: E402
+import posteriors_case as po  # noqa: E402
 
 
 # ---------------------------------------------------------------- clients

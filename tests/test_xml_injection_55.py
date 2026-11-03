@@ -73,12 +73,14 @@ VM_CLAIM = (
 )
 
 
-def test_recall_guidance_wrapped_in_kunglao_facts(tmp_path):
+def test_recall_guidance_wrapped_in_kunglao_facts(tmp_path, monkeypatch):
     """Knowledge recall is INTERNAL kunglao knowledge -> <kunglao-facts>,
     never <external-tools> (the reference library is not third-party output).
+    issue 771 migration: recall is default-OFF — opt in for the pin.
     """
     from recall_inject import evaluate
 
+    monkeypatch.setenv("KUNGLAO_RECALL", "1")
     ws = _recall_ws(tmp_path)
 
     def runner(query):
@@ -91,11 +93,13 @@ def test_recall_guidance_wrapped_in_kunglao_facts(tmp_path):
     _assert_wrapped(ctx, KUNGLAO_FACTS)
 
 
-def test_recall_guidance_inner_text_preserved_inside_tag(tmp_path):
-    """The wrapper is additive: the pre-#55 guidance lines survive verbatim
-    INSIDE the tag (existing substring pins stay green)."""
+def test_recall_guidance_inner_text_preserved_inside_tag(tmp_path, monkeypatch):
+    """The wrapper is additive: the guidance lines survive verbatim
+    INSIDE the tag (existing substring pins stay green).
+    issue 771 migration: opt-in + the header names the need-driven face."""
     from recall_inject import evaluate
 
+    monkeypatch.setenv("KUNGLAO_RECALL", "1")
     ws = _recall_ws(tmp_path)
     rc, _, ctx = evaluate(
         _recall_payload(ws, VM_CLAIM),
@@ -105,18 +109,20 @@ def test_recall_guidance_inner_text_preserved_inside_tag(tmp_path):
     inner = ctx
     for edge in KUNGLAO_FACTS:
         inner = inner.replace(edge, "")
-    assert "recall_inject: claim dispatch knowledge recall" in inner
+    assert "recall_inject: need-driven recall - query:" in inner
     assert "Before dispatching, read: dynamic-re-tool-priority.md" in inner
 
 
 def test_recall_main_stdin_wrapped_end_to_end(tmp_path):
-    """The wired shape: the additionalContext JSON carries the tagged text."""
+    """The wired shape: the additionalContext JSON carries the tagged text.
+    issue 771 migration: the child env opts in (default-off)."""
     ws = _recall_ws(tmp_path)
     r = subprocess.run(
         [sys.executable, str(REPO_ROOT / "hooks" / "recall_inject.py")],
         input=json.dumps(_recall_payload(ws, VM_CLAIM)), capture_output=True,
         encoding="utf-8", errors="replace",
-        env={"PYTHONIOENCODING": "utf-8", **__import__("os").environ},
+        env={"PYTHONIOENCODING": "utf-8", "KUNGLAO_RECALL": "1",
+             **__import__("os").environ},
         cwd=str(ws), timeout=120,
     )
     assert r.returncode == 0
@@ -201,7 +207,7 @@ def test_dispatch_gate_reject_with_guidance_wrapped(capsys):
     rc = dg._reject_with_guidance(
         "top1", "synthetic top1 message",
         "add `agent-reasoning: <why>` to the dispatch prompt.")
-    assert rc == 2
+    assert rc == 0  # #801: format-class demotion (default class)
     captured = capsys.readouterr()
     assert "REJECT top1" in captured.err
     assert GATE_VERDICT[0] not in captured.err, "stderr stays untagged"
@@ -236,7 +242,7 @@ def _failure_blocked_ws(root: Path) -> Path:
         {"claims": [{"id": "C-1", "status": "OPEN", "statement": "x",
                      "answers_question": "q1", "promotion_attempts": 1}]},
         allow_unicode=True, sort_keys=False), encoding="utf-8")
-    import posteriors as po
+    import posteriors_case as po
     cdir = ws / "oracle" / "cases"
     cdir.mkdir(parents=True)
     (cdir / "case-c-1.yaml").write_text(
@@ -408,7 +414,8 @@ def test_top1_reject_end_to_end_wrapped(tmp_path):
         input=payload, capture_output=True, text=True, timeout=60,
         cwd=str(REPO_ROOT), errors="replace",
     )
-    assert r.returncode == 2, f"top-1 deviation must REJECT; stderr={r.stderr!r}"
+    # #801: format-class demotion — wrapped verdict still rides stdout.
+    assert r.returncode == 0, f"demoted rc0; stderr={r.stderr!r}"
     assert "REJECT top1" in r.stderr
     assert GATE_VERDICT[0] not in r.stderr
     ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]

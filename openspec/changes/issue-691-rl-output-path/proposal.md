@@ -82,3 +82,62 @@ never a new prefix bypass.
   its existing callers and tests are untouched.
 - Consumers of `method-family-log.jsonl` read `family`/`cell` by key —
   the new explicit-null keys are additive (stable-schema discipline).
+
+## W2 Amendment (2026-10-19 — §8.2 M3.4, recorded per the owner directive that previously lived only in the code comment)
+
+**Frozen text**: item 1 "recorded, NEVER rejected (fail-open + warn;
+vocabulary validation stays the gate's only REJECT face)"; Non-goals "No
+new REJECT face … No enforcement of sampler-chosen dispatches — the
+reconciliation is telemetry"; spec requirement "A deviation from the
+sampler is a recorded decision, never a reject".
+
+**Owner directive (2026-10-18)**, verbatim from the implementing comment:
+"#773 W2: the sampler is the EXIT for the UNDECLARED case — silence is not
+an override. The gate draws once and REJECTs with the sampled family in
+the guidance (deterministic compliance in one retry); declaring another
+family remains the recorded-decision override (sample_deviation). This
+supersedes the 2026-10-14 'never rejects' amendment FOR THE UNDECLARED
+CASE ONLY (owner directive 2026-10-18 + the live forensics: declared=false
+on every strategy-log row meant the sampler never exited). Cold sampler ->
+the legacy face (the honest gap), never a fabricated family."
+
+**New semantics** (three cases, replacing the single never-reject rule):
+
+1. DECLARED family, any deviation from the draw — unchanged:
+   recorded, never rejected (one `sample_deviation` event, fail-open +
+   warn; the 2026-10-14 amendment stands for this case).
+2. UNDECLARED dispatch + the gate's own draw has material — ONE REJECT
+   (`methodfamily`, exit 2) whose guidance carries the sampled family,
+   its propensity and its `prior_source`; declaring the sampled family
+   makes the sampled exit durable in the usage row. Declaring a DIFFERENT
+   family on the retry is the recorded-decision override, not an error.
+3. UNDECLARED + cold sampler (no proposal material) — the legacy honest
+   gap: no reject, no fabricated family. A missing registry module
+   (`scripts/method_families.py` unimportable) is fail-closed REJECT per
+   the 2026-09-28 owner ruling ("a gate that cannot see must not wave the
+   dispatch through").
+
+**Implementing code**: `hooks/worker_budget_sinks.py:822-895`
+(`_method_family_gate`; owner-directive docstring 843-855; registry-gap
+reject 854-862; the #773 W2 comment 869-878; the UNDECLARED reject
+880-889), `hooks/worker_budget_sinks.py:801` (`_gate_sample`; the
+gate's own decision-grade draw) and `hooks/worker_budget_sinks.py:744`
+(`_sample_reconciliation`).
+
+**Invariant**: INV-001 (`loop-sampler-exit`) — this amendment IS the W2
+wiring the invariant's fingerprint watches: the reject carries the draw,
+and the retry's usage row records `sampled_family` + `propensity` so
+`runs/strategy-log.jsonl` shows `strategy: "sampled"` rows
+(`fingerprint: rl-sampler-exit`).
+
+### Integration contract (W2 amendment)
+
+Caller: the pre_check method-family face of the dispatch gate battery in
+`hooks/worker_budget_sinks.py` (the #432 chokepoint, wired pre-activation).
+Trigger: every kunglao-shaped dispatch whose declaration is absent while
+the sampler view is non-empty. Firing fingerprint: one `methodfamily`
+REJECT (exit 2) with the sampled family + propensity + prior_source in the
+guidance; the subsequent retry lands a `declared=true` usage row
+(`runs/method-family-log.jsonl`) and a `strategy: "sampled"` strategy-log
+row. DECLARED deviations keep firing only the `sample_deviation` event
+(registered `EMIT_ACTIONS` word), never a reject.

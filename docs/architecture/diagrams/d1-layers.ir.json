@@ -1,0 +1,36 @@
+{
+  "schema": "drawio-skill/diagram-ir/v1",
+  "metadata": {"title": "kunglao-agent 分层架构（as-built, dev 518e2d10）"},
+  "nodes": [
+    {"id": "cc-session", "label": "Claude Code 会话（编排模型）", "kind": "service", "properties": {"role": "orchestrator", "substrate": "Claude Code + plugin"}},
+    {"id": "plugin", "label": "kunglao-agent 插件面", "kind": "service", "properties": {"faces": "hooks/agents/skills/commands/.mcp"}},
+    {"id": "hook-battery", "label": "Hook 电池（PreToolUse/SubagentStop/Stop）", "kind": "service", "properties": {"order": "worker_budget.pre_check → dispatch_gate 牙齿 → recall_inject → …", "count": "26 hooks"}},
+    {"id": "worker-fleet", "label": "Worker 舰队（子代理）", "kind": "service", "properties": {"agents": "kunglao-worker/init-worker/redteam/verdict-scorer/ghidra-light/go-symbols/pefile-signature/floss-filter/web-re-worker"}},
+    {"id": "rlvr", "label": "RL 基座 scripts/rlvr（39 模块）", "kind": "service", "properties": {"core": "state/posteriors/q_cells/strategy_store/l1_planner/belief/step_grain/crystallize/scalar"}},
+    {"id": "reward", "label": "奖励通道", "kind": "service", "properties": {"faces": "task-oracle → oracle_runner → oracle_cadence → settle_round_credit → case posteriors"}},
+    {"id": "knowledge", "label": "知识供应（references/ + recall）", "kind": "service", "properties": {"state": "默认关（#771：KUNGLAO_RECALL=1 opt-in）"}},
+    {"id": "ledger", "label": "账本面 runs/*", "kind": "store", "properties": {"files": "kunglao-*.jsonl / strategy-log / plan-receipts / posterior-store / method-family-log / cost_events / mission_ledger"}},
+    {"id": "eval", "label": "评估矩阵（本地语料）", "kind": "service", "properties": {"faces": "eval_loop_runner / eval_matrix_runner / 数据集+checker（eval/ 不入仓）"}},
+    {"id": "init-deploy", "label": "Init/部署面", "kind": "service", "properties": {"faces": "kunglao-init（锚点/脚手架/hook 部署/武装 oracle）+ hook_activation + deploy_manifest"}},
+    {"id": "upgrade", "label": "升级面", "kind": "service", "properties": {"faces": "kunglao_upgrade（锚点/快照/铁律/回滚/迁移项）+ 七步合同（#774，未完全落地）"}},
+    {"id": "devkit", "label": "devkit 质量机制（不随产品发布）", "kind": "service", "properties": {"faces": "quality_gates×10 / liveness_gate / escape_rate / verification / deferral / invariants / spec_coverage"}},
+    {"id": "review-gate", "label": "Review Gate（提交审查）", "kind": "service", "properties": {"face": "HMAC mint + evidence，stale 即拦"}}
+  ],
+  "edges": [
+    {"id": "e1", "source": "cc-session", "target": "plugin", "label": "加载", "kind": "sync"},
+    {"id": "e2", "source": "plugin", "target": "hook-battery", "label": "注册（默认休眠，Phase 0 激活+TTL）", "kind": "sync"},
+    {"id": "e3", "source": "hook-battery", "target": "worker-fleet", "label": "放行/拒绝派遣（envelope）", "kind": "sync"},
+    {"id": "e4", "source": "hook-battery", "target": "rlvr", "label": "消费采样/规划/账本", "kind": "sync"},
+    {"id": "e5", "source": "worker-fleet", "target": "ledger", "label": "facts/evidence/status 写入", "kind": "sync"},
+    {"id": "e6", "source": "reward", "target": "rlvr", "label": "武装 oracle → 案例后验更新（#773 W1）", "kind": "sync"},
+    {"id": "e7", "source": "rlvr", "target": "hook-battery", "label": "采样家族/准入 receipt（#773 W2/W3）", "kind": "sync"},
+    {"id": "e8", "source": "rlvr", "target": "ledger", "label": "belief/plan-receipt/后验写入", "kind": "sync"},
+    {"id": "e9", "source": "knowledge", "target": "hook-battery", "label": "opt-in 注入（默认关）", "kind": "sync", "properties": {"state": "dashed"}},
+    {"id": "e10", "source": "init-deploy", "target": "plugin", "label": "脚手架+hook 部署+武装 oracle", "kind": "sync"},
+    {"id": "e11", "source": "upgrade", "target": "init-deploy", "label": "迁移项/部署刷新/铁律", "kind": "sync"},
+    {"id": "e12", "source": "devkit", "target": "ledger", "label": "活体指纹审计（#775）", "kind": "sync"},
+    {"id": "e13", "source": "review-gate", "target": "devkit", "label": "提交拦截（HMAC 证据）", "kind": "sync"},
+    {"id": "e14", "source": "eval", "target": "ledger", "label": "结果行/矩阵", "kind": "sync"}
+  ],
+  "views": []
+}

@@ -40,7 +40,7 @@ everywhere. This file IS the authority the frontmatter must mirror.
 |---|---|---|---|
 | kunglao-worker | CORE_READ+CORE_WRITE, EXEC, WEB, DOC_LIB, THINK, STATIC_BIN, DBG_WIN, DYNCHECK, MEM_FORENSIC, JS_INDEX (+Skill exception) | NotebookEdit only outside analysis set | generalist escalation surface; T2 dynamic usage bound to VM-channel contract |
 | kunglao-redteam | CORE_READ, EXEC, WEB, DOC_LIB, THINK, STATIC_BIN, DBG_WIN, DYNCHECK, MEM_FORENSIC, Skill; writes limited to verify-record surfaces | NotebookEdit (+nothing in the dangerous set: dynamic verification allowed per ruling) | checker dynamic verification enabled with mandatory WHEN-section: Windows-only targets for x64dbg; frida is cross-platform default; escalate only after static + file-level machine checks fail to settle a DIFF; terminate lifecycle on finish; MACHINE-CHECK fence still applies to every finding |
-| verdict-scorer | CORE_READ, THINK | EXEC + ALL mcp families + NotebookEdit | pure read-side judgment over existing artifacts; scoring runs in-process |
+| verdict-scorer | CORE_READ, THINK | EXEC + ALL mcp families + NotebookEdit | deterministic-scoring corridor — the scoring is `verdict_scorer.py`; the face validates and waits, never judges |
 | floss-filter | CORE_READ, CORE_WRITE (filtered.json artifact) | EXEC, WEB, all mcp families, NotebookEdit | consumes orchestrator-provided evidence/floss-raw.txt; zero execution |
 | pefile-signature | CORE_READ, CORE_WRITE (signature/packer json), EXEC (python pefile invocations) | WEB, other mcp families, NotebookEdit | bounded local binary parsing |
 | go-symbols | CORE_READ, CORE_WRITE (unstrip outputs), EXEC (unstrip CLI chain) | WEB, other mcp families, NotebookEdit | local symbol-recovery pipeline |

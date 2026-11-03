@@ -143,7 +143,13 @@ def _lint_target(facts_dir: Path, rel: str) -> list:
         from lint_facts import parse_frontmatter, lint_fact
     fm, body, _perr = parse_frontmatter(text)
     fid = str(fm.get("id") or p.stem)
-    return lint_fact(fid, fm, _fact_ids(facts_dir), body)
+    lane = None
+    try:
+        from lint_facts import workspace_lane
+        lane = workspace_lane(facts_dir.parent)
+    except Exception:  # noqa: BLE001 — lane detection never blocks the guard
+        lane = None
+    return lint_fact(fid, fm, _fact_ids(facts_dir), body, lane=lane)
 
 
 def evaluate(payload: dict) -> dict | None:
@@ -284,7 +290,7 @@ def _surface(ws: Path, result: dict, ladder: dict) -> None:
         detail = light_detail("facts_write_contract_lint", detail)
         note = detail
         if ladder["first"]:
-            kunglao_log.emit(ws, actor="bash_fact_guard",
+            kunglao_log.emit(ws, actor="hook:bash_fact_guard",
                              action="write_blocked", detail=detail)
         for rel, rules in ladder["warned"]:
             warn("bash_fact_guard_repeat",
@@ -295,7 +301,7 @@ def _surface(ws: Path, result: dict, ladder: dict) -> None:
             esc = "; ".join(
                 f"file={rel} consecutive={n} rules={','.join(rules)}"
                 for rel, rules, n in ladder["escalated"])
-            kunglao_log.emit(ws, actor="bash_fact_guard",
+            kunglao_log.emit(ws, actor="hook:bash_fact_guard",
                              action="write_escalated",
                              detail="repeat-block ladder crossed — reroute "
                                     f"or repair: {esc} | {detail}")

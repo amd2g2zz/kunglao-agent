@@ -411,7 +411,11 @@ class TestDataPlaneFaces:
 
     def test_difficulty_face_raw_signals_when_not_mounted(self, tmp_path):
         """No mounted tier: the calibration surface consumes the raw
-        evidence (apkid signals) — reused, never re-derived."""
+        evidence (apkid signals) — reused, never re-derived. Owner
+        ruling 2026-10-30: the raw-signals tier is ALWAYS "unknown" —
+        a raw score is not a difficulty verdict, and this face is
+        display-only (DAMP_NONE covers unknown, so no loop coupling).
+        "easy" may only come from a real calibration."""
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         (ws / "evidence").mkdir()
@@ -426,7 +430,8 @@ class TestDataPlaneFaces:
         face = snap["difficulty_src"]
         assert isinstance(face, dict)
         assert face.get("source") == "raw-signals"
-        assert face.get("tier") or face.get("score") is not None
+        assert face.get("tier") == "unknown"
+        assert face.get("score") is not None
 
     def test_difficulty_absent_is_none(self, tmp_path):
         ws = _make_ws(tmp_path)

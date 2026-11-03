@@ -504,11 +504,15 @@ class TestTolerantFold:
         back through the family aggregate (cold start via pooling, not
         the bare uniform)."""
         rows = []
+        # #804 regen: keyed rows (the fold banks arm_key-carrying rows
+        # only); the anchor still pools the family through the key's
+        # first segment.
         for i, credit in enumerate((1.0, 0.0, 1.0, 1.0)):
             rows.append({"schema": q_cells.OBS_SCHEMA,
                          "signature_hash": f"{'a' * 11}{i}",
                          "method_family": "static-decompile",
-                         "credit": credit})
+                         "credit": credit,
+                         "arm_key": "static-decompile|facts_snapshot|none|0"})
         store = q_cells.InMemoryStore(rows)
         fold_view = q_cells.fold(store, gamma=1.0)
         fresh = "b" * 12  # no row ever recorded at this signature

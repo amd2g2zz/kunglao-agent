@@ -34,7 +34,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
-import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
+import posteriors_case as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
 # 2026-09-22 case-hardening (#306 emptiness identity, NO output change):
 # the #306 emptiness probe hard-errors a workspace whose task_spec carries
@@ -127,6 +127,21 @@ import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 # fact_ids, top_dimension). No ranker or decide() code path was touched
 # (convergence_check.py and anomaly_detector.py are untouched by the
 # branch; the card is the only corpus delta).
+#
+# 2026-11-03 DATA-coupled freeze refresh (issue 974 captcha-methods
+# distillation): two external-distilled cards landed under
+# references/re-library/web/external-distilled/ (the routing manual +
+# the parameter atlas), growing the anomaly baseline corpus again
+# (anomaly_detector design D2 source 1: every .md under
+# references/re-library/). Lexical-rarity statistics shifted, moving
+# anomalies[].score past the frozen precision on 2 of 31 cases
+# (drain_blocked_contradiction, order_discovery_beats_contradiction).
+# Verified programmatically over all 31 cases: drift is score-only
+# (every case byte-identical once anomaly scores are stripped — zero
+# changes in action, decision order, phase fields, anomaly counts,
+# fact_ids, top_dimension). No ranker or decide() code path was touched
+# (convergence_check.py and anomaly_detector.py are untouched by the
+# branch; the two cards are the only corpus delta).
 #
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the

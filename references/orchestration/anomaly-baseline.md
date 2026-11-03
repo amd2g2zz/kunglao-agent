@@ -72,9 +72,9 @@ The integration with `convergence_check.decide()`:
 
 An anomaly is **observation, not verdict**. The fact's own status
 (`PROVEN`, `INFERRED`, etc.) is preserved — anomaly never triggers a
-STAMP downgrade in `claim_migrator`. The anomaly surfaces as a
-co-resident note at `notes/<fact_id>.md` (helper:
-`anomaly_detector._write_anomaly_note`) for analyst review:
+STAMP downgrade in `claim_migrator`. An anomaly surfaces as a
+co-resident observation note at `notes/<fact_id>.md` (the
+`boundary_type: anomaly` frontmatter shape) for analyst review:
 
 - **Confirm** (note stays, doc the anomaly) — analyst's explicit verdict
 - **Refute** (delete note, extend `baseline_corpus:` in `analysis_state.txt`)

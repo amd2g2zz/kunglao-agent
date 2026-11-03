@@ -1,0 +1,27 @@
+sequenceDiagram
+  autonumber
+  participant O as 编排模型
+  participant WB as worker_budget_sinks.pre_check
+  participant MFG as _method_family_gate
+  participant SS as rlvr.strategy_store
+  participant DG as dispatch_gate
+  participant RI as recall_inject
+  participant W as worker 子代理
+  O->>WB: Task payload = kunglao_dispatch envelope v1
+  WB->>WB: parse_dispatch → tier,tools,cid
+  WB->>WB: check_step_settled 前步未结算即拒
+  WB->>WB: 预算闸 + 锚点 + check_tier_consistency + eta 单调写
+  WB->>WB: check_worker_plan 计划闸 + 粒度闸 MAX_STEPS=8
+  WB->>WB: 零输出断路器 zero_output_fingerprint
+  WB->>MFG: _method_family_gate(paths,prompt,cid,...)
+  MFG->>SS: 未声明 → gate_sample(ws)
+  SS-->>MFG: family,propensity,prior_source 或冷隙
+  MFG--xO: 有料→REJECT methodfamily 携带采样家族
+  MFG->>SS: 已声明→reconcile_declaration 反账
+  MFG->>SS: append_usage_row 使用行
+  MFG-->>WB: None, mf_value
+  WB-->>DG: 放行进入牙齿
+  DG->>DG: must-stop → top1 → capability → MCP → plan-author
+  DG->>RI: recall 判断 默认关
+  DG->>DG: ALLOW 尾 strategy-log → plan-receipts → intent → signals → lifecycle → anchor → claim flip
+  DG-->>W: worker 启动 envelope 携带准入

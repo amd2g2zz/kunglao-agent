@@ -26,7 +26,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import posteriors as po  # noqa: E402
+import posteriors_case as po  # noqa: E402
 
 # 前置实验 4 候选序列（主会话实测 2.000→~1.922→1.585→1.000→0.000）
 _PQ4 = {"alpha": 1.0, "beta": 1.0, "gamma": 1.0, "delta": 1.0}
@@ -177,7 +177,7 @@ def test_missing_schema_field_raises(tmp_path):
         raise AssertionError("missing schema field must fail loudly")
 
 
-# ---------- Thompson sample 确定性 ----------
+# ---------- CasePosterior.sample RNG determinism (sampler face) ----------
 
 def test_thompson_sample_deterministic_same_seed():
     c = po.CasePosterior("C-001", alpha=7.0, beta=3.0)

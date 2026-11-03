@@ -117,10 +117,12 @@ def test_camoufox_manifest_entry():
     assert item.tier == "HARD"
     assert item.types == ("web",)
     # #408: camoufox ships with the plugin — the remediation names the
-    # carriage (never a user-level `claude mcp add` command); the runtime
-    # invocation stays `python -m camoufox_reverse_mcp` (plugin.json args).
+    # carriage (never a user-level `claude mcp add` command). #767: the
+    # runtime invocation runs uv against the pinned installable source
+    # (plugin.json args); the dep is on no public index.
     assert "plugin" in item.register
     assert "claude mcp add" not in item.register
+    assert "git+https://" in item.register and "@v1.1.1" in item.register
     assert mcp_probe.MANIFEST_GROUPS["web_labs"] == ["camoufox-reverse"]
 
 
@@ -140,7 +142,7 @@ def test_no_hard_manifest_item_applies_to_web():
 
 def test_desktop_entries_pin_to_desktop_triple():
     desktop = ("windows", "linux", "android")
-    for name in ("ghidra", "sequential-thinking", "ida-pro-vm", "virustotal"):
+    for name in ("ghidra", "sequential-thinking", "ida-pro-mcp", "virustotal"):
         assert mcp_probe._BY_NAME[name].types == desktop, name
 
 

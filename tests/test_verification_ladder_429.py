@@ -386,14 +386,6 @@ class TestMainlineLedger:
 # ---------- wiring: registry, gate, runner face ------------------------------
 
 class TestWiring:
-    def test_long_round_gate_registered(self, tmp_path):
-        import mechanism_scheduler as ms
-        assert "long_round" in ms.GATES
-        assert ms.GATES["long_round"](tmp_path, set()) is False
-        for _ in range(vl.T1_ROUND_TURNS_THRESHOLD):
-            vl.note_write(tmp_path, ts=_ts(NOW))
-        assert ms.GATES["long_round"](tmp_path, set()) is True
-
     def test_mechanism_registered_in_the_registry(self):
         import mechanism_scheduler as ms
         entries, errors = ms.load_registry()

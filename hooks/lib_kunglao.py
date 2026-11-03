@@ -21,7 +21,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -87,8 +88,13 @@ VERIFICATION_MODES = ("none", "replay_probe", "oracle_case", "red_team")
 
 
 def envelope_v2_defaults(payload: dict) -> dict:
-    """The v2 action fields with v1 back-fill defaults — the ONE face
-    every consumer reads the action tuple through (kwargs-drift guard)."""
+    """The v2 action fields with their schema defaults — the ONE face
+    every consumer reads the action tuple through (kwargs-drift guard).
+
+    #804 de-compat: this used to be the v1-envelope BACK-FILL (a legacy
+    shape silently served); it is now the schema-default reader only —
+    an envelope missing the v2 fields is a LOUD emitter defect (the
+    battery warns naming the gaps), never a supported input shape."""
     return {
         "action_type": str(payload.get("action_type") or "dispatch"),
         "context_recipe": str(payload.get("context_recipe")
@@ -212,6 +218,156 @@ def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
     substring, never through this face)."""
     v1 = parse_dispatch_json(text)
     return (v1[0], v1[1], v1[2])
+
+
+# ---- read_targets advisory: coordinates-first dispatch ---------------------
+# The orchestrator resolves each task target BEFORE dispatch (GitNexus
+# context / rg -n) and records path + (symbol or lines) in the v1
+# envelope, together with the re-anchor strategy the worker follows when
+# the coordinates no longer match at execution time (a revised file moves
+# them). Phase 1 is ADVISORY: the hook logs the status and never rejects.
+# The fallback covers TWO orthogonal failure classes, declared separately:
+#   locate failure    — the file/range no longer matches (revised file,
+#                       moved heading, deleted path): mechanical re-anchor
+#                       via `read_fallback` (symbol-first / heading-first)
+#                       or stop with a GAP (exact-or-gap).
+#   relevance failure — the coordinates READ FINE but the content does not
+#                       address the current question/scenario: no mechanical
+#                       rule can resolve this, so `relevance_fallback`
+#                       delegates the decision to the worker's LLM
+#                       (semantic-decide): revise the plan, request a
+#                       corrected target, or record the GAP with its
+#                       reasoning — never keep searching.
+READ_FALLBACKS = ("symbol-first", "heading-first", "exact-or-gap")
+READ_RELEVANCE_FALLBACKS = ("semantic-decide",)
+DEFAULT_RELEVANCE_FALLBACK = "semantic-decide"
+READ_TARGETS_OPT_OUT_RE = re.compile(
+    r"^\s*none\s*\(.*reasoning:", re.IGNORECASE | re.DOTALL)
+#: Size cap for the line-count check. Above it the file is not read at all
+#: (fail-open): a dispatch hook must never block on a giant file.
+READ_TARGET_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _read_target_path_errors(where: str, path: str, lines, item: dict,
+                             workspace: str | Path | None) -> list[str]:
+    """Containment, existence and line-count checks for one target.
+
+    A path escaping the workspace (absolute, ``../``, or a symlink pointing
+    outside) or a non-regular file is reported, never read. The line-count
+    check is fail-open above ``READ_TARGET_MAX_BYTES`` — a dispatch hook
+    must not block on a giant file.
+    """
+    if workspace is None:
+        return []
+    root = Path(workspace).resolve()
+    try:
+        target = (root / path).resolve()
+        target.relative_to(root)
+    except (OSError, ValueError):
+        return [f"{where}: path escapes the workspace: {path}"]
+    if item.get("missing") is True:
+        return []
+    if not target.exists():
+        return [f"{where}: path does not exist: {path}"]
+    if not target.is_file():
+        return [f"{where}: path is not a regular file: {path}"]
+    if lines is None:
+        return []
+    try:
+        if target.stat().st_size > READ_TARGET_MAX_BYTES:
+            return []
+        n_lines = len(target.read_text(
+            encoding="utf-8", errors="replace").splitlines())
+    except OSError:
+        return []
+    if lines[1] > n_lines:
+        return [f"{where}: lines end {lines[1]} > file length {n_lines}"]
+    return []
+
+
+def _read_target_errors(item, idx: int,
+                        workspace: str | Path | None) -> list[str]:
+    """One target's shape + consistency errors (empty list = valid)."""
+    where = f"read_targets[{idx}]"
+    if not isinstance(item, dict):
+        return [f"{where}: target must be an object"]
+    path = item.get("path")
+    if not isinstance(path, str) or not path.strip():
+        return [f"{where}: path is required (non-empty string)"]
+    symbol = item.get("symbol")
+    lines = item.get("lines")
+    has_symbol = isinstance(symbol, str) and bool(symbol.strip())
+    has_lines = isinstance(lines, (list, tuple))
+    errors: list[str] = []
+    if has_symbol == has_lines:
+        errors.append(
+            f"{where}: exactly one of `symbol` or `lines` is required")
+        has_lines = False
+    elif has_lines and (
+            len(lines) != 2
+            or not all(isinstance(n, int) and not isinstance(n, bool)
+                       for n in lines)
+            or lines[0] < 1 or lines[1] < lines[0]):
+        errors.append(
+            f"{where}: lines must be [start, end] with 1 <= start <= end")
+        has_lines = False
+    if item.get("why") is not None and not isinstance(item.get("why"), str):
+        errors.append(f"{where}: why must be a string when present")
+    errors.extend(_read_target_path_errors(
+        where, path, lines if has_lines else None, item, workspace))
+    return errors
+
+
+def _read_fallback_errors(meta: dict) -> list[str]:
+    """The two fallback halves: locate (required) + relevance (optional)."""
+    errors: list[str] = []
+    fallback = meta.get("read_fallback")
+    if fallback is None:
+        errors.append("read_fallback is required with read_targets "
+                      f"(one of {', '.join(READ_FALLBACKS)})")
+    elif not isinstance(fallback, str) or fallback not in READ_FALLBACKS:
+        errors.append(f"read_fallback must be one of {', '.join(READ_FALLBACKS)}")
+    relevance = meta.get("relevance_fallback")
+    if relevance is not None and (
+            not isinstance(relevance, str)
+            or relevance not in READ_RELEVANCE_FALLBACKS):
+        errors.append("relevance_fallback must be one of "
+                      f"{', '.join(READ_RELEVANCE_FALLBACKS)}")
+    return errors
+
+
+def read_targets_status(meta: dict | None,
+                        workspace: str | Path | None = None
+                        ) -> tuple[str, list[str]]:
+    """Validate the advisory ``read_targets`` block -> (status, errors).
+
+    Status: ``not_dispatch`` (no v1 envelope — ``parse_dispatch_json``
+    returned ``None``), ``missing`` (envelope without the key), ``opt_out``
+    (``none (reasoning: ...)``), ``ok``, or ``malformed`` (defects listed
+    in ``errors``).
+
+    The pair (coordinates, fallback rule) is the contract: coordinates
+    without a failure rule are reported as malformed — a worker that
+    cannot re-anchor falls back to an unbounded tree search, which is the
+    behaviour this block exists to retire.
+    """
+    if meta is None:
+        return ("not_dispatch", [])
+    raw = meta.get("read_targets")
+    if raw is None:
+        return ("missing", [])
+    if isinstance(raw, str):
+        if READ_TARGETS_OPT_OUT_RE.match(raw):
+            return ("opt_out", [])
+        return ("malformed",
+                ["read_targets must be a list of target objects or "
+                 "`none (reasoning: ...)`"])
+    if not isinstance(raw, list) or not raw:
+        return ("malformed", ["read_targets must be a non-empty list"])
+    errors = [e for idx, item in enumerate(raw)
+              for e in _read_target_errors(item, idx, workspace)]
+    errors.extend(_read_fallback_errors(meta))
+    return ("ok" if not errors else "malformed", errors)
 
 
 # ---- #237 D2/H1: verifier-remediation dispatch identity (single source) ----

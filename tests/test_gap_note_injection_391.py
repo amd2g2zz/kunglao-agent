@@ -27,6 +27,16 @@ import reward_settlement as rs  # noqa: E402
 import gap_notes as gn  # noqa: E402
 from recall_inject import evaluate  # noqa: E402  (pytest.ini pythonpath)
 
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _opt_in_recall(monkeypatch):
+    """issue 771 migration: recall is default-OFF (KUNGLAO_RECALL=1 opt-in);
+    these gap-note channel pins predate the switch — one mechanical
+    opt-in batch."""
+    monkeypatch.setenv("KUNGLAO_RECALL", "1")
+
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
 
 CLAIM = ('{"kunglao_dispatch": {"version": 1, "claim": "C-391", '

@@ -1,0 +1,194 @@
+{
+  "schema": "production-shape/1",
+  "id": "android-2026-10-21-rank-shape",
+  "synthetic": true,
+  "source": "SHAPE-ONLY distillation of the android 2026-10-21 production run (logs-panel review archive; READ-ONLY reference). Zero user content: event counts, field names, ordering faces and template tokens only. Ranker-determinism + propensity-consistency anchor for #792 (R2: 6/16 archive deviation rows carried propensity=0.0).",
+  "shape": {
+    "events_total": 3002,
+    "rank_feeds": 272,
+    "rank_feeds_k": {
+      "0": 81,
+      "1": 111,
+      "2": 80
+    },
+    "rank_feeds_entropy_zero": 111,
+    "rank_feeds_distinct_rng_base": 16,
+    "sample_deviation": 8,
+    "sample_deviation_propensity_zero": 3,
+    "sample_deviation_prior_source": {
+      "history": 8
+    },
+    "row_keys": [
+      "action",
+      "actor",
+      "arm",
+      "artifact",
+      "channel",
+      "claim",
+      "detail",
+      "duration_ms",
+      "epoch",
+      "exit",
+      "hypothesis_ref",
+      "matched_rule",
+      "null_reasons",
+      "tool",
+      "trace_id",
+      "ts",
+      "version"
+    ],
+    "rank_detail_keys": [
+      "entropy",
+      "feeds",
+      "input_fingerprint",
+      "k",
+      "propensity",
+      "ranked_order",
+      "scores",
+      "tiers"
+    ],
+    "fingerprint_keys": [
+      "claims_hash",
+      "evidence_hash",
+      "fingerprint",
+      "rng_base",
+      "round"
+    ],
+    "deviation_detail_keys": [
+      "declared",
+      "prior_source",
+      "propensity",
+      "reason",
+      "sampled"
+    ],
+    "feeds_keys": [
+      "case_flip_potential",
+      "downstream",
+      "thompson_sample"
+    ],
+    "archive_anchors": {
+      "deviation_rows": 16,
+      "deviation_propensity_zero": 6,
+      "deviation_prior_source_history": 16
+    },
+    "rank_face_material": {
+      "claims": [
+        {
+          "id": "C1",
+          "answers_question": "pq.net"
+        },
+        {
+          "id": "C2",
+          "answers_question": "pq.crypto"
+        },
+        {
+          "id": "C3",
+          "answers_question": "pq.pack"
+        },
+        {
+          "id": "C4"
+        },
+        {
+          "id": "C5"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "case-alpha",
+          "target_pq": "pq.net",
+          "alpha": 4.0,
+          "beta": 2.0
+        },
+        {
+          "case_id": "case-beta",
+          "target_pq": "pq.crypto",
+          "alpha": 2.0,
+          "beta": 2.0
+        },
+        {
+          "case_id": "case-gamma",
+          "target_pq": "pq.pack",
+          "alpha": 1.0,
+          "beta": 3.0
+        }
+      ]
+    },
+    "deviation_face_material": {
+      "history_families": [
+        "dynamic-trace",
+        "red-team-verification"
+      ],
+      "replay": "the recorded-deviation face declares an IN-SUPPORT family (a history family != the draw) — propensity > 0; the out-of-support declaration is #794's REJECT face"
+    }
+  },
+  "anchors": {
+    "792": "archive: 6/16 deviation rows propensity=0.0 (ITT broken); android rank_feeds degenerate single-claim face (111 entropy-0 rows); 16 distinct rng_base over 272 rounds-seeded runs (the retired round-seed face)"
+  },
+  "events": [
+    {
+      "action": "rank_feeds",
+      "actor": "priority_ratio",
+      "arm": "C-004",
+      "claim": "C-004",
+      "detail": {
+        "feeds": {
+          "C-004": {
+            "case_flip_potential": "P(flip)=0.5 (base 0.5 decayed by attempts=0 [dispatches=0, failure_strikes=0])",
+            "downstream": "downstream_weighted=0.0 (decay 0.5, cap 4.0, weight 0.1)",
+            "thompson_sample": "TEMPLATE-LINKED-CASES"
+          }
+        },
+        "scores": {
+          "C-004": 0.0
+        },
+        "ranked_order": [
+          "C-004"
+        ],
+        "tiers": {
+          "C-004": 1
+        },
+        "input_fingerprint": {
+          "claims_hash": "TEMPLATE",
+          "evidence_hash": "TEMPLATE",
+          "fingerprint": "TEMPLATE",
+          "rng_base": 0,
+          "round": 2
+        },
+        "entropy": 0.0,
+        "propensity": 1.0,
+        "k": 1
+      }
+    },
+    {
+      "action": "sample_deviation",
+      "actor": "hook:worker_budget",
+      "arm": null,
+      "claim": "C-004",
+      "detail": {
+        "declared": "static-decompile",
+        "sampled": "red-team-verification",
+        "propensity": 0.0,
+        "prior_source": "history",
+        "reason": null
+      }
+    },
+    {
+      "action": "sample_deviation",
+      "actor": "hook:worker_budget",
+      "arm": null,
+      "claim": "C-005",
+      "detail": {
+        "declared": "red-team-verification",
+        "sampled": "dynamic-trace",
+        "propensity": 0.217584,
+        "prior_source": "history",
+        "reason": null
+      }
+    }
+  ],
+  "expectations": {
+    "ranker-round-determinism": "PASS",
+    "deviation-propensity-positive": "PASS",
+    "rl-posterior-moved": "FAIL"
+  }
+}

@@ -142,6 +142,7 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
    - report.watchdog.fired == true  -> act ONLY on report.watchdog.reasons (missed events):
        heartbeat-gap   -> the cadence died: re-verify with python {h} {ws} --heartbeat-check, re-arm the chain if stale
        stuck-worker    -> smart-ping each named worker (SendMessage "[ping HH:MM] step? stuck? eta?", replies to runs/.ping-log.jsonl)
+       reap-window     -> a worker's derived liveness window blew (#770): its own write cadence went silent past tolerance — review it for TaskStop/RESUME before the stuck line; an actively-writing worker never trips this
        step-failure    -> repair the failed mechanical step (the report's per-step stderr tails carry the text)
      then run python {cc} {ws} --json and follow the session constitution's decision semantics.
    - oracle_registered=false in the report -> run the Phase 0 task-oracle.yaml backfill now

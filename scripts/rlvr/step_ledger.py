@@ -149,15 +149,25 @@ def _read(rel: str, ws) -> list[dict]:
 
 _STEP_KEYS = frozenset({
     "schema", "ts", "session_id", "call_id", "tool", "input_sha",
-    "output_sha", "reads", "writes", "duration_ms"})
+    "output_sha", "reads", "writes", "duration_ms",
+    # #779 face one (probe verdict (a)): the Task subagent's tool calls
+    # fire the workspace hooks carrying the PARENT session_id — the worker
+    # identity rides agent_id/agent_type, so the ledger can tell worker
+    # rows from orchestrator rows. Keys appear ONLY when an identity
+    # exists (no key drift on parent rows).
+    "agent_id", "agent_type"})
 
 
 def build_step_row(*, session_id: str, tool: str, tool_input,
                    tool_response, reads=None, writes=None,
-                   duration_ms=None, ts: str | None = None) -> dict:
+                   duration_ms=None, ts: str | None = None,
+                   agent_id: str | None = None,
+                   agent_type: str | None = None) -> dict:
     """The hash-only step-record/1 builder: content-bearing payload
     fields become shas; anything outside the whitelist is dropped (the
-    raw text physically cannot reach the ledger)."""
+    raw text physically cannot reach the ledger). ``agent_id``/``
+    agent_type`` ride when the hook payload carries a Task-subagent
+    identity (#779 face one) — absent on parent-session rows."""
     input_sha = sha_of(tool_input or {})
     output_sha = sha_of(tool_response if tool_response is not None else {})
     event_ts = ts or utc_now_z()
@@ -174,6 +184,10 @@ def build_step_row(*, session_id: str, tool: str, tool_input,
         "duration_ms": (float(duration_ms)
                         if isinstance(duration_ms, (int, float)) else None),
     }
+    if agent_id:
+        row["agent_id"] = str(agent_id)
+        if agent_type:
+            row["agent_type"] = str(agent_type)
     assert set(row) <= _STEP_KEYS
     return row
 
@@ -193,13 +207,14 @@ def read_steps(ws) -> list[dict]:
 
 _STEP_V2_KEYS = frozenset({
     "schema", "ts", "session_id", "step_id", "claim_ref",
-    "tool_calls", "call_ids", "first_ts", "last_ts", "duration_ms"})
+    "tool_calls", "call_ids", "first_ts", "last_ts", "duration_ms",
+    "agent_id"})
 
 
 def build_step_grain_row(*, session_id: str, claim_ref: str, step_id: str,
                          call_ids, first_ts: str = "", last_ts: str = "",
-                         duration_ms=None,
-                         ts: str | None = None) -> dict:
+                         duration_ms=None, ts: str | None = None,
+                         agent_id: str | None = None) -> dict:
     """The completion-grain step-record/2 builder (#690): ONE row per
     subagent completion, aggregating the session's per-tool-call rows.
     ``call_ids`` are step-record/1 call_id hashes (hash-only preserved —
@@ -218,6 +233,7 @@ def build_step_grain_row(*, session_id: str, claim_ref: str, step_id: str,
         "last_ts": str(last_ts or ""),
         "duration_ms": (float(duration_ms)
                         if isinstance(duration_ms, (int, float)) else None),
+        **({"agent_id": str(agent_id)} if agent_id else {}),
     }
     assert set(row) <= _STEP_V2_KEYS
     return row
@@ -230,15 +246,21 @@ def record_step_grain(ws, row: dict) -> dict | None:
     return _append(STEP_LEDGER_REL, clean, ws)
 
 
-def read_step_grains(ws, session_id: str | None = None) -> list[dict]:
+def read_step_grains(ws, session_id: str | None = None,
+                     agent_id: str | None = None) -> list[dict]:
     """The completion-grain read face: every step-record/2 row (oldest
-    first), optionally scoped to one session."""
+    first), optionally scoped to one session and/or one Task-subagent
+    identity (#779 face one: agent scoping keeps a worker's grains from
+    mixing with the parent session's)."""
     rows = [r for r in _read(STEP_LEDGER_REL, ws)
             if r.get("schema") == STEP_SCHEMA_V2]
-    if session_id is None:
-        return rows
-    return [r for r in rows
-            if str(r.get("session_id") or "") == str(session_id)]
+    if session_id is not None:
+        rows = [r for r in rows
+                if str(r.get("session_id") or "") == str(session_id)]
+    if agent_id is not None:
+        rows = [r for r in rows
+                if str(r.get("agent_id") or "") == str(agent_id)]
+    return rows
 
 
 # --------------------------------------------- the evidence-credit ledger

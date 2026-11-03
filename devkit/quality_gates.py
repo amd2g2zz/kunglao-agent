@@ -396,7 +396,7 @@ def _gate9_discovery_face(verbose: bool = True) -> bool:
     return bool(rc == 0)
 
 
-def _gate10_liveness() -> bool:
+def _gate10_liveness(verbose: bool = True) -> bool:
     """Liveness — Gate 10 (issue #772). Runs devkit/liveness_gate.py in
     --ledger mode against the workspace named by KUNGLAO_LIVENESS_WS.
     Without a workspace the gate SKIPs (there is nothing to observe —

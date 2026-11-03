@@ -40,11 +40,12 @@ def resolve_ws(payload: dict) -> Path | None:
     return None
 
 
-def main() -> int:
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except Exception:  # noqa: BLE001 — fail-open, exit 0 always
-        return 0
+def process_event(payload: dict) -> int:
+    """One PostToolUse payload -> at most one step-record/1 row.
+    #779 face one: the payload's Task-subagent identity (agent_id /
+    agent_type; the probe proved session_id stays the PARENT's) rides
+    the row, so the experience ledger can tell worker rows from
+    orchestrator rows."""
     if not isinstance(payload, dict):
         return 0
     ws = resolve_ws(payload)
@@ -59,11 +60,21 @@ def main() -> int:
             tool=str(payload.get("tool_name") or ""),
             tool_input=payload.get("tool_input") or {},
             tool_response=response,
-            duration_ms=duration)
+            duration_ms=duration,
+            agent_id=payload.get("agent_id"),
+            agent_type=payload.get("agent_type"))
         record_step(ws, row)
     except Exception:  # noqa: BLE001 — fail-open, exit 0 always
         return 0
     return 0
+
+
+def main() -> int:
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except Exception:  # noqa: BLE001 — fail-open, exit 0 always
+        return 0
+    return process_event(payload)
 
 
 if __name__ == "__main__":

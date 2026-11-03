@@ -1,0 +1,18 @@
+flowchart TD
+  subgraph 七步合同目标
+    direction TB
+    S1[1 git 快照] --> S2[2 删老 kunglao 文件] --> S3[3 部署新文件] --> S4[4 更新配置] --> S5[5 selfcheck] --> S6{6 ok?}
+    S6 -->|是| S7[7a 提示 reload]
+    S6 -->|否| S8[7b 回滚]
+  end
+  subgraph as-built 现状
+    direction TB
+    B1[anchor 快照 存在 1403] --> B2[孤儿修剪 仅迁移项 809-846 非通用阶段] --> B3[deploy_workspace_copy 存在 753-833] --> B4[配置 部分合并无统一步] --> B5[selfcheck 缺失 upgrade 路径未跑 597] --> B6[reload 仅提示 2307-2309] --> B7[回滚 存在 1500-1556]
+  end
+  S1 -.->|对齐| B1
+  S2 -.->|4.5/7 缺统一阶段| B2
+  S3 -.->|对齐| B3
+  S4 -.->|部分| B4
+  S5 -.->|缺失| B5
+  S6 -.->|仅提示| B6
+  S8 -.->|对齐| B7

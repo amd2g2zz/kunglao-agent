@@ -157,10 +157,16 @@ def test_real_registry_no_l1_arm_declares_the_recall_switch():
     doc = mx.load_config(REAL_CONFIG)
     arm = {a["id"]: a for a in mx.config_arms(doc)}["kunglao-warm-no-l1"]
     assert arm["env"] == {"KUNGLAO_RECALL": "0"}
-    # every OTHER arm leaves the switch undeclared (default = recall on)
+    # issue 771: recall is default-OFF — every kunglao loop arm opts in
+    # explicitly (KUNGLAO_RECALL=1); the cc-* arms run no kunglao hooks
+    # and stay undeclared.
     for other in mx.config_arms(doc):
-        if other["id"] != "kunglao-warm-no-l1":
+        if other["id"] == "kunglao-warm-no-l1":
+            continue
+        if other.get("runner_face") != "loop":
             assert "KUNGLAO_RECALL" not in (other.get("env") or {})
+        else:
+            assert (other.get("env") or {}).get("KUNGLAO_RECALL") == "1"
 
 
 def test_real_registry_units_match_the_split_firewall_readonly():

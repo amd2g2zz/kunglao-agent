@@ -19,10 +19,11 @@ RED (verified on dev): the IDA MCP path is double-locked for the worker rack.
   other tools (or an opt-out). No compliant path -> native IDA claims
   unreachable for workers.
 
-Naming resolution: the MCP registers as `ida-pro-vm`
-(scripts/toolchain.py _DECOMPILER_MCP_NAMES, scripts/mcp_probe.py MANIFEST).
-The issue title's `mcp__ida-pro-mcp__*` is a transcription of a live server
-name; this fix follows the repo's own convention (`mcp__ida-pro-vm__*`) —
+Naming resolution (#947): the live MCP registers as `ida-pro-mcp` — the
+retired repo convention named it `ida-pro-vm` (that ida-pro-vm-only scan
+was a false negative on the owner's real supply). The canonical name lives
+in scripts/toolchain.py _DECOMPILER_MCP_NAMES + scripts/mcp_probe.py
+MANIFEST, and the rack wildcards are `mcp__ida-pro-mcp__*` —
 worker_budget_sinks matches the tolerant prefix `mcp__ida` for both faces.
 
 GREEN shape:
@@ -31,7 +32,7 @@ GREEN shape:
   - tools/validate_index.py _CAPABILITY_TAGS admits ida:decompile
   - tools/_index-static.md carries the #339 contract entry
   - agents/{kunglao-worker,kunglao-redteam,ghidra-light}.md allowedTools
-    carry mcp__ida-pro-vm__* (the decompiler-capable rack — every agent
+    carry mcp__ida-pro-mcp__* (the decompiler-capable rack — every agent
     whose allowedTools already grant mcp__ghidra__*)
 """
 from __future__ import annotations
@@ -48,7 +49,7 @@ import validate_index as vi  # noqa: E402
 import worker_budget_gates as wbg  # noqa: E402
 
 IDA_TOOL = "ida-decompile"
-IDA_MCP_WILDCARD = "mcp__ida-pro-vm__*"
+IDA_MCP_WILDCARD = "mcp__ida-pro-mcp__*"
 
 # agents whose allowedTools already grant the sibling decompiler MCP
 # (mcp__ghidra__*) — the decompiler-capable rack. Agents that DISALLOW
@@ -108,7 +109,7 @@ def test_shipped_index_still_validates_with_ida_entry():
 def test_worker_rack_allows_ida_mcp():
     tools = _agent_allowedtools("kunglao-worker")
     assert IDA_MCP_WILDCARD in tools, (
-        "kunglao-worker allowedTools must grant mcp__ida-pro-vm__* "
+        "kunglao-worker allowedTools must grant mcp__ida-pro-mcp__* "
         "(LOCK 1 — the worker rack is the issue's subject)")
 
 
@@ -117,7 +118,7 @@ def test_decompiler_rack_agents_allow_ida_mcp():
         tools = _agent_allowedtools(agent)
         assert IDA_MCP_WILDCARD in tools, (
             f"{agent} grants mcp__ghidra__* (decompiler-capable rack) but "
-            "not mcp__ida-pro-vm__*")
+            "not mcp__ida-pro-mcp__*")
         assert "mcp__ghidra__*" in tools, (
             f"{agent} is expected to be a ghidra-granting agent; if it "
             "dropped ghidra, drop it from this test's rack list too")
@@ -138,18 +139,18 @@ def test_ghidra_disallowing_agents_do_not_gain_ida():
 def test_rack_gate_accepts_ida_tool_for_worker():
     import dispatch_gate as dg
     violation = dg._tools_contract_violation(
-        ["mcp__ida-pro-vm__decompile_function", "Write"], "kunglao-worker")
+        ["mcp__ida-pro-mcp__decompile_function", "Write"], "kunglao-worker")
     assert violation is None, (
         f"a rack citing the ida MCP bridge must clear #760: {violation}")
 
 
 # ---------- naming resolution anchor ----------
 
-def test_mcp_registers_as_ida_pro_vm():
+def test_mcp_registers_as_ida_pro_mcp():
     sys.path.insert(0, str(ROOT / "scripts"))
     import toolchain
-    assert "ida-pro-vm" in toolchain._DECOMPILER_MCP_NAMES, (
-        "the repo's own convention names the IDA MCP 'ida-pro-vm'; the "
+    assert "ida-pro-mcp" in toolchain._DECOMPILER_MCP_NAMES, (
+        "the repo's own convention names the IDA MCP 'ida-pro-mcp'; the "
         "wildcard must match the registered name (issue title says "
         "mcp__ida-pro-mcp__* — see module docstring)")
 
@@ -179,4 +180,4 @@ def test_android_keywords_unaffected():
 def test_ghidra_agent_rack_still_matches_after_ida_addition():
     tools = _agent_allowedtools("ghidra-light")
     assert "mcp__ghidra__*" in tools
-    assert "mcp__ida-pro-vm__*" in tools
+    assert "mcp__ida-pro-mcp__*" in tools

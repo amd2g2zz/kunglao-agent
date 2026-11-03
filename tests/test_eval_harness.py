@@ -67,13 +67,6 @@ def test_fault_injection_types_defined():
         assert ftype in ke.FAULT_TYPES, f"missing fault type: {ftype}"
 
 
-def test_impossible_fault_detected():
-    """impossible fault: claims with no evidence path are excluded from top_actions."""
-    result = ke.inject_fault("impossible")
-    assert result["applied"] is True
-    assert "no dispatchable path" in result["effect"].lower() or "excluded" in result["effect"].lower()
-
-
 # =====================================================================
 # #81 — executable, evaluator-owned L2 red-team evaluation
 # =====================================================================

@@ -283,7 +283,7 @@ def reconcile_case_settlements(ws: Path) -> dict:
     unobserved pair. Telemetry never raises into the pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
-        import posteriors as po
+        import posteriors_case as po
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z
 
@@ -404,7 +404,7 @@ def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
     try:
         if not entries:
             return out
-        import posteriors as po  # the posterior-ledger leaf
+        import posteriors_case as po  # the posterior-ledger leaf
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z  # the one timestamp source
 
@@ -505,6 +505,70 @@ def amend_case_settlements(ws: Path) -> dict:
         return out
 
 
+def _bridge_pool_admission(ws: Path, banked: list[str]) -> dict:
+    """The credit-into-pool bridge (the learning→decision bridge's
+    settle-side credit face). For every
+    FIRST-settlement claim whose strategy pool starved — NO step records
+    (``step_credit_totals`` count 0) AND no banked terminal mass
+    (``banked_mass`` row count 0; a matched terminal bank already fed
+    the pool and a second admission would double-count ONE observation)
+    — resolve the dispatch's declared family from the method-family
+    usage log keyed by cid and admit a claim-level
+    ``observe_step_credit`` observation with credit = the claim's
+    terminal credit (the settled ladder value read back off the
+    settlement ledger). Every processed claim appends one
+    ``posterior-store/1`` credit row to ``<ws>/runs/posterior-store.jsonl``
+    (``strategy_store.append_workspace_credit_row``): the degeneracy
+    breaker's series (rlvr.signal_guard.recent_credits) and the
+    rl-posterior-moved fingerprint count exactly these rows. Counts and
+    credits are never normalized away (the signal contract's
+    per-observation clause) — the row carries the settled value
+    verbatim. The bridge shares the pass's posture: keyed on the
+    first-settlement set (a replay admits nothing) and fail-open (a
+    broken leg is a counted error field, never a pass break)."""
+    out: dict = {"pool_bridged": 0, "pool_bridge_error": None}
+    try:
+        from rlvr import ledger as rl  # noqa: PLC0415 — lazy
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        from rlvr import strategy_store as _ss  # noqa: PLC0415
+        from rlvr.scalar import BAND_ROUND_CREDIT  # noqa: PLC0415
+
+        fam_by_claim = _qc.usage_family_map(ws)
+        for cid in banked:
+            cid = str(cid)
+            _s, step_n = _qc.step_credit_totals(ws, cid)
+            if step_n:
+                continue          # step-grade stays when records exist
+            mass = _qc.banked_mass(ws, cid)
+            if mass is None or mass[2] > 0:
+                continue          # banked (or unreadable) — never stacked
+            settled = rl.fold(ws, f"round_credit/{cid}")
+            reward = (settled.get("settlement") or {}).get("reward") \
+                if settled else None
+            if not isinstance(reward, (int, float)) \
+                    or isinstance(reward, bool):
+                continue          # honest gap: no settled value to admit
+            credit = float(reward)
+            fam = fam_by_claim.get(cid, "")
+            res = _qc.observe_step_credit(ws, cid, credit,
+                                          method_family=fam or None)
+            row = _ss.append_workspace_credit_row(
+                ws, method_family=fam, status=BAND_ROUND_CREDIT,
+                credit=credit, claim=cid, dispatch_id=cid,
+                credit_kind="step")
+            if res.get("appended") and row.get("appended"):
+                out["pool_bridged"] += 1
+            elif not row.get("appended"):
+                warn("settle_round_credit.pool_bridge",
+                     f"{cid}: posterior-store credit row refused "
+                     f"({row.get('reason')})")
+    except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
+        warn("settle_round_credit.pool_bridge",
+             f"{type(exc).__name__}: {exc}")
+        out["pool_bridge_error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
 def _round_credit_pass(ws: Path, dispatches: list[dict], *,
                        dry_run: bool) -> dict:
     """The round-credit leg: grade (dry run) or settle + bank one round
@@ -573,6 +637,78 @@ def _settle_episode_tiers(ws: Path) -> dict:
             "tiers_by_tier": res.get("by_tier") or {}}
 
 
+def _settle_case_legs(ws: Path, banked: list[str],
+                      amended: list[str]) -> dict:
+    """The posterior-moving legs of one settlement pass: the Gate C
+    degeneracy breaker first (a dead signal freezes everything), then
+    fresh -> late-amend -> pair-reconcile, the credit-into-pool bridge
+    (frozen signals bridge nothing) and the missing-rollout audit.
+    Fail-open throughout: a guard failure never blocks settlement
+    bookkeeping; the signal_degenerate stderr line is the loud face.
+    Returns the out-dict fields to merge."""
+    out: dict = {}
+    _frozen = False
+    try:
+        from rlvr.signal_guard import (freeze_if_degenerate,
+                                       recent_credits)
+        _frozen = freeze_if_degenerate(
+            ws, recent_credits(ws, 5))
+    except Exception as _sg_exc:  # noqa: BLE001 — fail-open
+        warn("settle_round_credit.signal_guard",
+             f"{type(_sg_exc).__name__}: {_sg_exc}")
+    if _frozen:
+        out["signal_frozen"] = True
+        out["case_observations"] = 0
+        out["cases_passed"] = 0
+        out["cases_failed"] = 0
+        out["case_amendments"] = 0
+        out["pool_bridged"] = 0
+        print("settle_round_credit: SIGNAL DEGENERATE — posterior "
+              "updates frozen (5 identical credits); diagnose "
+              "before re-arming.", file=sys.stderr, flush=True)
+    else:
+        fresh = record_case_settlements(ws, banked)
+        late = amend_case_settlements(ws)
+        # the pair-amendment leg rides LAST: it reconciles pairs
+        # against the register's current truth, after both
+        # observation legs had their byte-identical say
+        amended = reconcile_case_settlements(ws)
+        # the credit-into-pool bridge rides the SAME non-frozen
+        # branch (a frozen signal bridges nothing — the
+        # degeneracy breaker's freeze covers this leg too)
+        bridge = _bridge_pool_admission(ws, banked)
+        out["pool_bridged"] = bridge["pool_bridged"]
+        if bridge.get("pool_bridge_error"):
+            out["pool_bridge_error"] = bridge["pool_bridge_error"]
+        # #800 R2 amendment 4: the missing-rollout audit — a
+        # committed dispatch whose claim went terminal without
+        # banking a settlement is LOUD (the production C-005
+        # silent lie). Fail-open: never blocks the tick.
+        try:
+            import claims_store as _cstore8
+            out["missing_rollouts"] = len(
+                _cstore8.audit_missing_rollouts(ws))
+        except Exception as _mr_exc:  # noqa: BLE001 — fail-open
+            warn("settle_round_credit.missing_rollout_audit",
+                 f"{type(_mr_exc).__name__}: {_mr_exc}")
+        out["case_observations"] = (
+            fresh["case_observations"] + late["case_observations"])
+        out["cases_passed"] = (
+            fresh["cases_passed"] + late["cases_passed"])
+        out["cases_failed"] = (
+            fresh["cases_failed"] + late["cases_failed"])
+        out["case_observations_late_arm"] = late["case_observations"]
+        out["case_amendments"] = amended.get("case_amendments") or 0
+        errs = [leg["case_observations_error"]
+                for leg in (fresh, late)
+                if leg.get("case_observations_error")]
+        if amended.get("case_amendments_error"):
+            errs.insert(0, amended["case_amendments_error"])
+        if errs:
+            out["case_observations_error"] = " | ".join(errs)
+    return out
+
+
 def run(ws: Path, *, dry_run: bool = False) -> dict:
     """Assemble + settle one pass. Telemetry posture: any failure inside
     degrades to an error field, never a crash (the tick must not die).
@@ -584,8 +720,33 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     rollouts, not on the round-credit set, so it runs even when no
     terminal claim is currently dispatchable-visible."""
     claims = terminal_claims(ws)
-    dispatches = [{"dispatch_id": cid, "round": i + 1}
-                  for i, cid in enumerate(claims)]
+    # #800 R2: the credit pass stays CLAIM-grained (the #433 ladder's
+    # artifact attribution joins the facts' creator=C-NN field; the
+    # bridge's family map is claim-keyed), but a terminal claim with
+    # NO dispatch-ledger row is a pre-#800 workspace — unsupported
+    # (no-backcompat ruling 2026-09-01): loud gap, excluded from the
+    # pass. The REAL dispatch id enters at the q-cell bank seam
+    # (scalar._bank_q_cell_credit resolves it from the ledger).
+    dispatches = []
+    off_ledger = 0
+    for cid in claims:
+        _led = None
+        try:
+            import claims_store as _cstore8
+            _led = _cstore8.latest_committed_dispatch(ws, cid)
+        except Exception as _did_exc:  # noqa: BLE001 — fail-open read
+            warn("settle_round_credit.dispatch_id",
+                 f"ledger read failed for {cid} "
+                 f"({type(_did_exc).__name__}: {_did_exc})")
+        if _led is None:
+            off_ledger += 1
+            warn("settle_round_credit.off_ledger",
+                 f"terminal claim {cid} has no dispatch-ledger row "
+                 f"(pre-#800 workspace — unsupported per the "
+                 f"no-backcompat ruling); banking skipped")
+            continue
+        dispatches.append({"dispatch_id": cid,
+                           "round": len(dispatches) + 1})
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept
     # runs/posteriors.yaml from ever existing, now loud
@@ -613,50 +774,13 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             # the posterior-moving legs (contract rl-signal-contract/1 §3).
             # Fail-open: a guard failure never blocks settlement
             # bookkeeping; the signal_degenerate blocker is the loud face.
-            _frozen = False
-            try:
-                from rlvr.signal_guard import (freeze_if_degenerate,
-                                               recent_credits)
-                _frozen = freeze_if_degenerate(
-                    ws, recent_credits(ws, 5))
-            except Exception as _sg_exc:  # noqa: BLE001 — fail-open
-                warn("settle_round_credit.signal_guard",
-                     f"{type(_sg_exc).__name__}: {_sg_exc}")
-            if _frozen:
-                out["signal_frozen"] = True
-                out["case_observations"] = 0
-                out["cases_passed"] = 0
-                out["cases_failed"] = 0
-                out["case_amendments"] = 0
-                print("settle_round_credit: SIGNAL DEGENERATE — posterior "
-                      "updates frozen (5 identical credits); diagnose "
-                      "before re-arming.", file=sys.stderr, flush=True)
-            else:
-                fresh = record_case_settlements(ws, banked)
-                late = amend_case_settlements(ws)
-                # the pair-amendment leg rides LAST: it reconciles pairs
-                # against the register's current truth, after both
-                # observation legs had their byte-identical say
-                amended = reconcile_case_settlements(ws)
-                out["case_observations"] = (
-                    fresh["case_observations"] + late["case_observations"])
-                out["cases_passed"] = (
-                    fresh["cases_passed"] + late["cases_passed"])
-                out["cases_failed"] = (
-                    fresh["cases_failed"] + late["cases_failed"])
-                out["case_observations_late_arm"] = late["case_observations"]
-                out["case_amendments"] = amended.get("case_amendments") or 0
-                errs = [leg["case_observations_error"]
-                        for leg in (fresh, late)
-                        if leg.get("case_observations_error")]
-                if amended.get("case_amendments_error"):
-                    errs.insert(0, amended["case_amendments_error"])
-                if errs:
-                    out["case_observations_error"] = " | ".join(errs)
+            out.update(_settle_case_legs(ws, banked, amended))
     else:
         out = {"settled": 0, "rounds": 0,
                "reason": "no terminal claims - nothing to settle"}
     out["cases_armed"] = len(armed)
+    if off_ledger:
+        out["off_ledger"] = off_ledger
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:

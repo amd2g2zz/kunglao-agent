@@ -67,7 +67,11 @@ class TestContractCoverage:
 
     def test_contract_rows_carry_the_three_faces(self):
         for family, row in ec.FAMILY_CONTRACT.items():
-            assert row["suffix"].startswith("."), family
+            # a candidate suffix is a dotted text-candidate extension OR
+            # empty — the binary-candidate face (tf-snake grades the
+            # patched game binary itself, no extension)
+            assert row["suffix"] == "" or row["suffix"].startswith("."), \
+                family
             assert row["response_language"], family
             assert row["target_surface"] in ("text", "binary", "net"), family
 
