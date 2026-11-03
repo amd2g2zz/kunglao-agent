@@ -227,26 +227,81 @@ def load_unit(task_ref: str, tier: str | None = None) -> tuple[Path, dict, dict]
     return tdir, task, gt
 
 
-def _family_meta(family: str) -> dict:
+# #967 constructed-unit meta derivation (self-describing units): the
+# workspace language names the execution toolchain, and the anchors'
+# verification_method (#191 enum) maps to the checker kind it denotes.
+# task.yaml checker.kind wins over the derivation — it is schema-pinned
+# (ds.CHECKER_KINDS) on every validated unit; the map is the record of
+# the correspondence (reproduction == replay the construction).
+_LANGUAGE_TOOLCHAINS: dict[str, str] = {
+    "python": "python3",
+    "javascript": "node",
+    "go": "go",
+}
+_VERIFICATION_METHOD_KINDS: dict[str, str] = {
+    "reproduction": "replay-roundtrip",
+    "replay-evidence": "pair-match",
+    "static": "constant-hit",
+}
+
+
+def _constructed_unit_meta(task: dict) -> dict:
+    """#967: a constructed unit is SELF-DESCRIBING — task.yaml carries
+    the whole grading contract, so the meta derives from the unit in
+    hand: toolchain from workspace_scaffold.language, kind/thresholds
+    from the unit's own checker block (the oracle contract). No static
+    registry row exists or is needed — the next constructed unit
+    resolves with zero registration."""
+    checker = task.get("checker") or {}
+    lang = str((task.get("workspace_scaffold") or {})
+               .get("language", "")).lower()
+    kind = checker.get("kind")
+    if not kind:
+        method = str((task.get("anchors") or {})
+                     .get("verification_method", ""))
+        kind = _VERIFICATION_METHOD_KINDS.get(method, "")
+    return {
+        "toolchain": _LANGUAGE_TOOLCHAINS.get(lang, ""),
+        "kind": kind,
+        "thresholds": checker.get("thresholds", {}),
+        "face": "constructed",
+    }
+
+
+def _family_meta(family: str, task: dict | None = None) -> dict:
     """The family registry row: #299 smoke families live in eval_targets,
     the #332 native families in eval_native_targets, the misdirection
-    families in eval_misdirection."""
+    families in eval_misdirection. Unregistered OPERATOR-LOCAL
+    constructed units (#967) resolve self-describing meta from the task
+    unit in hand; without a unit context the static fallthrough stays
+    loud (KeyError — no silent fallback)."""
     if family in md.FAMILIES:
         return md.FAMILIES[family]
     if family in ntg.FAMILIES:
         return ntg.FAMILIES[family]
     if family in cn.FAMILIES:
         return {"toolchain": cn.FAMILIES[family]["toolchain"]}
+    if family not in tg.FAMILIES and task is not None:
+        return _constructed_unit_meta(task)
     return tg.FAMILIES[family]
 
 
-def _validate_candidate(path: Path, family: str) -> None:
+def _validate_candidate(path: Path, family: str,
+                        task: dict | None = None) -> None:
     if not path.is_file():
         raise Refusal("BAD_CANDIDATE", f"candidate not found: {path}")
     try:
         want = contract.candidate_suffix(family)
     except KeyError:
-        raise Refusal("BAD_TASK", f"unknown family: {family!r}") from None
+        if task is not None and task.get("source") == "constructed":
+            # #967: constructed units are self-describing — an
+            # unregistered family's candidate is the answer document
+            # (the text face the constructed oracle grades). A future
+            # non-text candidate shape declares its own contract row
+            # (the tf-snake unit-entrypoint precedent).
+            want = ".txt"
+        else:
+            raise Refusal("BAD_TASK", f"unknown family: {family!r}") from None
     if path.suffix != want:
         raise Refusal("BAD_CANDIDATE",
                       f"family {family} needs a {want} candidate, got {path.suffix}")
@@ -456,6 +511,81 @@ def replay_face(family: str, tdir: Path, gt: dict, candidate: Path,
         if pair[1] == expected[p["i"]]:
             matched += 1
     return matched, len(probes), ttc, notes
+
+
+# ------------------------------------------------- constructed-unit face
+def _family_registered(family: str) -> bool:
+    """True when a static registry (misdirection / native / chain /
+    eval_targets) owns the family's mechanism row."""
+    return (family in md.FAMILIES or family in ntg.FAMILIES
+            or family in cn.FAMILIES or family in tg.FAMILIES)
+
+
+def _constructed_face_pairs(family: str, gt: dict) -> list[dict] | None:
+    """#967 discriminator: the constructed answer-document oracle. Fires
+    ONLY when the family is unknown to every static registry AND the
+    ground truth carries the constructed oracle contract — published
+    pairs with checker-side expected values ({"i", "file", "out"}:
+    file-relative probes, mint-time-verified outputs). None = not this
+    face: registry families keep their registry faces, and an unknown
+    family without the contract keeps its loud refusal downstream.
+    The next constructed unit grades through here with zero
+    registration."""
+    if _family_registered(family):
+        return None
+    pairs = gt.get("published_pairs")
+    if not pairs or not isinstance(pairs, list):
+        return None
+    if all(isinstance(p, dict)
+           and isinstance(p.get("out"), str)
+           and isinstance(p.get("file"), str)
+           and "input" not in p and "request" not in p
+           for p in pairs):
+        return pairs
+    return None
+
+
+def constructed_replay_face(candidate: Path, gt: dict) -> \
+        tuple[int, int, float, list[dict], bool]:
+    """#967 constructed-unit replay face: the graded artifact is the
+    ANSWER DOCUMENT (the family contract's text face) — line i answers
+    published pair i, byte-exact against the unit's own expected values.
+    Recompute-free is the CONTRACT here, not a shortcut: the expected
+    values were mint-time generated by running the true construction and
+    cross-checked by an independent from-spec re-implementation — a
+    constructed black-box has no checker-side model to recompute with.
+    Line semantics mirror the units' own shipped checker.py: stripped
+    comparison, trailing blank lines are noise, missing/extra/mismatch
+    are per-line failure signals. Text-only: no execution, no toolchain
+    — an absent python3 must never SKIP a string comparison."""
+    started = time.time()
+    pairs = gt["published_pairs"]
+    notes: list[dict] = []
+    lines = [ln.strip() for ln in
+             candidate.read_text(encoding="utf-8", errors="replace")
+             .splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    matched = 0
+    for i, pair in enumerate(pairs):
+        if i >= len(lines):
+            notes.append({"code": "PAIR_MISMATCH",
+                          "detail": f"line {i} missing"})
+        elif lines[i] == pair["out"]:
+            matched += 1
+        else:
+            notes.append({"code": "PAIR_MISMATCH",
+                          "detail": f"line {i} mismatched"})
+    extra = len(lines) - len(pairs)
+    if extra > 0:
+        notes.append({"code": "PAIR_MISMATCH",
+                      "detail": f"{extra} extra line(s)"})
+    # positional integrity: the document must carry EXACTLY the
+    # contracted lines (the units' own checker.py semantics) — a
+    # missing/extra line breaks the line-index ↔ pair-index mapping no
+    # matter what the pair ratio would otherwise tolerate
+    return (matched, len(pairs), time.time() - started, notes,
+            len(lines) == len(pairs))
 
 
 # ------------------------------------------------------- license replay face
@@ -704,11 +834,14 @@ def _decide_verdict(*, failures: list[dict], unit_graded: bool,
                     verdict: str, verdict_kind: bool, ok_face: bool,
                     hits: int, thresholds: dict, oracles: list,
                     pair_matched: int, pair_count: int,
-                    replay_armed: bool) -> tuple[str, int, list[dict]]:
+                    replay_armed: bool,
+                    doc_integrity: bool = True) -> tuple[str, int, list[dict]]:
     """The verdict ladder. SKIP on toolchain-missing; a unit-entrypoint
     family's own verdict stands (the arithmetic has no constant/pair
     mass to judge on a unit-local ground truth, #888); the misdirection
-    verdict face decides for its tier; else the shared arithmetic over
+    verdict face decides for its tier; a structurally broken answer
+    document fails outright regardless of the pair ratio (#967: the
+    units' own checker.py semantics); else the shared arithmetic over
     the armed faces. Returns (verdict, rc, arithmetic_failures)."""
     if any(f["code"] == "TOOLCHAIN_MISSING" for f in failures):
         return "SKIP", RC_SKIP, []
@@ -717,6 +850,8 @@ def _decide_verdict(*, failures: list[dict], unit_graded: bool,
     if verdict_kind:
         v = "PASS" if ok_face else "FAIL"
         return v, (RC_PASS if ok_face else RC_FAIL), []
+    if not doc_integrity:
+        return "FAIL", RC_FAIL, []
     ok, arith_failures = ds.arithmetic_verdict(
         hits=hits,
         min_constant_hits=thresholds.get("min_constant_hits", 0)
@@ -738,7 +873,7 @@ def run(task_ref: str, candidate: Path, out: Path | None = None,
     checker = task["checker"]
     oracles = checker.get("oracles", [])
     thresholds = checker.get("thresholds", {})
-    _validate_candidate(candidate, family)
+    _validate_candidate(candidate, family, task)
 
     outdir = Path(out) if out else ds.EVAL_ROOT.parent / "runs" / "eval" / tdir.name
     outdir.mkdir(parents=True, exist_ok=True)
@@ -747,6 +882,7 @@ def run(task_ref: str, candidate: Path, out: Path | None = None,
     failures: list[dict] = []
     faces: dict = {}
     hits, pair_matched, pair_count, ttc, dispatch = 0, 0, 0, 0.0, 0
+    lines_ok = True  # the #967 answer-document integrity (constructed face)
     verdict = ""
 
     # ---- unit-entrypoint grading (#888) ----
@@ -781,8 +917,29 @@ def run(task_ref: str, candidate: Path, out: Path | None = None,
     # ---- replay face ----
     replay_armed = (not unit_graded) and any(
         o in oracles for o in ("pair-match", "replay-roundtrip"))
-    if replay_armed:
-        toolchain = _family_meta(family)["toolchain"]
+    if replay_armed and _constructed_face_pairs(family, gt) is not None:
+        # #967: the self-describing constructed-unit face — the candidate
+        # is the answer document, graded byte-exact against the unit's
+        # own published pairs (no registry row, no toolchain, no model
+        # recompute: the ground truth IS the oracle)
+        pair_matched, pair_count, ttc, notes, lines_ok = \
+            constructed_replay_face(candidate, gt)
+        dispatch = 1
+        faces["replay"] = {"matched": pair_matched, "count": pair_count,
+                           "face": "constructed-answer-doc",
+                           "ttc_seconds": round(ttc, 3)}
+        failures.extend(notes)
+    elif replay_armed:
+        if not _family_registered(family):
+            # #967: replay-armed but neither a registry row nor the
+            # self-describing answer-document contract — nothing
+            # gradeable; refuse loudly instead of mis-grading
+            raise Refusal(
+                "BAD_TASK",
+                f"family {family!r} is unknown to every registry and "
+                "carries no self-describing answer-document oracle "
+                "(#967): nothing gradeable")
+        toolchain = _family_meta(family, task)["toolchain"]
         try:
             if family == "net-verify-license":
                 pair_matched, pair_count, ttc, notes = license_face(
@@ -804,7 +961,8 @@ def run(task_ref: str, candidate: Path, out: Path | None = None,
         verdict_kind=verdict_kind, ok_face=ok_face, hits=hits,
         thresholds=thresholds, oracles=oracles,
         pair_matched=pair_matched, pair_count=pair_count,
-        replay_armed=replay_armed)
+        replay_armed=replay_armed,
+        doc_integrity=lines_ok if replay_armed else True)
     failures.extend(arith_failures)
 
     metrics = {

@@ -142,7 +142,7 @@ files:
   scripts/eval_chain_targets.py:
     r1: 1
   scripts/eval_checker.py:
-    r1: 7
+    r1: 16
   scripts/eval_contract.py:
     r1: 3
   scripts/eval_control_arm.py:
@@ -822,6 +822,8 @@ files:
     r1: 4
   tests/test_conftest_single_source_863g.py:
     r1: 3
+  tests/test_constructed_family_grading_967.py:
+    r1: 2
   tests/test_contract_docs.py:
     r1: 1
     r2: 1
