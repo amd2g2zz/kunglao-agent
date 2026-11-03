@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 5f1f4458ce9eda407fbea28ad8aa85691289b7cda4fae79461e7f454a5478396
+  references/_INDEX.md: 41e6e43cc6f3805c9f9954f10d3abe4bb1b45fa41652758ef95f0b1650933854
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -107,7 +107,8 @@ files:
   references/re-library/web/crawler/web-crawler-engineering.md: 04f3c932064810e003ef1fa819be40df26b41a27f623b49b38815af12de21a78
   references/re-library/web/external-distilled/_GAP-REPORT.md: 2cee9b4aed1e9aaaf1eb027ae0ffff82eab8d21e6c5167d6f89ca72bc561f780
   references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
-  references/re-library/web/external-distilled/external-captcha-perception-methods.md: 63e2db5428cca3fb7c63c739a220115b73583ccefc0cff3470c0c73042a42079
+  references/re-library/web/external-distilled/external-captcha-perception-atlas.md: 6c20b6587f8e434add6e6f530262609cb3d56b2697b95fc5afc4b94b50a0d7a3
+  references/re-library/web/external-distilled/external-captcha-perception-methods.md: 3a8f0545ad5d3e9c61dfd24fefd3c6e2aa6e28e5dcef490807f54ea5e7511de7
   references/re-library/web/external-distilled/external-delivery-verification-gates.md: 2ceda5a3d365003edccb14876b950a3d9709be97d79d6701d12ecab361037bbc
   references/re-library/web/external-distilled/external-env-stub-generation.md: 3689222e622fe7e608e9a54ebaaffac71038a61c84fc4bf0e8689a0b2fc9e25d
   references/re-library/web/external-distilled/external-minimal-intervention-observation.md: 3d7b5437ad12df2dbc4a5ea0642de8c555cde23c3301a66f2bc8c40f75df9b6f

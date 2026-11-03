@@ -1683,11 +1683,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 5f1f4458ce9eda407fbea28ad8aa85691289b7cda4fae79461e7f454a5478396
+    sha256: 41e6e43cc6f3805c9f9954f10d3abe4bb1b45fa41652758ef95f0b1650933854
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 8e19144d58c374ecf965ef01667c06844acc2911e224741aae64c4b132c99df4
+    sha256: ac9063ccc5412f46faefad23ed695a36cf77d304a4e2e201ef18f7b2249f5d3b
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1875,7 +1875,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: af97bae599ba3618b2c2f04a3548cde508d57b0b30e6468ea84703e705d662c8
+    sha256: bed3f66d31015734f5a61b48a6f15f0ee90248d781579f9200e6a2e7cc183f5c
   - src: references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     dest: .claude/references/re-library/android/case-distilled/_GAP-REPORT-D1.md
     kind: asset
@@ -2108,10 +2108,14 @@ files:
     dest: .claude/references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
     kind: asset
     sha256: e5ce5f5bf02c3babe77a6ac7e478b5f1398639324c183069f08418b8da48572d
+  - src: references/re-library/web/external-distilled/external-captcha-perception-atlas.md
+    dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-atlas.md
+    kind: asset
+    sha256: 6c20b6587f8e434add6e6f530262609cb3d56b2697b95fc5afc4b94b50a0d7a3
   - src: references/re-library/web/external-distilled/external-captcha-perception-methods.md
     dest: .claude/references/re-library/web/external-distilled/external-captcha-perception-methods.md
     kind: asset
-    sha256: 63e2db5428cca3fb7c63c739a220115b73583ccefc0cff3470c0c73042a42079
+    sha256: 3a8f0545ad5d3e9c61dfd24fefd3c6e2aa6e28e5dcef490807f54ea5e7511de7
   - src: references/re-library/web/external-distilled/external-delivery-verification-gates.md
     dest: .claude/references/re-library/web/external-distilled/external-delivery-verification-gates.md
     kind: asset
@@ -2275,7 +2279,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 59098c8e29d25519423e1f8a7f65010c38646c60d317e2e3a83d2fd257a674d1
+    sha256: 9789ee96a6d1c5dc1656b6c15100906adb377a9bb37559d617eadd16882d3fa7
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

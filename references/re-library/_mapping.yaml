@@ -426,6 +426,10 @@ cards:
   to: references/re-library/web/external-distilled/external-captcha-perception-methods.md
   domain: web
   family: external-distilled
+- from: references/re-library/external-captcha-perception-atlas.md
+  to: references/re-library/web/external-distilled/external-captcha-perception-atlas.md
+  domain: web
+  family: external-distilled
 - from: references/re-library/external-delivery-verification-gates.md
   to: references/re-library/web/external-distilled/external-delivery-verification-gates.md
   domain: web
