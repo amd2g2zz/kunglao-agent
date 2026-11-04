@@ -410,7 +410,7 @@ The dispatch prompt opens with the **v1 canonical JSON envelope**
 (parsed by `hooks/lib_kunglao.py:parse_dispatch` — single source):
 
 ```json
-{"kunglao_dispatch": {"version": 1, "claim": "C-007", "tier": 1, "tools": ["grep", "xxd"], "agent": "kunglao-worker"}}
+{"kunglao_dispatch": {"version": 1, "claim": "C-007", "tier": 1, "tools": ["grep", "xxd"], "agent": "kunglao-worker", "authorization": {"targets": ["target.example.com"], "excluded": [], "authorization_ref": "ticket-42"}}}
 ```
 
 The envelope is followed by 2-5 lines: claim context, expected fact file
@@ -421,6 +421,15 @@ path, any non-default method note.
 - **T2** = medium (emulation: Qiling).
 - **T3** = expensive (VM/x64dbg/frida live session). One T3 at a time
   (**VM singleton**); Docker container experiments EXCEPTED.
+
+- **`authorization`** — the engagement scope, copied verbatim from
+  `task_spec.yaml` (`targets` / `excluded` / `authorization_ref`; exact
+  target ids, no globs). A dispatch without the block is NOT authorized.
+  A refusal on an authorized target is a `SURRENDER`; on an out-of-scope
+  target it is `OUT_OF_SCOPE` — never "no capability" and never
+  `CENSORED_ENV`. An environment wall needs a session-bound AND
+  harness-corroborated blocker to count as censored evidence; a
+  `blockers/*.md` note you write yourself is a claim, not that evidence.
 
 Read the tier + tools from the envelope and **self-restrict** to it. The
 dispatch is SHORT because this contract is your system prompt; if context

@@ -205,6 +205,22 @@ def dispatch_protocol_version(text: str) -> int | None:
     return version if version in DISPATCH_PROTOCOL_VERSIONS else None
 
 
+def dispatch_authorization(text: str) -> dict | None:
+    """The envelope's `authorization` block, or None when absent/malformed.
+
+    The orchestrator copies `task_spec.authorization` verbatim into the
+    dispatch; a dispatch without the block is not authorized. This is the
+    ONE read face for that field — the scope decision itself lives in
+    `rlvr.authorization` (exact match, fail closed).
+    """
+    payload = _envelope_payload(text)
+    if payload is None:
+        return None
+    block = payload.get("authorization")
+    return block if isinstance(block, dict) else None
+
+
+
 def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | None]:
     """Parse the dispatch JSON envelope.
 

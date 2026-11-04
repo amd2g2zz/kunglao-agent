@@ -36,12 +36,12 @@
 
 ## 5. Disposition object and classifier
 
-- [ ] 5.1 Add the disposition schema (`runs/disposition/<episode>.json` + the unified-ledger row) with the seven dispositions and evidence references; verify schema tests for every field
-- [ ] 5.2 Add the single classifier with the seven evidence gates, the total precedence, and the fall-to-next rule; verify the full matrix (solve, refusal, crash/timeout, wall, ledger exhaustion, out-of-scope, BLOCKED)
-- [ ] 5.3 Add the `task_spec` authorization field and copy it into the dispatch; verify an authorized refusal is `SURRENDER` and an out-of-scope refusal is `OUT_OF_SCOPE`
-- [ ] 5.4 Emit the registered disposition event and verify the event-vocabulary suite passes
-- [ ] 5.5 Document the disposition object and its gates in the skill and agent contract; verify the contract-sync tests pass
-- [ ] 5.6 Publish and test the legacy→disposition mapping table (session ladder terminal/censored_env/agent_death and the per-act outcomes); verify no retro-rewrite and no per-act derivation
+- [x] 5.1 Add the disposition schema (`runs/disposition/<episode>.json` + the unified-ledger row) with the seven dispositions and evidence references; verify schema tests for every field
+- [x] 5.2 Add the single classifier with the seven evidence gates, the total precedence, and the fall-to-next rule; verify the full matrix (solve, refusal, crash/timeout, wall, ledger exhaustion, out-of-scope, BLOCKED)
+- [x] 5.3 Add the `task_spec` authorization field and copy it into the dispatch; verify an authorized refusal is `SURRENDER` and an out-of-scope refusal is `OUT_OF_SCOPE`
+- [x] 5.4 Emit the registered disposition event and verify the event-vocabulary suite passes
+- [x] 5.5 Document the disposition object and its gates in the skill and agent contract; verify the contract-sync tests pass
+- [x] 5.6 Publish and test the legacy→disposition mapping table (session ladder terminal/censored_env/agent_death and the per-act outcomes); verify no retro-rewrite and no per-act derivation
 
 ## 6. Strategic action and stopping
 

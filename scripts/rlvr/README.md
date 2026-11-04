@@ -258,6 +258,11 @@ The face map above covers the consolidation wave's homes. Every other
 module carries its full contract in its own docstring — this index is
 the one-line pointer (name — the docstring's opening line):
 
+- `authorization` — rlvr/authorization.py — the engagement authorization scope:
+  `task_spec.authorization` (exact `targets` / `excluded` / `authorization_ref`)
+  copied into the dispatch envelope; `authorized_target()` is the ONE scope
+  decision (no globs, fail closed on an absent/malformed block), and the
+  classifier's OUT_OF_SCOPE gate reads it.
 - `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
 - `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
 - `distill_dgate` — rlvr/distill_dgate.py — the D-gate three-question note lint (issue #365).
@@ -289,8 +294,12 @@ the one-line pointer (name — the docstring's opening line):
 - `disposition` — rlvr/disposition.py — the episode disposition algebra (#988):
   one evidence-gated disposition per episode (SOLVED / OUT_OF_SCOPE /
   CENSORED_ENV / ATTEMPTED_EXHAUSTED / INFRA / FAILED / SURRENDER) under a
-  total precedence, plus the published legacy session-ladder map; pure
-  classifier, no I/O.
+  total precedence, plus the published legacy session-ladder map; the
+  `disposition/1` row (`build_row` / `validate_row` / `write_row`) lands one
+  JSON object per episode under `runs/disposition/`, mirrors it into the
+  unified TELEMETRY ledger, and emits the registered
+  `disposition_recorded` event. Re-writing the identical row is idempotent;
+  a divergent rewrite is refused.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.
