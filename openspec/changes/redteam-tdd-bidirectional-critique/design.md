@@ -139,6 +139,29 @@ host prohibition stands. No VM channel → `UNVERIFIED-WITH-GAP`, never a host
 run. This keeps the TDD requirement compatible with the agent's hard
 constraint.
 
+### D10. Surrender is classified at the outcome layer, never laundered into censoring
+`rlvr.scalar.classify_outcome` currently maps `TIMEOUT → censored` and
+`BLOCKED → infra`; both yield no strategy signal. The new `surrender` class
+covers a stop/refusal without session-bound wall evidence and without route
+exhaustion, so an abandoned task cannot hide as a censored environment.
+Declaration surfaces (named, so classification does not guess): the
+authorization/engagement context is a `task_spec` field declared at intake and
+copied into the dispatch envelope; a dispatch without it is not authorized.
+The route-attempt ledger is `runs/rt-tests/<claim>/routes.json` (declared
+routes, per-attempt command/artifact, fixed budget, reproducibility). The
+declared routes per claim kind live in
+`references/schemas/machine_check_map.yaml` (`routes:` beside
+`required_checks`); the fixed budget is the policy constant
+`ROUTE_ATTEMPT_BUDGET`, recorded in the ledger. Out-of-scope refusals are the
+separate `refusal_out_of_scope` class, never a capability failure.
+Reward metering and denominator accounting are owned by #986 and #987; this
+capability owns classification and observability. A negative/impossible claim needs the route-attempt ledger
+(declared routes for the claim kind, per-attempt command/artifact, fixed
+budget, reproducibility); exhaustion produces a capability-gap record that
+feeds the method library, never a learning verdict on its own. The learning
+comparison (pre/post or ablation deltas) belongs to the eval metrics tracked
+in #987; the reward/credit side is tracked in #986.
+
 ## Risks / Trade-offs
 
 - **Re-execution cost** → sampled replay + input-digest cache; the sample size

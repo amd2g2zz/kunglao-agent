@@ -51,6 +51,12 @@ change anything or enter settlement.
 - **Close the three known holes**: wire `calibration_check` into the
   settlement precondition; replay a sample of `machine_check` entries at
   settlement; bind `oracle_backed_refutation` to an actual oracle result.
+- **Surrender is a distinct outcome**: a stop/refusal on an AUTHORIZED target
+  without a session-bound wall and without route exhaustion is `surrender`,
+  not `censored_env`; an out-of-scope refusal is the separate
+  `refusal_out_of_scope` class; the dispatch carries the authorization
+  context; a negative/impossible claim requires the route-attempt ledger. The
+  reward/credit side is #986; the learning-measurement side is #987.
 - **BREAKING**: reversible claims can no longer promote on a one-way
   machine check alone; an unbacked REFUTED no longer blocks PROVEN; critique
   rows without arbitration are ignored by settlement.
@@ -64,9 +70,12 @@ change anything or enter settlement.
 - `critique-arbitration`: the limited critic lane and its two-stage
   arbitration (oracle validation + orchestrator adjudication), including the
   settlement filter that makes unarbitrated critiques inert.
+- `rollout-surrender`: refusal/surrender as a distinct, observable outcome;
+  authorization context at dispatch; evidence-backed route exhaustion. Tracks
+  #986 (surrender outcome) and #987 (exhaustion is not a learning verdict).
 
 ### Modified Capabilities
-- None (no pre-existing spec store; behavior is defined by this change's two
+- None (no pre-existing spec store; behavior is defined by this change's three
   new capability specs).
 
 ## Impact
@@ -81,7 +90,8 @@ change anything or enter settlement.
   `scripts/register_proven_gate.py` (REFUTED evidence bar).
 - Settlement/learning: `scripts/verifier_integrity.py` (calibration wiring),
   `scripts/rlvr/scalar.py`, `scripts/rlvr/settlement_wire.py`,
-  `scripts/rlvr/reward_signal.py`, `scripts/rlvr/episode_settle.py`.
+  `scripts/rlvr/reward_signal.py`, `scripts/rlvr/episode_settle.py`,
+  `scripts/rlvr/interruption.py` (surrender vs censored classification).
 - Arbitration: `scripts/oracle_runner.py` / `scripts/oracle_cadence.py`
   (deterministic validation), orchestrator decision log and skill text.
 - Telemetry: `scripts/event_taxonomy.py` (new words for arbitration and

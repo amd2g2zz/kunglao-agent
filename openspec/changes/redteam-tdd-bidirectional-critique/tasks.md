@@ -2,7 +2,7 @@
 
 ## 1. Schema and contract
 
-- [ ] 1.1 Add `required_checks` per `claim_kind` in `references/schemas/machine_check_map.yaml` (keyed on `claim_kind`, never `boundary_type` — `observation` spans reversible and non-reversible kinds) and add the `detection` + `classification` kinds beside the existing eleven; verify a parser test that every claim kind resolves to a non-empty list and unknown kinds fail closed
+- [ ] 1.1 Add `required_checks` and `routes` per `claim_kind` in `references/schemas/machine_check_map.yaml` (keyed on `claim_kind`, never `boundary_type` — `observation` spans reversible and non-reversible kinds) and add the `detection` + `classification` kinds beside the existing eleven; verify a parser test that every claim kind resolves to a non-empty check list and route list, and unknown kinds fail closed
 - [ ] 1.2 Add the `tdd_red_green`, `round_trip`, `positive_negative_control`, `perturbation_stability`, and `replay_equality` check kinds to the contract doc and the validator's accepted-kind set; verify the map/contract parity test passes
 - [ ] 1.3 Rewrite `agents/kunglao-redteam.md` core rules: mandatory TDD (RED→GREEN under `runs/rt-tests/<claim>/`), executed reproduction, bidirectional rule with the claim-kind matrix, REFUTED evidence bar, evidence-bearing findings; verify the agent-contract sync test passes
 - [ ] 1.4 Write the claim-kind matrix into both the agent contract and the machine-check contract, and verify a docs-parity test guards the two copies
@@ -34,8 +34,16 @@
 - [ ] 4.4 Filter settlement critiques to accepted + arbitrated rows joined by `arbitration_id`, and verify unarbitrated/rejected critiques change no credit
 - [ ] 4.5 Document the settlement changes in `references/contracts/` and the RLVR README; verify the docs selection tests pass
 
-## 5. Integration checks
+## 5. Surrender lane
 
-- [ ] 5.1 End-to-end: a reversible claim with TDD + round-trip + accepted critique settles with traceable arbitration; verify the run emits the expected rows
-- [ ] 5.2 End-to-end: a claim with one-way success and a noisy critique (no evidence) cannot promote and the critique is suppressed; verify the verdict and telemetry
-- [ ] 5.3 Regenerate `references/_INDEX.yaml` and `deploy-manifest.yaml` (manifest last); verify `deploy_manifest.py --verify` exits 0 and its reported entry count matches the regenerated manifest (the two new scripts raise it above the current 643)
+- [ ] 5.1 Add the `surrender` and `refusal_out_of_scope` outcomes to the outcome taxonomy and classification (distinct from `censored_env`/`infra`) with tests for refusal, timeout, evidence-backed wall, and out-of-scope refusal
+- [ ] 5.2 Declare the authorization/engagement context in `task_spec.yaml` (new field) and copy it into the dispatch envelope; classify an authorized-task refusal as `surrender` and an out-of-scope refusal as `refusal_out_of_scope`; verify both cases
+- [ ] 5.3 Add the route-attempt ledger (`runs/rt-tests/<claim>/routes.json`) validated against the map's `routes` and the `ROUTE_ATTEMPT_BUDGET` constant, and the capability-gap record; verify a missing ledger yields `UNVERIFIED-WITH-GAP` and a full ledger yields a capability-gap row (not a learning verdict)
+- [ ] 5.4 Emit a registered rollout event for every refusal/surrender and verify the event-vocabulary suite passes
+- [ ] 5.5 Document the surrender lane (classification, authorization context, route ledger) in the skill and agent contract; verify the contract-sync tests pass
+
+## 6. Integration checks
+
+- [ ] 6.1 End-to-end: a reversible claim with TDD + round-trip + accepted critique settles with traceable arbitration; verify the run emits the expected rows
+- [ ] 6.2 End-to-end: a claim with one-way success and a noisy critique (no evidence) cannot promote and the critique is suppressed; verify the verdict and telemetry
+- [ ] 6.3 Regenerate `references/_INDEX.yaml` and `deploy-manifest.yaml` (manifest last); verify `deploy_manifest.py --verify` exits 0 and its reported entry count matches the regenerated manifest (the two new scripts raise it above the current 643)
