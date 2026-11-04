@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""rlvr/disposition.py — the episode disposition algebra (issue #988).
+"""rlvr/disposition.py — the episode disposition algebra.
 
 Every rollout ends in exactly one **evidence-gated** disposition, assigned by
 a total precedence (first match wins):
@@ -54,7 +54,7 @@ DISPOSITIONS = (
     "SURRENDER",
 )
 
-#: the strategic vocabulary recorded before termination (issue #539 / #988)
+#: the strategic vocabulary recorded before termination (the strategic face)
 STRATEGIC_ACTIONS = ("FIGHT", "BYPASS", "INVEST")
 
 #: the legacy session ladder classes the mapping table accepts
