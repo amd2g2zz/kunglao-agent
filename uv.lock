@@ -610,7 +610,7 @@ wheels = [
 
 [[package]]
 name = "kunglao-agent"
-version = "0.1.6rc2"
+version = "0.1.6rc3"
 source = { editable = "." }
 dependencies = [
     { name = "capstone" },
