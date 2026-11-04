@@ -149,11 +149,15 @@ flowchart LR
     F --> B
 ```
 
-The notes are simple success/failure tallies per method per state, with a
-bias toward trying anything not yet ruled out — exploration fades exactly
-as fast as evidence accumulates. Reward is `progress x weight - cost`, so
-an expensive habit that barely moves the needle loses money on simple
-targets, and every number traces to an append-only ledger row.
+The notes are Beta tallies per arm, keyed on four dimensions — method
+family, context recipe (what the target looked like), verification mode and
+difficulty tier — plus an agent segment once more than one worker type is in
+play, so each worker type addresses its own cell. Selection samples from the
+cell instead of taking the argmax: an arm with little evidence keeps a wide
+spread and still gets tried, and exploration fades exactly as fast as the
+spread narrows. Reward is `progress x weight - cost`, so an expensive habit
+that barely moves the needle loses money on simple targets, and every number
+traces to an append-only ledger row.
 
 ### What this buys — and what it deliberately does not
 
@@ -345,9 +349,10 @@ Each case has a Chinese version alongside the English one under `docs/cases/`.
 
 Constructed targets with mechanical oracles and ground truth known by
 construction; checkers mint held-out probes the candidate never saw. The
-built-in 12-unit L1 matrix (static RE targets across JS, x86/ARM64 ELF,
-Windows PE; byte-anchored deliverables only, no partial credit, pass@1,
-per-session caps):
+12-unit L1 matrix (static RE targets across JS, x86/ARM64 ELF, Windows PE;
+byte-anchored deliverables only, no partial credit, pass@1, per-session
+caps). The corpus is operator-local — the targets are not shipped with the
+repo, so these rows are measurements, not a suite you can rerun:
 
 | Runtime | pass@1 | Session cost |
 |---|---|---|
@@ -359,9 +364,12 @@ Read honestly: these 12 units are single-session-tractable and a frontier
 model with default tools saturates them cheapest — kunglao's differentiation
 is **long-horizon layered work, verification discipline (oracle + blind
 red-team on every claim), and the dynamic lanes**, not single-session speed.
-The measured long-horizon matrices and the five-arm comparison (bare CC /
-CC+warm-context / kunglao cold / kunglao warm / no-recall ablation) land
-with the current release train.
+The measured long-horizon matrices and the seven-arm ladder — bare CC,
+CC with warm context, CC with same-cost multisampling, kunglao cold, kunglao
+with its scheduler flattened to uniform, kunglao warm, and warm with recall
+ablated — land with the current release train. Three readouts keep the causes
+apart: learning value (warm − uniform), architecture value (uniform − bare
+CC), and the sampling rebuttal (warm versus same-cost multisampling).
 
 Control-arm A/B and the replay ruler (offline ranker-quality measurement)
 ship as commands: `scripts/eval_control_arm.py --ab`, `scripts/replay_ruler.py <ws>`.
@@ -540,7 +548,7 @@ registrations above are for machines deployed per the kunglao docs.
 
 ## 🗓️ Roadmap
 
-- Five-arm capability matrix (bare CC vs CC+warm-context vs kunglao cold/warm/no-recall) on the held-out corpus
+- Seven-arm capability matrix (bare CC, CC+warm-context, CC+same-cost multisampling, kunglao cold/uniform/warm/no-recall) on the held-out corpus
 - Registry admission for discovered arms — making novel methods dispatchable
 - Cross-workspace memory: what works where, feature-keyed
 - The blocked-path measurement corpus — quantifying discovery beyond history
