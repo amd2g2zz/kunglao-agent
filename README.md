@@ -10,7 +10,7 @@
 
 **🧠 plans its own route** · **🔬 every claim machine-checked** · **⚖️ blind verification on everything** · **📈 the loop measures itself**
 
-🚀 Quick Start · ✨ Core Tech · 🧠 kunglao × Claude Code · 🎛️ How RL Works · 🖥️ Showcase · 📖 Case Studies · 🧪 Evaluation · 🏗️ Architecture · 🗓️ Roadmap
+[📖 Introduction](#-introduction) · [🖥️ Showcase](#️-showcase) · [✨ Core technology](#-core-technology) · [🧠 kunglao × Claude Code](#-kunglao--claude-code) · [🎛️ Online RL: the loop gets better while it works](#️-online-rl-the-loop-gets-better-while-it-works) · [📋 Requirements](#-requirements) · [Quick start](#quick-start) · [Subcommands](#subcommands) · [What a run looks like](#what-a-run-looks-like) · [📖 Stating the task](#-stating-the-task) · [🧰 The run you watch](#-the-run-you-watch) · [📚 Case studies](#-case-studies) · [🧪 Evaluation and measured results](#-evaluation-and-measured-results) · [🏗️ Architecture](#️-architecture) · [Bring your own environment](#bring-your-own-environment) · [MCP servers](#mcp-servers) · [🗓️ Roadmap](#️-roadmap) · [❓ FAQ](#-faq) · [🔐 Safety](#-safety) · [🧪 Development](#-development) · [📝 License](#-license)
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -155,15 +155,15 @@ as fast as evidence accumulates. Reward is `progress x weight - cost`, so
 an expensive habit that barely moves the needle loses money on simple
 targets, and every number traces to an append-only ledger row.
 
-### What this buys - and what it deliberately does not
+### What this buys — and what it deliberately does not
 
 - **Cost drops on familiar work.** The second task of a kind is cheaper
   than the first; the notes persist across tasks in the deployment.
 - **Budget stops bleeding.** Dead methods are benched before they drain
   the clock; the discovery layer replaces vocabulary nobody wrote.
-- **The model is frozen.** Capability does not grow - scheduling does:
+- **The model is frozen.** Capability does not grow — scheduling does:
   the right method, in the right order, at the right moment.
-- **Honesty is not learned - it is enforced.** The checker pays only for
+- **Honesty is not learned — it is enforced.** The checker pays only for
   results it can re-verify; a worker's own words never count as proof.
   RL optimizes efficiency on top of that honest currency; it can never
   mint credit by fiction.
@@ -179,7 +179,7 @@ not asserted.
 ### How this differs from the common approaches
 
 Knowledge routing (a manual the LLM improvises against), bounded pipelines
-(fixed stages, fixed rounds), single-verdict triage - all decide with fixed
+(fixed stages, fixed rounds), single-verdict triage — all decide with fixed
 logic: last task's experience never changes next task's plan. The loop's
 control law is learned from its own measured history:
 
@@ -193,7 +193,7 @@ control law is learned from its own measured history:
 | Python 3.10 | 3.10+ floor (Python 2 is not supported) | the plugin carries a pinned env via `uv` |
 | `uv` | any recent | [astral.sh/uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh \| sh` (never `pip install uv`) |
 | Ghidra or IDA | one of them | decompilation for native targets |
-| MCP servers | 2 required | `ghidra` + `sequential-thinking` — see [Toolchain](#-toolchain-by-target) |
+| MCP servers | 2 required | `ghidra` + `sequential-thinking` — see [Toolchain](#toolchain-by-target) |
 
 > [!WARNING]
 > Analysis acts run real tools and may execute target-derived inputs. Use
@@ -405,6 +405,8 @@ One workspace per engagement — scaffolded by init; hooks are wired at workspac
 
 <details>
 <summary><strong>Toolchain by target</strong> — the `--type` you pick at init locks the HARD tier</summary>
+
+### Toolchain by target
 
 **All types require the two HARD MCP servers** (`ghidra` +
 `sequential-thinking` — commands in the MCP section below). Expand your
