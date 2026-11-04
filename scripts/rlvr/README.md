@@ -286,6 +286,11 @@ the one-line pointer (name — the docstring's opening line):
   step credit = probe_face.probe_delta (the ΔV seam), racing elimination gated
   on posterior collapse (zero failure evidence never eliminates), flag-gated
   KUNGLAO_DIRECTION=1 loop faces (default OFF).
+- `disposition` — rlvr/disposition.py — the episode disposition algebra (#988):
+  one evidence-gated disposition per episode (SOLVED / OUT_OF_SCOPE /
+  CENSORED_ENV / ATTEMPTED_EXHAUSTED / INFRA / FAILED / SURRENDER) under a
+  total precedence, plus the published legacy session-ladder map; pure
+  classifier, no I/O.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.
