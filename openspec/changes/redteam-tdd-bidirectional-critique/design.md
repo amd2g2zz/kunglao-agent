@@ -139,11 +139,26 @@ host prohibition stands. No VM channel → `UNVERIFIED-WITH-GAP`, never a host
 run. This keeps the TDD requirement compatible with the agent's hard
 constraint.
 
-### D10. Surrender is classified at the outcome layer, never laundered into censoring
-`rlvr.scalar.classify_outcome` currently maps `TIMEOUT → censored` and
-`BLOCKED → infra`; both yield no strategy signal. The new `surrender` class
-covers a stop/refusal without session-bound wall evidence and without route
-exhaustion, so an abandoned task cannot hide as a censored environment.
+### D10. Episode disposition algebra: one object, seven evidence gates, one precedence
+Every rollout produces one disposition row (`runs/disposition/<episode>.json`,
+mirrored into the unified ledger) carrying `{episode_id, claim, disposition,
+evidence_refs, route_ledger_ref, wall_ref, authorization_ref,
+strategic_action, propensity, budget, ts}`. The seven dispositions and their
+gates are in the capability spec. Assignment is a total order, first match
+wins: `SOLVED` > `OUT_OF_SCOPE` > `CENSORED_ENV` > `ATTEMPTED_EXHAUSTED` >
+`INFRA` > `FAILED` > `SURRENDER`.
+
+Legacy mapping (published and tested; no retro-rewrite):
+- session ladder `terminal` (exit 0) with a verifier pass -> `SOLVED`; exit 0
+  without a pass -> `FAILED` (unverified completion);
+- `censored_env` -> `CENSORED_ENV`;
+- `agent_death` (timeout_kill / nonzero_exit / liveness_lost / unknown_exit)
+  -> `FAILED`;
+- a per-act `BLOCKED` outcome aggregates into `INFRA` when it terminates the
+  episode; a per-act `strategy` outcome aggregates upward.
+The per-act outcome stays per-act (one episode has many acts) and aggregates
+into the episode disposition — it is never derived from it.
+
 Declaration surfaces (named, so classification does not guess): the
 authorization/engagement context is a `task_spec` field declared at intake and
 copied into the dispatch envelope; a dispatch without it is not authorized.
@@ -152,15 +167,30 @@ routes, per-attempt command/artifact, fixed budget, reproducibility). The
 declared routes per claim kind live in
 `references/schemas/machine_check_map.yaml` (`routes:` beside
 `required_checks`); the fixed budget is the policy constant
-`ROUTE_ATTEMPT_BUDGET`, recorded in the ledger. Out-of-scope refusals are the
-separate `refusal_out_of_scope` class, never a capability failure.
-Reward metering and denominator accounting are owned by #986 and #987; this
-capability owns classification and observability. A negative/impossible claim needs the route-attempt ledger
-(declared routes for the claim kind, per-attempt command/artifact, fixed
-budget, reproducibility); exhaustion produces a capability-gap record that
-feeds the method library, never a learning verdict on its own. The learning
-comparison (pre/post or ablation deltas) belongs to the eval metrics tracked
-in #987; the reward/credit side is tracked in #986.
+`ROUTE_ATTEMPT_BUDGET`, recorded in the ledger.
+
+### D11. Strategic action and externally checkable stopping
+`FIGHT` / `BYPASS` / `INVEST` are recorded with a propensity before
+termination (the vocabulary exists in `scripts/action_space.py:28-38` but is
+currently uncomposed); an episode with no recorded action is `SURRENDER`.
+Termination is allowed only on ledger exhaustion, a corroborated wall, or the
+budget; surrogate early-stop signals are banned because within-task
+early-failure prediction is near chance (the literature in #988). This turns
+the weak-stopping-signal failure into an externally checkable state machine.
+
+### D12. One disposition, four consumers
+Reward, measurement, learning, and settlement read the same disposition:
+`SOLVED` -> positive (oracle lock); `ATTEMPTED_EXHAUSTED` -> capability-gap
+record, no strategy credit; `SURRENDER` -> credit stays inside the declared
+[0,1] rails (0.0 without reproducible evidence) AND the episode enters
+strategic-action learning as a failure outcome and stays in the capability
+denominator — it is not a negative scalar; `CENSORED_ENV` -> explicit
+censoring (excluded from strategy learning, censoring rate reported);
+`OUT_OF_SCOPE` / `INFRA` / `FAILED` -> separate reporting, no strategic-choice
+signal. Ownership: this change owns the disposition object, the classifier,
+the strategic action/stopping, and the consumer mapping CONTRACT; the
+reward-meter and denominator implementation live under #986/#987; the default
+posture under #985.
 
 ## Risks / Trade-offs
 

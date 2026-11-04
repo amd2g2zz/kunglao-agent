@@ -34,16 +34,30 @@
 - [ ] 4.4 Filter settlement critiques to accepted + arbitrated rows joined by `arbitration_id`, and verify unarbitrated/rejected critiques change no credit
 - [ ] 4.5 Document the settlement changes in `references/contracts/` and the RLVR README; verify the docs selection tests pass
 
-## 5. Surrender lane
+## 5. Disposition object and classifier
 
-- [ ] 5.1 Add the `surrender` and `refusal_out_of_scope` outcomes to the outcome taxonomy and classification (distinct from `censored_env`/`infra`) with tests for refusal, timeout, evidence-backed wall, and out-of-scope refusal
-- [ ] 5.2 Declare the authorization/engagement context in `task_spec.yaml` (new field) and copy it into the dispatch envelope; classify an authorized-task refusal as `surrender` and an out-of-scope refusal as `refusal_out_of_scope`; verify both cases
-- [ ] 5.3 Add the route-attempt ledger (`runs/rt-tests/<claim>/routes.json`) validated against the map's `routes` and the `ROUTE_ATTEMPT_BUDGET` constant, and the capability-gap record; verify a missing ledger yields `UNVERIFIED-WITH-GAP` and a full ledger yields a capability-gap row (not a learning verdict)
-- [ ] 5.4 Emit a registered rollout event for every refusal/surrender and verify the event-vocabulary suite passes
-- [ ] 5.5 Document the surrender lane (classification, authorization context, route ledger) in the skill and agent contract; verify the contract-sync tests pass
+- [ ] 5.1 Add the disposition schema (`runs/disposition/<episode>.json` + the unified-ledger row) with the seven dispositions and evidence references; verify schema tests for every field
+- [ ] 5.2 Add the single classifier with the seven evidence gates, the total precedence, and the fall-to-next rule; verify the full matrix (solve, refusal, crash/timeout, wall, ledger exhaustion, out-of-scope, BLOCKED)
+- [ ] 5.3 Add the `task_spec` authorization field and copy it into the dispatch; verify an authorized refusal is `SURRENDER` and an out-of-scope refusal is `OUT_OF_SCOPE`
+- [ ] 5.4 Emit the registered disposition event and verify the event-vocabulary suite passes
+- [ ] 5.5 Document the disposition object and its gates in the skill and agent contract; verify the contract-sync tests pass
+- [ ] 5.6 Publish and test the legacy→disposition mapping table (session ladder terminal/censored_env/agent_death and the per-act outcomes); verify no retro-rewrite and no per-act derivation
 
-## 6. Integration checks
+## 6. Strategic action and stopping
 
-- [ ] 6.1 End-to-end: a reversible claim with TDD + round-trip + accepted critique settles with traceable arbitration; verify the run emits the expected rows
-- [ ] 6.2 End-to-end: a claim with one-way success and a noisy critique (no evidence) cannot promote and the critique is suppressed; verify the verdict and telemetry
-- [ ] 6.3 Regenerate `references/_INDEX.yaml` and `deploy-manifest.yaml` (manifest last); verify `deploy_manifest.py --verify` exits 0 and its reported entry count matches the regenerated manifest (the two new scripts raise it above the current 643)
+- [ ] 6.1 Record `FIGHT` / `BYPASS` / `INVEST` plus propensity before termination and map an absent action to `SURRENDER`; verify both cases
+- [ ] 6.2 Add the route-attempt ledger (`runs/rt-tests/<claim>/routes.json`) validated against the per-claim-kind routes and `ROUTE_ATTEMPT_BUDGET`; verify a missing ledger cannot yield `ATTEMPTED_EXHAUSTED`
+- [ ] 6.3 Enforce externally checkable stopping (ledger, wall, budget only); verify a surrogate early-stop signal cannot terminate a rollout
+
+## 7. Consumers
+
+- [ ] 7.1 Define the reward mapping CONTRACT (`SOLVED` positive; `SURRENDER` 0.0 within the [0,1] rails plus a strategic-action failure outcome; `ATTEMPTED_EXHAUSTED` no strategy credit; `CENSORED_ENV` explicit) and verify the mapping; the meter implementation belongs to #986
+- [ ] 7.2 Define the measurement mapping CONTRACT (per-disposition denominators + process metrics) and verify it against #987; the policy implementation belongs to #987
+- [ ] 7.3 Map the disposition into learning signals (capability gap vs negative choice vs censoring exclusion) and verify no learning verdict comes from a single episode
+- [ ] 7.4 Wire the default posture (supply/protection ON or arm-declared, per #985) and verify the arm matrix declares the switches
+
+## 8. Integration checks
+
+- [ ] 8.1 End-to-end: a reversible claim with TDD + round-trip + accepted critique settles with traceable arbitration; verify the run emits the expected rows
+- [ ] 8.2 End-to-end: a claim with one-way success and a noisy critique (no evidence) cannot promote and the critique is suppressed; verify the verdict and telemetry
+- [ ] 8.3 Regenerate `references/_INDEX.yaml` and `deploy-manifest.yaml` (manifest last); verify `deploy_manifest.py --verify` exits 0 and its reported entry count matches the regenerated manifest (the two new scripts raise it above the current 643)
