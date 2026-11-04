@@ -24,6 +24,7 @@ from . import censoring
 from . import constants_ref
 from . import crystallize
 from . import direction
+from . import disposition
 from . import distill_dgate
 from . import distill_lifecycle
 from . import distill_rollout
@@ -98,6 +99,7 @@ __all__ = [
     "constants_ref",
     "crystallize",
     "direction",
+    "disposition",
     "distill_dgate",
     "distill_lifecycle",
     "distill_rollout",
