@@ -10,7 +10,7 @@
 
 **🧠 自主规划路径** · **🔬 每条 claim 机器校验** · **⚖️ 全程盲验证** · **📈 循环自己度量自己**
 
-🚀 快速开始 · ✨ 核心技术 · 🧠 kunglao × Claude Code · 🎛️ RL 原理 · 🖥️ 运行实况 · 📖 实战案例 · 🧪 评估实测 · 🏗️ 架构
+[📖 它是什么](#-它是什么) · [🖥️ 运行实况](#️-运行实况) · [✨ 核心技术](#-核心技术) · [🧠 kunglao × Claude Code](#-kunglao--claude-code) · [🎛️ 在线 RL：循环边干活边变强](#️-在线-rl循环边干活边变强) · [📋 环境要求](#-环境要求) · [🚀 快速开始](#-快速开始) · [命令](#命令) · [一次运行长什么样](#一次运行长什么样) · [📖 怎么写任务描述](#-怎么写任务描述) · [🧰 你看的运行面](#-你看的运行面) · [📚 实战案例](#-实战案例) · [🧪 评估与实测结果](#-评估与实测结果) · [🏗️ 架构](#️-架构) · [自带分析环境](#自带分析环境) · [MCP 服务器](#mcp-服务器) · [🗓️ 路线图](#️-路线图) · [❓ 常见问题与处理方法](#-常见问题与处理方法) · [🔐 安全](#-安全) · [🧪 开发](#-开发) · [📝 许可证](#-许可证)
 
 [English](README.md) · **简体中文**
 
@@ -175,7 +175,7 @@ append-only 账本，所以这个改善是可审计的，不是自述的。
 | Python | 3.10+ | 插件通过 `uv` 携带锁定环境 |
 | `uv` | 任意较新版本 | [astral.sh/uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh \| sh`（禁止 `pip install uv`） |
 | Ghidra 或 IDA | 二选一 | 原生目标的反编译 |
-| MCP 服务器 | 必装 2 个 | `ghidra` + `sequential-thinking` —— 见[工具链](#️-按目标分工具链) |
+| MCP 服务器 | 必装 2 个 | `ghidra` + `sequential-thinking` —— 见[工具链](#按目标分工具链) |
 
 > [!WARNING]
 > 分析动作会运行真实工具，可能执行目标派生的输入。动态工作使用隔离
@@ -225,7 +225,7 @@ evidence/_index.json  # 每条 fact → 原始产物（sha256 + 路径）
 runs/                 # 会话审计轨迹
 ```
 
-### 命令
+## 命令
 
 | 命令 | 何时用 |
 |---|---|
@@ -236,6 +236,22 @@ runs/                 # 会话审计轨迹
 
 `uv sync` 还会注册 `kunglao` 控制台脚本（`decide`、`tick`、`verify`、
 `health`、`resume`、`upgrade`……全部子命令上 PATH）。
+
+---
+
+## 一次运行长什么样
+
+一个合成示例（示意，不是真实测量过的交战）：一个小型 Windows dropper 落在
+`~/cases/synth-dropper`：
+
+```bash
+/kunglao-agent:init ~/cases/synth-dropper --type windows   # 探测 Ghidra 与 VM 可达性
+/kunglao-agent:analysis ~/cases/synth-dropper
+> 「这个二进制做什么，往哪里回连？」
+```
+
+之后循环自己跑 —— 路线随样本的真实情况变化。可以走开；死掉的 worker 会被
+替换、问题重新入队，`/kunglao-agent:resume` 在任何中断后从盘上状态重建现场。
 
 ---
 
@@ -350,6 +366,8 @@ flowchart LR
 
 <details>
 <summary><strong>按目标分工具链</strong> —— init 时的 `--type` 锁定 HARD 档</summary>
+
+### 按目标分工具链
 
 **所有类型必装两个 HARD MCP 服务器**（`ghidra` + `sequential-thinking`
 —— 注册命令见下方 MCP 章节）。展开你的目标：
@@ -480,7 +498,7 @@ uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 - 留出语料上的五臂能力矩阵（裸 CC vs CC+热上下文 vs kunglao 冷/热/去召回消融）
 - 已发现方法臂的注册表准入 —— 让新方法可被派遣
 - 跨工作区记忆：什么方法在哪类状态有效，特征键控
-- blocked-path 测量语料 —— 量化"超越历史的发现"
+- blocked-path 测量语料 —— 量化「超越历史的发现」
 
 ---
 
@@ -559,7 +577,7 @@ MCP 服务）而不是重试。
 ## 🔐 安全
 
 仅限授权分析。你负责定义和执行允许范围；沙箱边界降低风险但永远替代
-不了宿主隔离；软件按"现状"提供。
+不了宿主隔离；软件按「现状」提供。
 
 ---
 
