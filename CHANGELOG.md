@@ -6,12 +6,12 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [Unreleased]
+## [0.1.6-rc3] - 2026-11-05
 
-Development line since `v0.1.6-rc2` (2026-10-17): 448 commits and 98
-merged PRs ahead of the released tree. Kept as `[Unreleased]` until the
-owner fixes the next release number — `pyproject.toml` and
-`release-manifest.yaml` stay at `0.1.6-rc2` (#991).
+Release candidate three: the post-rc2 development wave — the RL v2/v3
+kernel, the claim-state owner, the gate machinery, distillation
+economics, the new execution faces, and the episode disposition
+algebra. The known-issues list ships in the GitHub Release notes.
 
 ### Added
 
@@ -48,6 +48,13 @@ owner fixes the next release number — `pyproject.toml` and
   the upgrade transaction (#774), the signal router (#811), and the web
   analysis chain (#793).
 
+- **The episode disposition algebra (#988)**: the seven evidence-gated
+  dispositions and the published legacy map (#990), plus the
+  `disposition/1` runtime row, the `task_spec.authorization` scope
+  copied into the dispatch, and the registered `disposition_recorded`
+  event (#993). The reward/measurement/learning consumer mapping stays
+  open (#985-#987).
+
 ### Changed
 
 - **SUPERSEDES the gate fail-closed ruling (#801)**: the 2026-09-28
@@ -63,7 +70,7 @@ owner fixes the next release number — `pyproject.toml` and
 - **Runtime dependencies (#816)**: `claude-agent-sdk>=0.2.174` and
   `pandas>=2.3.3` join the runtime set, with `uv.lock` relocked.
 - **Deployment surface (#805)**: `deploy-manifest.yaml` grows from 578
-  to 643 sha-pinned entries, `release-manifest.yaml` registers six new
+  to 645 sha-pinned entries, `release-manifest.yaml` registers six new
   assets, and `scripts/posteriors.py` is renamed to
   `scripts/posteriors_case.py`.
 - **CI (#810)**: a Windows closure-path leg, the ruff static-analysis
@@ -88,6 +95,11 @@ owner fixes the next release number — `pyproject.toml` and
   restored after the ledger re-emit, keeping the #807 floor monotone.
 - **Formal-marker and docstring ratchet breaks (#977)**: dispatch
   read-targets and lint surfaces brought back under the ratchet.
+
+- **Disposition runtime hardening (#993)**: one row per episode
+  (exclusive create, per-workspace lock), gate/disposition coupling,
+  evidence pointers, ISO-8601 timestamps, finite-number rejection, and
+  an idempotent retry that heals a failed mirror/event.
 
 ## [0.1.6-rc2] - 2026-10-17
 
