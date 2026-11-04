@@ -66,7 +66,7 @@ def test_manifest_and_pyproject_are_0_1():
         f"release-manifest version is {manifest['version']}, expected {expected}"
 
 
-# ---------- issue #991: the post-rc2 Unreleased section ----------
+# ---------- post-rc2 Unreleased section (contract) ----------
 
 def _unreleased_section() -> str:
     text = _changelog_text()
