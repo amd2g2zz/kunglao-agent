@@ -51,7 +51,8 @@ LEDGER_SCAN_LIMIT = 100_000
 
 ORACLE_STATUS_REL = Path("runs") / "oracle-status.json"
 CASES_DIR_REL = Path("oracle") / "cases"
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 
 
 def _ledger_rows(ws: Path) -> list[dict]:

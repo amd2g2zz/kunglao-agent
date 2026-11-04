@@ -1,0 +1,36 @@
+;; sandbox-denying-units.sb.tmpl — issue #952 Face C TEMPLATE.
+;;
+;; A deny-read seatbelt containment profile for eval sessions: everything
+;; is allowed EXCEPT reading the two trees that hold the grading oracle
+;; and the task material, so a session cannot copy the checker's token
+;; formula into its artifacts (the P8 round-1 forgery class).
+;;
+;; TEMPLATE ONLY — the runner NEVER writes a profile. The operator
+;; materializes a real profile PER RUN:
+;;   1. copy this file to a per-run location,
+;;   2. substitute @KUNGLAO_GRADING_ROOT@ with the absolute path of the
+;;      grading root (checker.py + ground truth live OUTSIDE the units
+;;      tree, never adjacent to the task material),
+;;   3. substitute @KUNGLAO_UNITS_ROOT@ with the absolute path of the
+;;      units tree,
+;;   4. point KUNGLAO_SANDBOX_PROFILE at the materialized copy —
+;;      launch_session then wraps the session binary:
+;;          sandbox-exec -f <profile> claude ...original argv...
+;;
+;; sandbox-exec is macOS-only and deprecated-but-functional; the face is
+;; opt-in (env unset = off, zero behavior change). A missing sandbox-exec
+;; binary leaves ONE loud stderr WARN, launches the session UNWRAPPED and
+;; marks the row sandbox_wrap_failed=true (fail-loud, never silent).
+;; Unsubstituted @...@ slots stay inert string literals — a materialized
+;; profile with a leftover slot fails closed on the literal path, never
+;; open.
+(version 1)
+(allow default)
+;; deny READ+WRITE on the oracle + units trees: the containment face.
+;; Write matters as much as read (review round 1): the session knows the
+;; grading root (the env rides child_env) — a write-forge of the ground
+;; truth there would poison every future arm while reading nothing.
+(deny file-read* (subpath "@KUNGLAO_GRADING_ROOT@"))
+(deny file-write* (subpath "@KUNGLAO_GRADING_ROOT@"))
+(deny file-read* (subpath "@KUNGLAO_UNITS_ROOT@"))
+(deny file-write* (subpath "@KUNGLAO_UNITS_ROOT@"))

@@ -75,7 +75,6 @@ import sys
 from pathlib import Path
 
 from _path_hygiene import (  # #671 sys.path hygiene authority
-    ensure_scripts_path,
     load_hooks_lib,
     load_module_by_path,
 )
@@ -337,31 +336,6 @@ def _dispatch_text(payload: dict) -> str | None:
     return None
 
 
-def queries_for_features(prompt_text: str, tier: int) -> list[str]:
-    """Deterministic claim-feature -> recall query mapping (#268).
-
-    go signals -> "go" (languages-go.md is the top hit); tier 3 (VM/dynamic
-    intent, via tier_rules) -> "vm" + "dynamic" (dynamic-debugging scene +
-    verify-static-vs-dynamic.md); tier 2 (static-depth/disasm) and the tier 1
-    default -> "static analysis" (disasm/static-analysis scene — "disasm" itself
-    matches nothing in the layered index).
-    #761 J1: web-domain signals prepend "risk control" + "crawler" (the two new
-    web reference docs) — append-only semantics: every pre-existing mapping is
-    unchanged for prompts without web signals.
-    """
-    text = prompt_text.lower()
-    queries: list[str] = []
-    if any(s in text for s in WEB_SIGNALS):
-        queries.extend(WEB_QUERIES)
-    if any(s in text for s in GO_SIGNALS):
-        queries.append("go")
-    if tier == 3:
-        queries.extend(("vm", "dynamic"))
-    else:
-        queries.append("static analysis")
-    return queries
-
-
 def _parse_files(stdout: str) -> tuple[str, ...]:
     """File paths from references_recall.py stdout (scored and scene formats
     both print rows as `<path> | <category> | ...`; dedup, order-preserving)."""
@@ -584,6 +558,10 @@ def _guidance(queries: list[str], files: list[str]) -> str:
             f"<kunglao-facts>\n"
             f"recall_inject: need-driven recall - query: {query}\n"
             f"Before dispatching, read: {', '.join(rows)}\n"
+            f"If a range no longer matches (the file changed), re-anchor "
+            f"these reference cards by heading (`rg -n '^#{{1,6}} ' <path>`) "
+            f"and read the best-overlap section; if the file is gone, stop "
+            f"and report the GAP - never search the tree for a substitute.\n"
             f"</kunglao-facts>"
         )
 
@@ -636,7 +614,7 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
     try:
         mod = load_module_by_path(
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
-        mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
+        mod.emit(ws, "hook:recall_inject", action, tool="Agent", detail=detail)
     except Exception as exc:  # noqa: BLE001
         warn("recall_inject.trace_emit", f"{type(exc).__name__}: {exc}")
     try:

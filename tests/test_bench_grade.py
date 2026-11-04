@@ -75,25 +75,6 @@ def _mk_ws(tmp: Path, actions=(), verifies=(), extra=None):
     return ws
 
 
-def test_z_self_channels_trigger_independently(tmp_path):
-    # extra carries BAD-EVENT counts (interventions beyond the opening
-    # prompt), so 0 = clean on that channel
-    clean = bg.z_self_of(_mk_ws(tmp_path / "a"), extra={"notes_due": 0, "human_turns": 0})
-    assert clean == 1
-    reopen = bg.z_self_of(_mk_ws(tmp_path / "b", verifies=["REJECTED", "VERIFIED"]),
-                          extra={"notes_due": 0, "human_turns": 0})
-    assert reopen == 0
-    gate = bg.z_self_of(_mk_ws(tmp_path / "c", actions=["top1_reject"]),
-                        extra={"notes_due": 0, "human_turns": 0})
-    assert gate == 0
-    human = bg.z_self_of(_mk_ws(tmp_path / "d"),
-                         extra={"notes_due": 0, "human_turns": 2})
-    assert human == 0
-    notes = bg.z_self_of(_mk_ws(tmp_path / "e"),
-                         extra={"notes_due": 2, "human_turns": 0})
-    assert notes == 0
-
-
 def test_opaque_seal_roundtrip(tmp_path):
     sealed = bg.seal({"s1": "O", "s2": "N"})
     assert len(sealed) == 2

@@ -10,8 +10,10 @@ back. Shadow: sample_and_pair records, nothing intercepts (the P3
 "completion claims pass a rho gate" is explicitly out of scope here).
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import debug, warn
 import json
 import os
 import re
@@ -21,6 +23,7 @@ from pathlib import Path
 import yaml
 
 import kunglao_log
+import incremental_telemetry  # #801 R2b: the value-change gate for the detector_eval face
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 ENV_BACKEND = "KUNGLAO_RHO_BACKEND"
@@ -178,12 +181,19 @@ def sample_and_pair(ws, z=None, emit=True):
         # sampler whose pairs never settle is a loud DORMANT finding
         # (detector_liveness.liveness_report), never silence. Record-only:
         # nothing intercepts these rows (shadow contract preserved).
-        kunglao_log.emit(
-            Path(ws), actor="rho_verifier", action="detector_eval",
-            detail=json.dumps({"detector": "rho_sampler",
-                               "rho": out["rho"], "z": z,
-                               "backend": out["backend"]},
-                              ensure_ascii=False))
+        # #801 R2b: the eval row is VALUE-GATED — a dead rho (the 76x
+        # 0.0 shape) emits once and stays silent until the value moves;
+        # sampling itself keeps every checkpoint (test pins the split).
+        if incremental_telemetry.should_emit(
+                ws, "rho_sampler.detector_eval",
+                json.dumps({"rho": out["rho"], "z": z,
+                            "backend": out["backend"]}, sort_keys=True)):
+            kunglao_log.emit(
+                Path(ws), actor="rho_verifier", action="detector_eval",
+                detail=json.dumps({"detector": "rho_sampler",
+                                   "rho": out["rho"], "z": z,
+                                   "backend": out["backend"]},
+                                  ensure_ascii=False))
         # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
         # terminal anchor fired: mission complete/failed) is a transition, so it
         # earns a result digest; plain per-checkpoint sampling rows stay lean
@@ -211,6 +221,12 @@ def sample_and_pair(ws, z=None, emit=True):
                 detail=json.dumps({**cs, "cost_spent": cost,
                                    "n_cost_events": len(events)},
                                   ensure_ascii=False, default=str))
+        except FileNotFoundError as exc:
+            # #944: the optional mission ledger's absence is the normal
+            # pre-signal state on a fresh workspace — stderr-only DEBUG,
+            # never a ledger row. A ledger that exists but is corrupt
+            # (YAMLError) or unreadable stays WARN below.
+            debug("sample_and_pair", f"mission ledger absent: {exc}")
         except Exception as exc:  # noqa: BLE001 — 持久化永不破坏采样
             warn("sample_and_pair", f"{type(exc).__name__}: {exc}")
     out["z"] = z

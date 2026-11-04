@@ -12,7 +12,7 @@
 #   - zero overlap with in-flight PR #681-#684 file sets
 #   - a renamed/deleted test makes pytest exit nonzero ("no tests ran") —
 #     the manifest cannot silently shrink; fix the pin deliberately
-tests/test_priority_ratio.py::test_thompson_composite_formula_not_weighted
+tests/test_priority_ratio.py::test_composite_formula_not_weighted
 tests/test_priority_ratio.py::test_dependency_gate_blocks_child_of_unproven_parent
 tests/test_priority_ratio.py::test_dependency_gate_allows_child_of_terminal_fact_parent
 tests/test_priority_ratio.py::test_case_posterior_linked_via_target_pq
@@ -21,7 +21,7 @@ tests/test_priority_ratio.py::test_pq_categorical_entropy_is_rank_inert
 tests/test_priority_ratio.py::test_cost_field_is_tier_diagnostic_only
 tests/test_priority_ratio.py::test_scoring_is_deterministic_pure
 tests/test_priority_ratio.py::test_register_reorder_never_reshuffles
-tests/test_priority_ratio.py::test_seed_injection_varies_the_sample
+tests/test_priority_ratio.py::test_no_seed_axis_exists
 tests/test_priority_ratio.py::test_terminal_status_claims_never_ranked
 tests/test_digest.py::test_digest_has_six_sections
 tests/test_digest.py::test_digest_size_upper_bound

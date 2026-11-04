@@ -172,6 +172,7 @@ def test_name_match_scores_higher_than_description_match():
     both stay surfaced; the wide boundary is pinned by the no-threshold
     test above)."""
     r = run_cli("--find", "yara", "--json")
+    assert r.returncode == 0, f"tool-search failed rc={r.returncode}: {r.stderr[-800:]}"
     hits = json.loads(r.stdout)["tools"]
     name_hits = [h for h in hits if "yara" in str(h.get("name", "")).lower()]
     other_hits = [h for h in hits
@@ -192,6 +193,42 @@ def test_score_is_deterministic():
     r1 = run_cli("--find", "converg", "--json")
     r2 = run_cli("--find", "converg", "--json")
     assert r1.stdout == r2.stdout
+
+
+# ---------------------------------------------------------------------------
+# CI poison regression: the ws walk-up must never cross the git toplevel
+# ---------------------------------------------------------------------------
+
+def test_workspace_walkup_never_crosses_git_toplevel(tmp_path):
+    """A markerless repo nested inside a marker-holding ancestor tree
+    must NOT adopt the ancestor's workspace: the #812 negative-cache
+    store of the MAIN checkout was inherited by sibling-worktree and
+    CI-runner queries through exactly this hole, and its escalated
+    `yara` row dead-laned a live family for ten days. Seeded poison in
+    the ancestor must not answer a query from the nested repo."""
+    import subprocess as sp
+    outer = tmp_path / "outer"
+    (outer / "runs").mkdir(parents=True)
+    inner = outer / "inner-repo"
+    inner.mkdir()
+    for repo in (outer, inner):
+        sp.run(["git", "init", "-q", str(repo)], check=True)
+        sp.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c",
+                "user.name=t", "commit", "--allow-empty", "-q", "-m", "i"],
+               check=True)
+    # seed the ancestor store with an escalated yara row (the poison)
+    store = outer / "runs" / ".toolsearch-negative-cache.json"
+    store.write_text(json.dumps({"families": {"yara": {
+        "occurrence": 16, "first_ts": "2026-01-01T00:00:00Z",
+        "last_ts": "2026-01-01T00:00:00Z", "escalated": True,
+        "query": "yara"}}}), encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, str(TOOL), "--find", "yara", "--json"],
+        capture_output=True, text=True, timeout=120, cwd=str(inner),
+        encoding="utf-8", errors="replace")
+    assert r.returncode == 0, r.stderr
+    hits = json.loads(r.stdout)["tools"]
+    assert hits, "nested-repo query must scan fresh, never serve the ancestor poison"
 
 
 # ---------------------------------------------------------------------------

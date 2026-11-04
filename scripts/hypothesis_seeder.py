@@ -14,8 +14,10 @@ Spec: openspec/changes/issue-662-hypothesis-seed/{proposal,design,specs}.
 Design references D1-D8. Fail-open per D7.
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import argparse
 import json
 import sys

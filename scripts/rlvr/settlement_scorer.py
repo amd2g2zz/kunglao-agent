@@ -6,13 +6,18 @@ credit, so settlement over the producer's own output is a
 reward-hacking surface. This module is the settlement subagent's only
 door in — three mechanical properties:
 
-SHIPPING STATUS: the barrier family is complete and its dispatch
-surface exists (the settler agent + the read-barrier markers), but no
-production writer builds a ``settler_input`` doc yet — the direct
-``settle_step`` path (step grain at the SubagentStop boundary) is what
-runs today. The open writer gap is the module's own recorded design
-decision; until a writer lands, this door is armed and unbolted, not
-walked through.
+SHIPPING STATUS (issue-802): WIRED. The production writer + consumer live in
+``rlvr.settlement_wire`` — the stop face parks ``settler_input`` docs
+(``runs/settlement-input-<claim>.json``) filtered through the same
+exclusion wall, and ``settlement_wire.settle_parked`` settles the
+ruling through THIS module (the blind gate -> the validator stack ->
+the ledger), mints the claim through ``claims_store.apply`` (the
+issues-800/809 contract: a PROVEN mint resolves to a PASSED verification
+record), and stamps the ``settlement-wire/1`` liveness rows. The
+unblinded ``settle_step`` judgment is eval-only behind
+``KUNGLAO_EVAL_SETTLE`` (the production stop face defaults to blind
+mode; the mechanical hash-only bookkeeping stays at the boundary in
+every mode).
 
 1. THE BLIND INPUT CONTRACT. ``settler_input`` builds from a WHITELIST
    (raw step artifacts as path + sha256, the claim/question, the rules

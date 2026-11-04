@@ -180,12 +180,16 @@ def run_face(ws: Path, *, now: datetime | None = None) -> bool:
     # read() is fail-open by contract (corrupt/absent file -> None), so
     # the dedup comparison needs no handler of its own: a corrupt old
     # projection just rewrites.
-    existing = read(ws)
-    if isinstance(existing, dict) \
-            and existing.get("receipt_key") == doc["receipt_key"] \
-            and existing.get("round") == doc["round"]:
+    # issue 805: the dedup identity (receipt identity + round — never
+    # the wall clock) rides the SHARED input-signature primitive; the
+    # sig lands additively in the doc (policy-state/1 keeps its fields).
+    import input_signature
+    sig = input_signature.signature({"receipt_key": doc["receipt_key"],
+                                     "round": doc["round"]})
+    if input_signature.unchanged_doc(out, sig):
         return False  # unchanged receipt + unchanged round: dedup
-    _atomic_write(out, json.dumps(doc, ensure_ascii=False,
+    _atomic_write(out, json.dumps(input_signature.stamped(doc, sig),
+                                  ensure_ascii=False,
                                   sort_keys=True) + "\n")
     try:
         import kunglao_log

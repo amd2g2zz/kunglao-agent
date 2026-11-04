@@ -129,20 +129,23 @@ def _rejection_rows(ws: Path) -> list[dict]:
 
 class TestGateRejectionsLedger:
     def test_reject_appends_one_ledger_row(self, tmp_path) -> None:
-        """#603 AC-a: a top-1 REJECT (rc=2) MUST append exactly one row to
-        runs/gate-rejections.jsonl identifying gate=top1, the claim, and the
-        authority msg — pre-#603 the file is never created on this path."""
+        """#603 AC-a: a top-1 REJECT MUST append exactly one row to
+        runs/gate-rejections.jsonl identifying the face and the authority
+        msg — pre-#603 the file is never created on this path. #801
+        SUPERSESSION: the rejection is format-class and DEMOTES to rc 0;
+        durability is kept via the sidecar row (gate/name/class/exit 0)
+        plus the unified-log top1_reject trace carrying the claim."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
         r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         rows = _rejection_rows(ws)
         assert len(rows) == 1, (
             f"one ledger row per REJECT; got {len(rows)} rows={rows!r}")
         row = rows[0]
-        assert row.get("gate") == "top1"
+        assert row.get("gate") == "top1"  # #603 contract kept verbatim
         assert row.get("claim") == "C-3"
-        assert row.get("exit_code") == 2
+        assert row.get("exit_code") == 0  # #801: demoted, actual rc
         assert "C-1" in str(row.get("msg", "")), (
             "row must carry the authority msg naming the rank-1 claim")
 
@@ -170,7 +173,7 @@ class TestGateRejectionsLedger:
         ws = _top1_ws(root)
         for _ in range(2):
             r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep')
-            assert r.returncode == 2
+            assert r.returncode == 0  # #801 demotion
         rows = _rejection_rows(ws)
         assert len(rows) == 2, f"expected 2 rows, got {len(rows)}"
         assert [row["claim"] for row in rows] == ["C-3", "C-3"]
@@ -191,7 +194,7 @@ class TestRetryCounterFirewall:
         ws = _top1_ws(root)
         r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep',
                       agent_name="kunglao-worker-01")
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         counter = ws / "runs" / ".retry-counter.yaml"
         assert not counter.exists(), (
             "REJECT must not create or write runs/.retry-counter.yaml "
@@ -207,7 +210,7 @@ class TestRetryCounterFirewall:
         for _ in range(3):
             r = _run_gate(root, ws, '{"kunglao_dispatch": {"version": 1, "claim": "C-3", "tier": 2, "tools": ["grep"]}}\nbackground sweep',
                           agent_name="kunglao-worker-01")
-            assert r.returncode == 2
+            assert r.returncode == 0  # #801 demotion
         assert len(_rejection_rows(ws)) == 3, (
             "the ledger — not the counter — is the durable record of the loop")
         assert not (ws / "runs" / ".retry-counter.yaml").exists(), (

@@ -48,6 +48,7 @@ if str(SCRIPTS) not in sys.path:
 
 import rollout_ledger as rl  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
+from hypothesis_store import Hypothesis, HypothesisStore  # noqa: E402
 from rlvr import incremental_reward as ir  # noqa: E402
 from rlvr import q_cells  # noqa: E402
 from rlvr import state as rl_state  # noqa: E402
@@ -217,9 +218,11 @@ def test_settlement_with_credited_fact_banks_nonzero_r(tmp_path):
 # ---------- 5. D-678.4a: TRACE credit is observation-only -------------------
 
 def _q_row(sig: str, fam: str, credit, source="settlement") -> dict:
+    # #804 regen: keyed shape (the fold banks arm_key-carrying rows only)
     return {"schema": q_cells.OBS_SCHEMA, "ts": "2026-10-14T00:00:00Z",
             "source": source, "signature_hash": sig, "method_family": fam,
-            "claim": None, "agent": None, "credit": credit}
+            "claim": None, "agent": None, "credit": credit,
+            "arm_key": f"{fam}|facts_snapshot|none|0"}
 
 
 def test_trace_credit_does_not_bank_as_failure_mass(tmp_path):
@@ -232,21 +235,21 @@ def test_trace_credit_does_not_bank_as_failure_mass(tmp_path):
         _q_row("sig1", "red-team-verification", ss.TRACE_CANONICAL),
     ])
     cell = q_cells.fold(trace_store, gamma=1.0).cells[("sig1",
-                                                       "red-team-verification")]
+                                                       "red-team-verification|facts_snapshot|none|0")]
     assert cell.success == 0.0, "TRACE credit must not bank success"
     assert cell.failure == 0.0, "TRACE credit must not bank failure mass"
 
     fail_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", 0.0)])
     fcell = q_cells.fold(fail_store, gamma=1.0).cells[("sig1",
-                                                       "dynamic-trace")]
+                                                       "dynamic-trace|facts_snapshot|none|0")]
     assert fcell.success == 0.0
     assert fcell.failure == 1.0, "a genuine 0.0 still trains failure"
 
     full_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", 1.0)])
     scell = q_cells.fold(full_store, gamma=1.0).cells[("sig1",
-                                                       "dynamic-trace")]
+                                                       "dynamic-trace|facts_snapshot|none|0")]
     assert scell.success == 1.0
     assert scell.failure == 0.0
 
@@ -257,14 +260,14 @@ def test_observation_band_edges_are_pinned(tmp_path):
     top_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace", q_cells.OBSERVATION_BAND_CEIL)])
     top = q_cells.fold(top_store, gamma=1.0).cells[("sig1",
-                                                    "dynamic-trace")]
+                                                    "dynamic-trace|facts_snapshot|none|0")]
     assert (top.success, top.failure) == (0.0, 0.0)
 
     above_store = q_cells.InMemoryStore([
         _q_row("sig1", "dynamic-trace",
                q_cells.OBSERVATION_BAND_CEIL + 0.01)])
     above = q_cells.fold(above_store, gamma=1.0).cells[("sig1",
-                                                        "dynamic-trace")]
+                                                        "dynamic-trace|facts_snapshot|none|0")]
     assert above.success == pytest.approx(0.06)
     assert above.failure == pytest.approx(0.94)
 
@@ -275,7 +278,14 @@ def test_phi_has_intermediate_values_with_graded_facts(tmp_path):
     """A workspace whose facts are all grammar-clean substantive
     non-terminal (INFERRED) has Φ strictly between 0 and 1: the binary
     verified-count read this as 0.0 — a fully non-terminal fact base
-    looked IDENTICAL to an empty one."""
+    looked IDENTICAL to an empty one.
+
+    issue-796 Φ-v2: the intermediate-progress property now lives on the
+    closure TREE (decisive masses are graded: machine 1.0 vs referee
+    0.8, trunk depth steps, the Φ saturation cap) — fact files no
+    longer move Φ at all (the graded fraction was dilution-dominated).
+    The fact_face pins stay; the Φ expectation flips to the honest 0.0
+    for a treeless, oracle-less workspace."""
     ws = _ws(tmp_path)
     for i in range(3):
         _grammar_fact(ws, f"F5{i:02d}", "INFERRED", claim_id="C-001")
@@ -284,15 +294,30 @@ def test_phi_has_intermediate_values_with_graded_facts(tmp_path):
     assert face["verified"] == 0, "INFERRED is not a credit terminal"
     assert face["weighted_fraction"] == 0.5
 
+    # facts alone are Φ-silent now; the tree provides the intermediate
+    assert ir.potential(ws) == 0.0
+    (ws / "hypotheses").mkdir()
+    st = HypothesisStore(ws / "hypotheses")
+    st.create(Hypothesis(id="H-1", claim_id="C-001",
+                         competitor_group="g", candidates=["a"]))
+    st.transition("H-1", "confirmed", confirming_fact_id="ev")
+    st.record_resolution("H-1", evidence_kind="referee-confirm",
+                         evidence_ref="ev", step_ref="s-1",
+                         posterior=0.8)
     phi = ir.potential(ws)
-    assert 0.0 < phi < 1.0
-    assert abs(phi - 0.5) < 1e-9
+    assert 0.0 < phi < 1.0  # intermediate mass: referee < machine
 
 
 def test_phi_partial_certification_is_strictly_intermediate(tmp_path):
     """1 certified terminal + 1 substantive non-terminal: the graded
     fraction lands at 0.75 — intermediate values exist BEFORE every
-    fact certifies."""
+    fact certifies.
+
+    issue-796 Φ-v2: partial progress before completion is priced by the
+    TREE (a partially-resolved trunk: one decisive node of a would-be
+    chain), never by fact-count dilution. Pin: one trunk node resolved,
+    more trunk ahead → Φ strictly between the empty and saturated
+    tree."""
     ws = _ws(tmp_path)
     _register(ws, [{"id": "C-001", "status": "PROVEN",
                     "answers_question": None, "question": "q"}])
@@ -301,8 +326,24 @@ def test_phi_partial_certification_is_strictly_intermediate(tmp_path):
     face = rl_state.fact_face(ws)
     assert face["verified"] == 1
     assert abs(face["weighted_fraction"] - 0.75) < 1e-9
+    (ws / "hypotheses").mkdir()
+    st = HypothesisStore(ws / "hypotheses")
+    st.create(Hypothesis(id="H-1", claim_id="C-001",
+                         competitor_group="g", candidates=["a"]))
+    st.create(Hypothesis(id="H-2", claim_id="C-001",
+                         competitor_group="g", candidates=["b"],
+                         parent_id="H-1"))
+    st.transition("H-1", "confirmed", confirming_fact_id="ev")
+    st.record_resolution("H-1", evidence_kind="machine-witness",
+                         evidence_ref="ev", step_ref="s-1",
+                         posterior=1.0)
     phi = ir.potential(ws)
-    assert 0.5 < phi < 1.0
+    assert 0.0 < phi < 1.0
+    # the second (still-open) trunk node contributes nothing: Φ stays
+    # at the one-node mass — partial progress, no dilution (and with a
+    # single present dim, Φ renormalizes to exactly that dim's value)
+    from rlvr import phi_tree
+    assert phi == pytest.approx(phi_tree.tree_phi(ws))
 
 
 def test_phi_draft_and_junk_tiers(tmp_path):

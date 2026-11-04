@@ -861,7 +861,11 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         "tools": ["grep", "python3"],
         "agent": "kunglao-worker",
         "action_type": "dispatch",
-        **_DISPATCH_ARM_CONTEXT}
+        **_DISPATCH_ARM_CONTEXT,
+        # v2 enforces read_targets; the harness dispatch targets a
+        # synthetic sample, not a repo coordinate — declare the opt-out.
+        "read_targets": "none (reasoning: e2e checkpoint harness - "
+                        "synthetic sample, no repo coordinate)"}
     if method_family:
         dispatch_meta["method_family"] = method_family
     prompt_file = Path(ctx.state.evidence_dir) / f"dispatch-prompt-{claim}.md"
@@ -1364,11 +1368,14 @@ def _record_verify_settle(ctx: RunContext, claim: str, act, variant: str,
     # banks one keyed-store row (the credit mapping rides inside the
     # leaf) so a second workspace with the same feature signature
     # inherits the raised verification density. Fail-open telemetry, the
-    # transition above is the authoritative local record.
+    # transition above is the authoritative local record. #796 L9: the
+    # absorbed marker rides through — a kill-banked verdict is censored
+    # in the shared store, never clean cross-workspace evidence.
     try:
         _rf = _load_repo_module(ctx.repo, "rlvr.refutation_fold")
         _rf.record_verify_outcome(str(ctx.ws), verdict=str(verdict or ""),
-                                  boundary=str(variant or ""))
+                                  boundary=str(variant or ""),
+                                  absorbed=bool(absorbed_from_disk))
     except Exception as exc:  # noqa: BLE001 — telemetry, but loud
         kunglao_log.warn("e2e.refutation_store",
                          f"{type(exc).__name__}: {exc}")
@@ -1532,7 +1539,9 @@ def _run_verifier_act(ctx: RunContext, claim: str, dispatched: set[str],
             "agent": "kunglao-verifier",
             "action_type": "verify",
             "context_recipe": "facts_snapshot",
-            "verification_mode": "replay_probe"}})
+            "verification_mode": "replay_probe",
+            "read_targets": "none (reasoning: e2e checkpoint harness - "
+                            "synthetic sample, no repo coordinate)"}})
         + "\n\n"
         + _verifier_dispatch_text(
             claim, _stamp, llm_faces.CLAUDE_ACT_TIMEOUT_S,
@@ -1921,7 +1930,9 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
                 "agent": "kunglao-worker",
                 "action_type": "expand",
                 "context_recipe": "facts_snapshot",
-                "verification_mode": "none"}})
+                "verification_mode": "none",
+                "read_targets": "none (reasoning: e2e checkpoint harness - "
+                                "synthetic sample, no repo coordinate)"}})
             + "\n\ndiscovery contract (#546): the tried families have "
             "collapsed. Generate "
             + str(ex.EXPAND_HYPOTHESES_N)
@@ -2264,17 +2275,23 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
 
 def _no_open_claims(ctx: RunContext) -> bool:
     """Delivery-face test (robust): the register holds no OPEN claims.
-    Deterministic register read — never a stdout-substring guess."""
+    Deterministic register read — never a stdout-substring guess.
+    Status vocabulary from status_defs (the owner; review fix 4):
+    PARKED (#955) rides SUSPENDED, so a parked claim never masquerades
+    as deliverable work; IN_PROGRESS counts as open the same way
+    convergence_check._open_claims treats it."""
     import yaml as _yaml
+    from status_defs import (  # noqa: PLC0415 — the vocabulary owner
+        IN_PROGRESS_STATUSES, SUSPENDED)
     reg = ctx.ws / "claim-register.yaml"
     try:
         doc = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
         return False
+    open_statuses = ({"OPEN", "PARTIALLY-VERIFIED", "STAMP", "UNVERIFIED"}
+                     | set(IN_PROGRESS_STATUSES) | set(SUSPENDED))
     for c in doc.get("claims") or []:
-        if str(c.get("status", "")).upper() in ("OPEN", "PARK",
-                                                "PARTIALLY-VERIFIED",
-                                                "STAMP", "UNVERIFIED"):
+        if str(c.get("status", "")).upper() in open_statuses:
             return False
     return bool(doc.get("claims"))
 

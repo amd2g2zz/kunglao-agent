@@ -209,25 +209,6 @@ def test_register_ghidra_mcp(monkeypatch, tmp_path):
     assert log[0][1:] == ["mcp", "add", "ghidra", "--", str(bridge)], log[0]
 
 
-def test_register_ida_mcp_url(monkeypatch):
-    """register_ida_mcp_url() registers the operator-supplied URL via the
-    http transport — it never installs the IDA product."""
-    log: list[list[str]] = []
-
-    def fake_run(argv, **kw):
-        log.append(argv)
-        return _cp(argv)
-
-    monkeypatch.setattr(ti, "_subprocess_run", fake_run)
-    monkeypatch.setattr(ti.shutil, "which", lambda name: "/usr/local/bin/claude")
-    rc = ti.register_ida_mcp_url("http://localhost:13337")
-    assert rc == 0
-    assert len(log) == 1
-    assert log[0][0].endswith("claude"), log[0]
-    assert log[0][1:5] == ["mcp", "add", "--transport", "http"], log[0]
-    assert log[0][-1] == "http://localhost:13337", log[0]
-
-
 # ---------- consent gate (#455: stdin is NOT a user channel) ----------
 
 def test_prompt_yes_no_never_reads_stdin(monkeypatch):

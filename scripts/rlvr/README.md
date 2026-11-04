@@ -40,6 +40,19 @@ scripts/rlvr/
 ├── scalar.py            # scalar_settlement — tiers, tuples, Normal-Gamma,
 │                        #   round credit, trajectory validator
 ├── priors.py            # compute_priors (U4 feed consumer) — aggregate prior
+├── probe_face.py        # #956 the mechanical V(s) probe-face contract —
+│                        #   run_probe(unit_dir, ws) through the unit-local
+│                        #   probe.py shim (checker.py's trust boundary,
+│                        #   mirrored) + probe_delta (the #954 ΔV seam);
+│                        #   fail-closed, deterministic, oracle-locked
+├── direction.py         # #954 the direction face (Type-3) — Beta
+│                        #   posterior (α, β) per direction over the shared
+│                        #   runs/direction-state.jsonl (sibling rows to the
+│                        #   #958 censor rows), per-step credit =
+│                        #   probe_face.probe_delta (the ΔV seam), racing
+│                        #   elimination gated on posterior collapse (no
+│                        #   failure evidence -> never eliminated);
+│                        #   KUNGLAO_DIRECTION=1, default OFF
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
@@ -61,6 +74,25 @@ scripts/rlvr/
 │                        #   collapsed arms), feature-keyed novelty (the
 │                        #   anti-renaming wall), verifier-gated admission
 │                        #   scoring, runs/expansion/E-<n>.json receipts
+├── family_playbook.py  # #960 the Type-2 transfer store — family playbook
+│                        #   kunglao-playbook/1 schema (parse/serialize
+│                        #   byte-stable, hard line budget 60, capacity
+│                        #   culling 宁缺毋滥), operator-local root
+│                        #   (KUNGLAO_PLAYBOOK_ROOT), session_block()
+│                        #   whole-file init injection (no retrieval)
+├── playbook_distill.py # #960 the terminal distillation call — ONE
+│                        #   frozen-model call per rollout terminal
+│                        #   (claude -p bench seam, stub-injectable),
+│                        #   mechanical patch gate (evidence-ref
+│                        #   existence vs ws, shape, budget), fail-closed
+│                        #   (unchanged playbook on any fault)
+├── pricing.py           # issue-760 pricing face — the unknown-set
+│                        #   projection (undecided PQs + open obstacles,
+│                        #   pure view over existing keys) + the
+│                        #   information-gain price (bits x value, decayed
+│                        #   by the issue-800 dispatch-ledger repeat
+│                        #   count) + probe-price/1 telemetry emit +
+│                        #   the issue-801 consumption account face
 └── README.md            # this document
 ```
 
@@ -226,18 +258,59 @@ The face map above covers the consolidation wave's homes. Every other
 module carries its full contract in its own docstring — this index is
 the one-line pointer (name — the docstring's opening line):
 
+- `authorization` — rlvr/authorization.py — the engagement authorization scope:
+  `task_spec.authorization` (exact `targets` / `excluded` / `authorization_ref`)
+  copied into the dispatch envelope; `authorized_target()` is the ONE scope
+  decision (no globs, fail closed on an absent/malformed block), and the
+  classifier's OUT_OF_SCOPE gate reads it.
 - `censored_review` — rlvr/censored_review.py — the censored-outcome fairness review
 - `consolidated_ledger` — rlvr/consolidated_ledger.py — the 4-file ledger consolidation core (#721).
+- `distill_dgate` — rlvr/distill_dgate.py — the D-gate three-question note lint (issue #365).
+- `distill_lifecycle` — rlvr/distill_lifecycle.py — the 3-strike optimize-then-remove ladder (issue #365).
+- `distill_rollout` — rlvr/distill_rollout.py — the distill-rollout/1 settlement rows + reward bands + strategy priors (issue #365).
+- `distill_score` — rlvr/distill_score.py — the 0-1 scoring face + the scored playbook view (issue #365).
+- `episode_pool` — rlvr/episode_pool.py — the memory pool's physical layer (`runs/episodes/`) + the three policy gates (issue #824).
+- `episode_schema` — rlvr/episode_schema.py — the episode schema `episode/1` + summary caps + fail-closed validator (issue #824).
+- `pool_indexer` — rlvr/pool_indexer.py — the pool's derived views: value table + playbook (issue #824).
 - `constants_ref` — rlvr.constants_ref — the reference hash constant tables (entropy
 - `crystallize` — crystallize.py — the settlement writes knowledge back.
 - `expansion` — rlvr/expansion.py — the discovery-layer operator (issue #546, WS4 /
 - `hypotheses` — rlvr.hypotheses — layer-scoped hypotheses + counterexample refinement
 - `incremental_reward` — rlvr/incremental_reward.py — potential-based per-act reward + the
 - `invariants` — rlvr.invariants — the invariant-pruning operator (entropy reduction).
+- `interruption` — rlvr/interruption.py — the interruption classifier (#955 link 1):
+  terminal / censored_env / agent_death, mechanical over session returncode +
+  timed_out + active env-class blocker files + liveness at exit; agent-death
+  prose stays owned by the #447/#497 Type E gate.
+- `censoring` — rlvr/censoring.py — censored posterior semantics (#955 links 4/5):
+  censored rows update NOTHING, per-direction trailing censor streaks, the
+  freeze-at-K predicate, and the #954 integration seam
+  (posterior_observations filter over runs/direction-state.jsonl).
+- `direction` — rlvr/direction.py — the oracle-probe density direction face (#954,
+  Type-3): Beta posterior per direction over the shared direction-state rows,
+  step credit = probe_face.probe_delta (the ΔV seam), racing elimination gated
+  on posterior collapse (zero failure evidence never eliminates), flag-gated
+  KUNGLAO_DIRECTION=1 loop faces (default OFF).
+- `disposition` — rlvr/disposition.py — the episode disposition algebra (#988):
+  one evidence-gated disposition per episode (SOLVED / OUT_OF_SCOPE /
+  CENSORED_ENV / ATTEMPTED_EXHAUSTED / INFRA / FAILED / SURRENDER) under a
+  total precedence, plus the published legacy session-ladder map; the
+  `disposition/1` row (`build_row` / `validate_row` / `write_row`) lands one
+  JSON object per episode under `runs/disposition/`, mirrors it into the
+  unified TELEMETRY ledger, and emits the registered
+  `disposition_recorded` event. Re-writing the identical row is idempotent;
+  a divergent rewrite is refused.
+- `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
+  (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
+  register status via the ws_yaml single-writer seam, park/unpark round trip.
 - `marl` — marl.py — the MARL knowledge-transfer protocol (#705).
 - `meta_arms` — meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms,
+- `phi_tree` — rlvr/phi_tree.py — the Φ-tree economy (#796): decisive mass on the
+  closure hypothesis tree (tree_phi/settle_resolution/clawback/elimination_credit/
+  reconcile_claim; signed negative face; #760-complementary, #799-sealed).
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
+- `reward_signal` — rlvr/reward_signal.py — the A1 learning signal `R = completion + milestone progress − cost` + the settlement hook (issue #824).
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).

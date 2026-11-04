@@ -54,7 +54,8 @@ from __future__ import annotations
 try:
     from _path_hygiene import ensure_scripts_path as _esp406
     _esp406()
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
     from kunglao_log import warn
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
@@ -194,7 +195,7 @@ def main(stdin_stream=None) -> int:
                 break
         if ws is not None:
             for ev in events:
-                kunglao_log.emit(ws, actor="violation_capture",
+                kunglao_log.emit(ws, actor="hook:violation_capture",
                                  action=ev["action"],
                                  detail=light_detail(ev["action"],
                                                      ev["detail"]))

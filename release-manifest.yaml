@@ -6,7 +6,7 @@
 
 schema_version: "1.0"
 project: kunglao-agent
-version: "0.1.6-rc2"             # MUST equal pyproject.toml [project].version (receipt-checked)
+version: "0.1.6-rc3"             # MUST equal pyproject.toml [project].version (receipt-checked)
 requires_python: ">=3.10"
 
 dependencies:
@@ -29,8 +29,11 @@ assets:
     - agents/kunglao-init-worker.md   # #304 init worker agent
     - agents/kunglao-settler.md   # #687 blind settlement subagent
   hooks:
+    - hooks/battery.yaml   # issue 805: the hook battery's registration face (fail-closed launch prerequisite)
+    - hooks/battery_registry.py   # issue 805: registry loader/validator/launch gate (不入册不许跑 for the hook battery)
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
+    - hooks/gate_policy.py   # #801 Face 2: gate-layering authority (five HARD classes + demotion + warn breaker)
     - hooks/env_check_gate.py
     - hooks/compact_continuity.py   # #434 PreCompact strategy continuity
     - hooks/heartbeat_touch.py
@@ -56,6 +59,8 @@ assets:
     - hooks/step_record_capture.py    # shadow step ledger capture (PostToolUse)
     - hooks/evidence_pin_guard.py     # #652 evidence sha-pin freeze (Write|Edit|MultiEdit + Bash)
   templates:
+    # #952: the oracle+units deny-read/write sandbox profile TEMPLATE
+    - templates/sandbox-denying-units.sb.tmpl
     # #156: --html rendering assets (Jinja2 face template — the Apache-2.0
     # ECharts library is inlined in the .j2 itself under {% raw %}, #162
     # de-vendor; offline discipline: never a CDN reference)
@@ -95,6 +100,7 @@ assets:
     # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
     # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they
     # are governed by tools/_INDEX.yaml + validate_index.py, not this manifest.
+    - tools/_lib/negative_cache.py
     - tools/auxiliary/audit_legacy_proven.py
     - tools/auxiliary/sanitize.py
     - tools/pipelines/build_evidence_index.py
@@ -131,6 +137,8 @@ assets:
     - tools/_lib/workspace_manifest.py
     - tools/auxiliary/measure_blind_coverage.py
     - tools/auxiliary/measure_cold_start.py
+    # #365: knowledge-distillation engine (hybrid_distill)
+    - tools/auxiliary/hybrid_distill.py
     # #670: memory-gated jadx dispatch estimator (APK/JAR) + DEX xref
     - tools/static/apk_mem_gate.py
     - tools/static/baksmali_index.py

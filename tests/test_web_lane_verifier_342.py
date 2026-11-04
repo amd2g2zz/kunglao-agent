@@ -188,7 +188,9 @@ def test_malware_only_agents_keep_single_lane_refusal(tmp_path):
     web — the multi-lane parser changes only kunglao-redteam's binding."""
     ws = _write_lane_ws(tmp_path, "web")
     r = _run_dispatch_gate(tmp_path, ws, "ghidra-light")
-    assert r.returncode == 2, "ghidra-light must stay malware-only"
+    # #801: format-class demotion — refusal verdict stays, call proceeds.
+    assert r.returncode == 0, (
+        f"ghidra-light must stay malware-only (demoted): {r.stdout}{r.stderr}")
     assert "lane_routing" in r.stdout + r.stderr
 
 

@@ -47,6 +47,12 @@ scope:                         # filter for which claims enter the queue
   in: []                        # e.g. [family_attribution, network, persistence]
   out: []                       # e.g. [anti_analysis_strings, bitcoin_clipper]
 
+authorization:                 # the engagement scope the dispatch carries
+  targets: []                  # exact target ids the engagement covers (host / URL origin / path /
+                               # sample sha). Empty = NOTHING is authorized (disposition OUT_OF_SCOPE)
+  excluded: []                 # exact target ids inside that scope which are still excluded
+  authorization_ref: ""        # who/what authorized the engagement (ticket / operator message / contract id)
+
 constraints:                   # workers must never break these — enforced by §11 PreToolUse hooks
   vm_detonation: forbidden      # forbidden | allowed — vmr-shell requires allowed
   time_budget_minutes: 120      # Phase 0.4 computes deadline_ts = now + this value

@@ -65,7 +65,7 @@ tools/
 ├── tool-search.py         # meta-tool (root-layer exception): deterministic query over _INDEX.yaml (+ --find over the ext catalog), not registered in the index
 ├── validate_index.py      # meta-tool (root-layer exception): machine-contract validator for _INDEX.yaml
 ├── ext-scan.py            # meta-tool (root-layer exception): ext-catalog generator (--check detects drift)
-├── _lib/                  # cross-category shared-library single point: lib_disasm.py (PE/capstone VA→offset)
+├── _lib/                  # cross-category shared-library single point: lib_disasm.py (PE/capstone VA→offset), negative_cache.py (#812 toolfirst TTL negative-result cache, Standard 11 per-family counting)
 ├── crypto/                # crypto category: crypto-tool.py + algorithms.py (shared module)
 ├── static/                # static category: static CLIs + shared common.py (#340 dual-module merge) + yara-rules/
 ├── ghidra/                # ghidra category: run_ghidra_postscript.py + postScript Java sources + job_store.py

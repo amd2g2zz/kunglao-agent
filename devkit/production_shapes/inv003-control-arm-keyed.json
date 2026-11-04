@@ -1,0 +1,63 @@
+{
+ "schema": "production-shape/1",
+ "id": "inv003-control-arm-keyed",
+ "synthetic": true,
+ "source": "SYNTHETIC control shape (never observed in production): the same settlement flow WITH arm attribution — the family-level sentinel must accept it. Proves the INV-003 assertion is two-sided (rejects the production shape, accepts keyed mass).",
+ "shape": {
+  "events_total": 5,
+  "dispatches": 2,
+  "sampled_dispatches": 1,
+  "settled_rows": 2,
+  "settled_rows_with_arm": 2
+ },
+ "anchors": {},
+ "events": [
+  {
+   "action": "dispatch",
+   "claim": "C-001",
+   "arm": "static",
+   "strategy": "sampled"
+  },
+  {
+   "action": "claim_settled",
+   "claim": "C-001",
+   "actor": "reward_settlement",
+   "detail": "{\"settled\": 1}"
+  },
+  {
+   "action": "dispatch",
+   "claim": "C-002",
+   "arm": "dynamic",
+   "strategy": "sampled"
+  },
+  {
+   "action": "claim_settled",
+   "claim": "C-002",
+   "actor": "reward_settlement",
+   "detail": "{\"settled\": 1}"
+  }
+ ],
+ "artifacts": {
+  "runs/posterior-store.jsonl": [
+   {
+    "schema": "posterior-store/1",
+    "arm_key": "static",
+    "method_family": "static",
+    "credit": 1.0,
+    "claim": "C-001",
+    "status": "round_credit"
+   },
+   {
+    "schema": "posterior-store/1",
+    "arm_key": "dynamic",
+    "method_family": "dynamic",
+    "credit": 0.0,
+    "claim": "C-002",
+    "status": "round_credit"
+   }
+  ]
+ },
+ "expectations": {
+  "rl-posterior-moved": "PASS"
+ }
+}

@@ -64,6 +64,17 @@ def _write_hyp(ws: Path, hyp_id: str, *, candidates: list[str],
     return p
 
 
+def _write_supply_stub(ws: Path) -> Path:
+    """Satisfy the claim-birth supply floor (the dispatch-gate face UNDER
+    this file's PQ face). Tests here pin the PQ-neighborhood contract,
+    not supply — the stub is claim-linked WITHOUT a pq marker beyond the
+    claim_id map (its one candidate counts toward the PQ face exactly
+    like any claim-linked open hypothesis)."""
+    return _write_hyp(ws, "H-STUB", candidates=["stated mechanism"],
+                      claim_id="C-1", group="stub-C-1",
+                      body_marker=None)
+
+
 def _mk_ws(root: Path, *, pq_ids: tuple[str, ...] = ("q1",)) -> Path:
     """Activated single-claim workspace: C-1 answers q1, q1 is a primary
     question, hypotheses/ NOT yet written (caller adds what it needs)."""
@@ -133,13 +144,16 @@ def _v1_envelope(claim: str, tools: list[str]) -> str:
 class TestFirstDispatchAdmission:
     def test_empty_candidates_first_dispatch_rejects(self, tmp_path) -> None:
         """Scaffold exists (candidates=[] per #412) -> first dispatch into
-        q1 REJECTs (exit 2) with the gate-verdict repair path naming q1."""
+        q1 REJECTS with the gate-verdict repair path naming q1. #801
+        SUPERSESSION: format-class rejection -> DEMOTED rc 0 (the verdict
+        + repair path ride the tool result; no rc=2 context re-read)."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, (
-            f"first dispatch into an empty PQ neighborhood must REJECT; "
+        assert r.returncode == 0, (
+            f"#801 demotion: the REJECT face proceeds rc=0; "
             f"rc={r.returncode} stderr={r.stderr!r}")
         assert "REJECT hypothesis_admission" in r.stderr, f"stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission (#109)" in r.stdout, (
@@ -159,7 +173,7 @@ class TestFirstDispatchAdmission:
         ws = _mk_ws(root)
         assert not (ws / "hypotheses").exists()
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_single_candidate_still_rejects(self, tmp_path) -> None:
@@ -167,9 +181,10 @@ class TestFirstDispatchAdmission:
         the one story being chased (#109 problem statement)."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_adjudicated_candidates_do_not_count(self, tmp_path) -> None:
@@ -177,10 +192,11 @@ class TestFirstDispatchAdmission:
         competitor field — they cannot satisfy the admission."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC", "ChaCha20"],
                    status="refuted")
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, f"stderr={r.stderr!r}"
+        assert r.returncode == 0, f"#801 demotion rc0; stderr={r.stderr!r}"
         assert "REJECT hypothesis_admission" in r.stderr
 
     def test_reject_leaves_trace_and_skips_intent_record(
@@ -190,15 +206,16 @@ class TestFirstDispatchAdmission:
         never fires — a blocked dispatch declares no intent."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         prompt = _PROMPT + "\nuncertainty: which mac the header uses"
         r = _run_gate(root, ws, prompt)
-        assert r.returncode == 2
+        assert r.returncode == 0  # #801 demotion
         rows = [e for e in _event_rows(ws)
                 if e.get("action") == "hypothesis_admission_reject"]
         assert rows, f"reject trace missing; rows={_event_rows(ws)}"
         assert rows[0].get("claim") == "C-1"
-        assert rows[0].get("exit") == 2
+        assert rows[0].get("exit") == 0  # #801: the trace carries the ACTUAL rc
         assert "q1" in str(rows[0].get("detail"))
         assert _intent_rows(ws) == [], (
             "a REJECTed dispatch must not record a roi-intent row")
@@ -210,6 +227,7 @@ class TestAdmissionSatisfied:
     def test_three_candidates_on_one_scaffold_pass(self, tmp_path) -> None:
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001",
                    candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         r = _run_gate(root, ws, _PROMPT)
@@ -223,6 +241,7 @@ class TestAdmissionSatisfied:
         holding one candidate each also clear the bar."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"])
         _write_hyp(ws, "H-002", candidates=["custom-rolling-mac"])
         _write_hyp(ws, "H-003", candidates=["truncated-digest"])
@@ -247,6 +266,7 @@ class TestAdmissionSatisfied:
         """`pq:q1` (colon variant) binds like the seeder's `pq-q1`."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=["AES-CBC"], group="pq:q1")
         _write_hyp(ws, "H-002", candidates=["ChaCha20"], group="pq:q1")
         _write_hyp(ws, "H-003", candidates=["custom-rolling-mac"],
@@ -269,6 +289,16 @@ class TestAdmissionSatisfied:
             _sys.path.insert(0, scripts)
         import hypothesis_bridge as hb
         import priority_ratio as pr
+        # #792: the rank is deterministic, so the fixture must make an ARM
+        # rank first honestly — the scaffold claim C-1 carries a higher
+        # evidence tier (tier 2), the minted arms stay tier 1, and the
+        # unlinked-band default (tier, then claim_id) puts an arm on top.
+        reg_doc0 = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        for c0 in reg_doc0.get("claims") or []:
+            if c0.get("id") == "C-1":
+                c0["evidence_tier_attempted"] = 1
+        _write_yaml(ws / "claim-register.yaml", reg_doc0)
         r = hb.mint_family_arms(ws, "H-001",
                                 ["AES-CBC", "custom-rolling-mac",
                                  "truncated-digest"],
@@ -276,8 +306,8 @@ class TestAdmissionSatisfied:
         assert r["refused"] is None, r
         assert hb.check_bridge_lint(ws) == [], "lint-clean by construction"
         # dispatch the deterministically top-ranked claim (the arms ARE
-        # TS-samplable — the production flow dispatches rank one); the
-        # seeded rng makes this stable.
+        # rank-eligible — the production flow dispatches rank one; #792
+        # makes the order the declared unlinked-band default).
         reg_doc = yaml.safe_load(
             (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
         claims = reg_doc.get("claims") or []
@@ -300,6 +330,7 @@ class TestAdmissionSatisfied:
         import sys as _sys
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001", candidates=[])
         scripts = str(REPO_ROOT / "scripts")
         if scripts not in _sys.path:
@@ -307,7 +338,8 @@ class TestAdmissionSatisfied:
         import hypothesis_bridge as hb
         hb.mint_family_arms(ws, "H-001", ["AES-CBC"])
         r = _run_gate(root, ws, _PROMPT)
-        assert r.returncode == 2, "one arm is not a competition"
+        assert r.returncode == 0, (  # #801 demotion: loud verdict, no block
+            "one arm is not a competition")
         assert "REJECT hypothesis_admission" in r.stderr, r.stderr
 
 
@@ -321,6 +353,7 @@ class TestSecondDispatchUnrestricted:
         association, #105 producer) shows q1 was already dispatched."""
         root = tmp_path
         ws = _mk_ws(root)
+        _write_supply_stub(ws)  # supply floor satisfied
         _write_hyp(ws, "H-001",
                    candidates=["AES-CBC", "ChaCha20", "custom-rolling-mac"])
         first = _PROMPT + "\nuncertainty: which mac the header uses"

@@ -10,7 +10,7 @@
 
 **🧠 自主规划路径** · **🔬 每条 claim 机器校验** · **⚖️ 全程盲验证** · **📈 循环自己度量自己**
 
-🚀 快速开始 · ✨ 核心技术 · 🧠 kunglao × Claude Code · 🎛️ RL 原理 · 🖥️ 运行实况 · 📖 实战案例 · 🧪 评估实测 · 🏗️ 架构
+[📖 它是什么](#-它是什么) · [🖥️ 运行实况](#️-运行实况) · [✨ 核心技术](#-核心技术) · [🧠 kunglao × Claude Code](#-kunglao--claude-code) · [🎛️ 在线 RL：循环边干活边变强](#️-在线-rl循环边干活边变强) · [📋 环境要求](#-环境要求) · [🚀 快速开始](#-快速开始) · [命令](#命令) · [一次运行长什么样](#一次运行长什么样) · [📖 怎么写任务描述](#-怎么写任务描述) · [🧰 你看的运行面](#-你看的运行面) · [📚 实战案例](#-实战案例) · [🧪 评估与实测结果](#-评估与实测结果) · [🏗️ 架构](#️-架构) · [自带分析环境](#自带分析环境) · [MCP 服务器](#mcp-服务器) · [🗓️ 路线图](#️-路线图) · [❓ 常见问题与处理方法](#-常见问题与处理方法) · [🔐 安全](#-安全) · [🧪 开发](#-开发) · [📝 许可证](#-许可证)
 
 [English](README.md) · **简体中文**
 
@@ -135,10 +135,12 @@ flowchart LR
     F --> B
 ```
 
-笔记就是「每个方法 × 每类目标」的成功/失败计数，外加一个偏向：还没被
-排除的路总值得试——探索随证据积累恰好衰减。奖励 = 进度 × 权重 − 成本，
-所以「贵得没 prose」的习惯在简单目标上亏钱；每个数字都能追溯到一条
-append-only 账本行。
+笔记是每条臂上的 Beta 计数，键由四维组成：方法族、上下文配方（目标长
+什么样）、验证模式、难度档；一旦有不止一种 worker 参与，再加第五维 agent，
+让每类 worker 各自对到自己的格子。选路从格子里抽样，而不是取最大值：证据
+少的臂分布宽，照样有机会被试到，探索随分布收窄恰好衰减。奖励 = 进度 ×
+权重 − 成本，所以「花了大价钱却几乎不推进」的习惯在简单目标上亏钱；每个
+数字都能追溯到一条 append-only 账本行。
 
 ### 这买到什么——以及刻意不买什么
 
@@ -146,13 +148,16 @@ append-only 账本行。
   跨任务存续。
 - **预算不再流血。** 死方法在拖垮时钟前被雪藏；发现层长出没人写过的
   新打法。
-![胜率上升、步数下降——循环自己的账本就是证据](docs/assets/rl-curves.gif)
-
 - **模型是冻结的。** 变强的不是能力，是调度：对的方法、对的顺序、对的
   时机。
 - **诚实不是学出来的，是强制的。** 检查器只为能复验的结果付账；worker
   自己的话永远不算证明。RL 在这份诚实通货之上优化效率——永远不能用
   虚构铸币。
+
+![一张图两个度量：左轴胜率上升，右轴结算步数下降](docs/assets/rl-curves.gif)
+
+一张图两个度量——左轴是胜率，右轴是每 claim 的结算步数。两条线都取自同一份
+append-only 账本，所以这个改善是可审计的，不是自述的。
 
 ![检查器只为可复验的结果付账](docs/assets/rl-pricing.gif)
 
@@ -172,7 +177,7 @@ append-only 账本行。
 | Python | 3.10+ | 插件通过 `uv` 携带锁定环境 |
 | `uv` | 任意较新版本 | [astral.sh/uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh \| sh`（禁止 `pip install uv`） |
 | Ghidra 或 IDA | 二选一 | 原生目标的反编译 |
-| MCP 服务器 | 必装 2 个 | `ghidra` + `sequential-thinking` —— 见[工具链](#️-按目标分工具链) |
+| MCP 服务器 | 必装 2 个 | `ghidra` + `sequential-thinking` —— 见[工具链](#按目标分工具链) |
 
 > [!WARNING]
 > 分析动作会运行真实工具，可能执行目标派生的输入。动态工作使用隔离
@@ -222,7 +227,7 @@ evidence/_index.json  # 每条 fact → 原始产物（sha256 + 路径）
 runs/                 # 会话审计轨迹
 ```
 
-### 命令
+## 命令
 
 | 命令 | 何时用 |
 |---|---|
@@ -236,16 +241,32 @@ runs/                 # 会话审计轨迹
 
 ---
 
+## 一次运行长什么样
+
+一个合成示例（示意，不是真实测量过的交战）：一个小型 Windows dropper 落在
+`~/cases/synth-dropper`：
+
+```bash
+/kunglao-agent:init ~/cases/synth-dropper --type windows   # 探测 Ghidra 与 VM 可达性
+/kunglao-agent:analysis ~/cases/synth-dropper
+> 「这个二进制做什么，往哪里回连？」
+```
+
+之后循环自己跑 —— 路线随样本的真实情况变化。可以走开；死掉的 worker 会被
+替换、问题重新入队，`/kunglao-agent:resume` 在任何中断后从盘上状态重建现场。
+
+---
+
 ## 📖 怎么写任务描述
 
 循环从你陈述的最终状态机械推导 oracle。四种说法覆盖大部分偏差：
 
 | 你说 | 通常意味着 | oracle 锚定在 |
 |---|---|---|
-| "我要纯算" | 离线复现签名/加密例程 | 每对捕获样本（含留出对）byte-exact 回放 |
-| "我要解密" | 解一段密文，还是要可复用能力？ | 明文校验通过 / 金丝雀往返 byte 一致 |
-| "帮我分析这个协议" | 线格式还原 + 可运行编解码器 | 编解码器对每帧 byte-exact 往返 |
-| "这个 sign 在哪算的？" | 一个带证明的定位 | 具名函数 + 该点 hook 复现捕获值 |
+| 「我要纯算」 | 离线复现签名/加密例程 | 每对捕获样本（含留出对）byte-exact 回放 |
+| 「我要解密」 | 解一段密文，还是要可复用能力？ | 明文校验通过 / 金丝雀往返 byte 一致 |
+| 「帮我分析这个协议」 | 线格式还原 + 可运行编解码器 | 编解码器对每帧 byte-exact 往返 |
+| 「这个 sign 在哪算的？」 | 一个带证明的定位 | 具名函数 + 该点 hook 复现捕获值 |
 
 点名样本和行为（不是类别）；让成功标准是数据（捕获对 —— 留出对保
 证诚实）；约束前置说清（纯静态？有设备？走哪个通道？）。
@@ -267,7 +288,7 @@ runs/                 # 会话审计轨迹
 uv run python scripts/winrate_curve.py <workspace> [--window 5] [--html curve.html]
 ```
 
-健康运行的曲线随循环学会"哪些方法有效"而上升；贴零的平线说明排序
+健康运行的曲线随循环学会「哪些方法有效」而上升；贴零的平线说明排序
 器把预算花在了永不结算的臂上 —— 先查障碍注册表再加预算。
 
 ---
@@ -288,9 +309,10 @@ uv run python scripts/winrate_curve.py <workspace> [--window 5] [--html curve.ht
 ## 🧪 评估与实测结果
 
 构造目标带机械 oracle 和构造已知的 ground truth；checker 铸造候选从
-未见过的留出探针。内置 12 单元 L1 矩阵（跨 JS / x86/ARM64 ELF /
-Windows PE 的静态 RE 目标；只认 byte 锚定交付物、无部分分、pass@1、
-按会话限额）：
+未见过的留出探针。12 单元 L1 矩阵（跨 JS / x86/ARM64 ELF / Windows PE 的
+静态 RE 目标；只认 byte 锚定交付物、无部分分、pass@1、按会话限额）。语料
+是操作者本地的——目标不随仓库分发，所以下面是实测数字，不是你能直接重跑
+的测试集：
 
 | 运行时 | pass@1 | 会话成本 |
 |---|---|---|
@@ -300,9 +322,11 @@ Windows PE 的静态 RE 目标；只认 byte 锚定交付物、无部分分、pa
 
 诚实解读：这 12 个单元是单会话可解的，前沿模型 + 默认工具最便宜地
 刷满 —— kunglao 的差异化在**长时程多层工作、验证纪律（每条 claim 都
-有 oracle + 盲红队）、动态通道**，不在单会话速度。长时程矩阵与五臂
-对照（裸 CC / CC+热上下文 / kunglao 冷 / kunglao 热 / 去召回消融）
-随本发布列车落定。
+有 oracle + 盲红队）、动态通道**，不在单会话速度。长时程矩阵与七条臂
+的阶梯——裸 CC、CC+热上下文、CC+同价多重采样、kunglao 冷、调度器压平成
+均匀的 kunglao、kunglao 热、热但去掉召回——随本发布列车落定。三个读法
+把归因分开：学习值（热 − 均匀）、架构值（均匀 − 裸 CC）、采样反驳（热
+对比同价多重采样）。
 
 对照臂 A/B 与回放标尺（离线排序器质量测量）以命令随附：
 `scripts/eval_control_arm.py --ab`、`scripts/replay_ruler.py <ws>`。
@@ -347,6 +371,8 @@ flowchart LR
 
 <details>
 <summary><strong>按目标分工具链</strong> —— init 时的 `--type` 锁定 HARD 档</summary>
+
+### 按目标分工具链
 
 **所有类型必装两个 HARD MCP 服务器**（`ghidra` + `sequential-thinking`
 —— 注册命令见下方 MCP 章节）。展开你的目标：
@@ -461,7 +487,7 @@ uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 | `sequential-thinking` | HARD | 全类型必装 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
 | `x64dbg` | HARD | Windows T3 动态 | 动态调试（VM 远程） | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
 | `volatility` | WARN | Windows T3 | 内存取证 | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `ida-pro-mcp` | WARN | 选 IDA 时 | 远程 IDA 分析 | `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |
 | `gitnexus` | HARD | Android 图谱构建 | 反编译后知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
 | `ssh-mcp` | WARN | 通道 | ssh 执行控制面 | `claude mcp add ssh-mcp -- ssh-mcp` |
 | `virustotal` | WARN | CTI | 威胁情报（家族归因假设） | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
@@ -474,10 +500,10 @@ uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 
 ## 🗓️ 路线图
 
-- 留出语料上的五臂能力矩阵（裸 CC vs CC+热上下文 vs kunglao 冷/热/去召回消融）
+- 留出语料上的七臂能力矩阵（裸 CC、CC+热上下文、CC+同价多重采样、kunglao 冷/均匀/热/去召回）
 - 已发现方法臂的注册表准入 —— 让新方法可被派遣
 - 跨工作区记忆：什么方法在哪类状态有效，特征键控
-- blocked-path 测量语料 —— 量化"超越历史的发现"
+- blocked-path 测量语料 —— 量化「超越历史的发现」
 
 ---
 
@@ -556,7 +582,7 @@ MCP 服务）而不是重试。
 ## 🔐 安全
 
 仅限授权分析。你负责定义和执行允许范围；沙箱边界降低风险但永远替代
-不了宿主隔离；软件按"现状"提供。
+不了宿主隔离；软件按「现状」提供。
 
 ---
 

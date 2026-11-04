@@ -206,6 +206,10 @@ _WARN_ONLY_CHECK_NAMES = frozenset({
     "channel:docker",
     # #760 macos (labs): darwin runtime note — PASS/WARN only, never FAIL
     "darwin_runtime",
+    # #793 web chain supply faces — WARN probe + agent-do guidance (a
+    # missing supply degrades the lane to its L1/L4 faces, never refuses)
+    "jsir",
+    "iv8",
 })
 
 

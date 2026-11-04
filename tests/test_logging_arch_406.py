@@ -69,6 +69,10 @@ RAW_WARN_ALLOWED = {
     # devkit tool with no scripts/ import surface (importlib-based loader);
     # owned by the parallel hygiene batch — lands with their sweep.
     "devkit/quality_gates.py",
+    # #801 Face 2: the gate-layering authority is itself a hook loaded in
+    # partial-deploy contexts; its stderr prints are OSError lifelines on
+    # telemetry that JUST failed (same shape as dispatch_gate's lifelines).
+    "hooks/gate_policy.py",
 }
 
 

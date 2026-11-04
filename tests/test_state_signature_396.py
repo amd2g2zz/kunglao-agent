@@ -293,17 +293,34 @@ class TestOracleStatusValidation:
 
     def test_potential_drops_the_forged_dim(self, tmp_path):
         """Φ renormalizes over present dims: a forged oracle doc must not
-        enter the potential at all."""
+        enter the potential at all.
+
+        issue-796 Φ-v2: the vehicle for the present-dim fallback is now
+        the closure TREE (the graded-facts term is retired); the forged
+        dim still never enters — Φ falls back to the tree dim alone,
+        then the canonical oracle doc joins the weighted mean."""
         sys.path.insert(0, str(SCRIPTS))
+        from hypothesis_store import Hypothesis, HypothesisStore
         from rlvr import incremental_reward as ir
-        _fact(tmp_path, "F001", "PROVEN")  # certified: register-backed
+        (tmp_path / "hypotheses").mkdir()
+        st = HypothesisStore(tmp_path / "hypotheses")
+        st.create(Hypothesis(id="H-1", claim_id="C-1",
+                             competitor_group="g", candidates=["a"]))
+        st.transition("H-1", "confirmed", confirming_fact_id="ev")
+        st.record_resolution("H-1", evidence_kind="machine-witness",
+                             evidence_ref="ev", step_ref="s-1",
+                             posterior=1.0)
         self._write(tmp_path, {"cases": {"c1": {"status": "pass"}}})
-        # facts-only Φ: forged oracle dim absent => verified fraction alone
-        assert ir.potential(tmp_path) == pytest.approx(1.0)
+        # forged oracle dim absent => the tree dim alone (0.3/PHI_NORM)
+        from rlvr import phi_tree
+        assert ir.potential(tmp_path) == pytest.approx(
+            phi_tree.tree_phi(tmp_path))
         self._write(tmp_path, {"schema": "oracle-status/1",
                                "cases": {"c1": {"status": "fail"}}})
-        # canonical dim present: weighted mean (0.3*1.0 + 0.5*0.0)/0.8
-        assert ir.potential(tmp_path) == pytest.approx(0.375)
+        # canonical dim present: weighted mean over the two live dims
+        expect = (ir.W_TREE * phi_tree.tree_phi(tmp_path)
+                  + ir.W_ORACLE * 0.0) / (ir.W_TREE + ir.W_ORACLE)
+        assert ir.potential(tmp_path) == pytest.approx(expect)
 
 
 # ---------- phase + sides ----------

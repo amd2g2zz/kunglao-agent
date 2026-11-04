@@ -135,34 +135,47 @@ def test_fold_groups_by_arm_key_and_family_mass_keeps_prefix_face():
     rows = [
         _obs(sig, "famA", 1.0, arm_key="famA|full|replay|2"),
         _obs(sig, "famA", 0.0, arm_key="famA|minimal|none|1"),
-        _obs(sig, "famA", 0.0, arm_key=None),  # legacy row, family fallback
+        # #804 de-compat: the third row (arm_key=None) used to fall back
+        # to the bare family cell — retired; it banks nothing and counts
+        # in Fold.unkeyed (pinned exhaustively in test_decompat_804.py).
+        _obs(sig, "famA", 0.0, arm_key=None),
     ]
     view = q_cells.fold(q_cells.InMemoryStore(rows), gamma=1.0)
     assert set(k[1] for k in view.cells) == {
-        "famA|full|replay|2", "famA|minimal|none|1", "famA"}, \
-        "cells must group by the 4-dim arm_key; family-less rows fall back"
+        "famA|full|replay|2", "famA|minimal|none|1"}, \
+        "cells group by the 4-dim arm_key; the unkeyed row is the loud gap"
+    assert view.unkeyed == 1
     s, f = view.family_mass("famA")
-    assert s == 1.0 and f == 2.0, \
+    # #804: the unkeyed row no longer feeds the bare family cell, so the
+    # family mass is the two KEYED cells only.
+    assert s == 1.0 and f == 1.0, \
         "family_mass pools every arm_key cell whose family part matches"
 
 
 def test_cell_posterior_pools_the_legacy_fallback_cell():
+    """#804 de-compat REVERSAL of the former tolerance pin: the bare
+    family cell never pools into a keyed local read — see
+    test_decompat_804.py::test_keyed_local_read_never_pools_the_bare_
+    family_cell for the exact-mass pin."""
     sig = "bbbb0000bbbb"
     view = q_cells.fold(q_cells.InMemoryStore(
         [_obs(sig, "famB", 1.0, arm_key=None)]), gamma=1.0)
+    assert view.unkeyed == 1 and view.cells == {}, \
+        "an unkeyed row banks nowhere; the keyed lookup sees an empty cell"
     a, b = q_cells.cell_posterior(
         view, sig, "famB", arm_key="famB|full|replay|2")
-    assert (a, b) == (2.0, 1.0), \
-        "an arm_key lookup must pool the legacy family-keyed cell (tolerance)"
+    assert (a, b) == (1.0, 1.0), \
+        "no legacy pooling: the keyed read stands on the wide prior"
 
 
 def test_old_logs_without_arm_key_fold_unchanged():
+    """#804 de-compat REVERSAL: old-log rows without arm_key no longer
+    fold at the family key — they are the loud Fold.unkeyed gap."""
     sig = "cccc0000cccc"
     view = q_cells.fold(q_cells.InMemoryStore(
         [_obs(sig, "famC", 1.0), _obs(sig, "famC", 0.0)]), gamma=1.0)
-    cell = view.cells[(sig, "famC")]
-    assert cell.success == 1.0 and cell.failure == 1.0
-    assert q_cells.cell_posterior(view, sig, "famC") == (2.0, 2.0)
+    assert view.cells == {} and view.unkeyed == 2, \
+        "unkeyed old-log rows: no cells, counted gap"
 
 
 # ------------------------------------------------------------ 4. λ tempering

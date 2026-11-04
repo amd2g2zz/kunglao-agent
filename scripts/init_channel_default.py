@@ -15,8 +15,10 @@ ssh|docker|vmr|adb|local). The dynamic-task + local HARD REJECT belongs to
 be the last thing in init that raises.
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import os
 import subprocess
 from dataclasses import dataclass, field

@@ -32,9 +32,10 @@ Contract highlights (spec scenarios are the tests):
   - outcomes: one entry per dispatch attempt, FIFO-per-claim pairing
     with the earliest LATER same-claim result; act_result closed
     vocabulary landed/timeout/blocked/unknown (rc-null → unknown);
-    attribution via method_families.declared_value (envelope first, v0
-    prose marker second) with the claim-register source as fallback —
-    never fabricated; settled/credit from the ledger fold;
+    attribution via method_families.declared_value (the v1 envelope
+    field — the ONE declaration face; the v0 prose marker is retired,
+    #804) with the claim-register source as fallback — never
+    fabricated; settled/credit from the ledger fold;
   - tolerance: a missing/unparseable/undecodable run-state skips the
     run with a warn; dangling pointers degrade fields to nulls;
   - determinism: rows sorted by (family, task_id, run_id, root),

@@ -145,8 +145,9 @@ def test_ghidra_light_still_refused_on_web(tmp_path):
     refused outside its declared lane."""
     ws = _write_lane_ws(tmp_path, "web")
     r = _run_dispatch_gate(tmp_path, ws, "ghidra-light")
-    assert r.returncode == 2, \
-        f"ghidra-light must stay malware-only: {r.stdout}{r.stderr}"
+    # #801: format-class demotion — refusal verdict stays, call proceeds.
+    assert r.returncode == 0, \
+        f"ghidra-light must stay malware-only (demoted): {r.stdout}{r.stderr}"
     assert "lane_routing" in r.stdout + r.stderr
 
 
@@ -179,8 +180,9 @@ def test_plugin_qualified_maker_id_cannot_dodge(tmp_path):
     REFUSED, not silently admitted through an unresolvable filename."""
     ws = _write_lane_ws(tmp_path, "web")
     r = _run_dispatch_gate(tmp_path, ws, "kunglao-agent:ghidra-light")
-    assert r.returncode == 2, \
-        f"plugin-qualified maker id must not dodge the lane gate: " \
+    # #801: format-class demotion — dodge attempt still named, unblocked.
+    assert r.returncode == 0, \
+        f"plugin-qualified maker id must not dodge the lane gate (demoted): " \
         f"{r.stdout}{r.stderr}"
     assert "lane_routing" in r.stdout + r.stderr
 

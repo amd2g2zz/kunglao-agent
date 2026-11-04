@@ -59,8 +59,50 @@ def test_manifest_and_pyproject_are_0_1():
     # The pin is the UPCOMING release's candidate identity — dev declares its
     # own release identity (owner ruling 2026-09-27); the RC cycle carries the
     # rc suffix until the final bump.
-    assert expected == "0.1.6-rc2", f"pyproject version is {expected}, expected 0.1.6-rc2"
+    assert expected == "0.1.6-rc3", f"pyproject version is {expected}, expected 0.1.6-rc3"
 
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == expected, \
         f"release-manifest version is {manifest['version']}, expected {expected}"
+
+
+# ---------- newest release section (contract; version-agnostic) ----------
+
+def _latest_section() -> str:
+    """The changelog section for the CURRENT pyproject version (the
+    release cut renames [Unreleased] in place; the contract follows the
+    version, never a fixed heading)."""
+    pyproject = PYPROJECT.read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert match, "pyproject.toml missing [project].version"
+    heading = f"## [{match.group(1)}] - "
+    text = _changelog_text()
+    assert heading in text, \
+        f"missing changelog section for the current version {match.group(1)}"
+    rest = text.split(heading, 1)[1]
+    nxt = re.search(r"^## \[", rest, re.MULTILINE)
+    return rest[:nxt.start()] if nxt else rest
+
+
+def test_latest_section_shape():
+    section = _latest_section()
+    for sub in ("### Added", "### Changed", "### Fixed"):
+        assert sub in section, f"missing {sub} under the current release"
+    bullets = [ln for ln in section.splitlines() if ln.startswith("- ")]
+    assert len(bullets) >= 12, \
+        f"current release too thin: {len(bullets)} bullets"
+    missing = [ln for ln in bullets if not re.search(r"\(#[0-9]+\)", ln)]
+    assert not missing, \
+        f"current-release bullets without a (#issue) reference: {missing}"
+
+
+def test_latest_section_covers_all_waves_and_the_gate_reversal():
+    section = _latest_section()
+    for issue in ("791", "878", "951", "800", "801", "807", "977"):
+        assert f"#{issue}" in section, \
+            f"current release does not reference wave issue #{issue}"
+    assert "SUPERSEDES" in section and "fail-closed" in section, \
+        "the #801 gate-layering reversal must be recorded explicitly"
+    for hard in ("corruption", "reward_integrity", "termination_budget",
+                 "evidence", "execution_surface"):
+        assert hard in section, f"missing HARD gate class: {hard}"

@@ -25,13 +25,17 @@ health signals rendered at the existing Q/report face
                 triage() reports frequencies + promotion candidates and
                 NEVER auto-promotes (promotion is a reviewed registry
                 diff with a new derivation-doc row)
-  usage         ALLOW-tail rows -> runs/method-family-log.jsonl; the
+  usage         the dispatch observation row IS the usage record (the
+                #804 usage merge closed the side-ledger write)
+                (rlvr.q_cells — the #804 usage merge: the former
+                runs/method-family-log.jsonl is a retired archive, a
+                projection read only, never a scan target); the
                 unified-log dispatch row carries method_family=<token>
-                so logs replay-re-index
+                so legacy logs replay-re-index
   re-index      reindex(root) — scan a campaign/workspaces root for
-                usage logs + unified-log dispatch rows; legacy rows
-                without a family count as unattributed (honest gap,
-                never fabricated)
+                consolidated experience dispatch rows + unified-log
+                dispatch rows; rows without a family count as
+                unattributed (honest gap, never fabricated)
   health        family_health(ws) — never-fills / dominates-all /
                 other>20%-persistent from (family, cell) usage
 
@@ -67,9 +71,7 @@ import yaml
 SCHEMA = "method-families/1"
 REGISTRY_PATH = Path(__file__).resolve().parent / "method_families.yaml"
 
-USAGE_SCHEMA = "method-family-usage/1"
 QUARANTINE_SCHEMA = "method-family-quarantine/1"
-USAGE_REL = "runs/method-family-log.jsonl"
 QUARANTINE_REL = "runs/method-family-quarantine.jsonl"
 
 # the workspace-local discovery overlay (producer: rlvr/expansion.py —
@@ -81,10 +83,6 @@ OTHER = "other"
 OTHER_RE = re.compile(r"^other\((.+)\)$", re.DOTALL)
 OTHER_DETAIL_MAX = 120
 TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]{2,39}$")
-
-# v0 prose declaration face (the #105 dual-face precedent: v1 envelope
-# field OR prose marker; ONE contract, two declaration shapes).
-V0_MARKER_RE = re.compile(r"method-family:\s*([^\n]+)", re.IGNORECASE)
 
 # triage / health policy constants (documented, not fitted)
 PROMOTION_MIN = 3        # same one-line seen >= N times -> promotion candidate
@@ -206,16 +204,20 @@ def _overlay_admits(ws, token: str) -> bool:
 # validation (the ONE gate chokepoint imports these)
 # ---------------------------------------------------------------------------
 
-def declared_value(envelope_meta: dict | None, prompt_text: str) -> str | None:
-    """The declared method family: v1 envelope field first, v0 prose
-    marker second (the #105 dual-face order). None when undeclared."""
+def declared_value(envelope_meta: dict | None,
+                   prompt_text: str = "") -> str | None:
+    """The declared method family: the v1 envelope field is the ONE
+    declaration face. #804 de-compat (R3, with the usage-write closure):
+    the v0 prose-marker fallback (``method-family:`` in the prompt text
+    — a replay-only marker, retired in the recording face in wave-1) is
+    RETIRED here too; keeping it would let a prose-declared ALLOW lose
+    its family record (the observation row is envelope-only). An
+    envelope without the field is the undeclared honest gap."""
+    del prompt_text  # the retired prose face's parameter slot
     if isinstance(envelope_meta, dict):
         v = envelope_meta.get("method_family")
         if isinstance(v, str) and v.strip():
             return v.strip()
-    m = V0_MARKER_RE.search(prompt_text or "")
-    if m:
-        return m.group(1).strip()
     return None
 
 
@@ -229,8 +231,8 @@ def validate_method_family(value: str | None,
     if value is None or not str(value).strip():
         return (False,
                 "dispatch declares no method_family (protocol v1 envelope "
-                "field, or a `method-family: <token>` line on v0 prompts) "
-                "— the approach must be countable for "
+                "field — the ONE declaration face; the v0 prose marker is "
+                "retired, #804) — the approach must be countable for "
                 "Q(state signature, method family) (#432).")
     v = str(value).strip()
     try:
@@ -300,36 +302,6 @@ def append_quarantine_row(ws, claim: str | None, detail: str,
         "claim": claim, "detail": detail, "agent": agent})
 
 
-def append_usage_row(ws, claim: str | None, family: str, agent: str | None,
-                     tier: int = 0, tools: list | None = None, *,
-                     propensity: float | None = None,
-                     sampled_family: str | None = None,
-                     prior_source: str | None = None) -> None:
-    """One usage row per approved dispatch — the (family, cell) counting
-    feed. cell = the claim id today; W2 re-keys to state signatures.
-
-    #691: the row is ALSO the declaration reconciliation record —
-    ``propensity`` (the sampler's draw probability of the DECLARED
-    family), ``sampled_family`` (what the gate's own draw would have
-    chosen) and ``prior_source`` (history | llm_prior | store) ride every
-    row as explicit nulls when the sampler view is unavailable (the
-    honest gap, never a fabricated number). Values are validated at this
-    boundary: a non-numeric / NaN / out-of-[0,1] propensity degrades to
-    null, never a raise."""
-    if isinstance(propensity, bool) or not isinstance(
-            propensity, (int, float)) or propensity != propensity \
-            or not (0.0 <= float(propensity) <= 1.0):
-        propensity = None
-    _append_jsonl(Path(ws) / USAGE_REL, {
-        "schema": USAGE_SCHEMA, "ts": _utc_now_z(),
-        "claim": claim, "cell": claim, "family": family, "agent": agent,
-        "tier": tier, "tools": list(tools or []),
-        "propensity": (None if propensity is None
-                       else round(float(propensity), 6)),
-        "sampled_family": str(sampled_family) if sampled_family else None,
-        "prior_source": str(prior_source) if prior_source else None})
-
-
 def _read_jsonl(path: Path) -> list[dict]:
     if not path.is_file():
         return []
@@ -346,26 +318,6 @@ def _read_jsonl(path: Path) -> list[dict]:
         if isinstance(row, dict):
             rows.append(row)
     return rows
-
-
-def read_usage(ws) -> list[dict]:
-    return _read_jsonl(Path(ws) / USAGE_REL)
-
-
-def usage_family_map(ws) -> dict[str, str]:
-    """Claim id -> the LAST declared family — the settle-side join of
-    the learning→decision bridge: the usage rows are keyed by cid, so a
-    settled claim's dispatch family resolves from this log alone (the
-    same join the case-prior prior source and the credit-into-pool
-    bridge read). Tolerant: unreadable/blank rows are skipped, never
-    raise."""
-    out: dict[str, str] = {}
-    for row in read_usage(ws):
-        cid = str(row.get("claim") or "").strip()
-        fam = str(row.get("family") or "").strip()
-        if cid and fam:
-            out[cid] = fam
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -408,27 +360,34 @@ _FAMILY_DETAIL_RE = re.compile(r"\bmethod_family=([A-Za-z0-9-]+)")
 
 def reindex(root) -> dict:
     """Re-index dispatch actions into (family, cell) usage counts.
-    Legacy dispatch rows WITHOUT a family are counted once as
-    unattributed — the honest gap, never a fabricated bucket.
+    Rows WITHOUT a family are counted once as unattributed — the
+    honest gap, never a fabricated bucket.
 
-    Face precedence: a workspace that HAS a usage log is counted from
-    that face only (its unified-log dispatch rows are skipped) — once
-    the #432 gate ships, every approved dispatch lands in BOTH faces and
-    summing them would double-count. The log face therefore covers
-    legacy/replay workspaces only."""
+    Face precedence (#804 usage merge): the consolidated
+    runs/experience.jsonl dispatch rows are the authoritative face (the
+    usage-ledger columns ride them since the merge); a workspace WITH
+    an experience file skips the unified-log face (no double count).
+    The unified-log face covers legacy/replay workspaces only.
+    Archived usage logs (runs/method-family-log.jsonl) index NOTHING —
+    the archive is never a scan target."""
     root = Path(root)
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
     cells: Counter = Counter()
     fams: Counter = Counter()
     pair: Counter = Counter()
     unattributed = 0
     total = 0
-    usage_roots: set[Path] = set()
-    for p in sorted(root.rglob(USAGE_REL)):
-        usage_roots.add(p.parent.parent)
+    obs_roots: set[Path] = set()
+    for p in sorted(root.rglob(_cl.CONSOLIDATED["experience"])):
+        obs_roots.add(p.parent.parent)
         for row in _read_jsonl(p):
+            if not str(row.get("schema") or "").startswith("q-cell-obs"):
+                continue  # the consolidated file is multi-schema
+            if str(row.get("source") or "") != "dispatch":
+                continue  # settlements bank through the fold, not here
             total += 1
-            family = str(row.get("family") or "")
-            cell = str(row.get("cell") or row.get("claim") or "")
+            family = str(row.get("method_family") or "")
+            cell = str(row.get("claim") or "")
             if not family:
                 unattributed += 1
                 continue
@@ -436,8 +395,8 @@ def reindex(root) -> dict:
             cells[cell] += 1
             pair[(family, cell)] += 1
     for p in sorted(root.rglob("runs/logs/kunglao-*.jsonl")):
-        if p.parent.parent in usage_roots:
-            continue  # counted from its authoritative usage face already
+        if p.parent.parent in obs_roots:
+            continue  # counted from its authoritative experience face already
         for row in _read_jsonl(p):
             if row.get("action") != "dispatch":
                 continue
@@ -514,7 +473,11 @@ def compute_family_health(usage: list[dict],
 
 
 def family_health(ws) -> dict:
-    return compute_family_health(read_usage(ws))
+    """Vocabulary health over the dispatch observation projection (#804
+    usage merge: the former usage-log read — the same substrate the
+    fold and the settle-side family map consume)."""
+    from rlvr import q_cells  # noqa: PLC0415 — lazy (the gate stays import-light)
+    return compute_family_health(q_cells.usage_rows(ws))
 
 
 # ---------------------------------------------------------------------------

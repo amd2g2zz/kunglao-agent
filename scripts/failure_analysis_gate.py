@@ -101,8 +101,10 @@ Exit codes:
   2 = claim not found or terminal (no analysis needed)
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import argparse
 import hashlib
 import json
@@ -269,7 +271,7 @@ def linked_fail_settlements(ws: Path, claim: dict) -> dict[str, int]:
         linked[case_id] = 0
     if not linked:
         return {}
-    import posteriors as po
+    import posteriors_case as po
     try:
         led = po.PosteriorLedger.load(ws)
     except po.PosteriorSchemaError:
@@ -654,6 +656,13 @@ def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
         new_claim["obstacle_class"] = obstacle_class.strip()
     if (parent_claim or {}).get("answers_question"):
         new_claim["answers_question"] = parent_claim["answers_question"]
+    # Supply discipline (claim birth = hypothesis birth): the obstacle
+    # claim is born with its stub hypothesis (BEFORE the register write:
+    # a failed stub refuses the promotion cleanly, never half-mints).
+    from hypothesis_bridge import ensure_claim_stub
+    ensure_claim_stub(workspace, claim_id=new_id,
+                      statement=new_claim["statement"],
+                      qid=new_claim.get("answers_question"))
     claims.append(new_claim)
     reg["claims"] = claims
     (workspace / "claim-register.yaml").write_text(

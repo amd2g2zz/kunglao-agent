@@ -6,8 +6,6 @@ L1 = zero-LLM: every scoring PQ goes through bench_answer_key.match.
 Timeout runs fail CLOSED (success=False) — the experiment semantics, not
 a tool bug — while partial_score keeps the per-PQ diagnostic lens
 (AB-DESIGN §6 two-lens rule, plan B4/B5).
-z_self delegates to value_replay.z_self (the SAME four-channel function
-A1 uses for priors — one definition, two consumers).
 Arm blinding: seal() maps sample→opaque run ids; the arm appears ONLY
 inside the sealed map (grading/sealed-map.yaml, gitignored).
 
@@ -22,7 +20,6 @@ import sys
 from pathlib import Path
 
 import bench_answer_key
-import value_replay
 
 SEAL_SALT = "kunglao-bench-v1"
 
@@ -49,11 +46,6 @@ def grade(answers: dict, key: dict, outcome: str = "done") -> dict:
             "partial_score": round(matched / n, 4),
             "per_pq": per_pq,
             "outcome": outcome}
-
-
-def z_self_of(ws: Path, extra: dict | None = None) -> int:
-    """z_self label from the shared four-channel scan (A1 == B5)."""
-    return value_replay.z_self(Path(ws), extra=extra)["z_self"]
 
 
 def seal(sample_to_arm: dict[str, str]) -> dict[str, dict]:

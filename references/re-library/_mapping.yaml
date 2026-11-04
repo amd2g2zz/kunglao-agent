@@ -34,6 +34,7 @@ scenarios:
   Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
   Action error / tool-VM-install failure response: contracts/error-response-taxonomy
   Ask-the-user / irreversible-action decision: contracts/agent-three-state-charter
+  LLM judging or scoring a surface (settle / redteam / eval grade): contracts/rubrics/llm-settlement-rubric + contracts/rubrics/llm-redteam-rubric + contracts/rubrics/llm-eval-grading-rubric
 when_to_read:
   references/re-library/web/external-distilled/_GAP-REPORT.md: Before extending the external-distilled
     lane or judging a follow-up adoption.
@@ -63,6 +64,10 @@ when_to_read:
     tracing crashes the target, or observation stays empty.
   references/re-library/web/external-distilled/external-algorithm-recovery-chains.md: When planning a
     signature or encryption recovery task and choosing where to enter.
+  references/re-library/web/external-distilled/external-captcha-perception-methods.md: When choosing an
+    attack route for an interactive-perception captcha.
+  references/re-library/web/external-distilled/external-captcha-perception-atlas.md: When a route is
+    chosen and its build parameters or tool addresses are needed.
   references/re-library/web/external-distilled/external-delivery-verification-gates.md: When a recovered
     signer or protocol is about to be declared working or delivered.
   references/re-library/web/external-distilled/external-env-stub-generation.md: When a recovered signer must
@@ -417,6 +422,14 @@ cards:
   family: external-distilled
 - from: references/re-library/external-algorithm-recovery-chains.md
   to: references/re-library/web/external-distilled/external-algorithm-recovery-chains.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-captcha-perception-methods.md
+  to: references/re-library/web/external-distilled/external-captcha-perception-methods.md
+  domain: web
+  family: external-distilled
+- from: references/re-library/external-captcha-perception-atlas.md
+  to: references/re-library/web/external-distilled/external-captcha-perception-atlas.md
   domain: web
   family: external-distilled
 - from: references/re-library/external-delivery-verification-gates.md

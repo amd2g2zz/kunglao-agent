@@ -30,6 +30,11 @@
 //   task chip             who is working on what NOW   lib_kunglao worker-status protocol —
 //   (now{claim,op})       (idle · last C-<id> parked)  the same scan feeds dispatch gate +
 //                                                      capacity checks (check_workers_lt_3)
+//   loop chips            the rl-v2 loop's live state  the #913 DecisionLoop's belief seam
+//   (snap.loop: L/rid,    (lap·rollout, P(s) trend,    materializes the feed each lap —
+//   P+arrow, [phase],     phase, pool, trust band)     the same ledger faces the selector/
+//   pool, T:band)                                      terminator/settlement seams consume
+//                                                      read (single source: the feed file)
 //   flash (⚡, 5s)        milestone/state-change ping  producer-detected triggers the tick's
 //                                                      action loop already acts on
 //   eta (snapshot-level;  time remaining via flash    budget pacing (eta_ticks extrapolation,
@@ -303,6 +308,54 @@ function difficultyBadge(snap) {
   return '';
 }
 
+// #914 loop segments: the rl-v2 loop's live state — which lap, the
+// current rollout, P(s) level + trend arrow, the phase tag, the pool
+// size, the trust band. Data rides `snap.loop` (the loop-side feed
+// face's materialized file, embedded by the producer verbatim — the
+// renderer stays a dumb view over ONE snapshot). Closed color table,
+// the entropy badge's precedent: rising = learning (green), falling =
+// regress (red), flat = stall-suspect (amber). Every field is read
+// with the Number(null) trap guarded (the rank chip's precedent): a
+// null/absent lap never renders `L0`, a null p_level never renders
+// `P0.00` — the absent face, never a fabricated value. Absent
+// segments are hidden; a garbage section never kills the line.
+const LOOP_TREND_ARROWS = { rising: '↑', falling: '↓', flat: '→' };
+
+function loopSegments(loop) {
+  if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return [];
+  const segs = [];
+  const hasLap = Number.isFinite(Number(loop.lap)) && loop.lap !== null;
+  const rid = typeof loop.rollout_id === 'string' ? loop.rollout_id.trim() : '';
+  if (hasLap || rid) {
+    const ridText = rid ? `·${rid.slice(0, 18)}` : '';
+    segs.push(PALETTE.cyan(hasLap ? `L${Number(loop.lap)}${ridText}` : rid.slice(0, 18)));
+  }
+  const hasP = loop.p_level !== null && loop.p_level !== undefined
+    && Number.isFinite(Number(loop.p_level));
+  if (hasP) {
+    const trend = typeof loop.p_trend === 'string' ? loop.p_trend : '';
+    const arrow = LOOP_TREND_ARROWS[trend] ?? '';
+    const text = `P${Number(loop.p_level).toFixed(2)}${arrow}`;
+    segs.push(trend === 'rising' ? PALETTE.green(text)
+      : (trend === 'falling' ? PALETTE.red(text) : PALETTE.amber(text)));
+  }
+  if (typeof loop.phase === 'string' && loop.phase.trim()) {
+    segs.push(PALETTE.dim(`[${loop.phase.trim()}]`));
+  }
+  if (typeof loop.method_family === 'string' && loop.method_family.trim()) {
+    segs.push(PALETTE.dim(loop.method_family.trim()));
+  }
+  const pool = loop.pool && typeof loop.pool === 'object' && !Array.isArray(loop.pool)
+    ? loop.pool
+    : null;
+  const eps = pool ? Number(pool.episodes) : NaN;
+  if (Number.isFinite(eps) && eps > 0) segs.push(PALETTE.dim(`pool${eps}`));
+  if (typeof loop.trust_band === 'string' && loop.trust_band.trim()) {
+    segs.push(PALETTE.dim(`T:${loop.trust_band.trim()}`));
+  }
+  return segs;
+}
+
 // #212 perf segments: claims progress (closed/total, LIVE ledger — the
 // denominator grows as discovery registers claims), rolling win-rate
 // (#156 settlement stream), worker liveness. Absent = hidden.
@@ -413,6 +466,7 @@ function renderKunglao(snapPath, nowMs) {
   const chip = taskChip(snap.now);
   const diff = difficultyBadge(snap);
   const perfSegs = perfSegments(snap.perf);
+  const loopSegs = loopSegments(snap.loop);
 
   // Flash (5s window, kept): producer-detected triggers ship {seq, ts, text}.
   let flash = '';
@@ -434,6 +488,7 @@ function renderKunglao(snapPath, nowMs) {
   if (diff) parts.push(diff);
   if (dots) parts.push(dots);
   if (perfSegs.length) parts.push(...perfSegs);
+  if (loopSegs.length) parts.push(...loopSegs);
   if (chip) parts.push(PALETTE.dim('│'), chip);
   if (flash) parts.push(flash.trim());
   return parts.join(' ');

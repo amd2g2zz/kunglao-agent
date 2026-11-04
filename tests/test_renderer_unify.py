@@ -83,6 +83,14 @@ sys.path.insert(0, str(SCRIPTS))
 # 2026-10-15 regen (issue 687 blind settlement): one Roles roster row
 # (kunglao-settler) joined the derived table per fixture — no other byte
 # changed (diff-guarded regen, same sentinel renderer).
+# 2026-10-31 regen (issue 901 RL block): the project-instructions template
+# gained the rl-v2 learning-system note, then F-C1 folded it into the
+# loop-enforcement bullet list (the core-section cap enforces the index
+# discipline) — the four fixtures re-rendered twice through the same
+# sentinel path (diff-guarded regen).
+# 2026-10-31 regen (#947 mcp manifest rename): the decompiler MCP row is
+# ida-pro-mcp (the live MCP's name — the ida-pro-vm-only scan was a false
+# negative); the rendered MCP table row changed accordingly.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

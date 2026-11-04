@@ -267,9 +267,11 @@ class TestScenario1DispatchCapabilityCrossCheck:
             '{"kunglao_dispatch": {"version": 1, "claim": "C-1", '
             '"tier": 1, "tools": ["ghidra-decompile-functions"]}}\n'
             'decompile the string routine')
-        assert r.returncode == 2, (
+        # #801: format-class demotion — switch verdict + disproof marker
+        # stay, the call proceeds rc 0.
+        assert r.returncode == 0, (
             f"validated x64dbg card + ghidra dispatch is an undisproved "
-            f"family switch; rc={r.returncode}, stderr={r.stderr!r}")
+            f"family switch (demoted); rc={r.returncode}, stderr={r.stderr!r}")
         assert "REJECT capability" in r.stderr, f"stderr={r.stderr!r}"
         assert "capability-disproof" in r.stdout, (
             f"fix guidance must teach the disproof marker; "

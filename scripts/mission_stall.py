@@ -14,8 +14,10 @@
 ；心跳存活面管"进程死活"（#830 侧车）。本模块只看主线值。
 """
 from __future__ import annotations
-# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace — the canonical kunglao_log.warn.
-from kunglao_log import warn  # canonical warn: ONE implementation (process-wide dedupe + ledger face)
+# issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
+# the canonical kunglao_log.warn.
+# canonical warn: ONE implementation (process-wide dedupe + ledger face)
+from kunglao_log import warn
 import json
 from pathlib import Path
 

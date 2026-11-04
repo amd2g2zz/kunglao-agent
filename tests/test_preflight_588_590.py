@@ -40,20 +40,3 @@ def test_quick_presence_never_raises(tmp_path):
 
 # ---------- #590: preconditions decision group ----------
 
-def test_preconditions_group_shape():
-    group = toolchain.preconditions_questions()
-    ids = [q["id"] for q in group]
-    assert "preconditions" in ids, "rides the native-question round as a group"
-    q = next(q for q in group if q["id"] == "preconditions")
-    assert "context" in q and isinstance(q["context"], dict), \
-        "probe findings ride as CONTEXT, never as answers (pending is the floor)"
-
-
-def test_preconditions_context_carries_probe_findings(tmp_path):
-    ws = tmp_path / "ws"; ws.mkdir()
-    group = toolchain.preconditions_questions(ws)
-    q = next(q for q in group if q["id"] == "preconditions")
-    keys_a = sorted(q["context"].keys())
-    group2 = toolchain.preconditions_questions(ws)
-    q2 = next(q for q in group2 if q["id"] == "preconditions")
-    assert sorted(q2["context"].keys()) == keys_a, "same ws → same context keys"

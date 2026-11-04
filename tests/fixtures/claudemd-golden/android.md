@@ -1,4 +1,4 @@
-<!-- kunglao:frame:v0.1.6-rc2 -->
+<!-- kunglao:frame:v0.1.6-rc3 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -38,6 +38,7 @@ The convergence loop runs every round and is the only rule set that survives con
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
 - Delivery contract: complete `goal-operationalization.yaml` (deliverables / not_done / diff_vs_verbatim / probe_cases) and pass `scripts/goal_operationalization.py` on it BEFORE the first dispatch — an unaudited draft keeps every decide BLOCKED (verification undeclared, #147); then arm the declared probe cases (`oracle/`) and run `scripts/oracle_runner.py` until green.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
+- Learning system (rl-v2): the loop owns `runs/experience.jsonl` (created by its bootstrap, never seeded by init, never hand-edited — a hand edit is the corruption it would learn from); `experiments/` is local-only, carved out of every upgrade purge. Contracts and details: the skill's RL section and `docs/architecture/rl-signal-contract.md`.
 
 ## Skill & orchestrator
 
@@ -63,7 +64,7 @@ Capability discovery (tool recall) goes through the ONE search face —
 | `blockers/` | Active blocker files |
 | `runs/` | Worker status files + `.heartbeat.json` |
 
-**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence. Every fact file carries mandatory frontmatter — `id: F<NNN>`, `type: fact`, `title`, `status` — the write guard's lint refuses a file missing them. When a fact genuinely carries an open counter-hypothesis or a next experiment, add `uncertainty:` (what would refute or weaken it) and/or `next_probe:` (the runnable experiment, dispatchable verbatim as a sub-goal — the EXPERIMENT testing `promotion_gate`, the CONDITION); both optional, absent is the common case, never filler. `claim-register.yaml` is single-writer (#516): mutate it ONLY via `python3 scripts/ws_yaml.py set|del claim-register.yaml <dotted.path> <value>` — direct Bash/Edits are refused.
+**Facts** go in the `facts/` directory, one file per fact, named with the fact's `id`: the id follows the `F<NNN>-<slug>` pattern — `F` immediately followed by 3 or more digits, then a hyphen and a lowercase-hyphenated slug describing the finding (e.g. id `F001-first-finding`, file `facts/F001-first-finding.md`; the bare `F-001` shape is REFUSED by the lint — no hyphen between `F` and the digits, and the slug is mandatory). Byte-anchored, reproducible evidence. Every fact must pass the fact lint on first write: mandatory frontmatter includes `type: fact` among the required fields, and the authoritative contract — the complete mandatory set, the kunglao extension layer, and a complete lint-passing example — is **`.claude/templates/fact-frontmatter.md`**; read it before your first fact write and do not improvise the frontmatter shape (an incomplete fact is refused and never enters the fact base). When a fact genuinely carries an open counter-hypothesis or a next experiment, add `uncertainty:` (what would refute or weaken it) and/or `next_probe:` (the runnable experiment, dispatchable verbatim as a sub-goal — the EXPERIMENT testing `promotion_gate`, the CONDITION); both optional, absent is the common case, never filler. `claim-register.yaml` is single-writer (#516): mutate it ONLY via `python3 scripts/ws_yaml.py set|del claim-register.yaml <dotted.path> <value>` — direct Bash/Edits are refused.
 
 ## Roles & responsibilities
 
@@ -77,7 +78,7 @@ tool means you have left the orchestrator role — hand the work to an agent.
 | `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
 | `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
 | `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis (both the claim layer… | attack-test a claim before it is promoted to PROVEN |
-| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `verdict-scorer` | Deterministic PQ-coverage corridor — scoring itself is a script… | score verdict.json against task_spec primary_questions |
 | `kunglao-settler` | BLIND SETTLEMENT SUBAGENT — the independent settler that turns raw step artifacts into… | blind step settlement from raw artifacts (never producer narrative) |
 | `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
 | `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
@@ -153,7 +154,7 @@ Notes travel in six carriers; each row is the contract for what lands there, who
 | Carrier | Write what | Who writes, when | When to recall | Correction semantics |
 |---------|------------|------------------|----------------|----------------------|
 | `claim-register.yaml` | New OPEN claims or status transitions | Worker, when evidence emerges | Every round, before `convergence_check.py` | Status moves forward only with verifier sign-off; history is never edited |
-| `facts/_INDEX.md` + `facts/F<NNN>.md` | Byte-anchored reproducible facts | Worker, on first observation | Every round, on claim cite | A superseding fact lands as a new `F<NNN>` entry; the prior row stays |
+| `facts/_INDEX.md` + `facts/F001-first-finding.md` | Byte-anchored reproducible facts | Worker, on first observation | Every round, on claim cite | A superseding fact lands as a new `F`-series entry; the prior row stays |
 | `blockers/` | Blocker files for unresolvable environment/tooling gaps | Worker, after the self-repair ladder fails | Every round, before dispatch | A blocker closes only when its root cause is resolved and recorded |
 | `global_plan.txt` | High-level strategy shifts only | Orchestrator, on milestone change | Every round, after the convergence verdict | Amendments append; the prior plan text is preserved under `runs/`; a drift-REJECT amendment is verified — the same drift persisting 3 detection rounds escalates as `plan_repair_overdue` |
 | `analysis_state.txt` | Venv path, sample hash, toolchain, worker roster | Init and env repair | Every cold start and post-compact re-entry | The file is authoritative; in-memory guesses are discarded |
@@ -230,7 +231,7 @@ Analysis correctness depends on registered MCP servers — a fresh machine deplo
 |------------|------|-------|---------|--------------|
 | `ghidra` | HARD | all types | Ghidra decompile/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
 | `sequential-thinking` | HARD | all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
-| `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `ida-pro-mcp` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |
 | `gitnexus` | HARD | Android graph flow | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | intelligence (family attribution) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 

@@ -21,7 +21,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,7 +102,10 @@ def _emit_direct(ws: Path, actions: list) -> dict:
     kunglao_log.emit = _fake
     try:
         pr._emit_rank_feeds(ws, claims=[], evidence=pr.EvidenceView(),
-                            rng_base=0, actions=actions, round_no=0)
+                            rank_inputs={"claims_hash": "0",
+                                         "evidence_hash": "0",
+                                         "posterior_hash": "0"},
+                            actions=actions, round_no=0)
     finally:
         kunglao_log.emit = original
     return _payload_of(calls)
@@ -116,7 +118,7 @@ def _emit_direct(ws: Path, actions: list) -> dict:
 def test_rank_feeds_payload_carries_the_view_keys(tmp_path, events):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    actions = pr.priority_ratio(claims, deps, ev, rng=random.Random(11))
+    actions = pr.priority_ratio(claims, deps, ev)
     payload = _payload_of(events)
 
     assert {"entropy", "propensity", "k", "tiers"} <= set(payload)
@@ -140,23 +142,24 @@ def test_rank_feeds_payload_carries_the_view_keys(tmp_path, events):
 def test_rank_feeds_fingerprint_excludes_view_keys(tmp_path, events):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    pr.priority_ratio(claims, deps, ev, rng=random.Random(1))
+    pr.priority_ratio(claims, deps, ev)
     fp = _payload_of(events)["input_fingerprint"]
 
-    assert set(fp) == {"claims_hash", "evidence_hash", "rng_base",
-                       "round", "fingerprint"}
+    assert set(fp) == {"claims_hash", "evidence_hash", "posterior_hash",
+                       "rng_base", "round", "fingerprint"}
     canon = json.dumps({k: fp[k] for k in
-                        ("claims_hash", "evidence_hash", "rng_base", "round")},
+                        ("claims_hash", "evidence_hash", "posterior_hash",
+                         "rng_base", "round")},
                        sort_keys=True, ensure_ascii=False)
     assert fp["fingerprint"] == hashlib.sha256(
         canon.encode("utf-8")).hexdigest()
 
 
-def test_same_seed_replays_identical_view_keys(tmp_path, events):
+def test_same_inputs_replay_identical_view_keys(tmp_path, events):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    pr.priority_ratio(claims, deps, ev, rng=random.Random(7))
-    pr.priority_ratio(claims, deps, ev, rng=random.Random(7))
+    pr.priority_ratio(claims, deps, ev)
+    pr.priority_ratio(claims, deps, ev)
     rows = [json.loads(c["detail"]) for c in events
             if c["action"] == "rank_feeds"]
     assert len(rows) == 2
@@ -282,7 +285,7 @@ def test_latest_payload_absent_face(tmp_path):
 def test_why_this_one_reads_the_persisted_keys(tmp_path):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    actions = pr.priority_ratio(claims, deps, ev, rng=random.Random(3))
+    actions = pr.priority_ratio(claims, deps, ev)
 
     why = dv.build_view(ws)["faces"]["why_this_one"]
     persisted = rank_face.latest_payload(ws)["payload"]
@@ -301,7 +304,7 @@ def test_why_this_one_reads_the_persisted_keys(tmp_path):
 def test_next_candidates_carry_score_and_tier_per_row(tmp_path):
     ws = _rank_ws(tmp_path, cases=[("CASE-A", "pq-a", 3.0, 1.0)])
     claims, deps, ev = _rank_inputs(ws)
-    actions = pr.priority_ratio(claims, deps, ev, rng=random.Random(5))
+    actions = pr.priority_ratio(claims, deps, ev)
 
     nxt = dv.build_view(ws)["faces"]["next_candidates"]
     assert nxt["k"] == len(actions)

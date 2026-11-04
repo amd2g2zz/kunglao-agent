@@ -10,7 +10,7 @@
 
 **🧠 plans its own route** · **🔬 every claim machine-checked** · **⚖️ blind verification on everything** · **📈 the loop measures itself**
 
-🚀 Quick Start · ✨ Core Tech · 🧠 kunglao × Claude Code · 🎛️ How RL Works · 🖥️ Showcase · 📖 Case Studies · 🧪 Evaluation · 🏗️ Architecture · 🗓️ Roadmap
+[📖 Introduction](#-introduction) · [🖥️ Showcase](#️-showcase) · [✨ Core technology](#-core-technology) · [🧠 kunglao × Claude Code](#-kunglao--claude-code) · [🎛️ Online RL: the loop gets better while it works](#️-online-rl-the-loop-gets-better-while-it-works) · [📋 Requirements](#-requirements) · [Quick start](#quick-start) · [Subcommands](#subcommands) · [What a run looks like](#what-a-run-looks-like) · [📖 Stating the task](#-stating-the-task) · [🧰 The run you watch](#-the-run-you-watch) · [📚 Case studies](#-case-studies) · [🧪 Evaluation and measured results](#-evaluation-and-measured-results) · [🏗️ Architecture](#️-architecture) · [Bring your own environment](#bring-your-own-environment) · [MCP servers](#mcp-servers) · [🗓️ Roadmap](#️-roadmap) · [❓ FAQ](#-faq) · [🔐 Safety](#-safety) · [🧪 Development](#-development) · [📝 License](#-license)
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -135,7 +135,7 @@ failed tries — the same idea renamed is refused.
 **3. Where to double-check.** States where verifiers keep getting refuted
 learn to schedule verification more tightly there — and relax when the
 streak turns honest.
-**4. Which tools to route.** Tool and provider choices are learned too: a tool that fails gets demoted for a while and is reinstated the moment it works again - routing follows the recorded outcomes, not the registry order.
+**4. Which tools to route.** Tool and provider choices are learned too: a tool that fails gets demoted for a while and is reinstated the moment it works again — routing follows the recorded outcomes, not the registry order.
 
 ### How the learning works
 
@@ -149,33 +149,41 @@ flowchart LR
     F --> B
 ```
 
-The notes are simple success/failure tallies per method per state, with a
-bias toward trying anything not yet ruled out — exploration fades exactly
-as fast as evidence accumulates. Reward is `progress x weight - cost`, so
-an expensive habit that barely moves the needle loses money on simple
-targets, and every number traces to an append-only ledger row.
+The notes are Beta tallies per arm, keyed on four dimensions — method
+family, context recipe (what the target looked like), verification mode and
+difficulty tier — plus an agent segment once more than one worker type is in
+play, so each worker type addresses its own cell. Selection samples from the
+cell instead of taking the argmax: an arm with little evidence keeps a wide
+spread and still gets tried, and exploration fades exactly as fast as the
+spread narrows. Reward is `progress x weight - cost`, so an expensive habit
+that barely moves the needle loses money on simple targets, and every number
+traces to an append-only ledger row.
 
-### What this buys - and what it deliberately does not
+### What this buys — and what it deliberately does not
 
 - **Cost drops on familiar work.** The second task of a kind is cheaper
   than the first; the notes persist across tasks in the deployment.
 - **Budget stops bleeding.** Dead methods are benched before they drain
   the clock; the discovery layer replaces vocabulary nobody wrote.
-![Win rate rises, steps to solve falls - the loop's own ledger is the evidence](docs/assets/rl-curves.gif)
-
-- **The model is frozen.** Capability does not grow - scheduling does:
+- **The model is frozen.** Capability does not grow — scheduling does:
   the right method, in the right order, at the right moment.
-- **Honesty is not learned - it is enforced.** The checker pays only for
+- **Honesty is not learned — it is enforced.** The checker pays only for
   results it can re-verify; a worker's own words never count as proof.
   RL optimizes efficiency on top of that honest currency; it can never
   mint credit by fiction.
+
+![One chart, two measures: win rate climbs on the left axis while steps to settle fall on the right](docs/assets/rl-curves.gif)
+
+One chart, two measures — win rate on the left axis, steps to settle on the right.
+Both are read off the same append-only ledger, so the improvement is auditable,
+not asserted.
 
 ![The checker pays only for verifiable results](docs/assets/rl-pricing.gif)
 
 ### How this differs from the common approaches
 
 Knowledge routing (a manual the LLM improvises against), bounded pipelines
-(fixed stages, fixed rounds), single-verdict triage - all decide with fixed
+(fixed stages, fixed rounds), single-verdict triage — all decide with fixed
 logic: last task's experience never changes next task's plan. The loop's
 control law is learned from its own measured history:
 
@@ -189,7 +197,7 @@ control law is learned from its own measured history:
 | Python 3.10 | 3.10+ floor (Python 2 is not supported) | the plugin carries a pinned env via `uv` |
 | `uv` | any recent | [astral.sh/uv](https://astral.sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh \| sh` (never `pip install uv`) |
 | Ghidra or IDA | one of them | decompilation for native targets |
-| MCP servers | 2 required | `ghidra` + `sequential-thinking` — see [Toolchain](#-toolchain-by-target) |
+| MCP servers | 2 required | `ghidra` + `sequential-thinking` — see [Toolchain](#toolchain-by-target) |
 
 > [!WARNING]
 > Analysis acts run real tools and may execute target-derived inputs. Use
@@ -341,9 +349,10 @@ Each case has a Chinese version alongside the English one under `docs/cases/`.
 
 Constructed targets with mechanical oracles and ground truth known by
 construction; checkers mint held-out probes the candidate never saw. The
-built-in 12-unit L1 matrix (static RE targets across JS, x86/ARM64 ELF,
-Windows PE; byte-anchored deliverables only, no partial credit, pass@1,
-per-session caps):
+12-unit L1 matrix (static RE targets across JS, x86/ARM64 ELF, Windows PE;
+byte-anchored deliverables only, no partial credit, pass@1, per-session
+caps). The corpus is operator-local — the targets are not shipped with the
+repo, so these rows are measurements, not a suite you can rerun:
 
 | Runtime | pass@1 | Session cost |
 |---|---|---|
@@ -355,9 +364,12 @@ Read honestly: these 12 units are single-session-tractable and a frontier
 model with default tools saturates them cheapest — kunglao's differentiation
 is **long-horizon layered work, verification discipline (oracle + blind
 red-team on every claim), and the dynamic lanes**, not single-session speed.
-The measured long-horizon matrices and the five-arm comparison (bare CC /
-CC+warm-context / kunglao cold / kunglao warm / no-recall ablation) land
-with the current release train.
+The measured long-horizon matrices and the seven-arm ladder — bare CC,
+CC with warm context, CC with same-cost multisampling, kunglao cold, kunglao
+with its scheduler flattened to uniform, kunglao warm, and warm with recall
+ablated — land with the current release train. Three readouts keep the causes
+apart: learning value (warm − uniform), architecture value (uniform − bare
+CC), and the sampling rebuttal (warm versus same-cost multisampling).
 
 Control-arm A/B and the replay ruler (offline ranker-quality measurement)
 ship as commands: `scripts/eval_control_arm.py --ab`, `scripts/replay_ruler.py <ws>`.
@@ -389,7 +401,7 @@ One workspace per engagement — scaffolded by init; hooks are wired at workspac
 <workspace>/
 ├── bins/<sha256>        # the sample (gitignored)
 ├── task_spec.yaml       # goal / verification logic / constraints
-├── claim-register.yaml  # claims C-NN with status
+├── claim-register.yaml  # claims C-NN with status (semantic writes owned by scripts/claims_store.py, #800)
 ├── facts/               # byte-anchored facts F-NNN.md + _INDEX.md
 ├── evidence/            # raw artifacts + _index.json (path + sha256)
 ├── runs/                # ledgers, worker status, heartbeat
@@ -401,6 +413,8 @@ One workspace per engagement — scaffolded by init; hooks are wired at workspac
 
 <details>
 <summary><strong>Toolchain by target</strong> — the `--type` you pick at init locks the HARD tier</summary>
+
+### Toolchain by target
 
 **All types require the two HARD MCP servers** (`ghidra` +
 `sequential-thinking` — commands in the MCP section below). Expand your
@@ -521,7 +535,7 @@ uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>
 | `sequential-thinking` | HARD | required, all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
 | `x64dbg` | HARD | Windows T3 dynamic | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
 | `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `ida-pro-mcp` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-mcp <ida-mcp-url>` |
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
@@ -534,7 +548,7 @@ registrations above are for machines deployed per the kunglao docs.
 
 ## 🗓️ Roadmap
 
-- Five-arm capability matrix (bare CC vs CC+warm-context vs kunglao cold/warm/no-recall) on the held-out corpus
+- Seven-arm capability matrix (bare CC, CC+warm-context, CC+same-cost multisampling, kunglao cold/uniform/warm/no-recall) on the held-out corpus
 - Registry admission for discovered arms — making novel methods dispatchable
 - Cross-workspace memory: what works where, feature-keyed
 - The blocked-path measurement corpus — quantifying discovery beyond history

@@ -74,8 +74,7 @@ for a constant γ this is exactly the γ^age weight.
 ## Recording face (the sampler's data spine)
 
 ``runs/experience.jsonl`` (the consolidated WHAT-HAPPENED file, #721;
-``runs/q-cell-log.jsonl`` remains readable — and migration-archived —
-during the compat window) — append-only rows
+the single substrate, #804 de-compat) — append-only rows
 {schema: q-cell-obs/1, ts, source: dispatch|settlement, signature_hash,
 method_family, claim, agent, credit}. Dispatch rows carry credit=None
 (pending — structural cell mass, never posterior mass); settlement rows
@@ -99,12 +98,13 @@ when that factory exists (lazy import), else the JSONL face above.
 ## Offline index
 
 ``reindex(root)`` — the deterministic offline index over dispatch
-history, à la method_families.reindex: face 1 the q-cell observation
-log (exact signatures), faces 2/3 the #432 usage log and the
-unified-log dispatch rows (no historical signature recoverable — keyed
-under the workspace's CURRENT signature, flagged as approximated and
-counted pending only; credits join through the observe() face, the
-W2-T4 settlement wiring).
+history: face 1 the consolidated observation log (exact signatures —
+since the #804 usage merge it also carries the usage-ledger columns,
+so it is the only live (family, cell) source), face 2 the unified-log
+dispatch rows (no historical signature recoverable — keyed under the
+workspace's CURRENT signature, flagged as approximated and counted
+pending only; credits join through the observe() face, the W2-T4
+settlement wiring).
 
 ## Zero-decision posture
 
@@ -143,13 +143,17 @@ if __package__ in (None, ""):
 
 from kunglao_log import iter_jsonl, warn
 
+from rlvr import action_params as _action_params  # noqa: E402 — the issue-924 spec (stdlib-only module)
 from rlvr import state as ssig  # the package face (issue 420 Phase 2)
+from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
-OBS_REL = "runs/q-cell-log.jsonl"  # legacy rel (pre-#721 archive)
-# #721: the consolidated experience rel (the live observation home)
+# #721: the consolidated experience rel (the ONE observation home).
+# #804 de-compat: the legacy runs/q-cell-log.jsonl rel is retired — the
+# archive is a READ-registry entry in rlvr.consolidated_ledger.LEGACY
+# (the #721 migration source), never a write or scan target.
 EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
@@ -244,14 +248,13 @@ def _resolve_schedule(gamma) -> GammaSchedule:
         f"constant in (0, 1], or a gamma()/observe() schedule; got "
         f"{gamma!r:.80}")
 
-# the #432 v0 prose declaration face (dual-face contract: v1 envelope
-# field FIRST, prose marker second — same order as method_families)
-_V0_MARKER_RE = re.compile(r"method-family:\s*([^\n]+)", re.IGNORECASE)
 _SIG_HASH_RE = re.compile(r"^[0-9a-f]{12}$")
 
-# #432 usage-log face (the (family, cell) counting feed) and the
-# unified-log dispatch detail marker both feed reindex
-_USAGE_REL = "runs/method-family-log.jsonl"
+# the unified-log dispatch detail marker feeds reindex's replay face
+# (workspaces with no consolidated experience file). #804 usage merge:
+# the former face 2 (the #432 usage log) is RETIRED — face 1 (the
+# experience file) carries the usage columns since the merge and is
+# the only (family, cell) source for live workspaces.
 _FAMILY_DETAIL_RE = re.compile(r"\bmethod_family=([A-Za-z0-9-]+)")
 
 
@@ -283,13 +286,12 @@ class InMemoryStore:
 
 class JSONLQStore:
     """The default day-one store: the consolidated runs/experience.jsonl
-    (#721) with the legacy runs/q-cell-log.jsonl riding the compat
-    window. The stamp filter keeps the file's other schemas out — only
-    q-cell-obs rows ever enter the fold."""
+    (#721 — the single substrate, #804 de-compat). The stamp filter keeps
+    the file's other schemas out — only q-cell-obs rows ever enter the
+    fold."""
 
     def __init__(self, root):
         self.root = Path(root)
-        self.path = self.root / OBS_REL  # legacy rel (kept for callers)
 
     def observations(self) -> list[dict]:
         return _cl.read(self.root, "experience",
@@ -314,6 +316,62 @@ def default_store(ws) -> QCellStore:
         return JSONLQStore(ws)
 
 
+def _dispatch_rows(ws) -> list[dict]:
+    """The dispatch half of the consolidated observation log — the ONE
+    read face behind the usage projections (#804 usage merge): trusted
+    rows (the learner read face), dispatch source only."""
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.dispatch_rows")
+    return [r for r in rows if isinstance(r, dict)
+            and str(r.get("source") or "") == "dispatch"]
+
+
+def usage_family_map(ws) -> dict[str, str]:
+    """Claim id -> the LAST declared family — the settle-side join of
+    the learning→decision bridge. #804 usage merge: the former
+    usage-log read (method_families.usage_family_map) projects the
+    dispatch observation rows instead — the SAME substrate the fold
+    consumes, one store per write event. Tolerant: family-less rows
+    are skipped (the honest gap), never raise."""
+    out: dict[str, str] = {}
+    for row in _dispatch_rows(ws):
+        cid = str(row.get("claim") or "").strip()
+        fam = str(row.get("method_family") or "").strip()
+        if cid and fam:
+            out[cid] = fam
+    return out
+
+
+def dispatch_method(ws, claim: str) -> dict | None:
+    """The claim's declared method from its LAST dispatch row:
+    ``{family, tools}``. None when the claim never dispatched (the
+    honest gap — no fabricated method). #804 usage merge: the former
+    usage-log read (crystallize.resolve_method over read_usage)."""
+    cid = str(claim or "")
+    found = None
+    for row in _dispatch_rows(ws):
+        if str(row.get("claim") or "") != cid:
+            continue
+        fam = str(row.get("method_family") or "").strip()
+        if not fam:
+            continue
+        found = {"family": fam,
+                 "tools": [str(t) for t in (row.get("tools") or [])
+                           if str(t).strip()]}
+    return found
+
+
+def usage_rows(ws) -> list[dict]:
+    """The usage-ledger PROJECTION of the dispatch rows (#804 usage
+    merge): ``{family, cell, claim}`` — the counting columns the
+    vocabulary module's health face consumes, read from the single
+    substrate."""
+    return [{"family": str(r.get("method_family") or ""),
+             "cell": str(r.get("claim") or ""),
+             "claim": str(r.get("claim") or "")}
+            for r in _dispatch_rows(ws)]
+
+
 # ---------------------------------------------------------------------------
 # fold (γ discount on the read face; raw rows never rewritten)
 # ---------------------------------------------------------------------------
@@ -334,8 +392,15 @@ class CellCounts:
 
 @dataclass(frozen=True)
 class Fold:
-    """The γ-discounted read view over a store's observations."""
+    """The γ-discounted read view over a store's observations.
+
+    ``unkeyed`` (#804 de-compat): rows without an ``arm_key`` — the
+    pre-keyed old-log shape — bank NO mass and NO pending count; the
+    counter IS the loud un-attributed gap (mirrors kunglao_log's
+    null-actor gap: the missing attribution is the signal, never a
+    fabricated bucket)."""
     cells: dict[tuple[str, str], CellCounts] = field(default_factory=dict)
+    unkeyed: int = 0
 
     def family_mass(self, family: str) -> tuple[float, float]:
         """(success, failure) mass over ALL signatures — the family
@@ -405,18 +470,44 @@ def tiebroken_credit(credit: float, phi_delta) -> float:
 
 
 def family_of_action(action_key: str) -> str:
-    """The FAMILY part of a consumed action key: the 4-dim arm_key's
-    first segment, or the key itself for legacy family-keyed rows (the
-    dual-write tolerance — #539 WS1 recorded the key, #545 consumes it)."""
+    """The FAMILY part of a consumed action key: the arm_key's first
+    segment (the 4-dim family|recipe|verif|tier shape; a 5-dim
+    agent-conditioned key's first segment is equally the family)."""
     k = str(action_key or "")
     return k.split("|", 1)[0] if "|" in k else k
 
 
-def _action_key_of(row: dict) -> str:
-    """The row's consumption key: the arm_key column when present, else
-    the bare method_family (old logs keep folding exactly as before)."""
+def _action_key_of(row: dict) -> str | None:
+    """The row's consumption key: the arm_key column — or None when the
+    row carries no key. #804 de-compat: the former bare method_family
+    fallback (old logs folded into family cells) is retired; an unkeyed
+    row is the loud un-attributed gap (``Fold.unkeyed``), never mass."""
     ak = str(row.get("arm_key") or "").strip()
-    return ak or str(row.get("method_family") or "")
+    return ak or None
+
+
+def _decay_weights(rows: list[dict], schedule) -> list[float]:
+    """Per-row γ^age weights over the credit stream (append-order age;
+    no wall clock — machine-independent replay).
+
+    Each row is decayed once per LATER observation, at THAT observation's
+    event-time γ (no peeking: the schedule emits γ before the row's own
+    credit is observed). A step_calibration residual occupies a stream
+    position (it takes this row's γ weight) but is NOT an outcome — it
+    never feeds the adaptive EMA (a signed clawback would drag the
+    schedule's γ off its declared range)."""
+    n = len(rows)
+    gammas = [0.0] * n
+    for i, row in enumerate(rows):
+        gammas[i] = schedule.gamma()
+        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
+            schedule.observe(_credit_of(row))
+    weights = [1.0] * n
+    w = 1.0
+    for i in range(n - 2, -1, -1):
+        w *= gammas[i + 1]
+        weights[i] = w
+    return weights
 
 
 def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
@@ -437,12 +528,12 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     Pending rows (credit=None) count toward n_pending only, never
     posterior mass.
 
-    #545 keyed consumption: rows group by the 4-dim arm_key
-    (family|recipe|verif|tier — dual-written since WS1); rows without an
-    arm_key fall back to the bare method_family, so old logs fold
-    exactly as before (the dual-write tolerance). The read face stays
-    family-addressed through ``family_of_action`` /
-    ``Fold.family_mass``.
+    #545 keyed consumption: rows group by the 4/5-dim arm_key
+    (family|recipe|verif|tier[|agent]). #804 de-compat: the former
+    bare-method_family fallback for key-less old-log rows is RETIRED —
+    an unkeyed row banks no mass and no pending count and is counted in
+    ``Fold.unkeyed`` (the loud un-attributed gap). The read face stays
+    family-addressed through ``family_of_action`` / ``Fold.family_mass``.
 
     #548 tiebreaker: a row's effective credit runs through
     ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
@@ -468,30 +559,25 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     Δfailure (row ``failure_delta``) applied verbatim after the γ weight,
     outside the band and the tiebreak, and excluded from the γ EMA."""
     schedule = _resolve_schedule(gamma)
-    rows = [r for r in store.observations()
+    # #799: the learner refuses unsealed/forged rows fail-closed (armed)
+    obs = _seal.trusted_rows(store.observations(), op="q_cells.fold")
+    rows = [r for r in obs
             if isinstance(r, dict) and _credit_of(r) is not None
             and _admits_to_posterior(r)]
-    n = len(rows)
-    gammas = [0.0] * n
-    for i, row in enumerate(rows):
-        gammas[i] = schedule.gamma()
-        # #712: a step_calibration residual occupies a stream position
-        # (it takes this row's γ weight) but is NOT an outcome — it
-        # never feeds the adaptive EMA (a signed clawback would drag the
-        # schedule's γ off its declared range).
-        if str(row.get("credit_kind") or "") not in SIGNED_CREDIT_KINDS:
-            schedule.observe(_credit_of(row))
-    weights = [1.0] * n
-    w = 1.0
-    for i in range(n - 2, -1, -1):
-        w *= gammas[i + 1]
-        weights[i] = w
+    weights = _decay_weights(rows, schedule)
     cells: dict[tuple[str, str], CellCounts] = {}
+    unkeyed = 0
     for i, row in enumerate(rows):
         raw_credit = _credit_of(row)
         weight = weights[i]
-        key = (str(row.get("signature_hash") or ""),
-               _action_key_of(row))
+        action = _action_key_of(row)
+        if action is None:
+            # #804 de-compat: the un-attributed gap — the row is a real
+            # outcome (it already advanced the γ chain above) but banks
+            # NO cell mass: no key, no bucket, never a fabricated one.
+            unkeyed += 1
+            continue
+        key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key)
         if cell is None:
             cell = CellCounts(key[0], key[1])
@@ -522,18 +608,22 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
             success=cell.success + weight * credit,
             failure=cell.failure + weight * (1.0 - credit),
             n_pending=cell.n_pending)
-    for row in store.observations():
+    for row in obs:
         if not isinstance(row, dict) or _credit_of(row) is not None:
             continue
         if not _admits_to_posterior(row):
             continue          # #705: verification rows are never pending
-        key = (str(row.get("signature_hash") or ""),
-               _action_key_of(row))
+        action = _action_key_of(row)
+        if action is None:
+            # #804 de-compat: unkeyed pending rows are the same loud gap.
+            unkeyed += 1
+            continue
+        key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key) or CellCounts(key[0], key[1])
         cells[key] = CellCounts(cell.signature_hash, cell.family,
                                 cell.success, cell.failure,
                                 cell.n_pending + 1)
-    return Fold(cells)
+    return Fold(cells, unkeyed=unkeyed)
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +643,13 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
     nowhere-observed family yields the wide Beta(1,1) prior.
 
     ``arm_key`` (#545 keyed consumption): address the cell at the 4-dim
-    action key (family|recipe|verif|tier). The legacy cell at the bare
-    family key (old logs — the dual-write tolerance) POOLS into the
-    local mass, and the leave-one-out anchor subtracts BOTH, so a
-    key-addressed read never self-echoes its own family-grain history.
+    action key (family|recipe|verif|tier). #804 de-compat: the former
+    bare-family pooling tolerance is retired — a keyed read's local mass
+    is ITS OWN cell only; the rest of the family stays in the
+    leave-one-out anchor, so a key-addressed read never self-echoes its
+    own family-grain history. ``arm_key=None`` is the FAMILY-GRAIN read:
+    local is the (never banked) bare-family cell — effectively empty —
+    and the anchor carries the whole family.
 
     #705 MARL: a 5-dim agent-conditioned key (…|agent) reads its OWN
     cell as local mass and does NOT pool the same-arm 4-dim cell into
@@ -589,15 +682,10 @@ def cell_posterior(fold_view: Fold, signature_hash: str,
         (signature_hash, arm_key or family),
         CellCounts(signature_hash, family))
     s_local, f_local = cell.success, cell.failure
-    # #539/#545 legacy tolerance: a 4-dim key pools the bare family cell
-    # into local (and the leave-one-out anchor subtracts both). A 5-dim
-    # agent key skips this — the same-arm mass stays ANCHOR (prior),
-    # never this agent's own evidence.
-    if arm_key and arm_key != family and not _is_agent_key(arm_key):
-        legacy = fold_view.cells.get((signature_hash, family))
-        if legacy is not None:
-            s_local += legacy.success
-            f_local += legacy.failure
+    # #804 de-compat: the #539/#545 legacy tolerance (a 4-dim key
+    # POOLING the bare family cell into local, anchor subtracting both)
+    # is retired — local mass is the addressed cell ONLY; every other
+    # cell of the family stays in the leave-one-out anchor.
     fam_s, fam_f = fold_view.family_mass(family)
     s_anchor = max(fam_s - s_local, 0.0)
     f_anchor = max(fam_f - f_local, 0.0)
@@ -958,13 +1046,6 @@ def agent_of_action(action_key: str) -> str | None:
     return parts[4] if len(parts) >= 5 and parts[4] else None
 
 
-def _is_agent_key(action_key: str) -> bool:
-    """True for a 5-dim agent-conditioned key (the #705 local-mass
-    carve-out: a 5-dim read never pools a same-arm 4-dim cell into
-    local — sharing rides the anchor, never forced pooling)."""
-    return len(str(action_key or "").split("|")) >= 5
-
-
 def _recipe_cols(recipe_id, recipe_propensity,
                  recipe_source) -> tuple[str | None, float | None,
                                          str | None]:
@@ -1037,6 +1118,47 @@ def _coerce_credit(credit, credit_kind, failure_delta):
     return credit_out, failure_delta_out
 
 
+def _usage_cols(tier, tools, view: dict | None) -> tuple:
+    """#804 usage merge: the usage-ledger columns at the append boundary —
+    ``(tier_out, tools_out, triple_or_None)``. A non-int tier drops to
+    None; tools keep stripped non-empty strings; a non-numeric / NaN /
+    out-of-[0,1] propensity degrades to null (the #691 boundary
+    semantics, moved verbatim from append_usage_row). A SUPPLIED view
+    (even the all-None cold-sampler gap) emits the whole triple with
+    explicit nulls inside — the reconciliation receipt, never a
+    fabricated number; an unsupplied view emits nothing (the
+    byte-identical legacy row, the #695 emission discipline)."""
+    tier_out = None
+    if tier is not None:
+        try:
+            tier_out = int(tier)
+        except (TypeError, ValueError):
+            warn("q_cells.append", f"non-int tier dropped: {tier!r}")
+    tools_out = None
+    if isinstance(tools, (list, tuple)):
+        tools_out = [str(t).strip() for t in tools if str(t).strip()]
+    elif tools is not None:
+        warn("q_cells.append", f"non-list tools dropped: {tools!r:.80}")
+    view = view if isinstance(view, dict) else None
+    triple = None
+    if view is not None:
+        propensity = view.get("propensity")
+        if propensity is not None and (
+                isinstance(propensity, bool) or not isinstance(
+                    propensity, (int, float)) or propensity != propensity
+                or not (0.0 <= float(propensity) <= 1.0)):
+            warn("q_cells.append",
+                 f"invalid propensity dropped: {propensity!r}")
+            propensity = None
+        sampled = view.get("sampled_family")
+        prior = view.get("prior_source")
+        triple = {"propensity": (None if propensity is None
+                                 else round(float(propensity), 6)),
+                  "sampled_family": str(sampled).strip() if sampled else None,
+                  "prior_source": str(prior).strip() if prior else None}
+    return tier_out, tools_out, triple
+
+
 def append_observation(ws, signature_hash: str, method_family: str,
                        credit: float | None = None, *, source: str,
                        claim: str | None = None,
@@ -1052,7 +1174,11 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        recipe_propensity: float | None = None,
                        recipe_source: str | None = None,
                        failure_delta: float | None = None,
-                       reason: str | None = None) -> dict:
+                       reason: str | None = None,
+                       reward: float | None = None,
+                       confidence_band: str | None = None,
+                       tier=None, tools=None,
+                       sampler_view: dict | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1130,17 +1256,269 @@ def append_observation(ws, signature_hash: str, method_family: str,
     # the established emission discipline: absent = byte-identical row).
     if reason:
         row["reason"] = str(reason)
+    # #799 R2b: the event-stream documentation columns — the settlement
+    # line names WHAT reward banked and at WHICH band (production: both
+    # had zero presence in the stream). Absent when not supplied = the
+    # byte-identical legacy row (the additive-column discipline).
+    if reward is not None:
+        row["reward"] = round(float(reward), 6)
+    if confidence_band:
+        row["confidence_band"] = str(confidence_band)
+    # #804 usage merge: the usage-ledger columns ride the dispatch row
+    # additively — defaults/absence keep the row byte-identical.
+    tier_out, tools_out, usage_triple = _usage_cols(
+        tier, tools, sampler_view)
+    if tier_out:
+        row["tier"] = tier_out
+    if tools_out:
+        row["tools"] = tools_out
+    if usage_triple is not None:
+        row.update(usage_triple)
+    row = _seal.sign_row(row)  # #799: every q-cell row seals at write
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
 
 
 def observe(ws, signature_hash: str, method_family: str,
-            credit: float) -> dict:
+            credit: float, *, arm_key: str | None = None) -> dict:
     """The settlement feed: one (signature_hash, method_family, credit)
     observation — the observation interface as DATA (the W2-T4
-    settlement wiring calls this from settled round_credit rows)."""
+    settlement wiring calls this from settled round_credit rows).
+
+    #804 de-compat: the keyed bank face — an ``arm_key`` supplied here
+    rides the row so the fold banks it; a row banked WITHOUT one is the
+    loud un-attributed gap (``Fold.unkeyed``), never family mass."""
     return append_observation(ws, signature_hash, method_family, credit,
-                              source="settlement")
+                              source="settlement",
+                              arm_key_col=arm_key)
+
+
+# ---------------------------------------------------------------------------
+# censored rows — the #955 interruption record
+# ---------------------------------------------------------------------------
+
+#: the #955 CENSORED(env, reason) row kind, riding the SAME consolidated
+#: experience substrate. NOT a trajectory row: a censored sample carries
+#: no (s, a, r) — it records that the rollout died exogenously and that
+#: the direction posterior must stay SILENT about it. The trajectory
+#: prefix filter above already keeps it out of the fold and the pandas
+#: projection by construction; censored_rows() is its read face.
+SCHEMA_CENSORED = "censored/1"
+
+
+def append_censored(ws, env: str, reason: str, *, source: str,
+                    claim: str | None = None,
+                    rollout_id: str | None = None,
+                    direction: str | None = None,
+                    ts: str | None = None) -> dict:
+    """Append one CENSORED(env, reason) row (the #955 schema face, the
+    standard append pattern: schema stamp + boundary validation + fail-
+    open append + the #799 seal). ``env`` MUST be one of the
+    interruption classifier's closed env classes (a foreign class is a
+    caller error — ValueError, the boundary never invents a vocabulary
+    entry). ``claim`` / ``rollout_id`` / ``direction`` ride only when
+    supplied (the additive-column discipline: a bare censored row is
+    byte-stable). The row NEVER feeds the fold or any posterior — that
+    is the censoring semantics, enforced by the trajectory prefix wall
+    plus rlvr.censoring.posterior_observations for the #954 seam."""
+    from rlvr import interruption as _itv  # noqa: PLC0415 — lazy, cycle-free
+    env_out = str(env or "").strip()
+    if env_out not in _itv.ENV_CLASSES:
+        raise ValueError(
+            f"q_cells.append_censored: env {env!r} not in the closed "
+            f"env-class vocabulary {list(_itv.ENV_CLASSES)}")
+    if not str(source or "").strip():
+        raise ValueError("q_cells.append_censored: source must be non-empty")
+    row: dict = {
+        "schema": SCHEMA_CENSORED,
+        "ts": ts or _now(),
+        "source": str(source),
+        "env": env_out,
+        "reason": str(reason or ""),
+        "censored": True,
+    }
+    if claim:
+        row["claim"] = str(claim)
+    if rollout_id:
+        row["rollout_id"] = str(rollout_id)
+    if direction:
+        row["direction"] = str(direction)
+    row = _seal.sign_row(row)  # #799: every q-cell row seals at write
+    appended = _cl.append(ws, "experience", row)
+    return {"appended": appended, "row": row}
+
+
+def censored_rows(ws) -> list[dict]:
+    """Every sealed censored/1 row, append order (the #955 link-12
+    cross-run read face: the censored record survives the process)."""
+    return _seal.trusted_rows(
+        _cl.read(ws, "experience", schema_prefix="censored"),
+        op="q_cells.censored_rows")
+
+
+# ---------------------------------------------------------------------------
+# v2 trajectory rows — the (s,a,r) ledger face (#878)
+# ---------------------------------------------------------------------------
+
+#: the v2 row kinds riding the SAME consolidated experience substrate:
+#: an action row records the DECIDED action (the ``a``), a result row
+#: records the step outcome + reward (the ``r``) and — once the credit
+#: face ran (#883) — the R_t / A_t credit columns. Old q-cell-obs/1
+#: rows are untouched and keep parsing (backward-compatible reads).
+SCHEMA_ACTION_V2 = "q-cell-action/1"
+SCHEMA_RESULT_V2 = "q-cell-result/1"
+_TRAJECTORY_PREFIXES = ("q-cell-obs", "q-cell-action", "q-cell-result")
+
+
+def _v2_nonempty(value, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"q_cells.v2.{field}: must be a non-empty string")
+    return value
+
+
+def _v2_num(value, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value):
+        raise ValueError(f"q_cells.v2.{field}: must be a finite number")
+    return float(value)
+
+
+def _v2_jsonable(value, field: str) -> None:
+    """The v2 payload boundary's serializability wall: a value that
+    json.dumps refuses would fail LATER, inside _cl.append's write —
+    warn-and-False there, which for a fail-closed face means the whole
+    row silently vanishing. Reject it HERE, loudly (#879 review)."""
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"q_cells.v2.{field}: must be JSON-serializable "
+            f"({type(exc).__name__})") from None
+
+
+def _v2_budget(budget) -> dict:
+    if budget is None:
+        return {}
+    if not isinstance(budget, dict):
+        raise ValueError("q_cells.v2.budget: must be a mapping")
+    wall_s = _v2_num(budget.get("wall_s"), "budget.wall_s")
+    if wall_s < 0.0:
+        raise ValueError("q_cells.v2.budget.wall_s: must be >= 0")
+    max_calls = budget.get("max_calls")
+    if max_calls is not None and (isinstance(max_calls, bool)
+                                  or not isinstance(max_calls, int)
+                                  or max_calls < 1):
+        raise ValueError(
+            "q_cells.v2.budget.max_calls: must be None or an int >= 1")
+    return {"wall_s": wall_s, "max_calls": max_calls}
+
+
+def _append_v2(ws, row: dict) -> dict:
+    """The v2 append tail — the SAME seal + consolidated-ledger path
+    every q-cell row takes (single-writer flock inside _cl.append)."""
+    row = _seal.sign_row(row)
+    return {"appended": _cl.append(ws, "experience", row), "row": row}
+
+
+def append_action(ws, kind: str, rollout_id: str, target: str, *,
+                  step_id=None, params=None, budget=None,
+                  policy_version=None, state_snapshot=None,
+                  ts=None) -> dict:
+    """Record ONE decided action — the ``a`` of the (s,a,r) triple
+    (#878). The row is the loop's decision trace. The issue-924 param spec
+    wall lives HERE (the landing wall) and in core.actions.parse_action
+    (the boundary) — ONE table (rlvr.action_params), enforced twice:
+    kind validation, required/optional/unknown params, and the
+    effective-params normalization (optional-absent recorded at their
+    explicit defaults) all resolve through it — the ledger no longer
+    merely trusts the producer's vocabulary. ``state_snapshot`` (#879)
+    rides the state the action was decided from — the ``s`` axis as an
+    additive column; absent = not recorded, never fabricated.
+
+    Fail-CLOSED on structural garbage AND spec violations — unlike the
+    telemetry faces: a silently-dropped action row would hollow the
+    trajectory the credit face replays. A raise here is a loop bug
+    surfacing."""
+    rid = _v2_nonempty(rollout_id, "rollout_id")
+    tgt = _v2_nonempty(target, "target")
+    kind_out = _v2_nonempty(kind, "kind")
+    sid = None if step_id is None else _v2_nonempty(step_id, "step_id")
+    params = _action_params.normalize_params(kind_out, params)
+    _v2_jsonable(params, "params")
+    if state_snapshot is not None:
+        if not isinstance(state_snapshot, dict):
+            raise ValueError(
+                "q_cells.v2.state_snapshot: must be a mapping")
+        state_snapshot = dict(state_snapshot)
+        _v2_jsonable(state_snapshot, "state_snapshot")
+    row = {
+        "schema": SCHEMA_ACTION_V2,
+        "ts": ts or _now(),
+        "kind": kind_out,
+        "rollout_id": rid,
+        "step_id": sid,
+        "target": tgt,
+        "params": dict(params),
+    }
+    budget_doc = _v2_budget(budget)
+    if budget_doc:
+        row["budget"] = budget_doc
+    if policy_version is not None:
+        row["policy_version"] = _v2_nonempty(policy_version,
+                                             "policy_version")
+    if state_snapshot is not None:
+        row["state_snapshot"] = state_snapshot
+    return _append_v2(ws, row)
+
+
+def append_result(ws, rollout_id: str, step_id: str, *, r_t=None,
+                  verified: bool, cost: float = 0.0, verdict: str = "",
+                  evidence_refs=(), summary: str = "",
+                  R_t=None, A_t=None, ts=None) -> dict:
+    """Record ONE step result — the ``r`` of the (s,a,r) triple
+    (#878). ``r_t`` is the step's immediate reward (None = pending —
+    the settlement has not priced the step yet); ``R_t`` / ``A_t``
+    ride ADDITIVELY once the credit face (#883) computed the return
+    and advantage — absent columns mean not-yet-credited, never zero.
+    Fail-closed on structural garbage (same posture as append_action)."""
+    rid = _v2_nonempty(rollout_id, "rollout_id")
+    sid = _v2_nonempty(step_id, "step_id")
+    if not isinstance(verified, bool):
+        raise ValueError("q_cells.v2.verified: must be a bool")
+    r_out = None if r_t is None else _v2_num(r_t, "r_t")
+    rt_out = None if R_t is None else _v2_num(R_t, "R_t")
+    at_out = None if A_t is None else _v2_num(A_t, "A_t")
+    cost_out = _v2_num(cost, "cost")
+    if cost_out < 0.0:
+        raise ValueError("q_cells.v2.cost: must be >= 0")
+    row = {
+        "schema": SCHEMA_RESULT_V2,
+        "ts": ts or _now(),
+        "rollout_id": rid,
+        "step_id": sid,
+        "r_t": r_out,
+        "verified": verified,
+        "cost": round(cost_out, 6),
+        "verdict": str(verdict),
+        "evidence_refs": [str(e) for e in evidence_refs],
+        "summary": str(summary),
+    }
+    if rt_out is not None:
+        row["R_t"] = round(rt_out, 6)
+    if at_out is not None:
+        row["A_t"] = round(at_out, 6)
+    return _append_v2(ws, row)
+
+
+def trajectory_rows(ws) -> list[dict]:
+    """The v2 trajectory read face (#878): EVERY q-cell-* row of the
+    consolidated experience ledger in append order — observations
+    (old), actions, results — sealed rows only. Old q-cell-obs/1 rows
+    parse unchanged (backward-compatible reads): the file is a
+    multi-schema stream and the read face never rewrites a row."""
+    return _seal.trusted_rows(
+        _cl.read(ws, "experience", schema_prefix=_TRAJECTORY_PREFIXES),
+        op="q_cells.trajectory_rows")
 
 
 def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
@@ -1151,7 +1529,9 @@ def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
     carry a numeric credit and can never be re-matched). None = the
     honest gap — no row, never a fabricated bucket."""
     did = str(dispatch_id or "")
-    for row in reversed(JSONLQStore(ws).observations()):
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.match_pending")
+    for row in reversed(rows):
         if not isinstance(row, dict) \
                 or str(row.get("source") or "") != "dispatch" \
                 or row.get("credit") is not None:
@@ -1164,7 +1544,9 @@ def _match_pending_dispatch(ws, dispatch_id: str) -> dict | None:
 
 def observe_settlement(ws, dispatch_id: str, credit,
                        *, phi_delta: float | None = None,
-                       credit_kind: str = "solve") -> dict:
+                       credit_kind: str = "solve",
+                       reward: float | None = None,
+                       confidence_band: str | None = None) -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -1206,7 +1588,13 @@ def observe_settlement(ws, dispatch_id: str, credit,
     settlement row and the result — the credit banks against the
     DISPATCH-RECORDED recipe (ITT via the #678 trusted chain); no
     worker narrative is ever read here (the #881 ``steps:`` pattern
-    stays dead)."""
+    stays dead).
+
+    #799 R2b: the optional ``reward`` / ``confidence_band`` columns ride
+    the sealed settlement row when the caller supplies them — the event
+    stream self-documents what reward banked and at which band (both had
+    zero presence in the stream); absent when not supplied (the
+    byte-identical legacy row)."""
     did = str(dispatch_id or "")
     kind = "verification" if str(credit_kind or "").strip() == \
         "verification" else "solve"
@@ -1239,7 +1627,13 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  recipe_id=match.get("recipe_id"),
                                  recipe_propensity=match.get(
                                      "recipe_propensity"),
-                                 recipe_source=match.get("recipe_source"))
+                                 recipe_source=match.get("recipe_source"),
+                                 # #799 R2b: the settlement line carries
+                                 # the reward + confidence band (absent
+                                 # when not supplied — legacy rows
+                                 # byte-identical).
+                                 reward=reward,
+                                 confidence_band=confidence_band)
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -1260,14 +1654,45 @@ def observe_settlement(ws, dispatch_id: str, credit,
                 "credit_kind": kind, "beta_updated": False}
 
 
+def _step_ceiling(did: str, credit, evidence_seal) -> float:
+    """#799 pin: when armed, a step credit above the unverified floor
+    banks at the floor unless the caller carries a VALID sealed evidence
+    doc (``kind: step-evidence`` naming this dispatch and credit) —
+    worker-typed PROVEN alone can no longer settle 1.0. Unarmed = the
+    legacy face byte-identically."""
+    from rlvr import step_credit as _sc  # noqa: PLC0415
+    floor = _sc.CREDIT_BY_CLASS[_sc.UNVERIFIED]
+    if credit is None:
+        return credit
+    credit = max(0.0, min(1.0, float(credit)))
+    if not _seal.armed() or credit <= floor:
+        return credit
+    ok, why = ((False, "no evidence seal") if evidence_seal is None
+               else _seal.verify_row(evidence_seal))
+    if ok and str(evidence_seal.get("kind") or "") == "step-evidence" \
+            and str(evidence_seal.get("dispatch_id") or "") == did \
+            and abs(float(evidence_seal.get("credit") or -1.0)
+                    - credit) <= 1e-9:
+        return credit
+    warn("q_cells.step_ceiling",
+         f"step credit {credit} for {did!r} demoted to the unverified "
+         f"floor {floor} ({why or 'invalid evidence seal'}) — worker-"
+         f"typed status alone cannot settle 1.0 (#799)")
+    return floor
+
+
 def _bank_matched(ws, did: str, match: dict, credit, *,
                   kind: str, failure_delta: float | None = None,
-                  reason: str | None = None) -> dict:
+                  reason: str | None = None,
+                  evidence_seal: dict | None = None) -> dict:
     """Append one credit row into the matched dispatch's cell and shape
     the shared result dict (the #712 faces' common tail: same keys
     observe_settlement returns, so callers — strategy store, case-
     posterior leg — read one shape). ``reason`` rides the row only when
-    set (the amendment audit face)."""
+    set (the amendment audit face). #799: step rows pass the ceiling —
+    above-floor credit needs a valid evidence seal when armed."""
+    if kind == CREDIT_KIND_STEP:
+        credit = _step_ceiling(did, credit, evidence_seal)
     out = append_observation(ws, str(match.get("signature_hash")),
                              str(match.get("method_family")), credit,
                              source=("credit-amendment"
@@ -1298,7 +1723,9 @@ def _match_banked_row(ws, dispatch_id: str) -> dict | None:
     pruned dispatch row never orphans a correction: the banked row's
     own signature/method_family/arm_key ARE the cell address."""
     did = str(dispatch_id or "")
-    for row in reversed(JSONLQStore(ws).observations()):
+    rows = _seal.trusted_rows(JSONLQStore(ws).observations(),
+                              op="q_cells.match_banked")
+    for row in reversed(rows):
         if not isinstance(row, dict):
             continue
         if str(row.get("source") or "") not in ("settlement",
@@ -1330,7 +1757,8 @@ def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
     s = f = 0.0
     n = 0
     try:
-        for row in JSONLQStore(ws).observations():
+        for row in _seal.trusted_rows(JSONLQStore(ws).observations(),
+                                      op="q_cells.banked_mass"):
             if not isinstance(row, dict):
                 continue
             if str(row.get("source") or "") not in ("settlement",
@@ -1431,7 +1859,8 @@ def amend_settlement(ws, dispatch_id: str, target_credit,
 
 
 def _bridge_admit(ws, did: str, family: str, credit, *,
-                  kind: str) -> dict:
+                  kind: str,
+                  evidence_seal: dict | None = None) -> dict:
     """The pool-bridge fallback admission (the learning→decision
     bridge's credit face). The matched dispatch identity is gone (no
     pending row), but the method-family usage log resolved the
@@ -1442,6 +1871,8 @@ def _bridge_admit(ws, did: str, family: str, credit, *,
     face); ``credit_kind`` stays the caller's. Fail-open telemetry,
     same shape as the matched bank."""
     key = arm_key(family, "facts_snapshot", "none", 0)
+    if kind == CREDIT_KIND_STEP:
+        credit = _step_ceiling(did, credit, evidence_seal)
     out = append_observation(ws, _current_sig(ws), family, credit,
                              source="settlement", claim=did,
                              dispatch_id=did,
@@ -1461,7 +1892,8 @@ def _bridge_admit(ws, did: str, family: str, credit, *,
 
 def observe_step_credit(ws, dispatch_id: str, credit, *,
                         step_ref: str | None = None,
-                        method_family: str | None = None) -> dict:
+                        method_family: str | None = None,
+                        evidence_seal: dict | None = None) -> dict:
     """#712: bank ONE step-boundary credit — the dense signal that moves
     the Q-cell Beta at SubagentStop, BEFORE claim-terminal.
 
@@ -1491,14 +1923,16 @@ def observe_step_credit(ws, dispatch_id: str, credit, *,
         if match is None:
             fam = str(method_family or "").strip()
             if fam:
-                return _bridge_admit(ws, did, fam, credit, kind=kind)
+                return _bridge_admit(ws, did, fam, credit, kind=kind,
+                                     evidence_seal=evidence_seal)
             warn("q_cells.observe_step_credit",
                  f"no pending dispatch row for {did!r} — step credit not "
                  f"banked (the honest gap)")
             return {"appended": False, "matched": False,
                     "reason": "unmatched", "dispatch_id": did,
                     "credit_kind": kind, "beta_updated": False}
-        out = _bank_matched(ws, did, match, credit, kind=kind)
+        out = _bank_matched(ws, did, match, credit, kind=kind,
+                            evidence_seal=evidence_seal)
         if step_ref:
             out["step_ref"] = str(step_ref)
         return out
@@ -1558,7 +1992,8 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
     did = str(dispatch_id or "")
     total, count = 0.0, 0
     try:
-        for row in JSONLQStore(ws).observations():
+        for row in _seal.trusted_rows(JSONLQStore(ws).observations(),
+                                      op="q_cells.step_totals"):
             if not isinstance(row, dict) \
                     or str(row.get("credit_kind") or "") != CREDIT_KIND_STEP:
                 continue
@@ -1579,18 +2014,15 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
 
 
 def declared_family(envelope_meta, prompt_text: str) -> str | None:
-    """The declared method family — the #432 dual-face contract, single
-    owner reused when importable: v1 envelope field first, v0 prose
-    marker second. The local fallback is byte-equivalent for
-    pre-#432-bases; once #432 is on dev the lazy import resolves and the
-    fallback is dead code kept only for partial deployments."""
+    """The declared method family — the #432 envelope field is the ONE
+    declaration face. #804 de-compat: the v0 prose-marker fallback
+    (``method-family:`` in the prompt text — dead code kept for partial
+    deployments) is retired; an envelope without the field is the
+    undeclared honest gap."""
     if isinstance(envelope_meta, Mapping):
         v = envelope_meta.get("method_family")
         if isinstance(v, str) and v.strip():
             return v.strip()
-    m = _V0_MARKER_RE.search(prompt_text or "")
-    if m:
-        return m.group(1).strip()
     return None
 
 
@@ -1617,11 +2049,32 @@ def _recipe_view(ws, family: str, meta: dict, prompt: str | None,
         return dict(_RECIPE_GAP)
 
 
+def _task_open_signature(ws) -> str:
+    """issue-797 key freeze: the task-open FROZEN signature when the task's
+    learning-key doc exists (one signature per task — the cell a
+    dispatch opens accumulates for the whole task instead of churning a
+    fresh hash per state change; the production 3-fingerprints/35-min
+    pathology dies by construction). Absent doc / any freeze-face
+    failure -> the fresh per-dispatch computation (the bit-identical
+    legacy face; fail-open, telemetry never breaks the ALLOW tail)."""
+    try:
+        from rlvr import key_freeze  # noqa: PLC0415 — lazy (import-clean)
+        frozen = key_freeze.task_signature(ws)
+    except Exception:  # noqa: BLE001 — fail-open by design
+        frozen = None
+    if frozen:
+        return str(frozen)
+    return ssig.signature_hash(ssig.snapshot(ws))
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
                                 agent: str | None = None,
-                                fingerprint: str | None = None) -> dict:
+                                fingerprint: str | None = None,
+                                dispatch_id: str | None = None,
+                                tier=None, tools=None,
+                                sampler_view: dict | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
@@ -1640,7 +2093,7 @@ def record_dispatch_observation(ws, prompt: str, *,
         if not family:
             return {"appended": False, "reason": "undeclared",
                     "family": None, "signature_hash": None}
-        sig = ssig.signature_hash(ssig.snapshot(ws))
+        sig = _task_open_signature(ws)
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
         # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
         # an envelope-declared agent_type appends the 5th dim so the
@@ -1648,22 +2101,30 @@ def record_dispatch_observation(ws, prompt: str, *,
         meta = envelope_meta if isinstance(envelope_meta, dict) else {}
         recipe = str(meta.get("context_recipe") or "facts_snapshot")
         verif = str(meta.get("verification_mode") or "none")
-        tier = meta.get("tier", 0)
+        meta_tier = meta.get("tier", 0)   # the arm key's tier dim
+
         # #695 recipe arms: the dispatch-time recipe view (envelope
         # declaration reconciled against the gate's own arm sampler —
         # rlvr.recipe_arms, fail-open to the none gap on any miss)
         view = _recipe_view(ws, family, meta, prompt, agent, claim)
+        # #804 usage merge: the usage-ledger columns ride THIS row —
+        # tier/tools from the dispatch shape, the #691 sampler
+        # reconciliation triple from the gate's view (additive; absence
+        # keeps the row byte-identical).
         out = append_observation(ws, sig, family, None, source="dispatch",
                                  claim=claim, agent=agent,
                                  fingerprint=fingerprint,
+                                 dispatch_id=dispatch_id,
                                  arm_key_col=arm_key(family, recipe,
-                                                     verif, tier,
+                                                     verif, meta_tier,
                                                      meta.get("agent_type")),
                                  action_type=str(meta.get("action_type")
                                                  or "dispatch"),
                                  recipe_id=view.get("recipe_id"),
                                  recipe_propensity=view.get("propensity"),
-                                 recipe_source=view.get("source"))
+                                 recipe_source=view.get("source"),
+                                 tier=tier, tools=tools,
+                                 sampler_view=sampler_view)
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig,
                 "recipe": view}
@@ -1716,21 +2177,6 @@ def _count_pending(rows: Iterable[dict], pendings: dict, sig: str,
     return unattributed, approximated
 
 
-def _scan_usage_face(root: Path, pendings: dict) -> tuple[set, int, int, int]:
-    """Face 2 — the #432 usage log (family + claim; NO signature)."""
-    roots: set[Path] = set()
-    scanned = unattributed = approximated = 0
-    for p in sorted(root.rglob(_USAGE_REL)):
-        roots.add(p.parent.parent)
-        rows = _read_jsonl(p)
-        scanned += len(rows)
-        u, a = _count_pending(rows, pendings, _current_sig(p.parent.parent),
-                              lambda r: str(r.get("family") or ""))
-        unattributed += u
-        approximated += a
-    return roots, scanned, unattributed, approximated
-
-
 def _scan_unified_face(root: Path, skip: set[Path],
                        pendings: dict) -> tuple[int, int, int]:
     """Face 3 — unified-log dispatch rows (method_family= in detail)."""
@@ -1758,43 +2204,40 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
     #428 adaptive schedule imported from the posterior store; an
     explicit constant γ selects the exact-count calibration face).
 
-    Face 1 — runs/q-cell-log.jsonl (authoritative; exact signatures +
-    credits). Face 2 — the #432 usage log (family + claim, NO
-    signature/credit): keyed under the workspace's CURRENT signature
-    (approximation — historical signatures are unrecoverable from a
-    final-state workspace), counted PENDING only. Face 3 — unified-log
-    dispatch rows carrying method_family= in detail (same
-    approximation); a workspace with its own usage log is counted from
-    that face only (no double count — the method_families.reindex
-    precedence). Rows without a family are unattributed: counted once
-    as the honest gap, never fabricated."""
+    Face 1 — the consolidated runs/experience.jsonl (authoritative;
+    exact signatures + credits; since the #804 usage merge it carries
+    the usage columns too, so it is the only live (family, cell)
+    source — the usage-log face and the legacy q-cell-log.jsonl scan
+    are both retired archives that index NOTHING). Face 2 — unified-log
+    dispatch rows carrying method_family= in detail (the replay
+    approximation: workspaces with no experience file, keyed under the
+    workspace's CURRENT signature, counted PENDING only). Rows without
+    a family are unattributed: counted once as the honest gap, never
+    fabricated."""
     root = Path(root)
     schedule = _resolve_schedule(gamma)
     rows_scanned = unattributed = approximated = 0
     pendings: dict[tuple[str, str], int] = {}
     face1_rows: list[dict] = []
     obs_roots: set[Path] = set()
-    for p in (sorted(root.rglob(OBS_REL))
-              + sorted(root.rglob(EXPERIENCE_REL))):
+    # face 1 scans the consolidated experience file — since the #804
+    # usage merge it carries the usage columns too, so it is the ONLY
+    # (family, cell) face for live workspaces (the usage-log face 2 and
+    # the legacy q-cell-log rel are both retired archives).
+    for p in sorted(root.rglob(EXPERIENCE_REL)):
         obs_roots.add(p.parent.parent)
         rows = _read_jsonl(p)
-        if p.name == Path(EXPERIENCE_REL).name:
-            # #721: the consolidated file is multi-schema — only
-            # q-cell-obs rows are face-1 rows; the legacy group above
-            # precedes this one (archive history predates the file)
-            rows = [r for r in rows
-                    if str(r.get("schema") or "").startswith("q-cell-obs")]
+        # #721: the consolidated file is multi-schema — only
+        # q-cell-obs rows are face-1 rows
+        rows = [r for r in rows
+                if str(r.get("schema") or "").startswith("q-cell-obs")]
         rows_scanned += len(rows)
         face1_rows.extend(rows)
     fold_view = fold(InMemoryStore(face1_rows), gamma=schedule)
     # representative γ for the approximate-count face: the schedule's
     # post-replay γ (what the engine believes after the whole stream)
     rep_gamma = float(schedule.gamma())
-    usage_roots, scanned, unattributed, approximated = _scan_usage_face(
-        root, pendings)
-    rows_scanned += scanned
-    scanned, u3, a3 = _scan_unified_face(root, usage_roots | obs_roots,
-                                         pendings)
+    scanned, u3, a3 = _scan_unified_face(root, obs_roots, pendings)
     rows_scanned += scanned
     unattributed += u3
     approximated += a3
@@ -1828,6 +2271,9 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
         "root": str(root),
         "rows_scanned": rows_scanned,
         "unattributed": unattributed,
+        # #804 de-compat: face-1 rows without an arm_key bank no mass —
+        # the count is the loud un-attributed gap, never silent absence.
+        "unkeyed": fold_view.unkeyed,
         "signature_approximated_cells": approximated,
         "cells": cells,
         "families": [families[k] for k in sorted(families)],

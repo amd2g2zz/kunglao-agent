@@ -23,6 +23,24 @@
 > Thompson-ranked per posterior state, stable tie-break claim_id. The
 > constant-change procedure is docs/adr-001-strategy-parameter-governance.md
 > (replay evidence + versioned PR + pins; never runtime self-tuning).
+>
+> **Revised 2026-10-24 (issue #792 evidence-mean rebuild)**: the round-seeded
+> Thompson draw and the Beta(1,1) unlinked fallback were noise-shaped (same
+> claim re-scored across rounds with no data change; unlinked-vs-unlinked
+> ordering was uniform noise). ONE deterministic value function survives:
+> score = (Σ αᵢ/(αᵢ+βᵢ) over linked case posteriors + W_DOWNSTREAM·downstream_term)
+> · worth; unlinked claims carry NO value (score contribution 0.0), are
+> DEMOTED below every value-bearing claim, ordered by (downstream_term,
+> tier, worth), and their feeds say `unlinked — no value channel (arm
+> oracle cases / set answers_question)`. Same (ledger, claims, weights) →
+> byte-identical ranking ANY round; the #251 seed faces (case_face_seed /
+> posterior_rng / posterior_seed_state) are retired; the rank_feeds
+> fingerprint carries posterior_hash and rng_base=null. Exploration is the
+> explicit EXPLORE_EVERY_N_ROUNDS slot (default 0 = off; the promoted arm
+> is labeled `exploration_arm`, never conflated with the value column).
+> The R2 acceptance addition binds the deviation face: a recorded
+> sample_deviation to arm A carries propensity_A > 0 (the override
+> channel's mass floor — production 6/16 rows broke ITT at 0.0).
 
 Source documents (frozen sources, excerpts with line numbers):
 - `docs/design/archive/module-design.md` — all of §M1 (L112-207); M1.1 division L114-125; M1.2 signatures L126-159; M1.3 schema L160-172; M1.4 state machine L173-192; M1.5 error handling L193-199; M1.6 test points L200-205
@@ -46,19 +64,22 @@ def convergence_matrix(open_count, partial_count, free_slots, blocked_count) -> 
     """→ DISPATCH(1) | DISPATCH_VERIFIER(2) | SATURATED(3) | BLOCKED(4) | CONVERGED(0)"""
 
 def priority_ratio(claims: list[Claim], deps: DepGraph, evidence: EvidenceView,
-                   rng: Random | None = None) -> list[Action]:
-    """#107+#294 Thompson ranking:
-    score = (case_face + W_DOWNSTREAM·downstream_term) · worth
-    case_face = Σ linked oracle cases of ONE Beta posterior Thompson sample
-                (no linkage → one Beta(1,1) prior sample = cold-start exploration)
+                   round_no: int | None = None) -> list[Action]:
+    """#792 deterministic evidence ranking:
+    score = (case_value + W_DOWNSTREAM·downstream_term) · worth
+    case_value = Σ αᵢ/(αᵢ+βᵢ) over linked oracle-case posteriors (mean, no draw;
+                no linkage → NO value: demoted band, ordered by
+                downstream_term/tier/worth, feeds say `unlinked`)
     downstream_term = #294 bounded decaying count of dependents (ADR-001-governed)
     worth     = #759 value-weights multiplier (exogenous, not a DOF)
     (#295 removed LAMBDA_DH·ΔH_PQ — mechanically inert on all real data;
-    re-introduction goes through docs/adr-001-strategy-parameter-governance.md)
-    rng=None → Random(0); live callers share posterior_rng(ws)"""
-    # deleted with the owner ruling: [0.45L+0.30D+0.25N]/cost, gap_bucket
+    re-introduction goes through docs/adr-001-strategy-parameter-governance.md;
+    #792 retired the rng/round-seed face — rank is pure in the inputs)"""
+    # deleted with the owner rulings: [0.45L+0.30D+0.25N]/cost, gap_bucket
     # sort head, explore_gate, EXPLORE_THRESHOLD, the cheapness spread
     # deleted by #295 (ADR-001): the LAMBDA_DH·ΔH_PQ face and the dh_pq feed
+    # retired by #792: the thompson/{base}/{cid} draw, the Beta(1,1) fallback,
+    # case_face_seed / posterior_rng / posterior_seed_state
 
 def selfcheck(text: str) -> list[str]:
     """scan orchestrator output for ask-back / self-cap violations"""

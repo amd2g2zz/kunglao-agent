@@ -13,77 +13,148 @@ Submodule design notes live in the README face map; the per-module
 detail is each module's own docstring.
 """
 
+from . import action_params
+from . import attribution
+from . import authorization
 from . import censored_review
+from . import commit_semantics
 from . import compose
 from . import consolidated_ledger
 from . import belief
+from . import censoring
 from . import constants_ref
 from . import crystallize
+from . import direction
+from . import disposition
+from . import distill_dgate
+from . import distill_lifecycle
+from . import distill_rollout
+from . import distill_score
+from . import episode_pool
+from . import episode_schema
+from . import episode_settle
 from . import expansion
+from . import family_playbook
 from . import feature_prior
 from . import hypotheses
 from . import incremental_reward
 from . import invariants
 from . import l1_planner
+from . import interruption
+from . import key_freeze
 from . import l1_value
 from . import ledger
+from . import learning_seal
 from . import liveness
 from . import marl
+from . import memory_bridge
+from . import meta_context
+from . import meta_policy
+from . import meta_retrieval
 from . import meta_arms
 from . import obstacles
+from . import parking
+from . import phi_tree
+from . import playbook
+from . import playbook_distill
 from . import policy_compare
+from . import pool_indexer
+from . import pool_scheduler
 from . import posteriors
+from . import pricing
 from . import prediction_ledger
 from . import priors
+from . import probe_face
 from . import q_cells
 from . import recipe_arms
 from . import refutation_fold
 from . import reward
+from . import reward_signal
+from . import review_windows
 from . import scalar
 from . import settlement_scorer
+from . import settlement_wire
+from . import signal_guard
 from . import source_reliability
 from . import state
 from . import step_credit
 from . import step_grain
 from . import step_ledger
+from . import step_record
 from . import strategy_store
 from . import termination
+from . import timeout_triage
 from . import triples
 from . import verification_debt
 from . import winrate
 
 __all__ = [
+    "action_params",
+    "attribution",
+    "authorization",
     "belief",
     "censored_review",
+    "censoring",
+    "commit_semantics",
     "compose",
     "consolidated_ledger",
     "constants_ref",
     "crystallize",
+    "direction",
+    "disposition",
+    "distill_dgate",
+    "distill_lifecycle",
+    "distill_rollout",
+    "distill_score",
+    "episode_pool",
+    "episode_schema",
+    "episode_settle",
     "expansion",
+    "family_playbook",
     "feature_prior",
     "hypotheses",
     "incremental_reward",
     "invariants",
+    "interruption",
     "l1_planner",
+    "key_freeze",
     "l1_value",
     "ledger",
+    "learning_seal",
     "marl",
+    "memory_bridge",
     "meta_arms",
+    "meta_context",
+    "meta_policy",
+    "meta_retrieval",
     "obstacles",
+    "parking",
+    "phi_tree",
+    "playbook",
+    "playbook_distill",
     "policy_compare",
     "posteriors",
+    "pricing",
     "prediction_ledger",
     "priors",
+    "probe_face",
     "q_cells",
     "recipe_arms",
     "refutation_fold",
+    "reward",
+    "reward_signal",
+    "review_windows",
     "scalar",
+    "settlement_wire",
     "source_reliability",
     "state",
     "step_credit",
     "step_grain",
     "step_ledger",
+    "step_record",
     "strategy_store",
     "termination",
+    "timeout_triage",
     "verification_debt",
+    "winrate",
 ]

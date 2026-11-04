@@ -47,6 +47,45 @@ Fields:
   fact frontmatter `trace_id:` (same channel as the claim id). Unattributed rate = share of ledger lines missing
   trace_id (`kunglao_log.unattributed_rate`).
 
+- **`read_targets` + `read_fallback`: version-scoped** — the coordinates the worker
+  reads FIRST, resolved by the orchestrator BEFORE dispatch (GitNexus `context <symbol>` for code,
+  `rg -n` for non-code), plus the re-anchor strategy used when a coordinate no longer matches at
+  execution time (file revised, heading moved, path gone). Shape:
+
+  ```json
+  "read_targets": [
+    {"path": "hooks/recall_inject.py", "symbol": "_section_anchor",
+     "why": "the anchor rule under change"},
+    {"path": "runs/plan-C409.md", "lines": [1, 40], "missing": true}
+  ],
+  "read_fallback": "symbol-first",
+  "relevance_fallback": "semantic-decide"
+  ```
+
+  Validation (`hooks/lib_kunglao.py:read_targets_status`): each target carries `path` + exactly ONE
+  of `symbol` / `lines` (`1 <= start <= end`); the path must stay INSIDE the workspace and be a
+  regular file (`missing: true` declares a to-be-created file); `read_fallback` is REQUIRED
+  whenever targets are present. The two fallbacks cover two orthogonal failure classes:
+  - **locate failure** (file/range no longer matches) — `read_fallback`:
+    `symbol-first` (re-resolve the line range from the symbol), `heading-first` (reference cards:
+    `rg -n '^#{1,6} ' <path>` then the best-overlap section), `exact-or-gap` (no match → stop and
+    record the GAP).
+  - **relevance failure** (the coordinates read fine but the content does NOT address the current
+    question/scenario) — `relevance_fallback`, optional, default `semantic-decide`: no mechanical
+    rule can resolve this, so the decision is delegated to the worker's LLM: revise the plan,
+    request a corrected target, or record the GAP with its reasoning. Never keep searching the
+    tree for something that merely looks related.
+
+  Enforcement is version-scoped: **v1 envelopes stay ADVISORY** — `hooks/worker_budget_sinks.py:pre_check`
+  (placed BEFORE the method-family audit writes its sampler/quarantine rows) emits a
+  `read_targets_advisory` row (ok / missing / opt_out / malformed) and the dispatch proceeds.
+  **v2 envelopes** (the action-tuple protocol: `action_type` / `context_recipe` /
+  `verification_mode` / `control`) **REQUIRE the block**: a missing/malformed `read_targets`
+  REJECTs (`REJECT readtargets`) and emits a `read_targets_gate` row. Explicit opt-out in both
+  versions: `"read_targets": "none (reasoning: ...)"`. Precondition: an envelope whose
+  `claim` / `tier` does not parse as `C-\d+` / 1-3 is a non-claim prompt (`not_dispatch`) and is
+  not enforced.
+
 ## Protocol v0 (compat)
 
 `[T<N> tools=a,b] claim C-NN ...` — the existing regex form, **still supported**.

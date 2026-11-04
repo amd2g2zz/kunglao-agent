@@ -30,7 +30,6 @@ tests/test_constants_ref_693.py — test 5 here pins the DIFF face.
 
 from __future__ import annotations
 
-import random
 import sys
 from pathlib import Path
 
@@ -40,7 +39,7 @@ sys.path.insert(0, SCRIPTS)
 
 import entropy_face  # noqa: E402
 import priority_ratio as pr  # noqa: E402
-from posteriors import PQCategorical, PosteriorLedger  # noqa: E402
+from posteriors_case import PQCategorical, PosteriorLedger  # noqa: E402
 from rlvr import constants_ref, hypotheses, invariants  # noqa: E402
 
 
@@ -100,8 +99,7 @@ def test_entropy_observable_only_until_adr_gate(tmp_path):
 
     def rank(ws):
         ev = pr.EvidenceView(ws=ws)
-        actions = pr.priority_ratio(
-            claims, deps, ev, rng=random.Random(0), round_no=1)
+        actions = pr.priority_ratio(claims, deps, ev, round_no=1)
         return [(a.claim_id, a.score) for a in actions]
 
     assert rank(degenerate) == rank(rich)  # entropy never enters the score

@@ -6,6 +6,101 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.6-rc3] - 2026-11-05
+
+Release candidate three: the post-rc2 development wave — the RL v2/v3
+kernel, the claim-state owner, the gate machinery, distillation
+economics, the new execution faces, and the episode disposition
+algebra. The known-issues list ships in the GitHub Release notes.
+
+### Added
+
+- **The RL v2 kernel (#878)**: the `action/1` schema and q_cells v2
+  trajectory rows, Thompson-sampling task selection (#880), beta
+  termination (#882), the Planner-ranked method assigner (#881),
+  discounted-return / advantage / lineage credit (#883), per-dispatch
+  settlement (#884), the two-level scheduler (#863), and the unified
+  event-driven decision loop (#913).
+- **Loop observability (#915)**: file-backed telemetry with reason codes,
+  the statusline loop feed (#914), and rollout spend aggregation (#916).
+- **The RL v3 wave (#951)**: interruption censoring for env deaths
+  (#955), the direction posterior Type-3 transfer channel (#954),
+  mechanical probe faces for every unit (#956), the attribution
+  playbook (#960), and the dual-objective sim world (#951).
+- **The claim state owner (#800)**: `scripts/claims_store.py` as the one
+  semantic mutator (default-deny transition matrix, intent-journal
+  dispatch transaction, provenance log), the HMAC learning-channel seal
+  (#799), verifier integrity requiring a PASSED record before PROVEN
+  (#809), the blind-settler wire (#802), and evidence certification
+  (#803).
+- **Gate machinery (#801)**: the fail-closed hook battery registry
+  (#805), dispatch capability probes with the toolfirst negative cache
+  (#812), and the five-class gate-layering authority.
+- **Test governance (#807)**: the raise-only measured-set coverage floor
+  (`coverage-floor.json`), the production-shape replay gate, the test
+  inventory, and the measured-leg climb pins (#818).
+- **Knowledge distillation (#365)**: the standardized-item engine with
+  0–1 scoring, rollout settlement and the hybrid research loop; the
+  pricing face (#760), supply binds (#794), the Phi closure-tree reward
+  (#796), and ranker determinism (#792).
+- **New execution faces (#816)**: the Claude Agent SDK session face,
+  lane profiles and intake drafts (#791), LLM judgment rubrics (#922),
+  the upgrade transaction (#774), the signal router (#811), and the web
+  analysis chain (#793).
+
+- **The episode disposition algebra (#988)**: the seven evidence-gated
+  dispositions and the published legacy map (#990), plus the
+  `disposition/1` runtime row, the `task_spec.authorization` scope
+  copied into the dispatch, and the registered `disposition_recorded`
+  event (#993). The reward/measurement/learning consumer mapping stays
+  open (#985-#987).
+
+### Changed
+
+- **SUPERSEDES the gate fail-closed ruling (#801)**: the 2026-09-28
+  owner ruling that a crashed gate must fail-closed no longer holds for
+  the `format` and `self_health` classes. Exactly five HARD classes keep
+  their teeth — `corruption`, `reward_integrity`, `termination_budget`,
+  `evidence`, `execution_surface`. Demoted classes emit a loud WARN plus
+  one `runs/gate-rejections.jsonl` sidecar row and a `gate_warn` ledger
+  row, then proceed with rc 0; a 24-warn family breaker takes one
+  ownership action. This is a deliberate security-posture change, not a
+  bugfix: a gate crash must not lock the claim-register, and format
+  rejections must not burn a full context re-read per loop.
+- **Runtime dependencies (#816)**: `claude-agent-sdk>=0.2.174` and
+  `pandas>=2.3.3` join the runtime set, with `uv.lock` relocked.
+- **Deployment surface (#805)**: `deploy-manifest.yaml` grows from 578
+  to 645 sha-pinned entries, `release-manifest.yaml` registers six new
+  assets, and `scripts/posteriors.py` is renamed to
+  `scripts/posteriors_case.py`.
+- **CI (#810)**: a Windows closure-path leg, the ruff static-analysis
+  gate (#846), and enforced measured-set coverage in place of
+  observation-only reporting (#807).
+- **Status and narration (#811)**: the statusline, signal router, and
+  log-level taxonomy (#944) now carry the loop state.
+
+### Fixed
+
+- **The negative-cache poison (#951)**: bounded walk-up,
+  default-index scope, and contradiction purge for the #812 cache.
+- **The premature PROVEN mint (#800)**: decisive success settlements
+  must reference a verification record that does not postdate the
+  settlement — the 2026-10-21 production shape.
+- **Gate crashes locking the claim-register (#801)**: the self-health
+  demotion above, with sidecar and ledger traces as compensating
+  observability.
+- **Capability-probe false refusals (#812)**: a SKIP or an absent
+  capability fact no longer fabricates a refusal.
+- **The coverage ratchet POLICY anchor (#951)**: `coverage-floor.json`
+  restored after the ledger re-emit, keeping the #807 floor monotone.
+- **Formal-marker and docstring ratchet breaks (#977)**: dispatch
+  read-targets and lint surfaces brought back under the ratchet.
+
+- **Disposition runtime hardening (#993)**: one row per episode
+  (exclusive create, per-workspace lock), gate/disposition coupling,
+  evidence pointers, ISO-8601 timestamps, finite-number rejection, and
+  an idempotent retry that heals a failed mirror/event.
+
 ## [0.1.6-rc2] - 2026-10-17
 
 Release candidate two: the RL loop closure wave — the learning

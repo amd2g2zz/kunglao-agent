@@ -24,7 +24,7 @@ allowedTools:
 - mcp__context7__query-docs
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
-- mcp__ida-pro-vm__*
+- mcp__ida-pro-mcp__*
 - mcp__x64dbg__*
 - mcp__frida__spawn
 - mcp__frida__attach
@@ -301,6 +301,15 @@ every web claim, also ask):
 
 ## Output format (your final report)
 
+**Verdict vocabulary feeds the evidence ladder verbatim** (rl-v2 fleet
+adaptation): the RL credit layer prices your verdicts through
+`scripts/rlvr/step_credit.py`'s class table (`CREDIT_BY_CLASS`) —
+CONFIRMED prices at `cross_validated` (1.0), UNVERIFIED-WITH-GAP rides
+the `unverified` provisional floor (0.3), REFUTED prices at `refuted`
+(0.0). Use exactly these three tokens — a paraphrase ("mostly holds",
+"partially refuted") cannot land on the ladder and the loop cannot
+consume your verdict without translation.
+
 Write `runs/verify-redteam-<target>.md`:
 
 ```
@@ -331,6 +340,10 @@ dispatch_context's REDO slice (`build_redo_context`, scripts/dispatch_context.py
 it mechanically withholds your derivation values from redo prompts while
 keeping your GAP shapes. You write for the judge; the slice writes for the
 redone worker.
+
+Verdict scoring rubric (anchors + disqualifiers):
+`references/contracts/rubrics/llm-redteam-rubric.md` — loaded by
+scenario, never wholesale.
 
 ## Verdict-layer mode
 
