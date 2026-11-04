@@ -223,3 +223,7 @@ only if the change is reverted as a whole.
   campaign; it does not change any spec scenario.
 - Whether arbitration rows live in `claims_store` or the unified ledger — an
   implementation choice; the spec only requires a recorded, traceable decision.
+- Dispatch-time enforcement of the authorization block: the disposition
+  boundary fails closed today (an authorized episode without a declared
+  scope/target is refused), but `dispatch_gate` does not reject a dispatch
+  that omits the block. Deferred follow-up so the spec MUST stays tracked.

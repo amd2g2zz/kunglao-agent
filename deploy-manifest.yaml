@@ -47,7 +47,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: b6bb3a1f69df24e03cc52ca2deff4dc163090d1c98e9907f8a661bc032d0ec72
+    sha256: d66fd0edca4a7361d1b2fa1bab9108b048b6a4fba32314962fab37597d0a5dc4
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -143,7 +143,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 9046871851e51dd273340833029ac6b62cf7760b39cd4fc054ba174f804fa285
+    sha256: f7f7e529d3e9da0262e96a692433a2209ac4c66fbd033281e03b4a0e28168127
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -555,7 +555,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 53302d11812c202f46a7340ff19acbe34154200c477df0363506a293f375b1f1
+    sha256: 98ec3434e7a73830820f0bec869ba2a72574fb7def85d428e5711936b7b65f2f
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: fadeb5198d20228dd496531345aa3b5fdaa59d54bd9b12f5d6658478523ba265
+    sha256: 73770b89736b4169efacea1870500bc09dadca52b30a6a63ed97a43c089b1583
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1372,6 +1372,10 @@ files:
     dest: .claude/scripts/rlvr/attribution.py
     kind: scaffold
     sha256: 36a2817a3b33a76405510fdc5a2aa215b6f0caea22e9682e0a8e1041d0649af0
+  - src: scripts/rlvr/authorization.py
+    dest: .claude/scripts/rlvr/authorization.py
+    kind: scaffold
+    sha256: e4081e2f2efaffc9831368900b1ac41455c36666ff3b381eb6d8c94815e3d95f
   - src: scripts/rlvr/belief.py
     dest: .claude/scripts/rlvr/belief.py
     kind: scaffold
@@ -1395,7 +1399,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 18a9254096a5d03d81c5e27362177b733999d84d81912aae9ada96542317af14
+    sha256: 0b0b6569ade465b23ea3ab5049c809aa64f39495ba56fb66ce66bb3f93a2bf9d
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1411,7 +1415,7 @@ files:
   - src: scripts/rlvr/disposition.py
     dest: .claude/scripts/rlvr/disposition.py
     kind: scaffold
-    sha256: 59eb428905ee0800bf92480b8caf8d28c8988779bd732942ad83516e9d26ac23
+    sha256: d6e7f25927ba7be771961deeaafd586c6aaf0905a3475fade2624f57d9246cd9
   - src: scripts/rlvr/distill_dgate.py
     dest: .claude/scripts/rlvr/distill_dgate.py
     kind: scaffold
@@ -2263,7 +2267,7 @@ files:
   - src: templates/state/task_spec.yaml
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
-    sha256: 066feb82b9f61d78a7c39a45ae0dcf52596324ec19aabac8c877229fca3b7ecb
+    sha256: 269a675e1f25dbd0aeda5b7a52490a4f0b3a1429b746538ebe950121275a4fd8
   - src: templates/unidbg/harness.java.tmpl
     dest: .claude/templates/unidbg/harness.java.tmpl
     kind: asset

@@ -15,6 +15,7 @@ detail is each module's own docstring.
 
 from . import action_params
 from . import attribution
+from . import authorization
 from . import censored_review
 from . import commit_semantics
 from . import compose
@@ -90,6 +91,7 @@ from . import winrate
 __all__ = [
     "action_params",
     "attribution",
+    "authorization",
     "belief",
     "censored_review",
     "censoring",

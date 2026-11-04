@@ -110,6 +110,9 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",),
+    # the one evidence-gated disposition row per episode (rlvr.disposition
+    # mirrors it here, so a dead writer must read 0, never be absent)
+    "telemetry": ("disposition/1",),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
