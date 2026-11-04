@@ -64,3 +64,38 @@ def test_manifest_and_pyproject_are_0_1():
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == expected, \
         f"release-manifest version is {manifest['version']}, expected {expected}"
+
+
+# ---------- post-rc2 Unreleased section (contract) ----------
+
+def _unreleased_section() -> str:
+    text = _changelog_text()
+    assert "## [Unreleased]" in text, \
+        "missing [Unreleased] section (issue #991)"
+    assert text.index("## [Unreleased]") < text.index("## [0.1.6-rc2]"), \
+        "[Unreleased] must sit above the released rc2 section"
+    return text.split("## [Unreleased]", 1)[1].split("## [0.1.6-rc2]", 1)[0]
+
+
+def test_unreleased_section_shape():
+    section = _unreleased_section()
+    for sub in ("### Added", "### Changed", "### Fixed"):
+        assert sub in section, f"missing {sub} under [Unreleased]"
+    bullets = [ln for ln in section.splitlines() if ln.startswith("- ")]
+    assert len(bullets) >= 12, \
+        f"[Unreleased] too thin: {len(bullets)} bullets"
+    missing = [ln for ln in bullets if not re.search(r"\(#[0-9]+\)", ln)]
+    assert not missing, \
+        f"[Unreleased] bullets without a (#issue) reference: {missing}"
+
+
+def test_unreleased_section_covers_all_waves_and_the_gate_reversal():
+    section = _unreleased_section()
+    for issue in ("791", "878", "951", "800", "801", "807", "977"):
+        assert f"#{issue}" in section, \
+            f"[Unreleased] does not reference wave issue #{issue}"
+    assert "SUPERSEDES" in section and "fail-closed" in section, \
+        "the #801 gate-layering reversal must be recorded explicitly"
+    for hard in ("corruption", "reward_integrity", "termination_budget",
+                 "evidence", "execution_surface"):
+        assert hard in section, f"missing HARD gate class: {hard}"
