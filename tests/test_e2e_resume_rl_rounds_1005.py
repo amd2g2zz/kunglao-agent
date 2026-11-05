@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""E2E A — resume -> RL rounds -> learning -> settlement (user requirement
-2026-11-06; the end-to-end face of #1005).
+"""E2E A — resume -> RL rounds -> learning -> settlement.
 
 Seeded-random data (7 rounds per seed, >=5 required), three fault kinds
 interleaved, and the REAL chain from the resume CLI through the blind
