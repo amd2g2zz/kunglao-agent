@@ -82,7 +82,6 @@ files:
   scripts/difficulty_calibration.py: 3
   scripts/digest_build.py: 28
   scripts/dispatch_context.py: 28
-  scripts/distill_spine.py: 16
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
   scripts/e2e/checkpoints.py: 110

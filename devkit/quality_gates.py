@@ -49,8 +49,10 @@ Gate semantics:
      #492).
   7. Doc Sync — writing-layer drift guard: numeric gate-count claims on
      the devkit/workflows face, un-re-pinned references/ edits,
-     unregistered new scripts, and ext-index inconsistency (devkit/
-     doc_sync.py, #446 + #476).
+     unregistered new scripts, ext-index inconsistency, and rlvr
+     declared-module consumer truth (a module named in the facade with
+     no consumer outside the package fails — registration alone is not
+     liveness) (devkit/doc_sync.py, #446 + #476 + #989).
   8. Governance Binding — machine-binds governance WORDING to code
      (#867): (a) deprecated live callers via scripts/retirement_gate.py
      (baseline ratchet); (b) SKILL.md-taught kunglao_dispatch envelope
@@ -284,7 +286,7 @@ def _gate6_agents_contract(verbose: bool = True) -> bool:
 def _gate7_doc_sync(verbose: bool = True) -> bool:
     """Doc Sync — Gate 7 (issue #446, G-class writing-layer drift).
 
-    Three sub-checks (devkit/doc_sync.py):
+    Sub-checks (devkit/doc_sync.py):
       (a) numeric gate-count claims on devkit/** + .github/workflows/**
           are violations — the GATES registry is the count's only source
           (number-free wording required; even a correct number is a
@@ -293,7 +295,13 @@ def _gate7_doc_sync(verbose: bool = True) -> bool:
           references/_INDEX.yaml → HARD_PAUSE (re_pin_references.py
           joins the pre-commit chain — the 7th live drift, 2026-08-19);
       (c) staged NEW scripts/*.py unmentioned in references/_INDEX.md →
-          WARN (three-piece mechanism registration ledger).
+          WARN (three-piece mechanism registration ledger);
+      (d) ext index consistency — dangling or name-ambiguous entries in
+          tools/_INDEX.ext.yaml FAIL, uncatalogued entry points WARN;
+      (e) rlvr declared-module consumer truth — a module named in the
+          facade's ``__all__`` with no consumer outside the package
+          FAILs unless an explicit allowlist reason exists (registration
+          alone is not liveness).
 
     N/A when nothing is staged (manual runs): the references check
     passes trivially; the face scan is cheap and always runs.

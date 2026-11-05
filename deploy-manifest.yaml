@@ -416,10 +416,6 @@ files:
     dest: .claude/scripts/distill_schema.py
     kind: scaffold
     sha256: b42d0bfcf6cb3c51401d881b32c313877c091f9c84485b6e2d5c66ca106711cf
-  - src: scripts/distill_spine.py
-    dest: .claude/scripts/distill_spine.py
-    kind: scaffold
-    sha256: 5e58c6df40e2c86851d985d6e64d534b358735d4eae00b16049c2788bbbf1fce
   - src: scripts/dual_gate.py
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
@@ -1363,7 +1359,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 73770b89736b4169efacea1870500bc09dadca52b30a6a63ed97a43c089b1583
+    sha256: 0bedc0192b29aa745ab8f62598d8a3419edef4957fdddc1c82a208c067bd0fa3
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1420,10 +1416,6 @@ files:
     dest: .claude/scripts/rlvr/distill_dgate.py
     kind: scaffold
     sha256: 374679c5cbc752c3fde81dbffdd383c0070e949514497704ffa8dd343bbaf01e
-  - src: scripts/rlvr/distill_lifecycle.py
-    dest: .claude/scripts/rlvr/distill_lifecycle.py
-    kind: scaffold
-    sha256: f65797fca4b07cef38fbc1aa4e41a5902c01c4ce25000b0cedb852d87c32f9ab
   - src: scripts/rlvr/distill_rollout.py
     dest: .claude/scripts/rlvr/distill_rollout.py
     kind: scaffold
@@ -1667,11 +1659,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 28b70d1c54ae832f5935387bab5872caaa3812538d3dfe1155d464219d150d6f
+    sha256: b1b267c3a8db64d5cbf2266350dba72619d5e71995a999fa941a05f4ca7f3ea1
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 91a17f28326affb0d565391f39869ac397a668f64d3d1da0e51fdebc03081f8f
+    sha256: 0e0eb658bc668be3a9a9d661de6fc0a6bd9c0045c30bc5e65a208315e3251cd3
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2287,7 +2279,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 9789ee96a6d1c5dc1656b6c15100906adb377a9bb37559d617eadd16882d3fa7
+    sha256: 8185c5dc613eaea468680402194d98e5bb4d88b1311cdc5e7db1e1d6bb7dda28
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
