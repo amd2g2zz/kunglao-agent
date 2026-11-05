@@ -2271,7 +2271,8 @@ def material_section(sample_name: str, sample_sha: str,
 
 def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                   project_type: str | None = None,
-                  lane: str | None = None) -> Path | None:
+                  lane: str | None = None,
+                  deployed: bool = False) -> Path | None:
     """Write CLAUDE.md from template with project info filled in.
 
     #362: renders through the shared template_render engine ({{param}}
@@ -2332,7 +2333,14 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         # are shell escapes — str(Path) breaks every rendered command on
         # win32 and drifts the portable golden contract (#457 triage #9-#11;
         # same rule as the #367 hook stamping).
-        "skill_dir": SKILL_DIR.as_posix(),
+        # a deployed workspace is self-contained — render the
+        # WORKSPACE runtime root (<ws>/.claude, where scripts/hooks/tools/
+        # references actually live) instead of the executing install. The
+        # deploy runs AFTER this render on the init path, so the caller
+        # passes the intent (`deployed`), never a present-tense probe.
+        "skill_dir": (
+            (ws / ".claude").as_posix() if deployed
+            else SKILL_DIR.as_posix()),
         "venv_path": venv_path,
     }
     text = template_render.render_strict(
@@ -2439,7 +2447,8 @@ def scaffold_mcp(ws: Path) -> str:
     return "created"
 
 
-def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tuple[list, bool]:
+def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path,
+            project: Path | None = None) -> tuple[list, bool]:
     """Same-named hook command already present under the matcher → skip (idempotent); else append.
 
     #389/#445: entry construction is delegated to THE canonical builder
@@ -2447,8 +2456,12 @@ def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tupl
     not enough: a legacy bare-python entry with the same name must be
     REPLACED in place (position kept, no duplicate append) — the
     fixed-point pattern shared with external_kicker.
+
+    `project` roots the uv env at the workspace (<ws>/.claude) —
+    the generated env project — instead of the global install root.
     """
-    canonical = hook_activation.build_hook_entry(hook_dir, hook_file, matcher)
+    canonical = hook_activation.build_hook_entry(hook_dir, hook_file,
+                                                 matcher, project=project)
     command = canonical["hooks"][0]["command"]
     new = [e for e in entries if e.get("matcher") == matcher]
     other = [e for e in entries if e.get("matcher") != matcher]
@@ -2464,7 +2477,8 @@ def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tupl
     return other + new, True
 
 
-def _patch_settings(path: Path, hook_dir: Path) -> int:
+def _patch_settings(path: Path, hook_dir: Path,
+                    project: Path | None = None) -> int:
     """Merge the kunglao hook into settings.json (other keys preserved); return count of added entries."""
     existing: dict = {}
     if path.exists():
@@ -2480,7 +2494,8 @@ def _patch_settings(path: Path, hook_dir: Path) -> int:
         ("PreToolUse", "Agent", HOOK_FILES[0]),
         ("PostToolUse", "Agent", HOOK_FILES[0]),
     ):
-        entries, added = _ensure(pre if event == "PreToolUse" else post, matcher, hook_file, hook_dir)
+        entries, added = _ensure(pre if event == "PreToolUse" else post,
+                                 matcher, hook_file, hook_dir, project=project)
         if event == "PreToolUse":
             pre = entries
         else:
@@ -2558,7 +2573,6 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     # ephemeral checkouts/worktrees fall back to the production install) —
     # previously this stamped its own module location into BOTH the written
     # commands and the checker variable, the self-certifying loop of #752.
-    hook_dir = hook_activation._canonical_hooks_dir()
     # #783 default-flip: init materializes the deployment manifest (hooks +
     # agents + scaffold closure, WITH the #783 T5 digest carrier) BEFORE any
     # registration, so bootstrap_observability's register_hooks hits the
@@ -2566,6 +2580,12 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     # self-contained (uv project = workspace). --no-hooks never reaches this
     # function (deploy_env routes it away) — the opt-out face is unchanged.
     deployed_manifest = hook_activation.deploy_workspace_copy(ws)
+    # once the manifest is materialized, the workspace copies ARE the
+    # runtime — register against <ws>/.claude/hooks with the workspace env
+    # project, and self-check with deployed_project=ws. Using the canonical
+    # install here wrote global-rooted commands that only the later
+    # bootstrap re-registration repaired.
+    hook_dir = ws / ".claude" / "hooks"
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
         layer = "operator-declared"  # the operator named the file explicitly
@@ -2575,10 +2595,11 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
         if not target.exists():
             return {"deployed": False, "target": None,
                     "reason": "no <workspace>/.claude/settings.json (HOME settings never written)"}
-    added = _patch_settings(target, hook_dir)
+    added = _patch_settings(target, hook_dir, project=ws)
     selfcheck = hook_activation.selfcheck_registration(
         target, expected_files=HOOK_FILES,
-        workspace=ws, layer=layer)  # no forwarding — derivation inside (#752)
+        workspace=ws, layer=layer,
+        deployed_project=ws)  # workspace-rooted shape is the truth
     return {"deployed": True, "target": str(target), "added": added,
             "selfcheck": selfcheck,
             "deployed_manifest": {
@@ -2641,6 +2662,19 @@ def _deploy_skills(ws: Path, skills: list[str] | None) -> dict:
         raise ValueError(
             f"unknown --builtin-skills name(s): {', '.join(unknown)} "
             f"(available: {', '.join(valid)})")
+    # HIGH-2: the framework skill package now deploys to
+    # <ws>/.claude/skills/kunglao-agent as part of the deployment manifest.
+    # The L4 opt-in copy rmtree's its target first, so accepting this name
+    # would DELETE the deployed package (router SKILL.md + per-command
+    # skills) and replace it with the bare skills/kunglao-agent source.
+    framework_name = "kunglao-agent"
+    if framework_name in skills:
+        raise ValueError(
+            f"--builtin-skills {framework_name} is not allowed: the "
+            f"framework skill package is deployed by the deployment "
+            f"manifest (issue #1002); the opt-in flag only copies the "
+            f"per-command skills ("
+            f"{', '.join(s for s in valid if s != framework_name)})")
     for name in skills:
         src = SKILLS_SRC / name
         dst = dst_root / name
@@ -3073,7 +3107,8 @@ def initialize(ws: Path, hooks_json: Path | None,
         print(f"kunglao-init: lane={lane}")
 
     # Write CLAUDE.md from type-specific template (idempotent: skip if exists)
-    write_claudemd(ws, sample, sample_sha, project_type=project_type, lane=lane)
+    write_claudemd(ws, sample, sample_sha, project_type=project_type,
+                   lane=lane, deployed=not (no_hooks or plugin_mode))
     # #536: stamp CLAUDE.md with the template version (post-render so the
     # golden render contract stays byte-identical; idempotent refresh also
     # upgrades a behind workspace on --force re-init). The register and

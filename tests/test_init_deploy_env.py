@@ -247,13 +247,52 @@ def test_l3_workspace_mcp_json_seen_from_foreign_cwd(tmp_path, monkeypatch):
 # L4 skills — explicit flag only (#478 AC4)
 # ===========================================================================
 
-def test_l4_no_flag_deploys_nothing(tmp_path):
+def test_l4_no_flag_deploys_only_the_framework_skill(tmp_path):
     ws = _mk_ws(tmp_path)
     r = _run_init(ws)
     assert r.returncode == RC_OK, r.stderr
     skills_dir = ws / ".claude" / "skills"
-    assert not skills_dir.exists() or not any(skills_dir.iterdir()), (
-        "no --builtin-skills flag must install nothing")
+    # the FRAMEWORK skill package deploys unconditionally (the
+    # workspace is the runtime root) …
+    assert (skills_dir / "kunglao-agent" / "SKILL.md").is_file(), (
+        "the framework skill package must deploy without any flag")
+    # … while the L4 per-command copies stay opt-in.
+    assert not (skills_dir / "analysis").exists(), (
+        "no --builtin-skills flag must not deploy the opt-in copies")
+
+
+def test_init_renders_the_workspace_runtime_root(tmp_path):
+    """the fresh-init CLAUDE.md must render <ws>/.claude — the deploy
+    runs AFTER the render, so the renderer takes the intent, not a probe."""
+    ws = _mk_ws(tmp_path)
+    r = _run_init(ws)
+    assert r.returncode == RC_OK, r.stderr
+    md = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    env_root = (ws / ".claude").resolve().as_posix()
+    assert f"uv run --project {env_root} python {env_root}/scripts/" in md, md
+    assert "{{skill_dir}}" not in md
+
+
+def test_init_no_hooks_keeps_the_executing_install_ref(tmp_path):
+    """A --no-hooks workspace is not self-contained: the legacy install
+    reference stays (no deployed scripts to point at)."""
+    ws = _mk_ws(tmp_path)
+    r = _run_init(ws, ["--no-hooks"])
+    assert r.returncode == RC_OK, r.stderr
+    md = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert (ws / ".claude").resolve().as_posix() not in md
+
+
+def test_l4_framework_skill_name_is_rejected(tmp_path):
+    """HIGH-2: --builtin-skills kunglao-agent would rmtree the framework
+    skill package deployed by the manifest — it must be rejected loud and
+    the deployed package must survive."""
+    ws = _mk_ws(tmp_path)
+    r = _run_init(ws, ["--builtin-skills", "kunglao-agent"])
+    assert r.returncode == RC_ERROR, r.stdout + r.stderr
+    assert "not allowed" in (r.stdout + r.stderr)
+    assert (ws / ".claude" / "skills" / "kunglao-agent" / "SKILL.md").is_file(), (
+        "the deployed framework skill package must survive a rejected run")
 
 
 def test_l4_skills_flag_deploys_named_dir(tmp_path):
