@@ -410,11 +410,12 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
         dm.build_entries()), "init must stamp the deployment carrier"
     cmds = _commands(ws)
     assert cmds, "settings.json must carry the hook registry"
-    # 0.1.6 sweep (#6): env project = framework root; script path = ws copy
-    import hook_activation as _ha
+    # #1002: both axes resolve to the workspace — env project <ws>/.claude,
+    # script path the workspace copy (the "ships no pyproject" premise is
+    # retired by the generated workspace env).
+    env_root = (ws / ".claude").resolve().as_posix()
     for c in cmds:
-        assert f"uv run --project {_ha._framework_project_root()}" in c and \
-            " python " in c, c
+        assert f"uv run --project {env_root} python " in c, c
         assert f"{ws.as_posix()}/.claude/hooks/" in c, c
         assert "/.claude/hooks/" in c.replace("\\", "/"), c
 

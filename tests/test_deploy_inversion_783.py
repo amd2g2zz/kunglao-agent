@@ -30,26 +30,22 @@ def test_register_invokes_ws_local_when_copies_materialized(
         tmp_path: Path, monkeypatch) -> None:
     import hook_activation as ha
 
-    # hermetic env pin (issue 467 gate): this test owns the deploy/registration
-    # shape, not the env-staleness verdict — a machine may carry an older
-    # production install than the repo surface.
-    monkeypatch.setattr(ha, "_framework_project_root",
-                        lambda: ROOT)
-    ha.deploy_workspace_copy(tmp_path)          # materialize manifest
+    # #1002: deploy_workspace_copy also materializes the workspace env
+    # project (<ws>/.claude/pyproject.toml), so the deployed registration
+    # resolves BOTH axes locally: script path AND `uv run --project`.
+    # (Pre-#1002 the env axis fell back to the framework root because "a
+    # workspace ships no pyproject" — that premise is retired.)
+    ha.deploy_workspace_copy(tmp_path)          # materialize manifest + env
     count = ha.register_hooks(workspace=tmp_path)
     assert count > 0
 
     cmds = _commands(tmp_path)
     assert cmds, "registry must not be empty"
-    # 0.1.6 sweep (#6): the ENV project is the FRAMEWORK root (a workspace
-    # ships no pyproject — the old workspace form built an ephemeral empty
-    # env); the SCRIPT path stays the workspace deployed copy (#783 upgrade
-    # isolation preserved on the script axis).
+    env_root = (tmp_path / ".claude").resolve().as_posix()
+    hooks_dir = (tmp_path / ".claude" / "hooks").resolve().as_posix()
     for c in cmds:
-        assert f"uv run --project {ha._framework_project_root()}" in c and             " python " in c, (
-            f"#6: env project must be the framework root -- {c}")
-        assert f"{tmp_path.as_posix()}/.claude/hooks/" in c, (
-            f"#783: the script path stays the workspace copy -- {c}")
+        assert f"uv run --project {env_root} python {hooks_dir}/" in c, (
+            f"#1002: both axes must resolve to the workspace -- {c}")
         assert "/.claude/hooks/" in c.replace("\\", "/"), (
             f"script path must be the ws-local copy -- {c}")
 
@@ -93,7 +89,7 @@ def test_upgrade_refresh_keeps_ws_copies_current(tmp_path: Path,
     # gate against the resolved env root — pin it to the repo so the test
     # stays machine-independent.
     monkeypatch.setattr(ha, "_framework_project_root",
-                        lambda: ROOT)
+                        lambda *a, **k: ROOT)
     ha.deploy_workspace_copy(tmp_path)
     ha.register_hooks(workspace=tmp_path)
 

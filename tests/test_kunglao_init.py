@@ -19,8 +19,6 @@ from pathlib import Path
 
 import pytest
 
-import hook_activation
-from hook_activation import canonical_install_root
 from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,28 +123,18 @@ def _seed_hooks_json(init_ws: Path, pre_command: str, post_command: str) -> Path
     return target
 
 
-def _framework_project_root():
-    return hook_activation._framework_project_root()
-
-
 def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_home) -> None:
     """#389 F2: init hook deployment REPLACES a legacy bare-python
     worker_budget entry with the uv form — the same-name skip must not leave
     the stale entry (bare python is 2.x on this machine).
 
-    #752: the entry target is the EXECUTING INSTALL's root (derived by
-    hook_activation.canonical_install_root — durable skills/<name>
-    co-installs resolve to themselves, ephemeral checkouts fall back to the
-    production install), no longer the repo checkout's own location."""
-    root = canonical_install_root().resolve()
-    hook_file = root / "hooks" / "worker_budget.py"
-    # #811 起新 canonical 形态带可选 PYTHONUTF8=1 env 前缀（PEP 540 注入）
-    # 0.1.6 sweep (#6): the canonical form gains the explicit `python`
-    # token and runs against the FRAMEWORK project root (the env owns the
-    # dependency set); the SCRIPT path stays the canonical install copy.
-    env_root = _framework_project_root() or root
+    #1002: the canonical form is WORKSPACE-rooted — the script path is the
+    deployed copy under <ws>/.claude/hooks and the env project is the
+    generated <ws>/.claude pyproject (never the global install root)."""
+    ws_env = (init_ws / ".claude").resolve()
+    hook_file = ws_env / "hooks" / "worker_budget.py"
     uv_form = (f"PYTHONUTF8=1 "
-               f"uv run --project {env_root.as_posix()} "
+               f"uv run --project {ws_env.as_posix()} "
                f"python {hook_file.as_posix()}")
     legacy = f"python {hook_file.as_posix()}"
     hooks_json = _seed_hooks_json(init_ws, legacy, legacy)

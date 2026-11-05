@@ -621,23 +621,35 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     (install guidance); non-zero ``uv run`` = env layer (uv sync repair)."""
     problems = []
     uv = shutil.which("uv")
+    # #1002: a deployed workspace is served by ITS OWN env project — probe
+    # that one (no --locked: the generated workspace env ships no lock; uv
+    # resolves from its pyproject). The skill-root probe (with --locked)
+    # stays for bare/non-deployed installs.
+    ws_env = Path(ws) / ".claude"
+    if (ws_env / "pyproject.toml").is_file():
+        env_root = ws_env
+        locked_args: list[str] = []
+    else:
+        env_root = SKILL_DIR
+        locked_args = ["--locked"]
     if uv is None:
         problems.append(
             "uv layer missing — runtime invocations use "
-            f"uv run --project {SKILL_DIR}; fix: "
+            f"uv run --project {env_root}; fix: "
             "curl -LsSf https://astral.sh/uv/install.sh | sh")
     else:
         try:
             r = subprocess.run(
-                [uv, "run", "--locked", "--project", str(SKILL_DIR), "python",
-                 "-c", "import yaml"],
+                [uv, "run", *locked_args, "--project", str(env_root),
+                 "python", "-c", "import yaml"],
                 capture_output=True, text=True,
                 timeout=UV_PROBE_TIMEOUT_SECONDS,
                 encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 problems.append(
-                    "env layer broken — repair: uv sync --locked --project "
-                    f"{SKILL_DIR}; stderr: {(r.stderr or '').strip()[:120]}")
+                    "env layer broken — repair: uv sync "
+                    f"{'--locked ' if locked_args else ''}--project "
+                    f"{env_root}; stderr: {(r.stderr or '').strip()[:120]}")
         except Exception as exc:
             problems.append(f"uv run probe failed: {exc}")
     if sample_sha256 and sample_sha256 != "UNSET":

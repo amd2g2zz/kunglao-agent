@@ -180,8 +180,11 @@ assets:
     # #537 F-C4: global-rule distillation bundled with the skill package
     # (external installs read this copy; repo-top rules/ is the source).
     - skills/kunglao-agent/rules/kunglao-convergence-loop.md
+    - skills/subcommands.yaml   # the router's subcommand table
     - skills/init/SKILL.md
     - skills/analysis/SKILL.md
+    - skills/resume/SKILL.md    # #466 crash/reboot recovery
+    - skills/upgrade/SKILL.md   # #783 workspace upgrade
     - skills/help/SKILL.md
     - SKILL.md  # root command-router (skill-dir install entry point, #413)
     # #366: metadata-only plugin manifest — version 0.1 must be visible

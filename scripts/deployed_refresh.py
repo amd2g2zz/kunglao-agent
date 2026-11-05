@@ -51,6 +51,16 @@ def refresh(ws: Path, *, dry: bool = False,
     except Exception as exc:  # noqa: BLE001 — degraded detail only
         return f"deployed_refresh(skipped: manifest unavailable {exc!r})"
 
+    # #1002: the workspace runtime env is part of the deployed surface —
+    # refresh it alongside the files (idempotent, content-addressed). A
+    # failure stays a WARN detail (never-raise migration contract), but it
+    # is named: without the env the hook commands fall back to a global
+    # root and the shared-singleton defect returns.
+    try:
+        dm.ensure_workspace_env(ws)
+    except (OSError, ValueError) as exc:  # noqa: BLE001 — WARN-only posture
+        warn("workspace_env", f"env project write failed ({exc!r})")
+
     known_shas = {e.get("sha256") for e in entries.values()}
     dests = set(entries)
     backup_dir = None
@@ -61,7 +71,7 @@ def refresh(ws: Path, *, dry: bool = False,
     # contract stands — a gap between the deployed code's hard imports
     # and the serving env project's manifest surfaces as a warn + a
     # dep_gap detail part, never as an exception into the migration.
-    dep_gap = _dep_gap_detail()
+    dep_gap = _dep_gap_detail(ws)
     if dep_gap:
         warn("dep_surface_gate", dep_gap)
 
@@ -77,7 +87,7 @@ def refresh(ws: Path, *, dry: bool = False,
         shutil.copy2(f, tgt)
 
     for dest, e in sorted(entries.items()):
-        src = Path(__file__).resolve().parent.parent / e["src"]
+        src = dm.MANIFEST.resolve().parent / e["src"]
         if not src.is_file():
             continue
         dst = ws / dest
@@ -208,23 +218,37 @@ def prune_outright(ws: Path) -> list[str]:
     return removed
 
 
-def _dep_gap_detail() -> str:
-    """The issue-467 gap string ('' when the env covers the surface) —
-    computed against the EXECUTING tree and the hook env resolution, the
-    same pair the hook commands will use at runtime."""
+def _dep_gap_detail(ws: Path | None = None) -> str:
+    """The issue-467 gap string ('' when every env covers the surface).
+
+    #1002 checks BOTH serving envs: the SOURCE/framework env the code was
+    installed from (a stale install is the root-cause class) and the
+    workspace env project the hook commands actually use (a broken
+    generation must not hide behind the source check). Any gap is a named
+    detail part; the migration contract stays never-raise.
+    """
     try:
         import dep_surface_gate as dsg
-        env_root = dsg.framework_env_root()
-        if env_root is None:
-            return ""
-        report = dsg.check(
-            surface_root=Path(__file__).resolve().parent.parent,
-            env_root=env_root)
-        if report["ok"]:
-            return ""
-        mods = ",".join(m["module"] for m in report["missing"])
-        return (f"env {env_root} lacks {mods} "
-                f"— update the skill package at that root")
+        envs: list[Path] = []
+        ws_env = (Path(ws) / ".claude") if ws is not None else None
+        if ws_env is not None and (ws_env / "pyproject.toml").is_file():
+            envs.append(ws_env)
+        framework = dsg.framework_env_root()
+        if framework is not None:
+            envs.append(Path(framework))
+        gaps: list[str] = []
+        for env_root in dict.fromkeys(envs):       # ordered, deduped
+            report = dsg.check(
+                surface_root=Path(__file__).resolve().parent.parent,
+                env_root=env_root)
+            if report["ok"]:
+                continue
+            mods = ",".join(m["module"] for m in report["missing"])
+            gaps.append(f"env {env_root} lacks {mods}")
+        if gaps:
+            return ("; ".join(gaps)
+                    + " — update the skill package at that root")
+        return ""
     except Exception as exc:  # noqa: BLE001 — never raises into the migration
         warn("dep_surface_gate", f"gate check failed ({exc!r})")
         return ""
