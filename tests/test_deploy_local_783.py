@@ -40,7 +40,7 @@ def test_deploy_local_e2e(tmp_path: Path) -> None:
     cmds = [h["command"] for face in settings["hooks"].values()
             for e in face for h in e.get("hooks", [])]
     assert cmds, "registry registered"
-    # #1002: both axes resolve to the workspace — the env project is
+    # both axes resolve to the workspace — the env project is
     # <ws>/.claude (deployed pyproject) and the script path is the ws copy.
     env_root = (ws / ".claude").resolve().as_posix()
     for c in cmds:

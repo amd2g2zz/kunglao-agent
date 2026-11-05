@@ -259,7 +259,7 @@ def ensure_project_hooks(settings: dict, hook_dir: str,
     def _canonical(matcher: str, hook_file: str) -> dict:
         # #445: construction delegated to THE canonical builder — no third
         # hand-rolled entry shape (byte-identical output, test-pinned).
-        # #1002: `project` roots the uv env at the workspace env project.
+        # `project` roots the uv env at the workspace env project.
         return hook_activation.build_hook_entry(Path(hook_dir), hook_file,
                                                 matcher, project=project)
 
@@ -735,7 +735,7 @@ def build_resume_prompt(ws, *,
 
 def default_settings_path(workspace: Path) -> Path:
     """D2 project-level settings.json default — the workspace-PARENT target,
-    EXCEPT when the workspace carries its own deployed settings (#1002).
+    EXCEPT when the workspace carries its own deployed settings.
 
     Issue #410: this MUST derive from the wire_up_settings deployment-target
     registry, not a hand-written literal. The pre-#410 self-contradiction:
@@ -744,7 +744,7 @@ def default_settings_path(workspace: Path) -> Path:
     workspace was reported 'hooks missing' (FAIL) with 'leave unwired'
     guidance. Both now resolve the SAME registry (hook_deployment_targets[1]).
 
-    #1002: a deployed workspace's OWN settings is the correct carrier — the
+    a deployed workspace's OWN settings is the correct carrier — the
     parent-level file is shared by every sibling workspace under that
     parent, so writing a workspace-specific command set there makes siblings
     flip each other's recovery carrier. The parent target remains the
@@ -811,7 +811,7 @@ def tick(workspace: Path, *,
                 current = json.loads(spath.read_text(encoding="utf-8"))
             except Exception:
                 current = {}
-        # #1002: a deployed workspace re-registers its OWN hooks under the
+        # a deployed workspace re-registers its OWN hooks under the
         # workspace env; only a workspace without deployed copies falls
         # back to the executing install.
         ws_path = Path(workspace).resolve()

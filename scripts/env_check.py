@@ -621,7 +621,7 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     (install guidance); non-zero ``uv run`` = env layer (uv sync repair)."""
     problems = []
     uv = shutil.which("uv")
-    # #1002: a deployed workspace is served by ITS OWN env project — probe
+    # a deployed workspace is served by ITS OWN env project — probe
     # that one (no --locked: the generated workspace env ships no lock; uv
     # resolves from its pyproject). The skill-root probe (with --locked)
     # stays for bare/non-deployed installs.
@@ -640,8 +640,8 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     else:
         try:
             r = subprocess.run(
-                [uv, "run", *locked_args, "--project", str(env_root),
-                 "python", "-c", "import yaml"],
+                [uv, "run", *locked_args, "--project", str(env_root), "python",
+                 "-c", "import yaml"],
                 capture_output=True, text=True,
                 timeout=UV_PROBE_TIMEOUT_SECONDS,
                 encoding="utf-8", errors="replace")

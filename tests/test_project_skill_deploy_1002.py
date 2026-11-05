@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #1002 — project-scoped skill deployment and workspace runtime root.
+"""Issue — project-scoped skill deployment and workspace runtime root.
 
 Owner ruling 2026-11-05: the workspace ``<ws>/.claude`` is the deployment
 unit and the ONLY runtime root.  This file pins the general contract:
@@ -76,7 +76,7 @@ def test_manifest_deploys_the_full_skill_tree():
 
 def test_release_manifest_covers_the_post_466_skills():
     """The release asset list and the deploy surface agree on the skill
-    tree — resume (#466) and upgrade were missing from the release list."""
+    tree — resume and upgrade were missing from the release list."""
     text = (ROOT / "release-manifest.yaml").read_text(encoding="utf-8")
     for rel in ("skills/resume/SKILL.md", "skills/upgrade/SKILL.md"):
         assert rel in text, f"release-manifest.yaml does not declare {rel}"
@@ -146,7 +146,7 @@ def test_generated_hook_commands_are_workspace_rooted(tmp_path):
 
 
 def test_scheduled_task_prompt_is_workspace_rooted(tmp_path):
-    """The durable cron body is a runtime carrier too (#1002): in a
+    """The durable cron body is a runtime carrier too: in a
     deployed workspace it must resolve the workspace scripts under the
     workspace env, never the global install."""
     import heartbeat_loop_prompt as hlp
@@ -218,7 +218,7 @@ def test_selfcheck_rejects_a_global_project_prefix(tmp_path):
     ha.register_hooks(workspace=tmp_path)
     settings = tmp_path / ".claude" / "settings.json"
     doc = json.loads(settings.read_text(encoding="utf-8"))
-    # reintroduce the exact #1002 defect shape: the env project points at a
+    # reintroduce the exact defect shape: the env project points at a
     # global install, while the script path stays local (mixed root).
     for face in doc["hooks"].values():
         for entry in face:
@@ -245,8 +245,8 @@ def test_global_shadow_is_detected_and_reported(tmp_path):
 
     ws = tmp_path
     (ws / ".claude").mkdir()
-    # a shadow requires a project copy to be shadowed (#1002); without one
-    # the global/durable install is the legitimate active root (#752)
+    # a shadow requires a project copy to be shadowed; without one
+    # the global/durable install is the legitimate active root
     pkg = ws / ".claude" / "skills" / "kunglao-agent"
     pkg.mkdir(parents=True)
     (pkg / "SKILL.md").write_text("---\nname: kunglao-agent\n---\n",

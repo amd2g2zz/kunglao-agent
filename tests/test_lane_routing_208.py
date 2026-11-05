@@ -260,9 +260,16 @@ def test_explicit_malware_lane_is_byte_identical_to_legacy(tmp_path):
     r2 = _run_init(explicit, ["--type", "linux", "--resolve", str(f)])
     assert r2.returncode == RC_OK, r2.stderr
 
-    assert (explicit / "CLAUDE.md").read_bytes() == \
-        (legacy / "CLAUDE.md").read_bytes(), \
-        "lane=malware must render byte-identically to the legacy contract"
+    # the render embeds each workspace's own runtime path (workspace-rooted
+    # deployment); the LANE contract is about lane-dependent content, so
+    # normalize the environmental path before comparing.
+    def _norm(path: Path, ws: Path) -> str:
+        text = path.read_text(encoding="utf-8")
+        return text.replace(str(ws.resolve()), "<WS>").replace(str(ws), "<WS>")
+
+    assert _norm(explicit / "CLAUDE.md", explicit) == \
+        _norm(legacy / "CLAUDE.md", legacy), \
+        "lane=malware must render identically to the legacy contract"
     legacy_seeds = _seed_titles(legacy)
     assert _seed_titles(explicit) == legacy_seeds
 

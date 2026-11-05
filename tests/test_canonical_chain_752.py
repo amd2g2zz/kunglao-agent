@@ -494,12 +494,12 @@ def test_upgrade_rewires_stale_refs_and_reports(tmp_path, monkeypatch,
     assert "CLAUDE.md" in err
     settings_after = (ws / ".claude" / "settings.json").read_text(
         encoding="utf-8")
-    # #1002: a deployed workspace's carriers resolve to the WORKSPACE —
+    # a deployed workspace's carriers resolve to the WORKSPACE —
     # hooks under <ws>/.claude/hooks, skill refs under the project copy.
     assert f"{ws.as_posix()}/.claude/hooks" in settings_after
     assert f"{dev.as_posix()}/hooks" not in settings_after
     md = (ws / "CLAUDE.md").read_text(encoding="utf-8")
-    # #1002: a deep install ref maps by SUBPATH — scripts/hooks/... land on
+    # a deep install ref maps by SUBPATH — scripts/hooks/... land on
     # the workspace runtime tree (<ws>/.claude/scripts), NOT on the skill
     # package (which carries only SKILL.md + skills/**).
     assert f"{ws.as_posix()}/.claude/scripts/env_check.py" in md, md

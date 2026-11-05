@@ -118,7 +118,7 @@ def build_prompt(ws: str, interval: str = "5m", *,
     re-registers when the brief's state_hash drifts). The one-time startup
     action rides only the FIRST registration; re-registrations pass
     initial=False."""
-    # #1002: a deployed workspace is self-contained — the durable cron body
+    # a deployed workspace is self-contained — the durable cron body
     # must resolve the WORKSPACE copies under the workspace env, never the
     # global plugin cache / ~/.claude/skills tree. Workspaces without the
     # deployed surface keep the executing-install form.
@@ -130,8 +130,9 @@ def build_prompt(ws: str, interval: str = "5m", *,
         scripts_dir = deployed_scripts
         runner = f"uv run --project {deployed_root.as_posix()} python"
     else:
-        scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
-        runner = "python"
+        skill_root = Path(__file__).resolve().parent.parent
+        scripts_dir = skill_root / "scripts"
+        runner = f"uv run --project {skill_root.as_posix()} python"
     h = str(scripts_dir / "hook_activation.py")
     tk = str(scripts_dir / "heartbeat_tick.py")
     cc = str(scripts_dir / "convergence_check.py")
@@ -164,7 +165,7 @@ def build_prompt(ws: str, interval: str = "5m", *,
 {situation_brief(ws, lp, runner=runner)}"""
 
 
-def situation_brief(ws: str, self_path: str, runner: str = "python") -> str:
+def situation_brief(ws: str, self_path: str, runner: str) -> str:
     """#635: the state-derived brief appended to every composed prompt.
 
     Reads the live workspace (fail-open to an UNAVAILABLE marker — a brief

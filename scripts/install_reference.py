@@ -83,7 +83,7 @@ def stale_spans(text: str, active_name: str) -> list[tuple[int, int, str]]:
 
 
 def outside_spans(text: str, workspace: Path) -> list[tuple[int, int, str]]:
-    """#1002 — (start, end, matched) skill references resolving OUTSIDE the
+    """Boundary spans — (start, end, matched) skill references resolving OUTSIDE the
     workspace, regardless of install name.
 
     In a workspace that carries its own project skill copy, the name
@@ -98,7 +98,7 @@ def outside_spans(text: str, workspace: Path) -> list[tuple[int, int, str]]:
             if _is_global_prefix(m.group("prefix"), ws)]
 
 
-# #1002: subpaths the deployment manifest mirrors at <ws>/.claude/<dir>.
+# subpaths the deployment manifest mirrors at <ws>/.claude/<dir>.
 # A reference into one of these must land on the workspace RUNTIME tree,
 # not on the skill package (which carries only SKILL.md + skills/**).
 _DEPLOY_SUBDIRS = ("scripts", "hooks", "agents", "references",
@@ -128,7 +128,7 @@ def _rewire_style(matched: str, active_root: Path,
     absolute stays absolute; root/deep face preserved — byte-conservative
     outside the install name itself).
 
-    #1002: when ``base`` is given the reference is rewritten as an ABSOLUTE
+    when ``base`` is given the reference is rewritten as an ABSOLUTE
     path on the workspace surface, chosen by the subpath that FOLLOWS the
     match (``tail``): runtime mirrors (scripts/hooks/tools/references/...)
     land under ``<ws>/.claude``; skill-package paths land under
@@ -155,7 +155,7 @@ def scan_workspace(workspace: Path,
     carrier yields no row (hard I/O failures surface in the callers' own
     reads — this scanner never masks them as 'clean').
 
-    #1002: ``outside_only`` switches the predicate to "resolves outside
+    ``outside_only`` switches the predicate to "resolves outside
     the workspace" (the project-copy-authoritative sweep)."""
     ws = Path(workspace)
     out: dict[str, list[str]] = {}
@@ -187,7 +187,7 @@ def rewire_workspace(workspace: Path,
     Replacement is scoped to the stale spans only; settings.json content
     must JSON-parse BOTH before and after the rewrite or nothing is written.
 
-    #1002: ``base`` rewrites the references as absolute paths under that
+    ``base`` rewrites the references as absolute paths under that
     root (the workspace), used when the workspace copy is authoritative;
     ``outside_only`` widens the predicate to every reference resolving
     outside the workspace (same-name global shadows included).
@@ -228,13 +228,13 @@ def rewire_workspace(workspace: Path,
 
 
 # ---------------------------------------------------------------------------
-# #1002: global skill / plugin shadow
+# global skill / plugin shadow
 # ---------------------------------------------------------------------------
-# The stale scan above compares install NAMES (#752 predicate) — a global
+# The stale scan above compares install NAMES (predicate) — a global
 # install carrying the SAME name ("kunglao-agent") is invisible to it, yet
 # at runtime the global plugin cache / ~/.claude/skills tree wins over the
 # project copy. That is a SHADOW, not staleness: detect it separately and
-# report remediation (owner contract 2026-11-05: the project copy is
+# report remediation (owner contract: the project copy is
 # authoritative; a shadow must never silently coexist).
 PLUGIN_CACHE_RE = re.compile(
     r"[^\s\"'`()<>,]*\.claude[/\\]plugins[/\\]cache[/\\][^\s\"'`()<>,]*")
@@ -256,7 +256,7 @@ def _is_global_prefix(prefix: str, ws: Path) -> bool:
 
 
 def scan_global_shadow(workspace: Path) -> dict[str, list[str]]:
-    """Carrier -> unique global skill/plugin references (#1002).
+    """Carrier -> unique global skill/plugin references.
 
     Two faces: any ``.claude/plugins/cache/...`` token, and any
     ``.claude/skills/<name>`` reference whose prefix sits outside the
@@ -265,7 +265,7 @@ def scan_global_shadow(workspace: Path) -> dict[str, list[str]]:
 
     Only a workspace that CARRIES a project skill copy can be shadowed:
     without one, the global/durable install is the legitimate active root
-    (#752 dev co-install ruling), so the scan answers {} and the existing
+    (dev co-install ruling), so the scan answers {} and the existing
     stale-rewire face owns the situation.
     """
     ws = Path(workspace).resolve()

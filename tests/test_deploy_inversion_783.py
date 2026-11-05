@@ -30,10 +30,10 @@ def test_register_invokes_ws_local_when_copies_materialized(
         tmp_path: Path, monkeypatch) -> None:
     import hook_activation as ha
 
-    # #1002: deploy_workspace_copy also materializes the workspace env
+    # deploy_workspace_copy also materializes the workspace env
     # project (<ws>/.claude/pyproject.toml), so the deployed registration
     # resolves BOTH axes locally: script path AND `uv run --project`.
-    # (Pre-#1002 the env axis fell back to the framework root because "a
+    # (Previously the env axis fell back to the framework root because "a
     # workspace ships no pyproject" — that premise is retired.)
     ha.deploy_workspace_copy(tmp_path)          # materialize manifest + env
     count = ha.register_hooks(workspace=tmp_path)

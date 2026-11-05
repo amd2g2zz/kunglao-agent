@@ -150,7 +150,7 @@ class TestDeployRefusal:
         assert not (ws / ".claude" / "deployed-manifest.json").exists(), (
             "refusal must happen BEFORE the manifest copy")
         assert not (ws / ".claude" / "scripts").exists()
-        # #1002: the workspace env is written only AFTER the gate passes —
+        # the workspace env is written only AFTER the gate passes —
         # a refused deploy leaves no half-materialized env behind.
         assert not (ws / ".claude" / "pyproject.toml").exists(), (
             "refusal must happen BEFORE the workspace env write")

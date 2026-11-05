@@ -477,7 +477,7 @@ class HookWiringSelfcheckError(RuntimeError):
 
 
 def workspace_env_root(workspace: Path | None) -> Path | None:
-    """#1002: the workspace runtime project root, when deployed.
+    """the workspace runtime project root, when deployed.
 
     Returns ``<ws>/.claude`` iff the deploy step materialized the generated
     env manifest there. This is THE runtime root of a self-contained
@@ -496,13 +496,13 @@ def workspace_env_root(workspace: Path | None) -> Path | None:
 def _framework_project_root(workspace: Path | None = None) -> Path | None:
     """The env project that serves the deployed code.
 
-    #1002 (owner ruling 2026-11-05): in a deployed workspace the
+    (owner ruling): in a deployed workspace the
     WORKSPACE env project wins — ``<ws>/.claude/pyproject.toml`` is the
     deployment unit, so an upgrade of one project can never mutate the
     env another project runs. Without a workspace env (bare skill installs
-    / pre-#1002 workspaces) the historical resolution stands: the nearest
+    / pre-existing workspaces) the historical resolution stands: the nearest
     directory owning pyproject.toml, probing the executing install root
-    first (#6), then this module's parents.
+    first, then this module's parents.
     """
     ws_env = workspace_env_root(workspace)
     if ws_env is not None:
@@ -544,10 +544,10 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # workspace deployed copy (upgrade isolation #783 unchanged); only the
     # env project changed. The explicit `python` token is the invocation
     # standard's canonical form.
-    # #1002 (owner ruling 2026-11-05): the premise "a workspace ships no
+    # (owner ruling): the premise "a workspace ships no
     # project" no longer holds — init/upgrade write <ws>/.claude/pyproject
     # .toml, so the workspace IS the env project and wins over the global
-    # plugin cache. A workspace without the env keeps the #6 fallback.
+    # plugin cache. A workspace without the env keeps the fallback.
     project_root = _framework_project_root(project)
     if project_root is None:
         # no framework project found (never expected in-tree): fall back to
@@ -731,7 +731,7 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
     # FRAMEWORK root (same resolution the writer uses) — the SCRIPT path
     # stays the deployed hooks dir. A workspace-project form is the
     # ephemeral-env trap this sweep removed.
-    # #1002: the ENV project follows the same resolution as the writer —
+    # the ENV project follows the same resolution as the writer —
     # the workspace env project in deploy mode, the framework root
     # otherwise. Using the global root here would reject a correct
     # workspace-rooted command (the checker must read the same truth).
@@ -767,8 +767,8 @@ def verify_install_references(workspace: Path,
     this workspace still reference an install OTHER than the active one?
 
     The active root is the workspace's own project skill copy when it
-    carries one (#1002: the project copy is authoritative, and a same-name
-    global ref is a shadow), otherwise the executing install (#752).
+    carries one (the project copy is authoritative, and a same-name
+    global ref is a shadow), otherwise the executing install.
 
     Delegates the scan to install_reference.scan_workspace over the two
     carriers (.claude/settings.json, CLAUDE.md). Pure check: returns
@@ -781,9 +781,9 @@ def verify_install_references(workspace: Path,
     read-only so callers can gate on it without side effects.
     """
     import install_reference  # lazy: scripts/ sibling (#752 one-way dep)
-    # #1002: in a workspace that carries its own project skill copy, THAT
+    # in a workspace that carries its own project skill copy, THAT
     # copy is the active root — verification judges "outside the
-    # workspace" (same-name global refs are shadows), not the #752
+    # workspace" (same-name global refs are shadows), not the
     # install-name predicate against the executing install.
     outside_only = False
     if active_root is not None:
@@ -799,10 +799,10 @@ def verify_install_references(workspace: Path,
     stale = install_reference.scan_workspace(workspace, root,
                                             outside_only=outside_only)
     total = sum(len(v) for v in stale.values())
-    # #1002: a global plugin-cache / ~/.claude/skills reference in a
+    # a global plugin-cache / ~/.claude/skills reference in a
     # workspace carrier is a SHADOW — the global tree would win at runtime
     # over the project copy. Same-name installs are invisible to the stale
-    # scan above (name equality is the #752 predicate), so this is a
+    # scan above (name equality is the predicate), so this is a
     # separate face, reported with remediation rather than silently
     # coexisting (owner contract: project copy is authoritative).
     shadow = install_reference.scan_global_shadow(workspace)
@@ -848,7 +848,7 @@ def deploy_workspace_copy(ws: Path) -> dict:
     # issue 467 (manifest-vs-imports gate): refuse BEFORE any workspace
     # mutation when the SOURCE env project — the tree the workspace env is
     # generated from — does not declare the hard third-party imports of
-    # the tree being deployed. #1002: the gate now runs BEFORE the workspace
+    # the tree being deployed. The gate now runs BEFORE the workspace
     # env write, so a refused deploy leaves no half-materialized env
     # behind (the earlier order wrote the env first).
     _env_root = _framework_project_root()
@@ -873,7 +873,7 @@ def deploy_workspace_copy(ws: Path) -> dict:
                 f"would fail open per tick). Update the skill package "
                 f"at that root (git pull / plugin update), then re-run "
                 f"init/upgrade.")
-    # #1002: materialize the workspace runtime env AFTER the gate passes.
+    # materialize the workspace runtime env AFTER the gate passes.
     try:
         env_file = _ensure_env(ws)
     except (OSError, ValueError) as exc:
@@ -897,9 +897,9 @@ def deploy_workspace_copy(ws: Path) -> dict:
             f"<ws>/.claude/pyproject.toml does not declare: {_mods}")
     import yaml as _yaml
     data = _yaml.safe_load(_MF.read_text(encoding="utf-8")) or {}
-    # #1002: the source root is the MANIFEST's own tree, never this
+    # the source root is the MANIFEST's own tree, never this
     # module's `__file__` — a relocated/co-installed hook_activation (the
-    # #752 durable-install simulation, or a dev co-install) would otherwise
+    # durable-install simulation, or a dev co-install) would otherwise
     # resolve every src against a tree that does not carry the files and
     # silently copy ZERO entries (fail-open deployment).
     src_root = _MF.resolve().parent
@@ -1117,7 +1117,7 @@ def register_hooks_deployed(ws: Path) -> int:
     def _upsert(event: str, matcher: str, hf: str) -> bool:
         """Insert the canonical entry, replacing any same-basename entry.
 
-        #1002: the previous basename-only presence check kept a stale
+        the previous basename-only presence check kept a stale
         command root forever — a workspace wired to the global plugin
         cache read as "already registered" and was never rewired. The
         SHAPE is the writer's contract; presence of a basename is not.

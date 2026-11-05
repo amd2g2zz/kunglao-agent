@@ -410,7 +410,7 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
         dm.build_entries()), "init must stamp the deployment carrier"
     cmds = _commands(ws)
     assert cmds, "settings.json must carry the hook registry"
-    # #1002: both axes resolve to the workspace — env project <ws>/.claude,
+    # both axes resolve to the workspace — env project <ws>/.claude,
     # script path the workspace copy (the "ships no pyproject" premise is
     # retired by the generated workspace env).
     env_root = (ws / ".claude").resolve().as_posix()

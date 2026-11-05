@@ -2333,7 +2333,7 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         # are shell escapes — str(Path) breaks every rendered command on
         # win32 and drifts the portable golden contract (#457 triage #9-#11;
         # same rule as the #367 hook stamping).
-        # #1002: a deployed workspace is self-contained — render the
+        # a deployed workspace is self-contained — render the
         # WORKSPACE runtime root (<ws>/.claude, where scripts/hooks/tools/
         # references actually live) instead of the executing install. The
         # deploy runs AFTER this render on the init path, so the caller
@@ -2457,7 +2457,7 @@ def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path,
     REPLACED in place (position kept, no duplicate append) — the
     fixed-point pattern shared with external_kicker.
 
-    #1002: `project` roots the uv env at the workspace (<ws>/.claude) —
+    `project` roots the uv env at the workspace (<ws>/.claude) —
     the generated env project — instead of the global install root.
     """
     canonical = hook_activation.build_hook_entry(hook_dir, hook_file,
@@ -2580,7 +2580,7 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     # self-contained (uv project = workspace). --no-hooks never reaches this
     # function (deploy_env routes it away) — the opt-out face is unchanged.
     deployed_manifest = hook_activation.deploy_workspace_copy(ws)
-    # #1002: once the manifest is materialized, the workspace copies ARE the
+    # once the manifest is materialized, the workspace copies ARE the
     # runtime — register against <ws>/.claude/hooks with the workspace env
     # project, and self-check with deployed_project=ws. Using the canonical
     # install here wrote global-rooted commands that only the later
@@ -2599,7 +2599,7 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     selfcheck = hook_activation.selfcheck_registration(
         target, expected_files=HOOK_FILES,
         workspace=ws, layer=layer,
-        deployed_project=ws)  # #1002: workspace-rooted shape is the truth
+        deployed_project=ws)  # workspace-rooted shape is the truth
     return {"deployed": True, "target": str(target), "added": added,
             "selfcheck": selfcheck,
             "deployed_manifest": {
@@ -2662,7 +2662,7 @@ def _deploy_skills(ws: Path, skills: list[str] | None) -> dict:
         raise ValueError(
             f"unknown --builtin-skills name(s): {', '.join(unknown)} "
             f"(available: {', '.join(valid)})")
-    # #1002 HIGH-2: the framework skill package now deploys to
+    # HIGH-2: the framework skill package now deploys to
     # <ws>/.claude/skills/kunglao-agent as part of the deployment manifest.
     # The L4 opt-in copy rmtree's its target first, so accepting this name
     # would DELETE the deployed package (router SKILL.md + per-command

@@ -128,7 +128,7 @@ def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_hom
     worker_budget entry with the uv form — the same-name skip must not leave
     the stale entry (bare python is 2.x on this machine).
 
-    #1002: the canonical form is WORKSPACE-rooted — the script path is the
+    the canonical form is WORKSPACE-rooted — the script path is the
     deployed copy under <ws>/.claude/hooks and the env project is the
     generated <ws>/.claude pyproject (never the global install root)."""
     ws_env = (init_ws / ".claude").resolve()

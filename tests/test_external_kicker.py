@@ -147,7 +147,7 @@ def test_ensure_project_hooks_exact_commands(tmp_path):
 
 
 def test_ensure_project_hooks_roots_the_workspace_env(tmp_path):
-    """#1002: with project=<ws> (a deployed workspace), the commands resolve
+    """with project=<ws> (a deployed workspace), the commands resolve
     the WORKSPACE env project and the workspace hooks dir."""
     import deploy_manifest as dm
     ws = tmp_path / "ws"

@@ -252,17 +252,17 @@ def test_l4_no_flag_deploys_only_the_framework_skill(tmp_path):
     r = _run_init(ws)
     assert r.returncode == RC_OK, r.stderr
     skills_dir = ws / ".claude" / "skills"
-    # #1002: the FRAMEWORK skill package deploys unconditionally (the
+    # the FRAMEWORK skill package deploys unconditionally (the
     # workspace is the runtime root) …
     assert (skills_dir / "kunglao-agent" / "SKILL.md").is_file(), (
         "the framework skill package must deploy without any flag")
-    # … while the #478 L4 per-command copies stay opt-in.
+    # … while the L4 per-command copies stay opt-in.
     assert not (skills_dir / "analysis").exists(), (
         "no --builtin-skills flag must not deploy the opt-in copies")
 
 
 def test_init_renders_the_workspace_runtime_root(tmp_path):
-    """#1002: the fresh-init CLAUDE.md must render <ws>/.claude — the deploy
+    """the fresh-init CLAUDE.md must render <ws>/.claude — the deploy
     runs AFTER the render, so the renderer takes the intent, not a probe."""
     ws = _mk_ws(tmp_path)
     r = _run_init(ws)

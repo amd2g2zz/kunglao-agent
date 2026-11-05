@@ -527,7 +527,7 @@ def test_venv_probe_dispatches_through_uv_project(monkeypatch, tmp_path):
 
 
 def test_venv_probe_uses_the_workspace_env_when_deployed(monkeypatch, tmp_path):
-    """#1002: a deployed workspace is served by <ws>/.claude, not the skill
+    """a deployed workspace is served by <ws>/.claude, not the skill
     root — and the generated env ships no lock, so --locked is omitted."""
     ws = _kunglao_ws(tmp_path)
     (ws / ".claude").mkdir(parents=True, exist_ok=True)

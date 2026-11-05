@@ -51,7 +51,7 @@ def refresh(ws: Path, *, dry: bool = False,
     except Exception as exc:  # noqa: BLE001 — degraded detail only
         return f"deployed_refresh(skipped: manifest unavailable {exc!r})"
 
-    # #1002: the workspace runtime env is part of the deployed surface —
+    # the workspace runtime env is part of the deployed surface —
     # refresh it alongside the files (idempotent, content-addressed). A
     # failure stays a WARN detail (never-raise migration contract), but it
     # is named: without the env the hook commands fall back to a global
@@ -221,7 +221,7 @@ def prune_outright(ws: Path) -> list[str]:
 def _dep_gap_detail(ws: Path | None = None) -> str:
     """The issue-467 gap string ('' when every env covers the surface).
 
-    #1002 checks BOTH serving envs: the SOURCE/framework env the code was
+    checks BOTH serving envs: the SOURCE/framework env the code was
     installed from (a stale install is the root-cause class) and the
     workspace env project the hook commands actually use (a broken
     generation must not hide behind the source check). Any gap is a named

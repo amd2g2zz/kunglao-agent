@@ -576,7 +576,7 @@ def _build_current_frame(ws: Path, old_text: str,
             carried.get("sample_sha256", sample_sha), lane,
             sample_type=carried.get("sample_type"),
             sample_path=carried.get("sample_path")),
-        # #1002: deployed workspaces render their own runtime root so the
+        # deployed workspaces render their own runtime root so the
         # rendered loop commands resolve the deployed scripts, never the
         # global install.
         "skill_dir": (
@@ -1695,10 +1695,10 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
     already-current fast path sweeps too: a workspace mis-wired by a
     pre-fix tool stamps CURRENT and would otherwise skip through the early
     return forever."""
-    # #1002: in a workspace that carries its own project skill copy, THAT
+    # in a workspace that carries its own project skill copy, THAT
     # copy is the active root — stale references are rewritten to the
     # workspace path (absolute; the workspace need not live under HOME),
-    # never to the global install. Without a project copy the #752
+    # never to the global install. Without a project copy the
     # durable-install resolution stands.
     project_skill = ws / ".claude" / "skills" / "kunglao-agent"
     if project_skill.is_dir():
@@ -1711,7 +1711,7 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
         outside_only = False
     scan = install_reference.scan_workspace(ws, root,
                                             outside_only=outside_only)
-    # #1002: a global skill/plugin reference in a workspace that CARRIES a
+    # a global skill/plugin reference in a workspace that CARRIES a
     # project skill copy is a shadow — the global tree wins at runtime.
     # Report it with remediation; never silently coexist.
     shadow = install_reference.scan_global_shadow(ws)
@@ -1719,13 +1719,13 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
         return {"status": "clean"}
     if shadow:
         for carrier, refs in sorted(shadow.items()):
-            print(f"kunglao-upgrade: WARN global skill/plugin shadow "
-                  f"[{carrier}] {len(refs)} ref(s) — the project copy at "
-                  f"{ws}/.claude/skills/kunglao-agent is authoritative; "
-                  f"disable the global kunglao-agent plugin/skill for this "
-                  f"project", file=sys.stderr)
+            _warn_line(f"kunglao-upgrade: WARN global skill/plugin shadow "
+                       f"[{carrier}] {len(refs)} ref(s) — the project copy at "
+                       f"{ws}/.claude/skills/kunglao-agent is authoritative; "
+                       f"disable the global kunglao-agent plugin/skill for "
+                       f"this project")
             for ref in refs:
-                print(f"kunglao-upgrade: WARN   - {ref}", file=sys.stderr)
+                _warn_line(f"kunglao-upgrade: WARN   - {ref}")
         _warn("kunglao-upgrade: WARN — global skill/plugin shadow detected "
               "in the workspace carriers; the project skill copy is "
               "authoritative (disable the global plugin/skill for this "
@@ -2307,7 +2307,7 @@ def upgrade(ws: Path, dry_run: bool = False,
         # write nothing (the dry run never pends)
         _anchor_backfill(ws, dry_run=True, resolve=resolve, items_out=items_out)
         # #752 D6: planned sweep surfaces in the dry-run plan, writes nothing
-        # #1002: the dry-run plan must speak the same predicate as the
+        # the dry-run plan must speak the same predicate as the
         # applied sweep — outside-only in a deployed workspace.
         project_skill = ws / ".claude" / "skills" / "kunglao-agent"
         if project_skill.is_dir():
