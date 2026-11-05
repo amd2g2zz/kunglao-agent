@@ -71,8 +71,9 @@ _INSTALL_FAILED_NOTE = (" — install failed via --resolve (#451); static "
 
 
 def _tool_dirs() -> tuple[Path, ...]:
-    """Configured enumeration roots: KUNGLAO_TOOL_DIRS > DEFAULT_TOOL_DIRS."""
-    raw = os.environ.get("KUNGLAO_TOOL_DIRS", "")
+    """Configured enumeration roots: declared switch > DEFAULT_TOOL_DIRS."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    raw = runtime_switches.get_str("KUNGLAO_TOOL_DIRS")
     if raw.strip():
         return tuple(Path(p) for p in raw.split(os.pathsep) if p.strip())
     return DEFAULT_TOOL_DIRS

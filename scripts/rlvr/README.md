@@ -299,6 +299,28 @@ the one-line pointer (name — the docstring's opening line):
   unified TELEMETRY ledger, and emits the registered
   `disposition_recorded` event. Re-writing the identical row is idempotent;
   a divergent rewrite is refused.
+- `disposition_reward` — rlvr/disposition_reward.py — the disposition reward
+  face (#986): classification evidence normalization (an authorized refusal is
+  SURRENDER, out-of-scope is OUT_OF_SCOPE, CENSORED_ENV needs BOTH session-bound
+  and corroborated wall legs, a timeout is FAILED), the consumer mapping
+  (`reward_for`: SOLVED oracle lock; SURRENDER 0.0 inside [0,1] with a
+  strategic-action failure outcome, TRACE floor with reproducible evidence;
+  ATTEMPTED_EXHAUSTED capability gap; CENSORED_ENV excluded from strategy
+  learning; OUT_OF_SCOPE / INFRA / FAILED reported separately), and the bounded
+  `disposition-signal/1` choice signal (`settle_disposition` /
+  `settle_workspace`) through the unified TELEMETRY ledger plus the registered
+  `disposition_signal` event. `rlvr.episode_settle.settle_mission` is the
+  mission-terminal call site.
+- `disposition_measure` — rlvr/disposition_measure.py — the read-only
+  measurement face over the disposition rows + telemetry mirror: the declared
+  denominator table (capability = SOLVED + SURRENDER, censoring rate over all
+  valid rows, exhausted -> `capability-gap/1` carrying the route-ledger ref,
+  OUT_OF_SCOPE / INFRA / FAILED reported separately), strategy-learning
+  inputs excluding CENSORED_ENV, process metrics (steps / cost / dead-end
+  rate / route-pruning quality) joined per run and per arm only where the
+  sources exist (explicit None + coverage otherwise), and `learning_claim`
+  refusing single-episode verdicts in favour of pre/post or ablation deltas
+  with uncertainty.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.
@@ -310,6 +332,26 @@ the one-line pointer (name — the docstring's opening line):
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
 - `reward_signal` — rlvr/reward_signal.py — the A1 learning signal `R = completion + milestone progress − cost` + the settlement hook (issue #824).
+- `rollout_timer` — rlvr/rollout_timer.py — the per-rollout learned deadline
+  timer: `arm` computes `budget = clamp(base x coeff, 15m, 480m)` from the
+  comparable-family median and ONE global coefficient, persists a
+  `rollout-timer/1` row and returns the one-shot wake contract (cron derived
+  from the deadline, off :00/:30, plus the graceful wrap-up prompt); `cancel`
+  retires an early finish and a canceled timer never fires; `fire` records the
+  deadline and returns the graceful-stop contract; `learn` moves the bounded
+  coefficient table (early x0.9, timeout x1.25, on time x0.98, infra/aborted
+  no update, coeff clamp [0.5, 4.0]) and audits every decision as a
+  `rollout-budget/1` row. One global coefficient; the bucket key is recorded
+  but a split waits for n>=5. A deadline stop carries `stop_reason: deadline`
+  and is excluded from strategic learning without adding a disposition.
+- `route_ledger` — rlvr/route_ledger.py — the route-attempt ledger (#988):
+  `runs/rt-tests/<claim>/routes.json` with the per-claim-kind `routes:`
+  declaration from `references/schemas/machine_check_map.yaml`, per-attempt
+  machine command + content-addressed artifact (sha256 re-derived by the
+  validator), the fixed `ROUTE_ATTEMPT_BUDGET` policy constant, and the
+  classifier-facing `routes`/`attempted`/`budget`/`budget_exhausted` record;
+  a missing, malformed or non-reproducible ledger can never claim
+  ATTEMPTED_EXHAUSTED.
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
@@ -317,6 +359,18 @@ the one-line pointer (name — the docstring's opening line):
 - `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
 - `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
 - `step_ledger` — rlvr/step_ledger.py — the shadow experience substrate (the online
+- `stopping` — rlvr/stopping.py — the externally checkable stop checker (#988):
+  `may_terminate(record)` is pure and True only for route-ledger exhaustion,
+  a corroborated session-bound wall, or a spent declared budget; stagnation /
+  early-failure-prediction / effort surrogates never terminate. The
+  loop-facing call site (`e2e/checkpoints._tick_prelude`) refuses the idle
+  circuit breaker unless the checker passes (refusal recorded as
+  `stop_refused`).
+- `strategic_action` — rlvr/strategic_action.py — the recorded route choice
+  (#988): one `strategic-action/1` row per episode (FIGHT/BYPASS/INVEST
+  derived from the action_space STRATEGIC registry) carrying its propensity,
+  written through the unified experience ledger + the
+  `strategic_action_recorded` event; an absent action reads as SURRENDER.
 - `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
 - `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
 

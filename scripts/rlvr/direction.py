@@ -117,9 +117,11 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 # ------------------------------------------------------------- boundaries
 
 def enabled() -> bool:
-    """The face is ON only for the exact string "1" (default OFF — the
-    flag-off tree is byte-inert: no rows, no stderr, no reads)."""
-    return os.environ.get(FLAG_ENV, "") == "1"
+    """The face is ON only when the declared switch parses true (default
+    OFF — the flag-off tree is byte-inert: no rows, no stderr, no
+    reads)."""
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    return runtime_switches.get_bool(FLAG_ENV)
 
 
 def _now() -> str:

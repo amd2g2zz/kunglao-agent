@@ -385,14 +385,15 @@ class TestStepCredit:
 # ----------------------------------------------------------------- flag
 
 class TestFlag:
-    def test_default_off_and_exact_one(self, monkeypatch):
+    def test_default_off_and_declared_values(self, monkeypatch):
         monkeypatch.delenv(direction.FLAG_ENV, raising=False)
         assert direction.enabled() is False
-        for value in ("0", "true", "yes", " on", ""):
+        for value in ("0", "false", "off", ""):
             monkeypatch.setenv(direction.FLAG_ENV, value)
             assert direction.enabled() is False
-        monkeypatch.setenv(direction.FLAG_ENV, "1")
-        assert direction.enabled() is True
+        for value in ("1", "true", "yes", " on"):
+            monkeypatch.setenv(direction.FLAG_ENV, value)
+            assert direction.enabled() is True
 
     def test_flag_off_loop_faces_are_inert(self, tmp_path):
         """The zero-behavior pin: OFF, the loop faces write NOTHING and

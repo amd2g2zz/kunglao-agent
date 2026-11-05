@@ -99,7 +99,6 @@ def warn(op: str, reason: str) -> None:
           f"{op}: {reason}",
           file=sys.stderr)
 import argparse
-import os
 import hashlib
 import json
 import re
@@ -1891,7 +1890,8 @@ def _item_uv_sync(ws: Path, dry: bool) -> str:  # noqa: ARG001 — ws for item s
         return "uv_sync(dry)"
     # Operational opt-out (also the test-hermeticity switch): a CI runner or
     # an offline operator can disable the real sync without code surgery.
-    if os.environ.get("KUNGLAO_UPGRADE_NO_UV_SYNC") == "1":
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    if runtime_switches.get_bool("KUNGLAO_UPGRADE_NO_UV_SYNC"):
         why = "skipped(KUNGLAO_UPGRADE_NO_UV_SYNC=1)"
         print(f"kunglao-upgrade: venv sync {why}", file=sys.stderr)
         _emit(ws, "uv_sync", why)

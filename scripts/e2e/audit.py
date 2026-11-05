@@ -80,6 +80,11 @@ tests/test_e2e_runner.py::TestUnifiedAuditTrail)
         already exists (method_family rides the dispatch envelope), and
         fire only when the kernel activates. Not firing is honest — a
         missing hook would have been the old blind spot again.
+    stop_refused
+        the loop refused a surrogate early stop (the heartbeat idle
+        circuit breaker) because the externally checkable stop checker
+        found no ledger/wall/budget evidence; the tick proceeds (detail:
+        stop_class, tick, reasons).
 
 GUARANTEE: every decision leaves exactly one event in the stream —
 one record_result call = one row; one dispatch_act = one attempt + one
@@ -98,6 +103,7 @@ import os
 from pathlib import Path
 
 import kunglao_log
+import runtime_switches
 from harness_common import utc_now_z as _utc_now  # single source (Family F)
 
 #: the stream file (under <ws>/runs/logs/, sibling of the kunglao day files)
@@ -129,7 +135,7 @@ AUDIT_ACTIONS = (CHECKPOINT_ACTIONS | KERNEL_ACTIONS | DISTILL_ACTIONS
                      "dispatch_backoff",
                      "convergence_decision", "oracle_verdict",
                      "harvest_landed", "harvest_scan",
-                     "script_harvested",
+                     "script_harvested", "stop_refused",
                  }))
 
 #: report category buckets (§5) — anything outside them still counts in
@@ -220,7 +226,7 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "matched_rule": None,
         "trace_id": str(trace_id) if trace_id else None,
         "version": str(version) if version else None,
-        "channel": os.environ.get("KUNGLAO_CHANNEL", "local").lower(),
+        "channel": runtime_switches.get_str("KUNGLAO_CHANNEL").lower(),
     }
     # the auto-documented null set (kunglao_log.AUTO_NULL_FIELDS) — same
     # honesty rule: a normally-required null is explained in null_reasons

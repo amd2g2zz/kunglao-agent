@@ -55,7 +55,6 @@ except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
               file=sys.stderr)
 import json
 import locale
-import os
 import re
 import shutil
 import sys
@@ -75,6 +74,11 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 ensure_scripts_path()
 # #770: position-stable membership (front=True reordered shared-name twins);
 ensure_on_path(SKILL_DIR / "hooks")
+
+try:
+    import runtime_switches as _runtime_switches
+except Exception:  # noqa: BLE001 — partial-deploy lifeline, never block
+    _runtime_switches = None
 
 RC_ALLOW = 0
 RC_BLOCK = 2
@@ -199,7 +203,8 @@ def status_first_block(ws: Path, payload: dict, rel: Path) -> str | None:
 # effect on the exit contract otherwise. Exists because the #686 failure
 # (silent allow on must-block writes) was misattributed to the rule layer
 # for days with no in-tree way to see where the decision died.
-_DEBUG = os.environ.get("KUNGLAO_WG_DEBUG") == "1"
+_DEBUG = (_runtime_switches.get_bool("KUNGLAO_WG_DEBUG")
+          if _runtime_switches is not None else False)
 
 
 def _dbg(msg: str) -> None:

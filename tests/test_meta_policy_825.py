@@ -50,11 +50,20 @@ import dispatch_context as dc  # noqa: E402
 
 # ---------------------------------------------------------------- fixtures
 
-_META_ENV = ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-             "KUNGLAO_META_RETRIEVE_MAX", "KUNGLAO_META_MIN_UTILITY",
+_META_ENV = ("KUNGLAO_META_RETRIEVE_MAX", "KUNGLAO_META_MIN_UTILITY",
              "KUNGLAO_META_W_REWARD", "KUNGLAO_META_W_COST",
              "KUNGLAO_META_W_PRIOR", "KUNGLAO_META_N_SHRINK",
              "KUNGLAO_META_W_CITATION", "KUNGLAO_META_W_RETRIEVAL")
+_LEARNING_ENV = ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
+                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK")
+
+
+@pytest.fixture(autouse=True)
+def _declared_learning_faces(monkeypatch):
+    """Learning switches default OFF; these pins assert the declared-ON
+    behavior of each component, so every test declares them on."""
+    for name in _LEARNING_ENV:
+        monkeypatch.setenv(name, "1")
 
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
@@ -439,14 +448,17 @@ class TestEnvelopeInterface:
 
 class TestKnobs:
     def test_documented_defaults(self, monkeypatch):
-        for name in _META_ENV:
+        for name in _META_ENV + _LEARNING_ENV:
             monkeypatch.delenv(name, raising=False)
         k = mp.knobs()
         assert k["retrieve_max"] == 3
         assert k["min_utility"] == pytest.approx(0.0)
         assert k["w_reward"] == pytest.approx(1.0)
-        assert k["retrieval"] is True
-        assert k["value_table"] is True
+        # learning switches default OFF unless an arm declares them
+        assert k["retrieval"] is False
+        assert k["value_table"] is False
+        assert k["attribution"] is False
+        assert k["playbook"] is False
 
     def test_env_overrides(self, monkeypatch):
         for name in _META_ENV:

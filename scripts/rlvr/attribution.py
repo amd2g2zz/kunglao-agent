@@ -204,5 +204,5 @@ def report_ref(report: dict) -> str:
 
 def knob_on() -> bool:
     """The component-ablation switch (the third of four knobs)."""
-    import os  # noqa: PLC0415 — leaf face, keeps module import-light
-    return os.environ.get("KUNGLAO_META_ATTRIBUTION", "1") != "0"
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    return runtime_switches.get_bool("KUNGLAO_META_ATTRIBUTION")

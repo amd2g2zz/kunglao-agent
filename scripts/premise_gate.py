@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -384,15 +383,9 @@ def run_pending_reprobe(ws: Path, runner=None) -> dict:
 # ---------------------------------------------------------------------------
 
 def _expiry_ticks() -> int:
-    raw = os.environ.get("KUNGLAO_PREMISE_EXPIRY_TICKS")
-    if raw:
-        try:
-            n = int(raw)
-            if n > 0:
-                return n
-        except ValueError as exc:
-            _warn("_expiry_ticks", f"{type(exc).__name__}: {exc}")
-    return DEFAULT_EXPIRY_TICKS
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    n = runtime_switches.get_int("KUNGLAO_PREMISE_EXPIRY_TICKS")
+    return n if n > 0 else DEFAULT_EXPIRY_TICKS
 
 
 def _load_expiry_state(ws: Path) -> dict:

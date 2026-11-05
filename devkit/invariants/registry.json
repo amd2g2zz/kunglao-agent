@@ -47,8 +47,8 @@
     },
     {
       "id": "INV-007",
-      "name": "recall-default-off",
-      "statement": "reference-recall injection is opt-in (KUNGLAO_RECALL=1) per the #694 measurement, until the scorer earns its cost back (#771)",
+      "name": "recall-supply-default-on",
+      "statement": "reference-recall injection is a supply face: ON by default in the runtime-switch registry; an evaluation arm declares the exact 0 ablation, and no arm relies on an invisible default",
       "fingerprint": null,
       "check": "uv run pytest tests/ -k recall_default -q",
       "tier": "nightly"

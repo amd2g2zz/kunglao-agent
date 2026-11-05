@@ -300,6 +300,15 @@ def build_dispatch_context(
             phase=_meta_policy.episode_phase(ws, claim_id))
     except Exception:  # noqa: BLE001 — context build never raises
         meta_block = None
+    # The declared runtime-switch face rides the contract: every switch's
+    # effective value, declared default and source (env vs default), so an
+    # unset switch is never invisible to the executor. Optional key, same
+    # fail-open pattern; NOT in VERIFIER_SAFE_KEYS (orchestrator-side).
+    try:
+        import runtime_switches as _switches
+        switch_block = _switches.declared_values()
+    except Exception:  # noqa: BLE001 — context build never raises
+        switch_block = None
     ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
@@ -322,6 +331,8 @@ def build_dispatch_context(
         ctx["instrument_menu"] = instrument_menu
     if meta_block is not None:
         ctx["meta_policy"] = meta_block
+    if switch_block is not None:
+        ctx["runtime_switches"] = switch_block
     _emit_context_manifest(ws, ctx)  # issue 293 field upgrade A
     return ctx
 

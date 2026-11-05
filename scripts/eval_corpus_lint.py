@@ -37,7 +37,6 @@ stdlib + PyYAML only (house eval-script rule).
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -111,7 +110,8 @@ def corpus_roots(explicit: list[Path], repo: Path) -> list[Path]:
     blocked-path units when present."""
     if explicit:
         return explicit
-    override = os.environ.get("KUNGLAO_EVAL_ROOT", "")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    override = runtime_switches.get_str("KUNGLAO_EVAL_ROOT")
     root = Path(override) if override else repo / "eval"
     roots = [root / "v1" / "tasks"]
     bp = repo / "experiments" / "blocked-path-units"

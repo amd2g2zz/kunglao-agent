@@ -106,14 +106,20 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                    # elimination / signed clawback / calibration) are
                    # born in the consolidated experience file
                    "hypothesis-resolution/1", "hypothesis-elimination/1",
-                   "phi-clawback/1", "phi-calibration/1"),
+                   "phi-clawback/1", "phi-calibration/1",
+                   # the strategic route choice (FIGHT/BYPASS/INVEST +
+                   # propensity) is the learning feed's action face — a
+                   # dead writer must read 0, never be absent
+                   "strategic-action/1"),
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",),
     # the one evidence-gated disposition row per episode (rlvr.disposition
-    # mirrors it here, so a dead writer must read 0, never be absent);
-    # the per-rollout deadline timer and its coefficient audit row
-    "telemetry": ("disposition/1", "rollout-timer/1", "rollout-budget/1"),
+    # mirrors it here, so a dead writer must read 0, never be absent), its
+    # bounded reward-face choice signal (rlvr.disposition_reward), and the
+    # per-rollout deadline timer with its coefficient audit row
+    "telemetry": ("disposition/1", "disposition-signal/1",
+                  "rollout-timer/1", "rollout-budget/1"),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
@@ -141,7 +147,8 @@ def _knowledge_root() -> Path:
         warn("rlvr.consolidated_ledger",
              f"strategy_store root unavailable ({type(exc).__name__}: "
              f"{exc}) — environment-mirror fallback")
-        env = os.environ.get(STORE_ENV, "").strip()
+        import runtime_switches  # noqa: PLC0415 — fallback path only
+        env = runtime_switches.get_str(STORE_ENV).strip()
         if env:
             return Path(env)
         return Path(__file__).resolve().parent / "patterns"

@@ -34,13 +34,15 @@ The seven arms (docs/design/ws5-five-arms.yaml, the arm registry):
     kunglao-warm-no-l1 kunglao-warm with recall ablated (KUNGLAO_RECALL=0)
 
 Arms differ ONLY in declared faces (runner face, store kind, env). The
-launcher is HERMETIC: KUNGLAO_RECALL / KUNGLAO_EXPANSION /
-KUNGLAO_PREDICT_BEFORE_TRY are stripped from the inherited environment
-before each arm's declared env merges — ambient shell state can never
-contaminate an arm. Store isolation: warm arms read an ISOLATED per-run
-COPY of the configured warm store (arms never share a live store), the
-cold arm reads a materialized empty store dir, and the store env is
-unset entirely for arms that declare store: none.
+launcher is HERMETIC: every supply/learning switch an arm can declare
+(KUNGLAO_RECALL / KUNGLAO_EXPANSION / KUNGLAO_PREDICT_BEFORE_TRY /
+KUNGLAO_SCHEDULER / KUNGLAO_META_* / KUNGLAO_DIRECTION /
+KUNGLAO_EVAL_SETTLE / KUNGLAO_PLAYBOOK) is stripped from the inherited
+environment before each arm's declared env merges — ambient shell state
+can never contaminate an arm. Store isolation: warm arms read an
+ISOLATED per-run COPY of the configured warm store (arms never share a
+live store), the cold arm reads a materialized empty store dir, and the
+store env is unset entirely for arms that declare store: none.
 
 Store scope (warm_up.store_mode): per-run (default) materializes a
 fresh isolated store per (arm, unit) cell. per-arm materializes ONE
@@ -127,9 +129,15 @@ STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 STORE_FILE = "posterior-store.jsonl"
 # the operator-local corpus root env (the blocked-path measurement face)
 EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
-# hermeticity: stripped from the inherited env before arm env merges
+# hermeticity: stripped from the inherited env before arm env merges —
+# every supply/learning face an arm can declare is stripped here so an
+# ambient shell value can never masquerade as a declared arm value
 STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
-                "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER")
+                "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER",
+                "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
+                "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
+                "KUNGLAO_DIRECTION", "KUNGLAO_EVAL_SETTLE",
+                "KUNGLAO_PLAYBOOK")
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
 VALID_STORES = ("none", "cold", "warm")
@@ -825,7 +833,8 @@ def main(argv: list[str] | None = None) -> int:
               else float((doc.get("budget") or {}).get("budget_usd", 2.0)))
     wall = (args.wall_cap_s if args.wall_cap_s is not None
             else float((doc.get("budget") or {}).get("wall_cap_s", 1800)))
-    operator_root = args.corpus_root or os.environ.get(
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    operator_root = args.corpus_root or runtime_switches.get_str(
         EVAL_ROOT_ENV) or None
     if operator_root and not Path(operator_root).is_dir():
         print(f"REFUSED: corpus root is not a dir: {operator_root}",

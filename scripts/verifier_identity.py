@@ -29,7 +29,8 @@ LEDGER_NAME = ".convergence_ledger.jsonl"
 
 def session_tag() -> str:
     """Machine tag for the authoring session (env id first, host fallback)."""
-    env = os.environ.get("CLAUDE_SESSION_ID")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    env = runtime_switches.get_str("CLAUDE_SESSION_ID")
     if env:
         return env.strip()
     return (socket.gethostname() + "#" + str(os.getpid())

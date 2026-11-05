@@ -310,7 +310,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
         child_env["KUNGLAO_SOLO_CAP_S"] = str(
             int(round(wall_cap_s * solo_fraction)))
     if session_cmd is None:
-        session_cmd = os.environ.get(ENV_SESSION_CMD) or None
+        import runtime_switches  # noqa: PLC0415 — lazy leaf import
+        session_cmd = runtime_switches.get_str(ENV_SESSION_CMD) or None
     if session_cmd:
         argv = shlex.split(session_cmd) + [prompt]
     elif plugin:
@@ -322,7 +323,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
     # Unset = off, the argv is untouched. Set = the session binary is
     # wrapped (sandbox-exec -f <profile> <original argv...>); a missing
     # sandbox-exec launches UNWRAPPED with the flag raised (fail-loud).
-    sandbox_profile = os.environ.get(ENV_SANDBOX_PROFILE)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    sandbox_profile = runtime_switches.get_str(ENV_SANDBOX_PROFILE) or None
     sandbox_wrap_failed = False
     if sandbox_profile:
         argv, sandbox_wrap_failed = _sandbox_wrap(argv, sandbox_profile)
@@ -433,7 +435,8 @@ HARNESS_DRIFT_ACTION = "harness_drift"  # registered: event_taxonomy.EMIT_ACTION
 
 
 def _harness_root() -> Path:
-    env = os.environ.get(ENV_HARNESS_ROOT)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    env = runtime_switches.get_str(ENV_HARNESS_ROOT)
     return Path(env) if env else SCRIPT_DIR.parent
 
 
@@ -798,7 +801,8 @@ def playbook_injection_block(family: str | None) -> str:
     byte-identical to the pre-playbook shape (default OFF, zero
     behavior change). A family with no playbook file also degrades to
     no block (cold arm), so the same env value is honest on both arms."""
-    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    if not runtime_switches.get_bool(ENV_PLAYBOOK):
         return ""
     return family_playbook.session_block(str(family or ""))
 
@@ -820,7 +824,8 @@ def playbook_distill_face(ws: Path, family: str | None) -> dict | None:
     fails OPEN on top of that: anything that still escapes (e.g. a
     store-write OSError) is one rate-limited WARN and never breaks the
     run — the verdict row assembles exactly as before."""
-    if os.environ.get(ENV_PLAYBOOK, "") != "1":
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    if not runtime_switches.get_bool(ENV_PLAYBOOK):
         return None
     fam = str(family or "").strip()
     if not fam:
@@ -1975,7 +1980,8 @@ def _row_leak_marker(row: dict, ws: Path, task_name: str) -> None:
     ORACLE_LEAK failure — the checker's verdict is NEVER rewritten (the
     marker, not a rewrite, disqualifies the row for the capability
     read)."""
-    grading_root = os.environ.get(ENV_GRADING_ROOT)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    grading_root = runtime_switches.get_str(ENV_GRADING_ROOT) or None
     if not grading_root:
         return
     leak = leak_scan(ws, grading_root)

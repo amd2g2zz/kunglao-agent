@@ -100,6 +100,7 @@ import platform_paths  # noqa: E402
 # #757 T1: channel probes delegate to the toolchain implementations rather
 # than being rewritten here (single source of probe semantics, #698 D4).
 import toolchain as tc  # noqa: E402
+import runtime_switches  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ skill root
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
@@ -114,14 +115,14 @@ PINNED_PYTHON = (3, 11)
 # Issue #228: NO machine-specific default. Unset = not configured — the check
 # FAILs with guidance instead of silently pointing at one operator's lab VM /
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
-VM_HOST = os.environ.get("KUNGLAO_VM_HOST", "")
+VM_HOST = runtime_switches.get_str("KUNGLAO_VM_HOST")
 VM_PORTS = [9876, 1337]
 # #362: default port pair (vmr-shell, frida) — overridden per-run by
 # resolve_ports() from KUNGLAO_VM_SHELL_PORT / KUNGLAO_FRIDA_PORT (env first,
 # workspace .env fallback; mirrors scripts/toolchain.py's defensive parse).
 DEFAULT_SHELL_PORT = 9876
 DEFAULT_FRIDA_PORT = 1337
-_ghidra_home = os.environ.get("GHIDRA_HOME")
+_ghidra_home = runtime_switches.get_str("GHIDRA_HOME") or None
 GHIDRA_DEFAULT = platform_paths.analyze_headless(_ghidra_home) if _ghidra_home else None
 
 
@@ -140,9 +141,9 @@ def resolve_ports(ws: Path) -> list[int]:
     resolution (same precedence as load_dotenv: os.environ wins, the
     workspace .env fills gaps)."""
     dotenv = load_dotenv(ws)
-    shell = (os.environ.get("KUNGLAO_VM_SHELL_PORT")
+    shell = (runtime_switches.raw("KUNGLAO_VM_SHELL_PORT")
              or dotenv.get("KUNGLAO_VM_SHELL_PORT"))
-    frida = (os.environ.get("KUNGLAO_FRIDA_PORT")
+    frida = (runtime_switches.raw("KUNGLAO_FRIDA_PORT")
              or dotenv.get("KUNGLAO_FRIDA_PORT"))
     return [
         _parse_port(shell, DEFAULT_SHELL_PORT),
@@ -206,7 +207,7 @@ def check_flag() -> tuple[bool, str]:
     workspace host is Windows (informational, same truthy semantics).
     """
     truthy = []
-    process_val = os.environ.get(FLAG_NAME)
+    process_val = runtime_switches.raw(FLAG_NAME)
     if process_val is not None and is_truthy(process_val):
         truthy.append(f"process={process_val}")
     if os.name == "nt":
@@ -780,7 +781,7 @@ def _explicit_channel_setting(ws: Path) -> str | None:
     """Live explicit KUNGLAO_CHANNEL: os.environ first, <ws>/.env fills gaps.
     Separate from load_dotenv's merged view because that view only overlays
     environ keys already present in the .env file."""
-    val = os.environ.get("KUNGLAO_CHANNEL")
+    val = runtime_switches.raw("KUNGLAO_CHANNEL")
     if val is None:
         val = load_dotenv(ws).get("KUNGLAO_CHANNEL")
     return val
@@ -834,7 +835,7 @@ def read_channel_record(ws: Path) -> tuple[str | None, str]:
     (raw_value_or_None, source_label)."""
     raw = _explicit_channel_setting(ws)
     if raw is not None and raw.strip():
-        source = "env" if os.environ.get("KUNGLAO_CHANNEL") else ".env"
+        source = "env" if runtime_switches.raw("KUNGLAO_CHANNEL") else ".env"
         return raw, source
     raw = _channel_from_init_report(ws)
     if raw is not None:
@@ -935,9 +936,11 @@ def run(ws: Path) -> tuple[int, dict]:
     # them directly, so the lookup stays attribute-based).
     dotenv = load_dotenv(ws)
     global VM_HOST, GHIDRA_DEFAULT, VM_PORTS  # noqa: PLW0603 — rebind per-run
-    if not os.environ.get("KUNGLAO_VM_HOST") and dotenv.get("KUNGLAO_VM_HOST"):
+    if not runtime_switches.raw("KUNGLAO_VM_HOST") \
+            and dotenv.get("KUNGLAO_VM_HOST"):
         VM_HOST = dotenv["KUNGLAO_VM_HOST"]
-    if not os.environ.get("GHIDRA_HOME") and dotenv.get("GHIDRA_HOME"):
+    if not runtime_switches.raw("GHIDRA_HOME") \
+            and dotenv.get("GHIDRA_HOME"):
         _home = dotenv["GHIDRA_HOME"]
         GHIDRA_DEFAULT = platform_paths.analyze_headless(_home)
     # #362: reachability probe ports derive from env/.env (toolchain parity)
