@@ -235,20 +235,64 @@ def polarity_of(band: str) -> str:
     return "none"
 
 
-def prior_observations(ws, kind: str | None = None,
-                       window: tuple | None = None) -> tuple[int, int]:
-    """(alpha_obs, beta_obs) over settled rows via THE one interface
-    (rollout_ledger.settled). NEUTRAL contributes nothing. Never raises on
-    a missing ledger."""
+def bounded_reward_rows(ws, kind: str | None = None,
+                        window: tuple | None = None) -> dict:
+    """The [0,1]-only read face over settled rows.
+
+    Splits THE one ledger interface by each row kind's declared reward
+    rail (``rlvr.ledger.reward_rail_of``): bounded-rail rows are
+    returned as rewards; provenance rows (``round_credit`` — an
+    unclamped sum in credit units, e.g. 2.01) are NEVER read as rewards
+    here. They are named in ``excluded`` instead, with their rail and
+    settled value, so the exclusion is reported rather than silent. A
+    consumer that expects a probability calls this (or
+    ``bounded_prior_observations``) instead of reading
+    ``settlement.reward`` of arbitrary rows."""
+    rows: list[dict] = []
+    excluded: list[dict] = []
+    for row in rl.settled(ws, kind=kind, window=window):
+        rail = rl.reward_rail_of(row)
+        if rail == rl.REWARD_RAIL_BOUNDED:
+            rows.append(row)
+            continue
+        settlement = row.get("settlement") or {}
+        excluded.append({"rollout_id": str(row.get("rollout_id") or ""),
+                         "kind": str(row.get("kind") or ""),
+                         "rail": rail,
+                         "reward": settlement.get("reward")})
+    return {"rows": rows, "excluded": excluded}
+
+
+def bounded_prior_observations(ws, kind: str | None = None,
+                               window: tuple | None = None) -> dict:
+    """The U4 prior feed + its exclusion report in ONE pass:
+    ``{"alpha", "beta", "excluded"}``. Only rows on the BOUNDED rail
+    contribute; every provenance row is excluded by declaration and
+    named. NEUTRAL contributes nothing to either count."""
+    split = bounded_reward_rows(ws, kind=kind, window=window)
     # numpy adoption (issue 420 Phase 2, README rule 2): the prior-feed
     # counts are exact INTEGER aggregation over the polarity stream —
     # np.count_nonzero on a str array is bit-safe by construction
     # (integers are exact; no float crosses this face).
     pols = np.asarray(
         [polarity_of(str((row.get("settlement") or {}).get("band") or ""))
-         for row in rl.settled(ws, kind=kind, window=window)], dtype=str)
-    return (int(np.count_nonzero(pols == "positive")),
-            int(np.count_nonzero(pols == "negative")))
+         for row in split["rows"]], dtype=str)
+    return {"alpha": int(np.count_nonzero(pols == "positive")),
+            "beta": int(np.count_nonzero(pols == "negative")),
+            "excluded": split["excluded"]}
+
+
+def prior_observations(ws, kind: str | None = None,
+                       window: tuple | None = None) -> tuple[int, int]:
+    """(alpha_obs, beta_obs) over settled rows via THE one interface
+    (rollout_ledger.settled). NEUTRAL contributes nothing. Never raises
+    on a missing ledger.
+
+    Only rows on the BOUNDED [0,1] reward rail are counted;
+    provenance rows (round_credit) are excluded explicitly — see
+    ``bounded_prior_observations`` for the exclusion report."""
+    doc = bounded_prior_observations(ws, kind=kind, window=window)
+    return doc["alpha"], doc["beta"]
 
 
 # --- emission adapters (adapters only, no domain-state rewrites) -------

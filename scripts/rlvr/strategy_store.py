@@ -455,6 +455,7 @@ class PosteriorStrategyStore:
         self.ws = Path(ws)
         self._qstore = q_cells.default_store(self.ws)
         self._weights: dict[str, float] | None = None
+        self._decay_excluded: list[dict] | None = None
 
     # ------------------------------------------------ StrategyStore seam
 
@@ -701,6 +702,17 @@ class PosteriorStrategyStore:
             self._weights = self._decayed_weights()
         return float(self._weights.get(str(row_id), 1.0))
 
+    def decayed_exclusions(self) -> list[dict]:
+        """Settled rows this store EXCLUDED from the γ ladder because
+        their kind's reward rail is not the [0,1] bounded rail
+        (``round_credit`` provenance sums, ``mainline_decision`` signed
+        ΔV). Each entry is ``{rollout_id, kind, rail, reward}`` — the
+        exclusion is named, never silently clamped into an outcome.
+        Forces the same one-pass cache ``decayed_weight`` uses."""
+        if self._weights is None:
+            self._weights = self._decayed_weights()
+        return [dict(e) for e in (self._decay_excluded or [])]
+
     def cell_count(self, state_fingerprint: str) -> int | None:
         """Q-cell rows at this signature; None while the spine has no
         data at all (compose falls back to the settled-ledger total)."""
@@ -756,8 +768,26 @@ class PosteriorStrategyStore:
     def _decayed_weights(self) -> dict[str, float]:
         """The γ ladder over the settled stream, input order, shipped
         default schedule; ``weight_i = Π_{k>i} γ_k`` (no peeking — each
-        row is decayed once per LATER row, at THAT row's event γ)."""
-        rows = rl.settled(self.ws)
+        row is decayed once per LATER row, at THAT row's event γ).
+
+        Only rows on the bounded [0,1] reward rail feed the outcome EMA:
+        a provenance sum (the round credit, e.g. 2.01) or a signed ΔV is
+        not an outcome in [0,1], so those rows are EXCLUDED from the
+        ladder and named in ``decayed_exclusions()`` — never silently
+        clamped into a maximum reward."""
+        rows: list[dict] = []
+        excluded: list[dict] = []
+        for row in rl.settled(self.ws):
+            rail = rl.reward_rail_of(row)
+            if rail == rl.REWARD_RAIL_BOUNDED:
+                rows.append(row)
+                continue
+            excluded.append({
+                "rollout_id": str(row.get("rollout_id") or ""),
+                "kind": str(row.get("kind") or ""),
+                "rail": rail,
+                "reward": (row.get("settlement") or {}).get("reward")})
+        self._decay_excluded = excluded
         schedule = dts.default_schedule()
         gammas = [0.0] * len(rows)
         for i, row in enumerate(rows):
@@ -774,9 +804,10 @@ class PosteriorStrategyStore:
 
 
 def _row_outcome(row: dict) -> float:
-    """One settled row's outcome for the schedule's EMA face: the settled
-    reward clamped into [0, 1] (the credit-stream shape; unparseable
-    rewards fold as the neutral 0.5)."""
+    """One BOUNDED-rail settled row's outcome for the schedule's EMA
+    face: the settled reward clamped into [0, 1] (the credit-stream
+    shape; unparseable rewards fold as the neutral 0.5). Callers filter
+    by ``rl.reward_rail_of`` first — non-bounded rows never reach here."""
     try:
         reward = float((row.get("settlement") or {}).get("reward"))
     except (TypeError, ValueError):

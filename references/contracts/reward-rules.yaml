@@ -41,6 +41,12 @@ description: >
   numeric reward is the SIGN indicator only. Assertion-only flips
   settle NEUTRAL. The machine evaluation face is rlvr/phi_tree.py.
 
+  issue 1007 (the reward-unit contract, declarative): the `reward`
+  field is NOT one unit across rollout kinds — see the reward_units
+  block below. Settlement scalars are [0,1]; the round_credit
+  provenance sum is in credit units and is deliberately unclamped.
+  This declaration changes NO value and settles no row differently.
+
 bands:
   SETTLED_GREEN: {reward: 1.0, polarity: positive}
   SETTLED_RED:   {reward: 0.0, polarity: negative}
@@ -53,6 +59,54 @@ bands:
   CLAWBACK:      {reward: 0.0, reward_note: "the negative leg rides
     the signed phi-clawback/1 face (clawed credit + penalty)",
     polarity: negative}
+
+# --- reward units per row kind (issue 1007) --------------------------------
+# The `rollout-ledger/1` schema declares one reward UNIT per kind
+# (rlvr.ledger.KIND_REWARD_RAILS is the machine face; this block is the
+# contract page). A consumer that expects a probability reads
+# rlvr.ledger.reward_rail_of(row) and EXCLUDES + REPORTS provenance rows
+# instead of treating their value as a reward (rlvr.reward.
+# bounded_reward_rows / bounded_prior_observations; compute_priors reports
+# the exclusion under sources.rollout_ledger.excluded).
+reward_units:
+  bounded:
+    rail: bounded
+    kinds: [task, self_distill, hybrid_distill, hypothesis]
+    field: reward
+    range: [0.0, 1.0]
+    note: >
+      Settlement scalars — the v1 bands, the v2 tier scalars, and the
+      v4 hypothesis sign indicator. The [0,1] rail is enforced by
+      scalar.clamp_credit / rail_of on the settlement path and by
+      ledger.row_schema_lint at the write/read boundary.
+  provenance:
+    rail: provenance
+    kinds: [round_credit]
+    field: credit_units
+    range: unbounded
+    note: >
+      The per-dispatch round-credit value is a PROVENANCE SUM in credit
+      units, not a reward: r_i = full-credit cited artifacts x 1.0 +
+      one trace total per demotion class present x 0.01 - attributed
+      waste. The issue-1007 fixture is exactly 2 x 1.0 (F004, F005
+      credited) + 1 x 0.01 (F006/F007 share the cited_over_cap demotion
+      class) - 0 waste = 2.01. Clamping would erase the difference
+      between citing one and two artifacts, so the value is NOT
+      clamped; the row instead carries `reward_rail: provenance` and
+      `credit_units` in its settlement. Provenance sums may be negative
+      when attributed waste exceeds credited artifacts.
+  signed:
+    rail: signed
+    kinds: [mainline_decision, method_memory, strategy_memory]
+    field: reward
+    range: unbounded
+    note: >
+      Pre-existing signed-ΔV / signed-reward attribution rows (the
+      situation-stream mainline replay and the review-bridge
+      attribution carriers). Neither a [0,1] reward nor a credit sum:
+      the value IS the signed ΔV / attributed reward. Declared here so
+      the per-kind range is complete; the issue-1007 bounded consumer
+      excludes these rows as well.
 rules:
   - rule_id: task/oracle-green
     kind: task
@@ -205,7 +259,11 @@ cost_reference:
     per-rollout efficiency discount.
 
 # --- v3: round credit settlement (#379 spec + issue 433 value ladder) -----
+# Issue 1007: this section's value is on the PROVENANCE rail — a sum in
+# credit units (see reward_units.provenance), never a [0,1] reward.
 round_credit:
+  reward_rail: provenance       # issue 1007 — NOT a [0,1] reward
+  credit_field: credit_units    # the settled provenance sum (credit units)
   formula: >
     r_i = (full-credit artifacts created in dispatch i) + (one trace
     total per demotion class present in dispatch i) - attributed waste

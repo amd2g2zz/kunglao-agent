@@ -95,7 +95,11 @@ def _settled_task(ws: Path, anchor: str, *, oracle: bool = True,
           "evidence_refs": []}
     rl.settle(ws, f"{kind}/{anchor}", st)
     if settle_twice:
-        rl.settle(ws, f"{kind}/{anchor}", dict(st, reward=reward + 1.0))
+        # a REVISION must stay legal under the issue-1007 bounded rail:
+        # a task row at reward 2.0 is exactly the invalid row the contract
+        # refuses at the write boundary, so revise into the rail instead.
+        rl.settle(ws, f"{kind}/{anchor}",
+                  dict(st, band="SETTLED_RED", reward=0.0))
     return f"{kind}/{anchor}"
 
 
