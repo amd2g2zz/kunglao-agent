@@ -72,6 +72,7 @@ from . import refutation_fold
 from . import reward
 from . import reward_signal
 from . import review_windows
+from . import rollout_timer
 from . import route_ledger
 from . import scalar
 from . import settlement_scorer
@@ -149,6 +150,7 @@ __all__ = [
     "reward",
     "reward_signal",
     "review_windows",
+    "rollout_timer",
     "route_ledger",
     "scalar",
     "settlement_wire",

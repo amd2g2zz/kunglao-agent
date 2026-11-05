@@ -399,6 +399,18 @@ the one-line pointer (name — the docstring's opening line):
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
 - `reward_signal` — rlvr/reward_signal.py — the A1 learning signal `R = completion + milestone progress − cost` + the settlement hook (issue #824).
+- `rollout_timer` — rlvr/rollout_timer.py — the per-rollout learned deadline
+  timer: `arm` computes `budget = clamp(base x coeff, 15m, 480m)` from the
+  comparable-family median and ONE global coefficient, persists a
+  `rollout-timer/1` row and returns the one-shot wake contract (cron derived
+  from the deadline, off :00/:30, plus the graceful wrap-up prompt); `cancel`
+  retires an early finish and a canceled timer never fires; `fire` records the
+  deadline and returns the graceful-stop contract; `learn` moves the bounded
+  coefficient table (early x0.9, timeout x1.25, on time x0.98, infra/aborted
+  no update, coeff clamp [0.5, 4.0]) and audits every decision as a
+  `rollout-budget/1` row. One global coefficient; the bucket key is recorded
+  but a split waits for n>=5. A deadline stop carries `stop_reason: deadline`
+  and is excluded from strategic learning without adding a disposition.
 - `route_ledger` — rlvr/route_ledger.py — the route-attempt ledger (#988):
   `runs/rt-tests/<claim>/routes.json` with the per-claim-kind `routes:`
   declaration from `references/schemas/machine_check_map.yaml`, per-attempt

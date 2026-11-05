@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 4a351d618ac6e754743f28340ec085cab1fb0cf504a158a7c90e2f9d843c7e97
+    sha256: 25ec1c49fa4947f87f654acf4f2d9bb56b6631609d64ac9abb9abfa0fb8bc917
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1399,7 +1399,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 67a0288b7f0ed5cb6b8feb8f240e57223b23db30985fc9887794708b4061e5fa
+    sha256: 2c4d4bc2a6ac6643696fa4b21bde7b6187e17b1e58850fc7cd3fdca67ecfe4a9
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1600,6 +1600,10 @@ files:
     dest: .claude/scripts/rlvr/reward_signal.py
     kind: scaffold
     sha256: 0fce5e1930fded4a958304a0e75a28f7e656b7df50f39872965c71648979309c
+  - src: scripts/rlvr/rollout_timer.py
+    dest: .claude/scripts/rlvr/rollout_timer.py
+    kind: scaffold
+    sha256: b8dccb05708bc0e1ed45a65d7da1d779f913853cd311953ea9c52a063bd03038
   - src: scripts/rlvr/route_ledger.py
     dest: .claude/scripts/rlvr/route_ledger.py
     kind: scaffold
