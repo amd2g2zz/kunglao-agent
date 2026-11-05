@@ -27,6 +27,16 @@ receipt at the same dispatch — the audit envelope and the transition row
 skipped, counted, and warned (a corrupted carrier can no longer move the
 verdict silently).
 
+Attribution discipline: every decision is cross-checked against each
+sampler-attribution carrier present — the transition row, the audit
+envelope and every q-cell dispatch record for that decision. A carrier
+whose ``sampled_family`` names a different family than the logged arm,
+with no explicit override marker, makes the (action, propensity) pair
+incoherent — the decision is skipped, counted
+(``skipped_family_mismatch``) and warned, never weighted. An earlier
+incoherent dispatch for the same claim is not masked by a later coherent
+one.
+
 Small-sample honesty (the design doc §6 risk): below MIN_DECISIONS the
 report carries `"verdict": "underpowered"` and no ranking — an ε-greedy
 win at N=20 is noise dressed as a conclusion.
@@ -50,6 +60,7 @@ if __package__ in (None, ""):
 
 from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
+from rlvr import q_cells as _qc
 from rlvr.incremental_reward import read_transitions
 
 MIN_DECISIONS = 40          # below this: underpowered, no verdict
@@ -96,8 +107,54 @@ def _audit_envelopes(ws: Path) -> list[dict]:
                         if isinstance(v, dict)},
             "propensity": env.get("propensity"),
             "declared": bool(env.get("declared")),
+            "sampled_family": env.get("sampled_family"),
+            "family_override": env.get("family_override"),
         })
     return out
+
+
+def _qcell_attribution(ws: Path) -> dict[tuple[str, str], list[dict]]:
+    """(claim, declared family) -> EVERY dispatch observation row for
+    that decision — the q-cell substrate's sampler attribution history.
+    A re-dispatch appends another row, so the index keeps them all: one
+    incoherent dispatch must not be masked by a later coherent one.
+    Empty on any read failure (the honest gap: the decision keeps its
+    own carriers)."""
+    out: dict[tuple[str, str], list[dict]] = {}
+    try:
+        for row in _qc.dispatch_rows(ws):
+            claim = str(row.get("claim") or "").strip()
+            fam = str(row.get("method_family") or "").strip()
+            if claim and fam:
+                out.setdefault((claim, fam), []).append(row)
+    except Exception as exc:  # noqa: BLE001 — attribution is telemetry
+        warn("policy_compare.attribution", f"{type(exc).__name__}: {exc}")
+    return out
+
+
+def _attribution_conflict(
+        t: dict, env: dict,
+        index: dict[tuple[str, str], list[dict]]) -> dict | None:
+    """The first carrier whose (arm, sampler) pair is incoherent, or
+    None when every carrier is coherent. Every sampler-attribution
+    carrier present is consulted — the decision row, the audit envelope
+    and every q-cell dispatch record for the decision — and one
+    incoherent carrier is enough to refuse the decision."""
+    family = str(t.get("a") or "")
+    claim = str(t.get("claim_ref") or t.get("dispatch_id") or "")
+    carriers = [
+        {"method_family": family,
+         "sampled_family": t.get("sampled_family"),
+         "family_override": t.get("family_override")},
+        {"method_family": family,
+         "sampled_family": env.get("sampled_family"),
+         "family_override": env.get("family_override")},
+    ]
+    carriers.extend(index.get((claim, family)) or ())
+    for carrier in carriers:
+        if not _qc.attribution_consistent(carrier):
+            return carrier
+    return None
 
 
 def _pi(policy: str, family: str, weights: dict[str, float]) -> float:
@@ -157,16 +214,30 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
     transitions = read_transitions(ws)
     envelopes = _audit_envelopes(ws)
     by_key = {f"{e['claim']}|{e['family']}": e for e in envelopes}
+    attribution = _qcell_attribution(ws)
 
     decisions: list[dict] = []
     skipped_no_propensity = 0
     skipped_declared_fiat = 0
     skipped_propensity_mismatch = 0
+    skipped_family_mismatch = 0
     for t in transitions:
         key = f"{t.get('dispatch_id')}|{t.get('a')}"
         env = by_key.get(key)
         if env is None or env.get("propensity") is None:
             skipped_no_propensity += 1
+            continue
+        conflict = _attribution_conflict(t, env, attribution)
+        if conflict is not None:
+            # the row's sampler pair names another arm with no explicit
+            # override marker: the logged action is not the action whose
+            # probability is recorded, so it cannot be re-weighted.
+            skipped_family_mismatch += 1
+            warn("policy_compare.compare",
+                 f"refused decision {key!r}: sampled_family "
+                 f"{conflict.get('sampled_family')!r} != arm family "
+                 f"{str(t.get('a') or '')!r} with no explicit override — "
+                 f"excluded from off-policy weighting")
             continue
         if env.get("declared"):
             # 4-L8: declared selection rode π=1.0 by fiat — no draw
@@ -204,6 +275,7 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
         "skipped_no_propensity": skipped_no_propensity,
         "skipped_declared_fiat": skipped_declared_fiat,
         "skipped_propensity_mismatch": skipped_propensity_mismatch,
+        "skipped_family_mismatch": skipped_family_mismatch,
         "epsilon": EPSILON,
         "policies": {},
         "verdict": None,

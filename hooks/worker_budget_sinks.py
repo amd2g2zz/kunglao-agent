@@ -802,7 +802,8 @@ def _sample_reconciliation(ws, declared: str | None) -> dict:
     ONE rate-limited warn (error class only) and the dispatch proceeds —
     telemetry never turns an ALLOW into anything else."""
     gap = {"sampled_family": None, "propensity": None,
-           "prior_source": None, "deviates": False}
+           "prior_source": None, "deviates": False,
+           "sampled_propensity": None, "round_lead": None}
     if not ws or not declared:
         return gap
     try:
@@ -837,11 +838,14 @@ def _emit_sample_deviation(ws, cid, declared, view: dict,
     top-1 claim rank elsewhere never silences this record). Fail-open: a
     logging failure never blocks the dispatch (one stderr note)."""
     reason = _override_reason(prompt)
+    lead = view.get('round_lead')
     detail = json.dumps({
         'declared': str(declared),
         'sampled': view.get('sampled_family'),
         'propensity': view.get('propensity'),
         'prior_source': view.get('prior_source'),
+        'round_lead': lead,
+        'lead_override': bool(lead) and str(lead) != str(declared),
         'reason': reason,
     }, ensure_ascii=False)
     try:

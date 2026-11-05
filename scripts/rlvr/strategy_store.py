@@ -815,6 +815,25 @@ def _row_outcome(row: dict) -> float:
     return max(0.0, min(1.0, reward))
 
 
+def _round_lead(ws) -> str | None:
+    """The composed round-strategy lead in force at this decision point:
+    the latest versioned strategy object's ``dispatch.method_lead`` (the
+    compose single-point's own field, never a re-parse of rendered
+    prose). None when no strategy was ever composed — the honest gap.
+    Fail-open: a corrupt object degrades to None with one warn."""
+    try:
+        from rlvr import compose as _compose  # noqa: PLC0415 — lazy
+        doc = _compose.read_strategy(ws)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn("strategy_store.round_lead", f"{type(exc).__name__}: {exc}")
+        return None
+    dispatch = doc.get("dispatch") if isinstance(doc, dict) else None
+    if not isinstance(dispatch, dict):
+        return None
+    lead = str(dispatch.get("method_lead") or "").strip()
+    return lead or None
+
+
 def reconcile_declaration(ws, declared: str | None) -> dict:
     """#691 — the dispatch-gate reconciliation view for ONE declared
     method family: the gate's OWN sampler draw (the same face
@@ -823,15 +842,21 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
     draw probability under it.
 
     Returns ``{"sampled_family", "propensity", "prior_source",
-    "deviates"}`` — or the all-None gap view on every miss: no workspace,
-    no declaration, no proposal material (the honest cold gap), or any
-    failure (ONE rate-limited warn carrying the error class only).
-    Fail-open by design: telemetry never turns an ALLOW into anything
-    else. ``propensity`` is the sampler's draw probability of the
-    DECLARED family (0.0 when it is not a candidate at all — the draw
-    could never have chosen it; the honest number, not a gap)."""
+    "deviates", "sampled_propensity", "round_lead"}`` — or the all-None
+    gap view on every miss: no workspace, no declaration, no proposal
+    material (the honest cold gap), or any failure (ONE rate-limited
+    warn carrying the error class only). Fail-open by design: telemetry
+    never turns an ALLOW into anything else. ``propensity`` is the
+    sampler's draw probability of the DECLARED family (0.0 when it is
+    not a candidate at all — the draw could never have chosen it; the
+    honest number, not a gap); ``sampled_propensity`` is the same
+    quantity for the sampler's OWN draw, so the two families'
+    probabilities stay separable on the dispatch row. ``round_lead`` is
+    the composed round-strategy lead in force (advisory; None when no
+    strategy object exists)."""
     gap = {"sampled_family": None, "propensity": None,
-           "prior_source": None, "deviates": False}
+           "prior_source": None, "deviates": False,
+           "sampled_propensity": None, "round_lead": None}
     if not ws or not declared:
         return gap
     try:
@@ -851,11 +876,16 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
         total = sum(weights.values())
         propensity = (round(weights.get(str(declared), 0.0) / total, 6)
                       if total > 0.0 else None)
+        sampled_propensity = (
+            round(weights.get(sampled, 0.0) / total, 6)
+            if (total > 0.0 and sampled) else None)
         return {
             "sampled_family": sampled,
             "propensity": propensity,
             "prior_source": receipt.get("prior_source"),
             "deviates": bool(sampled) and str(declared) != sampled,
+            "sampled_propensity": sampled_propensity,
+            "round_lead": _round_lead(ws),
         }
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn("strategy_store.reconcile_declaration",
