@@ -129,7 +129,8 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 |---|---|
 | `SCHEMA`, `LEDGER_REL`, `LOCK_REL` | `rlvr.ledger` (re-exported) |
 | `KIND_TASK`, `KIND_SELF_DISTILL`, `KIND_HYBRID_DISTILL`, `ROLLOUT_KINDS` | `rlvr.ledger` |
-| `register_kind()`, `kinds()` | `rlvr.ledger` (the open-enum API) |
+| `REWARD_RAIL_BOUNDED`, `REWARD_RAIL_PROVENANCE`, `REWARD_RANGE_BOUNDED`, `KIND_REWARD_RAILS`, `reward_rail_of()`, `reward_range_of()` | `rlvr.ledger` (the issue-1007 per-kind reward-unit declaration) |
+| `register_kind()`, `kinds()` | `rlvr.ledger` (the open-enum API; `register_kind(kind, note, rail)` records the unit) |
 | `read()`, `fold()`, `settled()` | `rlvr.ledger` — `settled` stays THE one prior/settlement read interface (U4) |
 | `pending_settlement()`, `record()`, `settle()` | `rlvr.ledger` |
 | `row_schema_lint()`, `warn()` | `rlvr.ledger` (warn stays module-local rate-limited stderr) |
@@ -143,6 +144,7 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 | `classify()` (signals → settlement document) | `rlvr.reward` |
 | `settle_workspace()` | `rlvr.reward` |
 | `polarity_of()`, `prior_observations()` | `rlvr.reward` (the U4 prior feed) |
+| `bounded_reward_rows()`, `bounded_prior_observations()` | `rlvr.reward` (the issue-1007 `[0,1]`-only read face: provenance rows excluded + reported, never read as rewards) |
 | `task_signals()`, `self_distill_signals()`, `emit_unified_rows()`, `rollup_face()` | `rlvr.reward` (adapter faces over machine surfaces only) |
 | `snapshot_lessons()`, `resolve_library()` | `rlvr.reward` |
 
@@ -251,6 +253,71 @@ never an obstacle claim.
 | `heartbeat_register()`, `heartbeat_check()`, `heartbeat_off()`, `mark_loop_registered()` | stay CLI faces of the heartbeat script adapter; the package provides the judgment core they call |
 | `liveness_policy.*` constants (`STALE_MINUTES`, `CONTINUITY_WINDOW_*`, `TICK_INTERVAL_DEFAULT_MIN`, ...) | `scripts/liveness_policy.py` stays THE constant source (the #597 adjudication); `rlvr.liveness` re-exports, never redefines |
 
+
+## Reward units (issue 1007): `round_credit` is a provenance sum, not a [0,1] reward
+
+The `rollout-ledger/1` schema carries **two reward units**, declared per
+row kind (`rlvr.ledger.KIND_REWARD_RAILS` is the machine face; the
+contract page is `references/contracts/reward-rules.yaml` → `reward_units`):
+
+| unit | kinds | field | range |
+|---|---|---|---|
+| `bounded` | `task`, `self_distill`, `hybrid_distill`, `hypothesis` | `reward` | `[0,1]` |
+| `provenance` | `round_credit` | `credit_units` | unbounded (credit units) |
+| `signed` | `mainline_decision`, `method_memory`, `strategy_memory` | `reward` | unbounded (signed ΔV / attributed reward) |
+
+- **Bounded** rows are settlement scalars (v1 bands, v2 tier scalars, the
+  v4 hypothesis sign indicator). The `[0,1]` rail is enforced by
+  `scalar.clamp_credit` / `rail_of` on the settlement path and by
+  `ledger.row_schema_lint` at the write and read boundaries (a bounded
+  settlement outside the rail is refused at `ledger.settle`, never
+  written-then-hidden).
+- **Provenance** rows are the per-dispatch round credit:
+  `r_i = (full-credit cited artifacts) × 1.0 + (one trace total per
+  demotion class present) × 0.01 − attributed waste`. The observed
+  `2.01` is exactly `2 × 1.0` (two credited artifacts) `+ 1 × 0.01` (one
+  demotion class) `− 0` waste — a formula result in credit units, not a
+  rail violation. The value is deliberately **not clamped** (clamping
+  would erase the difference between citing one and two artifacts). New
+  settlements carry `reward_rail: provenance` + `credit_units`; the kind
+  declaration is authoritative, so legacy rows without the markers read
+  correctly too.
+- **Signed** rows are pre-existing attribution carriers: the
+  `mainline_decision` situation-stream replay settles a signed ΔV, and
+  the review-bridge `method_memory` / `strategy_memory` rows carry signed
+  step / mission rewards. Neither a `[0,1]` scalar nor a credit sum; they
+  are declared here so every registered kind has a unit and the bounded
+  consumer excludes them too.
+
+**The consumer rule.** Any consumer that expects `[0,1]` must call
+`rlvr.ledger.reward_rail_of(row)` and exclude every non-bounded row
+(provenance and signed) explicitly, reporting the exclusion. The prior
+feed is the first such consumer:
+
+```python
+from rlvr import reward
+
+split = reward.bounded_reward_rows(ws)
+#   split["rows"]     -> bounded-rail settled rows only
+#   split["excluded"] -> [{"rollout_id", "kind", "rail", "reward"}, ...]
+doc = reward.bounded_prior_observations(ws)   # {alpha, beta, excluded}
+```
+
+`reward.prior_observations` now counts only bounded-rail rows, and
+`compute_priors` reports every excluded row under
+`sources.rollout_ledger.excluded` (additive-when-present: the key appears
+only when a provenance row exists). A `2.01` is named, never silently
+read as a reward. `scalar.scalar_observations` already filters
+`kind=task` explicitly.
+
+Two more converted faces:
+
+- `rlvr.strategy_store.PosteriorStrategyStore` — the γ-ladder EMA reads
+  only bounded-rail rows; non-bounded rows are excluded and named by
+  `decayed_exclusions()` (`{rollout_id, kind, rail, reward}`), never
+  clamped into a maximum outcome.
+- `scripts/decision_view.py` `just_settled` — the display face carries
+  `reward_rail` next to `reward`, so a `2.01` is labelled `provenance`.
 
 ## The compact index (modules the face map above doesn't cover)
 

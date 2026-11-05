@@ -31,7 +31,10 @@ tests/test_compute_priors_137.py):
   - runs/rollout-ledger.jsonl settled rows (unified reward, U4) contribute per
     polarity: SETTLED_GREEN/HELPED -> +1 alpha, SETTLED_RED/ADVERSE ->
     +1 beta, NEUTRAL/pending -> nothing. Read through the ONE interface
-    (reward.prior_observations over ledger.settled).
+    (reward.bounded_prior_observations over ledger.settled).
+    Rows on a non-[0,1] reward rail (round_credit provenance sums) are
+    EXCLUDED and reported under sources.rollout_ledger.excluded — the
+    aggregate never reads 2.01 as a reward.
   - runs/rollout-ledger.jsonl settled EPISODE TIER SCALARS (issue 379,
     reward-rules v2) contribute a separate Normal-Gamma posterior under
     sources.scalar_ledger (n / mean / posterior) — the exponential-family
@@ -61,7 +64,9 @@ other persisted/computed surface — issue 137):
      "mean": alpha/(alpha+beta),
      "sources": {"case_bank":      {"alpha": .., "beta": ..},
                  "posteriors":     {"alpha": .., "beta": ..},
-                 "rollout_ledger": {"alpha": .., "beta": ..},
+                 "rollout_ledger": {"alpha": .., "beta": ..,
+                                    "excluded": [..]  # only when non-empty
+                                    },
                  "scalar_ledger":  {"n": .., "mean": ..,
                                     "posterior": {n/mu/kappa/alpha/beta/var}}},
      "workspaces": [<the named paths, as given>]}
@@ -138,13 +143,19 @@ def _posteriors_obs(ws: Path) -> tuple[float, float]:
     return alpha, beta
 
 
-def _rollout_ledger_obs(ws: Path) -> tuple[int, int]:
-    """(alpha_obs, beta_obs) from the unified rollout ledger (U4 —
-    the ONE prior interface: reward.prior_observations reads through
+def _rollout_ledger_obs(ws: Path) -> dict:
+    """(alpha, beta) from the unified rollout ledger (U4 — the ONE prior
+    interface: reward.bounded_prior_observations reads through
     ledger.settled; polarity mapping lives there, the prior math here is
-    untouched). Missing ledger -> (0, 0). Settled bands only:
-    NEUTRAL/pending rows are not observations."""
-    return reward.prior_observations(ws)
+    untouched). Missing ledger -> zero counts. Settled bands only:
+    NEUTRAL/pending rows are not observations. Rows on a
+    non-[0,1] reward rail (round_credit provenance sums) are EXCLUDED
+    from the counts and returned in ``excluded`` — the aggregate report
+    names every excluded row rather than silently reading 2.01 as a
+    reward."""
+    doc = reward.bounded_prior_observations(ws)
+    return {"alpha": doc["alpha"], "beta": doc["beta"],
+            "excluded": doc["excluded"]}
 
 
 def _scalar_ledger_obs(ws: Path) -> dict:
@@ -192,6 +203,7 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
 
     cb_alpha = cb_beta = 0
     rl_alpha = rl_beta = 0
+    rl_excluded: list[dict] = []
     sc_n_total = 0
     post_alphas: list[float] = []
     post_betas: list[float] = []
@@ -204,9 +216,11 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         pa, pb = _posteriors_obs(p)
         post_alphas.append(pa)
         post_betas.append(pb)
-        ua, ub = _rollout_ledger_obs(p)  # unified-reward prior feed (additive)
-        rl_alpha += ua
-        rl_beta += ub
+        ledger_obs = _rollout_ledger_obs(p)  # unified-reward prior feed
+        rl_alpha += ledger_obs["alpha"]
+        rl_beta += ledger_obs["beta"]
+        rl_excluded.extend(dict(e, workspace=str(p))
+                           for e in ledger_obs["excluded"])
         sc = _scalar_ledger_obs(p)  # issue-379 scalar feed (additive, Normal-Gamma)
         sc_n_total += sc["n"]
         sc_masses.append(sc["mean"] * sc["n"])
@@ -219,6 +233,12 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
     beta = BASE_BETA + cb_beta + post_beta + rl_beta
     agg_mean = (sc_sum / sc_n_total) if sc_n_total else 0.0
     agg_post = scalar.merge_normal_gamma_posts(sc_posts)
+    # additive-when-present: a workspace set with no provenance rows keeps
+    # the prior source shape byte-identical; an exclusion is reported
+    # the moment one exists (never silently dropped).
+    ledger_src: dict = {"alpha": rl_alpha, "beta": rl_beta}
+    if rl_excluded:
+        ledger_src["excluded"] = rl_excluded
     return {
         "schema": RESULT_SCHEMA,
         "alpha": alpha,
@@ -227,7 +247,7 @@ def compute_priors(ws_paths: list[Path] | list[str]) -> dict:
         "sources": {
             "case_bank": {"alpha": cb_alpha, "beta": cb_beta},
             "posteriors": {"alpha": post_alpha, "beta": post_beta},
-            "rollout_ledger": {"alpha": rl_alpha, "beta": rl_beta},
+            "rollout_ledger": ledger_src,
             "scalar_ledger": {"n": sc_n_total, "mean": agg_mean,
                               "posterior": agg_post},
         },

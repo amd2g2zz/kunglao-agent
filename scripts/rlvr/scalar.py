@@ -62,7 +62,10 @@ from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
 
 # the round-credit rollout kind — the ledger's OPEN ENUM registration API
 # (a new kind is one register_kind entry, never an ad-hoc string).
-rl.register_kind("round_credit", "per-dispatch round credit row (issue 379)")
+# the PROVENANCE reward rail — this kind's settled value is a
+# sum in credit units, never a [0,1] reward; see ledger.REWARD_RAIL_*.
+rl.register_kind("round_credit", "per-dispatch round credit row (issue 379)",
+                 rail=rl.REWARD_RAIL_PROVENANCE)
 
 KIND_ROUND_CREDIT = "round_credit"
 BAND_ROUND_CREDIT = "ROUND_CREDIT"
@@ -635,7 +638,10 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     row's identity ts for its signal, so the signal set is byte-identical
     and record/settle dedupe (no ledger churn). ROUND_CREDIT is
     polarity-none: it feeds no Beta prior and the scalar feed reads
-    episode scalars only. Returns {"settled", "untraced",
+    episode scalars only. Every emitted settlement carries
+    ``reward_rail: provenance`` and ``credit_units`` (the settled sum) so
+    a [0,1]-only consumer can exclude it by declaration instead of
+    mistaking 2.01 for a reward. Returns {"settled", "untraced",
     "unattributed_waste", "banked", "amended"} — ``banked`` lists the
     dispatch ids whose FIRST settlement rode this pass (the learning
     clock's tick); replays and the late-cite amendment path report
@@ -687,6 +693,12 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                          if isinstance(e, dict)}
         settlement = {"reward": row["r"], "band": BAND_ROUND_CREDIT,
                       "rule_id": RULE_ROUND_CREDIT,
+                      # the unit marker — this value is a
+                      # provenance sum (credit units), NOT a [0,1]
+                      # reward; a bounded-rail consumer filters on the
+                      # kind's rail and reports the exclusion.
+                      "reward_rail": rl.REWARD_RAIL_PROVENANCE,
+                      "credit_units": row["r"],
                       "evidence_refs": [
                           f"creator:{row['dispatch_id']}"] + [
                           f"credited:{aid}" for aid in row["credited"]] + [

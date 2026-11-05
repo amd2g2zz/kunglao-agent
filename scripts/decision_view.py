@@ -66,7 +66,8 @@ FACE_KEYS = {
     "in_flight": ("claims", "count", "method_lead"),
     "why_this_one": ("claim", "score", "entropy", "propensity", "k",
                      "feeds", "ts", "age_s", "stale"),
-    "just_settled": ("anchor", "kind", "band", "reward", "ts", "age_s"),
+    "just_settled": ("anchor", "kind", "band", "reward", "reward_rail",
+                     "ts", "age_s"),
     "hypothesis_space": ("alive", "parked", "pruned", "terminal", "other",
                          "h_bits", "h_pq", "h_trend"),
     "budget": ("tokens", "tool_calls", "verify_calls", "accounted"),
@@ -87,7 +88,8 @@ ABSENT = {
                      "propensity": None, "k": None, "feeds": {},
                      "ts": None, "age_s": None, "stale": True},
     "just_settled": {"anchor": None, "kind": None, "band": None,
-                     "reward": None, "ts": None, "age_s": None},
+                     "reward": None, "reward_rail": None,
+                     "ts": None, "age_s": None},
     "hypothesis_space": {"alive": 0, "parked": 0, "pruned": 0,
                          "terminal": 0, "other": 0, "h_bits": None,
                          "h_pq": None, "h_trend": "unknown"},
@@ -207,6 +209,10 @@ def _just_settled(ws: Path, payload_doc: dict, now: datetime) -> dict:
             else None,
             "reward": settlement.get("reward") if isinstance(settlement, dict)
             else None,
+            # the reward UNIT travels with the value: a round_credit
+            # provenance sum (2.01) reads as `provenance`, never as a
+            # [0,1] reward (rlvr.ledger.reward_rail_of)
+            "reward_rail": rl.reward_rail_of(row),
             "ts": ts,
             "age_s": _age_s(ts, now)}
 

@@ -81,7 +81,9 @@ import rollout_ledger as rl  # noqa: E402
 KIND_MAINLINE_DECISION = "mainline_decision"
 rl.register_kind(
     KIND_MAINLINE_DECISION,
-    "mainline (s_M, A_M, delta-V) decision row, situation-stream replay")
+    "mainline (s_M, A_M, delta-V) decision row, situation-stream replay",
+    # the settled value is a SIGNED ΔV, not a [0,1] reward
+    rail=rl.REWARD_RAIL_SIGNED)
 
 BAND_MAINLINE = "MAINLINE_DECISION"
 RULE_MAINLINE = "mainline/delta-v"

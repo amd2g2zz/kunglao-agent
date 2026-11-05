@@ -18,6 +18,8 @@ from rlvr.reward import (  # noqa: F401 — the compat surface
     POLARITY_BETA_BANDS,
     RULES_REL,
     RULES_SCHEMA,
+    bounded_prior_observations,
+    bounded_reward_rows,
     classify,
     emit_unified_rows,
     load_rules,
@@ -38,6 +40,7 @@ __all__ = [
     "POLARITY_ALPHA_BANDS", "POLARITY_BETA_BANDS", "ORACLE_STATUS_REL",
     "repo_rules_path", "load_rules", "classify", "settle_workspace",
     "polarity_of", "prior_observations",
+    "bounded_reward_rows", "bounded_prior_observations",
     "task_signals", "self_distill_signals", "emit_unified_rows",
     "rollup_face", "snapshot_lessons", "resolve_library", "warn",
 ]

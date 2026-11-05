@@ -375,7 +375,7 @@ files:
   - src: scripts/decision_view.py
     dest: .claude/scripts/decision_view.py
     kind: scaffold
-    sha256: 60623f33b4d3cef2f0c5dc3fbe255672fe1de1c6ac57add192d04060b8881122
+    sha256: 45bfd812850aabb702eb45a169858dff6b890163cd095614b0a602d03e45d65e
   - src: scripts/dep_surface_gate.py
     dest: .claude/scripts/dep_surface_gate.py
     kind: scaffold
@@ -1091,7 +1091,7 @@ files:
   - src: scripts/reward_settlement.py
     dest: .claude/scripts/reward_settlement.py
     kind: scaffold
-    sha256: c8cb727790ac9c170f1d728c8209db219b6a5dd69b7f8a413a6dff02e673df08
+    sha256: d7d42d821cdfb609ade8c179e1bcb08ac4c7e8a8b26ad99d75a4d7de166028e4
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
@@ -1111,7 +1111,7 @@ files:
   - src: scripts/rollout_ledger.py
     dest: .claude/scripts/rollout_ledger.py
     kind: scaffold
-    sha256: 09c23548d29509acc08d99d886bc0f86ae3a8503e131ef90887ff6bd3f318ceb
+    sha256: 6f44f10846ee2cee0f797306c76f0f74152fa805c09c7122b7713c850c9dd266
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
@@ -1295,7 +1295,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: f53603c19f699253cd406429befe10b419261409259db1df19d606ef98806be1
+    sha256: 235499d0b61f44e88f2e68fa25de98339272f3a6a1708678d9ca0bd544e43b4a
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1495,7 +1495,7 @@ files:
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
-    sha256: 92a8e1dfb8085f2988058c3af96d8babba0ce5cbf49106b80f14a30d2b0043e7
+    sha256: 27e5ddab31af3c060293755863d453ebdec40efe6cde16c1bf028aab758301b0
   - src: scripts/rlvr/liveness.py
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
@@ -1571,7 +1571,7 @@ files:
   - src: scripts/rlvr/priors.py
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
-    sha256: 05553502132df67c5058a4f7e94f028bdc4ab39825e1124b28cbe3b7e7e4c853
+    sha256: 5101d1c297062d5a4f560ed54214f4862154c7c555c80ade0acf8260c9672491
   - src: scripts/rlvr/probe_face.py
     dest: .claude/scripts/rlvr/probe_face.py
     kind: scaffold
@@ -1591,11 +1591,11 @@ files:
   - src: scripts/rlvr/review_windows.py
     dest: .claude/scripts/rlvr/review_windows.py
     kind: scaffold
-    sha256: 3da6a24e092be5eed30d61ca31e58776cc784d60bd82a63d850fdfb95ff3c633
+    sha256: fdf59ebbd04dc449b956d3863c0302051ff56f920b310b8d657cfbf891786469
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
-    sha256: 72875a11267c9c9694dcacb7c4117ee3325d07719fb7b4f2a803da6172b4b465
+    sha256: f203dbf8a06a23561ee6c4ede9abb39292a4994b8e2f38e6fe5333e7ddf6d140
   - src: scripts/rlvr/reward_signal.py
     dest: .claude/scripts/rlvr/reward_signal.py
     kind: scaffold
@@ -1611,7 +1611,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 10aa5e32d5fb50a5a7157b0c20cad32c4a5d99f01f22989a22c56ca4c9f49a8a
+    sha256: 08c5b9d04e6ec839e80eeac621d2259b3ea7367d8f683a320e5714dd1e9caf17
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -1659,7 +1659,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 7720848e598f74ec1ab537084da79c7a0977265f520cee7779074c0795cde253
+    sha256: 9d47613601bab6b217e1d5e5548ef17bc47a7bd1a86d99dccb6eeeff174ce6db
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1803,7 +1803,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: 7a8e7820c8871575c2e7576eee6aa9fbdabea8e9ea7b903955007d071d5430b1
+    sha256: 30cc64b7419944439c4ec5920525320e311a4572130c50e9a9f513838b3f3c04
   - src: references/contracts/rubrics/llm-eval-grading-rubric.md
     dest: .claude/references/contracts/rubrics/llm-eval-grading-rubric.md
     kind: asset
