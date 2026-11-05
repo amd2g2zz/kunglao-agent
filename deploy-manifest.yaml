@@ -555,7 +555,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 98ec3434e7a73830820f0bec869ba2a72574fb7def85d428e5711936b7b65f2f
+    sha256: eeeb53871bcd62a16c6c8c1a147bdde18cdf61c688cb25925817f101be22d015
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 73770b89736b4169efacea1870500bc09dadca52b30a6a63ed97a43c089b1583
+    sha256: d3fc49e7422f5fac423fc4977f9bd39bee296cac18f386a5583235866779836f
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1399,7 +1399,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 0b0b6569ade465b23ea3ab5049c809aa64f39495ba56fb66ce66bb3f93a2bf9d
+    sha256: 6d37e3e61d78129e41cc2ea9cf1fa18fb11d76f042b03c46c9134c2819f10af6
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1596,6 +1596,10 @@ files:
     dest: .claude/scripts/rlvr/reward_signal.py
     kind: scaffold
     sha256: 0fce5e1930fded4a958304a0e75a28f7e656b7df50f39872965c71648979309c
+  - src: scripts/rlvr/route_ledger.py
+    dest: .claude/scripts/rlvr/route_ledger.py
+    kind: scaffold
+    sha256: dbd4c8ca6bae02033721600bbc45160e047ad032f2c1b2f68f035824ad1f9f80
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
@@ -1636,6 +1640,14 @@ files:
     dest: .claude/scripts/rlvr/step_record.py
     kind: scaffold
     sha256: b33272969de1e72f025ec014e92bb2be0bee20dba894e130274d8e343a21ccee
+  - src: scripts/rlvr/stopping.py
+    dest: .claude/scripts/rlvr/stopping.py
+    kind: scaffold
+    sha256: 32b5d95f11c06f0296607c605e603746121d8915d17aa58ea3962ae6f6694d87
+  - src: scripts/rlvr/strategic_action.py
+    dest: .claude/scripts/rlvr/strategic_action.py
+    kind: scaffold
+    sha256: 56e37a99f66586ff0e9ae0de51b22567ad4e02cd3bc968a030cb35c06f626ea6
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
@@ -2159,7 +2171,7 @@ files:
   - src: references/schemas/machine_check_map.yaml
     dest: .claude/references/schemas/machine_check_map.yaml
     kind: asset
-    sha256: 5f1727a7a3db4424230d184061cfbc8427eb9087e858826b41c411cdd47596f9
+    sha256: 7589e01e9592169328e67e57c2182b82279ba3cbecf60d883a35eb4c90250044
   - src: references/schemas/schema.md
     dest: .claude/references/schemas/schema.md
     kind: asset

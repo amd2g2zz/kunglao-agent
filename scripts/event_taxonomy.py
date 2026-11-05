@@ -339,6 +339,7 @@ EMIT_ACTIONS = [
     "stale_plan_on_new_evidence",
     "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
+    "strategic_action_recorded",  # the recorded FIGHT/BYPASS/INVEST route choice + propensity (rlvr/strategic_action)
     "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "task_terminal_settlement",

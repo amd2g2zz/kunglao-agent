@@ -311,6 +311,14 @@ the one-line pointer (name — the docstring's opening line):
 - `policy_compare` — rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2).
 - `prediction_ledger` — rlvr/prediction_ledger.py — the prediction ledger.
 - `reward_signal` — rlvr/reward_signal.py — the A1 learning signal `R = completion + milestone progress − cost` + the settlement hook (issue #824).
+- `route_ledger` — rlvr/route_ledger.py — the route-attempt ledger (#988):
+  `runs/rt-tests/<claim>/routes.json` with the per-claim-kind `routes:`
+  declaration from `references/schemas/machine_check_map.yaml`, per-attempt
+  machine command + content-addressed artifact (sha256 re-derived by the
+  validator), the fixed `ROUTE_ATTEMPT_BUDGET` policy constant, and the
+  classifier-facing `routes`/`attempted`/`budget`/`budget_exhausted` record;
+  a missing, malformed or non-reproducible ledger can never claim
+  ATTEMPTED_EXHAUSTED.
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
@@ -318,6 +326,18 @@ the one-line pointer (name — the docstring's opening line):
 - `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
 - `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
 - `step_ledger` — rlvr/step_ledger.py — the shadow experience substrate (the online
+- `stopping` — rlvr/stopping.py — the externally checkable stop checker (#988):
+  `may_terminate(record)` is pure and True only for route-ledger exhaustion,
+  a corroborated session-bound wall, or a spent declared budget; stagnation /
+  early-failure-prediction / effort surrogates never terminate. The
+  loop-facing call site (`e2e/checkpoints._tick_prelude`) refuses the idle
+  circuit breaker unless the checker passes (refusal recorded as
+  `stop_refused`).
+- `strategic_action` — rlvr/strategic_action.py — the recorded route choice
+  (#988): one `strategic-action/1` row per episode (FIGHT/BYPASS/INVEST
+  derived from the action_space STRATEGIC registry) carrying its propensity,
+  written through the unified experience ledger + the
+  `strategic_action_recorded` event; an absent action reads as SURRENDER.
 - `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
 - `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
 

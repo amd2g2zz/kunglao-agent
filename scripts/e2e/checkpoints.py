@@ -2251,6 +2251,42 @@ def _verdict_face(ctx: RunContext, detail: dict,
     return None
 
 
+def _external_stop_record(ctx: RunContext) -> dict:
+    """The externally checkable evidence a loop stop may cite.
+
+    Three legal legs, each read from its owner face: the per-claim route
+    ledgers (``rlvr.route_ledger``), the corroborated session-bound env
+    wall (``rlvr.interruption`` — the classifier's payout already binds
+    the session AND corroborates the fact), and the declared run budget.
+    Surrogate signals are deliberately ABSENT from this record. Every
+    read is fail-open: an unreadable leg contributes no evidence, never a
+    fabricated one.
+    """
+    from rlvr import interruption as _interruption  # noqa: PLC0415 — lazy
+    from rlvr import route_ledger as _route_ledger  # noqa: PLC0415 — lazy
+    try:
+        ledger = _route_ledger.classify_workspace(ctx.ws)
+    except Exception as exc:  # noqa: BLE001 — an unreadable ledger is no evidence
+        kunglao_log.warn("e2e.stop_evidence",
+                         f"route ledger: {type(exc).__name__}: {exc}")
+        ledger = None
+    wall = None
+    try:
+        env_cls = _interruption.active_env_blocker(
+            ctx.ws, started_ts=getattr(ctx.state, "started_ts", None))
+        if env_cls is not None:
+            wall = {"session_bound": True, "corroborated": True}
+    except Exception as exc:  # noqa: BLE001 — the wall read is fail-open
+        kunglao_log.warn("e2e.stop_evidence",
+                         f"wall: {type(exc).__name__}: {exc}")
+    return {
+        "ledger": ledger,
+        "wall": wall,
+        "budget": {"spent": ctx.state.budget_consumed_seconds,
+                   "limit": ctx.state.budget_seconds},
+    }
+
+
 def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
     """Budget guard + heartbeat tick + adjudication; returns
     (terminal_or_None, tick_outcome, total_ms)."""
@@ -2262,10 +2298,26 @@ def _tick_prelude(ctx: RunContext, detail: dict, total_ms: int):
     out_tick, ms = ctx.py("heartbeat_tick.py", str(ctx.ws))
     total_ms += ms
     if out_tick.rc == 2:
-        return (_record(ctx, "C6", "loop", model.BLOCKED, 2,
-                        out_tick, total_ms,
-                        {**detail, "stop_class": "idle-circuit-breaker"}),
-                None, total_ms)
+        # the idle circuit breaker is a STAGNATION surrogate — it
+        # may only terminate the loop when the externally checkable stop
+        # checker agrees (route-ledger exhaustion / corroborated wall /
+        # spent budget). A refusal is recorded and the tick proceeds; the
+        # declared budget and the tick cap remain the hard bounds.
+        from rlvr import stopping as _stopping  # noqa: PLC0415 — lazy
+        stop_record = _external_stop_record(ctx)
+        if _stopping.may_terminate(stop_record):
+            return (_record(ctx, "C6", "loop", model.BLOCKED, 2,
+                            out_tick, total_ms,
+                            {**detail, "stop_class": "idle-circuit-breaker",
+                             "stop_reasons": list(
+                                 _stopping.stop_reasons(stop_record))}),
+                    None, total_ms)
+        audit.emit(str(ctx.ws), "orchestrator", "stop_refused",
+                   detail={"stop_class": "idle-circuit-breaker",
+                           "tick": detail.get("ticks"),
+                           "reasons": list(
+                               _stopping.stop_reasons(stop_record))})
+        return None, out_tick, total_ms
     if model.adjudicate("C6-loop", out_tick.rc) != model.PASS:
         return (_record(ctx, "C6", "loop", model.FAIL,
                         out_tick.rc, out_tick, total_ms,

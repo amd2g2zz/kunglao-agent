@@ -80,6 +80,11 @@ tests/test_e2e_runner.py::TestUnifiedAuditTrail)
         already exists (method_family rides the dispatch envelope), and
         fire only when the kernel activates. Not firing is honest — a
         missing hook would have been the old blind spot again.
+    stop_refused
+        the loop refused a surrogate early stop (the heartbeat idle
+        circuit breaker) because the externally checkable stop checker
+        found no ledger/wall/budget evidence; the tick proceeds (detail:
+        stop_class, tick, reasons).
 
 GUARANTEE: every decision leaves exactly one event in the stream —
 one record_result call = one row; one dispatch_act = one attempt + one
@@ -129,7 +134,7 @@ AUDIT_ACTIONS = (CHECKPOINT_ACTIONS | KERNEL_ACTIONS | DISTILL_ACTIONS
                      "dispatch_backoff",
                      "convergence_decision", "oracle_verdict",
                      "harvest_landed", "harvest_scan",
-                     "script_harvested",
+                     "script_harvested", "stop_refused",
                  }))
 
 #: report category buckets (§5) — anything outside them still counts in
