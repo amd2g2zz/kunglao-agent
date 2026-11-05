@@ -134,8 +134,10 @@ def test_reasoned_deviation_with_zero_propensity_rejected(tmp_path, capsys):
 def test_coherent_reasoned_deviation_passes_and_records(
         tmp_path, capsys, monkeypatch):
     """deviates + recorded reason + propensity > 0 -> the dispatch passes,
-    the dispatch row keeps the reconciliation, and the sample_deviation event
-    carries the reason AND the positive propensity (the 留痕 face)."""
+    the dispatch row keeps the reconciliation marked as an explicit
+    override (the draw-family propensity never pairs with the declared
+    arm), and the sample_deviation event carries the reason AND the
+    positive propensity (the 留痕 face)."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     monkeypatch.setattr(
@@ -153,7 +155,10 @@ def test_coherent_reasoned_deviation_passes_and_records(
     row = _usage_rows(ws)[-1]
     assert row['method_family'] == 'dynamic-trace'
     assert row['sampled_family'] == 'static-decompile'
-    assert row['propensity'] == 0.4
+    assert row['propensity'] is None
+    assert row['family_override'] is True
+    assert row['override_source'] == 'agent-reasoning'
+    assert row['override_propensity'] == 0.4
     evs = _events(ws, 'sample_deviation')
     assert len(evs) == 1
     det = _detail(evs[0])

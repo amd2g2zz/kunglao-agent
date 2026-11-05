@@ -316,7 +316,7 @@ def default_store(ws) -> QCellStore:
         return JSONLQStore(ws)
 
 
-def _dispatch_rows(ws) -> list[dict]:
+def dispatch_rows(ws) -> list[dict]:
     """The dispatch half of the consolidated observation log — the ONE
     read face behind the usage projections (#804 usage merge): trusted
     rows (the learner read face), dispatch source only."""
@@ -334,7 +334,7 @@ def usage_family_map(ws) -> dict[str, str]:
     consumes, one store per write event. Tolerant: family-less rows
     are skipped (the honest gap), never raise."""
     out: dict[str, str] = {}
-    for row in _dispatch_rows(ws):
+    for row in dispatch_rows(ws):
         cid = str(row.get("claim") or "").strip()
         fam = str(row.get("method_family") or "").strip()
         if cid and fam:
@@ -349,7 +349,7 @@ def dispatch_method(ws, claim: str) -> dict | None:
     usage-log read (crystallize.resolve_method over read_usage)."""
     cid = str(claim or "")
     found = None
-    for row in _dispatch_rows(ws):
+    for row in dispatch_rows(ws):
         if str(row.get("claim") or "") != cid:
             continue
         fam = str(row.get("method_family") or "").strip()
@@ -369,7 +369,7 @@ def usage_rows(ws) -> list[dict]:
     return [{"family": str(r.get("method_family") or ""),
              "cell": str(r.get("claim") or ""),
              "claim": str(r.get("claim") or "")}
-            for r in _dispatch_rows(ws)]
+            for r in dispatch_rows(ws)]
 
 
 # ---------------------------------------------------------------------------
@@ -398,9 +398,16 @@ class Fold:
     pre-keyed old-log shape — bank NO mass and NO pending count; the
     counter IS the loud un-attributed gap (mirrors kunglao_log's
     null-actor gap: the missing attribution is the signal, never a
-    fabricated bucket)."""
+    fabricated bucket).
+
+    ``inconsistent``: rows whose ``sampled_family`` disagrees with the
+    arm_key family and that carry no explicit ``family_override``
+    marker. They bank NO mass and NO pending count either — the
+    sampler pair describes a different arm, so the row is the loud
+    mis-attribution gap, counted and reported, never silently folded."""
     cells: dict[tuple[str, str], CellCounts] = field(default_factory=dict)
     unkeyed: int = 0
+    inconsistent: int = 0
 
     def family_mass(self, family: str) -> tuple[float, float]:
         """(success, failure) mass over ALL signatures — the family
@@ -486,6 +493,50 @@ def _action_key_of(row: dict) -> str | None:
     return ak or None
 
 
+def _valid_propensity(value) -> float | None:
+    """A finite [0, 1] propensity rounded to 6dp, else None (the
+    boundary semantics: non-numeric, NaN and out-of-range all fail)."""
+    if value is None or isinstance(value, bool) \
+            or not isinstance(value, (int, float)):
+        return None
+    v = float(value)
+    if v != v or not (0.0 <= v <= 1.0):
+        return None
+    return round(v, 6)
+
+
+def attribution_arm(row: dict) -> str | None:
+    """The family the row's logged ARM belongs to: the arm_key's first
+    segment when keyed, else the bare method_family. None when the row
+    names neither (the un-attributed gap)."""
+    ak = str(row.get("arm_key") or "").strip()
+    if ak:
+        return family_of_action(ak)
+    fam = str(row.get("method_family") or "").strip()
+    return fam or None
+
+
+def attribution_consistent(row: dict) -> bool:
+    """Whether the row's (arm, sampler) pair is coherent.
+
+    A row is coherent when it carries no sampler reconciliation at all
+    (the settlement/replay writers do not stamp one), when the sampler's
+    draw names the arm's own family, or when it carries the explicit
+    ``family_override`` marker (the dispatch overrode the draw and said
+    so). A row whose ``sampled_family`` disagrees with the arm family
+    and has no marker is inconsistent: its propensity describes another
+    family, so the fold and the off-policy readers must refuse it."""
+    sampled = row.get("sampled_family")
+    if not isinstance(sampled, str) or not sampled.strip():
+        return True
+    arm = attribution_arm(row)
+    if arm is None:
+        return True          # the unkeyed gap has its own counter
+    if sampled.strip() == arm:
+        return True
+    return row.get("family_override") is True
+
+
 def _decay_weights(rows: list[dict], schedule) -> list[float]:
     """Per-row γ^age weights over the credit stream (append-order age;
     no wall clock — machine-independent replay).
@@ -535,6 +586,13 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     ``Fold.unkeyed`` (the loud un-attributed gap). The read face stays
     family-addressed through ``family_of_action`` / ``Fold.family_mass``.
 
+    Attribution coherence: a row whose ``sampled_family`` disagrees with
+    its arm family and carries no explicit ``family_override`` marker
+    banks NO mass and NO pending count and is counted in
+    ``Fold.inconsistent`` — its propensity describes a different arm,
+    so folding it would mis-attribute the outcome. Marked override rows
+    stay admissible (the dispatch recorded the decision explicitly).
+
     #548 tiebreaker: a row's effective credit runs through
     ``tiebroken_credit`` — PHI_TIEBREAK_WEIGHT · phi_delta before the
     [0,1] clamp; rows without phi_delta are bit-identical to the
@@ -567,6 +625,7 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
     weights = _decay_weights(rows, schedule)
     cells: dict[tuple[str, str], CellCounts] = {}
     unkeyed = 0
+    inconsistent = 0
     for i, row in enumerate(rows):
         raw_credit = _credit_of(row)
         weight = weights[i]
@@ -576,6 +635,12 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
             # outcome (it already advanced the γ chain above) but banks
             # NO cell mass: no key, no bucket, never a fabricated one.
             unkeyed += 1
+            continue
+        if not attribution_consistent(row):
+            # the sampler pair names another arm — the row is a real
+            # outcome (γ chain above) but its attribution is incoherent:
+            # no mass, no bucket, the loud counted gap.
+            inconsistent += 1
             continue
         key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key)
@@ -618,12 +683,15 @@ def fold(store: QCellStore, gamma: float | GammaSchedule | None = None
             # #804 de-compat: unkeyed pending rows are the same loud gap.
             unkeyed += 1
             continue
+        if not attribution_consistent(row):
+            inconsistent += 1
+            continue
         key = (str(row.get("signature_hash") or ""), action)
         cell = cells.get(key) or CellCounts(key[0], key[1])
         cells[key] = CellCounts(cell.signature_hash, cell.family,
                                 cell.success, cell.failure,
                                 cell.n_pending + 1)
-    return Fold(cells, unkeyed=unkeyed)
+    return Fold(cells, unkeyed=unkeyed, inconsistent=inconsistent)
 
 
 # ---------------------------------------------------------------------------
@@ -1142,21 +1210,94 @@ def _usage_cols(tier, tools, view: dict | None) -> tuple:
     view = view if isinstance(view, dict) else None
     triple = None
     if view is not None:
-        propensity = view.get("propensity")
-        if propensity is not None and (
-                isinstance(propensity, bool) or not isinstance(
-                    propensity, (int, float)) or propensity != propensity
-                or not (0.0 <= float(propensity) <= 1.0)):
+        raw_prop = view.get("propensity")
+        propensity = _valid_propensity(raw_prop)
+        if raw_prop is not None and propensity is None:
             warn("q_cells.append",
-                 f"invalid propensity dropped: {propensity!r}")
-            propensity = None
+                 f"invalid propensity dropped: {raw_prop!r}")
         sampled = view.get("sampled_family")
         prior = view.get("prior_source")
-        triple = {"propensity": (None if propensity is None
-                                 else round(float(propensity), 6)),
+        triple = {"propensity": propensity,
                   "sampled_family": str(sampled).strip() if sampled else None,
                   "prior_source": str(prior).strip() if prior else None}
     return tier_out, tools_out, triple
+
+
+def _attribution_cols(family: str, view: dict | None,
+                      reason: str | None) -> dict:
+    """The explicit attribution block for a DISPATCH row whose sampler
+    reconciliation overrode the draw (the append face produces it only
+    when a ``sampler_view`` is supplied; settlement/credit rows carry no
+    sampler pair by design, which keeps the ledger's amendment and
+    replay faces idempotent).
+
+    The sampler reconciliation is coherent only when its draw names the
+    row's own family. Otherwise the dispatch overrode the draw: the row
+    must say so (``family_override`` + source + the recorded-reason
+    slot, explicitly null when the dispatch recorded none) and the two
+    probabilities must stay labelled — ``override_propensity`` is the
+    override family's share under the sampler, ``sampled_propensity``
+    is the draw's share. A bare ``propensity`` is never emitted for
+    such a row (the append face nulls it), so a probability from one
+    arm can never ride an arm_key of another.
+
+    The round-strategy lead follows the same rule: when the composed
+    lead names a different family than the dispatched one, the row
+    records ``lead_override`` with the same recorded reason.
+
+    A coherent row (draw == family, no differing lead) returns {} — its
+    row stays byte-identical to the pre-change shape."""
+    if not isinstance(view, dict):
+        return {}
+    fam = str(family or "").strip()
+    sampled = view.get("sampled_family")
+    sampled = str(sampled).strip() if sampled else ""
+    reason_txt = str(reason).strip()[:200] if reason else None
+    out: dict = {}
+    if sampled and fam and sampled != fam:
+        out["family_override"] = True
+        out["override_source"] = ("agent-reasoning" if reason_txt
+                                  else "declared")
+        # explicit even when absent: the override is recorded with its
+        # reason slot, so the missing decision line stays visible.
+        out["override_reason"] = reason_txt
+        prop = _valid_propensity(view.get("propensity"))
+        if prop is not None:
+            out["override_propensity"] = prop
+        sprop = _valid_propensity(view.get("sampled_propensity"))
+        if sprop is not None:
+            out["sampled_propensity"] = sprop
+    lead = view.get("round_lead")
+    lead = str(lead).strip() if lead else ""
+    if lead and fam and lead != fam:
+        out["round_lead"] = lead
+        out["lead_override"] = True
+        out["lead_override_reason"] = reason_txt
+    return out
+
+
+def _dispatch_reason(prompt: str | None) -> str | None:
+    """The dispatch's recorded-decision line (``agent-reasoning:``), the
+    same face the deviation event and the recipe view read."""
+    m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
+                  re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip()[:200] or None
+
+
+def _apply_attribution(row: dict, family: str, view: dict | None,
+                       reason: str | None) -> None:
+    """Write the attribution block onto one row (in place — the row is
+    the append face's own fresh dict). When the row is an explicit
+    override, the bare probability column is nulled so no draw-family
+    propensity can pair with a foreign arm_key."""
+    attr = _attribution_cols(family, view, reason)
+    if not attr:
+        return
+    if attr.get("family_override") and "propensity" in row:
+        row["propensity"] = None
+    row.update(attr)
 
 
 def append_observation(ws, signature_hash: str, method_family: str,
@@ -1178,7 +1319,8 @@ def append_observation(ws, signature_hash: str, method_family: str,
                        reward: float | None = None,
                        confidence_band: str | None = None,
                        tier=None, tools=None,
-                       sampler_view: dict | None = None) -> dict:
+                       sampler_view: dict | None = None,
+                       override_reason: str | None = None) -> dict:
     """Append one observation row (the data spine). Credit clamps into
     [0,1] at this boundary (r_r is rail-clamped per #429 §4; the clamping
     belongs to the caller's rails but the boundary never trusts input).
@@ -1204,7 +1346,16 @@ def append_observation(ws, signature_hash: str, method_family: str,
     residual claws back mass — negative is its job) with finite-only
     validation, and may carry ``failure_delta`` (the signed Δfailure the
     fold applies verbatim). failure_delta outside a calibration row is
-    dropped with ONE warn — the column has exactly one legal home."""
+    dropped with ONE warn — the column has exactly one legal home.
+
+    Attribution: when ``sampler_view`` reports a draw for a family other
+    than ``method_family``, the row carries ``family_override`` plus the
+    override source (and the recorded-reason slot) and the bare
+    ``propensity`` is nulled — the override's own share rides
+    ``override_propensity`` and the draw's share rides
+    ``sampled_propensity``. Credit rows never carry a sampler pair, so
+    the settlement ledger's mass and its idempotent amendment face stay
+    untouched by the dispatch-row exclusion."""
     credit_out, failure_delta_out = _coerce_credit(
         credit, credit_kind, failure_delta)
     phi_out = None
@@ -1274,6 +1425,10 @@ def append_observation(ws, signature_hash: str, method_family: str,
         row["tools"] = tools_out
     if usage_triple is not None:
         row.update(usage_triple)
+    # attribution coherence: a dispatch that overrode the sampler's draw
+    # marks the row explicitly and keeps the two probabilities labelled.
+    _apply_attribution(row, str(method_family), sampler_view,
+                       override_reason)
     row = _seal.sign_row(row)  # #799: every q-cell row seals at write
     appended = _cl.append(ws, "experience", row)
     return {"appended": appended, "row": row}
@@ -1749,9 +1904,12 @@ def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
     the posterior (the fold skips them — so does this read); signed
     kinds contribute verbatim; step rows are NOT included
     (``step_credit_totals`` owns that leg — sum them at the call
-    site). **None = the log could not be read** — callers must treat
-    None as "skip this pass" (an empty read and an unreadable read are
-    different facts; conflating them would fire a full-target
+    site); a row whose sampler attribution is incoherent is refused by
+    the fold, so it is refused here too (the attribution admission
+    mirrors the fold; the unkeyed legacy gap is outside this identity
+    key's scope). **None = the log could not be read** — callers must
+    treat None as "skip this pass" (an empty read and an unreadable
+    read are different facts; conflating them would fire a full-target
     over-amendment)."""
     did = str(dispatch_id or "")
     s = f = 0.0
@@ -1774,6 +1932,8 @@ def banked_mass(ws, dispatch_id: str) -> tuple[float, float, int] | None:
                 continue          # step mass: step_credit_totals owns it
             if not _admits_to_posterior(row):
                 continue          # verification: never banked, never read
+            if not attribution_consistent(row):
+                continue          # incoherent pair: the fold refuses it
             n += 1
             if str(row.get("credit_kind") or "") in SIGNED_CREDIT_KINDS:
                 s += c
@@ -1981,12 +2141,15 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
     became FOLD MASS for this identity — the claim-terminal
     calibration's operand, read from the SAME append-only log the fold
     consumes (what actually banked, never a parallel tally that could
-    drift). Mirrors the fold's admission EXACTLY: credit == 0.0 is a
-    failure observation (mass (0, 1)); credit in
+    drift). Mirrors the fold's admission for these credit rows: credit
+    == 0.0 is a failure observation (mass (0, 1)); credit in
     (0, OBSERVATION_BAND_CEIL] is the D-678.4a information option — NO
     mass, so it counts in NEITHER the sum nor the count (clawing it
     back would subtract mass that was never banked — the #712 review's
-    band-interaction finding); above the band a full observation.
+    band-interaction finding); above the band a full observation. A row
+    whose sampler attribution is incoherent is refused by the fold, so
+    it is refused here too (the attribution admission mirrors the
+    fold).
     Fail-open: an unreadable log reports (0.0, 0) so the settlement
     takes the legacy face rather than a fabricated correction."""
     did = str(dispatch_id or "")
@@ -2003,6 +2166,8 @@ def step_credit_totals(ws, dispatch_id: str) -> tuple[float, int]:
             credit = _credit_of(row)
             if credit is None:
                 continue
+            if not attribution_consistent(row):
+                continue          # incoherent pair: the fold refuses it
             if 0.0 < credit <= OBSERVATION_BAND_CEIL:
                 continue          # information option — zero mass, no operand
             total += credit
@@ -2087,7 +2252,14 @@ def record_dispatch_observation(ws, prompt: str, *,
     recipe_propensity, recipe_source: sampled|declared|none} — see
     rlvr.recipe_arms.record_dispatch_recipe) and the result gains the
     additive ``recipe`` view; the deviation event fires inside the
-    recipe face, never here."""
+    recipe face, never here.
+
+    Attribution: the ``sampler_view`` reconciliation rides the row as
+    the usage triple; when its draw names another family the row also
+    carries the explicit override block (see ``append_observation``)
+    and the dispatch's recorded decision line is threaded as the
+    override reason — the row never pairs a foreign propensity with the
+    arm_key."""
     try:
         family = declared_family(envelope_meta, prompt or "")
         if not family:
@@ -2124,7 +2296,8 @@ def record_dispatch_observation(ws, prompt: str, *,
                                  recipe_propensity=view.get("propensity"),
                                  recipe_source=view.get("source"),
                                  tier=tier, tools=tools,
-                                 sampler_view=sampler_view)
+                                 sampler_view=sampler_view,
+                                 override_reason=_dispatch_reason(prompt))
         return {"appended": out["appended"], "reason": None,
                 "family": family, "signature_hash": sig,
                 "recipe": view}
@@ -2274,6 +2447,9 @@ def reindex(root, gamma: float | GammaSchedule | None = None) -> dict:
         # #804 de-compat: face-1 rows without an arm_key bank no mass —
         # the count is the loud un-attributed gap, never silent absence.
         "unkeyed": fold_view.unkeyed,
+        # rows whose sampler draw contradicts the arm family without an
+        # explicit override — excluded from every cell, counted here.
+        "inconsistent": fold_view.inconsistent,
         "signature_approximated_cells": approximated,
         "cells": cells,
         "families": [families[k] for k in sorted(families)],
@@ -2315,7 +2491,8 @@ def cell_table(ws, gamma: float | GammaSchedule | None = None) -> dict:
             entry["arm_key"] = c.family
         cells.append(entry)
     return {"schema": CELLS_SCHEMA, "workspace": str(ws),
-            "gamma": float(schedule.gamma()), "cells": cells}
+            "gamma": float(schedule.gamma()), "cells": cells,
+            "inconsistent": fold_view.inconsistent}
 
 
 def _parse_prior(text: str) -> dict[str, float]:
