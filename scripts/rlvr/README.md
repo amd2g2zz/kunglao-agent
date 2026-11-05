@@ -300,6 +300,18 @@ the one-line pointer (name — the docstring's opening line):
   unified TELEMETRY ledger, and emits the registered
   `disposition_recorded` event. Re-writing the identical row is idempotent;
   a divergent rewrite is refused.
+- `disposition_reward` — rlvr/disposition_reward.py — the disposition reward
+  face (#986): classification evidence normalization (an authorized refusal is
+  SURRENDER, out-of-scope is OUT_OF_SCOPE, CENSORED_ENV needs BOTH session-bound
+  and corroborated wall legs, a timeout is FAILED), the consumer mapping
+  (`reward_for`: SOLVED oracle lock; SURRENDER 0.0 inside [0,1] with a
+  strategic-action failure outcome, TRACE floor with reproducible evidence;
+  ATTEMPTED_EXHAUSTED capability gap; CENSORED_ENV excluded from strategy
+  learning; OUT_OF_SCOPE / INFRA / FAILED reported separately), and the bounded
+  `disposition-signal/1` choice signal (`settle_disposition` /
+  `settle_workspace`) through the unified TELEMETRY ledger plus the registered
+  `disposition_signal` event. `rlvr.episode_settle.settle_mission` is the
+  mission-terminal call site.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.

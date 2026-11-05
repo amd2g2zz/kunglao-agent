@@ -555,7 +555,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 98ec3434e7a73830820f0bec869ba2a72574fb7def85d428e5711936b7b65f2f
+    sha256: 998e588473948caf32d46243dc9c26400b78235bcda2bd2fe9d2c87b4438cba6
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 73770b89736b4169efacea1870500bc09dadca52b30a6a63ed97a43c089b1583
+    sha256: 308bf111808248b19d79c84b35648b7723f5cf103568c251a29e937362e14a3f
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1399,7 +1399,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 0b0b6569ade465b23ea3ab5049c809aa64f39495ba56fb66ce66bb3f93a2bf9d
+    sha256: 7e5e4c06cc452d6b1045f88c88a31406b498c749be372db73b57e69d2c69f665
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1416,6 +1416,10 @@ files:
     dest: .claude/scripts/rlvr/disposition.py
     kind: scaffold
     sha256: d6e7f25927ba7be771961deeaafd586c6aaf0905a3475fade2624f57d9246cd9
+  - src: scripts/rlvr/disposition_reward.py
+    dest: .claude/scripts/rlvr/disposition_reward.py
+    kind: scaffold
+    sha256: da5654a5499515906f8b04e8c28579c6b76b1ac5e3003738d0ce5968f39e31c3
   - src: scripts/rlvr/distill_dgate.py
     dest: .claude/scripts/rlvr/distill_dgate.py
     kind: scaffold
@@ -1443,7 +1447,7 @@ files:
   - src: scripts/rlvr/episode_settle.py
     dest: .claude/scripts/rlvr/episode_settle.py
     kind: scaffold
-    sha256: ba04db4a81e8602fe193bc02c22183fb22d94df04dc5234dd1ec5e103999f8cc
+    sha256: 3d6413aa84ee032ded3aa775a2ce5bd51d562906a9657c47ce22528dcc10340d
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold

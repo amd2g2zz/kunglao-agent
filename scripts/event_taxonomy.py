@@ -208,6 +208,7 @@ EMIT_ACTIONS = [
     "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
     "disposition_recorded",  # the one evidence-gated disposition row per episode (rlvr/disposition.write_row)
+    "disposition_signal",  # the bounded reward-face choice signal per episode (rlvr/disposition_reward.settle_disposition)
     "distill_attempt",    # online distillation: a distillation act dispatched (phase=dispatched) or the production closure's trigger signal (phase=triggered)
     "distill_result",     # online distillation: per-attempt validation + sample-as-oracle outcome (rejections and phase=refused budget refusals included)
     "distill_rollout",    # issue-365 the distillation engine: one `distill-rollout/1` attempt or consumption settlement row (item/strategy/score/product/reward in the detail)
