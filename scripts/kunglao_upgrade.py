@@ -1306,8 +1306,14 @@ def _identity_current_suffix(idst: dict) -> str:
 
 
 def _refuse_dirty(ws: Path, dirty_n: int) -> int:
-    """#753 B1 refusal face — shared by the main migration path and the
-    #783 early-exit refresh (identical output; guidance pinned by tests)."""
+    """#753 B1 refusal face — the early-exit refresh's dirty guard
+    (#783; identical output; guidance pinned by tests).
+
+    The MAIN migration path does not call this helper: it takes the
+    pre-migration snapshot first (`_snapshot_pre_migration` commits the
+    dirty state as the rollback anchor) and refuses only when that snapshot
+    cannot be taken. This helper guards the early-exit refresh, which
+    rewrites the deployed tree with no snapshot of its own."""
     _emit_event("gate-dirty", "fail", f"{dirty_n} uncommitted entries")
     print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — {ws} has "
           f"{dirty_n} uncommitted change(s); migrating without a clean "
