@@ -114,10 +114,14 @@ def test_builtin_skills_unknown_name_fails_fast(tmp_path):
     assert NEW_FLAG in combined, "error must name the NEW flag, not the old one"
 
 
-def test_builtin_skills_no_flag_deploys_nothing(tmp_path):
+def test_builtin_skills_no_flag_deploys_only_the_framework(tmp_path):
     ws = _mk_ws(tmp_path)
     r = _run_init(ws)
     assert r.returncode == RC_OK, r.stderr
     skills_dir = ws / ".claude" / "skills"
-    assert not skills_dir.exists() or not any(skills_dir.iterdir()), (
-        f"no {NEW_FLAG} flag must install nothing")
+    # the project-scoped deployment contract ships the FRAMEWORK skill
+    # package unconditionally; the per-command copies stay opt-in.
+    assert (skills_dir / "kunglao-agent" / "SKILL.md").is_file(), (
+        "the framework skill package must deploy without any flag")
+    assert not (skills_dir / "analysis").exists(), (
+        f"no {NEW_FLAG} flag must not deploy the opt-in copies")

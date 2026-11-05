@@ -92,7 +92,7 @@ def test_stop_face_registered(tmp_path, monkeypatch):
     # the repo so the test stays machine-independent (a machine may carry
     # an older production install than the repo surface).
     monkeypatch.setattr(hook_activation, "_framework_project_root",
-                        lambda: ROOT)
+                        lambda *a, **k: ROOT)
     ws = _mk_ws(tmp_path)
     hook_activation.register_hooks_deployed(ws)
     settings_path = ws / ".claude" / "settings.json"

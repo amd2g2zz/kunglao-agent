@@ -124,7 +124,7 @@ def test_deployed_writer_emits_canonical_shape(tmp_path, monkeypatch):
     # manifest-vs-imports gate against the resolved env root — pin it to
     # the repo so the test stays machine-independent.
     monkeypatch.setattr(ha, "_framework_project_root",
-                        lambda: Path(__file__).resolve().parents[1])
+                        lambda *a, **k: Path(__file__).resolve().parents[1])
     ws = tmp_path / "ws"
     assert ha.register_hooks_deployed(ws) == 0
     settings = json.loads(

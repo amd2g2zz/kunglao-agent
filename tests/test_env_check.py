@@ -526,6 +526,31 @@ def test_venv_probe_dispatches_through_uv_project(monkeypatch, tmp_path):
                      str(skill_root), "python", "-c", "import yaml"]], seen
 
 
+def test_venv_probe_uses_the_workspace_env_when_deployed(monkeypatch, tmp_path):
+    """a deployed workspace is served by <ws>/.claude, not the skill
+    root — and the generated env ships no lock, so --locked is omitted."""
+    ws = _kunglao_ws(tmp_path)
+    (ws / ".claude").mkdir(parents=True, exist_ok=True)
+    (ws / ".claude" / "pyproject.toml").write_text(
+        "[project]\nname = \"kunglao-workspace-env\"\nversion = \"0.0.0\"\n",
+        encoding="utf-8")
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
+    seen: list[list[str]] = []
+
+    def _capture(argv, **kwargs):
+        seen.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(env_check.subprocess, "run", _capture)
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert seen == [["/fake/bin/uv", "run", "--project",
+                     str(ws / ".claude"), "python", "-c", "import yaml"]], seen
+
+
 def test_venv_probe_pins_the_lock_so_a_probe_never_relocks(
         monkeypatch, tmp_path):
     """Finding 10 (issue 225): `uv run` WITHOUT --locked re-locks the

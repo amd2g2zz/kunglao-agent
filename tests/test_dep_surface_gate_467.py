@@ -139,7 +139,7 @@ class TestDeployRefusal:
         imports numpy hard; the resolved env root does not declare it."""
         env = self._env_without_numpy(tmp_path_factory)
         monkeypatch.setattr(ha, "_framework_project_root",
-                            lambda: env)
+                            lambda *a, **k: env)
         ws = tmp_path / "ws"
         ws.mkdir()
         with pytest.raises(RuntimeError) as exc:
@@ -148,15 +148,19 @@ class TestDeployRefusal:
         assert "numpy" in msg
         assert str(env) in msg
         assert not (ws / ".claude" / "deployed-manifest.json").exists(), (
-            "refusal must happen BEFORE any workspace mutation")
+            "refusal must happen BEFORE the manifest copy")
         assert not (ws / ".claude" / "scripts").exists()
+        # the workspace env is written only AFTER the gate passes —
+        # a refused deploy leaves no half-materialized env behind.
+        assert not (ws / ".claude" / "pyproject.toml").exists(), (
+            "refusal must happen BEFORE the workspace env write")
 
     def test_green_path_unchanged_on_consistent_roots(self, tmp_path,
                                                        monkeypatch):
         # hermetic: pin the env resolution to the repo root (the machine
         # may carry an older production install — the refusal test owns
         # that behavior; this test owns the consistent-pair green path).
-        monkeypatch.setattr(ha, "_framework_project_root", lambda: ROOT)
+        monkeypatch.setattr(ha, "_framework_project_root", lambda *a, **k: ROOT)
         ws = tmp_path / "ws"
         ws.mkdir()
         report = ha.deploy_workspace_copy(ws)
@@ -165,7 +169,7 @@ class TestDeployRefusal:
 
     def test_unresolvable_env_root_fails_open(self, tmp_path, monkeypatch,
                                               capsys):
-        monkeypatch.setattr(ha, "_framework_project_root", lambda: None)
+        monkeypatch.setattr(ha, "_framework_project_root", lambda *a, **k: None)
         ws = tmp_path / "ws"
         ws.mkdir()
         report = ha.deploy_workspace_copy(ws)
@@ -184,7 +188,7 @@ class TestUpgradeRefreshPosture:
         env = tmp_path_factory.mktemp("env-root-2")
         _pyproject(env, ["PyYAML>=6.0", "pefile>=2023.2.7",
                          "capstone>=5.0"])
-        monkeypatch.setattr(ha, "_framework_project_root", lambda: env)
+        monkeypatch.setattr(ha, "_framework_project_root", lambda *a, **k: env)
         import deployed_refresh as dr
         detail = dr.refresh(tmp_path)
         assert "dep_gap" in detail

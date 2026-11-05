@@ -576,7 +576,13 @@ def _build_current_frame(ws: Path, old_text: str,
             carried.get("sample_sha256", sample_sha), lane,
             sample_type=carried.get("sample_type"),
             sample_path=carried.get("sample_path")),
-        "skill_dir": canonical_install_root().as_posix(),
+        # deployed workspaces render their own runtime root so the
+        # rendered loop commands resolve the deployed scripts, never the
+        # global install.
+        "skill_dir": (
+            (ws / ".claude").as_posix()
+            if (ws / ".claude" / "pyproject.toml").is_file()
+            else canonical_install_root().as_posix()),
         "venv_path": venv_path,
     }
     text = init.template_render.render_strict(
@@ -1689,13 +1695,48 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
     already-current fast path sweeps too: a workspace mis-wired by a
     pre-fix tool stamps CURRENT and would otherwise skip through the early
     return forever."""
-    root = canonical_install_root()
-    scan = install_reference.scan_workspace(ws, root)
-    if not scan:
+    # in a workspace that carries its own project skill copy, THAT
+    # copy is the active root — stale references are rewritten to the
+    # workspace path (absolute; the workspace need not live under HOME),
+    # never to the global install. Without a project copy the
+    # durable-install resolution stands.
+    project_skill = ws / ".claude" / "skills" / "kunglao-agent"
+    if project_skill.is_dir():
+        root = project_skill
+        base = ws
+        outside_only = True    # same-name global refs are shadows too
+    else:
+        root = canonical_install_root()
+        base = None
+        outside_only = False
+    scan = install_reference.scan_workspace(ws, root,
+                                            outside_only=outside_only)
+    # a global skill/plugin reference in a workspace that CARRIES a
+    # project skill copy is a shadow — the global tree wins at runtime.
+    # Report it with remediation; never silently coexist.
+    shadow = install_reference.scan_global_shadow(ws)
+    if not scan and not shadow:
         return {"status": "clean"}
-    rewired = install_reference.rewire_workspace(ws, root) if apply else {}
+    if shadow:
+        for carrier, refs in sorted(shadow.items()):
+            _warn_line(f"kunglao-upgrade: WARN global skill/plugin shadow "
+                       f"[{carrier}] {len(refs)} ref(s) — the project copy at "
+                       f"{ws}/.claude/skills/kunglao-agent is authoritative; "
+                       f"disable the global kunglao-agent plugin/skill for "
+                       f"this project")
+            for ref in refs:
+                _warn_line(f"kunglao-upgrade: WARN   - {ref}")
+        _warn("kunglao-upgrade: WARN — global skill/plugin shadow detected "
+              "in the workspace carriers; the project skill copy is "
+              "authoritative (disable the global plugin/skill for this "
+              "project)", "global-shadow", "install_reference_shadow", ws)
+    if not scan:
+        return {"status": "shadow" if shadow else "clean",
+                "root": str(root), "shadow": shadow}
+    rewired = install_reference.rewire_workspace(
+        ws, root, base=base, outside_only=outside_only) if apply else {}
     report: dict = {"status": "rewired" if apply else "planned",
-                    "root": str(root), "carriers": {}}
+                    "root": str(root), "carriers": {}, "shadow": shadow}
     verb = "STALE+REWIRE" if apply else "PLANNED"
     for carrier, refs in sorted(scan.items()):
         print(f"kunglao-upgrade: install-reference {verb} [{carrier}] "
@@ -2266,9 +2307,16 @@ def upgrade(ws: Path, dry_run: bool = False,
         # write nothing (the dry run never pends)
         _anchor_backfill(ws, dry_run=True, resolve=resolve, items_out=items_out)
         # #752 D6: planned sweep surfaces in the dry-run plan, writes nothing
-        stale_n = sum(len(v) for v in
-                      install_reference.scan_workspace(
-                          ws, canonical_install_root()).values())
+        # the dry-run plan must speak the same predicate as the
+        # applied sweep — outside-only in a deployed workspace.
+        project_skill = ws / ".claude" / "skills" / "kunglao-agent"
+        if project_skill.is_dir():
+            _plan_scan = install_reference.scan_workspace(
+                ws, project_skill, outside_only=True)
+        else:
+            _plan_scan = install_reference.scan_workspace(
+                ws, canonical_install_root())
+        stale_n = sum(len(v) for v in _plan_scan.values())
         print(f"  [{target}] install_reference_scan({stale_n} stale)")
         return RC_OK
 
