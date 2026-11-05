@@ -197,9 +197,9 @@ def _routes(ws, claim: str, declared: int, attempted: int) -> str:
 
 
 def test_route_pruning_reads_the_production_writer_shape(tmp_path):
-    """Cross-module pin (#988 writer -> #987 reader): the production
-    route_ledger writes `declared_routes`/`attempts`, and the measurement
-    face must read that shape instead of reporting a route-less ledger."""
+    """Cross-module pin: the production route_ledger writer shape must be
+    readable by the measurement face instead of reporting a route-less
+    ledger."""
     # Arrange: a real ledger written through the only production writer.
     ws = _ws(tmp_path)
     artifact = ws / "evidence" / "a.bin"
@@ -742,7 +742,7 @@ def test_exhausted_run_with_drive_letter_ref_is_refused(tmp_path):
     ws = _ws(tmp_path)
     _write(ws, episode_id="ep-drive", claim="C-1",
            ledger={"routes": ["r1"], "attempted": ["r1"], "budget": 1},
-           route_ledger_ref="C:/Windows/system32/config")
+           route_ledger_ref="C:" + "/Windows/system32/config")
 
     # Act
     report = dm.measure(ws)

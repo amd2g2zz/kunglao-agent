@@ -39,7 +39,7 @@ def test_expansion_off_switch_is_pinned():
         encoding="utf-8")
     body = src.split("def _maybe_expand")[1].split("def _maybe_distill")[0]
     assert 'KUNGLAO_EXPANSION' in body
-    assert '== "0"' in body
+    assert 'get_bool("KUNGLAO_EXPANSION")' in body
 
 
 def test_blocked_path_families_have_contract_rows():
