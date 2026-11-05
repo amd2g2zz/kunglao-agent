@@ -401,6 +401,113 @@ class TestExtIndexConsistency:
             "the shipped ext index must pass its own consistency gate")
 
 
+# ---- (e) declared-vs-consumed consumer truth (issue 989) --------------
+
+def _rlvr_tree(tmp_path: Path, *, declared: list[str] | None,
+               modules: dict[str, str] | None = None) -> Path:
+    """A fake repo carrying an rlvr facade; ``declared`` becomes the
+    ``__all__`` list (None omits the declaration entirely)."""
+    repo = tmp_path / "repo"
+    rlvr = repo / "scripts" / "rlvr"
+    rlvr.mkdir(parents=True)
+    lines = ['"""fake package."""', "from . import *  # noqa: F401,F403"]
+    if declared is not None:
+        lines.append("__all__ = [" + ", ".join(repr(n) for n in declared) + "]")
+    (rlvr / "__init__.py").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for name in (modules or {}):
+        (rlvr / f"{name}.py").write_text(modules[name], encoding="utf-8")
+    return repo
+
+
+def _declared_check(repo: Path) -> list[str]:
+    ds.REPO_ROOT = repo
+    try:
+        return ds._check_declared_consumer_truth()
+    finally:
+        ds.REPO_ROOT = REPO_ROOT
+
+
+class TestDeclaredConsumerTruth:
+    """Sub-check (e), issue 989: a facade declaration is registration,
+    not liveness — every ``__all__`` module needs a consumer outside the
+    package, or an explicit allowlist reason."""
+
+    def _consumer(self, repo: Path, rel: str, text: str) -> None:
+        p = repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def test_declared_module_without_consumer_fails(self, tmp_path: Path) -> None:
+        repo = _rlvr_tree(tmp_path, declared=["alpha", "beta"],
+                          modules={"alpha": "", "beta": ""})
+        self._consumer(repo, "scripts/use_alpha.py",
+                       "from rlvr import alpha\n")
+        fails = _declared_check(repo)
+        assert len(fails) == 1
+        assert "rlvr.beta" in fails[0]
+        assert "registration alone" in fails[0]
+
+    def test_consumer_outside_the_package_passes(self, tmp_path: Path) -> None:
+        repo = _rlvr_tree(tmp_path, declared=["alpha"],
+                          modules={"alpha": ""})
+        self._consumer(repo, "hooks/use_alpha.py",
+                       "from rlvr.alpha import face\n")
+        assert _declared_check(repo) == []
+
+    def test_attribute_reference_counts(self, tmp_path: Path) -> None:
+        repo = _rlvr_tree(tmp_path, declared=["alpha"],
+                          modules={"alpha": ""})
+        self._consumer(repo, "tools/use_alpha.py",
+                       "import rlvr\nrlvr.alpha.face()\n")
+        assert _declared_check(repo) == []
+
+    def test_test_consumer_counts(self, tmp_path: Path) -> None:
+        repo = _rlvr_tree(tmp_path, declared=["alpha"],
+                          modules={"alpha": ""})
+        self._consumer(repo, "tests/test_alpha.py",
+                       "from rlvr import alpha\n")
+        assert _declared_check(repo) == []
+
+    def test_intra_package_import_is_not_a_consumer(self, tmp_path: Path) -> None:
+        """The facade imports every module by construction — package-side
+        references are the declaration site, never consumption."""
+        repo = _rlvr_tree(tmp_path, declared=["alpha"],
+                          modules={"alpha": ""})
+        self._consumer(repo, "scripts/rlvr/other.py",
+                       "from rlvr import alpha\n")
+        fails = _declared_check(repo)
+        assert len(fails) == 1 and "rlvr.alpha" in fails[0]
+
+    def test_allowlist_needs_a_reason(self, tmp_path: Path,
+                                      monkeypatch) -> None:
+        repo = _rlvr_tree(tmp_path, declared=["alpha"],
+                          modules={"alpha": ""})
+        monkeypatch.setattr(ds, "RLVR_CONSUMER_ALLOWLIST", {"alpha": ""})
+        assert len(_declared_check(repo)) == 1
+        monkeypatch.setattr(ds, "RLVR_CONSUMER_ALLOWLIST",
+                            {"alpha": "public facade, consumed by plugins"})
+        assert _declared_check(repo) == []
+
+    def test_missing_facade_is_na(self, tmp_path: Path) -> None:
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        assert _declared_check(empty) == []
+
+    def test_malformed_facade_fails_closed(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        rlvr = repo / "scripts" / "rlvr"
+        rlvr.mkdir(parents=True)
+        (rlvr / "__init__.py").write_text("# no __all__ here\n",
+                                          encoding="utf-8")
+        fails = _declared_check(repo)
+        assert fails and "__all__" in fails[0]
+
+    def test_real_repo_declared_surface_is_consumed(self) -> None:
+        assert ds._check_declared_consumer_truth() == [], (
+            "a declared rlvr module has no consumer outside the package — "
+            "wire a caller, retire the module, or add an allowlist reason")
+
+
 # ---- Gate 7 registration lockstep (registry-derived, never hardcoded) --
 
 class TestGate7Registration:

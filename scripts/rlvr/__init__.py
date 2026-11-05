@@ -27,7 +27,6 @@ from . import crystallize
 from . import direction
 from . import disposition
 from . import distill_dgate
-from . import distill_lifecycle
 from . import distill_rollout
 from . import distill_score
 from . import episode_pool
@@ -103,7 +102,6 @@ __all__ = [
     "direction",
     "disposition",
     "distill_dgate",
-    "distill_lifecycle",
     "distill_rollout",
     "distill_score",
     "episode_pool",

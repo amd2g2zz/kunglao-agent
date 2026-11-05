@@ -40,6 +40,15 @@ Three sub-checks were shipped by #446 (design.md D2-D5, (a)-(c) below);
       absent from the catalog → WARN (fix: regenerate via
       tools/ext-scan.py — the shipped catalog is exhaustive, so any gap
       is drift, not pre-existing debt).
+  (e) declared-vs-consumed consumer truth (#989) — every module named in
+      scripts/rlvr/__init__.py's ``__all__`` needs at least one consumer
+      OUTSIDE scripts/rlvr/ (scripts/, hooks/, tools/, devkit/,
+      experiments/, evals/, tests/). The facade's own ``from . import``
+      lines are the declaration site, never evidence: registration alone
+      is not liveness. An explicit allowlist entry (module -> non-empty
+      reason) is the documented exception for a public API with no
+      static consumer. Missing facade = N/A; malformed facade = FAIL
+      (the declared surface is unreadable).
 
 Exit codes: 0 = pass; 1 = violations found; 2 = HARD_PAUSE (references
 unpinned). Registered as Gate 7 in quality_gates.GATES; the pre-commit
@@ -48,6 +57,7 @@ is provided by the quality_gates runner wrapper (same as Gates 5/6).
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -409,11 +419,137 @@ def _check_ext_index() -> tuple[list[str], list[str]]:
     return fails, warns
 
 
+# ---- sub-check (e): declared-vs-consumed consumer truth (#989) ---------
+
+RLVR_INIT_REL = "scripts/rlvr/__init__.py"
+RLVR_PACKAGE_PREFIX = "scripts/rlvr/"
+
+#: Consumer scan face for the rlvr declared surface. tests/ counts (a
+#: pinned library face is reachable, not orphaned); the package itself is
+#: excluded below — its ``from . import`` lines are the declaration.
+DECLARED_CONSUMER_ROOTS = ("scripts", "hooks", "tools", "devkit",
+                           "experiments", "evals", "tests")
+
+#: module name -> non-empty reason. Reserved for a public API whose
+#: consumers live outside the repo; the reason keeps the exception
+#: explicit and reviewable.
+RLVR_CONSUMER_ALLOWLIST: dict[str, str] = {}
+
+
+def _rlvr_declared_modules() -> tuple[list[str] | None, list[str]]:
+    """(declared module names, errors). ``None`` means N/A — no facade."""
+    path = REPO_ROOT / RLVR_INIT_REL
+    if not path.is_file():
+        return None, []
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError) as exc:
+        return None, [f"{RLVR_INIT_REL}: unreadable ({exc}) — the declared "
+                      "surface cannot be verified"]
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "__all__"
+                   for t in node.targets):
+            continue
+        if not isinstance(node.value, (ast.List, ast.Tuple)):
+            break
+        values = [e.value for e in node.value.elts
+                  if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+        if len(values) != len(node.value.elts):
+            break
+        return values, []
+    return None, [f"{RLVR_INIT_REL}: no module-level __all__ string list — "
+                  "the declared surface is unreadable (fail-closed)"]
+
+
+def _rlvr_references(tree: ast.AST, names: set[str]) -> set[str]:
+    """Declared names this module references, across every import shape."""
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "rlvr" and len(parts) > 1 \
+                        and parts[1] in names:
+                    found.add(parts[1])
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            module = node.module or ""
+            if module == "rlvr":
+                found.update(a.name for a in node.names if a.name in names)
+            elif module.startswith("rlvr."):
+                head = module.split(".")[1]
+                if head in names:
+                    found.add(head)
+        elif (isinstance(node, ast.Attribute)
+              and isinstance(node.value, ast.Name)
+              and node.value.id == "rlvr" and node.attr in names):
+            found.add(node.attr)
+    return found
+
+
+def _rlvr_consumers(names: set[str]) -> dict[str, set[str]]:
+    """{declared name -> consuming files outside the package}."""
+    consumers: dict[str, set[str]] = {name: set() for name in names}
+    for root_rel in DECLARED_CONSUMER_ROOTS:
+        root = REPO_ROOT / root_rel
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.py")):
+            if _SKIP_DIRS.intersection(path.parts):
+                continue
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            if rel.startswith(RLVR_PACKAGE_PREFIX):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "rlvr" not in text:  # cheap prefilter before the AST walk
+                continue
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                continue
+            for name in _rlvr_references(tree, names):
+                consumers[name].add(rel)
+    return consumers
+
+
+def _check_declared_consumer_truth() -> list[str]:
+    """Sub-check (e). Returns violation strings (empty = pass / N/A)."""
+    declared, errors = _rlvr_declared_modules()
+    if errors:
+        return errors
+    if declared is None:
+        return []
+    consumers = _rlvr_consumers(set(declared))
+    fails: list[str] = []
+    for name in declared:
+        if consumers[name]:
+            continue
+        if RLVR_CONSUMER_ALLOWLIST.get(name, "").strip():
+            continue
+        module_rel = f"{RLVR_PACKAGE_PREFIX}{name}.py"
+        if not (REPO_ROOT / module_rel).is_file():
+            fails.append(
+                f"{RLVR_INIT_REL}: __all__ declares {name!r} but "
+                f"{module_rel} does not exist")
+            continue
+        fails.append(
+            f"rlvr.{name}: declared in __all__ but no consumer outside "
+            f"{RLVR_PACKAGE_PREFIX} — registration alone is not liveness; "
+            "wire a consumer, retire the module, or record an explicit "
+            "allowlist reason")
+    return fails
+
+
 def check() -> int:
     claims = scan_gate_count_claims()
     pauses = _check_references_pins()
     warns = _check_new_script_registration()
     ext_fails, ext_warns = _check_ext_index()
+    declared_fails = _check_declared_consumer_truth()
     warns = warns + ext_warns
 
     for w in warns:
@@ -437,6 +573,16 @@ def check() -> int:
                     f"the regenerated {EXT_INDEX_REL}"))
         return RC_FAIL
 
+    if declared_fails:
+        print(_safe(f"FAIL Gate 7: {len(declared_fails)} rlvr "
+                    f"declared-consumer violation(s) ({RLVR_INIT_REL}):"))
+        for f in declared_fails:
+            print(_safe(f"  {f}"))
+        print(_safe("  Fix: wire a consumer outside the package, retire the "
+                    "module, or add a reasoned entry to "
+                    "devkit/doc_sync.py RLVR_CONSUMER_ALLOWLIST"))
+        return RC_FAIL
+
     if claims:
         print(_safe(f"FAIL Gate 7: {len(claims)} numeric gate-count "
                     f"claim(s) on the devkit/workflows face "
@@ -450,7 +596,8 @@ def check() -> int:
         return RC_FAIL
 
     print("[PASS] Gate 7 doc sync: gate-count claim scan clean, "
-          "references pins clean, ext index consistent"
+          "references pins clean, ext index consistent, rlvr declared "
+          "surface consumed"
           + (f", {len(warns)} registration WARN(s)" if warns else ""))
     return RC_PASS
 
