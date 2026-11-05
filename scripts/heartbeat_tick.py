@@ -272,10 +272,10 @@ def noop_breaker(ws: Path, current_hash: str,
     never participates in the equality (premise churn must not reset the
     no-op counter; see state_fingerprint)."""
     import json as _json
-    import os
+    import runtime_switches
     ws = Path(ws)
-    n = threshold if threshold is not None else int(
-        os.environ.get("KUNGLAO_NOOP_BREAKER_N", "6"))
+    n = threshold if threshold is not None else \
+        runtime_switches.get_int("KUNGLAO_NOOP_BREAKER_N")
     state_path = ws / "runs" / ".heartbeat-noop.json"
     prev = {}
     try:

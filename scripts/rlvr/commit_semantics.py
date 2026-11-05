@@ -390,7 +390,8 @@ def _retrieval_price(ws: Path, features: list[str], phase: str,
 # --------------------------------------------------- env-toggle helpers
 
 def _selection_with(env: str, value: str, ws: Path, features: list[str]):
-    old = os.environ.get(env)
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    old = runtime_switches.raw(env)
     os.environ[env] = value
     try:
         return mp.select_commit(ws, features)
@@ -402,7 +403,8 @@ def _selection_with(env: str, value: str, ws: Path, features: list[str]):
 
 
 def _enrich_with(env: str, value: str, ws: Path, claim, block: dict):
-    old = os.environ.get(env)
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    old = runtime_switches.raw(env)
     os.environ[env] = value
     try:
         return enrich_block(ws, claim, block)

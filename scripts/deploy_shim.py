@@ -93,11 +93,11 @@ _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 def _frida_alias(alias: str | None) -> str:
-    """--alias > KUNGLAO_FRIDA_ALIAS > the default renamed name."""
-    import os
+    """--alias > declared switch > the default renamed name."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
     if alias:
         return alias
-    env = os.environ.get("KUNGLAO_FRIDA_ALIAS", "").strip()
+    env = runtime_switches.get_str("KUNGLAO_FRIDA_ALIAS").strip()
     return env or DEFAULT_FRIDA_ALIAS
 
 

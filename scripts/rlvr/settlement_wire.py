@@ -53,7 +53,6 @@ field passes through.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,9 +83,10 @@ _DEFAULT_RULES = (Path(__file__).resolve().parents[2]
 
 def eval_settle_enabled() -> bool:
     """True only when the UNBLINDED settle_step judgment was explicitly
-    opted back into (eval runs). Anything else — unset, empty, any other
-    value — is production blind mode."""
-    return os.environ.get(EVAL_SETTLE_ENV) == "1"
+    opted back into (eval runs). The learning switch defaults OFF;
+    anything else — unset, empty, "0" — is production blind mode."""
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    return runtime_switches.get_bool(EVAL_SETTLE_ENV)
 
 
 def _safe_claim(claim) -> str:

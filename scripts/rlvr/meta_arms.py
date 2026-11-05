@@ -13,9 +13,10 @@ LAMBDA (power-prior) — neither reset nor full trust.
 from __future__ import annotations
 
 import hashlib
-import os
 import subprocess
 from pathlib import Path
+
+import runtime_switches
 
 from kunglao_log import warn  # canonical fail-open trace (#275)
 
@@ -128,6 +129,15 @@ def mc_propensity(rows: list[dict], chosen: str, families: list[str],
     return wins / draws
 
 
+def act_timeout_s() -> int:
+    """The ONE act-timeout read (shared with the e2e LLM face) — the
+    registry owns the parse and the declared default; a non-positive
+    value resolves to the default."""
+    declared = runtime_switches.SWITCHES["KUNGLAO_E2E_ACT_TIMEOUT_S"]
+    value = runtime_switches.get_int(declared.name)
+    return value if value > 0 else declared.default
+
+
 def env_fingerprint(ws, repo: Path | None = None) -> str:
     """Stable environment identity: (model env, claude CLI version,
     worker-agent prompt sha, act-timeout policy). Cached per workspace
@@ -135,8 +145,8 @@ def env_fingerprint(ws, repo: Path | None = None) -> str:
     tempering discriminator (#524 item 4)."""
     ws = Path(ws)
     cache_p = ws / "runs" / "env-fingerprint.json"
-    model = os.environ.get("KUNGLAO_MODEL", "") or os.environ.get(
-        "ANTHROPIC_MODEL", "") or "default-model"
+    model = runtime_switches.get_str("KUNGLAO_MODEL") or \
+        runtime_switches.get_str("ANTHROPIC_MODEL") or "default-model"
     key = model
     if cache_p.is_file():
         try:
@@ -163,7 +173,7 @@ def env_fingerprint(ws, repo: Path | None = None) -> str:
             agent_sha = hashlib.sha256(
                 cand.read_bytes()).hexdigest()[:12]
             break
-    timeout = os.environ.get("KUNGLAO_E2E_ACT_TIMEOUT_S", "1800")
+    timeout = act_timeout_s()
     fp = hashlib.sha256(
         f"{model}|{cli}|{agent_sha}|{timeout}".encode()
     ).hexdigest()[:12]

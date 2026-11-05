@@ -139,11 +139,14 @@ def _drifted_scratch_skill(tmp_path: Path) -> Path:
     # harness_common.py rides the copy set (#863 Family F: heartbeat_tick
     # delegates utc_now to it — a scratch copy without it dies on
     # ModuleNotFoundError instead of the intended registry-drift ValueError).
+    # runtime_switches.py rides the copy set (the runtime-switch registry is
+    # the single read face for kunglao_log's channel default — a scratch
+    # copy without it dies on ModuleNotFoundError at import).
     for f in ("heartbeat_tick.py", "hook_activation.py", "hooks_selfcheck.py",
               "wire_up_settings.py", "reconcile_workers.py", "heartbeat.py",
               "template_version.py", "kunglao_log.py", "liveness_policy.py",
               "_boot.py", "ws_layout.py", "env_manifest.py",
-              "harness_common.py"):
+              "harness_common.py", "runtime_switches.py"):
         shutil.copy2(SCRIPTS / f, skill / "scripts" / f)
     wu = skill / "scripts" / "wire_up_settings.py"
     wu.write_text(

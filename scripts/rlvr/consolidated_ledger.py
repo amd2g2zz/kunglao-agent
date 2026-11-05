@@ -140,7 +140,8 @@ def _knowledge_root() -> Path:
         warn("rlvr.consolidated_ledger",
              f"strategy_store root unavailable ({type(exc).__name__}: "
              f"{exc}) — environment-mirror fallback")
-        env = os.environ.get(STORE_ENV, "").strip()
+        import runtime_switches  # noqa: PLC0415 — fallback path only
+        env = runtime_switches.get_str(STORE_ENV).strip()
         if env:
             return Path(env)
         return Path(__file__).resolve().parent / "patterns"

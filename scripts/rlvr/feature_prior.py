@@ -81,7 +81,6 @@ nothing).
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -95,12 +94,12 @@ FEATURE_TABLE_REL = Path("runs") / "feature-table.jsonl"
 
 
 def enabled() -> bool:
-    """Default ON since WS3 (#544): the cold-start anchor engages
-    whenever a mined table + live features exist; the explicit opt-out
-    is KUNGLAO_PREDICT_BEFORE_TRY == "0" (exact). Flag off, or flag on
-    without a table/features, is byte-identical to the pre-change
-    kernel — the determinism wall."""
-    return os.environ.get(FLAG_ENV, "") != "0"
+    """Learning face: OFF by default. An evaluation arm (or an operator)
+    declares it on; the exact opt-out is the declared value "0". Flag
+    off, or flag on without a table/features, is byte-identical to the
+    pre-change kernel — the determinism wall."""
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    return runtime_switches.get_bool(FLAG_ENV)
 
 
 def default_table_path(ws) -> Path:

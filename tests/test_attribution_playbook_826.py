@@ -125,9 +125,23 @@ def _seed_ok(ws: Path, claim: str, features: list[str], **kw) -> dict:
 
 # ---------------------------------------------------------------- helpers
 
+@pytest.fixture(autouse=True)
+def _declared_learning_faces(monkeypatch):
+    """The learning switches default OFF; these pins assert the
+    declared-ON behavior of each component."""
+    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
+                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
+        monkeypatch.setenv(name, "1")
+
+
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the knob values, then re-declare the four learning switches
+    ON (their silent default is OFF)."""
     for name in _ENV:
         monkeypatch.delenv(name, raising=False)
+    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
+                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
+        monkeypatch.setenv(name, "1")
 
 
 def _failure(ws: Path, claim: str, features: list[str], why: str,

@@ -20,7 +20,6 @@ No face ever degrades silently: every act lands in structured evidence.
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import threading
@@ -29,19 +28,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
+import runtime_switches
 from e2e import audit, model
 
 #: per-command timeouts (seconds) — every subprocess call is bounded.
 SCRIPT_TIMEOUT_S = 600
 def _act_timeout_s() -> int:
-    """#473: env-overridable act timeout — rounds may run longer acts
-    without code changes. Garbage falls back to the default."""
-    raw = os.environ.get("KUNGLAO_E2E_ACT_TIMEOUT_S", "")
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return 1_800
-    return value if value > 0 else 1_800
+    """The act timeout, parsed once by the runtime-switch registry (the
+    same read the environment fingerprint uses). Invalid or non-positive
+    values resolve to the declared default."""
+    declared = runtime_switches.SWITCHES["KUNGLAO_E2E_ACT_TIMEOUT_S"]
+    value = runtime_switches.get_int(declared.name)
+    return value if value > 0 else declared.default
 
 
 CLAUDE_ACT_TIMEOUT_S = _act_timeout_s()

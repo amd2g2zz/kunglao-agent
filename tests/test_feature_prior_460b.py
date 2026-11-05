@@ -102,16 +102,13 @@ def _set_flag(value: str | None, monkeypatch):
 
 # --------------------------------------------- 1. flag-gated inertness
 
-def test_flag_defaults_on(monkeypatch):
-    """WS3 (#544) contract change: default ON — the cold-start anchor
-    engages whenever a table + features exist. The explicit opt-out is
-    KUNGLAO_PREDICT_BEFORE_TRY == "0" (exact; everything else is the
-    default-on face)."""
+def test_flag_defaults_off(monkeypatch):
+    """The learning face is OFF by default (an arm must declare it on)."""
     _set_flag(None, monkeypatch)
-    assert fp.enabled() is True
+    assert fp.enabled() is False
 
 
-def test_flag_off_is_exact_zero(monkeypatch):
+def test_flag_declared_values(monkeypatch):
     _set_flag("1", monkeypatch)
     assert fp.enabled() is True
     _set_flag("0", monkeypatch)

@@ -654,7 +654,8 @@ def _scheduler_uniform() -> bool:
     prior goes flat (1.0 everywhere), the draw reads an EMPTY store
     (every cell posterior stays the day-one Beta(1,1)) and the learned
     extras are withheld — the learned state never influences selection."""
-    return os.environ.get(SCHEDULER_ENV, "") == SCHEDULER_UNIFORM
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return runtime_switches.get_str(SCHEDULER_ENV) == SCHEDULER_UNIFORM
 
 
 def _uniform_propensity(receipt: dict) -> float:
@@ -1748,7 +1749,9 @@ _STOP_DECISIONS = {"BLOCKED": "convergence-blocked", "PARK": "parked"}
 # today's behavior, 1800/1800/3600/7200..., never shrinks below it);
 # the fast-discovery base stays env-selectable pending Kaplan-Meier
 # hazard data (the intended feed per the design contract).
-LUBY_BASE_S = int(os.environ.get("KUNGLAO_LUBY_BASE_S", "1800"))
+import runtime_switches
+
+LUBY_BASE_S = runtime_switches.get_int("KUNGLAO_LUBY_BASE_S")
 
 
 def _luby_units(n: int) -> int:
@@ -1892,8 +1895,8 @@ def _maybe_expand(ctx: RunContext, dispatched: set[str],
     fail-open, never breaks the loop. The ablation face:
     KUNGLAO_EXPANSION=0 disables the move entirely (the L3 off-arm of
     the blocked-path 2x2 delta)."""
-    import os as _os
-    if _os.environ.get("KUNGLAO_EXPANSION", "") == "0":
+    import runtime_switches as _runtime_switches
+    if not _runtime_switches.get_bool("KUNGLAO_EXPANSION"):
         return
     try:
         ex = _load_repo_module(ctx.repo, "rlvr.expansion")
@@ -2307,7 +2310,7 @@ def _crashed_loud_stop(ctx: RunContext, detail: dict, decision,
         return False
     n = int(detail.get("consecutive_crashed", 0)) + 1
     detail["consecutive_crashed"] = n
-    limit = int(os.environ.get("KUNGLAO_CRASHED_STOP_N", "3"))
+    limit = runtime_switches.get_int("KUNGLAO_CRASHED_STOP_N")
     if n < limit:
         return False
     detail["_crashed_terminal"] = _record(

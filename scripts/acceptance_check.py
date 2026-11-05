@@ -181,10 +181,12 @@ def run_acceptance(full_suite: bool = False) -> dict:
 
 from harness_common import utc_now_z as utc_now  # noqa: E402
 
+import runtime_switches  # noqa: E402
+
 KUNGLAO_ROOT = Path("/kunglao") if Path("/kunglao").exists() else Path(__file__).resolve().parent.parent
-OUT_DIR = Path(os.environ.get("KUNGLAO_OUT", "/out"))
-TIMEOUT_S = int(os.environ.get("KUNGLAO_TIMEOUT", "1800"))
-MUTATION_BUDGET = int(os.environ.get("KUNGLAO_MUTATION_BUDGET", "50"))
+OUT_DIR = Path(runtime_switches.get_str("KUNGLAO_OUT"))
+TIMEOUT_S = runtime_switches.get_int("KUNGLAO_TIMEOUT")
+MUTATION_BUDGET = runtime_switches.get_int("KUNGLAO_MUTATION_BUDGET")
 
 CATEGORIES = ("smoke", "complexity", "regression", "integration", "fault", "mutation")
 

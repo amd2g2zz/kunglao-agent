@@ -399,11 +399,22 @@ def _gate9_discovery_face(verbose: bool = True) -> bool:
 def _gate10_liveness(verbose: bool = True) -> bool:
     """Liveness — Gate 10 (issue #772). Runs devkit/liveness_gate.py in
     --ledger mode against the workspace named by KUNGLAO_LIVENESS_WS.
-    Without a workspace the gate SKIPs (there is nothing to observe —
-    a silent skip is exactly what this gate exists to prevent, so the
-    skip is printed loudly and the release train must run --smoke)."""
-    import os
-    ws = os.environ.get("KUNGLAO_LIVENESS_WS", "")
+
+    The switch is declared in scripts/runtime_switches.py (protection
+    face, default empty). Two explicit paths, both tested:
+
+      * unset/empty — the documented LOCAL SKIP: there is nothing to
+        observe, so the gate prints the skip loudly and returns True;
+        the release train MUST run devkit/liveness_gate.py --smoke
+        instead. This is a convenience posture, not a silent pass.
+      * set-but-invalid (missing/unreadable workspace) — the gate
+        FAILS: liveness_gate.py exits nonzero and this function returns
+        False."""
+    scripts_dir = str(REPO_ROOT / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import runtime_switches
+    ws = runtime_switches.get_str("KUNGLAO_LIVENESS_WS")
     if not ws:
         print("[gate10] SKIP: KUNGLAO_LIVENESS_WS not set — the release "
               "train MUST run devkit/liveness_gate.py --smoke instead")

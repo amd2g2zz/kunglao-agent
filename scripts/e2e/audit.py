@@ -98,6 +98,7 @@ import os
 from pathlib import Path
 
 import kunglao_log
+import runtime_switches
 from harness_common import utc_now_z as _utc_now  # single source (Family F)
 
 #: the stream file (under <ws>/runs/logs/, sibling of the kunglao day files)
@@ -220,7 +221,7 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "matched_rule": None,
         "trace_id": str(trace_id) if trace_id else None,
         "version": str(version) if version else None,
-        "channel": os.environ.get("KUNGLAO_CHANNEL", "local").lower(),
+        "channel": runtime_switches.get_str("KUNGLAO_CHANNEL").lower(),
     }
     # the auto-documented null set (kunglao_log.AUTO_NULL_FIELDS) — same
     # honesty rule: a normally-required null is explained in null_reasons

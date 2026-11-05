@@ -19,7 +19,6 @@ from __future__ import annotations
 # the canonical kunglao_log.warn.
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from kunglao_log import warn
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,7 +61,9 @@ def report_block(dec: ChannelDecision) -> dict:
 # ---------- capability probes (fail-open; design D3) ----------
 
 def _env_get(name: str, default: str = "") -> str:
-    return os.environ.get(name, default).strip()
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    value = runtime_switches.raw(name)
+    return (value if value is not None else default).strip()
 
 
 def _parse_port(raw: str, default: int) -> int:

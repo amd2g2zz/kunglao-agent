@@ -50,7 +50,6 @@ from __future__ import annotations
 from kunglao_log import warn
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -95,23 +94,13 @@ _CRASH_LINE = "[{ts}] wait: crashed ({kind}: {exc}) | status: failed"
 
 
 def _poll_interval_s() -> float:
-    raw = os.environ.get(POLL_ENV)
-    if raw is None:
-        return float(WAIT_POLL_INTERVAL_S)
-    try:
-        return max(0.05, float(raw))
-    except (TypeError, ValueError):
-        return float(WAIT_POLL_INTERVAL_S)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return max(0.05, runtime_switches.get_float(POLL_ENV))
 
 
 def _max_rounds() -> int:
-    raw = os.environ.get(ROUNDS_ENV)
-    if raw is None:
-        return int(WAIT_MAX_ROUNDS)
-    try:
-        return max(1, int(raw))
-    except (TypeError, ValueError):
-        return int(WAIT_MAX_ROUNDS)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return max(1, runtime_switches.get_int(ROUNDS_ENV))
 
 
 def _append_status_line(worker: str, line: str) -> None:

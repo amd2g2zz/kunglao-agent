@@ -31,7 +31,6 @@ stdlib only.
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 
 import yaml
@@ -48,7 +47,8 @@ EVAL_ROOT = ROOT / "eval"
 
 def eval_root() -> Path:
     """THE corpus-root face: KUNGLAO_EVAL_ROOT wins, else repo eval/."""
-    override = os.environ.get("KUNGLAO_EVAL_ROOT", "")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    override = runtime_switches.get_str("KUNGLAO_EVAL_ROOT")
     return Path(override) if override else EVAL_ROOT
 
 # ---- versioning ----------------------------------------------------------

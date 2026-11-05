@@ -50,7 +50,6 @@ except NameError as exc:
     _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -125,7 +124,8 @@ def repair_vm(ws: Path, state: dict) -> dict:
     # vmrun list gives paths, not IPs; the probe side stays env-driven — a
     # host that answers on both ports is the live lease. Re-probe the
     # configured host first, then keep the honest result either way.
-    host = os.environ.get("KUNGLAO_VM_HOST", "")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    host = runtime_switches.get_str("KUNGLAO_VM_HOST")
     results = []
     ok = False
     if host:
