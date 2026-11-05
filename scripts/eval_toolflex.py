@@ -725,9 +725,12 @@ def _chain_env(tdir: Path, env: dict | None) -> dict:
     ABSOLUTE: a relative PATH entry would not resolve once the tool
     subprocess runs under a different cwd."""
     base = dict(os.environ) if env is None else dict(env)
-    toolbox = str(Path(base.get("TF_TOOLBOX")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    toolbox_value = runtime_switches.raw("TF_TOOLBOX", mapping=base)
+    toolbox = str(Path(toolbox_value
                        or (Path(tdir) / "toolbox")).resolve())
-    old = [e for e in base.get("PATH", "").split(os.pathsep)
+    path_value = runtime_switches.raw("PATH", mapping=base) or ""
+    old = [e for e in path_value.split(os.pathsep)
            if e and Path(e).resolve() != Path(toolbox)]
     head = 0
     while head < len(old) and (Path(old[head]) / sh.SHADOW_MARKER_FILE

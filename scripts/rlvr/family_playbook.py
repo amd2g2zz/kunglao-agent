@@ -51,7 +51,6 @@ stdlib only.
 """
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,9 +106,10 @@ class PlaybookDoc:
 
 # ---- the operator-root face -----------------------------------------------
 def playbook_root() -> Path:
-    """THE playbook-root face: KUNGLAO_PLAYBOOK_ROOT wins, else the
+    """THE playbook-root face: the declared root override wins, else the
     repo-relative operator-local default (never a tracked path)."""
-    override = os.environ.get(ENV_PLAYBOOK_ROOT, "")
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    override = runtime_switches.get_str(ENV_PLAYBOOK_ROOT)
     return Path(override) if override else (
         ROOT / "experiments" / "blocked-path-units" / "playbooks")
 

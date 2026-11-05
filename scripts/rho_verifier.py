@@ -92,11 +92,13 @@ def _mission_level(ws):
 
 def get_backend(env=None):
     """Pluggable backend selection: deterministic by default; 'llm' only
-    with explicit endpoint env; anything else falls back deterministically
-    (tests stay green with zero API)."""
+    with an explicit endpoint switch; anything else falls back
+    deterministically (tests stay green with zero API)."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
     env = os.environ if env is None else env
-    if str(env.get(ENV_BACKEND, "")).strip().lower() == "llm" and \
-            os.environ.get("KUNGLAO_RHO_ENDPOINT"):
+    if str(runtime_switches.raw(ENV_BACKEND, mapping=env) or "").strip(
+    ).lower() == "llm" and \
+            runtime_switches.raw("KUNGLAO_RHO_ENDPOINT", mapping=env):
         try:
             from rho_llm_backend import LlmBackend  # optional module
             return LlmBackend()

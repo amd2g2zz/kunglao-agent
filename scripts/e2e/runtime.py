@@ -79,10 +79,10 @@ def resolve_task_dir(repo: Path, unit: str) -> Path:
     refuse. The corpus honors KUNGLAO_EVAL_ROOT (the operator-local
     corpus face: eval data is intermediate-process material; the
     blocked-path delta runs outside the repo tree)."""
-    import os  # noqa: PLC0415
+    import runtime_switches  # noqa: PLC0415
     import yaml  # noqa: PLC0415
 
-    override = os.environ.get("KUNGLAO_EVAL_ROOT", "")
+    override = runtime_switches.get_str("KUNGLAO_EVAL_ROOT")
     base = Path(override) / "v1/tasks" if override \
         else Path(repo) / "eval/v1/tasks"
     matches = sorted(p for p in base.glob(f"*/{unit}") if p.is_dir())

@@ -208,6 +208,7 @@ EMIT_ACTIONS = [
     "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
     "disposition_recorded",  # the one evidence-gated disposition row per episode (rlvr/disposition.write_row)
+    "disposition_signal",  # the bounded reward-face choice signal per episode (rlvr/disposition_reward.settle_disposition)
     "distill_attempt",    # online distillation: a distillation act dispatched (phase=dispatched) or the production closure's trigger signal (phase=triggered)
     "distill_result",     # online distillation: per-attempt validation + sample-as-oracle outcome (rejections and phase=refused budget refusals included)
     "distill_rollout",    # issue-365 the distillation engine: one `distill-rollout/1` attempt or consumption settlement row (item/strategy/score/product/reward in the detail)
@@ -339,6 +340,7 @@ EMIT_ACTIONS = [
     "stale_plan_on_new_evidence",
     "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
+    "strategic_action_recorded",  # the recorded FIGHT/BYPASS/INVEST route choice + propensity (rlvr/strategic_action)
     "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "task_terminal_settlement",

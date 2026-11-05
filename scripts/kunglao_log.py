@@ -395,6 +395,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import runtime_switches
+
 RC_USAGE = 64  # bad invocation (missing workspace / N < 1) — fail fast
 DEFAULT_TAIL = 20
 
@@ -818,7 +820,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "trace_id": trace_id,
         "version": str(version) if version else _repo_sha(),
         "channel": (str(channel).lower() if channel
-                    else os.environ.get("KUNGLAO_CHANNEL", "local").lower()),
+                    else runtime_switches.get_str(
+                        "KUNGLAO_CHANNEL").lower()),
     }
     for f in AUTO_NULL_FIELDS:
         if event[f] is None and f not in reasons:

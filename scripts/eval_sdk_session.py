@@ -127,10 +127,11 @@ def make_post_tool_use_hook(state: SessionState):
 
 
 def build_options(state: SessionState) -> sdk.ClaudeAgentOptions:
-    plugin_dir = os.environ.get(
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    plugin_dir = runtime_switches.get_str(
         "KUNGLAO_SDK_PLUGIN_DIR") or str(REPO_ROOT)
-    budget = os.environ.get("KUNGLAO_SDK_BUDGET_USD") or ""
-    max_turns = os.environ.get("KUNGLAO_SDK_MAX_TURNS") or ""
+    budget = runtime_switches.get_str("KUNGLAO_SDK_BUDGET_USD") or ""
+    max_turns = runtime_switches.get_str("KUNGLAO_SDK_MAX_TURNS") or ""
     return sdk.ClaudeAgentOptions(
         cwd=os.getcwd(),
         permission_mode="bypassPermissions",
@@ -183,8 +184,9 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: eval_sdk_session.py '<prompt>'", file=sys.stderr)
         return 2
     prompt = args[-1]
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
     state = SessionState(
-        solo_cap_s=float(os.environ.get("KUNGLAO_SOLO_CAP_S") or 0))
+        solo_cap_s=runtime_switches.get_float("KUNGLAO_SOLO_CAP_S"))
     options = build_options(state)
     try:
         result_text, cost = asyncio.run(run_session(prompt, options, state))

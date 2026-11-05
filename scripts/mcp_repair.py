@@ -79,7 +79,8 @@ def _resolve_command(command: str) -> tuple[str | None, str]:
     hit = shutil.which(command)
     if hit:
         detail = "PATH-resolved"
-        venv = os.environ.get("VIRTUAL_ENV")
+        import runtime_switches  # noqa: PLC0415 — lazy leaf import
+        venv = runtime_switches.get_str("VIRTUAL_ENV") or None
         if venv and hit.startswith(venv + os.sep):
             detail += f" (inside foreign VIRTUAL_ENV={venv} — pollution-suspect)"
         return hit, detail

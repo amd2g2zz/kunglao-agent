@@ -25,11 +25,7 @@ import pytest
 
 from recall_inject import evaluate  # pytest.ini pythonpath = . hooks scripts
 
-# ---- issue 771 migration: recall is DEFAULT-OFF (KUNGLAO_RECALL=1 opt-in) ----
-# These pre-switch-era pins predate the default-off change and assert the old always-inject
-# behavior; they are migrated to opt-in fixtures as ONE mechanical batch
-# (issue issue 771). Pins whose SUBJECT was the retired category/tier query
-# mapping are marked skip and listed in the PR body.
+# ---- supply default ON: the ablation face is the exact "0" ----
 
 
 @pytest.fixture(autouse=True)
@@ -650,16 +646,17 @@ def test_recall_disable_env_zero_short_circuits(tmp_path, monkeypatch):
     assert rc == 0 and stderr == "" and ctx is None
 
 
-def test_recall_disable_env_other_values_leave_recall_on(tmp_path, monkeypatch):
-    """issue 771 inverted semantics: recall is DEFAULT-OFF — only the exact "1"
-    arms the face; unset / "0" / any other value stays silent. A fresh
+def test_recall_switch_declared_values(tmp_path, monkeypatch):
+    """Supply default: unset/empty leaves recall ON; the declared falsy
+    values ("0"/"false"/"off") ablate it; "1" keeps it armed. A fresh
     workspace per value — the dispatch-scoped dedup would silence a
     repeat inject of unchanged content for the same worker."""
     import recall_inject
-    for value, expect_on in (("0", False), ("", False), ("false", False),
-                             ("off", False), ("1", True)):
-        ws = _kunglao_ws(tmp_path / f"ws-{value or 'unset'}")
-        if value == "":
+    for idx, (value, expect_on) in enumerate((
+            (None, True), ("", True), ("1", True),
+            ("0", False), ("false", False), ("off", False))):
+        ws = _kunglao_ws(tmp_path / f"ws-{idx}")
+        if value is None:
             monkeypatch.delenv(recall_inject.RECALL_DISABLE_ENV,
                                raising=False)
         else:

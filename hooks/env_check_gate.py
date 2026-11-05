@@ -69,6 +69,7 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 # position-stable (an existing session entry is never reordered).
 ensure_scripts_path()
 import init_state  # noqa: E402
+import runtime_switches  # noqa: E402
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/empty pass
 # #757: freshness window for the .env-check.json third check (must mirror the
@@ -180,7 +181,7 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
         return 0, "", None
 
     # Check 1: agent-teams flag (existing check, unchanged)
-    flag_val = environ.get(FLAG_NAME)
+    flag_val = runtime_switches.raw(FLAG_NAME, mapping=environ)
     if _is_truthy(flag_val):
         _emit_reject(ws, f"env_check_gate: {FLAG_NAME} set ({flag_val}) — teammate-polluted session")
         return (

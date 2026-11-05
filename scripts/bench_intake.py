@@ -154,10 +154,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     if args.check_safety:
-        import os
+        import runtime_switches  # noqa: PLC0415 — lazy leaf import
         report = check_safety(Path(args.check_safety),
-                              vm_snapshot=os.environ.get(
-                                  "KUNGLAO_BENCH_VM_SNAPSHOT"))
+                              vm_snapshot=runtime_switches.get_str(
+                                  "KUNGLAO_BENCH_VM_SNAPSHOT") or None)
         if args.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

@@ -101,6 +101,7 @@ VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
 import lane_spec  # noqa: E402  (issue 208: the lane vocabulary single source)
+import runtime_switches  # noqa: E402  (the switch registry)
 from report_render import (  # noqa: E402  (render face — one definition)
     ANDROID_SERVER_PORT,
     FRIDA_PORT,
@@ -112,7 +113,8 @@ from report_render import (  # noqa: E402  (render face — one definition)
     parse_port as _parse_port,
 )
 
-VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
+VM_SHELL_PORT = _parse_port(
+    runtime_switches.get_str("KUNGLAO_VM_SHELL_PORT"), 9876)
 
 # #698 dynamic channel: KUNGLAO_CHANNEL picks the agent's execution control
 # plane for dynamic debugging (five first-class, environment-equivalent
@@ -420,7 +422,7 @@ def _tcp_connect(host: str, port: int, timeout: int = 2) -> tuple[bool, str]:
 
 
 def _env_get(name: str) -> str | None:
-    return os.environ.get(name)
+    return runtime_switches.raw(name)
 
 
 def _file_exists(path: Path | None) -> bool:
@@ -488,7 +490,7 @@ def _vmrun_inventory(vmrun: str) -> list[VMInventoryEntry]:
     for vmx in running:
         entries[vmx] = VMInventoryEntry(name=Path(vmx).stem, vmx=vmx,
                                         running=True)
-    inv = Path(os.environ.get("APPDATA", "")) / "VMware" / "inventory.vmls"
+    inv = Path(runtime_switches.get_str("APPDATA")) / "VMware" / "inventory.vmls"
     if inv.is_file():
         try:
             text = inv.read_text(encoding="utf-8", errors="replace")

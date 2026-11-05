@@ -88,7 +88,8 @@ def prepend_path(shadow: Path, env: dict | None = None) -> dict:
     process environment (the arm-agnostic wiring face: runners that pass
     no env= override see exactly this)."""
     base = dict(os.environ) if env is None else dict(env)
-    old = base.get("PATH", "")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    old = runtime_switches.raw("PATH", mapping=base) or ""
     base["PATH"] = (str(shadow) + os.pathsep + old) if old else str(shadow)
     return base
 
