@@ -300,6 +300,16 @@ the one-line pointer (name — the docstring's opening line):
   unified TELEMETRY ledger, and emits the registered
   `disposition_recorded` event. Re-writing the identical row is idempotent;
   a divergent rewrite is refused.
+- `disposition_measure` — rlvr/disposition_measure.py — the read-only
+  measurement face over the disposition rows + telemetry mirror: the declared
+  denominator table (capability = SOLVED + SURRENDER, censoring rate over all
+  valid rows, exhausted -> `capability-gap/1` carrying the route-ledger ref,
+  OUT_OF_SCOPE / INFRA / FAILED reported separately), strategy-learning
+  inputs excluding CENSORED_ENV, process metrics (steps / cost / dead-end
+  rate / route-pruning quality) joined per run and per arm only where the
+  sources exist (explicit None + coverage otherwise), and `learning_claim`
+  refusing single-episode verdicts in favour of pre/post or ablation deltas
+  with uncertainty.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.

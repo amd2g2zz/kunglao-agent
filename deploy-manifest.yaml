@@ -1363,7 +1363,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 73770b89736b4169efacea1870500bc09dadca52b30a6a63ed97a43c089b1583
+    sha256: ac2a04340a98f83f6ffe341774c0cc549bdaf27ab8f134c46f5f7b8096166545
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1416,6 +1416,10 @@ files:
     dest: .claude/scripts/rlvr/disposition.py
     kind: scaffold
     sha256: d6e7f25927ba7be771961deeaafd586c6aaf0905a3475fade2624f57d9246cd9
+  - src: scripts/rlvr/disposition_measure.py
+    dest: .claude/scripts/rlvr/disposition_measure.py
+    kind: scaffold
+    sha256: 49f3803831b39e3ed8d273f478437aaa299b0061f0e9594bbba447b1e67019bb
   - src: scripts/rlvr/distill_dgate.py
     dest: .claude/scripts/rlvr/distill_dgate.py
     kind: scaffold
