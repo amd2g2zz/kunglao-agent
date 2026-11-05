@@ -18,6 +18,16 @@ kinds share ONE accounting system. This module owns the ledger:
      "reward": null,                     # null until settled
      "settlement": null | {"reward", "band", "rule_id", "evidence_refs"}}
 
+The ``reward`` field's UNIT is declared per kind:
+``REWARD_RAIL_BOUNDED`` kinds carry a [0,1] settlement scalar;
+``round_credit`` (``REWARD_RAIL_PROVENANCE``) carries a provenance sum in
+credit units — its rows also echo ``reward_rail: provenance`` and
+``credit_units`` in the settlement; ``REWARD_RAIL_SIGNED`` kinds
+(mainline ΔV, review-bridge attribution) carry an unbounded signed real.
+``reward_rail_of(row)`` / ``reward_range_of(row)`` are the schema read
+face; consumers that expect [0,1] must exclude + report the other rails
+(see ``rlvr.reward``).
+
 Append-only semantics (the wal-protocol posture): rows are NEVER rewritten
 in place. A settlement is an AMENDMENT row (same rollout_id); the read face
 ``fold`` merges identity (first row), signals (last non-empty), and
@@ -71,18 +81,80 @@ ROLLOUT_KINDS: dict[str, str] = {
     KIND_HYPOTHESIS: "hypothesis resolution/churn rollout — the Φ-tree "
                      "economy (#796)",
 }
+
+# --- reward units per row kind --------------------------------------------
+#
+# The ``reward`` field is NOT one unit across the ledger's kinds:
+#   - BOUNDED kinds (task / distill / hypothesis settlement rows) carry a
+#     [0,1] settlement scalar — the rail ``scalar.clamp_credit`` /
+#     ``rail_of`` enforce on the settlement path;
+#   - ``round_credit`` rows carry a PROVENANCE SUM in credit units
+#     (2 cited artifacts + 1 demotion class = 2.01). It is deliberately
+#     unclamped: clamping would erase the difference between citing one
+#     and two artifacts;
+#   - ``mainline_decision`` rows carry a SIGNED ΔV (the situation-stream
+#     replay face, verification_ladder) — a real, not a reward scalar.
+# This registry IS the ``rollout-ledger/1`` schema declaration. Consumers
+# that expect a [0,1] reward call ``reward_rail_of(row)`` and EXCLUDE (and
+# report) every row on any other rail instead of reading its value as a
+# reward (the prior feed is the first such consumer, reward.py).
+# The rule ids for these kinds live in reward-rules.yaml ``reward_units``.
+REWARD_RAIL_BOUNDED = "bounded"
+REWARD_RAIL_PROVENANCE = "provenance"
+REWARD_RAIL_SIGNED = "signed"
+REWARD_RANGE_BOUNDED = (0.0, 1.0)
+#: rail -> declared range (None = unbounded by design)
+REWARD_RAILS: dict[str, tuple[float, float] | None] = {
+    REWARD_RAIL_BOUNDED: REWARD_RANGE_BOUNDED,
+    REWARD_RAIL_PROVENANCE: None,
+    REWARD_RAIL_SIGNED: None,
+}
+#: kind -> rail. Kinds absent here read as bounded (the register default);
+#: a provenance kind MUST register itself with the provenance rail.
+KIND_REWARD_RAILS: dict[str, str] = {
+    KIND_TASK: REWARD_RAIL_BOUNDED,
+    KIND_SELF_DISTILL: REWARD_RAIL_BOUNDED,
+    KIND_HYBRID_DISTILL: REWARD_RAIL_BOUNDED,
+    KIND_HYPOTHESIS: REWARD_RAIL_BOUNDED,
+}
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from kunglao_log import warn  # noqa: E402 — post-constants, matches the shim layout
 
 
-def register_kind(kind: str, note: str = "") -> bool:
+def register_kind(kind: str, note: str = "",
+                  rail: str = REWARD_RAIL_BOUNDED) -> bool:
     """Open-enum registration. Returns False (no-op) when already
-    registered — re-registration is idempotent, not an error."""
+    registered — re-registration is idempotent, not an error (and never
+    re-writes the rail: a later bare call cannot demote a provenance
+    kind back to bounded). An unknown rail name is a caller bug —
+    ValueError, the enum never invents a unit."""
     kind = str(kind or "").strip()
     if not kind or kind in ROLLOUT_KINDS:
         return False
+    if rail not in REWARD_RAILS:
+        raise ValueError(f"register_kind: unknown reward rail {rail!r}")
     ROLLOUT_KINDS[kind] = note or "(unannotated)"
+    KIND_REWARD_RAILS[kind] = rail
     return True
+
+
+def reward_rail_of(row_or_kind) -> str:
+    """The declared reward rail of one ledger row (mapping) or kind name.
+    The KIND registry is authoritative — a settlement's
+    ``reward_rail`` marker is an audit echo, lint-checked for agreement,
+    never a second source of truth. An unknown kind reads bounded (the
+    register default)."""
+    kind = (row_or_kind.get("kind") if isinstance(row_or_kind, dict)
+            else row_or_kind)
+    return KIND_REWARD_RAILS.get(str(kind or "").strip(),
+                                 REWARD_RAIL_BOUNDED)
+
+
+def reward_range_of(row_or_kind) -> tuple[float, float] | None:
+    """The declared inclusive range of the row's reward value: (0.0,
+    1.0) on the bounded rail; None on the provenance rail (an unclamped
+    sum in credit units — not a reward)."""
+    return REWARD_RAILS[reward_rail_of(row_or_kind)]
 
 
 def _kind_names() -> tuple[str, ...]:
@@ -140,6 +212,52 @@ def _lint_signals(row: dict, errors: list[str]) -> None:
                 errors.append(f"signals[{i}]: missing {field}")
 
 
+def _lint_reward_rail(row: dict, errors: list[str]) -> None:
+    """Reward-unit lint: the settlement value must agree
+    with the KIND's declared rail. Bounded kinds carry a numeric [0,1]
+    reward; provenance kinds carry an unbounded sum, and when the
+    additive ``credit_units`` audit field is present it must equal the
+    settled value. A ``reward_rail`` marker that disagrees with the kind
+    is a schema error (the marker echoes, it never overrides)."""
+    st = row["settlement"]
+    if st is None or not isinstance(st, dict):
+        # a malformed settlement was already named by _lint_settlement;
+        # the read path stays fail-open on dirty rows (never raise here).
+        return
+    kind = str(row["kind"])
+    rail = reward_rail_of(kind)
+    marker = st.get("reward_rail")
+    if marker is not None and marker != rail:
+        errors.append(
+            f"settlement.reward_rail {marker!r} != the {kind!r} kind's "
+            f"{rail!r} rail")
+    reward = st.get("reward")
+    if rail == REWARD_RAIL_BOUNDED:
+        lo, hi = REWARD_RANGE_BOUNDED
+        for face, value in (("reward", row.get("reward")),
+                            ("settlement.reward", reward)):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value,
+                                                         (int, float)):
+                errors.append(f"{face}: number on the bounded reward rail")
+            elif not lo <= float(value) <= hi:
+                errors.append(
+                    f"{face}: {value!r} outside the [0,1] bounded reward "
+                    f"rail (kind={kind})")
+        return
+    units = st.get("credit_units")
+    if units is None:
+        return  # legacy row: the kind declaration still carries the unit
+    if isinstance(units, bool) or not isinstance(units, (int, float)):
+        errors.append("settlement.credit_units: number")
+    elif isinstance(reward, (int, float)) and not isinstance(reward, bool) \
+            and float(units) != float(reward):
+        errors.append(
+            f"settlement.credit_units {units!r} != settlement.reward "
+            f"{reward!r} (the provenance sum IS the settled value)")
+
+
 def row_schema_lint(row: dict) -> list[str]:
     """Schema errors for one row ([] = clean). Pure; used by tests and by
     append-time validation."""
@@ -154,6 +272,7 @@ def row_schema_lint(row: dict) -> list[str]:
     if row["reward"] is not None and not isinstance(row["reward"], (int, float)):
         errors.append("reward: null or number")
     _lint_settlement(row, errors)
+    _lint_reward_rail(row, errors)
     _lint_signals(row, errors)
     return errors
 
@@ -409,6 +528,18 @@ def settle(ws, rollout_id: str, settlement: dict,
         if current_core == core:
             return {"appended": False, "reason": "duplicate: already settled"}
     st.setdefault("settled_ts", ts or _utc_now())
+    # the write boundary lints BEFORE the append — a bounded
+    # row at 2.01 would be rejected by the read face anyway, and a
+    # write-then-hide is exactly the silent-unit bug the contract kills.
+    candidate = {"rollout_id": rollout_id,
+                 "kind": str(identity.get("kind")),
+                 "anchor": str(identity.get("anchor")),
+                 "ts": str(identity.get("ts")), "signals": [],
+                 "reward": st.get("reward"), "settlement": st}
+    errors = row_schema_lint(candidate)
+    if errors:
+        return {"appended": False,
+                "reason": "schema: " + "; ".join(errors)}
     ok = _locked_append(ws, _row_bytes(
         rollout_id, str(identity.get("kind")),
         str(identity.get("anchor")), str(identity.get("ts")),

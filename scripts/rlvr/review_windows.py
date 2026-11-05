@@ -56,9 +56,13 @@ KIND_STRATEGY = "strategy_memory"
 SOURCE = "review_windows/1"
 
 ledger.register_kind(KIND_METHOD,
-                     "step-reward attribution rows (review bridge, P3)")
+                     "step-reward attribution rows (review bridge, P3)",
+                     # attribution carriers, signed step reward
+                     rail=ledger.REWARD_RAIL_SIGNED)
 ledger.register_kind(KIND_STRATEGY,
-                     "mission-reward attribution rows (review bridge, P3)")
+                     "mission-reward attribution rows (review bridge, P3)",
+                     # attribution carriers, signed mission reward
+                     rail=ledger.REWARD_RAIL_SIGNED)
 
 
 class AttributionRefused(ValueError):
