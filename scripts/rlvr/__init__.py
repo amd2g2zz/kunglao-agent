@@ -70,6 +70,7 @@ from . import refutation_fold
 from . import reward
 from . import reward_signal
 from . import review_windows
+from . import rollout_timer
 from . import scalar
 from . import settlement_scorer
 from . import settlement_wire
@@ -142,6 +143,7 @@ __all__ = [
     "reward",
     "reward_signal",
     "review_windows",
+    "rollout_timer",
     "scalar",
     "settlement_wire",
     "source_reliability",
