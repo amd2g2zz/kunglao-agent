@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 72a19104eb1b89d4448bd96472e86b09403a49a0fcf39ad92222e77f73df44c1
+    sha256: f293dc67031ccbb818b17fb6a7b4a10b260618f35e588d541403fa620f3d0d9d
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1547,7 +1547,7 @@ files:
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
-    sha256: 2279bd063b167a9bce25154bdbb23b62d5314d052ded11a984815e5e46cb3a74
+    sha256: b7c7b0a462fc52fe2ca27101e6a0ad6b69a239f1b469d5f866001119592d1091
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
@@ -1579,7 +1579,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: dbe2a7e3ba2c80855667f47f3625778c2df11742d2099436a692e5e9ce89f495
+    sha256: 1babd49f2979d4a480c1bc75f4ead0a3300a80846476e8e554ff72957d0501f3
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1655,7 +1655,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 7720848e598f74ec1ab537084da79c7a0977265f520cee7779074c0795cde253
+    sha256: 3c855d8293c32e4d400b6d9711574ba2cbb8e79876c6754a0a2b0afe1a0f9238
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold

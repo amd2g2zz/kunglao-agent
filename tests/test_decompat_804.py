@@ -274,14 +274,18 @@ def _record_usage_merged(ws, **kw):
 def test_dispatch_row_carries_the_usage_columns(tmp_path):
     """R1 (additive): the dispatch observation row carries the usage-
     ledger columns — one substrate per dispatch, not two parallel write
-    faces for the same event."""
+    faces for the same event. The draw is another family here, so the
+    reconciliation is an explicit override: the bare propensity stays
+    empty and the override's own share is labelled."""
     row = _record_usage_merged(
         tmp_path, tier=2, tools=["grep", "bash"],
         sampler_view={"sampled_family": "dynamic-trace", "propensity": 0.4,
                       "prior_source": "history"})
     assert row["tier"] == 2
     assert row["tools"] == ["grep", "bash"]
-    assert row["propensity"] == 0.4
+    assert row["propensity"] is None
+    assert row["family_override"] is True
+    assert row["override_propensity"] == 0.4
     assert row["sampled_family"] == "dynamic-trace"
     assert row["prior_source"] == "history"
 
