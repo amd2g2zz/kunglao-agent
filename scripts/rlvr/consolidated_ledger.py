@@ -115,9 +115,11 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",),
     # the one evidence-gated disposition row per episode (rlvr.disposition
-    # mirrors it here, so a dead writer must read 0, never be absent) and
-    # its bounded reward-face choice signal (rlvr.disposition_reward)
-    "telemetry": ("disposition/1", "disposition-signal/1"),
+    # mirrors it here, so a dead writer must read 0, never be absent), its
+    # bounded reward-face choice signal (rlvr.disposition_reward), and the
+    # per-rollout deadline timer with its coefficient audit row
+    "telemetry": ("disposition/1", "disposition-signal/1",
+                  "rollout-timer/1", "rollout-budget/1"),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
