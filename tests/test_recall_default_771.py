@@ -6,9 +6,9 @@ the dispatch's question keywords — no WEB_QUERIES / GO_SIGNALS category
 default expansion, no tier fallback), SECTION-LOCATED (every injected item
 carries `path:L<start>~L<end>` computed FRESH at query time by anchoring on
 headings — never a stale stored offset), BUDGET-CAPPED (<= 3 files, <= 5
-items, <= 1200 chars per injection) and DEFAULT-OFF (KUNGLAO_RECALL=1 opt-in;
-unset stays silent; the demand gate — a question with extractable keywords —
-opens the injection face).
+items, <= 1200 chars per injection) and SUPPLY-DEFAULT (recall is a supply
+face: unset means ON; an arm declares the exact "0" ablation; the demand
+gate — a question with extractable keywords — opens the injection face).
 """
 import re
 from pathlib import Path
@@ -47,21 +47,22 @@ VM_CLAIM = _v1("C-101", 3, "observe the sample dynamic behavior in the VM "
                "with x64dbg breakpoints and frida injection")
 
 
-# ---- default OFF (issue 771: the default face honors the H2H receipt) ----
+# ---- supply default ON (an arm declares the exact "0" ablation) ----
 
 
-def test_default_off_without_opt_in(tmp_path):
-    """KUNGLAO_RECALL unset -> ZERO injection on a claim dispatch (rc 0,
-    silent). The default face is OFF until the scorer earns its cost back."""
+def test_default_on_without_a_declaration(tmp_path, monkeypatch):
+    """KUNGLAO_RECALL unset -> recall injects on a claim dispatch: the
+    supply face defaults ON; silence must not starve the rollout."""
+    monkeypatch.delenv("KUNGLAO_RECALL", raising=False)
     ws = _kunglao_ws(tmp_path)
     rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM),
                                recall_runner=lambda q: (
                                    0, "re-library/a.md | a | b | c"))
-    assert rc == 0 and stderr == "" and ctx is None
+    assert rc == 0 and stderr == "" and ctx is not None
 
 
 def test_opt_in_env_arms_recall(tmp_path, monkeypatch):
-    """Only the exact "1" arms the face."""
+    """The explicit "1" declaration keeps the face armed."""
     monkeypatch.setenv(recall_inject.RECALL_DISABLE_ENV, "1")
     ws = _kunglao_ws(tmp_path)
     rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM),
@@ -70,8 +71,8 @@ def test_opt_in_env_arms_recall(tmp_path, monkeypatch):
     assert rc == 0 and stderr == "" and ctx is not None
 
 
-def test_legacy_off_value_stays_off(tmp_path, monkeypatch):
-    """Under default-off semantics "0" is off too (it is simply not "1")."""
+def test_declared_zero_ablates(tmp_path, monkeypatch):
+    """The exact "0" declaration is the ablation face (the no-L1 arm)."""
     monkeypatch.setenv(recall_inject.RECALL_DISABLE_ENV, "0")
     ws = _kunglao_ws(tmp_path)
     rc, _, ctx = evaluate(_payload(ws, VM_CLAIM),

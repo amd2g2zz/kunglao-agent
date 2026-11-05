@@ -34,8 +34,11 @@ try:
     from _path_hygiene import ensure_scripts_path as _esp801
     _esp801()
     from kunglao_log import warn
+    import runtime_switches as _runtime_switches
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     import sys
+
+    _runtime_switches = None
 
     def warn(op: str, reason: str) -> None:
         print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
@@ -80,10 +83,12 @@ BREAKER_WORD = "warn_breaker_tripped"
 def _breaker_action() -> str:
     """The ownership action for a tripped family. Default circuit-break
     (suppress further same-family sidecar rows); `escalate` and
-    `downgrade` are explicit operator choices via env — all three persist
-    in the state file, so the choice is always observable."""
-    import os
-    val = os.environ.get(BREAKER_ACTION_ENV, "")
+    `downgrade` are explicit operator choices via the declared switch —
+    all three persist in the state file, so the choice is always
+    observable."""
+    if _runtime_switches is None:
+        return "circuit-break"  # partial-deploy lifeline
+    val = _runtime_switches.get_str(BREAKER_ACTION_ENV)
     return val if val in BREAKER_ACTIONS else "circuit-break"
 
 

@@ -24,11 +24,11 @@ composes THIS) — the dependency arrow points one way.
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 import mcp_probe  # noqa: E402  (same dir, sys.path injected by the importer;
                   #  derived mcp:<name> FIXES entries come from its manifest)
+import runtime_switches
 
 
 # frida custom port convention — config-driven, default 1337
@@ -44,7 +44,7 @@ def parse_port(raw: str | None, default: int) -> int:
     return value if 1 <= value <= 65535 else default
 
 
-FRIDA_PORT = parse_port(os.environ.get("KUNGLAO_FRIDA_PORT"), 1337)
+FRIDA_PORT = parse_port(runtime_switches.get_str("KUNGLAO_FRIDA_PORT"), 1337)
 ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
 
 

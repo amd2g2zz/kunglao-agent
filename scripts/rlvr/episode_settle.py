@@ -8,7 +8,9 @@ three gates (episode_pool), and the derived views (pool_indexer). This
 module is that chain:
 
     mission terminal -> settle pending rollouts (reward.settle_workspace,
-    THE engine face, called not modified) -> build ONE episode document
+    THE engine face, called not modified) -> settle the persisted episode
+    dispositions' bounded reward signal (disposition_reward.settle_workspace)
+    -> build ONE episode document
     from the workspace's own state (the rollout ledger's committed rows,
     the claim register's outcomes, the cost events) -> stamp the A1
     reward (reward_signal.episode_reward — the float plus the full
@@ -90,10 +92,12 @@ def settle_mission(ws) -> dict:
     claims = _read_register(ws)
     _require_terminal(claims)
     settled = _settle_pending_rollouts(ws)
+    disposition_signals = _settle_disposition_signals(ws)
     anchor = _anchor(claims)
     if episode_pool.episode_path(ws, anchor).is_file():
         return {"episodes_written": 0, "settled": settled["settled"],
-                "by_band": settled["by_band"]}
+                "by_band": settled["by_band"],
+                "disposition_signals": disposition_signals}
     _stamp_trust_mirrors(ws, claims)
     doc = _build_episode(ws, anchor, claims)
     from rlvr import reward_signal  # noqa: PLC0415 — lazy (late facade line)
@@ -105,7 +109,8 @@ def settle_mission(ws) -> dict:
     episode_pool.write_episode(ws, doc, body="")
     derived_views(ws)  # the chain's last link: the views see the episode
     return {"episodes_written": 1, "settled": settled["settled"],
-            "by_band": settled["by_band"]}
+            "by_band": settled["by_band"],
+            "disposition_signals": disposition_signals}
 
 
 def derived_views(ws) -> dict:
@@ -222,6 +227,15 @@ def _settle_pending_rollouts(ws: Path) -> dict:
     out = reward_settlement.settle_workspace(ws)
     return {"settled": int(out.get("settled") or 0),
             "by_band": dict(out.get("by_band") or {})}
+
+
+def _settle_disposition_signals(ws: Path) -> int:
+    """The disposition reward face at the same terminal: every persisted
+    disposition row gets its bounded choice signal (replays skip). A
+    workspace with no disposition rows is unchanged (zero)."""
+    from rlvr import disposition_reward  # noqa: PLC0415 — lazy
+    out = disposition_reward.settle_workspace(ws)
+    return int(out.get("settled") or 0)
 
 
 def _committed_rows(ws: Path) -> list[dict]:

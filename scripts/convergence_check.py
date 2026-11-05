@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -363,15 +362,9 @@ _DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
 def _verify_stale_ticks() -> float:
-    """#342 threshold: env override at decision time (the
-    KUNGLAO_NOOP_BREAKER_N pattern), default from liveness_policy."""
-    raw = os.environ.get("KUNGLAO_VERIFY_STALE_TICKS")
-    if raw is None:
-        return float(_VERIFY_STALE_TICKS_DEFAULT)
-    try:
-        return float(raw)
-    except ValueError:  # a malformed env value keeps the conservative default
-        return float(_VERIFY_STALE_TICKS_DEFAULT)
+    """#342 threshold: the declared switch, default from liveness_policy."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return runtime_switches.get_float("KUNGLAO_VERIFY_STALE_TICKS")
 
 
 def _effective_stale_ticks(workspace: Path) -> float:

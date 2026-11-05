@@ -55,7 +55,6 @@ from __future__ import annotations
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from kunglao_log import warn
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -489,15 +488,10 @@ GATES = {
 # ---------------------------------------------------------------------------
 
 def _budget_s() -> float:
-    raw = os.environ.get(BUDGET_ENV)
-    if raw:
-        try:
-            v = float(raw)
-            if v >= 0:
-                return v
-        except ValueError as exc:
-            warn("_budget_s", f"{type(exc).__name__}: {exc}")
-    return DEFAULT_BUDGET_S
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    declared = runtime_switches.SWITCHES[BUDGET_ENV]
+    value = runtime_switches.get_float(declared.name)
+    return value if value >= 0 else declared.default
 
 
 def next_eligible_for(entry: dict) -> str:

@@ -155,18 +155,24 @@ def test_real_registry_declares_the_five_arms():
 
 def test_real_registry_no_l1_arm_declares_the_recall_switch():
     doc = mx.load_config(REAL_CONFIG)
-    arm = {a["id"]: a for a in mx.config_arms(doc)}["kunglao-warm-no-l1"]
-    assert arm["env"] == {"KUNGLAO_RECALL": "0"}
-    # issue 771: recall is default-OFF — every kunglao loop arm opts in
-    # explicitly (KUNGLAO_RECALL=1); the cc-* arms run no kunglao hooks
-    # and stay undeclared.
+    arms = {a["id"]: a for a in mx.config_arms(doc)}
+    arm_env = arms["kunglao-warm-no-l1"]["env"]
+    assert arm_env["KUNGLAO_RECALL"] == "0"
+    # every arm declares the supply/learning defaults explicitly; the
+    # no-L1 arm is the only loop arm that ablates recall.
     for other in mx.config_arms(doc):
+        env = other.get("env") or {}
+        assert "KUNGLAO_RECALL" in env
+        assert "KUNGLAO_META_RETRIEVAL" in env
+        assert "KUNGLAO_META_VALUE_TABLE" in env
+        assert "KUNGLAO_META_ATTRIBUTION" in env
+        assert "KUNGLAO_META_PLAYBOOK" in env
         if other["id"] == "kunglao-warm-no-l1":
             continue
         if other.get("runner_face") != "loop":
-            assert "KUNGLAO_RECALL" not in (other.get("env") or {})
+            assert env["KUNGLAO_RECALL"] == "0"
         else:
-            assert (other.get("env") or {}).get("KUNGLAO_RECALL") == "1"
+            assert env["KUNGLAO_RECALL"] == "1"
 
 
 def test_real_registry_units_match_the_split_firewall_readonly():

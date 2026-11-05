@@ -65,7 +65,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,26 +126,18 @@ T1_NOTE_KIND = "write_note"
 
 
 def _threshold() -> int:
-    raw = os.environ.get("KUNGLAO_T1_MIN_WRITES")
-    if raw:
-        try:
-            v = int(raw)
-            if v > 0:
-                return v
-        except ValueError as exc:
-            warn("t1_threshold", f"{type(exc).__name__}: {exc}")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    v = runtime_switches.get_int("KUNGLAO_T1_MIN_WRITES")
+    if v > 0:
+        return v
     return T1_ROUND_TURNS_THRESHOLD
 
 
 def _interval_min() -> float:
-    raw = os.environ.get("KUNGLAO_T1_MIN_INTERVAL_MIN")
-    if raw:
-        try:
-            v = float(raw)
-            if v >= 0:
-                return v
-        except ValueError as exc:
-            warn("t1_interval", f"{type(exc).__name__}: {exc}")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    v = runtime_switches.get_float("KUNGLAO_T1_MIN_INTERVAL_MIN")
+    if v >= 0:
+        return v
     return float(T1_MIN_INTERVAL_MIN)
 
 
@@ -322,14 +313,10 @@ def _terminal_statuses() -> frozenset[str]:
 def _stall_min(override: float | None) -> float:
     if override is not None:
         return float(override)
-    raw = os.environ.get("KUNGLAO_T2_STALL_MIN")
-    if raw:
-        try:
-            v = float(raw)
-            if v >= 0:
-                return v
-        except ValueError as exc:
-            warn("t2_stall_min", f"{type(exc).__name__}: {exc}")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    v = runtime_switches.get_float("KUNGLAO_T2_STALL_MIN")
+    if v >= 0:
+        return v
     return T2_STALL_MIN_DEFAULT
 
 

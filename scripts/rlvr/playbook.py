@@ -125,5 +125,5 @@ def compressed_view(ws) -> list[dict]:
 
 def knob_on() -> bool:
     """The component-ablation switch (the fourth of four knobs)."""
-    import os  # noqa: PLC0415 — leaf face, keeps module import-light
-    return os.environ.get("KUNGLAO_META_PLAYBOOK", "1") != "0"
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    return runtime_switches.get_bool("KUNGLAO_META_PLAYBOOK")

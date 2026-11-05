@@ -267,10 +267,10 @@ def _obligation_lane(task_spec, ws: Path) -> str:
 
 
 def _predict_before_try_on() -> bool:
-    """The #460 Part B activation flag (default OFF — the inert-landing
-    discipline; the EX-5 replay A/B is the gate)."""
-    import os
-    return os.environ.get("KUNGLAO_PREDICT_BEFORE_TRY", "") == "1"
+    """The feature-prior activation switch (learning face, default OFF;
+    the EX-5 replay A/B is the gate)."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return runtime_switches.get_bool("KUNGLAO_PREDICT_BEFORE_TRY")
 
 
 def _prescan_obligation(task_spec, ws: Path) -> dict:

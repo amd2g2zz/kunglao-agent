@@ -41,7 +41,6 @@ from __future__ import annotations
 # canonical warn: ONE implementation (process-wide dedupe + ledger face)
 from kunglao_log import warn
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -92,7 +91,8 @@ def _entry(status: str, detail: str) -> dict:
 
 
 def _probe_vm_reachable() -> dict:
-    host = os.environ.get("KUNGLAO_VM_HOST")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    host = runtime_switches.get_str("KUNGLAO_VM_HOST") or None
     if not host:
         return _entry("skip", "KUNGLAO_VM_HOST unset — no VM channel configured")
     ok_shell, err_shell = tc._tcp_connect(host, tc.VM_SHELL_PORT)

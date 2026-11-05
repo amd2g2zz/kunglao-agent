@@ -17,6 +17,10 @@
 #                      must start with one of these tools or contain one of
 #                      the comparison markers (prose like "I read the source"
 #                      is rejected).
+# routes:              claim_kind → the route names an ATTEMPTED_EXHAUSTED
+#                      ledger must cover (rlvr/route_ledger.py: the declared
+#                      routes of runs/rt-tests/<claim>/routes.json). One
+#                      route per kind today; unknown kinds fail closed.
 
 claim_kinds:
   static_constant:  {check_type: disasm_constant_check, exception_allowed: false}
@@ -49,3 +53,20 @@ check_tool_markers:
           python, python3, py, disasm_constant_check, disasm_constant_check.py,
           vmr-shell, x64dbg, frida, ghidra, pefile, capstone, objdump, gdb]
   markers: ['=', '!=', 'assert', '0x', '|', '-s ']
+
+# Issue #988: the per-claim-kind route declarations. A route is the named
+# method path one attempt walks; the ledger's attempts must name a route
+# from this list and every declared route must be covered (or the fixed
+# attempt budget spent) before ATTEMPTED_EXHAUSTED may pay.
+routes:
+  static_constant:  [disasm_constant_check]
+  decryption_key:   [decrypt_compare]
+  input_bypass:     [vm_execution]
+  numeric:          [byte_recalc]
+  string:           [byte_offset_locate]
+  structure:        [byte_parse]
+  negative_result:  [bounded_search]
+  capability:       [vm_execution]
+  cti_correlation:  [source_corroboration]
+  attribution:      [attribution_chain]
+  external_source:  [external_source_fetch]

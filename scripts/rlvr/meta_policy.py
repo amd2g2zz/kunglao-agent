@@ -45,7 +45,7 @@ bandit read faces at call time.
 """
 from __future__ import annotations
 
-import os
+import runtime_switches
 
 from rlvr import episode_schema as es
 from rlvr import meta_context as mc
@@ -67,45 +67,35 @@ ENVELOPE_SCHEMA = "meta-policy/1"
 RENDER_MARKER = "kunglao meta-policy"
 
 
-def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        return default
-    return value if value == value else default  # NaN -> default
+def _env_float(name: str) -> float:
+    return runtime_switches.get_float(name)
 
 
-def _env_int(name: str, default: int) -> int:
-    value = _env_float(name, float(default))
-    return max(0, int(value))
+def _env_int(name: str) -> int:
+    return max(0, runtime_switches.get_int(name))
 
 
 def knobs() -> dict:
     """The three learnable knob groups + the ablation switches, read
-    from the environment with documented defaults."""
+    through the runtime-switch registry (the single default source)."""
     return {
         # (a) value-table weights
-        "w_reward": _env_float("KUNGLAO_META_W_REWARD", 1.0),
-        "w_cost": _env_float("KUNGLAO_META_W_COST", 0.5),
-        "w_prior": _env_float("KUNGLAO_META_W_PRIOR", 1.0),
-        "n_shrink": _env_float("KUNGLAO_META_N_SHRINK", 4.0),
+        "w_reward": _env_float("KUNGLAO_META_W_REWARD"),
+        "w_cost": _env_float("KUNGLAO_META_W_COST"),
+        "w_prior": _env_float("KUNGLAO_META_W_PRIOR"),
+        "n_shrink": _env_float("KUNGLAO_META_N_SHRINK"),
         # (b) utility-score weights
-        "w_citation": _env_float("KUNGLAO_META_W_CITATION", 2.0),
-        "w_retrieval": _env_float("KUNGLAO_META_W_RETRIEVAL", 1.0),
+        "w_citation": _env_float("KUNGLAO_META_W_CITATION"),
+        "w_retrieval": _env_float("KUNGLAO_META_W_RETRIEVAL"),
         # (c) retrieval threshold / count (the context budget)
-        "retrieve_max": _env_int("KUNGLAO_META_RETRIEVE_MAX", 3),
-        "min_utility": _env_float("KUNGLAO_META_MIN_UTILITY", 0.0),
-        # component-ablation switches (exact "0" = the component off)
-        "retrieval": os.environ.get("KUNGLAO_META_RETRIEVAL", "1") != "0",
-        "value_table": os.environ.get("KUNGLAO_META_VALUE_TABLE",
-                                      "1") != "0",
+        "retrieve_max": _env_int("KUNGLAO_META_RETRIEVE_MAX"),
+        "min_utility": _env_float("KUNGLAO_META_MIN_UTILITY"),
+        # component-ablation switches (declared per arm; learning default off)
+        "retrieval": runtime_switches.get_bool("KUNGLAO_META_RETRIEVAL"),
+        "value_table": runtime_switches.get_bool("KUNGLAO_META_VALUE_TABLE"),
         # the four-knob component-ablation set (the P3 switches)
-        "attribution": os.environ.get("KUNGLAO_META_ATTRIBUTION",
-                                      "1") != "0",
-        "playbook": os.environ.get("KUNGLAO_META_PLAYBOOK", "1") != "0",
+        "attribution": runtime_switches.get_bool("KUNGLAO_META_ATTRIBUTION"),
+        "playbook": runtime_switches.get_bool("KUNGLAO_META_PLAYBOOK"),
     }
 
 

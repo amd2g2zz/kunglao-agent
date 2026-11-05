@@ -34,6 +34,14 @@ from rlvr import episode_pool as pool  # noqa: E402
 
 # ------------------------------------------------------------ fixtures
 
+@pytest.fixture(autouse=True)
+def _declared_learning_faces(monkeypatch):
+    """The learning switches default OFF; these pins assert the
+    declared-ON enrichment behavior."""
+    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
+                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
+        monkeypatch.setenv(name, "1")
+
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
     (ws / "runs").mkdir(parents=True)

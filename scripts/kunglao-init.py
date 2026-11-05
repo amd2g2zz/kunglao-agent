@@ -286,19 +286,12 @@ INIT_PHASES = ("scaffold", "toolchain", "wire-up", "cron-verify", "render", "exi
 
 
 def _parse_init_report_keep() -> int:
-    """#700 D2: KUNGLAO_INIT_REPORT_KEEP int ≥ 1, default 5. Parse
-    failures, zero, negative → default — a mistyped env var must not
-    break init (fail-open class)."""
-    raw = os.environ.get("KUNGLAO_INIT_REPORT_KEEP")
-    if not raw:
-        return 5
-    try:
-        n = int(raw)
-    except ValueError:
-        return 5
-    if n < 1:
-        return 5
-    return n
+    """Retention count, default declared by the registry. Parse failures,
+    zero and negative values resolve to the default — a mistyped switch
+    must not break init (fail-open class)."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    n = runtime_switches.get_int("KUNGLAO_INIT_REPORT_KEEP")
+    return n if n >= 1 else 5
 
 
 _INIT_ARCHIVE_RE = re.compile(r"\.init-report\.(\d+)\.json$")
@@ -758,7 +751,8 @@ def guard_agent_teams(profile_root: Path | None = None) -> tuple[int, list[str]]
     Returns (exit_code, log_lines).
     """
     log: list[str] = []
-    val = os.environ.get(FLAG_NAME)
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    val = runtime_switches.raw(FLAG_NAME)
     if is_truthy(val):
         log.append(
             f"kunglao-init: HARD REJECT — {FLAG_NAME} is truthy ({val!r}); "

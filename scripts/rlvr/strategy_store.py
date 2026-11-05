@@ -51,7 +51,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
@@ -95,9 +94,10 @@ _REFUTATION_ARM = "refutation"
 
 
 def store_root() -> Path:
-    """The store root: env KUNGLAO_POSTERIOR_STORE override, else the
-    skill-dir patterns path (the guarded prior_store_root)."""
-    env = os.environ.get(STORE_ENV, "").strip()
+    """The store root: declared switch override, else the skill-dir
+    patterns path (the guarded prior_store_root)."""
+    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    env = runtime_switches.get_str(STORE_ENV).strip()
     if env:
         return Path(env)
     return Path(__file__).resolve().parent / "patterns"

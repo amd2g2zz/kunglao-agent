@@ -69,7 +69,8 @@ def scan_temp_agents() -> dict[str, dict]:
     Returns {agent_id: {path, mtime_ts, age_min, project, session}}.
     Stat-only; never reads transcript content.
     """
-    temp = Path(os.environ.get("TEMP", tempfile.gettempdir()))
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    temp = Path(runtime_switches.get_str("TEMP") or tempfile.gettempdir())
     pattern = str(temp / "claude" / "*" / "*" / "tasks" / "*.output")
     now = time.time()
     out: dict[str, dict] = {}

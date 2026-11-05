@@ -20,8 +20,8 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
     tier fallbacks are retired. Injected items carry FRESH section
     anchors `path:L<start>~L<end>` (anchored on headings at query
     time), and the injection is budget-capped (<= 3 files, <= 5 items,
-    <= 1200 chars). The face is DEFAULT-OFF: KUNGLAO_RECALL=1 opts in;
-    a keywordless question closes the demand gate.
+    <= 1200 chars). The face is supply: ON by default; an arm declares
+    the exact "0" ablation. A keywordless question closes the demand gate.
   - All queries of a dispatch are answered IN-PROCESS: the layered index
     is parsed once per process and memoized (first recall in a process
     pays ~2.5 s, every later query is milliseconds), and the per-query
@@ -68,7 +68,6 @@ except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
               file=sys.stderr)
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
@@ -83,12 +82,26 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
 
 # The recall ablation switch (the five-arm capability matrix's no-L1 arm):
-# an exact "0" disables the recall-history dispatch face for the whole
-# session — every evaluate() call short-circuits to pass-through and the
-# dispatch proceeds with no injected recall context. Any other value
-# (unset included) leaves recall ON; the switch only ever removes
-# knowledge supply, never rejects a dispatch.
+# recall is a SUPPLY face — it defaults ON; an arm declares the exact "0"
+# to disable the recall-history dispatch face for the whole session
+# (every evaluate() call short-circuits to pass-through). The switch only
+# ever removes knowledge supply, never rejects a dispatch.
 RECALL_DISABLE_ENV = "KUNGLAO_RECALL"
+
+try:
+    _RUNTIME_SWITCHES = load_module_by_path(
+        "runtime_switches", SKILL_DIR / "scripts" / "runtime_switches.py")
+except Exception:  # noqa: BLE001 — partial-deploy lifeline, never block
+    _RUNTIME_SWITCHES = None
+
+
+def recall_enabled() -> bool:
+    """The supply switch: ON unless the arm (or operator) declares the
+    exact "0" ablation. A partial deploy without scripts/ keeps the
+    supply default rather than silently starving recall."""
+    if _RUNTIME_SWITCHES is None:
+        return True
+    return _RUNTIME_SWITCHES.get_bool(RECALL_DISABLE_ENV)
 # Fallback window for the batched child (see _run_recall_batch): the
 # fast path is in-process memoized recall with NO window; the child only
 # runs when the in-process path cannot. One window with real headroom,
@@ -694,21 +707,19 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     advisory <kunglao-facts> block — context supply only, never a reward
     kind; the settlement matcher ignores advisory carriers.
 
-    Default OFF + demand gate: RECALL_DISABLE_ENV="KUNGLAO_RECALL"
-    must be exactly "1" to arm the face — unset/any other value passes
-    through with no injection, before any workspace or dispatch parsing
-    (the H2H receipt demoted the default face; the ws5 no-L1 arm
-    declares "0", the warm arms declare "1"). Opted in, queries derive
-    from the dispatch question's keywords ONLY; a keywordless question
-    closes the demand gate (recall_skip trace, no injection). Every
-    injected item carries a fresh `path:L<start>~L<end>` section anchor,
-    and the block is budget-capped (<= 3 files / <= 5 items / 1200
-    chars).
+    Supply default ON + demand gate: RECALL_DISABLE_ENV="KUNGLAO_RECALL"
+    is a supply switch (registry default ON) — an arm declares the exact
+    "0" to ablate recall for the whole session (the H2H receipt demoted
+    the face; the ws5 no-L1 arm declares "0", the warm arms declare "1").
+    Armed, queries derive from the dispatch question's keywords ONLY; a
+    keywordless question closes the demand gate (recall_skip trace, no
+    injection). Every injected item carries a fresh
+    `path:L<start>~L<end>` section anchor, and the block is budget-capped
+    (<= 3 files / <= 5 items / 1200 chars).
     """
-    if os.environ.get(RECALL_DISABLE_ENV, "").strip() != "1":
-        # Default OFF (opt-in via KUNGLAO_RECALL=1): the H2H
-        # receipt (zero improvement, +46% cost) demoted the default face;
-        # recall fires only when the operator arms it. Silent fast path.
+    if not recall_enabled():
+        # The declared ablation face (exact "0"): silent fast path, no
+        # workspace or dispatch parsing.
         return 0, "", None
     ws = _resolve_workspace(payload)
     if ws is None:

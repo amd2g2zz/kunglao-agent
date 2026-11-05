@@ -206,7 +206,8 @@ def _tool_dirs() -> tuple[Path, ...]:
     the defaults C:/tools + D:/tools (same literals toolchain_negotiation
     uses — kept local to avoid the import cycle
     toolchain_install -> toolchain_negotiation)."""
-    raw = os.environ.get("KUNGLAO_TOOL_DIRS", "")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    raw = runtime_switches.get_str("KUNGLAO_TOOL_DIRS")
     if raw.strip():
         return tuple(Path(p) for p in raw.split(os.pathsep) if p.strip())
     return (Path("C:/tools"), Path("D:/tools"))
@@ -231,7 +232,8 @@ def find_ghidra_install(
     (None) — a miss just means the resolution layer falls through to
     package installs.
     """
-    env_home = os.environ.get("GHIDRA_HOME")
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    env_home = runtime_switches.get_str("GHIDRA_HOME") or None
     if env_home and _is_ghidra_root(Path(env_home)):
         return env_home
     roots = tuple(tool_dirs) if tool_dirs is not None else _tool_dirs()
