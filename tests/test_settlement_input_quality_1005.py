@@ -40,7 +40,7 @@ for p in (str(ROOT), str(SCRIPTS), str(HOOKS), str(ROOT / "tests")):
         sys.path.insert(0, p)
 
 from _factories import write_claims_register  # noqa: E402
-from rlvr import settlement_scorer as bss  # noqa: E402
+import rlvr.settlement_scorer as bss  # noqa: E402 — facade-neutral form
 from rlvr import settlement_wire as wire  # noqa: E402
 
 QUESTION = "Does the sample carry a second-stage loader?"
