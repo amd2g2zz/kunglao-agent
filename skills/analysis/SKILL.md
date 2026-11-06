@@ -110,8 +110,10 @@ positional argument, so there is no separate partial-argument flow.
    verify → completion transaction → delivery) and follow it exactly.
 3. **Convergence loop** — each tick is one mechanical decision (DISPATCH /
    DISPATCH_VERIFIER / SATURATED / BLOCKED / CONVERGED) driven by
-   `scripts/convergence_check.py`; run `scripts/convergence_health.py` every
-   3rd turn.
+   `scripts/convergence_check.py`; drain `pending_settlements` via
+   `kunglao-settler` (carry the `facts-snapshot:` marker; it counts toward
+   the ≤3 cap and needs a no-open-step window) before the worker dispatch;
+   run `scripts/convergence_health.py` every 3rd turn.
 4. **Delivery** — the loop exits 0 on CONVERGED and builds the report from
    `claim-register.yaml` + `facts/` + `evidence/_index.json`.
 

@@ -322,8 +322,16 @@ def load_verdict(ws, claim) -> dict | None:
 def pending_settlements(ws) -> list[dict]:
     """Parked blind inputs the settler has NOT ruled on yet — the
     dispatch read face (the orchestrator dispatches kunglao-settler for
-    these). ``{"claim", "path"}`` per entry; an unparseable parked doc
-    is skipped loudly once, never guessed."""
+    these). ``{"claim", "path"}`` per entry.
+
+    Per-file cage: ANY unreadable doc — syntax, nesting blow-up
+    (RecursionError), unsafe claim token, io error — is ONE warn and is
+    skipped; one bad file must never suppress the drain for the rest (a
+    producer could otherwise switch off the very dispatch that polices
+    it). A claim counts as ruled only when its verdict PARSES: a corrupt
+    verdict keeps the claim pending, matching what ``settle_parked``
+    requires (``is_file`` alone would strand it as "ruled but
+    unsettleable")."""
     ws = Path(ws)
     runs = ws / "runs"
     if not runs.is_dir():
@@ -331,11 +339,17 @@ def pending_settlements(ws) -> list[dict]:
     out: list[dict] = []
     for p in sorted(runs.glob("settlement-input-*.json")):
         claim = p.stem.removeprefix("settlement-input-")
-        if load_parked(ws, claim) is None:
+        try:
+            if load_parked(ws, claim) is None:
+                warn("rlvr.settlement_wire.pending_settlements",
+                     f"unparseable parked input {p.name} — skipped")
+                continue
+            ruled = load_verdict(ws, claim) is not None
+        except Exception as exc:  # noqa: BLE001 — one bad doc is ONE warn
             warn("rlvr.settlement_wire.pending_settlements",
-                 f"unparseable parked input {p.name} — skipped")
+                 f"{p.name}: {type(exc).__name__}: {exc} — skipped")
             continue
-        if (runs / f"settlement-verdict-{claim}.json").is_file():
+        if ruled:
             continue
         out.append({"claim": claim, "path": p.relative_to(ws).as_posix()})
     return out
