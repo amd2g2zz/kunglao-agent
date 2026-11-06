@@ -18,8 +18,6 @@ The card's pins:
 from __future__ import annotations
 
 import json
-import os
-import signal
 import subprocess
 import sys
 import textwrap
@@ -167,6 +165,40 @@ def test_abort_inverts_exactly_623(tmp_path) -> None:
     assert not (ws / "runs" / "dispatch-launch-C-1.json").exists()
     assert not (ws / cs.JOURNAL_REL).exists()
     assert "aborted" in [r["outcome"] for r in _prov(ws)]
+
+
+def test_failed_register_step_rolls_back_the_applied_prefix(tmp_path) -> None:
+    """A step failure must not leave the applied prefix on disk.
+
+    The live audit (2026-11-05) found the shape: the register step fails,
+    the anchor + launch stash stay behind, and the journal — owned by the
+    same live pid — answers ``intent-in-flight`` forever. The orphan stash
+    also blocks the step-settled barrier, so every later settlement is
+    skipped. The failure path must invert exactly what landed and clear
+    the intent before returning.
+    """
+    ws = _ws(tmp_path)
+    assert cs.begin_dispatch(ws, "C-1", actor="o", tier=1,
+                             prompt="d", agent="w").ok is True
+    # the register moves under the journal (the observed race shape): the
+    # register step then refuses because the claim is no longer OPEN.
+    write_claims_register(ws, [{"id": "C-1", "status": "IN_PROGRESS",
+                                "dispatch_count": 0}])
+
+    r = cs.commit_dispatch(ws, "C-1")
+    assert r.ok is False and "register" in r.reason, r
+
+    assert _anchor_rows(ws) == [], "the anchor row must be inverted"
+    assert not (ws / "runs" / "dispatch-launch-C-1.json").exists(), (
+        "an orphan launch stash blocks the step-settled barrier")
+    assert not (ws / cs.JOURNAL_REL).exists(), (
+        "a failed journal left in place answers intent-in-flight forever")
+    assert _reg(ws)[0]["status"] == "OPEN", "the before-image is restored"
+    assert "failed" in [row["outcome"] for row in _prov(ws)]
+
+    # the store is usable again immediately, in the same process
+    assert cs.begin_dispatch(ws, "C-1", actor="o", tier=1,
+                             prompt="d", agent="w").ok is True
 
 
 def _child_script(crash_after: str) -> str:

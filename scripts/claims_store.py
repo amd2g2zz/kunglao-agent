@@ -664,7 +664,11 @@ _TXN_STEPS = (("anchor", _txn_step_anchor), ("stash", _txn_step_stash),
 def commit_dispatch(ws, claim: str) -> TransitionResult:
     """Apply the journalled steps with per-step journal marks. A crash
     between steps leaves a journal naming exactly what landed — which is
-    what recover() inverts."""
+    what recover() inverts. A step that FAILS in-process inverts its
+    applied prefix immediately and clears the intent: the orphan launch
+    stash would otherwise block the step-settled barrier, and a journal
+    owned by this live pid would answer ``intent-in-flight`` forever. The
+    failure is recorded on the dispatch ledger + provenance."""
     journal = _journal_load(ws)
     if journal is None or journal.get("claim") != str(claim):
         return TransitionResult(False, claim, "dispatch", None, None,
@@ -672,10 +676,12 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
     for name, step in _TXN_STEPS:
         ok = _txn_run_step(ws, journal, name, step)
         if not ok:
-            journal["state"] = "failed"
-            _journal_save(ws, journal)
+            _txn_rollback(ws, journal)
+            _journal_save(ws, None)
+            _ledger_append(ws, str(journal.get("id") or ""), claim, "failed",
+                           actor=journal.get("actor", ""))
             _append_provenance(ws, {"claim": claim, "event": "dispatch",
-                                    "from": "OPEN", "to": "IN_PROGRESS",
+                                    "from": "OPEN", "to": None,
                                     "actor": journal.get("actor", ""),
                                     "outcome": "failed",
                                     "reason": f"step-{name}-failed",
