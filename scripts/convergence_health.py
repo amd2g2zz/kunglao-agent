@@ -402,6 +402,30 @@ def assess(ledger: list, ws=None) -> dict:
     return r
 
 
+def family_vocabulary(workspace: Path) -> dict:
+    """The method-family vocabulary's VISIBLE surface at the on-demand
+    health face: the registry's family health (never-fills /
+    dominates-all / other-share) plus the quarantine triage's promotion
+    candidates.
+
+    The arm space itself is still a closed registry (the learned-arm
+    card is a later slice); this face makes "what should the registry
+    mint next" answerable from the loop's own data instead of a hunch.
+    Pure read — the registry is never modified here (promotion stays a
+    reviewed diff). Computed HERE, not in ``assess``: the per-tick path
+    must not pay the usage scan. An unreadable registry degrades to an
+    explicit ``unavailable`` marker, never a silent empty block."""
+    try:
+        import method_families as mf  # noqa: PLC0415 — leaf, import-light
+        return {"method_family_health": mf.family_health(workspace),
+                "method_family_triage": mf.triage(workspace)}
+    except Exception as exc:  # noqa: BLE001 — a read face reports, never raises
+        why = f"{type(exc).__name__}: {exc}"
+        warn("convergence_health.family_vocabulary", why)
+        return {"method_family_health": {"unavailable": why},
+                "method_family_triage": {"unavailable": why}}
+
+
 REMEDY_ADMIT_ACTION = "stalled_remedy_admitted"
 REMEDY_MAX_DEPTH = 2
 
@@ -526,6 +550,22 @@ def _human(r: dict) -> str:
                      f"event(s) — claims: {', '.join(rot['claims'])} "
                      "(re-hook-only dispatch REJECTED; carry "
                      "`rotation-experiment: rotation-characterization`)")
+    fam = r.get("method_family_health") or {}
+    tri = r.get("method_family_triage") or {}
+    if fam.get("unavailable"):
+        lines.append(f"family vocabulary: unavailable ({fam['unavailable']})")
+    elif fam:
+        dom = (fam.get("dominates_all") or {}).get("family") or "none"
+        lines.append(
+            f"family vocabulary: {fam.get('attributed_rows', 0)} attributed "
+            f"row(s); never-fills {len(fam.get('never_fills') or [])}; "
+            f"domination {dom}")
+    cands = tri.get("promotion_candidates") or []
+    if cands:
+        top = cands[0]
+        lines.append(
+            f"family promotion candidate(s): {len(cands)} — top "
+            f"other({top.get('detail')}) x{top.get('count')}")
     ch = r.get("churn") or {}
     if ch.get("facts_delta"):
         lines.append(f"facts grown:   +{ch['facts_delta']} (open D{ch.get('open_delta', 0):+d})")
@@ -538,6 +578,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent convergence health — is it actually converging?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--families", action="store_true",
+        help="include the method-family vocabulary block (health signals + "
+             "quarantine promotion candidates); opt-in so the per-dispatch "
+             "subprocess caller pays no usage scan")
     args = parser.parse_args()
 
     workspace = _resolve_ws(args.workspace)
@@ -553,6 +598,8 @@ def main() -> int:
     # consumer fails open on it. argparse + the no-ledger path stay outside.
     try:
         r = assess(ledger, ws=workspace)
+        if args.families:
+            r.update(family_vocabulary(workspace))
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:

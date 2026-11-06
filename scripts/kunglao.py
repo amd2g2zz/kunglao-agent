@@ -124,6 +124,10 @@ def cmd_health(args) -> int:
               file=sys.stderr)
         return ch.EXIT_NO_DATA
     r = ch.assess(ledger, ws=ws)  # ws -> #127 detector liveness telemetry
+    # the vocabulary block is an ON-DEMAND operator face: merged HERE,
+    # never inside assess() — the dispatch gate's per-hook subprocess
+    # call must not pay the usage scan.
+    r.update(ch.family_vocabulary(ws))
     print(ch._human(r))
     return r["exit_code"]
 
