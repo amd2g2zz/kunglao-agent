@@ -59,7 +59,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 855c07d32270196496dd05b2b50d7556a38ebe341af1682210f0518ac1e14fee
+    sha256: 6f2fc4600b1057a54c5cf941f5f87f2f073144015b497bb2765763b8e4b2ba75
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -139,7 +139,7 @@ files:
   - src: agents/kunglao-settler.md
     dest: .claude/agents/kunglao-settler.md
     kind: agent
-    sha256: b0f09f32650b4f8c2f9912d855bcdbfdde62c7a017dde9eddb13e9f9018cb1e5
+    sha256: 5c082f0e8eaad1d42265345166f9a2a53be28b7cae31bf16d359a4035871013d
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: 4050fe7954f0c3f04ef66c2ecf09f7cfd1a0adc726a4faea9da677cc88286add
+    sha256: 6969300bdf8d9fbbb86e773c30d22a353a76befee89cbdcbeb12ecc7fa29f998
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold
@@ -1615,11 +1615,11 @@ files:
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
-    sha256: e38b54238e99452546fe6a5f3240695973c1a558535f4ef3705225b57064274b
+    sha256: 3dfedf20eb4c2130c707a4b63feee941af98dfbc61ba58a2632cb82681843c5e
   - src: scripts/rlvr/settlement_wire.py
     dest: .claude/scripts/rlvr/settlement_wire.py
     kind: scaffold
-    sha256: d6540d5c9f72cb4ec12aa750556283b7cc62c0658dace63b87f4d70d2f51c358
+    sha256: 7eab8535d8344017beecbae032dffe4071fa187d2a64a1c5f7e87a56c23322f3
   - src: scripts/rlvr/signal_guard.py
     dest: .claude/scripts/rlvr/signal_guard.py
     kind: scaffold

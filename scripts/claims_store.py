@@ -664,7 +664,11 @@ _TXN_STEPS = (("anchor", _txn_step_anchor), ("stash", _txn_step_stash),
 def commit_dispatch(ws, claim: str) -> TransitionResult:
     """Apply the journalled steps with per-step journal marks. A crash
     between steps leaves a journal naming exactly what landed — which is
-    what recover() inverts."""
+    what recover() inverts. A step that FAILS in-process inverts its
+    applied prefix immediately and clears the intent: the orphan launch
+    stash would otherwise block the step-settled barrier, and a journal
+    owned by this live pid would answer ``intent-in-flight`` forever. The
+    failure is recorded on the dispatch ledger + provenance."""
     journal = _journal_load(ws)
     if journal is None or journal.get("claim") != str(claim):
         return TransitionResult(False, claim, "dispatch", None, None,
@@ -672,10 +676,12 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
     for name, step in _TXN_STEPS:
         ok = _txn_run_step(ws, journal, name, step)
         if not ok:
-            journal["state"] = "failed"
-            _journal_save(ws, journal)
+            _txn_rollback(ws, journal)
+            _journal_save(ws, None)
+            _ledger_append(ws, str(journal.get("id") or ""), claim, "failed",
+                           actor=journal.get("actor", ""))
             _append_provenance(ws, {"claim": claim, "event": "dispatch",
-                                    "from": "OPEN", "to": "IN_PROGRESS",
+                                    "from": "OPEN", "to": None,
                                     "actor": journal.get("actor", ""),
                                     "outcome": "failed",
                                     "reason": f"step-{name}-failed",
@@ -696,6 +702,33 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
                             reason="committed", journal_id=journal["id"])
 
 
+def _txn_restore_anchor(ws, journal: dict) -> None:
+    """Invert the anchor append: pop the row this commit appended, and
+    remove the FILE when nothing else remains (a 0-byte anchor reads as
+    an empty dispatch log downstream — and downstream gates parse its
+    last line)."""
+    row = journal.get("anchor_row")
+    if row is None:
+        return
+    log = (Path(ws) / "runs" / f".dispatch-anchor-"
+           f"{str(journal['claim']).replace('-', '')}.jsonl")
+    if not log.is_file():
+        return
+    try:
+        rows = [ln for ln in log.read_text(encoding="utf-8").splitlines()
+                if ln.strip()]
+        if rows and json.loads(rows[-1]) == row:
+            rows = rows[:-1]
+        if not rows:
+            log.unlink(missing_ok=True)
+            return
+        tmp = log.with_suffix(".jsonl.tmp")
+        tmp.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        tmp.replace(log)
+    except (OSError, ValueError):
+        return
+
+
 def _txn_rollback(ws, journal: dict) -> None:
     """Invert EXACTLY the applied steps (reverse order, journal-driven —
     no fresh-tail heuristics)."""
@@ -703,29 +736,17 @@ def _txn_rollback(ws, journal: dict) -> None:
         if name == "register":
             before = journal.get("register_before")
             reg = Path(ws) / "claim-register.yaml"
+            if before is None:
+                # the register did not exist at begin time: a faithful
+                # inversion REMOVES it — a 0-byte register is a new
+                # artifact that every reader parses as an empty claim set
+                reg.unlink(missing_ok=True)
+                continue
             tmp = reg.with_suffix(".yaml.tmp")
-            tmp.write_text(before if before is not None else "", encoding="utf-8")
+            tmp.write_text(before, encoding="utf-8")
             tmp.replace(reg)
         elif name == "anchor":
-            row = journal.get("anchor_row")
-            if row is None:
-                continue
-            log = (Path(ws) / "runs" / f".dispatch-anchor-"
-                   f"{str(journal['claim']).replace('-', '')}.jsonl")
-            if not log.is_file():
-                continue
-            try:
-                rows = [ln for ln in
-                        log.read_text(encoding="utf-8").splitlines()
-                        if ln.strip()]
-                if rows and json.loads(rows[-1]) == row:
-                    rows = rows[:-1]
-                tmp = log.with_suffix(".jsonl.tmp")
-                tmp.write_text(("\n".join(rows) + "\n") if rows else "",
-                               encoding="utf-8")
-                tmp.replace(log)
-            except (OSError, ValueError):
-                continue
+            _txn_restore_anchor(ws, journal)
         elif name == "stash":
             if not journal.get("stash_existed"):
                 try:

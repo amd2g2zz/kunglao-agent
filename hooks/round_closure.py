@@ -177,9 +177,12 @@ def _blind_settlement_face(ws: Path, wire, pending) -> dict:
     blind input doc (the production writer — the kunglao-settler
     dispatch read face consumes it), then SETTLE every parked claim that
     has a ruling. The step window (since the launch, until now) feeds
-    the artifact scan; the scorer's exclusion wall filters it. Fail-open
-    inside its own cage — a parking failure is ONE warn and never the
-    settle; the unblinded judgment is NEVER a fallback."""
+    the artifact scan; the scorer's exclusion wall filters it. An empty
+    artifact window is a LOUD skip — a zero-byte doc is never parked
+    (the settler would have nothing to rule over), and the writer fills
+    the claim's resolved value question when the caller passes none.
+    Fail-open inside its own cage — a parking failure is ONE warn and
+    never the settle; the unblinded judgment is NEVER a fallback."""
     out: dict = {}
     try:
         from datetime import datetime, timezone
@@ -189,16 +192,23 @@ def _blind_settlement_face(ws: Path, wire, pending) -> dict:
             claim = str(pending.get("claim") or "")
             artifacts = wire.step_window_artifacts(
                 ws, str(pending.get("ts") or ""), until=now)
-            try:
-                res = wire.park_blind_input(ws, claim, artifacts)
-                if res.get("parked") or not res.get("reason"):
-                    parked = [claim]
-                else:
-                    warn("round_closure_blind_park",
-                         f"{claim}: {res.get('reason')}")
-            except ValueError as exc:
+            if not artifacts:
+                # an empty window leaves the settler nothing to rule
+                # over: skip loudly instead of parking a zero-byte doc
                 warn("round_closure_blind_park",
-                     f"{claim}: {exc}")
+                     f"{claim}: the step window holds no raw artifact — "
+                     "nothing to blind-settle")
+            else:
+                try:
+                    res = wire.park_blind_input(ws, claim, artifacts)
+                    if res.get("parked") or not res.get("reason"):
+                        parked = [claim]
+                    else:
+                        warn("round_closure_blind_park",
+                             f"{claim}: {res.get('reason')}")
+                except ValueError as exc:
+                    warn("round_closure_blind_park",
+                         f"{claim}: {exc}")
         settled = wire.settle_face(ws)
         # the row-shape contract: a stop with nothing parked and nothing
         # settled reports NOTHING (a non-worker stop stays plain)

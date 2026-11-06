@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -108,9 +108,18 @@ def _verdict(credit: float = 0.5, cite: str = "evidence/raw-step.bin",
 
 def _seed_claim_dispatch(ws: Path, claim: str = "C-9") -> None:
     """A pending worker step: launch stash + session rows (the mechanical
-    step-grain settle surface)."""
+    step-grain settle surface).
+
+    The raw artifact is stamped AFTER the launch: the step window is
+    (launch_ts, now] at second granularity, and an artifact written in
+    the same second as the launch can land outside it — the blind park
+    then (correctly) skips an empty window and the fixture flakes."""
     from rlvr import incremental_reward as ir
     ir.record_launch(ws, claim, "grab", 0.5, action_type="dispatch")
+    artifact = ws / "evidence" / "raw-step.bin"
+    if artifact.is_file():
+        stamp = datetime.now(timezone.utc).timestamp()
+        os.utime(artifact, (stamp, stamp))
     from rlvr import step_ledger as sl
     sl.record_step(ws, {"schema": "step-record/1",
                         "ts": "2026-10-24T11:59:30Z",

@@ -422,6 +422,11 @@ def test_g3_approval_point_stamps_the_anchor(tmp_path, capsys):
         "register": ws / "claim-register.yaml",
         "deps": ws / "claim_deps.yaml", "task_spec": ws / "task_spec.yaml",
     }
+    # the approval-point transaction registers a real claim: an OPEN row
+    # makes the store commit succeed and stamp the anchor this test reads
+    from _factories import write_claims_register
+    write_claims_register(ws, [{"id": "C-001", "status": "OPEN",
+                                "dispatch_count": 0}])
     rc = sinks.pre_check(payload, paths)
     assert rc == 0, capsys.readouterr().err
     anchor_log = ws / "runs" / ".dispatch-anchor-C001.jsonl"
