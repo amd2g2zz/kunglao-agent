@@ -91,7 +91,7 @@ the learning loop consumes it.
   "schema": "settlement-verdict/1",
   "identity": "<your settler id>",
   "claim": "C-9",
-  "question": "q2",
+  "question": "<the input doc's question text — echo it verbatim>",
   "actions": [
     {"action_id": "<step id>", "credit": 0.4,
      "evidence": ["evidence/raw-step.bin"]}

@@ -5,8 +5,9 @@ description: >-
   READ-ONLY brief of where the analysis stood (health, open claims,
   partial facts, in-flight workers, breakpoint timeline) plus the next
   action taken from convergence_check. Use after a system reboot, a
-  crashed session, or any "where was this analysis?" moment. Never writes
-  — re-arming a dead heartbeat is advised, not performed (chain).
+  crashed session, or any "where was this analysis?" moment. The CLI never
+  writes; the command renews an expired activation TTL and then executes
+  the decision's next step after the documented preconditions.
 arguments: [workspace]
 argument-hint: <workspace> — no args → guided workspace prompt
 ---
@@ -52,20 +53,38 @@ resume <workspace> [--json]`) and covers:
 
 | rc | verdict | meaning |
 |---|---|---|
-| 0 | RESUMABLE | state coherent, heartbeat alive — follow the next step |
+| 0 | RESUMABLE | state coherent, heartbeat alive — the COMMAND follows through after the safe preconditions (see Handoff contract); the CLI itself only reads |
 | 1 | NEEDS-MANUAL | a manual step first: dead heartbeat (re-arm), missing claim-register, or BLOCKED/INVALID decision |
 | 2 | NO-STATE | nothing to resume — initialize with `/kunglao-agent:init` |
 
-## Read-only contract
+## Handoff contract — read-only CLI, follow-through command
 
-resume starts no heartbeat, renews no TTL, dispatches nothing, and writes
-no file. When the heartbeat is dead the brief advises the re-arm
-chain (`hook_activation --wire-up` + `--heartbeat-on` + CronCreate of the
-heartbeat loop, accepted via `heartbeat_loop_prompt.py --verify`);
-executing it is the operator's/init's job — resume never duplicates the
-wire-up. This is the split against `scripts/external_kicker.py`:
-the kicker recovers the DYING session and writes; resume diagnoses the
-CRASHED workspace and only reads.
+Two faces, one contract:
+
+- **The CLI** (`scripts/kunglao_resume.py`) is READ-ONLY: it starts no
+  heartbeat, renews no TTL, dispatches nothing, and writes no file. The
+  brief is diagnosis; the CLI never follows through on the decision.
+- **The command** (`/kunglao-agent:resume`) owns the follow-through. On
+  rc 0 it applies the safe preconditions IN ORDER:
+  1. activation TTL expired (`.hook_state.json` `expires_at` in the past)
+     → run `hook_activation.py <ws> --renew` first, then continue;
+  2. dead heartbeat, stale-workspace gate (rc 5), or rc 1/2 → STOP and
+     surface the documented manual path; never auto-dispatch;
+  3. otherwise execute the decision's next step from the brief:
+     `DISPATCH_VERIFIER` → dispatch an independent verifier for the named
+     partial facts; `DISPATCH` → the priority top claim; `SATURATED` →
+     poll the active workers; `CONVERGED` → run the handoff checklist;
+     `BLOCKED` → the self-recovery ladder; `INVALID` → fix
+     `task_spec.primary_questions` first.
+  When the command cannot execute the step itself it hands off explicitly
+  to `/kunglao-agent analysis <workspace>` — it never silently stops.
+- The kicker split stands: `scripts/external_kicker.py` recovers the
+  DYING session and writes; resume diagnoses the CRASHED workspace, and
+  only the command acts on it.
+
+The regression fixture for this split is the observed `RESUMABLE` state
+with an expired activation TTL plus a `DISPATCH_VERIFIER` decision: the
+command renews the TTL first, then dispatches the verifier.
 
 ## No arguments
 
@@ -82,8 +101,9 @@ silently run against it. Never guess.
 - With the workspace known, run
   `uv run --project <SKILL_DIR> python scripts/kunglao_resume.py <workspace>` (add `--json` for the
   machine-readable brief) and relay the brief, its exit code, and the
-  next step. rc 1 → surface the manual reasons and the re-arm advice
-  BEFORE any other action. rc 2 → point the operator at
+  next step. rc 0 → follow the Handoff contract (preconditions first, then
+  the decision's next step); rc 1 → surface the manual reasons and the
+  re-arm advice BEFORE any other action. rc 2 → point the operator at
   `/kunglao-agent:init <workspace> [--type ...]`.
 
 ## Boundaries

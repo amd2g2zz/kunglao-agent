@@ -59,7 +59,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 855c07d32270196496dd05b2b50d7556a38ebe341af1682210f0518ac1e14fee
+    sha256: 6f2fc4600b1057a54c5cf941f5f87f2f073144015b497bb2765763b8e4b2ba75
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -139,7 +139,7 @@ files:
   - src: agents/kunglao-settler.md
     dest: .claude/agents/kunglao-settler.md
     kind: agent
-    sha256: b0f09f32650b4f8c2f9912d855bcdbfdde62c7a017dde9eddb13e9f9018cb1e5
+    sha256: 5c082f0e8eaad1d42265345166f9a2a53be28b7cae31bf16d359a4035871013d
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -787,7 +787,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: ab0f992eb6658431d5367ff1447362169b42bc28ee1dc2d8383911850ffbae28
+    sha256: 99d0d869b888b938635e05b91c05258114ffd563570b298e3cc4eaa320140cc5
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -795,7 +795,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 340d007115e2f91c540ae3674527821a6c0122eb5bf3c00376f66cd8bd0123b0
+    sha256: 5eb3617f5da5b933ecb51edf0797f3d0adff30b6bdccfc9c2b84a88a8331adbf
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -1615,11 +1615,11 @@ files:
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
-    sha256: e38b54238e99452546fe6a5f3240695973c1a558535f4ef3705225b57064274b
+    sha256: 3dfedf20eb4c2130c707a4b63feee941af98dfbc61ba58a2632cb82681843c5e
   - src: scripts/rlvr/settlement_wire.py
     dest: .claude/scripts/rlvr/settlement_wire.py
     kind: scaffold
-    sha256: d6540d5c9f72cb4ec12aa750556283b7cc62c0658dace63b87f4d70d2f51c358
+    sha256: 7eab8535d8344017beecbae032dffe4071fa187d2a64a1c5f7e87a56c23322f3
   - src: scripts/rlvr/signal_guard.py
     dest: .claude/scripts/rlvr/signal_guard.py
     kind: scaffold
@@ -2611,7 +2611,7 @@ files:
   - src: skills/help/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/help/SKILL.md
     kind: asset
-    sha256: c4570b9b684703d16a7f883f0a425d3019514e74d5990689ad937b5d0ca7f213
+    sha256: 5cf37127a70c5315d69a3acc0dc0501b17d5a88fb349a9ec2945ec1c4fe67a25
   - src: skills/init/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/init/SKILL.md
     kind: asset
@@ -2619,7 +2619,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 3f1c9b8c1979e5dfff2bc0d1062533f6cb49ed028369fec02d09bd0db5936de3
+    sha256: 2bc67074a6df5ed30401dbc28c8b04155fc0ab06a74e17c3baf747b6af047822
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset
@@ -2627,11 +2627,11 @@ files:
   - src: skills/resume/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/resume/SKILL.md
     kind: asset
-    sha256: 176ca17433f661395a69cd6e1222566f54de97225d6952e43eefa571c29405eb
+    sha256: 46a526db97e5f171917124675efa384592c1118b2a83e0485698a02a7ff44ecc
   - src: skills/subcommands.yaml
     dest: .claude/skills/kunglao-agent/skills/subcommands.yaml
     kind: asset
-    sha256: 021f84977c69c6a74f50b837a1e486393eac57cacaaf839bb8fa2e724d0711e4
+    sha256: 63226671785ccb482d34e59d401ecd85f30b68f35027962b3d518606e4ce03c6
   - src: skills/upgrade/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/upgrade/SKILL.md
     kind: asset
