@@ -43,7 +43,7 @@ for _p in (SCRIPTS,):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 import state_signature as sigmod  # noqa: E402
 from rlvr import compose  # noqa: E402
 

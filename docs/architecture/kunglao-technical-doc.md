@@ -690,12 +690,10 @@ flowchart TD
 | `retirement_gate.py` | retirement_gate.py — 机器绑定治理门（#861）。 | scan(), main() | 0/2 |
 | `retract_claim.py` | retract_claim.py - RETRACTED terminal state + dependency blast-radius reopening (#331). | find_dependents_transitive(), retract_claim(), retracted_claim_ids(), fact_claim_map(), check_retracted_references() | 6/2 |
 | `review_gate.py` | review_gate.py — 1-reviewer all-PASS commit gate (maker-checker mechanical). | staged_diff_sha(), parse_frontmatter(), sign(), default_keyfile(), main() | 1/0 |
-| `reward_settlement.py` | reward_settlement.py — the #420 Phase-2 adapter shim. | — | 2/9 |
 | `rho_checkpoint.py` | rho_checkpoint.py — P2 ρ progress signal + V/D/ETA (#823, N-arm). | sigmoid(), fit_platt(), v_from_priors(), rho_from_distribution(), rho_sequence() | 3/6 |
 | `rho_verifier.py` | rho_verifier.py — #823-P2 rho_t dense progress signal (shadow). | get_backend(), DeterministicBackend, LlmBackend, sample_and_pair(), pairs_from_ledger() | 2/3 |
 | `rl_digest.py` | rl_digest.py — the per-decision RL digest line (the round-closure visibility face). | digest(), render(), emit(), main() | 1/1 |
 | `roi_settlement.py` | roi_settlement.py — #49 dispatch intent contract + entropy-gain admission gate. | intents_path(), settlements_path(), read_intents(), read_settlements(), record_intent() | 4/5 |
-| `rollout_ledger.py` | rollout_ledger.py — the #420 Phase-2 adapter shim. | — | 3/23 |
 | `rollup.py` | rollup.py - terminal-transition write loop (#524). | run_rollup(), pending_terminal_claims(), rollup_terminal_claim(), sweep_terminal_claims(), main() | 0/9 |
 | `rotation_induction.py` | rotation_induction.py — same-slot value-join rotation induction (#341, scope B+D). | scan_runtime_facts(), detect_rotations(), state_path(), load_state(), save_state() | 0/1 |
 | `route_capability.py` | route_capability.py — deterministic feature→capability router (issue #278 P4-b). | load_index(), load_specialist_table(), intent_matches(), feature_matches(), recommend_agent_type() | 3/7 |

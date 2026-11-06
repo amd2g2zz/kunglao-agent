@@ -31,8 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
-import reward_settlement as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
@@ -335,7 +335,7 @@ class TestAntiPollution:
         """U3 posture for the write face: the import surface is
         allowlisted, no escape hatches — notes are ledger-derived only."""
         ALLOW = {"__future__", "json", "sys", "re", "pathlib",
-                 "xml", "rollout_ledger", "reward_settlement",
+                 "xml", "rlvr",
                  "scalar_settlement", "harness_common", "kunglao_log"}
         tree = ast.parse(
             (SCRIPTS / "gap_notes.py").read_text(encoding="utf-8"))

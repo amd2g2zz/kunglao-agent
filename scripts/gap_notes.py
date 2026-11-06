@@ -44,8 +44,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import rollout_ledger as rl
-import reward_settlement as rs
+from rlvr import ledger as rl
+from rlvr import reward as rs
 import scalar_settlement as ss
 
 SCHEMA = "gap-note/1"

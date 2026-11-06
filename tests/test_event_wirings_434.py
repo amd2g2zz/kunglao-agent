@@ -177,7 +177,7 @@ class TestKernelRoundClosure462:
     def test_round_closure_composes_and_versions_the_strategy(
             self, tmp_path, capsys):
         import round_closure
-        import rollout_ledger as rl
+        from rlvr import ledger as rl
         import yaml
         ws = _mk_ws(tmp_path)
         for rid in ("task/k1", "task/k2"):

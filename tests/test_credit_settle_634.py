@@ -220,7 +220,7 @@ def test_episode_tier_leg_amends_and_is_idempotent(tmp_path):
     """The episode-tier leg: a settled task rollout with no tier scalar is
     amended in the same pass (experience tuple written), and the next pass
     finds nothing left to amend."""
-    import rollout_ledger as rl
+    from rlvr import ledger as rl
     import settle_round_credit as src
     ws = _ws(tmp_path, [{"id": "C-1", "status": "OPEN"}])
     rl.record(ws, kind="task", anchor="C-9", signals=[
@@ -242,7 +242,7 @@ def test_episode_tier_leg_amends_and_is_idempotent(tmp_path):
 
 
 def test_dry_run_counts_pending_tiers_and_writes_nothing(tmp_path):
-    import rollout_ledger as rl
+    from rlvr import ledger as rl
     import settle_round_credit as src
     ws = _ws(tmp_path, [{"id": "C-1", "status": "OPEN"}])
     rl.record(ws, kind="task", anchor="C-9", signals=[

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """rlvr/ledger.py — THE unified rollout ledger (U1).
 
-Issue #420 Phase 2: the implementation body moved here from
-scripts/rollout_ledger.py (which stays a thin re-export adapter so every
-existing bare-name importer keeps working unchanged).
+Issue #420 Phase 2: the implementation body moved here; the top-level
+adapter shim was retired by the legacy-surface card — importers use
+``rlvr.ledger`` directly.
 
 Owner ruling (2026-09-23): the whole RLVA reward is unified — ALL rollout
 kinds share ONE accounting system. This module owns the ledger:

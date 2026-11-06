@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """rlvr/reward.py — the ONE deterministic settlement engine (U2/U3).
 
-Issue #420 Phase 2: the implementation body moved here from
-scripts/reward_settlement.py (which stays a thin re-export adapter).
+Issue #420 Phase 2: the implementation body moved here; the top-level
+adapter shim was retired by the legacy-surface card — importers use
+``rlvr.reward`` directly.
 
 THE only place reward is computed (owner ruling 2026-09-23: the whole
 RLVA reward is unified). Deterministic mapping signals -> band -> reward

@@ -20,8 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
-import reward_settlement as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
 
@@ -274,7 +274,7 @@ class TestNoModelCallPath:
     IMPORT_ALLOWLIST = {
         "__future__", "json", "sys", "os", "re", "time",
         "datetime", "pathlib", "typing", "yaml",
-        "rollout_ledger", "harness_common", "kunglao_log",
+        "harness_common", "kunglao_log",
         "outcome_capture", "failure_analysis_gate",
         # #421: exogenous classification — a mechanical file-reader over
         # runs/env-state.json (component-state face); no model-call path.
@@ -302,8 +302,7 @@ class TestNoModelCallPath:
 
     def _imports(self) -> list[str]:
         # Phase 2 of the rlvr consolidation (issue 420): parse the ENGINE
-        # BODY (scripts/rlvr/reward.py);
-        # scripts/reward_settlement.py is the pure re-export shim.
+        # BODY (scripts/rlvr/reward.py); the retired re-export shim is gone.
         tree = ast.parse(
             (SCRIPTS / "rlvr" / "reward.py").read_text(encoding="utf-8"))
         imported: list[str] = []
@@ -328,9 +327,8 @@ class TestNoModelCallPath:
 
     def test_engine_source_has_no_exec_escape_hatches(self):
         # Phase 2 of the rlvr consolidation (issue 420): the body carries
-        # the wall; the shim re-exports it.
-        for path in (SCRIPTS / "rlvr" / "reward.py",
-                     SCRIPTS / "reward_settlement.py"):
+        # the wall; the retired re-export shim is gone.
+        for path in (SCRIPTS / "rlvr" / "reward.py",):
             text = path.read_text(encoding="utf-8")
             for needle in self._ESC_NEEDLES:
                 assert needle not in text, (path.name, needle)

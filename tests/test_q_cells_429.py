@@ -671,7 +671,7 @@ class TestSettlementFeed462:
     def test_settle_banks_the_matching_q_cell_credit(self, tmp_path):
         """The acceptance integration: settle -> observe -> cell credit
         non-None -> the fold carries real posterior mass."""
-        import rollout_ledger as rl
+        from rlvr import ledger as rl
         import scalar_settlement as ss
         ws = tmp_path / "ws"
         ws.mkdir()
@@ -727,7 +727,7 @@ class TestSettlementFeed462:
         recorded the round_credit identity row but failed/died before
         settling must bank on the retry (the old row-existence guard
         silently skipped that round's credit forever)."""
-        import rollout_ledger as rl
+        from rlvr import ledger as rl
         import scalar_settlement as ss
         ws = tmp_path / "ws"
         ws.mkdir()

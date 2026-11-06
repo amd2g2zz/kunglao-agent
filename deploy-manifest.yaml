@@ -611,7 +611,7 @@ files:
   - src: scripts/gap_notes.py
     dest: .claude/scripts/gap_notes.py
     kind: scaffold
-    sha256: 29756174ec651ff7ed76e8477063cd4d811c325ecbd6d61824ff90eb8c8599a6
+    sha256: f507ccd26838b6e9b7ee0e81ca908a1dd3eb16a4a9dca841f3464b37ee7b7c38
   - src: scripts/gate_telemetry.py
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
@@ -623,7 +623,7 @@ files:
   - src: scripts/guardian_kpi.py
     dest: .claude/scripts/guardian_kpi.py
     kind: scaffold
-    sha256: 94bbf06730d74b17faca907df827301248d8686a90ce30e5ae3062058613d666
+    sha256: aea820cc05afd11884978a672742698a2b2daeeeb4b75a53a120c0d27f67c824
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
@@ -1088,10 +1088,6 @@ files:
     dest: .claude/scripts/review_gate.py
     kind: scaffold
     sha256: c9a696c9c76ce9c51f14a44b54fe36f9146e36cf1e96b6bb3a2c131051634f9a
-  - src: scripts/reward_settlement.py
-    dest: .claude/scripts/reward_settlement.py
-    kind: scaffold
-    sha256: d7d42d821cdfb609ade8c179e1bcb08ac4c7e8a8b26ad99d75a4d7de166028e4
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
@@ -1108,14 +1104,10 @@ files:
     dest: .claude/scripts/roi_settlement.py
     kind: scaffold
     sha256: 0f4e2af47645e2594d9ac05b46b1e5eb3ca92ec08519dafab7c0c436c687ee53
-  - src: scripts/rollout_ledger.py
-    dest: .claude/scripts/rollout_ledger.py
-    kind: scaffold
-    sha256: 6f44f10846ee2cee0f797306c76f0f74152fa805c09c7122b7713c850c9dd266
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: d205f0e17106f8387210051b2646127e40b6879b5997dd137ca0343b655057bf
+    sha256: 3f3b8cf3ae62c40b05b1bfb5c23357725e93f214f63cba1184da6e9a3c403282
   - src: scripts/rotation_induction.py
     dest: .claude/scripts/rotation_induction.py
     kind: scaffold
@@ -1295,7 +1287,7 @@ files:
   - src: scripts/verification_ladder.py
     dest: .claude/scripts/verification_ladder.py
     kind: scaffold
-    sha256: 235499d0b61f44e88f2e68fa25de98339272f3a6a1708678d9ca0bd544e43b4a
+    sha256: f667c51002e3ce99cabe23dd1b27fa2dae238fad8a1a39bde7b04018b806cfc8
   - src: scripts/verifier_identity.py
     dest: .claude/scripts/verifier_identity.py
     kind: scaffold
@@ -1499,7 +1491,7 @@ files:
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold
-    sha256: 27e5ddab31af3c060293755863d453ebdec40efe6cde16c1bf028aab758301b0
+    sha256: bd0304c6730922c66a730727d7e910356b36b11905b3dd1d9d8a4d8010c8841a
   - src: scripts/rlvr/liveness.py
     dest: .claude/scripts/rlvr/liveness.py
     kind: scaffold
@@ -1563,7 +1555,7 @@ files:
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
-    sha256: 15433168db21a4013de24ace2c34cd18c423b6df4ee4655faad28412d34cb13d
+    sha256: 4c68e4f1eaf700592f4a5f73596910f31f0127539e2da82df24e72be7527ac64
   - src: scripts/rlvr/prediction_ledger.py
     dest: .claude/scripts/rlvr/prediction_ledger.py
     kind: scaffold
@@ -1599,7 +1591,7 @@ files:
   - src: scripts/rlvr/reward.py
     dest: .claude/scripts/rlvr/reward.py
     kind: scaffold
-    sha256: f203dbf8a06a23561ee6c4ede9abb39292a4994b8e2f38e6fe5333e7ddf6d140
+    sha256: 60299c6933b2125ab4ebdf37aaf05e72e499c05ed717ac6228f155bd0286333a
   - src: scripts/rlvr/reward_signal.py
     dest: .claude/scripts/rlvr/reward_signal.py
     kind: scaffold
@@ -1691,11 +1683,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: b1b267c3a8db64d5cbf2266350dba72619d5e71995a999fa941a05f4ca7f3ea1
+    sha256: dee3240f1b61ce403b34022dd638dff24a18baba578bdc8313356fe0e6ce266b
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 910d6a27e5ce679fd38e18c9b0f9cc38e15526188be36dd22f886b300f2bed8f
+    sha256: bdac6d7d05616867fd2dc60768d128e8d42f5a8055c97481352a4702acb3f075
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -1807,7 +1799,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: 30cc64b7419944439c4ec5920525320e311a4572130c50e9a9f513838b3f3c04
+    sha256: 89ec31b08f3483ddbebe006d549b8fd1909ed9dff5838329f9e325fbcc4a75f1
   - src: references/contracts/rubrics/llm-eval-grading-rubric.md
     dest: .claude/references/contracts/rubrics/llm-eval-grading-rubric.md
     kind: asset
@@ -2311,7 +2303,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8185c5dc613eaea468680402194d98e5bb4d88b1311cdc5e7db1e1d6bb7dda28
+    sha256: 65d4a35b9cf30f2595bc9f2d7c8d3f504dc08d459e469219325639c10e707aa8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

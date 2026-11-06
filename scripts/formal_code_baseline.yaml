@@ -229,7 +229,6 @@ files:
   scripts/retirement_gate.py: 4
   scripts/retract_claim.py: 13
   scripts/review_gate.py: 1
-  scripts/reward_settlement.py: 2
   scripts/rho_checkpoint.py: 6
   scripts/rho_verifier.py: 12
   scripts/rlvr/action_params.py: 7
@@ -284,7 +283,6 @@ files:
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14
   scripts/roi_settlement.py: 4
-  scripts/rollout_ledger.py: 2
   scripts/rollup.py: 43
   scripts/rotation_induction.py: 6
   scripts/route_capability.py: 21

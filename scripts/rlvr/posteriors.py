@@ -12,7 +12,7 @@ activation-pending shim anywhere on this surface). Samples always come
 from a GENUINE posterior, only the data behind it is discounted.
 
 Store — ``<ws>/runs/posterior-store.jsonl``, append-only JSONL,
-ledger-isomorphic with rollout_ledger.py. One row = one Bernoulli
+ledger-isomorphic with ``rlvr/ledger.py``. One row = one Bernoulli
 observation of one DTS cell ``(state, arm)``:
 
     {"schema": "posterior-store/1",
