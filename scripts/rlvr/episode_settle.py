@@ -92,6 +92,7 @@ def settle_mission(ws) -> dict:
     claims = _read_register(ws)
     _require_terminal(claims)
     settled = _settle_pending_rollouts(ws)
+    _produce_dispositions(ws)
     disposition_signals = _settle_disposition_signals(ws)
     anchor = _anchor(claims)
     if episode_pool.episode_path(ws, anchor).is_file():
@@ -236,6 +237,20 @@ def _settle_disposition_signals(ws: Path) -> int:
     from rlvr import disposition_reward  # noqa: PLC0415 — lazy
     out = disposition_reward.settle_workspace(ws)
     return int(out.get("settled") or 0)
+
+
+def _produce_dispositions(ws: Path) -> None:
+    """The runtime disposition producer at the same terminal (one
+    evidence-gated row per terminal claim) — the writer whose absence
+    kept the choice-signal face settling zero. Fail-open: a producer
+    failure must never block the mission settlement; the producer
+    itself cages per claim and warns."""
+    from rlvr import disposition_producer  # noqa: PLC0415 — lazy
+    try:
+        disposition_producer.produce(ws)
+    except Exception as exc:  # noqa: BLE001 — settlement is the primary face
+        from kunglao_log import warn  # noqa: PLC0415 — canonical warn
+        warn("rlvr.disposition_producer", f"{type(exc).__name__}: {exc}")
 
 
 def _committed_rows(ws: Path) -> list[dict]:
