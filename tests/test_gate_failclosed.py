@@ -347,6 +347,8 @@ def test_plan_contingency_infra_error_rejects(tmp_path, monkeypatch, capsys):
         "dispatch-anchor: t\ngoal: g\npreflight: p\nsteps:\n"
         "  1. do the thing -> expect evidence\nfallback: report blocker\n",
         encoding="utf-8")
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(tmp_path, "C-001")
     kunglao_log._WARN_LAST.clear()
     ok, msg = gates.check_worker_plan(
         {"workspace": str(tmp_path), "state": tmp_path / "analysis_state.txt",

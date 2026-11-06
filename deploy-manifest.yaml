@@ -95,11 +95,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: fa613f347c4ef68572fdb20e7be042d629a93e7b3d2f6e29fbd4f7a8d76a2f78
+    sha256: 77920fa2a3cba38550e4539d86ecf500f996eba63d38835fe60fe60db7613f36
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: f293dc67031ccbb818b17fb6a7b4a10b260618f35e588d541403fa620f3d0d9d
+    sha256: 1d4f59ad07a3d29ca21c59d7b4ef35a447ccfdc5b9553e86adc2f6def4c7a3b5
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1643,7 +1643,7 @@ files:
   - src: scripts/rlvr/step_ledger.py
     dest: .claude/scripts/rlvr/step_ledger.py
     kind: scaffold
-    sha256: 854dfcdabb38cad7e43bc1171952daa7741b1a0eca31f5d1f1313ad314f73d58
+    sha256: dc13d0463004db8e3d3698992e644042b3b1e31288fce71e4cc5c1865df675e6
   - src: scripts/rlvr/step_record.py
     dest: .claude/scripts/rlvr/step_record.py
     kind: scaffold

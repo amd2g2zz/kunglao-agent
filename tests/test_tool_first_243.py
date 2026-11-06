@@ -74,6 +74,8 @@ def ws(tmp_path: Path) -> Path:
     (w / "runs" / ".dispatch-anchor-C001.jsonl").write_text(
         json.dumps({"ts": "2026-09-12T00:00:00Z", "claim": "C-001"}) + "\n",
         encoding="utf-8")
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(w, "C-001")
     return w
 
 

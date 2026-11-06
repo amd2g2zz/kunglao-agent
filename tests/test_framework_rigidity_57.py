@@ -263,6 +263,9 @@ def _seed_anchor_log(ws: Path, key: str, *ts_list: str) -> Path:
     p = ws / "runs" / f".dispatch-anchor-{key}.jsonl"
     p.write_text("".join(json.dumps({"ts": ts, "claim": "C-001"}) + "\n"
                          for ts in ts_list), encoding="utf-8")
+    # the gates arm on EXECUTION evidence, not the approval anchor alone
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, "C-001")
     return p
 
 

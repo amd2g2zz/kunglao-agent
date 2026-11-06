@@ -45,10 +45,13 @@ import priority_ratio  # noqa: E402
 # ---------- helpers (mirrors test_plan_first_ownership_239 / test_obstacle_ladder) ----------
 
 def _seed_prior_dispatch(ws: Path, ts: str = '2026-09-10T01:00:00Z') -> None:
-    """One prior approved dispatch for C-001 (approval-point anchor log)."""
+    """One prior EXECUTED dispatch for C-001: the approval-point anchor
+    (provenance) plus the claim-attributed step record the gate arms on."""
     (ws / 'runs').mkdir(parents=True, exist_ok=True)
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': ts, 'claim': 'C-001'}) + '\n', encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
 
 
 def _write_reg(ws: Path, claims: list[dict]) -> None:
@@ -144,6 +147,22 @@ def test_span_guidance_notes_inferred_family_vocabulary(tmp_path):
     assert not ok, msg
     assert 'inferred' in msg.lower(), (
         'inference-only families must be labelled: ' + msg)
+
+
+def test_anchor_without_execution_does_not_arm_the_granularity_gate(tmp_path):
+    """The approval anchor alone is not execution: the gate stays in its
+    planning-round posture until a claim-attributed step/transition row
+    proves a prior dispatch actually ran."""
+    from worker_budget_gates import check_claim_granularity
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
+        encoding='utf-8')
+    _seed_plan(ws, _monolithic_12())
+    ok, msg = check_claim_granularity({'workspace': str(ws)}, 'C-001')
+    assert ok, f'an anchor alone must not arm the gate: {msg}'
+    assert 'no prior dispatch has executed' in msg
 
 
 # ---------- 2. K boundary ----------
