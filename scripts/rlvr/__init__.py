@@ -27,6 +27,7 @@ from . import crystallize
 from . import direction
 from . import disposition
 from . import disposition_measure
+from . import disposition_producer
 from . import disposition_reward
 from . import distill_dgate
 from . import distill_rollout

@@ -295,20 +295,12 @@ def _blocker_pays(cls: str, path: Path, text: str, ws,
     return bound and named    # uncorroboratable: BOTH legs
 
 
-def active_env_blocker(ws, *, started_ts=None, claim=None) -> str | None:
-    """The FIRST env class matched by an ACTIVE blocker file BOUND to
-    the dying session (recency: mtime >= started_ts; or claim: the
-    claim id names itself in the blocker text) AND CORROBORATED by a
-    harness-side mechanical check (see the module docstring's
-    CORROBORATION table: check agrees -> either binding leg pays; check
-    refutes -> that blocker is not evidence; no check for the class or
-    instance -> BOTH binding legs required), in ``ENV_CLASSES`` order;
-    None when no blocker carries a session-bound, corroborated env
-    class.
-
-    No binding key supplied -> None ALWAYS (the anti-forge fail-closed:
-    an unbound keyword match never censors — see the mapping table).
-    Unreadable workspace -> None (fail-open, one warn)."""
+def active_env_blocker_detail(ws, *, started_ts=None,
+                              claim=None) -> dict | None:
+    """The paying blocker's class AND path (``{"class", "path"}``), or
+    None — the same binding + corroboration rules as
+    ``active_env_blocker`` (which now delegates here), with the file path
+    the disposition row's ``wall_ref`` names."""
     if _epoch(started_ts) is None and not str(claim or "").strip():
         return None
     try:
@@ -331,11 +323,30 @@ def active_env_blocker(ws, *, started_ts=None, claim=None) -> str | None:
                     continue
                 if _blocker_pays(cls, path, text, ws,
                                  floor=floor, claim=claim):
-                    return cls
+                    return {"class": cls, "path": str(path)}
         return None
     except OSError as exc:
         warn("rlvr.interruption", f"blocker scan failed: {exc}")
         return None
+
+
+def active_env_blocker(ws, *, started_ts=None, claim=None) -> str | None:
+    """The FIRST env class matched by an ACTIVE blocker file BOUND to
+    the dying session (recency: mtime >= started_ts; or claim: the
+    claim id names itself in the blocker text) AND CORROBORATED by a
+    harness-side mechanical check (see the module docstring's
+    CORROBORATION table: check agrees -> either binding leg pays; check
+    refutes -> that blocker is not evidence; no check for the class or
+    instance -> BOTH binding legs required), in ``ENV_CLASSES`` order;
+    None when no blocker carries a session-bound, corroborated env
+    class.
+
+    No binding key supplied -> None ALWAYS (the anti-forge fail-closed:
+    an unbound keyword match never censors — see the mapping table).
+    Unreadable workspace -> None (fail-open, one warn)."""
+    detail = active_env_blocker_detail(ws, started_ts=started_ts,
+                                       claim=claim)
+    return detail["class"] if detail else None
 
 
 def classify(session_record, ws) -> dict:

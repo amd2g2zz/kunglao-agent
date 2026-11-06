@@ -388,6 +388,18 @@ the one-line pointer (name — the docstring's opening line):
   sources exist (explicit None + coverage otherwise), and `learning_claim`
   refusing single-episode verdicts in favour of pre/post or ablation deltas
   with uncertainty.
+- `disposition_producer` — rlvr/disposition_producer.py — THE runtime writer
+  the algebra shipped without (#988): one evidence-gated row per TERMINAL
+  claim at the mission boundary, assembled from faces the workspace already
+  carries (authorization block, the canonical verification surface resolved
+  through verifier_integrity — the trust mirror is excluded by its own marker
+  and a PROVEN status without a resolved PASS is completion_claimed/FAILED —
+  the interruption wall, the route ledger, the claim's transitions, the
+  strategic-action row). A missing authorization block or an ambiguous
+  multi-target scope writes NO rows and warns once; the ts is derived
+  (settlement stamp, else latest transition) so a re-settle rebuilds the
+  identical row. `rlvr.episode_settle.settle_mission` calls it before the
+  choice-signal face.
 - `parking` — rlvr/parking.py — the PARKED claim state + the minimal escrow stub
   (#955 link 3, escrow_design: #667): provisional mass -> runs/parked-mass.jsonl,
   register status via the ws_yaml single-writer seam, park/unpark round trip.
