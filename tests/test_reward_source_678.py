@@ -46,7 +46,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
 from hypothesis_store import Hypothesis, HypothesisStore  # noqa: E402
 from rlvr import incremental_reward as ir  # noqa: E402

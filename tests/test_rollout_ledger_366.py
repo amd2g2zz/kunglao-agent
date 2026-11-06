@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 
 
 def _sig(type_: str, source: str, value, ts="2026-09-24T00:00:00Z",
@@ -297,7 +297,8 @@ class TestPersistence:
         into the settlement currency's write path (defense in depth — the
         engine-level test lives in test_reward_settlement_366)."""
         import ast
-        tree = ast.parse((SCRIPTS / "rollout_ledger.py").read_text(encoding="utf-8"))
+        tree = ast.parse((SCRIPTS / "rlvr" / "ledger.py").read_text(
+            encoding="utf-8"))
         imported: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

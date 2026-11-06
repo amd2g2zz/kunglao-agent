@@ -382,8 +382,6 @@ files:
     r1: 1
   scripts/retract_claim.py:
     r1: 8
-  scripts/reward_settlement.py:
-    r1: 1
   scripts/rho_checkpoint.py:
     r1: 7
   scripts/rho_verifier.py:
@@ -484,8 +482,6 @@ files:
     r1: 2
   scripts/roi_settlement.py:
     r1: 4
-  scripts/rollout_ledger.py:
-    r1: 1
   scripts/rollup.py:
     r1: 18
   scripts/rotation_induction.py:

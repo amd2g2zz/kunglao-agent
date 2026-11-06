@@ -34,8 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
-import reward_settlement as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
@@ -138,8 +138,7 @@ class TestRulesFileV2:
         used to import bare); it is not a model-call path."""
         ALLOW = {"__future__", "json", "sys", "os", "re", "time",
                  "datetime", "pathlib", "typing", "yaml",
-                 "rollout_ledger", "harness_common", "kunglao_log",
-                 "reward_settlement",  # the sibling U2/U3 engine itself
+                 "harness_common", "kunglao_log",
                  # issue 420: numpy for the ordered-float reductions in the
                  # Normal-Gamma pooling (_seq_sum — np.add.accumulate,
                  # input order, bit-pinned by test_rlvr_bitexact.py). Not a

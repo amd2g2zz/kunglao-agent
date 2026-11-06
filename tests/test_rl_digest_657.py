@@ -74,7 +74,7 @@ def _write_strategy(ws: Path, *, tick: int = 3, ts: str | None = None,
 
 def _settle(ws: Path, claim: str, band: str = "SETTLED_GREEN",
             ts: str | None = None) -> None:
-    import rollout_ledger as rl
+    from rlvr import ledger as rl
     rid = f"task/{claim}"
     rl.record(ws, kind="task", anchor=claim, signals=[
         {"type": "method_family", "source": "envelope",

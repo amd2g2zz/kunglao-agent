@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
-import reward_settlement as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
 
 import gap_notes as gn  # noqa: E402
 from recall_inject import evaluate  # noqa: E402  (pytest.ini pythonpath)

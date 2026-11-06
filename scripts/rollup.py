@@ -446,7 +446,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # face (task rows still emit), never the rollup.
     _u366_lib = lessons_library if lessons_library is not None else None
     try:
-        import reward_settlement as _rs366
+        from rlvr import reward as _rs366
         _u366_before = _rs366.snapshot_lessons(_u366_lib)
     except Exception as exc:  # noqa: BLE001 — emission adapter degrades only
         warn("unified_reward_snapshot", f"{type(exc).__name__}: {exc}")
@@ -492,7 +492,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # not break).
     unified_reward: dict = {"settlement": "skipped:no-adapter"}
     try:
-        import reward_settlement as _rs366
+        from rlvr import reward as _rs366
         unified_reward = _rs366.rollup_face(
             workspace, claim_id, status_upper,
             lessons_before=_u366_before, library=_u366_lib)

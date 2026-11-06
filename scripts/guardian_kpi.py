@@ -57,7 +57,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-import rollout_ledger as rl
+from rlvr import ledger as rl
 from kunglao_log import iter_jsonl
 
 GUARDIAN_SCHEMA = "guardian-kpi/1"

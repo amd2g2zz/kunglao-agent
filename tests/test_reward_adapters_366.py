@@ -35,8 +35,8 @@ def _load(mod_name: str, file_name: str):
 
 
 rag = _load("rollup_366_under_test", "rollup.py")
-import rollout_ledger as rl  # noqa: E402
-import reward_settlement as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
 
 
 def _write_register(ws: Path, claims: list[dict]) -> None:

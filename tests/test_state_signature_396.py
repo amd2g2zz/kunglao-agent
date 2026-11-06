@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 import state_signature as ssig  # noqa: E402
 
 

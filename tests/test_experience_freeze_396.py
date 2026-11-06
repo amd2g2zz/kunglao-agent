@@ -39,7 +39,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import eval_loop_runner as elr  # noqa: E402
 import experience_triples as xt  # noqa: E402
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
 import state_signature as ssig  # noqa: E402
 import tc_journal  # noqa: E402
@@ -48,7 +48,8 @@ RECORDING_MODULES = ("state_signature", "tc_journal", "experience_triples")
 
 # the decision faces that must never pull recording in
 # (#420 Phase 2: the settlement engine bodies live at rlvr/{reward,scalar}.py;
-#  the top-level scripts are re-export shims — the wall follows the bodies)
+#  the top-level re-export shims were retired by the legacy-surface card —
+#  the wall follows the bodies)
 DECISION_SOURCES = [
     HOOKS / "dispatch_gate.py",
     HOOKS / "worker_budget.py",
@@ -57,13 +58,12 @@ DECISION_SOURCES = [
     HOOKS / "worker_budget_sinks.py",
     HOOKS / "recall_inject.py",
     HOOKS / "completion_gate.py",
-    SCRIPTS / "reward_settlement.py",
     SCRIPTS / "scalar_settlement.py",
     SCRIPTS / "rlvr" / "reward.py",
     SCRIPTS / "rlvr" / "scalar.py",
+    SCRIPTS / "rlvr" / "ledger.py",
     SCRIPTS / "convergence_check.py",
     SCRIPTS / "priority_ratio.py",
-    SCRIPTS / "rollout_ledger.py",
 ]
 
 DERIVED_VIEW_NAMES = ("triples.csv", "situation-stream.jsonl",

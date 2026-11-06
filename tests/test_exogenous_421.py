@@ -21,8 +21,8 @@ SCRIPTS = REPO / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import reward_settlement as rs  # noqa: E402
-import rollout_ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 from harness_common import utc_now_z  # noqa: E402
 
 NOW = utc_now_z()

@@ -76,7 +76,7 @@ from harness_common import utc_now_z as _utc_now  # noqa: E402
 from kunglao_log import warn  # noqa: E402
 
 # --- rollout-ledger registration (open enum, central registry) ------------
-import rollout_ledger as rl  # noqa: E402
+from rlvr import ledger as rl  # noqa: E402
 
 KIND_MAINLINE_DECISION = "mainline_decision"
 rl.register_kind(
