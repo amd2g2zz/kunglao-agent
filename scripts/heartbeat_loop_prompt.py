@@ -118,19 +118,33 @@ def build_prompt(ws: str, interval: str = "5m", *,
     re-registers when the brief's state_hash drifts). The one-time startup
     action rides only the FIRST registration; re-registrations pass
     initial=False."""
-    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/
-    h = str(skill_dir / "scripts" / "hook_activation.py")
-    tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
-    cc = str(skill_dir / "scripts" / "convergence_check.py")
-    lp = str(skill_dir / "scripts" / "heartbeat_loop_prompt.py")
+    # a deployed workspace is self-contained — the durable cron body
+    # must resolve the WORKSPACE copies under the workspace env, never the
+    # global plugin cache / ~/.claude/skills tree. Workspaces without the
+    # deployed surface keep the executing-install form.
+    ws_path = Path(ws).resolve()
+    deployed_root = ws_path / ".claude"
+    deployed_scripts = deployed_root / "scripts"
+    if ((deployed_scripts / "hook_activation.py").is_file()
+            and (deployed_root / "pyproject.toml").is_file()):
+        scripts_dir = deployed_scripts
+        runner = f"uv run --project {deployed_root.as_posix()} python"
+    else:
+        skill_root = Path(__file__).resolve().parent.parent
+        scripts_dir = skill_root / "scripts"
+        runner = f"uv run --project {skill_root.as_posix()} python"
+    h = str(scripts_dir / "hook_activation.py")
+    tk = str(scripts_dir / "heartbeat_tick.py")
+    cc = str(scripts_dir / "convergence_check.py")
+    lp = str(scripts_dir / "heartbeat_loop_prompt.py")
     startup = (f"""[Startup action — run once on the loop's first trigger]
-python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
+{runner} {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.json AND mark loop_registered=true (#461) — this prompt body executing is the proof CronCreate accepted it
 
 """ if initial else "")
     return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
 
 {startup}[Watchdog tick — the heartbeat fires ONLY on missed events]
-0. python {tk} {ws} --origin cron   # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
+0. {runner} {tk} {ws} --origin cron   # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
                                  # --origin cron (#616): this prompt body executing IS the proof the durable loop ran — the sidecar row is
                                  # tagged cron-born. In-session manual runs (re-arm chain) carry origin=manual, so the reset gate can tell
                                  # "the cron has fired" from "a human ticked" instead of refusing the only in-session recovery.
@@ -140,18 +154,18 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
      (dispatch returns in-turn, worker completions between-turns, the Stop WORKGUARD judges turn-exit);
      re-reading manuals or dispatching from a quiet wake is the noise this watchdog replaced.
    - report.watchdog.fired == true  -> act ONLY on report.watchdog.reasons (missed events):
-       heartbeat-gap   -> the cadence died: re-verify with python {h} {ws} --heartbeat-check, re-arm the chain if stale
+       heartbeat-gap   -> the cadence died: re-verify with {runner} {h} {ws} --heartbeat-check, re-arm the chain if stale
        stuck-worker    -> smart-ping each named worker (SendMessage "[ping HH:MM] step? stuck? eta?", replies to runs/.ping-log.jsonl)
        reap-window     -> a worker's derived liveness window blew (#770): its own write cadence went silent past tolerance — review it for TaskStop/RESUME before the stuck line; an actively-writing worker never trips this
        step-failure    -> repair the failed mechanical step (the report's per-step stderr tails carry the text)
-     then run python {cc} {ws} --json and follow the session constitution's decision semantics.
+     then run {runner} {cc} {ws} --json and follow the session constitution's decision semantics.
    - oracle_registered=false in the report -> run the Phase 0 task-oracle.yaml backfill now
    - tick exit=2 with idle_circuit_breaker -> MANDATORY stop — do not re-tick through it
 
-{situation_brief(ws, lp)}"""
+{situation_brief(ws, lp, runner=runner)}"""
 
 
-def situation_brief(ws: str, self_path: str) -> str:
+def situation_brief(ws: str, self_path: str, runner: str) -> str:
     """#635: the state-derived brief appended to every composed prompt.
 
     Reads the live workspace (fail-open to an UNAVAILABLE marker — a brief
@@ -185,7 +199,7 @@ def situation_brief(ws: str, self_path: str) -> str:
             "[Registration duty — every firing; act ONLY when due/drifted]",
             "1. read runs/.cadence-advice.json; if evaluation_due OR its "
             f"state_hash differs from {shash}:",
-            f"   - compose fresh: python {self_path} {ws} --interval <N>m "
+            f"   - compose fresh: {runner} {self_path} {ws} --interval <N>m "
             "--no-initial",
             "   - CronDelete the firing job; CronCreate the composed prompt "
             "with cron */<N> * * * *",

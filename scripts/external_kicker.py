@@ -240,7 +240,8 @@ def _entry_contains_file(entry: dict, hook_file: str) -> bool:
     return False
 
 
-def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
+def ensure_project_hooks(settings: dict, hook_dir: str,
+                         project: Path | None = None) -> tuple[dict, int]:
     """D2: return (new_settings, appended_count) — a FIXED-POINT transform.
 
     Carries every pre-existing key with byte-identical values (env secrets,
@@ -258,8 +259,9 @@ def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
     def _canonical(matcher: str, hook_file: str) -> dict:
         # #445: construction delegated to THE canonical builder — no third
         # hand-rolled entry shape (byte-identical output, test-pinned).
+        # `project` roots the uv env at the workspace env project.
         return hook_activation.build_hook_entry(Path(hook_dir), hook_file,
-                                                matcher)
+                                                matcher, project=project)
 
     hooks = dict(settings.get("hooks") or {})
     appended = 0
@@ -732,7 +734,8 @@ def build_resume_prompt(ws, *,
 # ---------- orchestration ----------
 
 def default_settings_path(workspace: Path) -> Path:
-    """D2 project-level settings.json default — the workspace-PARENT target.
+    """D2 project-level settings.json default — the workspace-PARENT target,
+    EXCEPT when the workspace carries its own deployed settings.
 
     Issue #410: this MUST derive from the wire_up_settings deployment-target
     registry, not a hand-written literal. The pre-#410 self-contradiction:
@@ -740,7 +743,16 @@ def default_settings_path(workspace: Path) -> Path:
     env_check checked only <ws>/.claude/settings.json — a parent-wired
     workspace was reported 'hooks missing' (FAIL) with 'leave unwired'
     guidance. Both now resolve the SAME registry (hook_deployment_targets[1]).
+
+    a deployed workspace's OWN settings is the correct carrier — the
+    parent-level file is shared by every sibling workspace under that
+    parent, so writing a workspace-specific command set there makes siblings
+    flip each other's recovery carrier. The parent target remains the
+    fallback for legacy/undeployed workspaces.
     """
+    local = Path(workspace).resolve() / ".claude" / "settings.json"
+    if local.is_file():
+        return local
     return wire_up_settings.hook_deployment_targets(workspace)[1]
 
 
@@ -799,8 +811,15 @@ def tick(workspace: Path, *,
                 current = json.loads(spath.read_text(encoding="utf-8"))
             except Exception:
                 current = {}
-        hook_dir = Path(__file__).resolve().parent.parent / "hooks"
-        new_settings, appended = ensure_project_hooks(current, str(hook_dir))
+        # a deployed workspace re-registers its OWN hooks under the
+        # workspace env; only a workspace without deployed copies falls
+        # back to the executing install.
+        ws_path = Path(workspace).resolve()
+        local_hooks = ws_path / ".claude" / "hooks"
+        hook_dir = (local_hooks if local_hooks.is_dir()
+                    else Path(__file__).resolve().parent.parent / "hooks")
+        new_settings, appended = ensure_project_hooks(
+            current, str(hook_dir), project=ws_path)
         if new_settings != current:
             write_settings_atomic(spath, new_settings)
             print(f"kicker: project hooks ensured ({appended} appended) — {spath}")

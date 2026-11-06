@@ -383,7 +383,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: 10a3df18f622c714a365bb127d5db1f1fba916b36200ae4945e92c8f412916b7
+    sha256: 97f7ad7ad1ca7581122489ba97ce9bc58ab2805385f4d72e70e758af6200f57e
   - src: scripts/deploy_shim.py
     dest: .claude/scripts/deploy_shim.py
     kind: scaffold
@@ -391,7 +391,7 @@ files:
   - src: scripts/deployed_refresh.py
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
-    sha256: 43293832ca044dc64d6502982ea27d92eed5eeb213e22169eba42d42ba508e62
+    sha256: d222fd24c44e2655764a7ed680f4c1f3bc48a4f8cae30c9be828ef32d1c80e89
   - src: scripts/detector_liveness.py
     dest: .claude/scripts/detector_liveness.py
     kind: scaffold
@@ -435,7 +435,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: 734bbffcbfd11d08ce0d10866374f1f3b981dba0de49ae0bfeb2965aafc985fb
+    sha256: 00c5b65ee814ee59758a5715b9f755f85970e874381c712f209148156e664afc
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -575,7 +575,7 @@ files:
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
-    sha256: 42512dd58d889feb6a0c1b68bd18df522b2e21646d387a2a2f02b0916658f3a3
+    sha256: a73ec005e3b84723b6c810d69db3875184fca7a4d139d2164c11300c69354b38
   - src: scripts/fact_contradiction_gate.py
     dest: .claude/scripts/fact_contradiction_gate.py
     kind: scaffold
@@ -635,7 +635,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 41535ebeea7aed90ac213a9009d64c86a02e643b5b1fc2905926420611a2baea
+    sha256: 9aae2e56faed1f1aae9af65a3cbd2cc7626b6ca3a3999ef0b6e1a1f12d565dee
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -647,7 +647,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: ef2ff672e1cf2c80af37533048c620009129ede177585334c219b0229fb12666
+    sha256: 622a91145f0f0c832f7eb0a193a0c8fc6afbfedd6b25a5ba25adb3206117be64
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -699,7 +699,7 @@ files:
   - src: scripts/install_reference.py
     dest: .claude/scripts/install_reference.py
     kind: scaffold
-    sha256: 350f37e12f71406279f8bbc13d9ccce9744a3bcfce758e3054a2f10b06a204a2
+    sha256: ea0aa77cb93111eb5d037e29009218be7aa6cf557a99b75ee91a9fe89c013238
   - src: scripts/install_unidbg.py
     dest: .claude/scripts/install_unidbg.py
     kind: scaffold
@@ -747,7 +747,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 4a4963ae03fcdda7f81911558f7e479d0b874eafe0f738abbe5fccdeca781ec2
+    sha256: bb9c89c6dbd12e019ce17f23e21465039bf34a981446af46b674bdf5ac8c9922
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -787,7 +787,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: ab0f992eb6658431d5367ff1447362169b42bc28ee1dc2d8383911850ffbae28
+    sha256: 99d0d869b888b938635e05b91c05258114ffd563570b298e3cc4eaa320140cc5
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -795,7 +795,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: a0ac72d2c4f89388cfd072a9d24f4c27d9ebcf557aecbcebf2272c7f294ddf1d
+    sha256: 5eb3617f5da5b933ecb51edf0797f3d0adff30b6bdccfc9c2b84a88a8331adbf
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -1691,7 +1691,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 976159971e2dad6a5bf0bd5b2655213960c56c77eea7337b3dab0f66af8c0b40
+    sha256: 910d6a27e5ce679fd38e18c9b0f9cc38e15526188be36dd22f886b300f2bed8f
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2600,3 +2600,39 @@ files:
     dest: .claude/tools/web/sign_candidate_verify.py
     kind: asset
     sha256: 126e8a8b7a4acee15c8f9ca00c5539982a7d1aaaa342cd941af2ffb36dec6ef7
+  - src: SKILL.md
+    dest: .claude/skills/kunglao-agent/SKILL.md
+    kind: asset
+    sha256: fc3990502b624e010a289bd51f1b14b8315eedcfa32b11083c89ca75db985368
+  - src: skills/analysis/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/analysis/SKILL.md
+    kind: asset
+    sha256: d734b825bae1bbd2dc43918a8a0795b0885ad6ec2a8580f599ee7c33ae182fe3
+  - src: skills/help/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/help/SKILL.md
+    kind: asset
+    sha256: 5cf37127a70c5315d69a3acc0dc0501b17d5a88fb349a9ec2945ec1c4fe67a25
+  - src: skills/init/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/init/SKILL.md
+    kind: asset
+    sha256: cb53252022333a042f4a2a535d45afdb9cfe34c0dcefb4f1ec9c89f008bd5eec
+  - src: skills/kunglao-agent/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
+    kind: asset
+    sha256: 2bc67074a6df5ed30401dbc28c8b04155fc0ab06a74e17c3baf747b6af047822
+  - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
+    dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
+    kind: asset
+    sha256: 2a2ea2ac7328762d8a5b9b73f603daec4f950a03614b18f626996e3176d73b69
+  - src: skills/resume/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/resume/SKILL.md
+    kind: asset
+    sha256: 46a526db97e5f171917124675efa384592c1118b2a83e0485698a02a7ff44ecc
+  - src: skills/subcommands.yaml
+    dest: .claude/skills/kunglao-agent/skills/subcommands.yaml
+    kind: asset
+    sha256: 63226671785ccb482d34e59d401ecd85f30b68f35027962b3d518606e4ce03c6
+  - src: skills/upgrade/SKILL.md
+    dest: .claude/skills/kunglao-agent/skills/upgrade/SKILL.md
+    kind: asset
+    sha256: 0fb966e98b2d7836656de0c03a2358558fb94537389dfca1bbc19d06509a6f26

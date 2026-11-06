@@ -146,6 +146,24 @@ def test_ensure_project_hooks_exact_commands(tmp_path):
     ]
 
 
+def test_ensure_project_hooks_roots_the_workspace_env(tmp_path):
+    """with project=<ws> (a deployed workspace), the commands resolve
+    the WORKSPACE env project and the workspace hooks dir."""
+    import deploy_manifest as dm
+    ws = tmp_path / "ws"
+    hooks = ws / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    dm.ensure_workspace_env(ws)
+    out, _ = ensure_project_hooks({}, str(hooks), project=ws)
+    commands = [h["command"] for ev in out["hooks"].values()
+                for e in ev for h in e["hooks"]]
+    env_root = (ws / ".claude").as_posix()
+    assert commands
+    assert all(
+        f"uv run --project {env_root} python {hooks.as_posix()}/" in c
+        for c in commands), commands
+
+
 def test_ensure_project_hooks_uv_on_this_machine(tmp_path):
     """#389 machine-behavior: the built hook commands must run via uv (bare
     `python` is 2.x here — the repro), and uv must be resolvable on this
