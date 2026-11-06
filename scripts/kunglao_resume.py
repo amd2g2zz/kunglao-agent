@@ -16,6 +16,13 @@ calls convergence_check.decide() directly and NEVER convergence_check.main()
 Re-arming a dead workspace is init's job (#461 bootstrap, merged fa08fd3);
 resume only ADVISES the chain.
 
+HANDOFF CONTRACT: the CLI never follows through — no TTL renew, no
+dispatch, no write. The /kunglao-agent:resume COMMAND owns the
+follow-through: on rc 0 it renews an expired activation TTL first, stops
+on a dead heartbeat / stale gate / rc 1 or 2, and otherwise executes the
+decision's next step (or hands off explicitly to /kunglao-agent analysis).
+skills/resume/SKILL.md states both faces; tests pin them to this docstring.
+
 issue-282 AMENDMENT (scoped, documented in
 openspec/changes/issue-282-progress-timeline/design.md): resume renders the
 derived progress.txt timeline BEFORE reading it (render-then-read) — the
@@ -142,8 +149,8 @@ UNKNOWN_DECISION_STEP = ("decision not in the resume lookup table — rerun "
                          "convergence_check.py for the authoritative action")
 
 REARM_ADVICE = (
-    "re-arm before continuing (the #461 bootstrap chain — resume itself "
-    "never writes):\n"
+    "re-arm before continuing (the #461 bootstrap chain — this CLI "
+    "writes nothing):\n"
     "  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --wire-up\n"
     "  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n"
     "  CronCreate */5 * * * * (heartbeat_loop_prompt.py output) — accept it "

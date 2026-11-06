@@ -787,7 +787,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: ab0f992eb6658431d5367ff1447362169b42bc28ee1dc2d8383911850ffbae28
+    sha256: 99d0d869b888b938635e05b91c05258114ffd563570b298e3cc4eaa320140cc5
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -795,7 +795,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 340d007115e2f91c540ae3674527821a6c0122eb5bf3c00376f66cd8bd0123b0
+    sha256: 5eb3617f5da5b933ecb51edf0797f3d0adff30b6bdccfc9c2b84a88a8331adbf
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -2611,7 +2611,7 @@ files:
   - src: skills/help/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/help/SKILL.md
     kind: asset
-    sha256: c4570b9b684703d16a7f883f0a425d3019514e74d5990689ad937b5d0ca7f213
+    sha256: 5cf37127a70c5315d69a3acc0dc0501b17d5a88fb349a9ec2945ec1c4fe67a25
   - src: skills/init/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/init/SKILL.md
     kind: asset
@@ -2619,7 +2619,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 3f1c9b8c1979e5dfff2bc0d1062533f6cb49ed028369fec02d09bd0db5936de3
+    sha256: 2bc67074a6df5ed30401dbc28c8b04155fc0ab06a74e17c3baf747b6af047822
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset
@@ -2627,11 +2627,11 @@ files:
   - src: skills/resume/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/resume/SKILL.md
     kind: asset
-    sha256: 176ca17433f661395a69cd6e1222566f54de97225d6952e43eefa571c29405eb
+    sha256: 46a526db97e5f171917124675efa384592c1118b2a83e0485698a02a7ff44ecc
   - src: skills/subcommands.yaml
     dest: .claude/skills/kunglao-agent/skills/subcommands.yaml
     kind: asset
-    sha256: 021f84977c69c6a74f50b837a1e486393eac57cacaaf839bb8fa2e724d0711e4
+    sha256: 63226671785ccb482d34e59d401ecd85f30b68f35027962b3d518606e4ce03c6
   - src: skills/upgrade/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/upgrade/SKILL.md
     kind: asset

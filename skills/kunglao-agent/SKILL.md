@@ -338,4 +338,4 @@ Read `references/orchestration/failure-modes/failure-modes.md` (index; 18 F-rows
 - `/kunglao-agent` — print the subcommand menu, wait for a choice (never silently run).
 - `/kunglao-agent init ~/cases/synth-dropper --type windows` — scaffold a new Windows workspace.
 - `/kunglao-agent analysis ~/cases/synth-dropper` — enter the convergence loop on an existing workspace.
-- `/kunglao-agent resume ~/cases/synth-dropper` — print the read-only breakpoint brief (never writes; re-arm advised).
+- `/kunglao-agent resume ~/cases/synth-dropper` — print the read-only breakpoint brief (the CLI never writes; the command renews an expired TTL and follows the decision's next step; re-arm advised).

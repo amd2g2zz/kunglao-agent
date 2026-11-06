@@ -261,7 +261,7 @@ runs/                 # session audit trail
 |---|---|---|
 | `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | starting an engagement, first | scaffolds the workspace, probes the toolchain, writes `CLAUDE.md` and `.mcp.json` (`--no-mcp` skips); HARD-rejects with fix guidance when a required tool is missing |
 | `/kunglao-agent:analysis <workspace>` (alias `analyze`) | after init — state the task and start | collects goal / verification logic / constraints once, then runs the convergence loop |
-| `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers) plus the next action |
+| `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers) plus the next action; the command renews an expired TTL first, then executes it |
 | `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update | migrates the workspace scaffold; user data never touched — byte drift refuses |
 | `/kunglao-agent:help` | anything else | prints the usage list |
 
@@ -618,7 +618,8 @@ posterior rows; `runs/q-cell-log.jsonl` for per-arm observations.
 **How do I resume after a crash?**
 `/kunglao-agent:resume <workspace>` (or `kunglao resume <workspace>`): a
 read-only breakpoint brief — health, open claims, in-flight workers, crash
-timeline — plus the next action. All state is on disk; no session context
+timeline — plus the next action; the command renews an expired TTL first,
+then executes that action. All state is on disk; no session context
 required.
 
 **Do I need a VM or MCP servers?**

@@ -25,7 +25,7 @@ subcommands:
     zero-args: "guided workspace prompt — cwd candidate only with explicit confirm, never guess"
     missing-args: "single positional — a missing workspace is the zero-args case"
     example: "/kunglao-agent:resume ~/cases/synth-dropper"
-    next-step: "crashed / rebooted workspace → /kunglao-agent:resume (read-only brief + re-arm advice)"
+    next-step: "crashed / rebooted workspace → /kunglao-agent:resume (read-only brief; the command renews an expired TTL and follows the next step)"
   help:
     invocation: "/kunglao-agent:help"
     argument-hint: "[no args] — print the subcommand usage list"
