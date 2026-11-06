@@ -494,6 +494,12 @@ def test_cross_chunk_sequential_deps_within_a_domain(tmp_path):
 
 def _min_paths(ws: Path) -> dict:
     ws.mkdir(parents=True, exist_ok=True)
+    # the approval point's dispatch transaction registers a REAL claim:
+    # an OPEN row makes the store commit succeed (its failure path now
+    # rolls back the anchor/stash instead of leaving them behind)
+    from _factories import write_claims_register
+    write_claims_register(ws, [{"id": "C-001", "status": "OPEN",
+                                "dispatch_count": 0}])
     return {
         'workspace': str(ws),
         'state': ws / 'analysis_state.txt',
@@ -511,11 +517,11 @@ def _payload(prompt: str) -> dict:
     }}
 
 
-def _dispatch_prompt() -> str:
-    return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-            '"method_family": "static-decompile", '
-            '"tier": 1, "tools": ["grep"], "agent": "w-test"}}\n'
-            'facts-snapshot: 1 facts')
+def _dispatch_prompt(tier: int = 1) -> str:
+    envelope = {"kunglao_dispatch": {
+        "version": 1, "claim": "C-001", "method_family": "static-decompile",
+        "tier": tier, "tools": ["grep"], "agent": "w-test"}}
+    return json.dumps(envelope) + '\nfacts-snapshot: 1 facts'
 
 
 def _seed_live_heartbeat(ws: Path) -> None:
@@ -562,7 +568,8 @@ def test_pre_check_battery_rejects_granularity(tmp_path, capsys):
     _seed_plan(ws, f'dispatch-anchor: {anchor_ts}\n'
                'goal: reverse the core\nsteps:\n' + body
                + 'fallback: rerun with logs\n')
-    rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
+    # the second dispatch derives its tier from the attempt history
+    rc = sinks.pre_check(_payload(_dispatch_prompt(tier=2)), paths)
     captured = capsys.readouterr()
     assert rc == 2, captured.err
     assert 'REJECT granularity' in captured.err, captured.err
