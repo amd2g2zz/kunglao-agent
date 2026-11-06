@@ -359,13 +359,18 @@ def test_check_tier_gate_ignores_terminal_claims(tmp_path):
 
 def _min_paths(ws: Path) -> dict:
     """Minimal pre_check paths dict for a tmp workspace — all other gates
-    fail-open on it (no register / no state / no task_spec / 0 active).
+    fail-open on it (one OPEN seed claim / no state / no task_spec / 0
+    active).
 
-    Only the ws DIRECTORY is created, never the files: pre_check's final
-    register_worker atomic-write needs the dir, while file absence keeps the
-    heartbeat/deadline gates fail-open.
+    The seed claim is what makes the approval point's dispatch
+    transaction commit for real: the store's failure path now rolls the
+    anchor and stash back, so a workspace with no claim would leave the
+    plan-provenance gate nothing to cite.
     """
     ws.mkdir(parents=True, exist_ok=True)
+    from _factories import write_claims_register
+    write_claims_register(ws, [{"id": "C-001", "status": "OPEN",
+                                "dispatch_count": 0}])
     return {
         'workspace': str(ws),
         'state': ws / 'analysis_state.txt',
@@ -561,8 +566,9 @@ def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
     # settles -> the re-dispatch attempt reaches the plan gate).
     from rlvr import step_grain as _sg690
     assert _sg690.settle_step(ws, 'sess-test') is not None
+    # the second dispatch derives its tier from the attempt history
     rc = pre_check(_dispatch_payload(
-        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 2, '
         '"tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
         paths)
     captured = capsys.readouterr()

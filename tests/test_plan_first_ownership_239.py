@@ -36,8 +36,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _min_paths(ws: Path) -> dict:
     """Minimal pre_check paths dict — every other gate fails open on it, so a
-    rc here is attributable to the plan gate alone."""
+    rc here is attributable to the plan gate alone.
+
+    The register seeds ONE OPEN claim: the approval point's dispatch
+    transaction must commit for real (a rolled-back commit leaves no
+    anchor for the plan-provenance gate to cite)."""
     ws.mkdir(parents=True, exist_ok=True)
+    from _factories import write_claims_register
+    write_claims_register(ws, [{"id": "C-001", "status": "OPEN",
+                                "dispatch_count": 0}])
     return {
         'workspace': str(ws),
         'state': ws / 'analysis_state.txt',
@@ -55,9 +62,9 @@ def _payload(prompt: str) -> dict:
     }}
 
 
-def _dispatch_prompt() -> str:
+def _dispatch_prompt(tier: int = 1) -> str:
     return ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
-            '"tier": 1, "tools": ["grep"], "agent": "w-test", '
+            f'"tier": {tier}, "tools": ["grep"], "agent": "w-test", '
             '"method_family": "static-decompile"}}\n'
             'facts-snapshot: 1 facts')
 
@@ -249,7 +256,8 @@ def test_redispatch_e2e_replay_full_lifecycle(tmp_path, capsys):
     assert _anchor_log(ws).exists(), 'first dispatch must stamp its anchor'
     _seed_live_heartbeat(ws)  # lifecycle linkage created the state file
     _settle_step(ws)  # #690: worker completes before the re-dispatch
-    rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
+    # the second dispatch derives its tier from the attempt history
+    rc = sinks.pre_check(_payload(_dispatch_prompt(tier=2)), paths)
     captured = capsys.readouterr()
     assert rc == 2, captured.err
     assert 'REJECT plan' in captured.err
@@ -302,7 +310,8 @@ def test_ghostwritten_plan_does_not_satisfy_redispatch(tmp_path, capsys):
     before = (datetime.fromisoformat(
         anchor_ts.replace('Z', '+00:00')).timestamp() - 3600)
     os.utime(plan, (before, before))
-    rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
+    # the second dispatch derives its tier from the attempt history
+    rc = sinks.pre_check(_payload(_dispatch_prompt(tier=2)), paths)
     captured = capsys.readouterr()
     assert rc == 2, 'ghostwritten plan must not satisfy the re-dispatch'
     assert 'REJECT plan' in captured.err
@@ -327,7 +336,8 @@ def test_worker_authored_plan_satisfies_redispatch(tmp_path, capsys):
         f'dispatch-anchor: {anchor_ts}\n'
         'goal: decode strings\nsteps: dump strings\nfallback: xxd walk\n',
         encoding='utf-8')
-    rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
+    # the second dispatch derives its tier from the attempt history
+    rc = sinks.pre_check(_payload(_dispatch_prompt(tier=2)), paths)
     assert rc == 0, capsys.readouterr().err
 
 

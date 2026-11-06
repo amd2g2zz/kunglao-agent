@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: 4050fe7954f0c3f04ef66c2ecf09f7cfd1a0adc726a4faea9da677cc88286add
+    sha256: 6969300bdf8d9fbbb86e773c30d22a353a76befee89cbdcbeb12ecc7fa29f998
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold
@@ -351,7 +351,7 @@ files:
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: 8910e792d97cc0757c982d99d4621485b62644a94ecb2661a9f17a9426fe4926
+    sha256: 125c1d381421c3ef7cd80f64ef40b408b2edaa056d31a1781ce0c982643302d2
   - src: scripts/cost_gate.py
     dest: .claude/scripts/cost_gate.py
     kind: scaffold
@@ -767,7 +767,7 @@ files:
   - src: scripts/kunglao.py
     dest: .claude/scripts/kunglao.py
     kind: scaffold
-    sha256: 90461a1114855d7553bc8975aa970e32ce8b64079f93f4b16aacef14226b6c6b
+    sha256: 8943af58bb63bb6995460dcd9728b37be11115bd6d2a3448cc39411b60afdf80
   - src: scripts/kunglao_eval.py
     dest: .claude/scripts/kunglao_eval.py
     kind: scaffold
