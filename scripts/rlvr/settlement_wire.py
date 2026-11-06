@@ -115,6 +115,86 @@ def default_rules_path() -> str | None:
     return str(_DEFAULT_RULES) if _DEFAULT_RULES.is_file() else None
 
 
+# ------------------------------------------------- the question resolver
+
+#: the two value-function sources the resolver joins: the register row
+#: carries ``answers_question`` (the pq id), the task spec maps that id
+#: to the question text.
+REGISTER_REL = "claim-register.yaml"
+TASK_SPEC_REL = "task_spec.yaml"
+
+
+def _yaml_doc(path: Path) -> dict:
+    """Load one YAML mapping; a missing or unreadable file is ``{}``
+    (the question field is context for the settler, never a gate). The
+    catch is the full unreadable family — io, syntax, a non-UTF-8
+    payload (UnicodeDecodeError), and the recursion blow-up a deeply
+    nested spec triggers."""
+    import ws_yaml  # noqa: PLC0415 — leaf face, import-light
+    try:
+        doc = ws_yaml.yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError, ws_yaml.yaml.YAMLError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _claim_qid(ws: Path, claim: str) -> str:
+    """The claim's ``answers_question`` pq id ("" when the row, the
+    field, or the register file is absent)."""
+    for row in (_yaml_doc(ws / REGISTER_REL).get("claims") or []):
+        if isinstance(row, dict) and str(row.get("id") or "") == claim:
+            return str(row.get("answers_question") or "").strip()
+    return ""
+
+
+def _question_text(item) -> tuple[str, str]:
+    """(qid, text) for one raw ``primary_questions`` item.
+
+    Three accepted shapes, mirroring the canonical parse: the template
+    dict (``id`` plus ``q``/``question``), the legacy one-key mapping
+    (qid -> free text), and a bare qid string (its own text)."""
+    if isinstance(item, str):
+        return item.strip(), item.strip()
+    if not isinstance(item, dict) or not item:
+        return "", ""
+    if "id" in item:
+        qid = str(item.get("id") or "").strip()
+        text = str(item.get("q") or item.get("question") or "").strip()
+        return qid, text or qid
+    if len(item) == 1:
+        qid, text = next(iter(item.items()))
+        qid = str(qid or "").strip()
+        return qid, str(text or "").strip() or qid
+    return "", ""
+
+
+def claim_question(ws, claim) -> str:
+    """The value question the claim answers, resolved register ->
+    task_spec (the production park passed nothing here, so every blind
+    doc lost the question it was judging).
+
+    ``claim-register`` rows carry ``answers_question`` (the pq id); the
+    task spec maps that id to the question text. Any missing link
+    degrades to "" — the settler judges artifacts, never a guessed
+    question."""
+    ws = Path(ws)
+    qid = _claim_qid(ws, str(claim or ""))
+    if not qid:
+        return ""
+    raw = _yaml_doc(ws / TASK_SPEC_REL).get("primary_questions")
+    if isinstance(raw, dict):
+        # a top-level mapping: keys are qids, values free text
+        if qid not in raw:
+            return ""
+        text = raw[qid]
+        return (str(text).strip() if isinstance(text, str) else "") or qid
+    for item in (raw or []):
+        iqid, text = _question_text(item)
+        if iqid and iqid == qid:
+            return text
+    return ""
+
+
 # ------------------------------------------------------------ the writer
 
 def _scan_window(ws: Path, since_ts: str, until: datetime) -> list[str]:
@@ -174,13 +254,19 @@ def step_window_artifacts(ws, since_ts: str,
 
 def park_blind_input(ws, claim, artifact_paths, *,
                      identity: str = DEFAULT_SETTLER_IDENTITY,
-                     question: str = "",
+                     question: str = ...,
                      rules_path: str | None = ...) -> dict:
     """Build + park the blind input doc for one claim (THE production
     writer — the issue-709 docstring's open gap, closed).
 
+    ``question`` defaults to the claim's resolved value question
+    (``claim_question``: register ``answers_question`` through the task
+    spec), so an omitted argument can never re-open the empty-question
+    hole; an explicit ``question=""`` stays empty.
+
     Raises ValueError exactly where the whitelist builder raises
-    (excluded face, missing artifact, unsafe claim) — the caller cages.
+    (excluded face, missing artifact, an empty artifact list, unsafe
+    claim) — the caller cages.
     Idempotent: identical bytes never rewrite; a CHANGED re-park after
     the settler ruled refuses (the ruling window is closed). Returns
     ``{"claim", "path", "doc", "parked", "reason"}``."""
@@ -188,6 +274,8 @@ def park_blind_input(ws, claim, artifact_paths, *,
     rel = blind_input_rel(claim)  # also the claim-safety gate
     if rules_path is ...:
         rules_path = default_rules_path()
+    if question is ...:
+        question = claim_question(ws, claim)
     doc = bss.settler_input(ws, claim=str(claim), identity=identity,
                             artifact_paths=list(artifact_paths or ()),
                             question=str(question or ""),

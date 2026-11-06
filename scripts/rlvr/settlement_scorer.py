@@ -168,10 +168,13 @@ def settler_input(ws, *, claim, artifact_paths, identity,
     """Build the BLIND settler input (path + sha256 artifacts only).
 
     Raises ValueError at the boundary — empty identity, empty claim, an
-    excluded face (case-folded, resolved), an artifact outside the ws or
-    missing on disk, an unreadable rules table. The builder never scans
-    the workspace: it opens exactly the listed artifact paths (after the
-    exclusion check). Deterministic: same arguments -> same bytes."""
+    empty artifact list (nothing to rule over), an excluded face
+    (case-folded, resolved), an artifact outside the ws or missing on
+    disk, an unreadable rules table. The rules pin is the RESOLVED
+    ABSOLUTE path (a slash-stripped normalized string is unresolvable).
+    The builder never scans the workspace: it opens exactly the listed
+    artifact paths (after the exclusion check). Deterministic: same
+    arguments -> same bytes."""
     ident = str(identity or "").strip()
     if not ident:
         raise ValueError("blind settlement input: settler identity "
@@ -191,6 +194,11 @@ def settler_input(ws, *, claim, artifact_paths, identity,
             raise ValueError(
                 f"blind settlement input: artifact missing: {rel}")
         artifacts.append({"path": rel, "sha256": sha256_file(p)})
+    if not artifacts:
+        raise ValueError(
+            "blind settlement input: at least one raw artifact is "
+            "required — an empty window leaves the settler nothing to "
+            "rule over")
     rules = None
     if rules_path:
         # repo-side policy path: face-scan the normalized path (never
@@ -206,7 +214,11 @@ def settler_input(ws, *, claim, artifact_paths, identity,
             raise ValueError(
                 f"blind settlement input: rules table missing: "
                 f"{rules_path}")
-        rules = {"path": norm, "sha256": sha256_file(rp)}
+        # the pin is the RESOLVED ABSOLUTE path: the normalized form
+        # dropped the leading slash, leaving a string that was neither
+        # absolute nor workspace-relative — the settler could not open
+        # the table it is required to rule under.
+        rules = {"path": str(rp.resolve()), "sha256": sha256_file(rp)}
     return {
         "schema": SETTLEMENT_INPUT_SCHEMA,
         "identity": ident,
@@ -218,8 +230,9 @@ def settler_input(ws, *, claim, artifact_paths, identity,
 
 
 def check_blind_input(input_doc) -> dict:
-    """The settlement-side blind re-check: schema, identity, claim, and
-    no excluded face among the artifacts — PATH checks, not string
+    """The settlement-side blind re-check: schema, identity, claim, at
+    least one pinned artifact, and no excluded face among the artifacts —
+    PATH checks, not string
     checks: artifact paths are lexically normalized (dot segments
     collapse; absolute/upward-escaping paths refuse) and case-folded
     before the scan, exactly like the builder's resolution; the rules
@@ -250,6 +263,15 @@ def check_blind_input(input_doc) -> dict:
         if face:
             return {"ok": False,
                     "reason": f"input: {raw} is excluded ({face})"}
+    if not arts:
+        # the trust wall's evidence floor: a zero-artifact doc pins no
+        # bytes, so a ruling over it cites nothing — and an empty
+        # citation list settles full credit (the review probe). The
+        # writer refuses an empty window; the gate must too, or a
+        # hand-crafted doc routes around the writer.
+        return {"ok": False,
+                "reason": "input: at least one artifact is required — a "
+                          "zero-evidence ruling cannot settle"}
     rules = input_doc.get("rules")
     if isinstance(rules, dict) and rules.get("path"):
         norm = _norm_rel(posixpath.normpath(
