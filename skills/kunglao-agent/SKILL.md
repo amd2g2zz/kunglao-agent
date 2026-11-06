@@ -166,6 +166,8 @@ Act on the decision + exit code — it is a command, not a suggestion:
 | `EMPTY_WORKSPACE` | 66 | markers exist but payloads are empty (intake never happened or files rotted) | Re-run init intake: `kunglao-init <ws> --resolve <answers.json>`. Never dispatch, never read as converged |
 | `VERSION_MISMATCH` | 67 | workspace format stamp != executing skill version (older AND newer refuse; missing stamp included) | Run `uv run --project <SKILL_DIR> python scripts/kunglao_upgrade.py <ws>` — the transactional upgrade is the only path forward; never dispatch, never read as converged |
 
+**Settler drain first** — on any tick (CONVERGED included) when the decision carries `pending_settlements`, dispatch `kunglao-settler` for the FIRST entry as a background task; carry the `facts-snapshot: <N> facts` marker in its prompt (the dispatch gate applies to it). The settler counts toward the ≤3 in-flight cap and the step barrier rejects it while any worker step is unsettled: drain in a no-open-step window, never alongside a worker dispatch in the same turn. Input `runs/settlement-input-<claim>.json`; its ruling `runs/settlement-verdict-<claim>.json` is what lets the SubagentStop settlement run.
+
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER act before the turn ends — background launches, never awaited inline.
 
 ## The dispatch contract

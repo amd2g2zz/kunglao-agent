@@ -2412,6 +2412,20 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             _emit_gap(workspace, actor="convergence_check",
                       action="heartbeat_gap",
                       detail=json.dumps(gap, ensure_ascii=False))
+    # the settler dispatch face: parked blind-settlement inputs the
+    # settler has NOT ruled on yet. Conditional key (byte-frozen anchors
+    # stay identical when nothing is parked — the conditional-key
+    # precedent above): the orchestrator drains these BEFORE the next
+    # worker dispatch, otherwise the loop runs but never settles (the live
+    # audit: zero settle events, dispatched_ids empty on every verifier
+    # decision).
+    try:
+        from rlvr import settlement_wire as _wire
+        _pending = _wire.pending_settlements(workspace)
+        if _pending:
+            decision["pending_settlements"] = _pending
+    except Exception as exc:  # noqa: BLE001 — advisory read face, never the verdict
+        warn("pending_settlements", f"{type(exc).__name__}: {exc}")
     # emit_snapshot=False (resume's #466 read-only contract) must quiesce
     # the #51 always-on recording too: signals are computed and attached
     # identically, but the value/rho persistence stays off (#51 regression:
@@ -2467,6 +2481,11 @@ def _human(d: dict) -> str:
         w15 = [f"{v['worker']} ({v['kind']}: {', '.join(v['missing']) or 'no files'})"
                for v in d["done_artifact_violations"]]
         lines.append(f"w15 (done without files): {'; '.join(w15)}")
+    pend = d.get("pending_settlements") or []
+    if pend:
+        first = pend[0]
+        lines.append(f"settler pending: {len(pend)} — dispatch kunglao-settler "
+                     f"for {first['claim']} ({first['path']})")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
     o = d.get("oracle")  # #108: the honest progress face (always present)
