@@ -288,7 +288,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'plan-first gate (#239 v2: dispatch carries intent, not a plan — '
             'planning is the worker\'s first act of execution). This is a '
-            'RE-dispatch: the claim already had an approved dispatch, so it '
+            'RE-dispatch: the claim already executed a dispatch, so it '
             'needs its plan reference. Fix: let the WORKER author '
             'runs/plan-C<NN>.md (goal / preflight / steps / fallback) in its '
             'own session — its first sanctioned write — citing its '
@@ -1269,7 +1269,8 @@ def pre_check(payload: dict, paths: dict) -> int:
         # #241: claim granularity — plan-size / domain-span at the SAME
         # plan-check point (NOT first dispatch: post-#239 the worker has
         # authored no plan yet, so the gate arms on the approval-point log
-        # exactly like the plan gate and fires from the NEXT dispatch on).
+        # plus the execution evidence, exactly like the plan gate, and
+        # fires from the NEXT dispatch on).
         # A monolithic plan REJECTS with the mechanical split directive
         # (mint_split_claims fan-out, issue 234 operator at creation time).
         ('granularity', check_claim_granularity(paths, cid, prompt)),

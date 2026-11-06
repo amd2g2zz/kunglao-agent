@@ -39,14 +39,17 @@ revoke target.
 
 ZERO DECISION POSTURE, as recorded by #670 (shadow telemetry): pure
 append + fail-open reads; no dispatch, gate, settlement, or promotion
-face imports this module (the 396 freeze-wall posture). #690 GRADUATES
-exactly one seam: the completion-grain step-record/2 rows (the settle
-face's own rows, hash-only like the rest) plus ``read_step_grains`` are
-consumed by rlvr.step_grain — the step grain is the settlement grain.
-step-record/1 (the per-tool-call shadow rows) stays append-only shadow
-telemetry under its original posture. Event time rides the events —
-the replay of a session's amendment stream is a pure function of its
-evidence items and byte-identical to the recorded file.
+face imports this module (the 396 freeze-wall posture). Two GRADUATED
+seams exist: (a) #690's completion-grain step-record/2 rows (the settle
+face's own rows, hash-only like the rest) plus ``read_step_grains``,
+consumed by rlvr.step_grain — the step grain is the settlement grain;
+(b) the dispatch gates' execution-evidence probe (plan-first /
+granularity arming) reads ``read_step_grains`` only, never the
+step-record/1 shadow rows. step-record/1 (the per-tool-call shadow rows)
+stays append-only shadow telemetry under its original posture. Event
+time rides the events — the replay of a session's amendment stream is a
+pure function of its evidence items and byte-identical to the recorded
+file.
 """
 from __future__ import annotations
 

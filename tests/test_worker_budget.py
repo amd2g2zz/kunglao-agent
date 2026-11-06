@@ -401,10 +401,12 @@ def test_check_worker_plan_first_dispatch_passes_without_plan(tmp_path):
 
 
 def _seed_prior_dispatch(ws, ts='2026-09-10T01:00:00Z'):
-    """One prior approved dispatch for C-001 (approval-point anchor log)."""
+    """One prior EXECUTED dispatch for C-001: anchor + step evidence."""
     (ws / 'runs').mkdir(parents=True, exist_ok=True)
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': ts, 'claim': 'C-001'}) + '\n', encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
 
 
 def test_check_worker_plan_redispatch_without_plan_rejects(tmp_path):
@@ -1038,6 +1040,8 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
         encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
     scenarios.append(('plan', 'plan-C',
                       lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
 
@@ -1118,6 +1122,8 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
         encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
     payload = {
         'hook_event_name': 'PreToolUse',
         'cwd': str(ws),

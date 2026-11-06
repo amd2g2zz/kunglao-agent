@@ -74,13 +74,16 @@ def _anchor_log(ws: Path, key: str = 'C001') -> Path:
 
 
 def _seed_prior_dispatch(ws: Path, ts: str = '2026-09-10T01:00:00Z') -> None:
-    """Seed ONE prior approved dispatch for C-001 (what stamp_dispatch_anchor
-    writes at the approval point)."""
+    """Seed ONE prior EXECUTED dispatch for C-001: the approval-point
+    anchor (what stamp_dispatch_anchor writes) plus the step record the
+    gate requires as execution evidence."""
     ws.mkdir(parents=True, exist_ok=True)
     (ws / 'runs').mkdir(exist_ok=True)
     _anchor_log(ws).write_text(
         json.dumps({'ts': ts, 'claim': 'C-001', 'agent': 'w-test'}) + '\n',
         encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
 
 
 def _seed_live_heartbeat(ws: Path) -> None:
@@ -144,7 +147,7 @@ def test_first_dispatch_ignores_prewritten_plan_entirely(tmp_path):
 # ---------- 2. Re-dispatch beyond the planning round ----------
 
 def test_redispatch_without_plan_reference_rejected(tmp_path):
-    """A re-dispatch (prior approved dispatch exists) without any plan on
+    """A re-dispatch (prior executed dispatch exists) without any plan on
     disk and without a plan reference in the prompt is still REJECTED."""
     from worker_budget_gates import check_worker_plan
     ws = tmp_path / 'ws'
@@ -152,6 +155,94 @@ def test_redispatch_without_plan_reference_rejected(tmp_path):
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
     assert not ok, 're-dispatch beyond the planning round requires the plan'
     assert 'plan' in msg.lower()
+
+
+def test_anchor_without_execution_does_not_arm_the_gate(tmp_path):
+    """An APPROVED dispatch that never executed does not arm plan-first:
+    the retry is still the planning round. The live audit's repeated
+    approvals with dispatched_ids empty armed the gate on nothing."""
+    import json as _json
+    from worker_budget_gates import check_worker_plan
+    ws = tmp_path / 'ws'
+    ws.mkdir(parents=True)
+    (ws / 'runs').mkdir()
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        _json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
+        encoding='utf-8')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, f'an anchor alone must not arm the plan gate: {msg}'
+    assert 'no prior dispatch has executed' in msg
+
+
+def _seed_transition(ws: Path, action_type: str,
+                     claim: str = 'C-001') -> None:
+    """Append one transition row to the consolidated experience file."""
+    (ws / 'runs').mkdir(parents=True, exist_ok=True)
+    row = {'schema': 'transition/1', 'ts': '2026-09-10T02:00:00Z',
+           'dispatch_id': claim, 'action_type': action_type,
+           'claim_ref': claim}
+    with (ws / 'runs' / 'experience.jsonl').open('a', encoding='utf-8') as fh:
+        fh.write(json.dumps(row) + '\n')
+
+
+def _anchor_only_ws(tmp_path, name: str):
+    ws = tmp_path / name
+    ws.mkdir(parents=True)
+    (ws / 'runs').mkdir()
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
+        encoding='utf-8')
+    return ws
+
+
+def test_a_settled_dispatch_transition_arms_the_gate(tmp_path, monkeypatch):
+    """The transition path is load-bearing: a settled DISPATCH row for the
+    claim arms plan-first even when no step row exists."""
+    from rlvr import learning_seal
+    monkeypatch.setattr(learning_seal, 'armed', lambda: False)
+    from worker_budget_gates import check_worker_plan
+    ws = _anchor_only_ws(tmp_path, 'ws')
+    _seed_transition(ws, 'dispatch')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert not ok, f'a settled dispatch must arm the gate: {msg}'
+    assert 'plan' in msg.lower()
+
+
+def test_prediction_settle_does_not_arm_the_gate(tmp_path, monkeypatch):
+    """Only DISPATCH rows are execution evidence: a prediction-settle
+    transition carries the same claim keys but nothing was dispatched."""
+    from rlvr import learning_seal
+    monkeypatch.setattr(learning_seal, 'armed', lambda: False)
+    from worker_budget_gates import check_worker_plan
+    ws = _anchor_only_ws(tmp_path, 'ws')
+    _seed_transition(ws, 'prediction-settle')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, f'a non-dispatch row must not arm the gate: {msg}'
+    assert 'no prior dispatch has executed' in msg
+
+
+def test_execution_evidence_memo_invalidates_on_append(tmp_path, monkeypatch):
+    """The per-process memo must not serve a stale False after the ledger
+    grows: appending a dispatch transition re-arms the gate."""
+    from rlvr import learning_seal
+    monkeypatch.setattr(learning_seal, 'armed', lambda: False)
+    import worker_budget_gates as wbg
+    calls = []
+    real = wbg._scan_execution_evidence
+
+    def _counting(ws, cid):
+        calls.append(cid)
+        return real(ws, cid)
+
+    monkeypatch.setattr(wbg, '_scan_execution_evidence', _counting)
+    ws = _anchor_only_ws(tmp_path, 'ws')
+    assert wbg._execution_evidence(ws, 'C-001') is False
+    assert wbg._execution_evidence(ws, 'C-001') is False
+    assert len(calls) == 1, 'the memo must serve the second call'
+    _seed_transition(ws, 'dispatch')
+    assert wbg._execution_evidence(ws, 'C-001') is True, (
+        'an appended row must invalidate the memo')
+    assert len(calls) == 2
 
 
 def test_redispatch_e2e_replay_full_lifecycle(tmp_path, capsys):

@@ -86,11 +86,13 @@ def _write_retry_counter(ws: Path, entries: dict[str, int]) -> None:
 
 
 def _seed_prior_dispatch(ws: Path, ts: str = '2026-09-10T01:00:00Z') -> None:
-    """One prior approved dispatch for C-001 (approval-point anchor log) —
-    arms the plan gate's re-dispatch leg."""
+    """One prior EXECUTED dispatch for C-001 — arms the plan gate's
+    re-dispatch leg (anchor + claim-attributed step evidence)."""
     (ws / 'runs').mkdir(parents=True, exist_ok=True)
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': ts, 'claim': 'C-001'}) + '\n', encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
 
 
 # ---------------------------------------------------------------------------

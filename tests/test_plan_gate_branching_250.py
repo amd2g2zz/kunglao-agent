@@ -38,6 +38,8 @@ def _seed_prior_dispatch(ws: Path) -> None:
     (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
         json.dumps({'ts': TS, 'claim': 'C-001', 'agent': 'w-test'}) + '\n',
         encoding='utf-8')
+    from _factories import seed_execution_evidence
+    seed_execution_evidence(ws, 'C-001')
 
 
 LINEAR = (

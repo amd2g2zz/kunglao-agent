@@ -769,10 +769,11 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
 #   - the FIRST dispatch of a claim is plan-free (nothing to satisfy at
 #     dispatch time — a ghostwritten plan neither satisfies nor blocks it);
 #   - plan-first gates the worker's EXECUTION LOOP instead: a RE-dispatch
-#     (the claim already has a prior approved dispatch in its approval-point
-#     anchor log) requires the plan reference — the worker-authored plan on
-#     disk (content + provenance, #57 gate 3 below) or the plan path in the
-#     dispatch prompt (reserved for re-dispatch continuity).
+#     (a prior dispatch actually EXECUTED — approval anchor plus the
+#     step/transition evidence) requires the plan reference — the
+#     worker-authored plan on disk (content + provenance, #57 gate 3
+#     below) or the plan path in the dispatch prompt (reserved for
+#     re-dispatch continuity).
 
 # #294: the plan-first gate (#239) only checked file EXISTENCE — an empty-shell
 # template (goal:/preflight:/steps:/fallback: with every field bare, no content)
@@ -836,16 +837,18 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     """Issue #239 (contract v2, owner ruling) + #57 gate 3: dispatch carries
     intent, NOT a plan — planning is the worker's first act of execution.
 
-    FIRST dispatch of the claim (no prior approved dispatch recorded in the
-    claim's approval-point anchor log `runs/.dispatch-anchor-<KEY>.jsonl`):
-    PASSES without any pre-existing plan. The gate does not inspect plan
-    files at all on the first dispatch — an orchestrator-ghostwritten plan
-    neither satisfies nor blocks it. The worker's first sanctioned write is
-    its own plan (kunglao-worker.md golden rule #3), carrying its dispatch
-    anchor as provenance.
+    FIRST dispatch of the claim (no prior dispatch has EXECUTED — the
+    approval-point anchor log `runs/.dispatch-anchor-<KEY>.jsonl` alone is
+    approval evidence, not execution): PASSES without any pre-existing
+    plan. The gate does not inspect plan files at all on the first
+    dispatch — an orchestrator-ghostwritten plan neither satisfies nor
+    blocks it. The worker's first sanctioned write is its own plan
+    (kunglao-worker.md golden rule #3), carrying its dispatch anchor as
+    provenance.
 
-    RE-dispatch (>=1 prior approved dispatch for the claim — execution beyond
-    the planning round): requires the plan reference for THAT claim:
+    RE-dispatch (>=1 prior EXECUTED dispatch for the claim — execution
+    beyond the planning round): requires the plan reference for THAT
+    claim:
       - the on-disk `runs/plan-C<NN>*.md` WITH CONTENT (real-world naming is
         plan-c005.md, claim only, no suffix) and worker-session provenance
         (#57 gate 3 plan_author_violation — a plan authored outside the
@@ -864,10 +867,12 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     (a gate_error:plan_read warn). The pre-#427 fail-open 'content not
     verified' pass is gone.
 
-    First-dispatch vs re-dispatch is decided ONLY from the approval-point
-    anchor log (what stamp_dispatch_anchor wrote for PRIOR dispatches): the
-    current dispatch's own KUNGLAO_DISPATCH_CONTEXT / context-file nonce is
-    composed pre-dispatch and must never count as a prior dispatch.
+    First-dispatch vs re-dispatch is decided from the approval-point
+    anchor log (what stamp_dispatch_anchor wrote for PRIOR dispatches)
+    AND the execution evidence (a claim-attributed step row or a settled
+    DISPATCH transition row): the current dispatch's own
+    KUNGLAO_DISPATCH_CONTEXT / context-file nonce is composed
+    pre-dispatch and must never count as a prior dispatch.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -877,15 +882,18 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     if not ws:
         return (True, '')  # FAIL_OPEN — mirrors check_workers_lt_3
     key = cid.replace('-', '')  # C-001 -> C001 (claim key inside plan names)
-    # #239 v2: prior approved dispatches ONLY — the approval-point log.
-    if not _anchor_log_ts_list(Path(ws), key):
-        return (True, (f'first dispatch of {cid}: no pre-existing plan '
-                       f'required (dispatch carries intent, not a plan — '
-                       f'planning is the worker\'s first act of execution; '
-                       f'the worker\'s first sanctioned write is '
-                       f'runs/plan-{key}*.md with its dispatch-anchor '
-                       f'provenance line; the plan is required from the '
-                       f'NEXT dispatch on)'))
+    # #239 v2: re-dispatch = a prior dispatch that actually EXECUTED —
+    # the approval anchor alone is not execution (the audit's repeated
+    # approvals with dispatched_ids empty armed this gate on nothing).
+    if not _anchor_log_ts_list(Path(ws), key) \
+            or not _execution_evidence(Path(ws), cid):
+        return (True, (f'first dispatch of {cid} (no prior dispatch has '
+                       f'executed): no pre-existing plan required (dispatch '
+                       f'carries intent, not a plan — planning is the '
+                       f'worker\'s first act of execution; the worker\'s '
+                       f'first sanctioned write is runs/plan-{key}*.md with '
+                       f'its dispatch-anchor provenance line; the plan is '
+                       f'required from the NEXT dispatch on)'))
     # plan discovery: the #239 plan-naming contract, single source (#241).
     from claim_granularity import plan_file
     plan_path = plan_file(ws, cid)
@@ -970,8 +978,9 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
 # pure predicate (granularity_defects) and the split mint
 # (mint_split_claims); this face arms it at the plan-check point of the
 # execution loop — post-#239, on the FIRST dispatch the worker has authored
-# no plan yet, so the gate arms on the approval-point log exactly like the
-# plan-first gate and fires from the NEXT dispatch on.
+# no plan yet, so the gate arms on the approval-point log PLUS the
+# execution evidence (exactly like the plan-first gate) and fires from the
+# NEXT dispatch on.
 
 
 def check_claim_granularity(paths: dict, cid: str | None,
@@ -980,8 +989,9 @@ def check_claim_granularity(paths: dict, cid: str | None,
     gate at the plan-check point of the execution loop.
 
     Post-#239 contract: planning is the worker's first act. On the FIRST
-    dispatch (no prior approved dispatch in the approval-point anchor log)
-    the worker has authored no plan yet and the gate is NOT armed — the
+    dispatch (no prior dispatch has executed — an approval anchor plus a
+    claim-attributed step/transition row is the arming evidence) the
+    worker has authored no plan yet and the gate is NOT armed — the
     same arming discipline as check_worker_plan. From the NEXT dispatch on,
     the worker-authored plan is READ:
       - step count > GRANULARITY_MAX_STEPS (8) -> monolithic; padded or
@@ -996,8 +1006,10 @@ def check_claim_granularity(paths: dict, cid: str | None,
 
     FAIL_OPEN: no claim, no workspace, no plan to inspect (the plan-first
     gate owns the no-plan rejection — one rejection per gate family),
-    unreadable plan. Arming: the approval-point anchor log ONLY (the
-    current dispatch's own context nonce never counts as a prior dispatch).
+    unreadable plan. Arming: the approval-point anchor log PLUS the
+    execution evidence — a claim-attributed step row or a settled
+    DISPATCH transition row (the current dispatch's own context nonce
+    never counts as a prior dispatch).
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -1007,14 +1019,17 @@ def check_claim_granularity(paths: dict, cid: str | None,
     if not ws:
         return (True, '')  # FAIL_OPEN — mirrors check_worker_plan
     key = cid.replace('-', '')
-    # arming: prior approved dispatches ONLY — the approval-point log
-    # (identical discipline to check_worker_plan's plan-first arming).
-    if not _anchor_log_ts_list(Path(ws), key):
-        return (True, (f'first dispatch of {cid}: granularity gate not '
-                       f'armed (post-#239 the worker has authored no plan '
-                       f'yet — planning is the worker\'s first act; the '
-                       f'gate fires on the plan the worker authored, from '
-                       f'the NEXT dispatch on)'))
+    # arming: a prior dispatch that actually EXECUTED — approval anchor
+    # plus step/transition evidence (identical discipline to
+    # check_worker_plan's plan-first arming).
+    if not _anchor_log_ts_list(Path(ws), key) \
+            or not _execution_evidence(Path(ws), cid):
+        return (True, (f'first dispatch of {cid} (no prior dispatch has '
+                       f'executed): granularity gate not armed (post-#239 '
+                       f'the worker has authored no plan yet — planning is '
+                       f'the worker\'s first act; the gate fires on the '
+                       f'plan the worker authored, from the NEXT dispatch '
+                       f'on)'))
     from claim_granularity import (GRANULARITY_MAX_STEPS, granularity_defects,
                                    plan_file, read_plan, split_guidance)
     plan_path = plan_file(ws, cid)
@@ -1151,6 +1166,62 @@ def _anchor_log_ts_list(ws: Path, key: str) -> list[str]:
         except OSError as exc:
             warn("_anchor_log_ts_list", f"{type(exc).__name__}: {exc}")
     return out
+
+
+#: process-local memo for _execution_evidence — the plan and granularity
+#: gates ask the same question in one dispatch, and the consolidated
+#: experience scan is linear in the append-only file. Keyed by the
+#: ledger's identity so an appended row invalidates it.
+_EXEC_CACHE: dict = {}
+
+
+def _execution_evidence(ws: Path, cid: str) -> bool:
+    """Did a prior DISPATCH of this claim actually EXECUTE?
+
+    The approval anchor proves a dispatch was APPROVED — not that the
+    worker ever ran. The live audit caught the loop approving dispatch
+    after dispatch (anchor rows growing) while ``dispatched_ids`` stayed
+    empty, so the plan gates armed against evidence of nothing.
+
+    Evidence: a claim-attributed completion-grain step row (the graduated
+    ``read_step_grains`` seam) or a SETTLED DISPATCH transition row —
+    other action types (verify / settle / prediction-settle) are not
+    dispatches and must not arm this gate. Unreadable ledgers fail OPEN
+    to False: the gate keeps its pre-arming (planning-round) posture
+    rather than blocking a dispatch on a broken read."""
+    ws = Path(ws)
+    ledger = ws / "runs" / "experience.jsonl"
+    try:
+        st = ledger.stat()
+        sig = (str(ws), cid, st.st_mtime_ns, st.st_size)
+    except OSError:
+        sig = (str(ws), cid, 0, 0)
+    if sig in _EXEC_CACHE:
+        return _EXEC_CACHE[sig]
+    result = _scan_execution_evidence(ws, cid)
+    _EXEC_CACHE[sig] = result
+    return result
+
+
+def _scan_execution_evidence(ws: Path, cid: str) -> bool:
+    try:
+        from rlvr import step_ledger as _sl
+        if any(str(r.get('claim_ref') or '') == cid
+               for r in _sl.read_step_grains(ws)):
+            return True
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        warn("_execution_evidence", f"step ledger unreadable: {exc}")
+        return False
+    try:
+        from rlvr import incremental_reward as _ir
+        return any(
+            str(r.get('action_type') or 'dispatch') == 'dispatch'
+            and (str(r.get('dispatch_id') or '') == cid
+                 or str(r.get('claim_ref') or '') == cid)
+            for r in _ir.read_transitions(ws))
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        warn("_execution_evidence", f"transition ledger unreadable: {exc}")
+        return False
 
 
 def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
@@ -1820,7 +1891,9 @@ def check_tool_search_citation(paths: dict, cid: str | None,
     (`tool-search: <keywords> -> <hit|none>`); a bare marker is NOT a
     citation (#630 anti-self-attestation shape).
 
-    Arming + fail-open mirror check_claim_granularity: first dispatch passes
+    Arming + fail-open mirror check_claim_granularity's approval-anchor
+    leg (the execution-evidence tightening applied to the plan and
+    granularity gates is not applied here): first dispatch passes
     (the worker has authored no plan yet); no-plan passes (the plan-first
     gate owns that rejection — one rejection per gate family); unreadable
     plan passes. Returns (ok, reason). ok=False REJECTs the dispatch.

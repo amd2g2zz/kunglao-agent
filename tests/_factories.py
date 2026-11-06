@@ -97,6 +97,28 @@ _CLAIM_DEFAULTS = ((
     ("depends_on", "[]"),
 ))
 
+def seed_execution_evidence(ws: Path, claim: str = "C-001") -> Path:
+    """Seed ONE claim-attributed step record — the execution evidence the
+    plan gates arm on.
+
+    An approval anchor alone no longer arms ``check_worker_plan`` /
+    ``check_claim_granularity`` (the live audit caught repeat approvals
+    with ``dispatched_ids`` empty). The row matches what the step grain
+    writes at a real settle: the hash-only v2 whitelist with ``claim_ref``.
+    """
+    import sys
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    from rlvr import step_ledger
+    step_ledger.record_step_grain(ws, {
+        "schema": "step-record/2", "ts": "2026-01-01T00:00:00Z",
+        "session_id": "sess-seed", "step_id": f"step-{claim}",
+        "claim_ref": claim, "tool_calls": 0, "call_ids": [],
+        "first_ts": "", "last_ts": "", "duration_ms": 1})
+    return ws / "runs" / "experience.jsonl"
+
+
 def write_claims_register(ws: Path, claims: list[dict],
                           *, defaults: bool = False) -> Path:
     """Write the workspace claim-register.yaml (text dialect).
