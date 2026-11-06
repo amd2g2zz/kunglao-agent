@@ -201,6 +201,33 @@ def test_failed_register_step_rolls_back_the_applied_prefix(tmp_path) -> None:
                              prompt="d", agent="w").ok is True
 
 
+def test_rollback_removes_the_anchor_file_it_created(tmp_path) -> None:
+    """The inversion is byte-faithful: the anchor file did not exist
+    before the commit, so a rolled-back commit leaves no file. A 0-byte
+    anchor is a NEW artifact — downstream readers (the plan-provenance
+    gate, the granularity re-dispatch) parse its last line, and an empty
+    log reads as a missing dispatch."""
+    ws = _ws(tmp_path)
+    assert cs.begin_dispatch(ws, "C-1", actor="o", tier=1,
+                             prompt="d", agent="w").ok is True
+    write_claims_register(ws, [{"id": "C-1", "status": "IN_PROGRESS",
+                                "dispatch_count": 0}])
+    assert cs.commit_dispatch(ws, "C-1").ok is False
+    assert not (ws / "runs" / ".dispatch-anchor-C1.jsonl").exists()
+
+
+def test_rollback_removes_a_register_it_created(tmp_path) -> None:
+    """When the register did not exist at begin time, the inverted
+    commit removes it instead of writing a 0-byte file."""
+    ws = tmp_path / "bare"
+    (ws / "runs").mkdir(parents=True)
+    assert cs.begin_dispatch(ws, "C-1", actor="o", tier=1,
+                             prompt="d", agent="w").ok is True
+    write_claims_register(ws, [{"id": "C-1", "status": "IN_PROGRESS"}])
+    assert cs.commit_dispatch(ws, "C-1").ok is False
+    assert not (ws / "claim-register.yaml").exists()
+
+
 def _child_script(crash_after: str) -> str:
     return textwrap.dedent(f"""
         import os, signal, sys
