@@ -263,7 +263,8 @@ def test_gate_refuses_aliased_and_escaping_paths(tmp_path):
     # the rules table may live outside the ws, never on a denied face
     with pytest.raises(ValueError, match="excluded"):
         bss.settler_input(ws, claim="C-9", identity="settle-1",
-                          artifact_paths=[], rules_path="notes/worker-report.md")
+                          artifact_paths=["evidence/raw-step.bin"],
+                          rules_path="notes/worker-report.md")
     base = {"schema": bss.SETTLEMENT_INPUT_SCHEMA, "identity": "settle-1",
             "claim": "C-9", "artifacts": []}
     for bad in ("Runs/Method-Family-Log.Jsonl", "runs/../notes/x.md",
@@ -275,7 +276,8 @@ def test_gate_refuses_aliased_and_escaping_paths(tmp_path):
     assert bss.check_blind_input(rules_doc)["ok"] is False
     # the legal repo-side rules table still rides through both doors
     ok = bss.settler_input(ws, claim="C-9", identity="settle-1",
-                           artifact_paths=[], rules_path=RULES_PATH)
+                           artifact_paths=["evidence/raw-step.bin"],
+                           rules_path=RULES_PATH)
     assert bss.check_blind_input(ok)["ok"] is True
 
 
