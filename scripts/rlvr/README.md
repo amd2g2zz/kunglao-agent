@@ -61,6 +61,12 @@ scripts/rlvr/
 │                        #   append-only runs/posterior-store.jsonl + fold/read
 │                        #   γ decay + pseudo-count priors + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
+├── orphan_resolver.py   # issue-1005 S7 the orphan launch-sweep resolver —
+│                        #   consumes sweep_orphan_launches' return at the
+│                        #   close path: one orphan-resolution/1 telemetry row
+│                        #   (stash path + sha256 cited) + a quarantine move to
+│                        #   runs/orphan-archive/; refused rows (open claim /
+│                        #   foreign envelope) leave the stash in place
 ├── obstacles.py         # obstacle/1 attribution registry (issue 461
 │                        #   Phase 1) — intervention-born failure-cause
 │                        #   objects as runs/obstacles/OBS-<n>.json,
