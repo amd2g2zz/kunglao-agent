@@ -2392,7 +2392,14 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         # anchors — the trace IS the artifact).
         try:
             from rlvr import incremental_reward as _ir_sweep
-            _ir_sweep.sweep_orphan_launches(workspace)
+            _ir_orphans = _ir_sweep.sweep_orphan_launches(workspace)
+            # issue-1005 S7: the sweep's return value is finally
+            # consumed — every orphan leaves ONE resolution row
+            # (settled or refused with a reason) and, unless refused,
+            # a quarantine move; fail-open, and the decide() dict
+            # stays untouched (byte-frozen anchors)
+            from rlvr import orphan_resolver as _orphan_resolver
+            _orphan_resolver.resolve(workspace, _ir_orphans)
         except Exception as exc:  # noqa: BLE001 — fail-open per issue-275 WARN policy
             warn("orphan_launch_sweep", f"{type(exc).__name__}: {exc}")
     # #618: dead-window alarm off the durable heartbeat sidecar (#830

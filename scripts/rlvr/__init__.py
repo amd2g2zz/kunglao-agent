@@ -55,6 +55,7 @@ from . import meta_policy
 from . import meta_retrieval
 from . import meta_arms
 from . import obstacles
+from . import orphan_resolver
 from . import parking
 from . import phi_tree
 from . import playbook
@@ -135,6 +136,7 @@ __all__ = [
     "meta_policy",
     "meta_retrieval",
     "obstacles",
+    "orphan_resolver",
     "parking",
     "phi_tree",
     "playbook",
