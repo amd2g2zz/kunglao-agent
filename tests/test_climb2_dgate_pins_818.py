@@ -38,6 +38,13 @@ def _write_yaml(path: Path, data) -> None:
                                    sort_keys=False), encoding="utf-8")
 
 
+def _strategy_rows(ws):
+    """#1004: the strategy-log dispatch rows ride the telemetry family's
+    consolidated file (schema strategy-log/1)."""
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "telemetry", schema_prefix="strategy-log/1")
+
+
 def _mk_ws(tmp_path: Path, *, claim: dict | None = None) -> Path:
     ws = tmp_path / "malware-analysis-workspace"
     ws.mkdir(parents=True)
@@ -326,9 +333,7 @@ class TestStrategyLog:
         import dispatch_gate as dg
         ws = _mk_ws(tmp_path)
         dg._log_strategy_dispatch(ws, "C-1", _v1_prompt("C-1"))
-        rows = [json.loads(ln) for ln in
-                (ws / "runs" / "strategy-log.jsonl")
-                .read_text("utf-8").splitlines() if ln.strip()]
+        rows = _strategy_rows(ws)  # #1004: the telemetry family face
         assert rows[-1]["strategy"] == "default"
         assert rows[-1]["declared"] is False
         assert rows[-1]["claim"] == "C-1"
@@ -340,31 +345,28 @@ class TestStrategyLog:
                                      "answers_question": "q1",
                                      "promotion_attempts": 4})
         dg._log_strategy_dispatch(ws, "C-1", "[strategy exploit-chain-a] go")
-        rows = [json.loads(ln) for ln in
-                (ws / "runs" / "strategy-log.jsonl")
-                .read_text("utf-8").splitlines() if ln.strip()]
+        rows = _strategy_rows(ws)  # #1004: the telemetry family face
         assert rows[-1]["strategy"] == "exploit-chain-a"
         assert rows[-1]["declared"] is True
         assert rows[-1]["attempts_at_snapshot"] == 4
 
-    def test_read_truncate_write_caps_the_ledger(self, tmp_path) -> None:
+    def test_rows_append_only_into_the_family_file(self, tmp_path) -> None:
+        """#1004: the read-truncate-write cap retired with the standalone
+        file — the dispatch rows ride the telemetry family's consolidated
+        file APPEND-ONLY (no rewrite path exists on the family face)."""
         import dispatch_gate as dg
+        from rlvr import consolidated_ledger as _cl
         ws = _mk_ws(tmp_path)
-        log = ws / "runs" / "strategy-log.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        pre = "\n".join(
-            json.dumps({"event": "dispatch", "claim": f"C-{i}",
-                        "strategy": "s", "declared": True,
-                        "attempts_at_snapshot": 0})
-            for i in range(dg.STRATEGY_LOG_MAX + 5)) + "\n"
-        log.write_text(pre, encoding="utf-8")
+        for i in range(3):
+            assert _cl.append(ws, "telemetry",
+                              {"schema": dg.STRATEGY_LOG_SCHEMA,
+                               "event": "dispatch", "claim": f"C-{i}",
+                               "strategy": "s", "declared": True,
+                               "attempts_at_snapshot": 0})
         dg._log_strategy_dispatch(ws, "C-1", "[strategy s1] x")
-        kept = [ln for ln in
-                log.read_text("utf-8").splitlines() if ln.strip()]
-        # cap runs BEFORE the append: steady state is MAX+1 (read-truncate-
-        # write), never unbounded growth
-        assert len(kept) == dg.STRATEGY_LOG_MAX + 1
-        assert json.loads(kept[-1])["strategy"] == "s1"
+        rows = _strategy_rows(ws)
+        assert len(rows) == 4  # append-only: nothing truncated
+        assert rows[-1]["strategy"] == "s1"
 
 
 # ---------------- 9. intent declaration + record (#105) ----------------
@@ -557,18 +559,22 @@ class TestPqHistoryFaces:
     def test_dispatched_before_reads_both_history_faces(
             self, tmp_path) -> None:
         import dispatch_gate as dg
-        ws = _mk_ws(tmp_path)
+        from rlvr import consolidated_ledger as _cl
+        # #1004: the strategy face rides the telemetry family file
+        # (append-only — each face gets its own workspace)
         qmap = {"C-1": "q1", "C-2": "q1"}
+        ws = _mk_ws(tmp_path)
         assert dg._pq_dispatched_before(ws, "q1", qmap) is False
-        strategy = ws / "runs" / "strategy-log.jsonl"
-        strategy.write_text(json.dumps(
-            {"event": "dispatch", "claim": "C-2"}) + "\n", encoding="utf-8")
+        assert _cl.append(ws, "telemetry",
+                          {"schema": dg.STRATEGY_LOG_SCHEMA,
+                           "event": "dispatch", "claim": "C-2"})
         assert dg._pq_dispatched_before(ws, "q1", qmap) is True
-        strategy.unlink()
-        intents = ws / "runs" / "roi-intents.jsonl"
+        ws2 = tmp_path / "malware-analysis-workspace-2"
+        intents = ws2 / "runs" / "roi-intents.jsonl"
+        intents.parent.mkdir(parents=True, exist_ok=True)
         intents.write_text(json.dumps({"claim_id": "C-1"}) + "\n",
                            encoding="utf-8")
-        assert dg._pq_dispatched_before(ws, "q1", qmap) is True
+        assert dg._pq_dispatched_before(ws2, "q1", qmap) is True
 
     def test_first_dispatch_into_starved_pq_demotes_not_blocks(
             self, tmp_path) -> None:
@@ -755,11 +761,10 @@ class TestMainArcs:
         rc = self._run_main(monkeypatch, _payload(prompt, "kunglao-worker"))
         assert rc == 0
         # the ALLOW tail is the one face every dispatch passes: strategy log
-        strategy = ws / "runs" / "strategy-log.jsonl"
-        assert strategy.is_file()
-        last = json.loads([ln for ln in
-                           strategy.read_text("utf-8").splitlines()
-                           if ln.strip()][-1])
+        # (#1004: the telemetry family face)
+        srows = _strategy_rows(ws)
+        assert srows
+        last = srows[-1]
         assert last["claim"] == "C-1"
         # the intent row is banked (named uncertainty in the envelope)
         intents = ws / "runs" / "roi-intents.jsonl"

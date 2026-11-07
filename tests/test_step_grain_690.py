@@ -189,9 +189,10 @@ def test_branch_budget_overrun_lands_in_attributed_waste(tmp_path) -> None:
     _tool_rows(ws, "sess-9", 2)
     settled = sg.settle_step(ws, "sess-9")
     assert settled is not None
-    waste = [json.loads(ln) for ln in
-             (ws / "runs" / "attributed-waste.jsonl").read_text(
-                 "utf-8").splitlines()]
+    # #1004: the waste rows ride the settlement family file
+    from rlvr import consolidated_ledger as _cl
+    waste = [r for r in _cl.read(ws, "settlement",
+                                 schema_prefix="attributed-waste/1")]
     assert waste, "a wall_s overrun must land in attributed-waste"
     row = waste[-1]
     assert row["schema"] == "attributed-waste/1"
@@ -204,9 +205,9 @@ def test_branch_budget_overrun_lands_in_attributed_waste(tmp_path) -> None:
     ir.record_launch(ws, "C-6", "fast", branch_budget={"wall_s": 86400})
     settled = sg.settle_step(ws, "sess-9")
     assert settled is not None
-    assert len([json.loads(ln) for ln in
-                (ws / "runs" / "attributed-waste.jsonl").read_text(
-                    "utf-8").splitlines()]) == 1
+    from rlvr import consolidated_ledger as _cl
+    assert len(_cl.read(ws, "settlement",
+                        schema_prefix="attributed-waste/1")) == 1
 
 
 def test_branch_budget_retries_blocks_the_next_dispatch(tmp_path) -> None:

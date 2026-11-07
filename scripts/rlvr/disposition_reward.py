@@ -334,8 +334,7 @@ def _existing_signal(ws, signal: dict) -> bool:
     """One signal per episode: the episode id + claim identify a replay
     (the disposition row itself is never rewritten)."""
     for row in consolidated_ledger.read(
-            ws, TELEMETRY_FAMILY, schema_prefix=SIGNAL_SCHEMA,
-            include_legacy=False):
+            ws, TELEMETRY_FAMILY, schema_prefix=SIGNAL_SCHEMA):
         if (row.get("episode_id") == signal["episode_id"]
                 and row.get("claim") == signal["claim"]):
             return True

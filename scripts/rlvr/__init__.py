@@ -150,6 +150,8 @@ __all__ = [
     "refutation_fold",
     "reward",
     "reward_signal",
+    "signal_guard",
+    "triples",
     "review_windows",
     "rollout_timer",
     "route_ledger",

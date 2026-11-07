@@ -74,6 +74,9 @@ EXCLUDED_PREFIXES = ("runs/worker-status-", "runs/verification-")
 EXCLUDED_SUFFIXES = ("-verify-note.md",)
 EXCLUDED_FILES = {
     "runs/method-family-log.jsonl": "the method-family learning face",
+    # the retired rel stays DENIED (denying more is safe — #721): a
+    # blind act never opens the learning faces, whatever a worker's
+    # artifact list claims; #1004's retire CLI is the rel's only reader
     "runs/q-cell-log.jsonl": "the q-cell learning face (arm values)",
     # #721: the q-cell arm values now ride the consolidated learning
     # feed — the whole file joins the wall (its transition rows are

@@ -345,7 +345,7 @@ ext:
     consume: "invoke"
     source: "scripts/consolidate_ledgers.py"
     usage: "python scripts/consolidate_ledgers.py"
-    description: "consolidate_ledgers.py — the one-time #721 ledger migration + liveness CLI."
+    description: "consolidate_ledgers.py — the #1004 ledger retirement CLI + liveness."
   - name: "content_hash"
     capability: "unknown"
     type: "tool"

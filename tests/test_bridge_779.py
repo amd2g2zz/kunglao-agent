@@ -16,7 +16,8 @@ admission would double-count one observation).
 
 Bridge-produced pool observations must count in the degeneracy series
 ``rlvr.signal_guard.recent_credits`` monitors: every admission appends
-a ``posterior-store/1`` credit row to ``<ws>/runs/posterior-store.jsonl``
+a ``posterior-store/1`` credit row to the knowledge family's
+consolidated file
 (the file the breaker reads), carrying the settled credit and the
 resolved family. All fixtures are SYNTHETIC (privacy rule).
 """
@@ -226,11 +227,10 @@ def test_bridge_without_usage_family_records_the_honest_gap(tmp_path):
 
 
 def _posterior_store_rows(ws: Path) -> list[dict]:
-    store = Path(ws) / "runs" / "posterior-store.jsonl"
-    if not store.is_file():
-        return []
-    return [json.loads(ln) for ln in
-            store.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # #1004: the credit series rides the knowledge family's consolidated
+    # file (rows carry workspace_id — this workspace's own rows)
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "knowledge", schema_prefix="posterior-store/1")
 
 
 def test_bridge_appends_credit_row_to_posterior_store(tmp_path):

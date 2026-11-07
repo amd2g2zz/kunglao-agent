@@ -407,7 +407,8 @@ class TestTolerance:
         same string is NOT the claim's task settlement."""
         copy = tmp_path / "root"
         shutil.copytree(ROOT, copy)
-        ledger = copy / "ws" / "e2e-ws-b" / "runs" / "rollout-ledger.jsonl"
+        # #1004: the rollout ledger rides the settlement family file
+        ledger = copy / "ws" / "e2e-ws-b" / "runs" / "settlement.jsonl"
         ledger.parent.mkdir(parents=True, exist_ok=True)
         ledger.write_text(json.dumps({
             "schema": "rollout-ledger/1",

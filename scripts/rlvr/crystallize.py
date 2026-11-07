@@ -193,26 +193,41 @@ def _rewrite_without(path: Path, drop) -> int:
 
 
 def revoke_claim(ws, claim: str) -> dict:
-    """Drop every derived row attributed to the claim from BOTH derived
-    stores (negatives by ``claim_ref``, broadcasts by ``claim``). The
-    discriminant dies with the settlement it was derived from; the
-    evidence of record (steps, transitions, amendment rows) is
-    untouched. An empty claim is refused at the boundary (it would
-    match every unattributed row). Returns per-store removal counts."""
+    """Drop every derived row attributed to the claim from the knowledge
+    family's consolidated file (negatives by ``claim_ref``, broadcasts
+    by ``claim`` — ONE rewrite pass over the shared file, both
+    predicates filtered together: two passes would read/race the same
+    bytes). The discriminant dies with the settlement it was derived
+    from; the evidence of record (steps, transitions, amendment rows)
+    is untouched. An empty claim is refused at the boundary (it would
+    match every unattributed row). Returns per-stream removal counts.
+    This is the ONE sanctioned rewrite on the knowledge family file
+    (derived-row revocation — the append-only wall governs recording,
+    not revocation)."""
     from rlvr import marl as _marl
     from rlvr import strategy_store as _ss
     cid = str(claim or "").strip()
     if not cid:
         return {"negatives_removed": 0, "broadcasts_removed": 0}
-    removed_neg = _rewrite_without(
-        _marl.neg_store_path(),
-        lambda r: str(r.get("claim_ref") or "") == cid)
-    removed_bcast = _rewrite_without(
-        _ss.store_path(),
-        lambda r: str(r.get("claim") or "") == cid)
-    if removed_neg or removed_bcast:
+    removed: dict[str, int] = {"negatives_removed": 0,
+                               "broadcasts_removed": 0}
+
+    def _drop(row: dict) -> bool:
+        schema = str(row.get("schema") or "")
+        if schema == _marl.NEG_SCHEMA \
+                and str(row.get("claim_ref") or "") == cid:
+            removed["negatives_removed"] += 1
+            return True
+        if schema == _ss.STORE_SCHEMA \
+                and str(row.get("claim") or "") == cid:
+            removed["broadcasts_removed"] += 1
+            return True
+        return False
+
+    from rlvr import consolidated_ledger as _cl
+    _rewrite_without(_cl.family_path(None, "knowledge"), _drop)
+    if removed["negatives_removed"] or removed["broadcasts_removed"]:
         warn("crystallize.revoke",
-             f"claim {cid}: {removed_neg} negative(s), "
-             f"{removed_bcast} broadcast(s) revoked")
-    return {"negatives_removed": removed_neg,
-            "broadcasts_removed": removed_bcast}
+             f"claim {cid}: {removed['negatives_removed']} negative(s), "
+             f"{removed['broadcasts_removed']} broadcast(s) revoked")
+    return removed

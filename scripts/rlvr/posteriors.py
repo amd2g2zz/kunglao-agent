@@ -11,9 +11,11 @@ literature). ONE engine: DTS everywhere, day one (owner ruling
 activation-pending shim anywhere on this surface). Samples always come
 from a GENUINE posterior, only the data behind it is discounted.
 
-Store — ``<ws>/runs/posterior-store.jsonl``, append-only JSONL,
-ledger-isomorphic with ``rlvr/ledger.py``. One row = one Bernoulli
-observation of one DTS cell ``(state, arm)``:
+Store — the knowledge family's consolidated file
+(``knowledge-store.jsonl`` under the guarded cross-task root, #1004;
+the standalone ``<ws>/runs/posterior-store.jsonl`` rel is retired),
+append-only JSONL, ledger-isomorphic with ``rlvr/ledger.py``. One row =
+one Bernoulli observation of one DTS cell ``(state, arm)``:
 
     {"schema": "posterior-store/1",
      "state": "<state-signature hash>",   # the Q-table key half
@@ -64,18 +66,16 @@ WARN); writes are loud-result dicts, never raises into the producer.
 """
 from __future__ import annotations
 
-import json
 import math
-from pathlib import Path
 
 import numpy as np
 
 from harness_common import utc_now_z as _utc_now
-from kunglao_log import iter_jsonl, warn
+from kunglao_log import warn
+
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
 
 SCHEMA = "posterior-store/1"
-STORE_REL = "runs/posterior-store.jsonl"
-LOCK_REL = "runs/.posterior-store.lock"
 
 # Pseudo-count priors = the learning-rate knob (prior strength = how many
 # observations a newborn cell carries). Beta(1, 1) uniform: every arm is
@@ -247,57 +247,11 @@ def row_schema_lint(row: dict) -> list[str]:
     return errors
 
 
-# --- IO (mirrors rollout_ledger: locked O_APPEND, fail-open reads) -----------
+# --- IO (the knowledge family's consolidated faces; fail-open reads) --------
 
-def _path(ws) -> Path:
-    return Path(ws) / STORE_REL
-
-
-def _lock_path(ws) -> Path:
-    return Path(ws) / LOCK_REL
-
-
-def _locked_append(ws, data: bytes) -> bool:
-    """Append under the store lock. flock (POSIX) with an unlocked
-    O_APPEND fallback where fcntl is unavailable. Never raises."""
-    p = _path(ws)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        lock = _lock_path(ws)
-        lock.touch(exist_ok=True)
-        fd = None
-        try:
-            import fcntl
-            fd = lock.open("a", encoding="utf-8")
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        except ImportError:
-            fd = None  # Windows/CI: O_APPEND write stays atomic
-        except OSError:
-            fd = None
-        try:
-            import os
-            append_fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                                0o644)
-            try:
-                os.write(append_fd, data)
-            finally:
-                os.close(append_fd)
-            return True
-        finally:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except Exception as exc:  # noqa: BLE001 — unlock best-effort
-                    warn("lock_unlock", f"{type(exc).__name__}: {exc}")
-                fd.close()
-    except Exception as exc:  # noqa: BLE001 — never raise into the producer
-        warn("locked_append", f"{type(exc).__name__}: {exc}")
-        return False
-
-
-def _row_bytes(state: str, arm: str, ts: str, gamma: float, outcome,
-               adds: tuple[float, float]) -> bytes:
-    row = {
+def _row(state: str, arm: str, ts: str, gamma: float, outcome,
+         adds: tuple[float, float]) -> dict:
+    return {
         "schema": SCHEMA,
         "state": state,
         "arm": arm,
@@ -307,24 +261,18 @@ def _row_bytes(state: str, arm: str, ts: str, gamma: float, outcome,
         "alpha_add": adds[0],
         "beta_add": adds[1],
     }
-    return (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def read(ws) -> list[dict]:
     """Schema-enforced read: only rows passing row_schema_lint are signal
     (a learned state never half-reads a row, and a FOREIGN schema version
     is never merged — the version wall). Unparseable or schema-violating
-    lines are skipped with one rate-limited WARN. Missing store → []."""
-    p = _path(ws)
-    if not p.exists():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    lines are skipped with one rate-limited WARN. Missing store → [].
+    Rides the knowledge family's consolidated file through the
+    ``posterior-store/1`` stamp prefix (#1004 — no dual read)."""
     out: list[dict] = []
-    for row in iter_jsonl(text.splitlines()):
-        if not isinstance(row, dict) or row_schema_lint(row):
+    for row in _cl.read(ws, "knowledge", schema_prefix=SCHEMA):
+        if row_schema_lint(row):
             warn("read_dirty", "schema-violating row skipped")
             continue
         out.append(row)
@@ -347,7 +295,6 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
       per-event γ (``next_gamma(outcome)``). The decay itself is applied
       at the fold/read face, never in the file.
     Loud result dict, no raise."""
-    ws = Path(ws)
     state = str(state or "").strip()
     arm = str(arm or "").strip()
     if not state or not arm:
@@ -361,8 +308,8 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
             "gamma", default_schedule().gamma() if gamma is None else gamma)
     except ValueError as exc:
         return {"appended": False, "reason": str(exc)}
-    ok = _locked_append(ws, _row_bytes(state, arm, ts or _utc_now(), g,
-                                       outcome, adds))
+    ok = _cl.append(ws, "knowledge",
+                    _row(state, arm, ts or _utc_now(), g, outcome, adds))
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

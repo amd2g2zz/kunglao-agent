@@ -282,7 +282,8 @@ def test_posterior_store_row_sealed_and_forged_dropped(
     out = ss.append_store_row(method_family="graph", status="ok",
                               credit=1.0)
     assert out["appended"] is True
-    spath = ss.store_path()
+    # #1004: the store rows ride the knowledge family file (guarded root)
+    spath = cl.family_path(None, "knowledge")
     rows = [json.loads(l) for l in
             spath.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert rows and "seal" in rows[0]

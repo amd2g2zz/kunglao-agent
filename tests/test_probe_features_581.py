@@ -560,10 +560,12 @@ def _plain_cell(tmp_path: Path, arm: str, unit: str, verdict: str,
                      "session": {"session_cost": {"total_cost_usd": 1.0},
                                  "wall_s": 90.0},
                      "workspace": str(ws)}}]}), encoding="utf-8")
-    p = ws / "runs" / "transitions.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("".join(json.dumps(r) + "\n" for r in mean_rows),
-                 encoding="utf-8")
+    # #1004: the transition rows ride the experience family file (the
+    # transition/1 stamp is the read face's admission ticket)
+    from rlvr import consolidated_ledger as _cl
+    for r in mean_rows:
+        assert _cl.append(ws, "experience",
+                          {**r, "schema": "transition/1"})
 
 
 def _spine(tmp_path: Path, tiers: dict[str, str],

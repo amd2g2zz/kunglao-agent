@@ -53,8 +53,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
+from kunglao_log import warn  # canonical warn: ONE implementation
 
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
 from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import ledger as rl
 from rlvr import posteriors as dts
@@ -63,16 +64,22 @@ from rlvr.compose import method_family_of_row  # the settled-row face
 
 # --------------------------------------------------------------------------
 # the cross-task posterior store (#545, WS2) — append-only JSONL, keyed
-# (family, arm_key, feature_key, fingerprint), living inside the guarded
+# (family, arm_key, feature_key, fingerprint), riding the knowledge
+# family's consolidated file (knowledge-store.jsonl) under the guarded
 # prior_store_root (eval/v1/split.yaml prior_store_roots →
-# scripts/rlvr/patterns). The store is repo-code territory: the OWNER
-# RULING (2026-10-07) keeps everything under eval/ WRITE-FORBIDDEN — this
-# module only ever READS split.yaml (the holdout firewall's filter face),
-# never writes anything under eval/.
+# scripts/rlvr/patterns) since #1004 — the standalone posterior-store.jsonl
+# and the workspace-local runs/posterior-store.jsonl credit series both
+# retired into the family file (rows carry ``workspace_id``, so the
+# credit-series readers keep their per-workspace series).
+# The store is repo-code territory: the OWNER RULING (2026-10-07) keeps
+# everything under eval/ WRITE-FORBIDDEN — this module only ever READS
+# split.yaml (the holdout firewall's filter face), never writes anything
+# under eval/.
 #
 # Write face: the e2e settlement hook (e2e/checkpoints._settle_dispatch_outcome)
 # appends one row per settled dispatch — holdout-filtered BEFORE append,
-# fail-open telemetry (a store failure never breaks settlement).
+# sealed at write (learning_seal.sign_row), fail-open telemetry (a store
+# failure never breaks settlement).
 # Read face: ``warm_pools`` — cross-task rows enter ONLY as
 # LAMBDA-tempered anchor mass through the sampler's existing pool face
 # (q_cells.cell_posterior's warm_pool), NEVER as a local-cell write; the
@@ -82,7 +89,6 @@ from rlvr.compose import method_family_of_row  # the settled-row face
 # second — defense in depth).
 
 STORE_SCHEMA = "posterior-store/1"
-STORE_REL = "posterior-store.jsonl"
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 
 #: the refutation fold's store arm (its rows ride the same keyed store —
@@ -95,16 +101,13 @@ _REFUTATION_ARM = "refutation"
 
 def store_root() -> Path:
     """The store root: declared switch override, else the skill-dir
-    patterns path (the guarded prior_store_root)."""
+    patterns path (the guarded prior_store_root). The knowledge family's
+    consolidated file resolves under THIS root (the single source)."""
     import runtime_switches  # noqa: PLC0415 — leaf face, import-light
     env = runtime_switches.get_str(STORE_ENV).strip()
     if env:
         return Path(env)
     return Path(__file__).resolve().parent / "patterns"
-
-
-def store_path() -> Path:
-    return store_root() / STORE_REL
 
 
 def workspace_id_of(ws) -> str:
@@ -166,8 +169,10 @@ def append_row(row: dict) -> dict:
     """Filter-and-append one store row. THE HOLDOUT FILTER PRECEDES THE
     APPEND: any row whose serialized form carries a holdout unit-id is
     refused with a loud warn (the same predicate eval_split_lint
-    enforces — belt and suspenders). Fail-open telemetry: a store
-    failure never breaks settlement."""
+    enforces — belt and suspenders). The row is SEALED at write
+    (learning_seal.sign_row — unchanged by the #1004 family move) and
+    lands in the knowledge family's consolidated file. Fail-open
+    telemetry: a store failure never breaks settlement."""
     try:
         hit = _holdout_hit(row)
         if hit is not None:
@@ -175,7 +180,7 @@ def append_row(row: dict) -> dict:
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        ok = q_cells._append_row(store_path(), _seal.sign_row(row))
+        ok = _cl.append(None, "knowledge", _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -275,15 +280,16 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
                                 credit_kind: str | None = None,
                                 ts: str | None = None) -> dict:
     """The workspace credit-series face (the learning→decision bridge's
-    breaker contract): append one credit row to the WORKSPACE-LOCAL store
-    (``<ws>/runs/posterior-store.jsonl``) — the file
-    ``rlvr.signal_guard.recent_credits`` reads for the degeneracy series
-    and the rl-posterior-moved fingerprint counts. The row is the SAME
+    breaker contract): append one credit row to the knowledge family's
+    consolidated file — the file ``rlvr.signal_guard.recent_credits``
+    reads (workspace-filtered) for the degeneracy series and the
+    rl-posterior-moved fingerprint counts. The row is the SAME
     ``posterior-store/1`` shape as the cross-task store's (one builder,
-    ``_build_store_row``), so a credit is byte-consistent whichever file
-    carries it; the holdout filter precedes the append exactly as on the
-    cross-task face. Fail-open telemetry: a failure is one counted
-    result, never a settle break."""
+    ``_build_store_row`` — it carries the row's ``workspace_id``, which
+    is what keeps the per-workspace series separable inside the shared
+    family file); the holdout filter precedes the append exactly as on
+    the cross-task face, and the row is sealed at write. Fail-open
+    telemetry: a failure is one counted result, never a settle break."""
     row = _build_store_row(ws, method_family=method_family, status=status,
                            credit=credit, claim=claim,
                            dispatch_id=dispatch_id, credit_kind=credit_kind,
@@ -295,9 +301,7 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        target = (Path(ws) if ws is not None else Path(".")) \
-            / "runs" / "posterior-store.jsonl"
-        ok = q_cells._append_row(target, _seal.sign_row(row))
+        ok = _cl.append(ws, "knowledge", _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -310,14 +314,12 @@ def load_rows(ws=None) -> list[dict]:
     """The tolerant read: schema-filtered rows, oldest first; when ``ws``
     is given, rows from THAT workspace are excluded (the leave-one-out
     shape — a workspace never warm-starts from its own rows). Missing
-    store = [], corrupt lines skip, unknown schemas skip."""
-    try:
-        text = store_path().read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    rows = [r for r in iter_jsonl(text.splitlines())
-            if isinstance(r, dict)
-            and str(r.get("schema") or "") == STORE_SCHEMA]
+    store = [], corrupt lines skip, unknown schemas skip. Rides the
+    knowledge family's consolidated file through the
+    ``posterior-store/1`` stamp prefix; the ``trusted_rows`` wall is
+    unchanged (#1004: the seal verifies the same way under the new file
+    name)."""
+    rows = _cl.read(None, "knowledge", schema_prefix=STORE_SCHEMA)
     rows = _seal.trusted_rows(rows, op="strategy_store.load_rows")
     if ws is not None:
         mine = workspace_id_of(ws)

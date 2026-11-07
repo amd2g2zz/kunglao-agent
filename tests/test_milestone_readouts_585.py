@@ -59,10 +59,12 @@ def _write_audit(ws: Path, rows: list[dict]) -> None:
 
 
 def _write_transitions(ws: Path, rows: list[dict]) -> None:
-    p = ws / "runs" / "transitions.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows),
-                 encoding="utf-8")
+    # #1004: the transition rows ride the experience family file (the
+    # transition/1 stamp is the read face's admission ticket)
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "experience",
+                          {**r, "schema": "transition/1"})
 
 
 def _write_results(run_dir: Path, unit: str, ws: Path,

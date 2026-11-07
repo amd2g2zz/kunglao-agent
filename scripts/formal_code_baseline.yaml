@@ -4,7 +4,7 @@ files:
   hooks/battery_registry.py: 6
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
-  hooks/cost_input_capture.py: 9
+  hooks/cost_input_capture.py: 10
   hooks/dispatch_gate.py: 229
   hooks/env_check_gate.py: 30
   hooks/gate_policy.py: 11
@@ -65,12 +65,12 @@ files:
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
   scripts/compute_priors.py: 2
-  scripts/consolidate_ledgers.py: 2
+  scripts/consolidate_ledgers.py: 5
   scripts/context_budget.py: 12
   scripts/contracts.py: 12
   scripts/convergence_check.py: 185
   scripts/convergence_health.py: 14
-  scripts/cost_gate.py: 3
+  scripts/cost_gate.py: 5
   scripts/dead_letter.py: 5
   scripts/decision_lint.py: 1
   scripts/decision_pending.py: 10
@@ -86,7 +86,7 @@ files:
   scripts/e2e/audit.py: 10
   scripts/e2e/checkpoints.py: 110
   scripts/e2e/evidence.py: 1
-  scripts/e2e/llm_faces.py: 17
+  scripts/e2e/llm_faces.py: 16
   scripts/e2e/model.py: 7
   scripts/e2e/runtime.py: 13
   scripts/emit_gate.py: 12
@@ -110,12 +110,13 @@ files:
   scripts/eval_dataset.py: 16
   scripts/eval_loop_runner.py: 79
   scripts/eval_matrix_report.py: 4
+  scripts/eval_matrix_runner.py: 1
   scripts/eval_misdirection.py: 1
   scripts/eval_native_sources.py: 1
   scripts/eval_native_targets.py: 6
   scripts/eval_sdk_session.py: 1
   scripts/eval_smoke_runner.py: 2
-  scripts/eval_split_lint.py: 4
+  scripts/eval_split_lint.py: 5
   scripts/eval_targets.py: 12
   scripts/eval_tf_graders.py: 1
   scripts/eval_tf_shadow.py: 2
@@ -127,7 +128,7 @@ files:
   scripts/experiments/rc1_econ_replay.py: 5
   scripts/external_kicker.py: 41
   scripts/failure_analysis_gate.py: 58
-  scripts/feature_mining.py: 5
+  scripts/feature_mining.py: 7
   scripts/feedback.py: 3
   scripts/fix_guard.py: 2
   scripts/formal_code_lint.py: 5
@@ -155,10 +156,10 @@ files:
   scripts/install_reference.py: 4
   scripts/instrument_menu.py: 15
   scripts/intake_battery.py: 6
-  scripts/intake_promise.py: 15
+  scripts/intake_promise.py: 14
   scripts/jadx_exec.py: 21
   scripts/kunglao-decide.py: 11
-  scripts/kunglao-init.py: 302
+  scripts/kunglao-init.py: 300
   scripts/kunglao-monitor.py: 13
   scripts/kunglao-status.py: 1
   scripts/kunglao.py: 27
@@ -237,22 +238,26 @@ files:
   scripts/rlvr/censoring.py: 21
   scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
+  scripts/rlvr/consolidated_ledger.py: 13
   scripts/rlvr/crystallize.py: 1
   scripts/rlvr/direction.py: 22
+  scripts/rlvr/disposition.py: 1
+  scripts/rlvr/disposition_measure.py: 1
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
+  scripts/rlvr/episode_settle.py: 2
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/family_playbook.py: 6
-  scripts/rlvr/feature_prior.py: 5
+  scripts/rlvr/feature_prior.py: 6
   scripts/rlvr/incremental_reward.py: 42
   scripts/rlvr/interruption.py: 8
   scripts/rlvr/key_freeze.py: 2
   scripts/rlvr/l1_planner.py: 2
   scripts/rlvr/l1_value.py: 5
   scripts/rlvr/learning_seal.py: 12
-  scripts/rlvr/ledger.py: 3
+  scripts/rlvr/ledger.py: 4
   scripts/rlvr/liveness.py: 40
-  scripts/rlvr/marl.py: 2
+  scripts/rlvr/marl.py: 5
   scripts/rlvr/meta_arms.py: 8
   scripts/rlvr/meta_context.py: 3
   scripts/rlvr/meta_policy.py: 1
@@ -264,7 +269,8 @@ files:
   scripts/rlvr/playbook_distill.py: 1
   scripts/rlvr/policy_compare.py: 5
   scripts/rlvr/pool_indexer.py: 2
-  scripts/rlvr/posteriors.py: 13
+  scripts/rlvr/posteriors.py: 16
+  scripts/rlvr/prediction_ledger.py: 2
   scripts/rlvr/priors.py: 18
   scripts/rlvr/q_cells.py: 172
   scripts/rlvr/recipe_arms.py: 28
@@ -272,15 +278,15 @@ files:
   scripts/rlvr/reward.py: 10
   scripts/rlvr/reward_signal.py: 2
   scripts/rlvr/scalar.py: 38
-  scripts/rlvr/settlement_scorer.py: 2
-  scripts/rlvr/signal_guard.py: 1
-  scripts/rlvr/state.py: 24
+  scripts/rlvr/settlement_scorer.py: 4
+  scripts/rlvr/signal_guard.py: 5
+  scripts/rlvr/state.py: 26
   scripts/rlvr/step_credit.py: 5
-  scripts/rlvr/step_grain.py: 19
-  scripts/rlvr/step_ledger.py: 15
-  scripts/rlvr/strategy_store.py: 32
+  scripts/rlvr/step_grain.py: 21
+  scripts/rlvr/step_ledger.py: 12
+  scripts/rlvr/strategy_store.py: 36
   scripts/rlvr/termination.py: 1
-  scripts/rlvr/triples.py: 15
+  scripts/rlvr/triples.py: 16
   scripts/rlvr/winrate.py: 14
   scripts/roi_settlement.py: 4
   scripts/rollup.py: 43
@@ -316,7 +322,7 @@ files:
   scripts/toolchain_install.py: 63
   scripts/toolchain_negotiation.py: 30
   scripts/troubleshooting_gate.py: 1
-  scripts/tuition_curve.py: 8
+  scripts/tuition_curve.py: 11
   scripts/update_index.py: 6
   scripts/user_signal.py: 3
   scripts/value_replay.py: 5

@@ -58,7 +58,7 @@ scripts/rlvr/
 ├── state.py             # state_signature — canonical state + V(s) anchor
 ├── posteriors.py        # DTS posterior store, Discounted Thompson
 #                        #   Sampling (issue 428) —
-│                        #   append-only runs/posterior-store.jsonl + fold/read
+│                        #   the knowledge family file + fold/read
 │                        #   γ decay + pseudo-count priors + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
 ├── obstacles.py         # obstacle/1 attribution registry (issue 461

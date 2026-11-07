@@ -350,8 +350,12 @@ def _ledger_row(ws, mission):
     ledger.record(ws, "task", mission["claim"], [],
                   rollout_id=f"rollout-{mission['claim']}",
                   ts=mission["claim"].lower())
-    with (ws / "cost_events.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"amount": mission["tokens"] / 10_000.0}) + "\n")
+    # #1004: the cost face rides the settlement family's consolidated file
+    from rlvr import consolidated_ledger as _cl
+    _cl.append(ws, "settlement",
+               {"schema": "cost-event/1", "ts": mission["claim"].lower(),
+                "amount": mission["tokens"] / 10_000.0,
+                "source": "loop-sim"})
 
 
 def _settle_and_stamp(ws, mission, memory, *, scramble=False):

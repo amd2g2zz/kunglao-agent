@@ -261,14 +261,18 @@ class TestNullBaseline:
 class TestThreeBudgets:
 
     def _seed_budgets(self, ws: Path) -> None:
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-01-01T00:00:00Z", "amount": 2.5}) + "\n"
-            + json.dumps({"ts": "2026-01-01T00:01:00Z", "amount": 3.0}) + "\n",
-            encoding="utf-8")
-        rows = [{"schema": "step-record/1", "ts": "2026-01-01T00:00:00Z",
-                 "session_id": "s1", "call_id": f"c{i}"} for i in range(3)]
-        (ws / "runs" / "step-ledger.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        # #1004: the cost + step streams ride the consolidated family files
+        from rlvr import consolidated_ledger as _cl
+        for ts, amount in (("2026-01-01T00:00:00Z", 2.5),
+                           ("2026-01-01T00:01:00Z", 3.0)):
+            assert _cl.append(ws, "settlement",
+                              {"schema": "cost-event/1", "ts": ts,
+                               "amount": amount, "source": "test"})
+        for i in range(3):
+            assert _cl.append(ws, "experience",
+                              {"schema": "step-record/1",
+                               "ts": "2026-01-01T00:00:00Z",
+                               "session_id": "s1", "call_id": f"c{i}"})
         with (ws / "runs" / "signals.jsonl").open("a",
                                                   encoding="utf-8") as fh:
             for i in range(2):

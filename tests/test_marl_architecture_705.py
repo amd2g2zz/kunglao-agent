@@ -393,7 +393,9 @@ def test_solution_broadcast_method_not_answer(tmp_path, monkeypatch):
                                   credit=1.0, answer=answer)
     assert out["appended"], out
 
-    blob = strategy_store.store_path().read_text(encoding="utf-8")
+    # #1004: the store rows ride the knowledge family file (guarded root)
+    from rlvr import consolidated_ledger as _cl
+    blob = _cl.family_path(None, "knowledge").read_text(encoding="utf-8")
     assert FAM in blob                        # the method is shared
     assert answer not in blob                 # the answer is NOT
 

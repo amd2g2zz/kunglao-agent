@@ -2,7 +2,9 @@
 """tests/test_rollout_ledger_366.py — unified rollout ledger (U1).
 
 The ONE rollout row schema for all RLVA rollout kinds: append-only
-runs/rollout-ledger.jsonl, kinds registered centrally (open enum), the
+the settlement family's consolidated file since #1004 (the
+standalone rollout-ledger rel is retired), kinds registered centrally
+(open enum), the
 settled(kind, window) query is the ONE prior-feed interface (U4's
 consumer face is tested against compute_priors in
 test_reward_adapters_366.py).
@@ -89,10 +91,14 @@ class TestSchemaLint:
     def test_dirty_rows_skipped_on_read(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        # #1004: the family file (the dirty-row tolerance lives on the
+        # consolidated read face)
+        from rlvr import consolidated_ledger as _cl
+        p = _cl.family_path(ws, "settlement")
         p.parent.mkdir(parents=True)
         p.write_text('{"rollout_id": "a"}\nnot json at all\n\n'
-                     '{"rollout_id": "b", "kind": "task", "anchor": "a", '
+                     '{"schema": "rollout-ledger/1", "rollout_id": "b", '
+                     '"kind": "task", "anchor": "a", '
                      '"ts": "2026-09-24T00:00:00Z", "signals": [], '
                      '"reward": null, "settlement": null}\n',
                      encoding="utf-8")
@@ -112,7 +118,8 @@ class TestAppendOnly:
                   settlement={"reward": 1.0, "band": "SETTLED_GREEN",
                               "rule_id": "task/oracle-green",
                               "evidence_refs": ["runs/oracle-status.json"]})
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        from rlvr import consolidated_ledger as _cl
+        p = _cl.family_path(ws, "settlement")
         after_first = p.read_bytes()
         # a later activity on ANOTHER rollout must only append
         rl.record(ws, kind="task", anchor="C-2",
@@ -125,12 +132,13 @@ class TestAppendOnly:
         ws.mkdir()
         rl.record(ws, kind="self_distill", anchor="lesson-a",
                   signals=[_sig("lesson_written", "rollup", "sig-1")])
-        before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        from rlvr import consolidated_ledger as _cl
+        before = _cl.family_path(ws, "settlement").read_bytes()
         rl.settle(ws, "self_distill/lesson-a",
                   settlement={"reward": 0.0, "band": "NEUTRAL",
                               "rule_id": "self_distill/pending",
                               "evidence_refs": ["lesson_written"]})
-        data = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        data = _cl.family_path(ws, "settlement").read_bytes()
         assert data.startswith(before)  # append-only: original row intact
         assert len(rl.read(ws)) == 2    # identity row + settlement amendment
 
@@ -154,10 +162,17 @@ class TestAppendOnly:
         assert len(rows) == n
         assert len({r["rollout_id"] for r in rows}) == n
 
-    def test_lock_file_pattern_used(self):
-        """The lock is a .lock file next to the ledger (the repo's pattern)."""
-        assert rl.LOCK_REL.endswith(".lock")
-        assert "runs" in rl.LOCK_REL
+    def test_lock_file_pattern_used(self, tmp_path):
+        """The lock is a .lock file next to the consolidated file (the
+        repo's pattern) — the consolidated append is the single writer
+        guard (#1004: the per-module lock rel retired with the file)."""
+        from rlvr import consolidated_ledger as _cl
+        ws = tmp_path / "ws"
+        rl.record(ws, kind="task", anchor="C-lock",
+                  signals=[_sig("s1", "src", 1)])
+        lock = _cl.family_path(ws, "settlement").parent / ".settlement.lock"
+        assert lock.name.endswith(".lock")
+        assert "runs" in str(lock)
 
 
 # ---------- record(): identity append + dedupe ----------
@@ -285,7 +300,9 @@ class TestPersistence:
         ws.mkdir()
         rl.record(ws, kind="task", anchor="C-1",
                   signals=[_sig("s", "src", 1)])
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        # #1004: the family file
+        from rlvr import consolidated_ledger as _cl
+        p = _cl.family_path(ws, "settlement")
         lines = p.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 1
         row = json.loads(lines[0])

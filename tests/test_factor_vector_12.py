@@ -65,7 +65,7 @@ def test_value_m_appends_full_factor_shape(ws):
     assert row["pq_cov"] == {"q1": 0.0, "q2": 0.0}
     assert row["round"] == 0  # no convergence ledger -> round 0
     assert row["cost_rounds"] == 1
-    assert row["cost_tokens"] == 0.0  # no cost_events.jsonl
+    assert row["cost_tokens"] == 0.0  # no cost-event rows
 
 
 def test_each_tick_appends_one_row(ws):
@@ -136,9 +136,13 @@ def test_vector_survives_dirty_signal_stream(ws):
 
 
 def test_cost_tokens_reads_cost_events(ws):
+    # #1004: the cost face rides the settlement family's consolidated file
+    from rlvr import consolidated_ledger as _cl
     (ws / "runs").mkdir(exist_ok=True)
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 1.5}\n{"amount": 2.5}\n', encoding="utf-8")
+    for amount in (1.5, 2.5):
+        assert _cl.append(ws, "settlement",
+                          {"schema": "cost-event/1", "ts": "t",
+                           "amount": amount, "source": "test"})
     ml.value_m(ws)
     row = ml.load(ws)["mission"]["history"][-1]
     assert row["cost_tokens"] == 4.0

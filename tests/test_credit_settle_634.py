@@ -147,11 +147,19 @@ def test_unmatched_dispatch_writes_no_store_row(tmp_path):
     """No pending dispatch row -> no banked credit -> no store row: the
     honest gap, never a fabricated bucket."""
     import settle_round_credit as src
-    from rlvr import strategy_store
+    from rlvr import consolidated_ledger as _cl
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     out = src.run(ws)
     assert out["settled"] == 1  # the ledger row still settles
-    assert strategy_store.load_rows(ws=None) == []
+    # #1004: the two store faces share the knowledge family file (rows
+    # carry workspace_id; the bridge credit rows carry credit_kind=step)
+    # — the pin is on the CROSS-TASK bank: the unmatched dispatch
+    # fabricated nothing there
+    mine = [r for r in
+            _cl.read(ws, "knowledge", schema_prefix="posterior-store/1")
+            if str(r.get("workspace_id") or "") == ws.name
+            and "credit_kind" not in r]
+    assert mine == []
 
 
 def test_case_settlement_leg_updates_linked_case_posteriors(tmp_path):
@@ -250,7 +258,9 @@ def test_dry_run_counts_pending_tiers_and_writes_nothing(tmp_path):
          "ts": "t"}], rollout_id="task/C-9")
     rl.settle(ws, "task/C-9", {"reward": 1.0, "band": "SETTLED_GREEN",
                                "rule_id": "r/1", "evidence_refs": []})
-    before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+    # #1004: the rollout ledger rides the settlement family file
+    from rlvr import consolidated_ledger as _cl
+    before = _cl.family_path(ws, "settlement").read_bytes()
     out = src.run(ws, dry_run=True)
     assert out["would_amend_tiers"] == 1
-    assert (ws / "runs" / "rollout-ledger.jsonl").read_bytes() == before
+    assert _cl.family_path(ws, "settlement").read_bytes() == before

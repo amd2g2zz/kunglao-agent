@@ -74,9 +74,12 @@ def _verify_row(sig: str, *, refuted: bool, boundary: str = "verify",
 
 
 def _write_ledger(ws: Path, rows: list[dict]) -> None:
-    (ws / "runs" / "transitions.jsonl").write_text(
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
-        encoding="utf-8")
+    # #1004: the transition rows ride the experience family file (the
+    # transition/1 stamp is the read face's admission ticket)
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "experience",
+                          {**r, "schema": "transition/1"})
 
 
 def _sig_patch(monkeypatch, sig: str) -> None:

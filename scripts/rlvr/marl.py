@@ -41,29 +41,28 @@ rate-limited warn.
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
-from kunglao_log import iter_jsonl, warn
+from kunglao_log import warn
 
-from rlvr import q_cells
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
 
 NEG_SCHEMA = "marl-negative/1"
-NEG_REL = "marl-negative.jsonl"
 
 #: the inert class — a workspace with no mined features degrades here,
 #: never a fabricated bucket (fail-open).
 UNKNOWN_CLASS = "unknown"
 
 
-def neg_store_path() -> Path:
-    """The SHARED negative-knowledge store — one file under the same
-    guarded root as the posterior store (env
-    ``KUNGLAO_POSTERIOR_STORE`` override, else the prior_store_root
+def neg_store_path():
+    """The SHARED negative-knowledge store file — the knowledge family's
+    consolidated file (``knowledge-store.jsonl`` under the guarded root:
+    env ``KUNGLAO_POSTERIOR_STORE`` override, else the prior_store_root
     patterns dir). Shared, not per-workspace: the whole point of
     class-level negative knowledge is that workspace B inherits
-    workspace A's dead end for the SAME structural class."""
-    from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy
-    return _ss.store_root() / NEG_REL
+    workspace A's dead end for the SAME structural class. The rows ride
+    the family file beside the posterior-store/1 rows (#1004); the
+    standalone marl-negative.jsonl rel is retired."""
+    return _cl.family_path(None, "knowledge")
 
 
 def _class_of(ws=None, *, features=None) -> str:
@@ -103,15 +102,9 @@ def signature_class(ws=None, *, features=None) -> str:
 
 def _read_neg_rows() -> list[dict]:
     """Tolerant read: schema-filtered rows, oldest first. Missing file →
-    [], corrupt lines skip."""
-    p = neg_store_path()
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    return [r for r in iter_jsonl(text.splitlines())
-            if isinstance(r, dict)
-            and str(r.get("schema") or "") == NEG_SCHEMA]
+    [], corrupt lines skip. Rides the knowledge family's consolidated
+    file through the ``marl-negative/1`` stamp prefix (#1004)."""
+    return _cl.read(None, "knowledge", schema_prefix=NEG_SCHEMA)
 
 
 def _tool_chain_token(tool_chain) -> str | None:
@@ -164,7 +157,7 @@ def record_negative(ws, *, method_family: str,
     for key, val in (("claim_ref", claim_ref), ("step_ref", step_ref)):
         if val:
             row[key] = str(val)
-    appended = q_cells._append_row(neg_store_path(), row)
+    appended = _cl.append(None, "knowledge", row)
     return {"appended": bool(appended), "reason": None if appended
             else "write-failed", "signature_class": cls, "row": row}
 

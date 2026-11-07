@@ -78,15 +78,10 @@ def _ws(tmp: Path) -> Path:
 
 
 def _store_rows(tmp: Path) -> list[dict]:
-    """The cross-task store's rows (tolerant JSONL read — the file may
-    not exist when the face settled nothing)."""
-    p = tmp / "store" / strategy_store.STORE_REL
-    if not p.is_file():
-        return []
-    return [r for r in (json.loads(line) for line in
-                        p.read_text(encoding="utf-8").splitlines()
-                        if line.strip())
-            if isinstance(r, dict)]
+    """The cross-task store's rows (#1004: the knowledge family's
+    consolidated file under the test's isolated guarded root)."""
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(tmp, "knowledge", schema_prefix="posterior-store/1")
 
 
 # ---- B1: the chain fires ----------------------------------------------------

@@ -92,12 +92,15 @@ def test_inv003_assertion_rejects_arm_null_production_shape() -> None:
     assert ok, detail  # the fixture EXPECTS the fingerprint to FAIL there
 
 
-def test_inv003_assertion_accepts_arm_keyed_control() -> None:
+def test_inv003_assertion_accepts_arm_keyed_control(monkeypatch) -> None:
     import tempfile
     fixture = next(f for f in rg.fixtures(SHAPES)
                    if f["id"] == "inv003-control-arm-keyed")
     with tempfile.TemporaryDirectory() as td:
         ws = rg.materialize(Path(td), fixture)
+        # #1004: the scratch workspace is the knowledge root for the
+        # assertion's read (the reader resolves it via the registry)
+        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(ws))
         ok, detail = rg._inv003_posterior_family_key(ws, fixture)
     assert ok, detail
 

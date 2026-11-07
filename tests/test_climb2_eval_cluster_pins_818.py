@@ -408,7 +408,7 @@ class TestSplitLint:
     def test_posterior_store_row_attribution(self, tmp_path, monkeypatch,
                                              capsys) -> None:
         repo = self._fake_repo(tmp_path, ["unit-a"], {}, {})
-        store = repo / "priors" / "posterior-store.jsonl"
+        store = repo / "priors" / "knowledge-store.jsonl"  # #1004 rename
         store.write_text(json.dumps(
             {"schema": "posterior-store/1", "feature": "x",
              "unit": "unit-a"}) + "\n", encoding="utf-8")

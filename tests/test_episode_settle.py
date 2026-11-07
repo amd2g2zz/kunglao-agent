@@ -39,7 +39,8 @@ from rlvr import reward_signal  # noqa: E402
 from rlvr import timeout_triage as tt  # noqa: E402
 
 
-def _mk_ws(tmp_path: Path, *, terminal: bool = True) -> Path:
+def _mk_ws(tmp_path: Path, *, terminal: bool = True,
+           seed_cost: bool = True) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     claims = {
@@ -62,10 +63,15 @@ def _mk_ws(tmp_path: Path, *, terminal: bool = True) -> Path:
          "rollout_id": "mainline_decision/t2", "kind": "mainline_decision",
          "ts": "t2", "signals": [], "reward": None},
     ]
-    (runs / "rollout-ledger.jsonl").write_text(
-        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 0.4}\n{"amount": 0.25}\n', encoding="utf-8")
+    # #1004: both streams ride the settlement family's consolidated file
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "settlement", r)
+    if seed_cost:
+        for amount in (0.4, 0.25):
+            assert _cl.append(ws, "settlement",
+                              {"schema": "cost-event/1", "ts": "t",
+                               "amount": amount, "source": "fixture"})
     (ws / "task_spec.yaml").write_text(
         "primary_questions:\n- id: pq1\n  q: produce the trainer\n",
         encoding="utf-8")
@@ -350,9 +356,11 @@ class TestPerMissionSpendWindow:
         everything before it. Under the cumulative fold mission a2 paid
         a1+b1+a2, any family whose missions spend >= $1 total saturated
         to reward <= 0 and could never master."""
-        ws = _mk_ws(tmp_path)
-        (ws / "cost_events.jsonl").write_text('{"amount": 0.4}\n',
-                                              encoding="utf-8")
+        ws = _mk_ws(tmp_path, seed_cost=False)
+        from rlvr import consolidated_ledger as _cl
+        _cl.append(ws, "settlement",
+                   {"schema": "cost-event/1", "ts": "t", "amount": 0.4,
+                    "source": "fixture"})
         es.settle_mission(ws)
         ep1, _b = es.episode_schema.read_episode_file(
             es.episode_pool.episode_path(ws, "C-001"))
@@ -363,8 +371,10 @@ class TestPerMissionSpendWindow:
         (ws / "claim-register.yaml").write_text(yaml.safe_dump(
             {"claims": [{"id": "C-101", "status": "PROVEN",
                          "title": "retry"}]}), encoding="utf-8")
-        with (ws / "cost_events.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write('{"amount": 0.25}\n')
+        from rlvr import consolidated_ledger as _cl
+        _cl.append(ws, "settlement",
+                   {"schema": "cost-event/1", "ts": "t", "amount": 0.25,
+                    "source": "fixture"})
         out = es.settle_mission(ws)
         assert out["episodes_written"] == 1
         ep2, _b = es.episode_schema.read_episode_file(

@@ -77,9 +77,13 @@ def load_fixture(path: Path | str) -> dict:
     if not isinstance(data["expectations"], dict):
         raise ValueError(f"{Path(path).name}: expectations must be an object")
     for art in (data.get("artifacts") or {}):
-        if not str(art).startswith("runs/"):
+        # runs/ paths, plus the knowledge family file (the guarded-root
+        # store home since #1004 — the one sanctioned non-runs artifact)
+        if not str(art).startswith("runs/") \
+                and str(art) != "knowledge-store.jsonl":
             raise ValueError(
-                f"{Path(path).name}: artifact paths must stay under runs/")
+                f"{Path(path).name}: artifact paths must stay under runs/ "
+                f"(or be knowledge-store.jsonl)")
     return data
 
 
@@ -168,12 +172,23 @@ def run(directory: Path | str = DEFAULT_SHAPES,
             with tempfile.TemporaryDirectory(
                     prefix="replay-") as td:
                 ws = materialize(Path(td), fixture)
+                # #1004: the knowledge artifact's reader resolves the
+                # guarded root through the registry — the scratch
+                # workspace IS that root for this assertion's scope
+                import os
+                prior_root = os.environ.get("KUNGLAO_POSTERIOR_STORE")
+                os.environ["KUNGLAO_POSTERIOR_STORE"] = str(ws)
                 try:
                     ok, detail = entry["fn"](ws, fixture)
                 except Exception as exc:  # noqa: BLE001 — a broken
                     # assertion is a RED result, never a crash of the gate
                     ok, detail = False, (
                         f"assertion raised: {type(exc).__name__}: {exc}")
+                finally:
+                    if prior_root is None:
+                        os.environ.pop("KUNGLAO_POSTERIOR_STORE", None)
+                    else:
+                        os.environ["KUNGLAO_POSTERIOR_STORE"] = prior_root
             mark = "PASS" if ok else "FAIL"
             if not ok:
                 failed += 1

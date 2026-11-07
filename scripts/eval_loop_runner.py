@@ -28,7 +28,7 @@ no mocked telemetry. The runner's ONLY jobs:
                          runs/mission_ledger.yaml), oracle case green rate
                          (runs/oracle-status.json), PROVEN claims
                          (claim-register.yaml), token spend
-                         (runs/cost_events.jsonl + the session's own cost
+                         (the settlement family's cost face + the session's own cost
                          report), the #136 task_terminal_settlement row
                          (runs/logs/kunglao-*.jsonl);
     4. FINAL CHECK       the task's mechanical checker (the #299 face) on

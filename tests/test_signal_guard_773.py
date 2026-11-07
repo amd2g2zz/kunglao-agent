@@ -28,12 +28,14 @@ from rlvr.signal_guard import (  # noqa: E402
 
 
 def _seed_store(ws: Path, credits: list[float]) -> None:
-    store = ws / "runs" / "posterior-store.jsonl"
-    store.parent.mkdir(parents=True, exist_ok=True)
-    store.write_text(
-        "".join(json.dumps({"schema": "posterior-store/1",
-                            "credit": c}) + "\n" for c in credits),
-        encoding="utf-8")
+    # #1004: the credit series rides the knowledge family file (rows
+    # carry workspace_id — this workspace's own series)
+    from rlvr import consolidated_ledger as _cl
+    for c in credits:
+        assert _cl.append(ws, "knowledge",
+                          {"schema": "posterior-store/1",
+                           "workspace_id": Path(ws).name,
+                           "credit_kind": "step", "credit": c})
 
 
 def test_check_degeneracy_flags_five_identical():

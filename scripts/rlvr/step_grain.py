@@ -17,7 +17,8 @@ faces:
              from the dispatch-launch stash), closes the transition via
              ``incremental_reward.append_transition`` (the missing
              production caller), and prices a branch_budget.wall_s
-             overrun into runs/attributed-waste.jsonl. Since #712 the
+             overrun into the settlement family's consolidated file
+             (runs/settlement.jsonl, #1004). Since #712 the
              settle ALSO scores the evidence the step touched
              (rlvr.step_credit — cross-validated 1.0 / unverified 0.3 /
              refuted 0.0) and banks it into the Q-cell immediately, so
@@ -56,11 +57,11 @@ from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
 from liveness_policy import STEP_SETTLE_TTL_MINUTES  # the fail-open line
 
+from rlvr import consolidated_ledger as _cl
 from rlvr import incremental_reward as _ir
 from rlvr import step_ledger as _sl
 
 WASTE_SCHEMA = "attributed-waste/1"
-WASTE_LEDGER_REL = "runs/attributed-waste.jsonl"
 
 _WASTE_KEYS = frozenset({
     "schema", "ts", "claim_ref", "step_id", "kind",
@@ -234,9 +235,11 @@ def barrier_verdict(ws, now: datetime | None = None) -> tuple[bool, str]:
 def record_attributed_waste(ws, *, claim_ref: str, step_id: str,
                             kind: str, budget_s: float, actual_s: float,
                             ts: str | None = None) -> dict | None:
-    """One attributed-waste/1 row: spend beyond the branch act budget,
-    attributed to the claim and the step that spent it. Hash-only
-    posture (refs + numbers only). Fail-open: None + ONE warn."""
+    """One attributed-waste/1 row in the settlement family's consolidated
+    file: spend beyond the branch act budget, attributed to the claim
+    and the step that spent it. Hash-only posture (refs + numbers
+    only). Fail-open: None + ONE warn (the consolidated append refuses
+    loudly and never raises)."""
     row = {
         "schema": WASTE_SCHEMA,
         "ts": ts or utc_now_z(),
@@ -248,16 +251,7 @@ def record_attributed_waste(ws, *, claim_ref: str, step_id: str,
         "waste_s": round(float(actual_s) - float(budget_s), 3),
     }
     assert set(row) <= _WASTE_KEYS
-    try:
-        p = Path(ws) / WASTE_LEDGER_REL
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        return row
-    except OSError as exc:
-        warn("rlvr.step_grain.record_attributed_waste",
-             f"{type(exc).__name__}: {exc}")
-        return None
+    return row if _cl.append(ws, "settlement", row) else None
 
 
 def settle_step(ws, session_id: str, outcome: str = "completed",

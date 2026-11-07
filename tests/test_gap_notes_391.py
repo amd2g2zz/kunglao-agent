@@ -324,7 +324,9 @@ class TestAntiPollution:
         ws = tmp_path / "ws"
         ws.mkdir()
         _settle_fail(ws)
-        ledger = ws / "runs" / "rollout-ledger.jsonl"
+        # #1004: the rollout ledger rides the settlement family file
+        from rlvr import consolidated_ledger as _cl
+        ledger = _cl.family_path(ws, "settlement")
         before = ledger.read_bytes()
         rows_before = rl.read(ws)
         gn.emit_gap_notes(ws)

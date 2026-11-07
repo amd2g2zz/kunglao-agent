@@ -44,9 +44,11 @@ def _live_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True)
-    (ws / "runs" / "strategy-log.jsonl").write_text(
-        json.dumps({"event": "dispatch", "strategy": "sampled",
-                    "claim": "C-001"}) + "\n", encoding="utf-8")
+    # #1004: the dispatch rows ride the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    assert _cl.append(ws, "telemetry",
+                      {"schema": "strategy-log/1", "event": "dispatch",
+                       "strategy": "sampled", "claim": "C-001"})
     (logs / "kunglao-2026-10-18.jsonl").write_text(
         json.dumps({"action": "dispatch", "admitted": ["dispatch/C-001"],
                     "claim": "C-001"}) + "\n" +
@@ -57,9 +59,10 @@ def _live_ws(tmp_path: Path) -> Path:
         json.dumps({"action": "t2_queue_built", "queued": 1}) + "\n" +
         json.dumps({"action": "distill_attempt", "phase": "triggered"})
         + "\n", encoding="utf-8")
-    (ws / "runs" / "posterior-store.jsonl").write_text(
-        json.dumps({"schema": "posterior-store/1", "arm": "method:static"})
-        + "\n", encoding="utf-8")
+    # #1004: the store rows ride the knowledge family file (guarded root)
+    assert _cl.append(ws, "knowledge",
+                      {"schema": "posterior-store/1",
+                       "arm": "method:static"})
     (ws / "runs" / "plan-receipts.jsonl").write_text(
         json.dumps({"schema": "plan-receipt/1", "claim": "C-001",
                     "admitted": ["dispatch/C-001"],
@@ -157,10 +160,13 @@ def test_posterior_sentinel_is_family_level(lg, tmp_path):
                 if f["id"] == "rl-posterior-moved")
 
     def _ws(name: str, rows: list[dict]) -> Path:
+        # #1004: the store rows ride the knowledge family file (each
+        # workspace's guarded root is the test's own isolated root)
         ws = tmp_path / name
         (ws / "runs").mkdir(parents=True)
-        (ws / "runs" / "posterior-store.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        from rlvr import consolidated_ledger as _cl
+        for r in rows:
+            assert _cl.append(ws, "knowledge", r)
         return ws
 
     # case-level movement: rows exist but carry NO arm attribution

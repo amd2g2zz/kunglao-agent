@@ -249,7 +249,11 @@ def classify_episode(record: dict) -> dict:
 
 
 def legacy_disposition(session_class: str, oracle_pass: bool) -> str:
-    """The published legacy map (session ladder -> disposition).
+    """The session-ladder bridge (LIVE mapping, not a compat shim —
+    #1004 owner pin): maps the session ladder's class vocabulary onto
+    the disposition vocabulary. ``legacy`` names the SESSION-LADDER
+    input dialect (the pre-disposition naming), not a retired storage
+    format — callers convert live session classifications today.
 
     terminal + pass -> SOLVED; terminal without a pass -> FAILED
     (unverified completion); censored_env -> CENSORED_ENV; agent_death ->

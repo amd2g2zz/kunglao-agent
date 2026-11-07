@@ -101,8 +101,11 @@ DEAD_END_CREDIT_MAX = 0.0
 #: the two-sided normal quantile used for the delta interval
 Z_95 = 1.96
 
-#: cost-event rels (the workspace-level spend face; no run identity exists)
-COST_EVENT_RELS = ("cost_events.jsonl", "runs/cost_events.jsonl")
+#: the cost-event face (the settlement family's consolidated file; the
+#: workspace-level spend face — no run identity exists). #1004: the
+#: standalone cost-events rels retired into the family file.
+COST_FACE = "runs/settlement.jsonl"
+COST_SCHEMA = "cost-event/1"
 
 
 class LearningClaimError(ValueError):
@@ -378,41 +381,15 @@ def _arm_for(claim: str, q_rows: list[dict],
 
 
 def _cost_workspace(ws) -> dict:
-    ws = Path(ws)
-    files: list[str] = []
-    total = 0.0
-    events = 0
-    for rel in COST_EVENT_RELS:
-        path = ws / rel
-        if not path.is_file():
-            continue
-        files.append(rel)
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            warn("rlvr.disposition_measure.cost",
-                 f"{rel}: {type(exc).__name__}: {exc}")
-            continue
-        dirty = 0
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                doc = json.loads(line)
-            except ValueError:
-                dirty += 1
-                continue
-            amount = _float_or_none(doc.get("amount")) if isinstance(
-                doc, dict) else None
-            if amount is None:
-                dirty += 1
-                continue
-            total += amount
-            events += 1
-        if dirty:
-            warn("rlvr.disposition_measure.cost",
-                 f"{rel}: skipped {dirty} malformed line(s)")
+    """The workspace-level spend face over the settlement family's
+    cost-event rows (tolerant read — malformed lines are skipped by the
+    family read face, never fatal)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    rows = [r for r in _cl.read(ws, "settlement", schema_prefix=COST_SCHEMA)
+            if _float_or_none(r.get("amount")) is not None]
+    files = [COST_FACE] if rows else []
+    total = sum(float(r["amount"]) for r in rows)
+    events = len(rows)
     coverage = ("workspace-total (no run identity)" if files else "absent")
     return {"amount": round(total, 6) if events else None,
             "events": events, "files": files, "coverage": coverage}

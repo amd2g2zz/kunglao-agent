@@ -204,7 +204,7 @@ def test_store_read_tolerant_on_missing_and_corrupt(tmp_path, monkeypatch):
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
     assert strategy_store.load_rows(ws=None) == []
     root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
+    (root / "knowledge-store.jsonl").write_text(  # #1004 rename
         "{not json}\n"
         + json.dumps({"schema": "posterior-store/1",
                       "workspace_id": "w"}) + "\n",

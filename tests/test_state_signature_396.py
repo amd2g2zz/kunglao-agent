@@ -71,11 +71,12 @@ def _register(ws: Path, claims: list[dict]) -> None:
 
 
 def _cost(ws: Path, amounts: list[float]) -> None:
-    p = ws / "cost_events.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
-        for a in amounts:
-            fh.write(json.dumps({"amount": a}) + "\n")
+    # #1004: the cost face rides the settlement family's consolidated file
+    from rlvr import consolidated_ledger as _cl
+    for a in amounts:
+        assert _cl.append(ws, "settlement",
+                          {"schema": "cost-event/1", "ts": "t",
+                           "amount": a, "source": "fixture"})
 
 
 # ---------- fact face ----------
@@ -552,15 +553,19 @@ class TestSituationStream:
         assert row["state"]["schema"] == "state-sig/2"
         assert row["signature"] == ssig.signature_str(row["state"])
         assert row["signature_hash"] == ssig.signature_hash(row["state"])
-        p = tmp_path / "runs" / "situation-stream.jsonl"
-        lines = p.read_text(encoding="utf-8").strip().splitlines()
+        # #1004: the snapshot stream rides the telemetry family file
+        from rlvr import consolidated_ledger as _cl
+        lines = _cl.family_path(tmp_path, "telemetry").read_text(
+            "utf-8").strip().splitlines()
         assert len(lines) == 1
         assert json.loads(lines[0])["trigger"] == "worker_return"
 
     def test_append_only_stream_grows(self, tmp_path):
         ssig.append_snapshot(tmp_path, trigger="worker_return")
         ssig.append_snapshot(tmp_path, trigger="terminal")
-        p = tmp_path / "runs" / "situation-stream.jsonl"
+        # #1004: the snapshot stream rides the telemetry family file
+        from rlvr import consolidated_ledger as _cl
+        p = _cl.family_path(tmp_path, "telemetry")
         assert len(p.read_text(encoding="utf-8").strip().splitlines()) == 2
 
     def test_tick_inherited_from_convergence_ledger(self, tmp_path):

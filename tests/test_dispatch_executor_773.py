@@ -146,9 +146,9 @@ def test_strategy_row_unchanged_without_sampled(dg, tmp_path):
     usage row, not here)."""
     ws = _bare_ws(tmp_path)
     dg._log_strategy_dispatch(ws, "C-001", "dispatch C-001, no marker")
-    rows = [json.loads(l) for l in
-            (ws / "runs" / "strategy-log.jsonl")
-            .read_text(encoding="utf-8").splitlines() if l.strip()]
+    # #1004: the dispatch rows ride the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    rows = _cl.read(ws, "telemetry", schema_prefix="strategy-log/1")
     assert rows[-1]["strategy"] == "default" and rows[-1]["declared"] is False
 
 

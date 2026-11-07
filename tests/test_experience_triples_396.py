@@ -84,12 +84,14 @@ def _seed_round(ws: Path, dispatch_id: str, r: float, claim="C-5") -> str:
 
 
 def _strategy_row(ws: Path, strategy: str, claim: str) -> None:
+    # #1004: the dispatch rows ride the telemetry family file
+    from rlvr import consolidated_ledger as _cl
     runs = ws / "runs"
     runs.mkdir(exist_ok=True)
-    with (runs / "strategy-log.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"ts": TS, "event": "dispatch",
-                             "strategy": strategy, "claim": claim,
-                             "attempts_at_snapshot": 0}) + "\n")
+    assert _cl.append(ws, "telemetry",
+                      {"schema": "strategy-log/1", "ts": TS,
+                       "event": "dispatch", "strategy": strategy,
+                       "claim": claim, "attempts_at_snapshot": 0})
 
 
 def _read_csv_rows(ws: Path) -> list[dict]:
