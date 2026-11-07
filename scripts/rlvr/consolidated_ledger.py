@@ -126,7 +126,12 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
     # bounded reward-face choice signal (rlvr.disposition_reward), and the
     # per-rollout deadline timer with its coefficient audit row
     "telemetry": ("disposition/1", "disposition-signal/1",
-                  "rollout-timer/1", "rollout-budget/1"),
+                  "rollout-timer/1", "rollout-budget/1",
+                  # issue-1005 S7: the orphan launch-sweep's resolution
+                  # row (rlvr.orphan_resolver mirrors it here — the
+                  # close-path audit face; pre-seeded at 0 so a dead
+                  # resolver reads DEAD, never absent)
+                  "orphan-resolution/1"),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {

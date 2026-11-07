@@ -347,7 +347,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: ae95e6a0277bb8370b06d866c3428356db5921c49dfa2d8090fc07b60a3de20b
+    sha256: 8d9c4b5bf1f0751c90cd3af00d7d857492ba3554598e7c0adbf32282e3d09b5d
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1355,7 +1355,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: f31588fcdeb905de9ec933cd3f6fc6dc35304dab8dae525fd45f8cfc4cf427ee
+    sha256: 8fa8036071fe6d75de4064a631c8d5913c56643444cc65a42943708c38b5619a
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1391,7 +1391,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 8adc3bfdf03e2b08ee0dc039255b7abe690fe7a2a6cab836cd9a50cf9e1d4fce
+    sha256: 48f74adda05ccf02d60b3580d538700df698232961276eee1940eaee8a993921
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1524,6 +1524,10 @@ files:
     dest: .claude/scripts/rlvr/obstacles.py
     kind: scaffold
     sha256: 1a033c46c80c6a491a01fce6cb6c71291dedd0cef02f70a7352ac157918d1930
+  - src: scripts/rlvr/orphan_resolver.py
+    dest: .claude/scripts/rlvr/orphan_resolver.py
+    kind: scaffold
+    sha256: 5144af79f05244949c9fae0f8f9c1893c4e268bd61a3db68f1db8b07c15cd234
   - src: scripts/rlvr/parking.py
     dest: .claude/scripts/rlvr/parking.py
     kind: scaffold
