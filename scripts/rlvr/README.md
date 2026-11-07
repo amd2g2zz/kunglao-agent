@@ -456,6 +456,13 @@ the one-line pointer (name — the docstring's opening line):
   derived from the action_space STRATEGIC registry) carrying its propensity,
   written through the unified experience ledger + the
   `strategic_action_recorded` event; an absent action reads as SURRENDER.
+  The same module owns the dispatch-DECLARATION face (issue-1005 S5): the
+  dispatch gate's ALLOW tail appends one declaration row per dispatch —
+  `{claim, route, propensity, declared, trace_id, ts}`, a declared route
+  or the explicit gap (`declared: false`, `route: null`) — APPEND history,
+  last row is the live face; `absence_disposition` maps the gap toward
+  SURRENDER through the disposition algebra's own vocabulary, and
+  `disposition_fields` speaks both faces of the stamp.
 - `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
 - `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
 

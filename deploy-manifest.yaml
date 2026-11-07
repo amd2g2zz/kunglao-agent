@@ -27,7 +27,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: d27f94e2047999b7cbd38b1976a8d7ee3ff6400dec8f4efef7dc54ae76a37f44
+    sha256: 15906d28640af1f96e25d400e9d7f6c0eacd22f45f80efc2f89c719c8bf9e1ca
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 1d4f59ad07a3d29ca21c59d7b4ef35a447ccfdc5b9553e86adc2f6def4c7a3b5
+    sha256: 05beb42d6741d87cdc14897ce0ca0f365b767d5b05d39e4a6331b1f51140ac69
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1655,7 +1655,7 @@ files:
   - src: scripts/rlvr/strategic_action.py
     dest: .claude/scripts/rlvr/strategic_action.py
     kind: scaffold
-    sha256: c96c10a94c0fa7267ff0435b145d3699137f4c6636bd0f9dfa040466874254ca
+    sha256: 510b71dfe8d65fbae2b05144a9cea22b50cba37256301cc93e023a74794cc663
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
