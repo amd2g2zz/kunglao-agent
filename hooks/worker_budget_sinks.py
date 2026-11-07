@@ -793,25 +793,56 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
         return False
 
 
+def _strategic_declared_face(ws) -> dict | None:
+    """issue-1005 S5: the LAST strategic-action declaration row's
+    declared face — the PREFERRED declared-face source for the
+    reconciliation view (the dispatch seam's own record of the
+    strategic route; appended history, last row wins). None on absence
+    or outage: the envelope family face stays the fallback and the view
+    keeps its pre-change shape. Fail-open: telemetry never blocks the
+    gate (one rate-limited warn)."""
+    try:
+        from rlvr import strategic_action as _sa  # noqa: PLC0415 — lazy
+        row = _sa.latest_declaration(ws)
+        if row is None:
+            return None
+        return {"declared_route": row.get("route"),
+                "declared_propensity": row.get("propensity"),
+                "declared_source": _sa.SCHEMA}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('strategic_declaration.face', f'{type(exc).__name__}: {exc}')
+        return None
+
+
 def _sample_reconciliation(ws, declared: str | None) -> dict:
     """#691: what the RL sampler would choose for THIS dispatch — the
     gate's own draw (rlvr.strategy_store.reconcile_declaration: the same
     face ``method_lead`` renders, recomputed at dispatch time so nothing
     the envelope says can move it) plus the declared family's propensity
-    under it. Fail-open to the all-None gap view: a sampler failure is
-    ONE rate-limited warn (error class only) and the dispatch proceeds —
-    telemetry never turns an ALLOW into anything else."""
+    under it. issue-1005 S5: the strategic-action declaration row is the
+    PREFERRED declared face for the strategic route — when the workspace
+    holds a row, the view carries ``declared_route`` /
+    ``declared_propensity`` / ``declared_source`` beside the
+    method-family reconciliation; with no row the view stays
+    byte-identical to the pre-change shape (the envelope family face is
+    the fallback). Fail-open to the all-None gap view: a sampler failure
+    is ONE rate-limited warn (error class only) and the dispatch
+    proceeds — telemetry never turns an ALLOW into anything else."""
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False,
            "sampled_propensity": None, "round_lead": None}
-    if not ws or not declared:
+    if not ws:
         return gap
+    face = _strategic_declared_face(ws)
+    if not declared:
+        return {**gap, **face} if face else gap
     try:
         from rlvr import strategy_store as _ss691  # noqa: PLC0415 — lazy
-        return _ss691.reconcile_declaration(ws, declared)
+        view = _ss691.reconcile_declaration(ws, declared)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('method_family.sample_view', f'{type(exc).__name__}: {exc}')
-        return gap
+        view = gap
+    return {**view, **face} if face else view
 
 
 def _override_reason(prompt: str) -> str | None:

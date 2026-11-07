@@ -1028,7 +1028,19 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     no input, and the strand cycled in degraded mode. Now a markerless pass
     lands a `strategy: "default", declared: false` row (honest: no strategy
     was declared) — the row the #120 read path and the compose face need. A
-    marker keeps its richer row."""
+    marker keeps its richer row.
+
+    Cross-face note (issue-1005 S5): the SAME ALLOW tail also appends the
+    strategic-action declaration row (`_log_strategic_declaration`), which
+    parses the same `[strategy <id>]` marker but classifies it as a ROUTE
+    face: `declared: true` ONLY for a closed-set route word (FIGHT /
+    BYPASS / INVEST). A marker naming any other strategy id — including
+    the compose face's "default" id — is `declared: true` HERE and
+    `declared: false, route: null` THERE, DELIBERATELY: the strategy-log
+    answers "was a novelty strategy named?", the declaration row answers
+    "was a strategic route chosen?". A cross-log join must key on
+    (claim, dispatch ts) and read this difference first; neither face's
+    recorded value may be "fixed" to match the other."""
     m = STRATEGY_MARKER_RE.search(prompt_text or "")
     declared = m is not None
     strategy = m.group(1) if m else "default"
@@ -1063,6 +1075,55 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
         path.write_text("\n".join(kept) + "\n", encoding="utf-8")
     except OSError as exc:
         print(f"dispatch_gate: strategy-log write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
+def _log_strategic_declaration(ws: Path, claim_id: str, prompt_text: str,
+                               trace_id: str | None) -> None:
+    """issue-1005 S5: append the dispatch's strategic-route declaration
+    row (`strategic-action/1` in the unified experience ledger, via
+    rlvr.strategic_action) at the same ALLOW tail the strategy-log row
+    uses. The route face parses the SAME `[strategy <id>]` marker: a
+    marker naming one of the closed route words (FIGHT/BYPASS/INVEST)
+    declares the route; a markerless pass (or a marker naming a strategy
+    id, not a route word) lands the honest gap row (`declared: false` /
+    `route: null`) — a silent default must never be the norm, and the
+    settle side maps the absence toward SURRENDER per the disposition
+    algebra. The behavior propensity is the route's PRIOR share
+    (Laplace-smoothed, recent window) computed before this dispatch's own
+    row appends (a choice never raises its own propensity). Repeated
+    dispatches APPEND (history; the last row is the live face). Fail-open:
+    print-on-error, never raise into the gate (the strategy-log write
+    posture).
+
+    Cross-face note: this row and the strategy-log row come from the SAME
+    `[strategy <id>]` marker but classify it independently — the
+    strategy-log face answers "was a novelty strategy named?" (declared:
+    true for ANY marker, raw token kept), this face answers "was a
+    strategic route chosen?" (declared: true ONLY for a closed-set route
+    word; a strategy id like "default" lands the honest gap). A
+    `[strategy default]` dispatch therefore legitimately produces
+    {declared: true} in the strategy-log and {declared: false, route:
+    null} in the declaration row — a DELIBERATE semantic difference, not
+    a contradiction to repair. A cross-log join must key on (claim,
+    dispatch ts) and read this note first; neither face's recorded value
+    may be changed to match the other."""
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from harness_common import utc_now_z
+            from rlvr import strategic_action as _sa
+        m = STRATEGY_MARKER_RE.search(prompt_text or "")
+        token = m.group(1) if m else ""
+        route = token.strip().upper()
+        if route not in _sa.STRATEGIC_ACTIONS:
+            route = None
+        propensity = _sa.route_propensity(ws, route)
+        row = _sa.build_declaration_row(
+            claim=claim_id, route=route, propensity=propensity,
+            declared=route is not None, trace_id=trace_id, ts=utc_now_z())
+        _sa.append_declaration(ws, row)
+    except Exception as exc:  # noqa: BLE001 — never blocks dispatch
+        print(f"dispatch_gate: strategic-action write failed ({exc!r})",
               file=sys.stderr, flush=True)
 
 
@@ -2412,6 +2473,11 @@ def _main_inner() -> int:
                     "mission-stable allocation (envelope trace_id absent "
                     "or format-invalid)", trace_id=trace_id)
     _log_strategy_dispatch(ws, claim_id, prompt_text)
+    # issue-1005 S5: the strategic-route declaration rides the same
+    # ALLOW tail — the row is the declared face the sampler
+    # reconciliation prefers, and an undeclared dispatch lands the
+    # honest gap row whose settle-side residual is SURRENDER.
+    _log_strategic_declaration(ws, claim_id, prompt_text, trace_id)
     # #773 W3: the policy's admission receipt at the ALLOW tail — the one
     # point every real dispatch passes (fail-open; see _write_plan_receipt).
     _write_plan_receipt(ws, claim_id)
