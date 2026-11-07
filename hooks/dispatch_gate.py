@@ -1034,13 +1034,12 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     strategic-action declaration row (`_log_strategic_declaration`), which
     parses the same `[strategy <id>]` marker but classifies it as a ROUTE
     face: `declared: true` ONLY for a closed-set route word (FIGHT /
-    BYPASS / INVEST). A marker naming any other strategy id — including
-    the compose face's "default" id — is `declared: true` HERE and
-    `declared: false, route: null` THERE, DELIBERATELY: the strategy-log
-    answers "was a novelty strategy named?", the declaration row answers
-    "was a strategic route chosen?". A cross-log join must key on
-    (claim, dispatch ts) and read this difference first; neither face's
-    recorded value may be "fixed" to match the other."""
+    BYPASS / INVEST). Any other strategy id — including the compose face's
+    "default" — is `declared: true` HERE and `declared: false, route: null`
+    THERE, DELIBERATELY: the strategy-log answers "was a novelty strategy
+    named?", the declaration row "was a strategic route chosen?". A
+    cross-log join must key on (claim, dispatch ts) and read this
+    difference first; neither face's recorded value may be "fixed"."""
     m = STRATEGY_MARKER_RE.search(prompt_text or "")
     declared = m is not None
     strategy = m.group(1) if m else "default"
@@ -1109,7 +1108,7 @@ def _log_strategic_declaration(ws: Path, claim_id: str, prompt_text: str,
     dispatch ts) and read this note first; neither face's recorded value
     may be changed to match the other."""
     try:
-        with scripts_on_path():  # #671 scoped membership
+        with scripts_on_path():  # scoped membership
             from harness_common import utc_now_z
             from rlvr import strategic_action as _sa
         m = STRATEGY_MARKER_RE.search(prompt_text or "")
