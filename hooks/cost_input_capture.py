@@ -255,21 +255,20 @@ def process_event(payload: dict) -> int:
             from rlvr import consolidated_ledger as _cl
         except Exception:  # noqa: BLE001 — a broken facade sibling must
             # never starve cost capture: load the ledger core DIRECTLY
-            # from its file. The scripts dir joins sys.path first (the
-            # hygiene-route helper — never a bare insert) so the core's
-            # own repo import (kunglao_log) resolves even when the
-            # facade is importable neither way. Both faces failing
-            # falls to the ONE warn below — the record is dropped, the
-            # tool stream never breaks.
-            from _path_hygiene import ensure_scripts_path
+            # from its file via the ONE delegated by-path loader (the
+            # loader-delegation contract). The scripts dir joins sys.path first (the hygiene-route
+            # helper — never a bare insert) so the core's own repo
+            # import (kunglao_log) resolves even when the facade is
+            # importable neither way. Both faces failing falls to the
+            # ONE warn below — the record is dropped, the tool stream
+            # never breaks.
+            from _path_hygiene import (ensure_scripts_path,
+                                       load_module_by_path)
             ensure_scripts_path()
-            import importlib.util
-            _spec = importlib.util.spec_from_file_location(
+            _cl = load_module_by_path(
                 "kunglao_consolidated_ledger_core",
                 Path(__file__).resolve().parent.parent / "scripts"
                 / "rlvr" / "consolidated_ledger.py")
-            _cl = importlib.util.module_from_spec(_spec)
-            _spec.loader.exec_module(_cl)
         _cl.append(ws, "settlement", row)
     except Exception as exc:  # noqa: BLE001 — FAIL_OPEN at the record face
         warn("process_event", f"{type(exc).__name__}: {exc}")
