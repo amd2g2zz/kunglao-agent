@@ -53,6 +53,21 @@ FAM = "static-symbolic"
 AK = f"{FAM}|facts_snapshot|none|0"  # #804 regen: keyed shape
 
 
+def _fail_bank_appends(monkeypatch) -> None:
+    """Fail ONLY the experience-family appends — the q-cell bank rows.
+    The settlement family rides the same consolidated boundary since the
+    family move, and its writes must land for the repair to reconcile;
+    a blunt global patch would erase the very rows pass 2 needs."""
+    real_append = cl.append
+
+    def _bank_rows_fail(ws, family, row, **kwargs):
+        if family == "experience":
+            return False
+        return real_append(ws, family, row, **kwargs)
+
+    monkeypatch.setattr(cl, "append", _bank_rows_fail)
+
+
 # ---------- fixtures --------------------------------------------------------
 
 def _ws(tmp_path: Path, claims: list[dict] | None = None) -> Path:
@@ -396,7 +411,7 @@ def test_settle_pass_repair_never_reenters_banked(tmp_path, monkeypatch):
     directory trick cannot be used — it lives in the same family)."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    _fail_bank_appends(monkeypatch)
     src.run(ws)                           # ledger settles; bank fails open
     monkeypatch.undo()
     out2 = src.run(ws)
@@ -412,7 +427,7 @@ def test_repair_never_refires_the_store_and_l1_writers(tmp_path, monkeypatch):
     strategy-store and L1 writers must never fire from a reconcile."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    _fail_bank_appends(monkeypatch)
     src.run(ws)
     monkeypatch.undo()
 

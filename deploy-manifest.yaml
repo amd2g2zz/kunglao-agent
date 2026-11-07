@@ -23,7 +23,7 @@ files:
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
-    sha256: cbf546579020268b4edc1630a1ff261d4af666f1589acb05aacb7eba98ec032c
+    sha256: 592d4f5ec158ab24f6d0b17ebcb0ba2f5ec36bbefc58cf732e4273eb2ec027df
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
