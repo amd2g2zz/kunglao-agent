@@ -27,7 +27,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 629d0395e836764e7fbb2fc76614793bf98352750f2a339bcde398c0915dee80
+    sha256: 15906d28640af1f96e25d400e9d7f6c0eacd22f45f80efc2f89c719c8bf9e1ca
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
