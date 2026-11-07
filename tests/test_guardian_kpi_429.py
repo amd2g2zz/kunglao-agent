@@ -317,9 +317,9 @@ class TestVerifierDrift:
 
     def test_read_only_never_writes(self, tmp_path):
         _settled_task(tmp_path, "T-M", oracle=True)
-        before = (tmp_path / "runs" / "rollout-ledger.jsonl").read_bytes()
+        before = (tmp_path / "runs" / "settlement.jsonl").read_bytes()
         gk.verifier_drift(tmp_path)
-        after = (tmp_path / "runs" / "rollout-ledger.jsonl").read_bytes()
+        after = (tmp_path / "runs" / "settlement.jsonl").read_bytes()
         assert before == after
 
     def test_cold_start_empty_counts(self, tmp_path):

@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """cost_input_capture.py — PostToolUse 成本输入捕获 (#873)。
 
-缺口0：cost_events.jsonl 的写入方在仓库内不存在——cost_gate.py 只读，
-docstring 声明的 "written by PostToolUse hook" 是纸面。本 hook 补上输入端：
-  - tool_response 含 "COST WARNING: session total ~$<float>"
-    （COST CRITICAL 同构）→ 追加 {"ts","amount","source"} 到
-    <ws>/cost_events.jsonl（schema 与 cost_gate 解析器逐字段一致）
-  - 无匹配 / ws 未解析 / IO 异常 → 静默不写（FAIL_OPEN，永不打断工具流）
+Input face for the cost-event rows: the tool_response carries
+"COST WARNING: session total ~$<float>" (COST CRITICAL isomorphic) ->
+one stamped cost-event/1 row {"ts","amount","source"} appended to the
+consolidated settlement family ledger (<ws>/runs/settlement.jsonl — the
+same family cost_gate reads; the legacy cost_events.jsonl rel survives
+only inside the compat window). No match / unresolvable ws / IO
+trouble → silent no-write (FAIL_OPEN, never interrupts the tool stream).
 
 口径边界（proposal 声明）：Claude Code 不暴露 per-call 计费遥测——amount
 是会话累计 session total（PostToolUse 文本解析口径），非增量。
@@ -37,7 +38,7 @@ from pathlib import Path
 
 COST_RE = re.compile(
     r"COST (?:WARNING|CRITICAL): session total ~\$([0-9]+(?:\.[0-9]+)?)")
-COST_EVENTS = "cost_events.jsonl"
+COST_SCHEMA = "cost-event/1"
 
 # #801 Face 3: the machine:analysis cockpit ratio — machine-overhead input
 # tokens (orchestrator transcript rows) over analysis-output tokens
@@ -245,13 +246,31 @@ def process_event(payload: dict) -> int:
     if ws is None:
         return 0
     try:
-        row = {"ts": datetime.now(timezone.utc).isoformat(
+        row = {"schema": COST_SCHEMA,
+               "ts": datetime.now(timezone.utc).isoformat(
                    timespec="seconds").replace("+00:00", "Z"),
                "amount": amount,
                "source": str(payload.get("tool_name") or "unknown")}
-        with (ws / COST_EVENTS).open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError as exc:
+        try:
+            from rlvr import consolidated_ledger as _cl
+        except Exception:  # noqa: BLE001 — a broken facade sibling must
+            # never starve cost capture: load the ledger core DIRECTLY
+            # from its file. The scripts dir joins sys.path first so the
+            # core's own repo import (kunglao_log) resolves even when
+            # the facade is importable neither way. Both faces failing
+            # falls to the ONE warn below — the record is dropped, the
+            # tool stream never breaks.
+            import importlib.util
+            _scripts = (Path(__file__).resolve().parent.parent / "scripts")
+            if str(_scripts) not in sys.path:
+                sys.path.insert(0, str(_scripts))
+            _spec = importlib.util.spec_from_file_location(
+                "kunglao_consolidated_ledger_core",
+                _scripts / "rlvr" / "consolidated_ledger.py")
+            _cl = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_cl)
+        _cl.append(ws, "settlement", row)
+    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN at the record face
         warn("process_event", f"{type(exc).__name__}: {exc}")
     return 0
 

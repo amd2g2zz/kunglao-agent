@@ -6,8 +6,11 @@ adapter shim was retired by the legacy-surface card — importers use
 ``rlvr.ledger`` directly.
 
 Owner ruling (2026-09-23): the whole RLVA reward is unified — ALL rollout
-kinds share ONE accounting system. This module owns the ledger:
-``<ws>/runs/rollout-ledger.jsonl``, append-only JSONL, one row schema:
+kinds share ONE accounting system. This module owns the ledger rows,
+append-only JSONL in the consolidated settlement family file
+``<ws>/runs/settlement.jsonl`` (the row schema and the
+``rollout-ledger/1`` stamp are unchanged; the family move retired the
+per-module file):
 
     {"schema": "rollout-ledger/1",
      "rollout_id": "<kind>/<anchor>",   # identity (stable across folds)
@@ -45,9 +48,12 @@ marked ``advisory: true`` (U3 whitelist): the ledger stores them, but the
 settlement engine never reads them for rule matching, and no single signal
 — advisory or not — settles a band alone.
 
-Locking: appends take an flock on ``runs/.rollout-ledger.lock`` (the repo's
-lock-file pattern; POSIX fcntl, graceful unlocked fallback where flock is
-unavailable — O_APPEND single-writes stay atomic, and CI is single-tenant).
+Locking: appends ride the consolidated settlement family's flock
+(``runs/.settlement.lock`` via rlvr.consolidated_ledger — the ONE
+writer guard; the per-module ``runs/.rollout-ledger.lock`` rel retired
+with the family move; graceful unlocked fallback where flock is
+unavailable — O_APPEND single-writes stay atomic, and CI is
+single-tenant).
 
 The ONE prior interface (U4): ``settled(ws, kind=..., window=...)`` — the
 Thompson/rank family reads settled rows through this call and no other
@@ -62,11 +68,14 @@ import json
 from pathlib import Path
 
 from harness_common import utc_now_z as _utc_now
-from kunglao_log import iter_jsonl
+
+from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "rollout-ledger/1"
+#: the legacy rel the rows wrote before the family move — kept as the
+#: compat-window's documented name (readers still see it; production
+#: no longer writes it; the schema-cutover slice retires the window)
 LEDGER_REL = "runs/rollout-ledger.jsonl"
-LOCK_REL = "runs/.rollout-ledger.lock"
 
 # --- kinds registry (open enum, registered centrally) ----------------------
 KIND_TASK = "task"
@@ -279,66 +288,15 @@ def row_schema_lint(row: dict) -> list[str]:
 
 # --- IO ---------------------------------------------------------------------
 
-def _path(ws) -> Path:
-    return Path(ws) / LEDGER_REL
-
-
-def _lock_path(ws) -> Path:
-    return Path(ws) / LOCK_REL
-
-
-def _locked_append(ws, data: bytes) -> bool:
-    """Append under the ledger lock. flock (POSIX) with an unlocked
-    O_APPEND fallback where fcntl is unavailable. Never raises."""
-    p = _path(ws)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        lock = _lock_path(ws)
-        lock.touch(exist_ok=True)
-        fd = None
-        try:
-            import fcntl
-            fd = lock.open("a", encoding="utf-8")
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        except ImportError:
-            fd = None  # Windows/CI: O_APPEND write stays atomic
-        except OSError:
-            fd = None
-        try:
-            import os
-            append_fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                                0o644)
-            try:
-                os.write(append_fd, data)
-            finally:
-                os.close(append_fd)
-            return True
-        finally:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except Exception as exc:  # noqa: BLE001 — unlock best-effort
-                    warn("lock_unlock", f"{type(exc).__name__}: {exc}")
-                fd.close()
-    except Exception as exc:  # noqa: BLE001 — never raise into the producer
-        warn("locked_append", f"{type(exc).__name__}: {exc}")
-        return False
-
-
 def read(ws) -> list[dict]:
     """Schema-enforced read: only rows passing row_schema_lint are signal
     (a settlement currency never half-reads a row); unparseable or
     schema-violating lines are skipped with one rate-limited WARN.
-    Missing ledger -> []."""
-    p = _path(ws)
-    if not p.exists():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    Rows come from the consolidated settlement family read (legacy
+    rollout-ledger rows first, then live family rows — chronology);
+    missing ledger -> []."""
     out: list[dict] = []
-    for row in iter_jsonl(text.splitlines()):
+    for row in _cl.read(ws, "settlement", schema_prefix="rollout-ledger"):
         if not isinstance(row, dict) or row_schema_lint(row):
             warn("read_dirty", "schema-violating row skipped")
             continue
@@ -346,9 +304,9 @@ def read(ws) -> list[dict]:
     return out
 
 
-def _row_bytes(rollout_id: str, kind: str, anchor: str, ts: str,
-               signals: list[dict], settlement: dict | None) -> bytes:
-    row = {
+def _row(rollout_id: str, kind: str, anchor: str, ts: str,
+         signals: list[dict], settlement: dict | None) -> dict:
+    return {
         "schema": SCHEMA,
         "rollout_id": rollout_id,
         "kind": kind,
@@ -358,7 +316,6 @@ def _row_bytes(rollout_id: str, kind: str, anchor: str, ts: str,
         "reward": None if settlement is None else settlement["reward"],
         "settlement": settlement,
     }
-    return (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 # --- fold + query faces ------------------------------------------------------
@@ -490,7 +447,7 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
         row["settlement"] = settlement  # an amendment never un-settles
         row["reward"] = None if settlement is None else settlement["reward"]
         row["ts"] = existing[0].get("ts") or row["ts"]  # identity ts stable
-    ok = _locked_append(ws, _row_bytes(
+    ok = _cl.append(ws, "settlement", _row(
         rid, kind, anchor, row["ts"], signals, row["settlement"]))
     return {"appended": bool(ok),
             "reason": None if ok else "write failed",
@@ -540,7 +497,7 @@ def settle(ws, rollout_id: str, settlement: dict,
     if errors:
         return {"appended": False,
                 "reason": "schema: " + "; ".join(errors)}
-    ok = _locked_append(ws, _row_bytes(
+    ok = _cl.append(ws, "settlement", _row(
         rollout_id, str(identity.get("kind")),
         str(identity.get("anchor")), str(identity.get("ts")),
         [], st))

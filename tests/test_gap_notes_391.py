@@ -324,7 +324,7 @@ class TestAntiPollution:
         ws = tmp_path / "ws"
         ws.mkdir()
         _settle_fail(ws)
-        ledger = ws / "runs" / "rollout-ledger.jsonl"
+        ledger = ws / "runs" / "settlement.jsonl"
         before = ledger.read_bytes()
         rows_before = rl.read(ws)
         gn.emit_gap_notes(ws)

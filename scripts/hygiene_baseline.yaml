@@ -80,7 +80,7 @@ files:
   scripts/convergence_health.py:
     r1: 18
   scripts/cost_gate.py:
-    r1: 2
+    r1: 1
   scripts/dead_letter.py:
     r1: 4
   scripts/decision_pending.py:
@@ -537,7 +537,7 @@ files:
   scripts/troubleshooting_gate.py:
     r1: 1
   scripts/tuition_curve.py:
-    r1: 9
+    r1: 7
   scripts/update_index.py:
     r1: 4
   scripts/user_signal.py:

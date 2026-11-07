@@ -32,6 +32,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from rlvr import consolidated_ledger as cl  # noqa: E402
 from rlvr import episode_settle as es  # noqa: E402
 from rlvr import commit_semantics  # noqa: E402
 from rlvr import meta_policy  # noqa: E402
@@ -111,6 +112,53 @@ class TestTerminalSettle:
         doc = yaml.safe_load(ep.read_text(encoding="utf-8"))
         assert doc.get("reward") is not None
         assert "reward_block" in doc
+
+
+def _mk_ws_family_only(tmp_path: Path, *, terminal: bool = True) -> Path:
+    """The same mission workspace with its rows living ONLY in the
+    consolidated settlement family file (the post-move production
+    shape): stamped rollout rows and stamped cost rows, no legacy
+    rels on disk."""
+    ws = _mk_ws(tmp_path, terminal=terminal)
+    (ws / "runs" / "rollout-ledger.jsonl").unlink()
+    (ws / "cost_events.jsonl").unlink()
+    for rid, ts in (("mainline_decision/t1", "t1"),
+                    ("mainline_decision/t2", "t2")):
+        assert cl.append(ws, "settlement", {
+            "schema": "rollout-ledger/1", "rollout_id": rid,
+            "kind": "mainline_decision", "ts": ts, "signals": [],
+            "reward": None})
+    for amount in (0.4, 0.25):
+        assert cl.append(ws, "settlement", {
+            "schema": "cost-event/1", "amount": amount})
+    return ws
+
+
+class TestFamilyOnlyWorkspace:
+    """The post-move production shape: every face the legacy-seeded
+    fixture pins must read identically off the family file."""
+
+    def test_committed_rows_match_the_legacy_fixture(self, tmp_path):
+        ws = _mk_ws_family_only(tmp_path)
+        out = es.settle_mission(ws)
+        assert out["episodes_written"] == 1
+        ep = next(iter(es.episode_pool.list_episodes(ws)))
+        doc = yaml.safe_load(ep.read_text(encoding="utf-8"))
+        commits = doc["commits"]
+        assert [c["action"] for c in commits] == ["switch", "switch"]
+
+    def test_cost_window_matches_the_legacy_fixture(self, tmp_path):
+        ws = _mk_ws_family_only(tmp_path)
+        es.settle_mission(ws)
+        ep = next(iter(es.episode_pool.list_episodes(ws)))
+        doc = yaml.safe_load(ep.read_text(encoding="utf-8"))
+        assert doc["cost"]["spend_usd"] == pytest.approx(0.65)
+        assert doc["cost"]["event_rows"]["runs/settlement.jsonl"] == 2
+
+    def test_open_claims_still_refuse_loudly(self, tmp_path):
+        ws = _mk_ws_family_only(tmp_path, terminal=False)
+        with pytest.raises(es.MissionNotTerminal):
+            es.settle_mission(ws)
 
 
 # ------------------------------------------------- P2 settlement card pins

@@ -250,7 +250,7 @@ def test_dry_run_counts_pending_tiers_and_writes_nothing(tmp_path):
          "ts": "t"}], rollout_id="task/C-9")
     rl.settle(ws, "task/C-9", {"reward": 1.0, "band": "SETTLED_GREEN",
                                "rule_id": "r/1", "evidence_refs": []})
-    before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+    before = (ws / "runs" / "settlement.jsonl").read_bytes()
     out = src.run(ws, dry_run=True)
     assert out["would_amend_tiers"] == 1
-    assert (ws / "runs" / "rollout-ledger.jsonl").read_bytes() == before
+    assert (ws / "runs" / "settlement.jsonl").read_bytes() == before

@@ -134,11 +134,14 @@ def _verification(ws: Path, word: str = "verified") -> Path:
 
 
 def _rollout_rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "rollout-ledger.jsonl"
+    """The rollout-ledger/1 rows of the settlement family file (the
+    family file is multi-schema: wire rows share the file)."""
+    p = ws / "runs" / "settlement.jsonl"
     if not p.is_file():
         return []
     return [json.loads(ln) for ln in
-            p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            p.read_text(encoding="utf-8").splitlines() if ln.strip()
+            and json.loads(ln).get("schema") == "rollout-ledger/1"]
 
 
 def _wire_rows(ws: Path) -> list[dict]:

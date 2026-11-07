@@ -823,8 +823,8 @@ flowchart TD
 | `runs/.ladder-t1.json` | `scripts/verification_ladder.py` |
 | `runs/.posterior-store.lock` | `scripts/rlvr/posteriors.py` |
 | `runs/.retry-counter.yaml` | `hooks/worker_budget_core.py` |
-| `runs/.rollout-ledger.lock` | `scripts/rlvr/ledger.py` |
 | `runs/.rotation-induction.json` | `hooks/worker_budget_gates.py` |
+| `runs/.settlement.lock` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/.status-first.json` | `hooks/write_guard.py` |
 | `runs/act-fail-*.md` | `scripts/e2e/checkpoints.py` |
 | `runs/act-timeout-*.md` | `scripts/e2e/checkpoints.py` |
