@@ -30,7 +30,7 @@ The seven arms (docs/design/ws5-five-arms.yaml, the arm registry):
                        KUNGLAO_SCHEDULER=uniform (flat priors, the
                        learned state never influences family selection,
                        the propensity still rides the envelope)
-    kunglao-warm       the full loop reading a warm posterior-store copy
+    kunglao-warm       the full loop reading a warm knowledge-store copy
     kunglao-warm-no-l1 kunglao-warm with recall ablated (KUNGLAO_RECALL=0)
 
 Arms differ ONLY in declared faces (runner face, store kind, env). The
@@ -126,7 +126,7 @@ DEFAULT_OUT_REL = "runs/ws5-matrix"
 # the cross-task posterior store (the WS2 carrier): the env var the loop
 # reads the store root through, and the store file name inside it
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
-STORE_FILE = "posterior-store.jsonl"
+STORE_FILE = "knowledge-store.jsonl"  # the knowledge family file (#1004)
 # the operator-local corpus root env (the blocked-path measurement face)
 EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
 # hermeticity: stripped from the inherited env before arm env merges —

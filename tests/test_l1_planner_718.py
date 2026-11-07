@@ -112,9 +112,11 @@ def _transition(ws: Path, claim: str, *, r_incr: float,
            "phi_delta": round(phi_delta, 6), "claim_ref": claim,
            "action_key": FAM, "r_incr": r_incr, "r_settle": None,
            "done": False}
-    p = ws / "runs" / "transitions.jsonl"
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row) + "\n")
+    # #1004: the transition rows ride the experience family file (the
+    # transition/1 stamp is the read face's admission ticket)
+    from rlvr import consolidated_ledger as _cl
+    assert _cl.append(ws, "experience",
+                      {**row, "schema": "transition/1"})
 
 
 def _index_row(ws: Path, fact_id: str, status: str, claim: str) -> None:

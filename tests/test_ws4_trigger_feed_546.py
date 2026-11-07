@@ -65,8 +65,10 @@ def test_functional_first_fail_feeds_nothing_second_fail_feeds():
              "method_family": "static-decompile", "agent": None,
              "credit": 0.0},
         ]
-        (ws / "runs" / "q-cell-log.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+        # #1004: the q-cell rows ride the experience family file
+        from rlvr import consolidated_ledger as _cl
+        for r in rows:
+            assert _cl.append(ws, "experience", r)
         # the count face: prior fails >= 1 -> repeat condition holds
         prior = sum(
             1 for r in q_cells.default_store(str(ws)).observations()

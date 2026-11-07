@@ -3,7 +3,9 @@
 
 Issue 428 + 420 Phase 2 (v0.1.6 W2-T1): ``scripts/rlvr/posteriors.py``
 owns the learned-state core — an append-only JSONL store
-(``runs/posterior-store.jsonl``, ledger-isomorphic with rollout_ledger)
+(the knowledge family's consolidated file since #1004; the
+standalone ``runs/posterior-store.jsonl`` rel is retired;
+ledger-isomorphic with rollout_ledger)
 whose fold/read face applies the γ forgetting recurrence
 
     (α, β) ← γ · (α, β) + obs        (per (state, arm) cell, input order)
@@ -40,6 +42,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+
+from rlvr import consolidated_ledger as _cl  # noqa: E402  (#1004)
+from rlvr import strategy_store as _ss  # noqa: E402  (#1004)
+rp_STORE_ENV = _ss.STORE_ENV
+
+def _isolated_root(monkeypatch, name):
+    """#1004: the DTS store rides the knowledge family file — a bank is
+    isolated by its guarded ROOT (the conftest autouse fixture points
+    the env at one shared root), so a two-bank test re-points the env."""
+    root = Path(name)
+    monkeypatch.setenv(rp_STORE_ENV, str(root))
+    return root
 
 from rlvr import posteriors as rp  # noqa: E402
 
@@ -104,13 +118,15 @@ class TestStoreFaces:
         ok = rp.record(tmp_path, "s", "a", 1, gamma=1.0, ts=TS)
         assert ok["appended"] is True
 
-    def test_outcome_domain_enforced(self, tmp_path):
+    def test_outcome_domain_enforced(self, tmp_path, monkeypatch):
         """Bernoulli only: 0/1 in int/float/bool. Everything else —
         fractional rewards, strings, None — refused (scalar semantics are
         NOT this store's; it accepts observations as data, 0 or 1)."""
         for good, (a_add, b_add) in ((1, (1.0, 0.0)), (0, (0.0, 1.0)),
                                      (True, (1.0, 0.0)), (0.0, (0.0, 1.0))):
-            ws = tmp_path / str(good)
+            # #1004: the family file ignores ws — each case gets its own
+            # guarded root
+            ws = _isolated_root(monkeypatch, tmp_path / str(good))
             res = rp.record(ws, "s", "a", good, gamma=1.0, ts=TS)
             assert res["appended"] is True
             row = rp.read(ws)[0]
@@ -128,7 +144,7 @@ class TestStoreFaces:
         """The byte prefix is invariant across activity (wal posture):
         later appends never rewrite earlier bytes."""
         rp.record(tmp_path, "s", "a", 1, gamma=0.9, ts=TS)
-        p = tmp_path / rp.STORE_REL
+        p = _cl.family_path(tmp_path, "knowledge")
         first = p.read_bytes()
         rp.record(tmp_path, "s", "a", 0, gamma=0.9, ts=TS)
         rp.record(tmp_path, "s", "b", 1, gamma=1.0, ts=TS)
@@ -143,7 +159,7 @@ class TestStoreFaces:
         assert view.cell("sig-a", "static-first") is None
 
     def test_dirty_rows_skipped_fail_open(self, tmp_path):
-        p = tmp_path / rp.STORE_REL
+        p = _cl.family_path(tmp_path, "knowledge")
         p.parent.mkdir(parents=True, exist_ok=True)
         good = json.dumps({"schema": rp.SCHEMA, "state": "s", "arm": "a",
                            "ts": TS, "gamma": 1.0, "outcome": 1,
@@ -155,7 +171,7 @@ class TestStoreFaces:
     def test_unknown_schema_version_never_half_read(self, tmp_path):
         """The version wall: a row from a FOREIGN schema version is
         skipped loudly, never merged into the fold (no-backcompat)."""
-        p = tmp_path / rp.STORE_REL
+        p = _cl.family_path(tmp_path, "knowledge")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(
             {"schema": "posterior-store/9", "state": "s", "arm": "a",
@@ -203,14 +219,15 @@ class TestFoldMath:
         _assert_hex("alpha prior-decayed", cell["alpha"],
                     "0x1.8000000000000p+0")  # 0.5·1 + 1
 
-    def test_input_order_changes_the_decayed_posterior(self, tmp_path):
+    def test_input_order_changes_the_decayed_posterior(self, tmp_path,
+                                                       monkeypatch):
         """(α,β) ← γ·(α,β)+obs is order-sensitive — pass-then-fail is NOT
         fail-then-pass under γ < 1. Both directions hand-pinned."""
-        ws1 = tmp_path / "w1"
-        ws2 = tmp_path / "w2"
+        ws1 = _isolated_root(monkeypatch, tmp_path / "w1")
         _seed_cell(ws1, "s", "a", [1, 0], gamma=0.5)
-        _seed_cell(ws2, "s", "a", [0, 1], gamma=0.5)
         c1 = rp.fold(ws1).cell("s", "a")
+        ws2 = _isolated_root(monkeypatch, tmp_path / "w2")
+        _seed_cell(ws2, "s", "a", [0, 1], gamma=0.5)
         c2 = rp.fold(ws2).cell("s", "a")
         _assert_hex("order1 alpha", c1["alpha"], "0x1.8000000000000p-1")
         _assert_hex("order1 beta", c1["beta"], "0x1.4000000000000p+0")
@@ -274,12 +291,13 @@ class TestFoldMath:
         assert decayed["alpha"] < raw["alpha"]
         assert decayed["beta"] < raw["beta"]
 
-    def test_priors_are_the_learning_rate_knob(self, tmp_path):
+    def test_priors_are_the_learning_rate_knob(self, tmp_path,
+                                               monkeypatch):
         """Pseudo-count prior strength = how many observations a cell
         carries at birth: a strong prior barely moves on one obs."""
-        weak = tmp_path / "weak"
-        strong = tmp_path / "strong"
+        weak = _isolated_root(monkeypatch, tmp_path / "weak")
         _seed_cell(weak, "s", "a", [1], gamma=1.0)
+        strong = _isolated_root(monkeypatch, tmp_path / "strong")
         _seed_cell(strong, "s", "a", [1], gamma=1.0)
         c_weak = rp.fold(weak, prior_alpha=1.0, prior_beta=1.0).cell("s", "a")
         c_strong = rp.fold(strong, prior_alpha=50.0,
@@ -325,17 +343,20 @@ class TestNumpyView:
         expected = math.sqrt(3.0 * 2.0 / (25.0 * 6.0))
         assert widths[0] == pytest.approx(expected)
 
-    def test_width_shrinks_with_effective_count(self, tmp_path):
+    def test_width_shrinks_with_effective_count(self, tmp_path,
+                                                monkeypatch):
         """Cold-start width pin (owner: 冷启动偏向更大探索空间): the SAME
         observations leave a γ < 1 posterior wider (more uncertain →
         wider exploration) than a γ = 1 posterior."""
-        wide_ws = tmp_path / "wide"
-        narrow_ws = tmp_path / "narrow"
         outcomes = [1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0,
                     1, 1]
+        # the family read face ignores ws — each fold must run under its
+        # own guarded root (the env is the bank selector, #1004)
+        wide_ws = _isolated_root(monkeypatch, tmp_path / "wide")
         _seed_cell(wide_ws, "s", "a", outcomes, gamma=0.9)
-        _seed_cell(narrow_ws, "s", "a", outcomes, gamma=1.0)
         wide = rp.fold(wide_ws).cell("s", "a")
+        narrow_ws = _isolated_root(monkeypatch, tmp_path / "narrow")
+        _seed_cell(narrow_ws, "s", "a", outcomes, gamma=1.0)
         narrow = rp.fold(narrow_ws).cell("s", "a")
         assert wide["n_effective"] < narrow["n_effective"]
         assert wide["width"] > narrow["width"]
@@ -417,13 +438,14 @@ class TestSelfHeal:
     # lie at mean 31/72 ≈ 0.43, while γ < 1 has DECAYED it away.
     CONTRADICTING = [0] * 40
 
-    def test_early_misattribution_decays_out_under_gamma(self, tmp_path):
-        ws_heal = tmp_path / "heal"
-        ws_stuck = tmp_path / "stuck"
+    def test_early_misattribution_decays_out_under_gamma(self, tmp_path,
+                                                         monkeypatch):
+        ws_heal = _isolated_root(monkeypatch, tmp_path / "heal")
         stream = self.MISATTRIBUTED + self.CONTRADICTING
         _seed_cell(ws_heal, "s", "a", stream, gamma=0.9)
-        _seed_cell(ws_stuck, "s", "a", stream, gamma=1.0)
         healed = rp.fold(ws_heal).cell("s", "a")["mean"]
+        ws_stuck = _isolated_root(monkeypatch, tmp_path / "stuck")
+        _seed_cell(ws_stuck, "s", "a", stream, gamma=1.0)
         stuck = rp.fold(ws_stuck).cell("s", "a")["mean"]
         # The γ < 1 posterior RECOVERED toward the true rate (0.0 here);
         # the γ = 1 control is still dominated by the fake passes.
@@ -431,18 +453,21 @@ class TestSelfHeal:
         assert stuck > 0.30
         assert healed < stuck - 0.08
 
-    def test_recovery_is_progressive_mid_contradiction(self, tmp_path):
+    def test_recovery_is_progressive_mid_contradiction(self, tmp_path,
+                                                       monkeypatch):
         """Mid-contradiction checkpoint (20 obs in): recovery is underway
         well before the stream ends — decayed evidence is already
         minority-weight while the γ = 1 control still trusts the lie
         (31/52 ≈ 0.60)."""
         stream = self.MISATTRIBUTED + [0] * 20
-        ws_heal = tmp_path / "heal"
-        ws_stuck = tmp_path / "stuck"
+        ws_heal = _isolated_root(monkeypatch, tmp_path / "heal")
         _seed_cell(ws_heal, "s", "a", stream, gamma=0.9)
+        healed = rp.fold(ws_heal).cell("s", "a")["mean"]
+        ws_stuck = _isolated_root(monkeypatch, tmp_path / "stuck")
         _seed_cell(ws_stuck, "s", "a", stream, gamma=1.0)
-        assert rp.fold(ws_heal).cell("s", "a")["mean"] < 0.35
-        assert rp.fold(ws_stuck).cell("s", "a")["mean"] > 0.45
+        stuck = rp.fold(ws_stuck).cell("s", "a")["mean"]
+        assert healed < 0.35
+        assert stuck > 0.45
 
     def test_adaptive_schedule_self_heals_too(self, tmp_path):
         """The outcome-adaptive schedule must also recover: a bad stretch
@@ -543,7 +568,8 @@ class TestDefaults:
         assert "EX-2" in source
         assert "ex2-gamma-calibration" in source
 
-    def test_shipped_write_default_folds_decayed(self, tmp_path):
+    def test_shipped_write_default_folds_decayed(self, tmp_path,
+                                                 monkeypatch):
         """DTS everywhere, day one (owner ruling 2026-09-29): rows written
         at the default γ (no schedule decision threaded) fold to a DECAYED
         posterior under the default read — the γ = 1 no-forgetting write
@@ -554,7 +580,7 @@ class TestDefaults:
             assert rp.record(tmp_path, "s", "a", out, ts=TS)["appended"]
         decayed = rp.fold(tmp_path).cell("s", "a")
         assert decayed["n_effective"] < len(outcomes)
-        unit_ws = tmp_path / "unit-control"
+        unit_ws = _isolated_root(monkeypatch, tmp_path / "unit-control")
         for out in outcomes:
             rp.record(unit_ws, "s", "a", out, gamma=1.0, ts=TS)
         exact = rp.fold(unit_ws).cell("s", "a")

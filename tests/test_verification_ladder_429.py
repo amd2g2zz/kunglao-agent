@@ -69,7 +69,9 @@ def _signal(ws: Path, kind: str, ts: str, **fields) -> None:
 
 def _situation(ws: Path, ts: str, trigger: str, state: dict,
                tick: int = 1) -> None:
-    p = ws / "runs" / "situation-stream.jsonl"
+    # #1004: the snapshot stream rides the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    p = _cl.family_path(ws, "telemetry")
     p.parent.mkdir(parents=True, exist_ok=True)
     row = {"schema": ssig.SITUATION_SCHEMA, "ts": ts, "trigger": trigger,
            "tick": tick, "state": state,

@@ -45,9 +45,10 @@ marked ``advisory: true`` (U3 whitelist): the ledger stores them, but the
 settlement engine never reads them for rule matching, and no single signal
 — advisory or not — settles a band alone.
 
-Locking: appends take an flock on ``runs/.rollout-ledger.lock`` (the repo's
-lock-file pattern; POSIX fcntl, graceful unlocked fallback where flock is
-unavailable — O_APPEND single-writes stay atomic, and CI is single-tenant).
+Locking: appends ride the consolidated settlement file's own flock (the
+consolidation core is the single writer guard — the per-module
+``runs/.rollout-ledger.lock`` rel retired with the standalone file,
+#1004).
 
 The ONE prior interface (U4): ``settled(ws, kind=..., window=...)`` — the
 Thompson/rank family reads settled rows through this call and no other
@@ -62,11 +63,11 @@ import json
 from pathlib import Path
 
 from harness_common import utc_now_z as _utc_now
-from kunglao_log import iter_jsonl
+from kunglao_log import warn
+
+from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "rollout-ledger/1"
-LEDGER_REL = "runs/rollout-ledger.jsonl"
-LOCK_REL = "runs/.rollout-ledger.lock"
 
 # --- kinds registry (open enum, registered centrally) ----------------------
 KIND_TASK = "task"
@@ -279,86 +280,25 @@ def row_schema_lint(row: dict) -> list[str]:
 
 # --- IO ---------------------------------------------------------------------
 
-def _path(ws) -> Path:
-    return Path(ws) / LEDGER_REL
-
-
-def _lock_path(ws) -> Path:
-    return Path(ws) / LOCK_REL
-
-
-def _locked_append(ws, data: bytes) -> bool:
-    """Append under the ledger lock. flock (POSIX) with an unlocked
-    O_APPEND fallback where fcntl is unavailable. Never raises."""
-    p = _path(ws)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        lock = _lock_path(ws)
-        lock.touch(exist_ok=True)
-        fd = None
-        try:
-            import fcntl
-            fd = lock.open("a", encoding="utf-8")
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        except ImportError:
-            fd = None  # Windows/CI: O_APPEND write stays atomic
-        except OSError:
-            fd = None
-        try:
-            import os
-            append_fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                                0o644)
-            try:
-                os.write(append_fd, data)
-            finally:
-                os.close(append_fd)
-            return True
-        finally:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except Exception as exc:  # noqa: BLE001 — unlock best-effort
-                    warn("lock_unlock", f"{type(exc).__name__}: {exc}")
-                fd.close()
-    except Exception as exc:  # noqa: BLE001 — never raise into the producer
-        warn("locked_append", f"{type(exc).__name__}: {exc}")
-        return False
-
-
 def read(ws) -> list[dict]:
-    """Schema-enforced read: only rows passing row_schema_lint are signal
-    (a settlement currency never half-reads a row); unparseable or
-    schema-violating lines are skipped with one rate-limited WARN.
-    Missing ledger -> []."""
-    p = _path(ws)
-    if not p.exists():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    """Schema-enforced read of the settlement family's rollout-ledger
+    rows: only rows passing row_schema_lint are signal (a settlement
+    currency never half-reads a row); unparseable or schema-violating
+    lines are skipped with one rate-limited WARN. Missing ledger -> []."""
     out: list[dict] = []
-    for row in iter_jsonl(text.splitlines()):
-        if not isinstance(row, dict) or row_schema_lint(row):
+    for row in _cl.read(ws, "settlement", schema_prefix=SCHEMA):
+        if row_schema_lint(row):
             warn("read_dirty", "schema-violating row skipped")
             continue
         out.append(row)
     return out
 
 
-def _row_bytes(rollout_id: str, kind: str, anchor: str, ts: str,
-               signals: list[dict], settlement: dict | None) -> bytes:
-    row = {
-        "schema": SCHEMA,
-        "rollout_id": rollout_id,
-        "kind": kind,
-        "anchor": anchor,
-        "ts": ts,
-        "signals": signals,
-        "reward": None if settlement is None else settlement["reward"],
-        "settlement": settlement,
-    }
-    return (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+def _append_row(ws, row: dict) -> bool:
+    """The one write path: the consolidated settlement file's append
+    (flock + stamp contract enforced by the core; a refusal is ONE warn
+    + False — never a raise into the producer)."""
+    return _cl.append(ws, "settlement", row)
 
 
 # --- fold + query faces ------------------------------------------------------
@@ -490,8 +430,17 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
         row["settlement"] = settlement  # an amendment never un-settles
         row["reward"] = None if settlement is None else settlement["reward"]
         row["ts"] = existing[0].get("ts") or row["ts"]  # identity ts stable
-    ok = _locked_append(ws, _row_bytes(
-        rid, kind, anchor, row["ts"], signals, row["settlement"]))
+    ok = _append_row(ws, {
+        "schema": SCHEMA,
+        "rollout_id": rid,
+        "kind": kind,
+        "anchor": anchor,
+        "ts": row["ts"],
+        "signals": signals,
+        "reward": None if row["settlement"] is None
+        else row["settlement"]["reward"],
+        "settlement": row["settlement"],
+    })
     return {"appended": bool(ok),
             "reason": None if ok else "write failed",
             "rollout_id": rid}
@@ -540,10 +489,16 @@ def settle(ws, rollout_id: str, settlement: dict,
     if errors:
         return {"appended": False,
                 "reason": "schema: " + "; ".join(errors)}
-    ok = _locked_append(ws, _row_bytes(
-        rollout_id, str(identity.get("kind")),
-        str(identity.get("anchor")), str(identity.get("ts")),
-        [], st))
+    ok = _append_row(ws, {
+        "schema": SCHEMA,
+        "rollout_id": rollout_id,
+        "kind": str(identity.get("kind")),
+        "anchor": str(identity.get("anchor")),
+        "ts": str(identity.get("ts")),
+        "signals": [],
+        "reward": st.get("reward"),
+        "settlement": st,
+    })
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

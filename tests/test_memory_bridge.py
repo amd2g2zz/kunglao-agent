@@ -63,11 +63,14 @@ def _mk_ws(tmp_path: Path, *, family: str = "tf-snake") -> Path:
          "rollout_id": "mainline_decision/t2", "kind": "mainline_decision",
          "ts": "t2", "signals": [], "reward": None},
     ]
-    (runs / "rollout-ledger.jsonl").write_text(
-        "\n".join(str(__import__("json").dumps(r)) for r in rows) + "\n",
-        encoding="utf-8")
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 0.4}\n{"amount": 0.25}\n', encoding="utf-8")
+    # #1004: both streams ride the settlement family's consolidated file
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "settlement", r)
+    for amount in (0.4, 0.25):
+        assert _cl.append(ws, "settlement",
+                          {"schema": "cost-event/1", "ts": "t",
+                           "amount": amount, "source": "fixture"})
     spec = f"family: {family}\nprimary_questions:\n- id: pq1\n  q: win\n"
     (ws / "task_spec.yaml").write_text(spec, encoding="utf-8")
     return ws

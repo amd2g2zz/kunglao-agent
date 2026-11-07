@@ -51,6 +51,23 @@ def _latest_log(ws: Path) -> Path | None:
 def _resolve_ledger(ws: Path, ledger: str) -> Path | None:
     if ledger == "runs/logs/latest":
         return _latest_log(ws)
+    if ledger == "knowledge-store.jsonl":
+        # #1004: the knowledge family's consolidated file lives under the
+        # guarded cross-task root, not the workspace (the env override
+        # first — the same resolution rlvr.strategy_store.store_root
+        # performs; the import is the single source when scripts/ is
+        # importable from the devkit)
+        try:
+            sys.path.insert(0, str(SCRIPTS))
+            import runtime_switches  # noqa: PLC0415 — the registry face
+            env = runtime_switches.get_str(
+                "KUNGLAO_POSTERIOR_STORE").strip()
+            if env:
+                return Path(env) / ledger
+            from rlvr import strategy_store  # noqa: PLC0415
+            return strategy_store.store_root() / ledger
+        except Exception:  # noqa: BLE001 — devkit face degrades loudly
+            return ws / ledger
     return ws / ledger
 
 

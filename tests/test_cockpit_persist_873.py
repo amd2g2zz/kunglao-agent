@@ -47,15 +47,31 @@ def _payload(ws, response, tool="Agent"):
     return {"tool_name": tool, "tool_response": response, "cwd": str(ws)}
 
 
+
+# ---------- #1004 family-face helpers (the cost streams ride the
+# settlement family's consolidated file) ----------
+
+def _cost_rows(ws):
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "settlement", schema_prefix="cost-event/1")
+
+
+def _append_cost(ws, amount, ts="2026-09-01T00:00:00Z", source="Agent"):
+    from rlvr import consolidated_ledger as _cl
+    assert _cl.append(ws, "settlement",
+                      {"schema": "cost-event/1", "ts": ts,
+                       "amount": amount, "source": source})
+
+
 def test_cost_warning_appends_event(tmp_path):
     cap = _load_capture()
     ws = _ws_with_runs(tmp_path)
     rc = cap.process_event(_payload(
         ws, "... COST WARNING: session total ~$12.34 ..."))
     assert rc == 0
-    p = ws / "cost_events.jsonl"
-    assert p.exists()
-    row = json.loads(p.read_text(encoding="utf-8").splitlines()[0])
+    rows = _cost_rows(ws)
+    assert len(rows) == 1
+    row = rows[0]
     assert row["amount"] == 12.34
     assert row["source"] == "Agent"
     assert row["ts"].endswith("Z")
@@ -66,9 +82,8 @@ def test_cost_critical_also_matched(tmp_path):
     ws = _ws_with_runs(tmp_path)
     cap.process_event(_payload(
         ws, "COST CRITICAL: session total ~$666.58 (over $50)"))
-    row = json.loads((ws / "cost_events.jsonl")
-                     .read_text(encoding="utf-8").splitlines()[0])
-    assert row["amount"] == 666.58
+    rows = _cost_rows(ws)
+    assert rows and rows[0]["amount"] == 666.58
 
 
 def test_no_match_no_write(tmp_path):
@@ -76,7 +91,7 @@ def test_no_match_no_write(tmp_path):
     ws = _ws_with_runs(tmp_path)
     rc = cap.process_event(_payload(ws, "normal tool output, no cost here"))
     assert rc == 0
-    assert not (ws / "cost_events.jsonl").exists()
+    assert _cost_rows(ws) == []
 
 
 def test_bad_amount_fail_open(tmp_path):
@@ -84,7 +99,7 @@ def test_bad_amount_fail_open(tmp_path):
     ws = _ws_with_runs(tmp_path)
     rc = cap.process_event(_payload(ws, "COST WARNING: session total ~$abc"))
     assert rc == 0
-    assert not (ws / "cost_events.jsonl").exists()
+    assert _cost_rows(ws) == []
 
 
 def test_accumulate_appends(tmp_path):
@@ -92,9 +107,7 @@ def test_accumulate_appends(tmp_path):
     ws = _ws_with_runs(tmp_path)
     cap.process_event(_payload(ws, "COST WARNING: session total ~$10.00"))
     cap.process_event(_payload(ws, "COST CRITICAL: session total ~$20.00"))
-    lines = (ws / "cost_events.jsonl").read_text(
-        encoding="utf-8").splitlines()
-    assert len(lines) == 2
+    assert len(_cost_rows(ws)) == 2
 
 
 # ---------- 缺口1/3：cockpit_summary cost/burn + tick 落账 ----------
@@ -109,9 +122,7 @@ def _mk_mission_ws(tmp_path, with_cost=True, with_mission=True):
                 "history": [{"v_m": 0.5}, {"v_m": 0.75}],
             }}), encoding="utf-8")
     if with_cost:
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 12.5,
-                        "source": "Agent"}) + "\n", encoding="utf-8")
+        _append_cost(ws, 12.5)
     return ws
 
 
@@ -176,9 +187,7 @@ def _rho_ws(tmp_path):
     (ws / "facts").mkdir(exist_ok=True)
     (ws / "facts" / "F001.md").write_text(
         "handler 0x14002abcd allocates 0x150 size gate", encoding="utf-8")
-    (ws / "cost_events.jsonl").write_text(
-        json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 7.25,
-                    "source": "Agent"}) + "\n", encoding="utf-8")
+    _append_cost(ws, 7.25)
     return ws
 
 

@@ -396,7 +396,15 @@ def test_settle_pass_repair_never_reenters_banked(tmp_path, monkeypatch):
     directory trick cannot be used — it lives in the same family)."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    # #1004: cl.append is now ALSO the knowledge family's store writer,
+    # so the refusal is scoped to the L1 case-observation family (the
+    # ledger and the store bank stay live — the repair pin needs the
+    # first-pass bank to have landed)
+    _real = cl.append
+    monkeypatch.setattr(
+        cl, "append",
+        lambda ws_, family, row, **k: False if family == "experience"
+        else _real(ws_, family, row, **k))
     src.run(ws)                           # ledger settles; bank fails open
     monkeypatch.undo()
     out2 = src.run(ws)
@@ -412,7 +420,14 @@ def test_repair_never_refires_the_store_and_l1_writers(tmp_path, monkeypatch):
     strategy-store and L1 writers must never fire from a reconcile."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    # #1004: the refusal is scoped to the L1 case-observation family
+    # (see the sibling test) — the store/L1 writers land on the first
+    # pass, so the repair never has a reason to re-fire them
+    _real = cl.append
+    monkeypatch.setattr(
+        cl, "append",
+        lambda ws_, family, row, **k: False if family == "experience"
+        else _real(ws_, family, row, **k))
     src.run(ws)
     monkeypatch.undo()
 

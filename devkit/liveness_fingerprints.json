@@ -4,13 +4,14 @@
  "fingerprints": [
   {
    "id": "rl-sampler-exit",
-   "face": "the sampled family reaches the dispatch decision (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl)",
-   "ledger": "runs/strategy-log.jsonl",
+   "face": "the sampled family reaches the dispatch decision (the strategy-log/1 rows ride the telemetry family file, #1004) (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl)",
+   "ledger": "runs/telemetry.jsonl",
    "check": {
     "kind": "jsonl_count",
     "all_of": {
      "event": "dispatch",
-     "strategy": "sampled"
+     "strategy": "sampled",
+     "schema": "strategy-log/1"
     },
     "min": 1
    }
@@ -39,8 +40,8 @@
   },
   {
    "id": "rl-posterior-moved",
-   "face": "posterior store rows update after settle — keyed by ARM (#807: case-level movement — key-less rows, dispatch-pending structural mass, or credits with no arm attribution — no longer satisfies the sentinel; INV-003 is a FAMILY-level live signal)",
-   "ledger": "runs/posterior-store.jsonl",
+   "face": "posterior store rows update after settle — keyed by ARM (#807: case-level movement — key-less rows, dispatch-pending structural mass, or credits with no arm attribution — no longer satisfies the sentinel; INV-003 is a FAMILY-level live signal) (#1004: the rows ride the knowledge family's consolidated file under the guarded root)",
+   "ledger": "knowledge-store.jsonl",
    "check": {
     "kind": "jsonl_count",
     "all_of": {

@@ -134,11 +134,9 @@ def _verification(ws: Path, word: str = "verified") -> Path:
 
 
 def _rollout_rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "rollout-ledger.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(ln) for ln in
-            p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # #1004: the rollout ledger rides the settlement family file
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "settlement", schema_prefix="rollout-ledger/1")
 
 
 def _wire_rows(ws: Path) -> list[dict]:

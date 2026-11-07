@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """cost_input_capture.py — PostToolUse 成本输入捕获 (#873)。
 
-缺口0：cost_events.jsonl 的写入方在仓库内不存在——cost_gate.py 只读，
+缺口0：成本事件的写入方在仓库内不存在——cost_gate.py 只读，
 docstring 声明的 "written by PostToolUse hook" 是纸面。本 hook 补上输入端：
   - tool_response 含 "COST WARNING: session total ~$<float>"
-    （COST CRITICAL 同构）→ 追加 {"ts","amount","source"} 到
-    <ws>/cost_events.jsonl（schema 与 cost_gate 解析器逐字段一致）
+    （COST CRITICAL 同构）→ 追加 {"schema":"cost-event/1","ts","amount","source"}
+    到 settlement 家族合并文件（#1004；stamp 与 cost_gate 解析器逐字段一致）
   - 无匹配 / ws 未解析 / IO 异常 → 静默不写（FAIL_OPEN，永不打断工具流）
 
 口径边界（proposal 声明）：Claude Code 不暴露 per-call 计费遥测——amount
@@ -37,7 +37,6 @@ from pathlib import Path
 
 COST_RE = re.compile(
     r"COST (?:WARNING|CRITICAL): session total ~\$([0-9]+(?:\.[0-9]+)?)")
-COST_EVENTS = "cost_events.jsonl"
 
 # #801 Face 3: the machine:analysis cockpit ratio — machine-overhead input
 # tokens (orchestrator transcript rows) over analysis-output tokens
@@ -245,13 +244,14 @@ def process_event(payload: dict) -> int:
     if ws is None:
         return 0
     try:
-        row = {"ts": datetime.now(timezone.utc).isoformat(
+        row = {"schema": "cost-event/1",
+               "ts": datetime.now(timezone.utc).isoformat(
                    timespec="seconds").replace("+00:00", "Z"),
                "amount": amount,
                "source": str(payload.get("tool_name") or "unknown")}
-        with (ws / COST_EVENTS).open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError as exc:
+        from rlvr import consolidated_ledger as _cl  # lazy: hook import cost
+        _cl.append(ws, "settlement", row)
+    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN, never the tool flow
         warn("process_event", f"{type(exc).__name__}: {exc}")
     return 0
 

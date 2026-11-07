@@ -9,7 +9,10 @@ wants kunglao-agent to abort. But repeated warnings or single warning + high abs
 cost SHOULD trigger an advisory.
 
 This script:
-  - Reads cost_events.jsonl (written by PostToolUse hook when "COST WARNING" detected)
+  - Reads the settlement family's cost-event rows (runs/settlement.jsonl,
+    schema ``cost-event/1`` — the #1004 consolidation home; the standalone
+    cost-events file rel is retired) written by the PostToolUse hook when
+    "COST WARNING" is detected
   - Counts warnings in last N minutes (sliding window)
   - Tiered response:
       * 1 warning: emit advisory "advisory: reduce dispatch verbosity"
@@ -22,8 +25,8 @@ This script:
 Hook wire-up (NOT auto-installed by this script - kunglao-agent hooks are selective
 per F-10 / hook_activation.py):
   - PostToolUse on Edit|Write|MultiEdit|Agent: matches "COST WARNING" in tool_result
-  - Writes cost_events.jsonl line per warning
-  - This script reads cost_events.jsonl on heartbeat tick
+  - Appends one cost-event/1 row per warning (consolidated settlement file)
+  - This script reads the cost face on heartbeat tick
 
 Usage:
   python cost_gate.py <workspace> [--window-min 10] [--hard-cap 50.0]
@@ -41,34 +44,36 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
-COST_EVENTS_FILE = "cost_events.jsonl"
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+from rlvr import consolidated_ledger as _cl  # noqa: E402  (#1004 family face)
+
+#: the cost telemetry's registered stamp (the settlement family's cost face)
+COST_SCHEMA = "cost-event/1"
 COST_ADVICE_FILE = "cost_advice.json"
 
 
-from harness_common import utc_now  # #863 Family F: single source (was a local def)
-
-
-def parse_event(line: str) -> dict | None:
-    """Parse a cost_events.jsonl line. Format: {"ts": ISO, "amount": float, "source": str}"""
-    return next(iter_jsonl([line]), None)
+def parse_event(line_or_row) -> dict | None:
+    """Validate one cost-event/1 row: {"ts": ISO, "amount": number, ...}
+    (accepts a raw JSONL line string or an already-parsed row)."""
+    row = line_or_row
+    if isinstance(row, str):
+        row = next(iter_jsonl([row]), None)
+    if not isinstance(row, dict) or "ts" not in row or "amount" not in row:
+        return None
+    return row
 
 
 def load_events(workspace: Path) -> list:
-    """Load all cost events from cost_events.jsonl."""
-    path = workspace / COST_EVENTS_FILE
-    if not path.exists():
-        return []
+    """Load all cost events from the settlement family's cost face."""
     out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.strip():
-            continue
-        ev = parse_event(line)
-        if ev is None or "ts" not in ev or "amount" not in ev:
+    for ev in _cl.read(workspace, "settlement", schema_prefix=COST_SCHEMA):
+        if parse_event(ev) is None:
             continue
         try:
-            ev["dt"] = datetime.fromisoformat(ev["ts"].replace("Z", "+00:00"))
+            ev["dt"] = datetime.fromisoformat(
+                str(ev["ts"]).replace("Z", "+00:00"))
         except ValueError:
             continue
         out.append(ev)
@@ -123,16 +128,17 @@ def check(workspace: Path, window_min: int, hard_cap: float) -> int:
 
 
 def append_event(workspace: Path, amount: float, source: str = "hook") -> None:
-    """Helper for hook to append a new cost event. Used by PostToolUse hook."""
-    path = workspace / COST_EVENTS_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Helper for hook to append a new cost event (cost-event/1, the
+    settlement family's consolidated file). Used by PostToolUse hook.
+    Fail-open: the consolidated append refuses loudly (ONE warn) and
+    never raises into the hook."""
     ev = {
+        "schema": COST_SCHEMA,
         "ts": utc_now().isoformat().replace("+00:00", "Z"),
         "amount": amount,
         "source": source,
     }
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    _cl.append(workspace, "settlement", ev)
 
 
 def main() -> int:

@@ -3,8 +3,9 @@
 """tuition_curve.py — #823-P4 学费曲线聚合器 + 座舱 V/D/ETA 数据面。
 
 全部离线：只消费 ledger（rho_pair 结算行）与 runs/mission_ledger.yaml。
-cost 口径（#873 起）：rho_pair 行携带真实 cost（cost_events 最新
-amount，会话累计口径）；无 cost 字段的行不入样。stratum 暂固定 "default"。
+cost 口径（#873 起）：rho_pair 行携带真实 cost（cost-event/1 最新
+amount，会话累计口径；#1004 起读 settlement 家族合并文件的成本面）；
+无 cost 字段的行不入样。stratum 暂固定 "default"。
 """
 from __future__ import annotations
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
@@ -14,36 +15,30 @@ from kunglao_log import warn
 import json
 from pathlib import Path
 
+from rlvr import consolidated_ledger as _cl  # #1004: the family read face
+
 _LEDGER = "runs/logs"
 _WINDOW = 5
 
 
-COST_EVENTS = "cost_events.jsonl"
+#: the cost telemetry's registered stamp (the settlement family's cost face)
+COST_SCHEMA = "cost-event/1"
 HARD_CAP_DEFAULT = 50.0
 
 
 def cost_state(ws, hard_cap: float = HARD_CAP_DEFAULT) -> dict:
-    """cost_events.jsonl → {"spent","remaining","latest"}（#873 缺口2/3）。
+    """cost-event/1 rows → {"spent","remaining","latest"}（#873 缺口2/3；
+    #1004 起读 settlement 家族合并文件的成本面）。
 
-    文件缺失/空 = 零花销；坏行跳过。remaining = hard_cap − spent（下限 0）。
+    无成本行 = 零花销；坏行跳过。remaining = hard_cap − spent（下限 0）。
     """
-    ws = Path(ws)
     spent = 0.0
     latest = None
-    p = ws / COST_EVENTS
-    if p.exists():
-        for line in p.read_text(encoding="utf-8",
-                                errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            amt = row.get("amount")
-            if isinstance(amt, (int, float)):
-                spent += float(amt)
-                latest = float(amt)
+    for row in _cl.read(ws, "settlement", schema_prefix=COST_SCHEMA):
+        amt = row.get("amount")
+        if isinstance(amt, (int, float)):
+            spent += float(amt)
+            latest = float(amt)
     return {"spent": round(spent, 4),
             "remaining": round(max(hard_cap - spent, 0.0), 4),
             "latest": latest}

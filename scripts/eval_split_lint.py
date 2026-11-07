@@ -102,10 +102,12 @@ def _scan_posterior_store(paths: list[Path],
     write-face filter (rlvr.strategy_store.append_row, filter BEFORE
     append) was bypassed, so the violation names the row. The generic
     whole-file scan above still covers the raw bytes; this class exists
-    so the failure is attributable to the exact row."""
+    so the failure is attributable to the exact row. #1004: the rows
+    ride the knowledge family's consolidated file, so the scan matches
+    that file name."""
     out: list[str] = []
     for p in paths:
-        if p.name != "posterior-store.jsonl":
+        if p.name != "knowledge-store.jsonl":
             continue
         try:
             lines = p.read_text(encoding="utf-8",
@@ -125,7 +127,7 @@ def _scan_posterior_store(paths: list[Path],
                 if unit.lower() in blob:
                     out.append(
                         f"LEAK[POSTERIOR_STORE_UNIT_ID] {unit}: "
-                        f"posterior-store.jsonl row {ln} carries the "
+                        f"posterior-store/1 row {ln} carries the "
                         f"holdout unit-id — the write-face filter was "
                         f"bypassed (priors are feature-keyed, never "
                         f"identity-keyed, #518)")

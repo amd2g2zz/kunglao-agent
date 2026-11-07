@@ -33,8 +33,9 @@ Header (byte-pinned):
   a          strategy_arm + method_choices from the dispatch/eval faces:
              episode rows read the ledger signals (strategy_arm /
              method_choices) and the experience_tuple's a; round rows
-             join runs/strategy-log.jsonl (event=dispatch rows) by claim
-             id when the dispatch id IS a claim id
+             join the telemetry family's strategy-log dispatch rows
+             (schema strategy-log/1) by claim id when the dispatch id IS
+             a claim id
   r          the settled scalar (never recomputed here)
 
 Regenerable: the ledger stays the system of record; extraction
@@ -60,18 +61,16 @@ scripts/experience_triples.py (which stays a thin re-export adapter).
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
 from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
 
 TRIPLES_REL = "runs/triples.csv"
 CSV_HEADER = ("grain", "rollout_id", "s_signature", "s_hash", "a_arm",
               "a_choices", "r", "r_source", "ts")
 Q_REPORT_SCHEMA = "q-report/1"
-
-_STRATEGY_LOG_REL = "runs/strategy-log.jsonl"
 
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
@@ -88,25 +87,11 @@ def _last_signal(signals: list[dict], type_: str):
 
 
 def _strategy_arm_by_claim(ws) -> dict:
-    """runs/strategy-log.jsonl event=dispatch rows: claim -> LAST strategy
-    id (the strategy-log dispatch-pass-path writer; the per-claim arm face)."""
-    p = Path(ws) / _STRATEGY_LOG_REL
-    if not p.is_file():
-        return {}
+    """The telemetry family's strategy-log/1 dispatch rows: claim -> LAST
+    strategy id (the dispatch-pass-path writer; the per-claim arm face)."""
     out: dict[str, str] = {}
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return out
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(row, dict) or str(row.get("event")) != "dispatch":
+    for row in _cl.read(ws, "telemetry", schema_prefix="strategy-log"):
+        if str(row.get("event")) != "dispatch":
             continue
         claim = str(row.get("claim") or "")
         strategy = str(row.get("strategy") or "")

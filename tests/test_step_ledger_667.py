@@ -200,15 +200,19 @@ def test_intervention_row_is_hash_only(tmp_path) -> None:
                                  actor="owner", subject="C-005",
                                  note="pulled the plug", ts=TS)
     assert row is not None
-    text = (ws / "runs" / "interventions.jsonl").read_text("utf-8")
+    # #1004: the intervention rows ride the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    text = _cl.family_path(ws, "telemetry").read_text("utf-8")
     assert "C-005" not in text and "pulled the plug" not in text
     assert len(row["subject_sha"]) == 64 and len(row["note_sha"]) == 64
 
 
-def test_intervention_fail_open(tmp_path) -> None:
+def test_intervention_fail_open(tmp_path, monkeypatch) -> None:
     ws = tmp_path / "bare"
     (ws / "runs").mkdir(parents=True)
-    (ws / "runs" / "interventions.jsonl").mkdir()
+    # #1004: fail-open = the consolidated append refuses (a DIRECTORY
+    # where the telemetry family file must live)
+    (ws / "runs" / "telemetry.jsonl").mkdir()
     assert sl.record_intervention(ws, trigger="t", actor="a",
                                   subject="s", note="n") is None
 

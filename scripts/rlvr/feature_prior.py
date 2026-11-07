@@ -89,8 +89,10 @@ from typing import Iterable, Mapping
 # flag-on vs flag-off; default OFF — the inert-landing discipline)
 FLAG_ENV = "KUNGLAO_PREDICT_BEFORE_TRY"
 
-# where Part A's miner writes (and the A/B replay reads) the table
-FEATURE_TABLE_REL = Path("runs") / "feature-table.jsonl"
+# where Part A's miner writes (and the A/B replay reads) the table:
+# the knowledge family's consolidated file (#1004 — the standalone
+# runs/feature-table.jsonl rel is retired)
+FEATURE_TABLE_SCHEMA = "feature-table/1"
 
 
 def enabled() -> bool:
@@ -103,8 +105,11 @@ def enabled() -> bool:
 
 
 def default_table_path(ws) -> Path:
-    """The workspace's mined-table location (presence = Part A output)."""
-    return Path(ws) / FEATURE_TABLE_REL
+    """The mined-table location: the knowledge family's consolidated
+    file under the guarded cross-task root (#1004 — the store is
+    cross-task by design; presence = Part A output)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    return _cl.family_path(ws, "knowledge")
 
 
 def load_table(path) -> list[dict]:

@@ -51,11 +51,13 @@ def _row(claim: str, family: str, status: str, *, facts: int = 0,
 
 
 def _write_ws(tmp_path: Path, name: str, lines: list[str]) -> Path:
-    """One workspace whose runs/transitions.jsonl holds exactly `lines`."""
+    """One workspace whose consolidated runs/experience.jsonl holds
+    exactly `lines` (#1004: the retired transitions name matches
+    nothing — the consolidated ledger is the only scanned home)."""
     ws = tmp_path / name
     runs = ws / "runs"
     runs.mkdir(parents=True)
-    (runs / "transitions.jsonl").write_text(
+    (runs / "experience.jsonl").write_text(
         "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
     return ws
 
@@ -212,7 +214,11 @@ def test_malformed_rows_skipped_and_counted(tmp_path):
     ws = _write_ws(tmp_path, "ws-messy", raw_lines)
     report = cr.review([ws])
     assert report["rows_total"] == 1
-    assert report["skipped_malformed"] == 5
+    # #1004 face accounting (the consolidated file is the only ledger):
+    # 2 unparseable lines + the schema-less dict that classifies to
+    # nothing count malformed (3); the JSON "[]"/"42" non-dicts are
+    # foreign-shape rows — skipped silently, never "malformed"
+    assert report["skipped_malformed"] == 3
     fam_entry = report["families"][fam]
     assert fam_entry["censored_with_facts"]["count"] == 1
 
@@ -308,9 +314,9 @@ def test_find_transition_files_requires_runs_component(tmp_path):
     hits = _write_ws(tmp_path, "ws-find", [])
     stray = tmp_path / "loose"
     stray.mkdir()
-    (stray / "transitions.jsonl").write_text("", encoding="utf-8")
+    (stray / "experience.jsonl").write_text("", encoding="utf-8")
     found = cr.find_transition_files([tmp_path])
-    assert found == [hits / "runs" / "transitions.jsonl"]
+    assert found == [hits / "runs" / "experience.jsonl"]
 
 
 def test_experience_file_scanned_and_archive_skipped(tmp_path):

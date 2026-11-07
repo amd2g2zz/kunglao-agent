@@ -46,11 +46,9 @@ def _ws(tmp_path: Path) -> Path:
 
 
 def _ledger_rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "predictions.jsonl"
-    if not p.is_file():
-        return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()
-            if l.strip()]
+    # #1004: the prediction ledger rides the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "telemetry", schema_prefix="prediction-ledger/1")
 
 
 def _transitions(ws: Path) -> list[dict]:
@@ -63,7 +61,10 @@ def _transitions(ws: Path) -> list[dict]:
 def _age_row(ws: Path, pred_id: str, hours: float) -> None:
     """Rewrite one prediction's registered_ts to `hours` ago (the only
     way a pure-unit test can age a row — the read faces own the clock)."""
-    p = ws / "runs" / "predictions.jsonl"
+    # #1004: the age surgery targets the telemetry family file (a
+    # test-only rewrite — the read faces own the clock)
+    from rlvr import consolidated_ledger as _cl
+    p = _cl.family_path(ws, "telemetry")
     rows = _ledger_rows(ws)
     stamp = (datetime.now(tz=timezone.utc)
              - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")

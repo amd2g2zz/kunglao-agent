@@ -58,11 +58,15 @@ def _waiver_text(cid: str, justify: str) -> str:
 
 
 def _seed_ledger(ws, cids=("C-001", "C-002")) -> None:
-    """Prior sanctioned state: the transition ledger's dispatch_id column."""
-    lines = "".join(
-        json.dumps({"ts": "2026-10-09T00:00:00Z", "dispatch_id": c,
-                    "action_type": "verify"}) + "\n" for c in cids)
-    (ws / "runs" / "transitions.jsonl").write_text(lines, encoding="utf-8")
+    """Prior sanctioned state: the transition ledger's dispatch_id column
+    (#1004: the experience family file — the transition/1 stamp is the
+    read face's admission ticket)."""
+    from rlvr import consolidated_ledger as _cl
+    for c in cids:
+        assert _cl.append(ws, "experience",
+                          {"schema": "transition/1",
+                           "ts": "2026-10-09T00:00:00Z",
+                           "dispatch_id": c, "action_type": "verify"})
 
 
 # ---------- Fix 1 (5-F6): the waiver skip needs the orchestrator stamp ------

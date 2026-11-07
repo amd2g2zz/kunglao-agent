@@ -82,9 +82,9 @@ def _events(ws: Path) -> list[dict]:
 
 
 def _signals(ws: Path) -> list[dict]:
+    # #1004: no dual read — the telemetry family file only
     return consolidated_ledger.read(
-        ws, "telemetry", schema_prefix=disposition_reward.SIGNAL_SCHEMA,
-        include_legacy=False)
+        ws, "telemetry", schema_prefix=disposition_reward.SIGNAL_SCHEMA)
 
 
 # ---------- classification: refusal, timeout, wall, out-of-scope --------

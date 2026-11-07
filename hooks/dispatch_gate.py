@@ -407,13 +407,11 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
 
 # ③ strategy dispatch marker: `[strategy <id>]` anywhere in the prompt.
 STRATEGY_MARKER_RE = re.compile(r"\[strategy\s+([A-Za-z0-9._-]+)\]")
-STRATEGY_LOG = "runs/strategy-log.jsonl"
-# #496 review F4: the ledger used to append unbounded (every marked
-# dispatch +1 row, from_workspace re-reads the whole file). Cap: before
-# each dispatch row is written the file is re-read and truncated to the
-# most recent STRATEGY_LOG_MAX rows (read-truncate-write — idempotent, an
-# already-short file keeps its rows verbatim and in order).
-STRATEGY_LOG_MAX = 200
+# #1004: the dispatch rows ride the telemetry family's consolidated file
+# (schema strategy-log/1) through the stamp-gated append face — the
+# standalone strategy-log file and its read-truncate-write cap are
+# retired (the consolidated face is append-only).
+STRATEGY_LOG_SCHEMA = "strategy-log/1"
 
 
 def _reject_with_guidance(name: str, msg: str, fix: str,
@@ -1051,17 +1049,9 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
         "attempts_at_snapshot": snapshot,
     }
     try:
-        path = ws / STRATEGY_LOG
-        path.parent.mkdir(parents=True, exist_ok=True)
-        kept: list[str] = []
-        if path.exists():
-            kept = [ln for ln in
-                    path.read_text(encoding="utf-8", errors="replace").splitlines()
-                    if ln.strip()]
-        kept = kept[-STRATEGY_LOG_MAX:]
-        kept.append(json.dumps(row, ensure_ascii=False))
-        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
-    except OSError as exc:
+        from rlvr import consolidated_ledger as _cl  # lazy: hook import cost
+        _cl.append(ws, "telemetry", {**row, "schema": STRATEGY_LOG_SCHEMA})
+    except Exception as exc:  # noqa: BLE001 — fail-open telemetry
         print(f"dispatch_gate: strategy-log write failed ({exc!r})",
               file=sys.stderr, flush=True)
 
@@ -1541,42 +1531,56 @@ def _pq_dispatched_before(ws: Path, qid: str,
                           claim_question: dict[str, str]) -> bool:
     """#109 first-dispatch face: True when any dispatch-history row's claim
     answers `qid`. Two production row sources, both claim-keyed:
-      - runs/strategy-log.jsonl  event=dispatch rows (#496 writer / #120
-        priority_ratio read path);
+      - the telemetry family's strategy-log/1 dispatch rows (#496 writer /
+        #120 priority_ratio read path);
       - runs/roi-intents.jsonl   claim_id rows (#105 producer).
     Fail-open by direction: an unreadable/absent face reads as "no history",
     which can only make the gate check MORE (the admission itself then
     decides), never silently allow. A REJECTed dispatch writes no row
     (both faces sit on the ALLOW tail), so the REJECT->file-candidates->
     re-dispatch loop stays inside "first dispatch" until it passes."""
+    try:
+        from rlvr import consolidated_ledger as _cl  # lazy: hook import cost
+        strategy_rows = [r for r in
+                         _cl.read(ws, "telemetry",
+                                  schema_prefix=STRATEGY_LOG_SCHEMA)
+                         if r.get("event") == "dispatch"]
+    except Exception:  # unreadable face -> no history from it
+        strategy_rows = []
     faces = (
-        (ws / STRATEGY_LOG, "event", "claim"),
-        (ws / ROI_INTENTS_LOG, None, "claim_id"),
+        (strategy_rows, "claim"),
+        (_roi_intent_rows(ws), "claim_id"),
     )
-    for path, event_key, claim_key in faces:
-        try:
-            if not path.is_file():
-                continue
-            lines = path.read_text(
-                encoding="utf-8", errors="replace").splitlines()
-        except OSError:  # unreadable face -> no history from it
-            continue
-        for ln in lines:
-            ln = ln.strip()
-            if not ln:
-                continue
-            try:
-                row = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(row, dict):
-                continue
-            if event_key is not None and row.get(event_key) != "dispatch":
-                continue
+    for rows, claim_key in faces:
+        for row in rows:
             cid = str(row.get(claim_key) or "").strip()
             if cid and claim_question.get(cid) == qid:
                 return True
     return False
+
+
+def _roi_intent_rows(ws: Path) -> list[dict]:
+    """The roi-intents face's tolerant rows (the pre-#1004 inline parse,
+    factored out so both faces share the loop shape)."""
+    try:
+        if not (ws / ROI_INTENTS_LOG).is_file():
+            return []
+        lines = (ws / ROI_INTENTS_LOG).read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:  # unreadable face -> no history from it
+        return []
+    out: list[dict] = []
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            row = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
 
 
 def _emit_probe_price(ws: Path, claim_id: str,

@@ -71,9 +71,11 @@ _TERMINAL_FAIL = frozenset({"negative", "refuted"})
 #: a mission is terminal when no claim is OPEN (or status-less)
 _OPEN_STATUSES = frozenset({"open", ""})
 
-#: the workspace's cost-event faces (cost_gate writes the root file,
-#: the loop runner writes runs/ — each owns its file)
-_COST_FACES = ("cost_events.jsonl", "runs/cost_events.jsonl")
+#: the workspace's cost-event face: the settlement family's consolidated
+#: file (the cost-event/1 rows; the standalone cost-events rels retired,
+#: #1004)
+_COST_FACE = "runs/settlement.jsonl"
+_COST_SCHEMA = "cost-event/1"
 
 #: committed rollout-row kind -> the six-commit action (episode/1's
 #: vocabulary); unmapped kinds ride the neutral persist
@@ -254,27 +256,21 @@ def _produce_dispositions(ws: Path) -> None:
 
 
 def _committed_rows(ws: Path) -> list[dict]:
-    """The trajectory's committed rows, read RAW (the episode document
-    folds history; the schema-complete settlement currency face stays
-    ledger.read's)."""
+    """The trajectory's committed rollout-ledger rows, read RAW (the
+    episode document folds history; the schema-complete settlement
+    currency face stays ledger.read's). #1004: the rows ride the
+    settlement family's consolidated file."""
     from rlvr import ledger  # noqa: PLC0415 — lazy
-    from kunglao_log import iter_jsonl  # noqa: PLC0415 — lazy
-    p = ws / ledger.LEDGER_REL
-    if not p.is_file():
-        return []
-    text = p.read_text(encoding="utf-8", errors="replace")
-    return [r for r in iter_jsonl(text.splitlines()) if isinstance(r, dict)]
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    return _cl.read(ws, "settlement", schema_prefix=ledger.SCHEMA)
 
 
-def _amount_rows(p: Path) -> list[dict]:
-    """The parseable amount-bearing cost rows of one face."""
-    from kunglao_log import iter_jsonl  # noqa: PLC0415 — lazy
-    if not p.is_file():
-        return []
-    text = p.read_text(encoding="utf-8", errors="replace")
-    return [r for r in iter_jsonl(text.splitlines())
-            if isinstance(r, dict)
-            and isinstance(r.get("amount"), (int, float))
+def _amount_rows(ws) -> list[dict]:
+    """The parseable amount-bearing cost rows of the cost face (the
+    settlement family's consolidated file, stamped cost-event/1)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    return [r for r in _cl.read(ws, "settlement", schema_prefix=_COST_SCHEMA)
+            if isinstance(r.get("amount"), (int, float))
             and not isinstance(r.get("amount"), bool)]
 
 
@@ -300,14 +296,10 @@ def _spend_window(ws: Path) -> tuple[float, dict[str, int]]:
     cost events since the previous settle mark for the workspace, a
     first episode owning everything before it."""
     consumed = _consumed_cost_rows(ws)
-    total = 0.0
-    counts: dict[str, int] = {}
-    for rel in _COST_FACES:
-        rows = _amount_rows(ws / rel)
-        start = min(consumed.get(rel, 0), len(rows))
-        counts[rel] = len(rows)
-        total += sum(float(r["amount"]) for r in rows[start:])
-    return total, counts
+    rows = _amount_rows(ws)
+    start = min(consumed.get(_COST_FACE, 0), len(rows))
+    return (sum(float(r["amount"]) for r in rows[start:]),
+            {_COST_FACE: len(rows)})
 
 
 def _family_feature(ws: Path) -> str:

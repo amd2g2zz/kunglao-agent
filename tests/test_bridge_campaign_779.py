@@ -128,9 +128,10 @@ def _family_mass(ws, family):
 
 
 def _store_rows(ws):
-    return [json.loads(ln) for ln in
-            (ws / "runs" / "posterior-store.jsonl")
-            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # #1004: the credit series rides the knowledge family's consolidated
+    # file (guarded root; this workspace's rows carry its workspace_id)
+    from rlvr import consolidated_ledger as _cl
+    return _cl.read(ws, "knowledge", schema_prefix="posterior-store/1")
 
 
 def _log_sampled_exit(ws, cid: str) -> None:

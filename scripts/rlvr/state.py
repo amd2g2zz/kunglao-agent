@@ -105,13 +105,13 @@ this anchor stays a pure function of the workspace.
 
 ## Mainline situation snapshot stream
 
-``runs/situation-stream.jsonl`` — append-only JSONL of
-{schema, ts, trigger, tick, state, signature, signature_hash} rows: the
-mainline situation snapshot sequence the owner separates from tuple
-columns (feeds v0.2 ΔV attribution and stall detection; flat V
-trajectory = the rigorous "no progress"). Written by the loop runner's
-worker-return / terminal faces. Fail-open everywhere: recording never
-breaks the producer.
+The telemetry family's consolidated file (``runs/telemetry.jsonl``) —
+append-only {schema: situation/1, ts, trigger, tick, state, signature,
+signature_hash} rows: the mainline situation snapshot sequence the
+owner separates from tuple columns (feeds v0.2 ΔV attribution and stall
+detection; flat V trajectory = the rigorous "no progress"). Written by
+the loop runner's worker-return / terminal faces. Fail-open everywhere:
+recording never breaks the producer.
 
 ZERO DECISION POSTURE: pure reads + fail-open appends. No dispatch,
 gate, or settlement face imports this module (pinned by
@@ -124,10 +124,9 @@ import json
 from pathlib import Path
 
 
-from kunglao_log import iter_jsonl
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
 
 SCHEMA = "state-sig/2"
-SITUATIONS_REL = "runs/situation-stream.jsonl"
 SITUATION_SCHEMA = "situation/1"
 
 # the settlement currency's fact credit terminals (scalar_settlement
@@ -178,8 +177,6 @@ W_CHAIN = 0.5
 W_FACTS = 0.3
 W_BUDGET = 0.2
 W_SIDES = 0.0  # RESERVED v0.2: side completion rate (weight 0 = absent)
-
-COST_EVENTS_REL = "cost_events.jsonl"  # tuition_curve single source
 
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
@@ -504,12 +501,20 @@ def _belief_declared_unknown(ws) -> bool:
         return False
 
 
+def _cost_face_present(ws) -> bool:
+    """The cost telemetry's presence: the settlement family's cost face
+    carries at least one cost-event/1 row (the pre-#1004
+    cost-events file existence check, family form)."""
+    return bool(_cl.read(ws, "settlement", schema_prefix="cost-event/1"))
+
+
 def snapshot(ws) -> dict:
     """The canonical state document (discretized; sides reserved empty).
     Pure read — never raises on a bare workspace. The budget doc carries
-    ``present`` (the cost_events face exists): the V anchor counts the
-    budget dim only when spend was actually measured — a workspace with
-    no cost telemetry contributes no budget term."""
+    ``present`` (the cost telemetry face exists — at least one
+    cost-event row): the V anchor counts the budget dim only when spend
+    was actually measured — a workspace with no cost telemetry
+    contributes no budget term."""
     facts = fact_face(ws)
     frac = budget_fraction(ws)
     chain = chain_progress(ws)
@@ -521,7 +526,7 @@ def snapshot(ws) -> dict:
         "claims": {"pattern": pattern},
         "budget": {"fraction": round(frac, 4),
                    "bucket": budget_bucket(frac),
-                   "present": (Path(ws) / COST_EVENTS_REL).is_file()},
+                   "present": _cost_face_present(ws)},
         "chain": None if chain is None else {"k": chain[0], "n": chain[1]},
         "phase": phase(ws),
         "obstacles": obstacle_face(ws),
@@ -608,11 +613,11 @@ def v_from_workspace(ws) -> float:
 
 
 def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
-    """Append one mainline situation snapshot row. Fail-open: any failure
-    returns {"appended": False, ...} and never raises into the producer
+    """Append one mainline situation snapshot row (the telemetry family's
+    consolidated file). Fail-open: any failure returns
+    {"appended": False, ...} and never raises into the producer
     (recording never breaks the loop). ``tick=None`` inherits the
     convergence-ledger tick (kunglao_log.current_tick)."""
-    ws = Path(ws)
     row: dict = {}
     try:
         if tick is None:
@@ -628,16 +633,8 @@ def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
             "signature": signature_str(state),
             "signature_hash": signature_hash(state),
         }
-        p = ws / SITUATIONS_REL
-        p.parent.mkdir(parents=True, exist_ok=True)
-        import os
-        data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-        try:
-            os.write(fd, data)
-        finally:
-            os.close(fd)
-        return {"appended": True, "row": row}
+        ok = _cl.append(ws, "telemetry", row)
+        return {"appended": bool(ok), "row": row}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("append_snapshot", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "row": row}
@@ -645,15 +642,7 @@ def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
 
 def read_situations(ws) -> list[dict]:
     """Tolerant read of the snapshot stream (missing -> [])."""
-    p = Path(ws) / SITUATIONS_REL
-    if not p.is_file():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    return [row for row in iter_jsonl(text.splitlines())
-            if isinstance(row, dict)]
+    return _cl.read(ws, "telemetry", schema_prefix=SITUATION_SCHEMA)
 
 
 if __name__ == "__main__":  # pragma: no cover — library module

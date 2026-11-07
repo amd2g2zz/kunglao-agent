@@ -24,9 +24,11 @@ Faces:
       line settles on contract compliance, never on the claim's truth),
       and a duplicate discriminator against any open prediction (dedup).
       5-F4: ``actor`` (the registering act's identity) is REQUIRED
-      and rides the row as ``registered_by`` — the raw-JSONL-append
-      bypass (runs/predictions.jsonl is not a carrier) mints rows the
-      settle face will never honor. Input validation at the boundary:
+      and rides the row as ``registered_by`` — a raw file append is
+      not a carrier (#1004: the ledger rides the telemetry family's
+      consolidated file through the stamp-gated append face), and rows
+      that bypass the register face are ones the settle face will
+      never honor. Input validation at the boundary:
       empty statement/discriminator/actor raise.
 
   base_rate(discriminator, statement) -> float
@@ -70,19 +72,17 @@ Faces:
 """
 from __future__ import annotations
 
-import json
 import math
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
 
+from rlvr import consolidated_ledger as _cl
 from rlvr import incremental_reward as ir
 
 SCHEMA = "prediction-ledger/1"
-LEDGER_REL = "runs/predictions.jsonl"
 
 STATUS_PENDING = "pending"
 STATUS_CONFIRMED = "confirmed"
@@ -145,36 +145,19 @@ def log_lift(rate: float) -> float:
     return math.log(1.0 / max(float(rate), BASE_RATE_FLOOR))
 
 
-def _ledger_path(ws: Path) -> Path:
-    return Path(ws) / LEDGER_REL
-
-
-def _append_row(ws: Path, row: dict) -> None:
-    p = _ledger_path(ws)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+def _append_row(ws, row: dict) -> bool:
+    """The one write path: the telemetry family's consolidated append
+    (flock + the stamp contract enforced by the core; a refusal is ONE
+    warn + False — never a raise into the producer)."""
+    return _cl.append(ws, "telemetry", row)
 
 
 def read_ledger(ws) -> list[dict]:
     """All ledger rows, oldest first; tolerant read (blank/malformed
-    lines skipped; absent file = empty)."""
-    p = _ledger_path(ws)
-    if not p.is_file():
-        return []
-    rows: list[dict] = []
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
+    lines skipped; absent file = empty). Rides the telemetry family's
+    consolidated file through the ``prediction-ledger/1`` stamp
+    prefix — there is no dual read (#1004)."""
+    return _cl.read(ws, "telemetry", schema_prefix=SCHEMA)
 
 
 def _age_hours(registered_ts: str) -> float:
@@ -322,8 +305,8 @@ def settle(ws, prediction_id: str, outcome: str) -> dict | None:
              f"{_latest_status(current or {}) or 'unknown'!r})")
         return None
     if not str(current.get("registered_by") or "").strip():
-        # 5-F4: the raw JSONL-append bypass (runs/predictions.jsonl is
-        # not a carrier) mints rows with no authorship — they can never
+        # 5-F4: a raw file append is not a carrier — rows that bypassed
+        # the register face mint no authorship — they can never
         # bank lift, no matter what the evidence text carries.
         warn("prediction_ledger.settle",
              f"refused settle of {prediction_id}: the pending row "

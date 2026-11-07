@@ -546,5 +546,8 @@ def test_features_from_workspace_degrades_task_kind(tmp_path):
 
 
 def test_default_table_path_is_the_mined_location(tmp_path):
+    # #1004: the table home is the knowledge family's consolidated file
+    # (under the guarded cross-task root)
+    from rlvr import consolidated_ledger as _cl
     assert fp.default_table_path(tmp_path) == \
-        tmp_path / "runs" / "feature-table.jsonl"
+        _cl.family_path(tmp_path, "knowledge")

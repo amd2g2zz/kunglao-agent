@@ -609,8 +609,11 @@ def test_write_strategy_emits_the_sections_seam(tmp_path):
     _ok_row(ws, "task/s2", "static-decompile")
     # budget telemetry present: the budget line rides the lead section
     # (advisory context for the lead decision — the warm branch)
-    (ws / "cost_events.jsonl").write_text(
-        json.dumps({"cost_usd": 0.5}) + "\n", encoding="utf-8")
+    # #1004: the budget telemetry rides the settlement family's cost face
+    from rlvr import consolidated_ledger as _cl
+    assert _cl.append(ws, "settlement",
+                      {"schema": "cost-event/1", "ts": "t",
+                       "amount": 0.5, "source": "fixture"})
     obj = compose.compose(ws, tick=1)  # the REAL store (W3) — no stub
     compose.write_strategy(ws, obj)
     seam_path = ws / "runs" / "round-strategy.json"
@@ -746,7 +749,8 @@ def _store_root(tmp_path, monkeypatch, rows) -> Path:
     from rlvr import strategy_store
     root = tmp_path / "posterior-store"
     root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
+    # #1004: the guarded root holds the knowledge family file
+    (root / "knowledge-store.jsonl").write_text(
         "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setenv(strategy_store.STORE_ENV, str(root))
     return root

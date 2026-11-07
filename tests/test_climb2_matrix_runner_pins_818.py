@@ -269,7 +269,7 @@ class TestLaunchShape:
             warm, None)
         empty = tmp_path / "empty-store"
         empty.mkdir()
-        assert "posterior-store.jsonl" in emr.warm_source_fault(warm, empty)
+        assert emr.STORE_FILE in emr.warm_source_fault(warm, empty)  # #1004: the knowledge family file
         (empty / emr.STORE_FILE).write_text("", encoding="utf-8")
         assert emr.warm_source_fault(warm, empty) is None
 

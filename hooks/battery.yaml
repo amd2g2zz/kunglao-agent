@@ -298,7 +298,7 @@ entries:
     entry: rlvr.step_grain:settle_step
     trigger: {type: event, gate: always}
     cost_class: cheap
-    telemetry_word: file:runs/step-ledger.jsonl
+    telemetry_word: file:runs/experience.jsonl
     liveness_fingerprint: battery-face-settle
     description: the step settlement — SubagentStop IS the boundary (#690)
 

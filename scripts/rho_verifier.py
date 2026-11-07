@@ -160,7 +160,7 @@ def sample_and_pair(ws, z=None, emit=True):
     if z is None and mission and mission.get("n_pqs") and \
             mission["n_answered"] == mission["n_pqs"]:
         z = 1.0
-    # #873: rho_pair 携带真实 cost——cost_events.jsonl 最新 amount
+    # #873: rho_pair 携带真实 cost——cost-event/1 rows (settlement family) 最新 amount
     # （会话累计口径，与 cost_gate 解析一致）。缺源时置 None 不阻断采样；
     # 学费曲线只认有 cost 的行（duration 代理已废）。
     try:

@@ -188,7 +188,9 @@ def _seed_settled_workspace(ws: Path) -> None:
 
 
 def _ledger_bytes(ws: Path) -> bytes:
-    p = ws / "runs" / "rollout-ledger.jsonl"
+    # #1004: the rollout ledger rides the settlement family file
+    from rlvr import consolidated_ledger as _cl
+    p = _cl.family_path(ws, "settlement")
     if not p.is_file():
         return b""
     return p.read_bytes()

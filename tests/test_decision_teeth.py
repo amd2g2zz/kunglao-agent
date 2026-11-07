@@ -558,8 +558,11 @@ def _strategy_ws(root: Path) -> Path:
          "strategy": "spawn-inject", "claim": "C-1",
          "attempts_at_snapshot": 1},
     ]
-    (ws / "runs" / "strategy-log.jsonl").write_text(
-        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    # #1004: the dispatch rows ride the telemetry family file
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "telemetry",
+                          {**r, "schema": "strategy-log/1"})
     _write(ws / "analyses" / "failure-C-1.yaml", {
         "claim": "C-1", "covers_attempt": 2,
         "method_assumption": "spawn works", "assumption_validity": "not-justified",
@@ -601,10 +604,9 @@ class TestStrategyDataFace:
         r = _run_gate(root, ws,
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground sweep [strategy first-pass]')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
-        log = ws / "runs" / "strategy-log.jsonl"
-        assert log.exists(), "the strategy dispatch row must be logged"
-        rows = [json.loads(ln) for ln in
-                log.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        from rlvr import consolidated_ledger as _cl
+        rows = _cl.read(ws, "telemetry", schema_prefix="strategy-log/1")
+        assert rows, "the strategy dispatch row must be logged"
         row = next((e for e in rows if e.get("strategy") == "first-pass"), None)
         assert row is not None, f"rows={rows}"
         assert row["event"] == "dispatch"

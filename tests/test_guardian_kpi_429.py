@@ -317,9 +317,12 @@ class TestVerifierDrift:
 
     def test_read_only_never_writes(self, tmp_path):
         _settled_task(tmp_path, "T-M", oracle=True)
-        before = (tmp_path / "runs" / "rollout-ledger.jsonl").read_bytes()
+        # #1004: the rollout ledger rides the settlement family file
+        from rlvr import consolidated_ledger as _cl
+        ledger = _cl.family_path(tmp_path, "settlement")
+        before = ledger.read_bytes()
         gk.verifier_drift(tmp_path)
-        after = (tmp_path / "runs" / "rollout-ledger.jsonl").read_bytes()
+        after = ledger.read_bytes()
         assert before == after
 
     def test_cold_start_empty_counts(self, tmp_path):

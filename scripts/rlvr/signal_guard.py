@@ -7,6 +7,12 @@ identical settlement credits = a dead signal: freeze the posterior-moving
 legs and raise the ``signal_degenerate`` blocker. Recovery is manual —
 learning on a dead signal must not resume by itself (resuming on noise
 is learning on noise).
+
+Since #1004 the credit series rides the knowledge family's consolidated
+file (``knowledge-store.jsonl`` under the guarded root): the rows carry
+``workspace_id`` (the shared posterior-store/1 builder), and
+``recent_credits`` filters to the CALLING workspace — the per-workspace
+series semantics survive the family merge.
 """
 from __future__ import annotations
 
@@ -14,8 +20,9 @@ import json
 import sys
 from pathlib import Path
 
+from rlvr import consolidated_ledger as _cl  # #1004: the family faces
+
 DEGENERATE_WINDOW = 5
-STORE_REL = Path("runs") / "posterior-store.jsonl"
 
 
 def check_degeneracy(credits: list[float],
@@ -31,23 +38,25 @@ def check_degeneracy(credits: list[float],
 
 
 def recent_credits(ws: Path, n: int = DEGENERATE_WINDOW) -> list[float]:
-    """The most recent settled credits from the ws posterior store
-    (chronologic, oldest first), for the degeneracy check."""
-    store = Path(ws) / "runs" / "posterior-store.jsonl"
-    if not store.is_file():
-        return []
+    """The most recent settled credits of THIS workspace's credit series
+    (chronologic, oldest first), for the degeneracy check. The series
+    rides the knowledge family's consolidated file (#1004); rows are
+    keyed to their workspace by ``workspace_id`` (the credit-series
+    builder's column) and belong to the SERIES by ``credit_kind`` (the
+    workspace-credit face's marker) — so another workspace's store rows
+    AND this workspace's cross-task bank rows never leak into the
+    degeneracy series (the pre-#1004 series was the workspace-local
+    file; the family merge keeps it exactly that series)."""
+    mine = Path(ws).name
     vals: list[float] = []
-    for line in store.read_text(encoding="utf-8",
-                                errors="replace").splitlines():
-        line = line.strip()
-        if not line:
+    for rec in _cl.read(ws, "knowledge",
+                        schema_prefix="posterior-store/1"):
+        if str(rec.get("workspace_id") or "") != mine:
             continue
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
+        if not rec.get("credit_kind"):
+            continue  # the cross-task bank's rows are not series rows
         c = rec.get("credit")
-        if isinstance(c, (int, float)):
+        if isinstance(c, (int, float)) and not isinstance(c, bool):
             vals.append(float(c))
     return vals[-n:]
 

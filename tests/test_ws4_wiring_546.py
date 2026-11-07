@@ -157,8 +157,11 @@ def test_slow_grind_wiring_fires_via_the_loop_stall_arm(tmp_path):
                    method_family="static-decompile", claim=f"C-{tag}")
     # the settlement stream's potential column, flat at the grind scale
     rows = [{"s_prime_phi": v} for v in (0.10, 0.102, 0.104, 0.105)]
-    (ws / "runs" / "transitions.jsonl").write_text(
-        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    # #1004: the transition rows ride the experience family file
+    from rlvr import consolidated_ledger as _cl
+    for r in rows:
+        assert _cl.append(ws, "experience",
+                          {**r, "schema": "transition/1"})
     (ws / "runs" / "expansion-hypotheses.json").write_text(
         json.dumps({"hypotheses": [
             {"id": "h-1", "family": "unicorn-emu", "p_llm": 0.3,

@@ -10,8 +10,9 @@ wall time ALONE — if timed-out acts had already moved the state forward
 the slow-but-correct routes the hard tasks need.
 
 The review face over one or more run directories (each scanned
-recursively for `runs/transitions.jsonl` — and, since #721, the
-consolidated `runs/experience.jsonl`; migration archives are skipped):
+recursively for the consolidated `runs/experience.jsonl` ledger — the
+#1004 retirement left it the only ledger name; migration archives are
+skipped):
 
   per method family (the row's `a` field), settlement rows
   (`r_settle` present) fall into:
@@ -79,10 +80,9 @@ from kunglao_log import warn
 SCHEMA = "censored-review/1"
 SCOPE = "rlvr.censored_review"
 
-TRANSITIONS_NAME = "transitions.jsonl"   # matched only inside a runs/ dir
-EXPERIENCE_NAME = "experience.jsonl"     # #721: the consolidated live ledger
-LEDGER_NAMES = (TRANSITIONS_NAME, EXPERIENCE_NAME)
-AUDIT_REL = ("logs", "e2e-audit.jsonl")  # sibling of the transitions file
+EXPERIENCE_NAME = "experience.jsonl"     # the consolidated live ledger
+LEDGER_NAMES = (EXPERIENCE_NAME,)        # #1004: the retired names match nothing
+AUDIT_REL = ("logs", "e2e-audit.jsonl")  # sibling of the ledger file
 
 SUCCESS_STATUS = "DISPATCHED"   # the producer's binary-success word
 CENSORED_STATUS = "TIMEOUT"     # the producer's censoring word
@@ -415,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         description="censored-outcome fairness review: does 'timeout = "
                     "failure' punish slow-but-correct arms? Per-family "
                     "censored-with-facts vs clean-failure comparison "
-                    "over runs/transitions.jsonl ledgers")
+                    "over the consolidated transition ledgers")
     ap.add_argument("run_dirs", nargs="+",
                     help="run directories to scan for transitions.jsonl "
                          "under a runs/ path component")
