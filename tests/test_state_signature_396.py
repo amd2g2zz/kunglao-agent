@@ -566,15 +566,18 @@ class TestSituationStream:
         assert row["state"]["schema"] == "state-sig/2"
         assert row["signature"] == ssig.signature_str(row["state"])
         assert row["signature_hash"] == ssig.signature_hash(row["state"])
-        p = tmp_path / "runs" / "situation-stream.jsonl"
+        # issue-1004 R2b: the rows live in the consolidated telemetry
+        # family file (the legacy rel is not written by production)
+        p = tmp_path / "runs" / "telemetry.jsonl"
         lines = p.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
         assert json.loads(lines[0])["trigger"] == "worker_return"
+        assert not (tmp_path / "runs" / "situation-stream.jsonl").exists()
 
     def test_append_only_stream_grows(self, tmp_path):
         ssig.append_snapshot(tmp_path, trigger="worker_return")
         ssig.append_snapshot(tmp_path, trigger="terminal")
-        p = tmp_path / "runs" / "situation-stream.jsonl"
+        p = tmp_path / "runs" / "telemetry.jsonl"
         assert len(p.read_text(encoding="utf-8").strip().splitlines()) == 2
 
     def test_tick_inherited_from_convergence_ledger(self, tmp_path):
@@ -597,4 +600,4 @@ class TestSituationStream:
         res = ssig.append_snapshot(tmp_path, trigger="terminal")
         assert res["appended"] is False
         assert res["row"] == {}
-        assert not (tmp_path / "runs" / "situation-stream.jsonl").exists()
+        assert not (tmp_path / "runs" / "telemetry.jsonl").exists()

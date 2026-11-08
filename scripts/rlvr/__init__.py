@@ -172,6 +172,7 @@ __all__ = [
     "strategy_store",
     "termination",
     "timeout_triage",
+    "triples",
     "verification_debt",
     "winrate",
 ]

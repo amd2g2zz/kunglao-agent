@@ -107,13 +107,17 @@ this anchor stays a pure function of the workspace.
 
 ## Mainline situation snapshot stream
 
-``runs/situation-stream.jsonl`` — append-only JSONL of
-{schema, ts, trigger, tick, state, signature, signature_hash} rows: the
+Mainline situation snapshot rows (``situation/1``), append-only JSONL of
+{schema, ts, trigger, tick, state, signature, signature_hash}: the
 mainline situation snapshot sequence the owner separates from tuple
 columns (feeds v0.2 ΔV attribution and stall detection; flat V
-trajectory = the rigorous "no progress"). Written by the loop runner's
-worker-return / terminal faces. Fail-open everywhere: recording never
-breaks the producer.
+trajectory = the rigorous "no progress"). Since issue-1004 R2b the rows
+live in the consolidated telemetry family file
+``runs/telemetry.jsonl`` (the legacy ``runs/situation-stream.jsonl``
+rel stays readable through the compat window — legacy rows first, then
+the live family rows; the migration archives it bytes-intact). Written
+by the loop runner's worker-return / terminal faces. Fail-open
+everywhere: recording never breaks the producer.
 
 ZERO DECISION POSTURE: pure reads + fail-open appends. No dispatch,
 gate, or settlement face imports this module (pinned by
@@ -126,7 +130,7 @@ import json
 from pathlib import Path
 
 
-from kunglao_log import iter_jsonl
+from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "state-sig/2"
 SITUATIONS_REL = "runs/situation-stream.jsonl"
@@ -624,7 +628,8 @@ def v_from_workspace(ws) -> float:
 
 
 def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
-    """Append one mainline situation snapshot row. Fail-open: any failure
+    """Append one mainline situation snapshot row to the consolidated
+    telemetry family file (runs/telemetry.jsonl). Fail-open: any failure
     returns {"appended": False, ...} and never raises into the producer
     (recording never breaks the loop). ``tick=None`` inherits the
     convergence-ledger tick (kunglao_log.current_tick)."""
@@ -644,31 +649,19 @@ def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
             "signature": signature_str(state),
             "signature_hash": signature_hash(state),
         }
-        p = ws / SITUATIONS_REL
-        p.parent.mkdir(parents=True, exist_ok=True)
-        import os
-        data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-        try:
-            os.write(fd, data)
-        finally:
-            os.close(fd)
-        return {"appended": True, "row": row}
+        return {"appended": bool(_cl.append(ws, "telemetry", row)),
+                "row": row}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("append_snapshot", f"{type(exc).__name__}: {exc}")
         return {"appended": False, "row": row}
 
 
 def read_situations(ws) -> list[dict]:
-    """Tolerant read of the snapshot stream (missing -> [])."""
-    p = Path(ws) / SITUATIONS_REL
-    if not p.is_file():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    return [row for row in iter_jsonl(text.splitlines())
+    """Tolerant read of the snapshot stream (missing -> []): legacy
+    runs/situation-stream.jsonl rows first (the compat window — they
+    predate the live file), then the stamped family rows."""
+    return [row for row in
+            _cl.read(ws, "telemetry", schema_prefix="situation")
             if isinstance(row, dict)]
 
 
