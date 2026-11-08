@@ -27,7 +27,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 15906d28640af1f96e25d400e9d7f6c0eacd22f45f80efc2f89c719c8bf9e1ca
+    sha256: 4e6754c32212b5f58a5c706f2b1e09373be62d092cefa3b6ef7c8fd17f317824
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -347,7 +347,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 8d9c4b5bf1f0751c90cd3af00d7d857492ba3554598e7c0adbf32282e3d09b5d
+    sha256: 77f841c224205fd4dacf35cecf45ceb3ca963f71b91fb72414cd115f86b22527
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1359,7 +1359,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 0989a1b1a4eb0ac6efb668b488892b5c53b6eb4cfec782585113865de07a9d3e
+    sha256: 18f4acb0f224073eb2fd464b1c89665a9a224182822a82d9d3d93df558b21e31
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1395,7 +1395,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 48f74adda05ccf02d60b3580d538700df698232961276eee1940eaee8a993921
+    sha256: 08e7bf45073c5aa22975b077082bc6c5c0a8748b33afb0a487d650d4b3e6f7a1
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1408,6 +1408,10 @@ files:
     dest: .claude/scripts/rlvr/direction.py
     kind: scaffold
     sha256: 28b89439fec97d81fa075c69aa94bc4eb3183d3ca4c19f3897748cb4785eca00
+  - src: scripts/rlvr/dispatch_reject.py
+    dest: .claude/scripts/rlvr/dispatch_reject.py
+    kind: scaffold
+    sha256: a1484ac14a53cbcb531e6807c8c830ff426093f77794dca730545a353ce5fe34
   - src: scripts/rlvr/disposition.py
     dest: .claude/scripts/rlvr/disposition.py
     kind: scaffold
