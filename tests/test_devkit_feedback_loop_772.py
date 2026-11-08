@@ -60,9 +60,12 @@ def _live_ws(tmp_path: Path) -> Path:
         json.dumps({"action": "t2_queue_built", "queued": 1}) + "\n" +
         json.dumps({"action": "distill_attempt", "phase": "triggered"})
         + "\n", encoding="utf-8")
-    (ws / "runs" / "posterior-store.jsonl").write_text(
-        json.dumps({"schema": "posterior-store/1", "arm": "method:static"})
-        + "\n", encoding="utf-8")
+    # issue-1004 R2c: the posterior-movement evidence rides the
+    # knowledge family file under the guarded root — seeded through the
+    # REAL bank face (the moved IO), never a hand-written file
+    import rlvr.strategy_store as _ss772
+    _ss772.append_store_row(ws, method_family="static",
+                            status="DISPATCHED", credit=1.0)
     (ws / "runs" / "plan-receipts.jsonl").write_text(
         json.dumps({"schema": "plan-receipt/1", "claim": "C-001",
                     "admitted": ["dispatch/C-001"],
@@ -148,7 +151,7 @@ def test_liveness_ledger_red_on_decorative_workspace(lg, tmp_path):
     assert rc == 1
 
 
-def test_posterior_sentinel_is_family_level(lg, tmp_path):
+def test_posterior_sentinel_is_family_level(lg, tmp_path, monkeypatch):
     """INV-003 is a FAMILY-level signal (the liveness upgrade card).
 
     The production-broadcast shape (both 2026-10 runs: settlement rows
@@ -156,36 +159,41 @@ def test_posterior_sentinel_is_family_level(lg, tmp_path):
     satisfy rl-posterior-moved — key-less posterior movement is exactly
     the decorative case the sentinel exists to catch. The same store
     with ONE arm-keyed row passes: family attribution is the signal.
+    Both shapes seed through the REAL faces into the knowledge family
+    file (issue-1004 R2c), each on its own isolated guarded root (the
+    family file is cross-task — per-case roots keep the evaluations
+    independent).
     """
+    import rlvr.strategy_store as ss772
     spec = next(f for f in lg.load_fingerprints()["fingerprints"]
                 if f["id"] == "rl-posterior-moved")
 
-    def _ws(name: str, rows: list[dict]) -> Path:
+    def _seed_and_check(name: str, seed, expect_ok: bool) -> None:
+        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
+                           str(tmp_path / f"root-{name}"))
         ws = tmp_path / name
-        (ws / "runs").mkdir(parents=True)
-        (ws / "runs" / "posterior-store.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
-        return ws
+        ws.mkdir()
+        seed(ws)
+        ok, detail = lg.evaluate_fingerprint(ws, spec)
+        assert ok is expect_ok, f"{name}: {detail}"
 
-    # case-level movement: rows exist but carry NO arm attribution
-    bare = _ws("bare", [
-        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
-         "credit": 1.0, "claim": "C-001"},
-        {"schema": "posterior-store/1", "arm": None, "state": "sig",
-         "gamma": 0.8, "outcome": 1, "alpha_add": 1, "beta_add": 0},
-    ])
-    ok, detail = lg.evaluate_fingerprint(bare, spec)
-    assert not ok, f"key-less rows satisfied the sentinel: {detail}"
+    # case-level movement: the row carries NO arm attribution
+    def _bare(ws):
+        ss772.append_row({
+            "schema": "posterior-store/1", "ts": "2026-11-09T00:00:00Z",
+            "workspace_id": "ws", "arm_key": "", "method_family": "",
+            "feature_key": "none", "fingerprint": None, "status": "ok",
+            "credit": 1.0, "censored": False, "facts_citing": 0,
+            "propensity": None, "phi_delta": None,
+            "provenance": {"dispatch_id": ""}, "claim": "C-001"})
 
-    # the identical store, one row arm-keyed: family-level movement
-    keyed = _ws("keyed", [
-        {"schema": "posterior-store/1", "arm_key": "", "method_family": "",
-         "credit": 1.0, "claim": "C-001"},
-        {"schema": "posterior-store/1", "arm_key": "static",
-         "method_family": "static", "credit": 1.0, "claim": "C-002"},
-    ])
-    ok, detail = lg.evaluate_fingerprint(keyed, spec)
-    assert ok, f"arm-keyed movement did not pass: {detail}"
+    # the one arm-keyed row: family-level movement
+    def _keyed(ws):
+        ss772.append_store_row(ws, method_family="static", status="ok",
+                               credit=1.0, claim="C-002")
+
+    _seed_and_check("bare", _bare, False)
+    _seed_and_check("keyed", _keyed, True)
 
 
 def test_liveness_missing_ledger_is_fail_not_skip(lg, tmp_path):

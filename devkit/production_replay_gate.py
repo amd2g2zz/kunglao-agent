@@ -149,7 +149,12 @@ def _inv003_posterior_family_key(ws: Path, fixture: dict) -> tuple[bool, str]:
     rows = (fixture.get("artifacts") or {}).get(KNOWLEDGE_ARTIFACT) or []
     ok = detail = None
     with tempfile.TemporaryDirectory(prefix="inv003-root-") as kroot:
-        prev = os.environ.get(STORE_ENV)
+        # the declared switch is READ through the runtime-switches face
+        # (#985 contract); the scratch-root assignment below is test
+        # staging (a write, not a read)
+        sys.path.insert(0, str(DEVKIT_ROOT.parent / "scripts"))
+        import runtime_switches  # noqa: PLC0415 — lazy (devkit mirror)
+        prev = runtime_switches.get_str(STORE_ENV).strip()
         os.environ[STORE_ENV] = kroot
         try:
             if rows:
@@ -158,10 +163,10 @@ def _inv003_posterior_family_key(ws: Path, fixture: dict) -> tuple[bool, str]:
                             for r in rows), encoding="utf-8")
             ok, detail = lg.evaluate_fingerprint(ws, spec)
         finally:
-            if prev is None:
-                os.environ.pop(STORE_ENV, None)
-            else:
+            if prev:
                 os.environ[STORE_ENV] = prev
+            else:
+                os.environ.pop(STORE_ENV, None)
     expected = fixture.get("expectations", {}).get("rl-posterior-moved",
                                                    "PASS")
     want = expected == "PASS"

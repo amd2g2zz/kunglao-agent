@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -62,8 +61,10 @@ def _knowledge_ledger(rel: str) -> Path | None:
     ledger prefix — the cross-task store is not ws-relative,
     issue-1004 R2c). The root single source is
     ``rlvr.strategy_store.store_root``; on an import failure the same
-    two-step mirror applies (env override, then the rlvr patterns dir)
-    — never a second resolver."""
+    two-step mirror applies (declared switch override, then the rlvr
+    patterns dir) — never a second resolver. The override is read
+    through the runtime-switches face (the #985 contract: declared
+    switches are never raw-read)."""
     try:
         sys.path.insert(0, str(SCRIPTS))
         from rlvr import strategy_store  # noqa: PLC0415 — lazy (devkit)
@@ -71,7 +72,8 @@ def _knowledge_ledger(rel: str) -> Path | None:
     except Exception as exc:  # noqa: BLE001 — mirror, loud in the detail
         print(f"liveness: knowledge root unavailable ({exc!r}) — "
               f"env/patterns mirror", file=sys.stderr)
-        env = os.environ.get("KUNGLAO_POSTERIOR_STORE", "").strip()
+        import runtime_switches  # noqa: PLC0415 — lazy (devkit mirror)
+        env = runtime_switches.get_str("KUNGLAO_POSTERIOR_STORE").strip()
         if env:
             return Path(env) / rel
         return SCRIPTS / "rlvr" / "patterns" / rel
