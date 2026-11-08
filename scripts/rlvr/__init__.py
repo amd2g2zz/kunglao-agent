@@ -25,6 +25,7 @@ from . import censoring
 from . import constants_ref
 from . import crystallize
 from . import direction
+from . import dispatch_reject
 from . import disposition
 from . import disposition_measure
 from . import disposition_producer
@@ -108,6 +109,7 @@ __all__ = [
     "constants_ref",
     "crystallize",
     "direction",
+    "dispatch_reject",
     "disposition",
     "disposition_measure",
     "disposition_reward",

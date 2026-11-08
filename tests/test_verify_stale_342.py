@@ -291,9 +291,14 @@ def test_schedule_probe_order_puts_verify_stale_first(tmp_path):
     """#342 mirrors #595: the inserted event sits at the FRONT of the
     SCHEDULE probes (before WORK_AND_FREE_SLOT), and the rest of the order
     is unchanged — a fresh partial still reaches DISPATCH exactly as
-    before, and STUCK still precedes the saturation tail."""
+    before, and STUCK still precedes the saturation tail. The issue-1005
+    S8 feedback pair later displaced VERIFY_STALE from index 0 to index 2
+    (the gate keeps refusing the dispatch the stale-verify forcing would
+    re-emit, so the feedback precedes it); the pin's intent is unchanged:
+    VERIFY_STALE still precedes every dispatch flavor below it."""
     order = cc.STAGE_PROBES[cc.State.SCHEDULE]
-    assert order[0] == cc.Event.VERIFY_STALE
+    assert order.index(cc.Event.VERIFY_STALE) \
+        < order.index(cc.Event.PARTIALS_AND_FREE_SLOT)
     assert order.index(cc.Event.STUCK_WORKERS_PRESENT) \
         < order.index(cc.Event.WORK_NO_FREE_SLOT)
     for ev in (cc.Event.WORK_AND_FREE_SLOT, cc.Event.PARTIALS_AND_FREE_SLOT,

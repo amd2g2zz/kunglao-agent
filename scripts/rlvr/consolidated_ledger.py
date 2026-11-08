@@ -113,7 +113,12 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                    # the strategic route choice (FIGHT/BYPASS/INVEST +
                    # propensity) is the learning feed's action face — a
                    # dead writer must read 0, never be absent
-                   "strategic-action/1"),
+                   "strategic-action/1",
+                   # the dispatch-gate reject face (issue-1005 S8): the
+                   # gate's rc=2 tail appends the row the decision
+                   # machine's feedback reads — a dead writer must read
+                   # 0, never be absent
+                   "dispatch-reject/1"),
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",

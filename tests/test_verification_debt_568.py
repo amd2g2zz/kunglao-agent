@@ -360,14 +360,21 @@ class TestDecisionGate:
 
     def test_debt_event_precedes_every_blocked_event_in_schedule(self):
         """The repair pin, structural form: in the SCHEDULE probe order
-        the debt event fires before every event whose transition lands
-        BLOCKED, so verifiable debt can never be read as blocked."""
+        the debt event fires before every PRE-EXISTING event whose
+        transition lands BLOCKED, so verifiable debt can never be read
+        as blocked. The issue-1005 S8 terminal flavor is the deliberate
+        exception: a claim whose dispatch the gate rejected
+        REJECT_RETRY_MAX times cannot pay the debt through the dispatch
+        the debt gate would force, so the terminal feedback precedes the
+        debt forcing (pinned in the feedback suite).
+        """
         probes = cc.STAGE_PROBES[cc.State.SCHEDULE]
         debt_idx = probes.index(cc.Event.DEBT_GATE)
         blocked_events = [
             event for event in probes
             if cc.TRANSITIONS.get((cc.State.SCHEDULE, event), (None,))[0]
-            is cc.State.BLOCKED]
+            is cc.State.BLOCKED
+            and event is not cc.Event.REJECT_RETRY_EXHAUSTED]
         assert blocked_events, "sanity: the schedule tail blocks today"
         for event in blocked_events:
             assert debt_idx < probes.index(event), (

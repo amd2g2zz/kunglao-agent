@@ -81,28 +81,42 @@ def test_stuck_workers_present_at_schedule_index_2() -> None:
     FIRST per the issue), pushing the #595 probe set down one to 1/2/3;
     the verification-debt gate then inserted at index 1 (debt forcing
     precedes every blocked flavor, so verifiable debt can never be read
-    as blocked), pushing it down one more to 2/3/4.
+    as blocked), pushing it down one more to 2/3/4; the issue-1005 S8
+    dispatch-reject feedback pair then inserted at 0/1 (the gate keeps
+    refusing the dispatch those forcing flavors would re-emit, so the
+    feedback precedes them — escalation before backoff, both before
+    VERIFY_STALE), pushing it down again to 4/5/6.
     The pin's intent is unchanged: the earlier probe order is preserved
     (pushed down, not replaced), STUCK still precedes the saturation tail.
     """
     probes = cc.STAGE_PROBES[cc.State.SCHEDULE]
-    assert probes[0] is cc.Event.VERIFY_STALE, (
-        f"VERIFY_STALE must sit at index 0 of STAGE_PROBES[SCHEDULE] (#342), "
+    assert probes[0] is cc.Event.REJECT_RETRY_EXHAUSTED, (
+        f"REJECT_RETRY_EXHAUSTED must sit at index 0 of "
+        f"STAGE_PROBES[SCHEDULE] (the issue-1005 S8 terminal flavor: the "
+        f"gate keeps refusing the dispatch the forcing flavors re-emit), "
         f"got {probes[0]!r}")
-    assert probes[1] is cc.Event.DEBT_GATE, (
-        f"DEBT_GATE must sit at index 1 of STAGE_PROBES[SCHEDULE] "
-        f"(debt forcing precedes every blocked flavor), "
+    assert probes[1] is cc.Event.REJECT_SEEN, (
+        f"REJECT_SEEN must sit at index 1 of STAGE_PROBES[SCHEDULE] "
+        f"(the issue-1005 S8 backoff flavor, escalation before backoff), "
         f"got {probes[1]!r} at position 1")
-    assert probes[4] is cc.Event.STUCK_WORKERS_PRESENT, (
-        f"STUCK_WORKERS_PRESENT must sit at index 4 of STAGE_PROBES[SCHEDULE] "
-        f"(#595 semantics, displaced by #342 VERIFY_STALE at 0, the debt "
-        f"gate at 1 and the #484 PARTIALS slot at 2), got {probes[4]!r} "
-        f"at position 4")
+    assert probes[2] is cc.Event.VERIFY_STALE, (
+        f"VERIFY_STALE must sit at index 2 of STAGE_PROBES[SCHEDULE] (#342), "
+        f"got {probes[2]!r}")
+    assert probes[3] is cc.Event.DEBT_GATE, (
+        f"DEBT_GATE must sit at index 3 of STAGE_PROBES[SCHEDULE] "
+        f"(debt forcing precedes every pre-existing blocked flavor), "
+        f"got {probes[3]!r} at position 3")
+    assert probes[6] is cc.Event.STUCK_WORKERS_PRESENT, (
+        f"STUCK_WORKERS_PRESENT must sit at index 6 of STAGE_PROBES[SCHEDULE] "
+        f"(#595 semantics, displaced by #342 VERIFY_STALE, the debt "
+        f"gate, the #484 PARTIALS slot and the issue-1005 S8 feedback "
+        f"pair), got {probes[6]!r} "
+        f"at position 6")
     # #484 completion: PARTIALS_AND_FREE_SLOT precedes WORK_AND_FREE_SLOT
     # (verify-first interleave; the seven-round starved-verifier mode).
-    assert probes[2] is cc.Event.PARTIALS_AND_FREE_SLOT
-    assert probes[3] is cc.Event.WORK_AND_FREE_SLOT
-    tail = probes[5:]
+    assert probes[4] is cc.Event.PARTIALS_AND_FREE_SLOT
+    assert probes[5] is cc.Event.WORK_AND_FREE_SLOT
+    tail = probes[7:]
     assert tail == [cc.Event.WORK_NO_FREE_SLOT,
                     cc.Event.FAILURE_ARTIFACTS_DUE,
                     cc.Event.LADDER_EXHAUSTED_BLOCKER,
