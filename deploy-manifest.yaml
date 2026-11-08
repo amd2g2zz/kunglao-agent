@@ -2615,7 +2615,7 @@ files:
   - src: SKILL.md
     dest: .claude/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: fc3990502b624e010a289bd51f1b14b8315eedcfa32b11083c89ca75db985368
+    sha256: 31686865f3048ce2499ba281cc2157df2fd2f0e15acc722b6591de5b5e289e8b
   - src: skills/analysis/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/analysis/SKILL.md
     kind: asset
@@ -2623,7 +2623,7 @@ files:
   - src: skills/help/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/help/SKILL.md
     kind: asset
-    sha256: 5cf37127a70c5315d69a3acc0dc0501b17d5a88fb349a9ec2945ec1c4fe67a25
+    sha256: be410846a1df6bdfe27a331ef827852afe932719c83a69087bbeefef9705cee5
   - src: skills/init/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/init/SKILL.md
     kind: asset
@@ -2643,7 +2643,7 @@ files:
   - src: skills/subcommands.yaml
     dest: .claude/skills/kunglao-agent/skills/subcommands.yaml
     kind: asset
-    sha256: 63226671785ccb482d34e59d401ecd85f30b68f35027962b3d518606e4ce03c6
+    sha256: 2e094c75db53ef98057e89438faefc0f3862704e61a1b7e3a1236192376fdaeb
   - src: skills/upgrade/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/upgrade/SKILL.md
     kind: asset
