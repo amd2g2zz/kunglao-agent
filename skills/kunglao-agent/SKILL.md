@@ -168,6 +168,8 @@ Act on the decision + exit code — it is a command, not a suggestion:
 
 **Settler drain first** — on any tick (CONVERGED included) when the decision carries `pending_settlements`, dispatch `kunglao-settler` for the FIRST entry as a background task; carry the `facts-snapshot: <N> facts` marker in its prompt (the dispatch gate applies to it). The settler counts toward the ≤3 in-flight cap and the step barrier rejects it while any worker step is unsettled: drain in a no-open-step window, never alongside a worker dispatch in the same turn. Input `runs/settlement-input-<claim>.json`; its ruling `runs/settlement-verdict-<claim>.json` is what lets the SubagentStop settlement run.
 
+**Rollout deadline timer** — every dispatch commit arms a ONE-SHOT deadline (`runs/rollout-timer-wake.json` carries one wake contract per armed rollout). MUSTs: after each dispatch, read YOUR rollout's entry and `CronCreate` its `cron` exactly once (never a `*/5` loop); a worker finishing early → `CronDelete` that job (the round-closure hook cancels the timer and learns the outcome); the deadline wake runs `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/rollout_timer_wake.py <WORKSPACE> --wake <rollout_id>` and then performs the graceful wrap-up ONLY — persist evidence → settle → cancel → learn → arm next. It must NOT start, dispatch, resume, or expand any claim.
+
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER act before the turn ends — background launches, never awaited inline.
 
 ## The dispatch contract

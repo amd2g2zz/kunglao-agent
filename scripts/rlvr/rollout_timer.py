@@ -62,6 +62,15 @@ OUTCOMES = ("early", "timeout", "on_time", "infra", "aborted")
 #: outcomes that carry a real duration (and therefore feed the median)
 SAMPLE_OUTCOMES = ("early", "timeout", "on_time")
 
+#: outcomes whose duration is an OBSERVED completion time — the median's
+#: feed. A timeout's recorded actual is the budget itself (the true
+#: duration is unknown — the rollout never finished), so a timeout-heavy
+#: history is right-censored data: feeding it would drag the median
+#: toward the budget (budgets stop adapting, more deadlines fire, the
+#: coefficient pegs). The coefficient table still learns timeout x1.25;
+#: only the duration feed excludes it.
+DURATION_OUTCOMES = ("early", "on_time")
+
 #: update factors (the bounded coefficient table)
 EARLY_FACTOR = 0.9
 TIMEOUT_FACTOR = 1.25
@@ -143,9 +152,11 @@ def base_estimate(rows, *, kind: str, difficulty: str,
                   default: float = DEFAULT_BASE_MIN) -> float:
     """Median duration of comparable rollouts (same kind + difficulty).
 
-    Only informative outcomes and stamped budget rows count; absent,
-    unreadable or non-numeric durations are skipped. A family with no
-    comparables returns the cold-start default (30 minutes).
+    Only OBSERVED completion durations count (``DURATION_OUTCOMES`` —
+    an uncompleted rollout's duration is right-censored at its budget,
+    never fed); absent, unreadable or non-numeric durations are
+    skipped. A family with no comparables returns the cold-start
+    default (30 minutes).
     """
     durations = []
     for row in rows or ():
@@ -155,7 +166,7 @@ def base_estimate(rows, *, kind: str, difficulty: str,
             continue
         if row.get("kind") != kind or row.get("difficulty") != difficulty:
             continue
-        if row.get("outcome") not in SAMPLE_OUTCOMES:
+        if row.get("outcome") not in DURATION_OUTCOMES:
             continue
         actual = row.get("actual_min")
         if not _is_number(actual) or actual < 0:
@@ -364,6 +375,15 @@ def _fold_timer(ws, rollout_id: str):
             continue
         folded = {**folded, **row} if folded else dict(row)
     return folded
+
+
+def timer_state(ws, rollout_id: str):
+    """The public read face for one rollout's folded timer view.
+
+    The host faces (rlvr.rollout_timer_host) resolve the timer's state
+    through this seam; the fold itself is the append-only transition
+    merge above. ``None`` = no timer row for that rollout id."""
+    return _fold_timer(ws, rollout_id)
 
 
 def _require_timer(ws, rollout_id: str) -> dict:

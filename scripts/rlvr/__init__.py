@@ -76,6 +76,7 @@ from . import reward
 from . import reward_signal
 from . import review_windows
 from . import rollout_timer
+from . import rollout_timer_host
 from . import route_ledger
 from . import scalar
 from . import settlement_scorer
@@ -156,6 +157,7 @@ __all__ = [
     "reward_signal",
     "review_windows",
     "rollout_timer",
+    "rollout_timer_host",
     "route_ledger",
     "scalar",
     "settlement_wire",

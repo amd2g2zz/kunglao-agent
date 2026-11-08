@@ -59,7 +59,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 6f2fc4600b1057a54c5cf941f5f87f2f073144015b497bb2765763b8e4b2ba75
+    sha256: 365bda87585b8d1f907aa90006b4d7fc8e8e71c276fdecbe9f9826f2b880639f
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: 6969300bdf8d9fbbb86e773c30d22a353a76befee89cbdcbeb12ecc7fa29f998
+    sha256: 090c1bfac3d80029935c15ab2f5e2cb1021762800320639b99d253938631e521
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold
@@ -1104,6 +1104,10 @@ files:
     dest: .claude/scripts/roi_settlement.py
     kind: scaffold
     sha256: 0f4e2af47645e2594d9ac05b46b1e5eb3ca92ec08519dafab7c0c436c687ee53
+  - src: scripts/rollout_timer_wake.py
+    dest: .claude/scripts/rollout_timer_wake.py
+    kind: scaffold
+    sha256: 76f49e518c03cfaa7b0d9925603e4ebd47fb6a910c7c91b5a27947fa95f78a67
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
@@ -1355,7 +1359,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 0fd9e9fc528b512205c7e4772018fecf8e964644367b05d39977fc643205e362
+    sha256: 18f4acb0f224073eb2fd464b1c89665a9a224182822a82d9d3d93df558b21e31
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1607,7 +1611,11 @@ files:
   - src: scripts/rlvr/rollout_timer.py
     dest: .claude/scripts/rlvr/rollout_timer.py
     kind: scaffold
-    sha256: b8dccb05708bc0e1ed45a65d7da1d779f913853cd311953ea9c52a063bd03038
+    sha256: 8d645b53d8b872f01f10ac28874339f1bb952ec7b6af25f81b929eecb70be222
+  - src: scripts/rlvr/rollout_timer_host.py
+    dest: .claude/scripts/rlvr/rollout_timer_host.py
+    kind: scaffold
+    sha256: 8875a582f07c2e73aee29e14c87ced5eddb36693ff95be0924cbe4521a1b3390
   - src: scripts/rlvr/route_ledger.py
     dest: .claude/scripts/rlvr/route_ledger.py
     kind: scaffold
@@ -2311,7 +2319,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: c7cd4af16a3f0fe116ecd5f7e8ff4ffc5a8236dd14c577a06506de0535798aac
+    sha256: 3cc4968409b3d1af1de851e7bdb459ce838a227c2e328ecf0f69052d77a3d55e
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -2623,7 +2631,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 3c83483f213b7e8a87724f8882387533c7cd45e7f6f80a5bc14dd7c42037c507
+    sha256: b2da70fead3361f3ad0aea4611f39add144d55b1876780e21270fdf8c90da563
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset

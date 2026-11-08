@@ -698,8 +698,24 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
                             "actor": journal.get("actor", ""),
                             "outcome": "applied", "reason": "",
                             "journal": journal["id"]})
+    _arm_rollout_timer(ws, claim, journal)
     return TransitionResult(True, claim, "dispatch", "OPEN", "IN_PROGRESS",
                             reason="committed", journal_id=journal["id"])
+
+
+def _arm_rollout_timer(ws, claim: str, journal: dict) -> None:
+    """Arm the dispatch's one-shot deadline timer (the rollout-timer
+    host face; rollout_id = the dispatch ledger id). Fail-open
+    telemetry: a timer trouble is ONE stderr WARN and never disturbs an
+    already-committed dispatch."""
+    try:
+        from rlvr.rollout_timer_host import arm_for_dispatch
+        arm_for_dispatch(ws, claim, str(journal.get("id") or ""),
+                         method_family=journal.get("method_family") or None)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the dispatch
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"rollout timer arm failed ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
 
 
 def _txn_restore_anchor(ws, journal: dict) -> None:
@@ -808,6 +824,21 @@ def recover(ws) -> list[TransitionResult]:
     applied = list(journal.get("applied") or [])
     _txn_rollback(ws, journal)
     _journal_save(ws, None)
+    # a COMMITTED journal's dispatch had armed its one-shot deadline
+    # timer (the commit's last face) — the inversion says the dispatch
+    # never happened, so the timer must not survive it: cancel-only
+    # cleanup, no learn (a rollout that never ran owes no outcome).
+    # Fail-open telemetry: the recovery face is never blocked by it.
+    if journal.get("state") == "committed":
+        try:
+            from rlvr.rollout_timer_host import discard_rollout_timer
+            discard_rollout_timer(
+                ws, str(journal.get("id") or ""),
+                reason="dispatch recovered (never confirmed)")
+        except Exception as exc:  # noqa: BLE001 — telemetry face
+            print(f"[kunglao-agent] claims_store WARN (fail-open): "
+                  f"recovered-dispatch timer cleanup failed "
+                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
     from_status = "IN_PROGRESS" if "register" in applied else None
     _append_provenance(ws, {"claim": journal.get("claim", ""),
                             "event": str(journal.get("kind") or "dispatch"),

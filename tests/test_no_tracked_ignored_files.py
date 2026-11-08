@@ -191,6 +191,12 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # measurement artifacts only.
     "coverage-floor.json":
         "#807 coverage-floor ratchet policy anchor: committed floor, not process output (#951)",
+    # the rollout-budget host's offline coefficient-trajectory gate:
+    # synthetic-data sim code driving the REAL host faces (the
+    # loop_sim tracked-home precedent; no corpus, no measurement
+    # output — the evidence lives in the openspec change).
+    "experiments/scheduler/coeff_sim.py":
+        "scheduler sim harness: offline coefficient-trajectory gate for the rollout-budget host (loop_sim tracked-home precedent)",
 }
 
 
