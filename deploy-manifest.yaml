@@ -1495,7 +1495,7 @@ files:
   - src: scripts/rlvr/learning_seal.py
     dest: .claude/scripts/rlvr/learning_seal.py
     kind: scaffold
-    sha256: 53ac888d5319b0f5061813cc713bd8da09e30ce115ff1f31f8bc7d22d512bfda
+    sha256: 425b2f0a8c4ddc743711091fb8cd53d52b6d9af3b7246b8983c1bd497ce11334
   - src: scripts/rlvr/ledger.py
     dest: .claude/scripts/rlvr/ledger.py
     kind: scaffold

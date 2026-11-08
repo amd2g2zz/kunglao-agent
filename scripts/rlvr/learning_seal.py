@@ -179,14 +179,19 @@ def provision(keypath=None) -> dict:
     except FileExistsError:
         # a concurrent provision won the race — NEVER touch the winner's
         # key; the loser reports the now-armed status without a write.
+        warn("rlvr.learning_seal.provision",
+             "key already exists (concurrent provision?) — the winner's "
+             "key is untouched; reporting the armed status")
         return {"path": str(path), "created": False, "armed": armed(),
                 "key_id": None,
                 "note": "key already exists (concurrent provision?)"}
     except OSError as exc:
         try:
             path.unlink(missing_ok=True)  # never leave a partial key
-        except OSError:
-            pass
+        except OSError as unlink_exc:
+            warn("rlvr.learning_seal.provision",
+                 f"partial key cleanup failed ({type(unlink_exc).__name__}: "
+                 f"{unlink_exc}) — remove {path} by hand")
         return {"path": str(path), "created": False, "armed": armed(),
                 "key_id": None,
                 "note": f"write failed ({type(exc).__name__}: {exc})"}
