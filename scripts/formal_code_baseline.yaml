@@ -5,7 +5,7 @@ files:
   hooks/compact_continuity.py: 4
   hooks/completion_gate.py: 40
   hooks/cost_input_capture.py: 9
-  hooks/dispatch_gate.py: 229
+  hooks/dispatch_gate.py: 225
   hooks/env_check_gate.py: 30
   hooks/gate_policy.py: 11
   hooks/heartbeat_touch.py: 24

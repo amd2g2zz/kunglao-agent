@@ -140,15 +140,17 @@ def test_cold_sampler_rejects_without_a_fabricated_family(
 
 
 def test_strategy_row_unchanged_without_sampled(dg, tmp_path):
-    """The #496 marker row keeps its legacy shape: the DECLARED prompt
+    """The #496 marker row keeps its shape: the DECLARED prompt
     carries no [strategy X] marker, so the row stays the honest
     default/declared:false (the method-family axis lives in the
-    usage row, not here)."""
+    usage row, not here). The row lands in the telemetry family
+    file (issue-1004 R2b)."""
     ws = _bare_ws(tmp_path)
     dg._log_strategy_dispatch(ws, "C-001", "dispatch C-001, no marker")
     rows = [json.loads(l) for l in
-            (ws / "runs" / "strategy-log.jsonl")
+            (ws / "runs" / "telemetry.jsonl")
             .read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert rows[-1]["schema"] == dg.STRATEGY_LOG_SCHEMA
     assert rows[-1]["strategy"] == "default" and rows[-1]["declared"] is False
 
 

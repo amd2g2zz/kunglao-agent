@@ -214,7 +214,7 @@ GATES 1-10 + `liveness_gate`（`--ledger`/`--smoke`）+ `escape_rate` + `verific
 | --------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `runs/belief.jsonl`               | belief/1          | `{schema, ts, claim:"C-009", step_ref:"8e2e…", seen:[{id,status}], declared_unknown:[], open_status:"PROVEN"}`                                                   |
 | `runs/plan-receipts.jsonl`        | plan-receipt/1    | `{schema, ts, claim:"C-001", admitted:["dispatch/C-001"], chosen:"dispatch/C-001"}`                                                                              |
-| `runs/strategy-log.jsonl`         | —                 | `{ts, event:"dispatch", strategy, declared, claim, attempts_at_snapshot [, sampled_family, propensity, source:"gate"]}`                                          |
+| `runs/strategy-log.jsonl`         | strategy-log/1 (telemetry family since R2b; historical rows unstamped) | `{schema, ts, event:"dispatch", strategy, declared, claim, attempts_at_snapshot [, sampled_family, propensity, source:"gate"]}`                               |
 | `runs/posterior-store.jsonl`      | posterior-store/1 | `{schema, ts, workspace_id, arm_key, method_family, feature_key, fingerprint, status, credit 0..1, censoring, outcome_class [, agent_type, claim, credit_kind]}` |
 | `runs/method-family-log.jsonl`    | usage 行           | `{cid, method_family, row_agent, tier, tools, propensity, sampled_family, prior_source}`                                                                         |
 | `runs/kunglao-*.jsonl`            | kunglao-event/1   | `{ts, action∈EMIT_ACTIONS ~150 词, actor, arm, channel, claim, detail, exit, tick, epoch, trace_id}`                                                              |
@@ -851,7 +851,7 @@ flowchart TD
 | `runs/harvest-playbook.json` | `scripts/e2e/checkpoints.py`, `scripts/script_harvest.py` |
 | `runs/infeasible-ladder-*.yaml` | `scripts/infeasible_proposal.py` |
 | `runs/infeasible-state.json` | `scripts/infeasible_proposal.py`, `scripts/infeasible_signal.py` |
-| `runs/interventions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/step_ledger.py` |
+| `runs/interventions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/l1-value-log.jsonl` | `scripts/rlvr/l1_value.py` |
 | `runs/llm-prior.json` | `scripts/rlvr/priors.py` |
 | `runs/method-family-log.jsonl` | `scripts/method_families.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
@@ -865,19 +865,19 @@ flowchart TD
 | `runs/planning-actions.jsonl` | `scripts/planning_actions.py` |
 | `runs/posterior-store.jsonl` | `scripts/rlvr/posteriors.py` |
 | `runs/posteriors.yaml` | `scripts/posteriors_case.py` |
-| `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/prediction_ledger.py` |
+| `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/q-cell-log.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
 | `runs/roi-intents.jsonl` | `hooks/dispatch_gate.py`, `scripts/roi_settlement.py` |
 | `runs/roi-settlements.jsonl` | `scripts/roi_settlement.py` |
 | `runs/rollout-ledger.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/ledger.py` |
 | `runs/settlement.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/signals.jsonl` | `scripts/action_space.py`, `scripts/signals_stream.py` |
-| `runs/situation-stream.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/state.py` |
+| `runs/situation-stream.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/step-ledger.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/step_ledger.py` |
-| `runs/strategy-log.jsonl` | `hooks/dispatch_gate.py`, `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/triples.py` |
+| `runs/strategy-log.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/t2-queue.json` | `scripts/verification_ladder.py` |
 | `runs/tc-journal.jsonl` | `scripts/tc_journal.py` |
-| `runs/telemetry.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
+| `runs/telemetry.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `hooks/dispatch_gate.py`, `scripts/rlvr/prediction_ledger.py`, `scripts/rlvr/state.py`, `scripts/rlvr/step_ledger.py` |
 | `runs/think-state.json` | `scripts/think_seat.py` |
 | `runs/tool-errors.json` | `hooks/worker_budget_core.py` |
 | `runs/transitions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |

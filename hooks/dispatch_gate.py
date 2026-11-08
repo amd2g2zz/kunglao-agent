@@ -414,13 +414,20 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
 
 # ③ strategy dispatch marker: `[strategy <id>]` anywhere in the prompt.
 STRATEGY_MARKER_RE = re.compile(r"\[strategy\s+([A-Za-z0-9._-]+)\]")
+#: the legacy rel the rows wrote before the family move — kept as the
+#: compat-window's documented name (readers still see it; production
+#: no longer writes it; the schema-cutover slice retires the window)
 STRATEGY_LOG = "runs/strategy-log.jsonl"
-# #496 review F4: the ledger used to append unbounded (every marked
-# dispatch +1 row, from_workspace re-reads the whole file). Cap: before
-# each dispatch row is written the file is re-read and truncated to the
-# most recent STRATEGY_LOG_MAX rows (read-truncate-write — idempotent, an
-# already-short file keeps its rows verbatim and in order).
-STRATEGY_LOG_MAX = 200
+#: issue-1004 R2b: the dispatch rows write the telemetry family
+#: directly, stamped at write (historical rows are unstamped; the
+#: LEGACY registration + the pre-stamp rule keep them readable)
+STRATEGY_LOG_SCHEMA = "strategy-log/1"
+# issue-496 review F4: the ledger used to append unbounded (every marked
+# dispatch +1 row, and a reader re-read the whole file). The family file
+# is append-only (no rewrite path exists), so the bound lives on the
+# READ faces — windowed to the most recent STRATEGY_LOG_MAX rows, whose
+# SINGLE source is rlvr.triples (imported at the read face; no second
+# semantic value). The window retires at the schema cutover.
 
 
 def _reject_with_guidance(name: str, msg: str, fix: str,
@@ -1035,7 +1042,10 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     """③ #496: append the strategy dispatch row on the PASS path — the only
     writer the strategy-novelty interface needs. attempts_at_snapshot is the
     claim's current promotion_attempts, so a later #495 analysis with a
-    higher covers_attempt counts as a same-strategy failure. Fail-open.
+    higher covers_attempt counts as a same-strategy failure. Since
+    issue-1004 R2b the row lands in the consolidated telemetry family
+    file (runs/telemetry.jsonl, ``strategy-log/1`` stamp at write); the
+    legacy rel stays readable through the compat window. Fail-open.
 
     local-fix (owner review 2026-10-10): the marker was an OPT-IN gate with
     no emitting side — the orchestrator was never told to carry
@@ -1068,6 +1078,7 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     except Exception:  # noqa: BLE001 — unreadable register: snapshot 0, row kept
         snapshot = 0
     row = {
+        "schema": STRATEGY_LOG_SCHEMA,
         "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
                 .replace("+00:00", "Z"),
         "event": "dispatch",
@@ -1077,17 +1088,13 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
         "attempts_at_snapshot": snapshot,
     }
     try:
-        path = ws / STRATEGY_LOG
-        path.parent.mkdir(parents=True, exist_ok=True)
-        kept: list[str] = []
-        if path.exists():
-            kept = [ln for ln in
-                    path.read_text(encoding="utf-8", errors="replace").splitlines()
-                    if ln.strip()]
-        kept = kept[-STRATEGY_LOG_MAX:]
-        kept.append(json.dumps(row, ensure_ascii=False))
-        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
-    except OSError as exc:
+        with scripts_on_path():  # scoped membership
+            from rlvr import consolidated_ledger as _cl
+        # the consolidated append: flock-guarded, stamped, append-only —
+        # the read faces window to the most recent STRATEGY_LOG_MAX rows
+        # (single source rlvr.triples; see the constant block above)
+        _cl.append(ws, "telemetry", row)
+    except Exception as exc:  # noqa: BLE001 — print-on-error, never blocks
         print(f"dispatch_gate: strategy-log write failed ({exc!r})",
               file=sys.stderr, flush=True)
 
@@ -1661,45 +1668,65 @@ def _workspace_pq_ids(ws: Path) -> set[str]:
     return {str(qid) for qid, _need in (pqs or [])}
 
 
+def _strategy_log_rows(ws: Path) -> list[dict]:
+    """The strategy-log dispatch rows for the first-dispatch face: the
+    telemetry-family read (legacy unstamped rows first via the compat
+    window, then the stamped family rows), windowed to the most recent
+    STRATEGY_LOG_MAX rows — the issue-496 F4 bound, single-sourced from
+    rlvr.triples (the triples arm join windows the SAME stream with the
+    SAME value, so a claim outside the window resolves NEITHER here nor
+    there). Boundary honesty: the old write-side truncate held MAX+1
+    rows per file (truncate then append), so a row between MAX and
+    MAX+1 is windowed out where the old file read kept it — this face
+    reads that as "no history", which only makes the gate check MORE,
+    never silently allow. Fail-open: an unreadable family reads as no
+    history (never a raise into the gate)."""
+    try:
+        with scripts_on_path():  # issue-671 scoped membership
+            from rlvr import consolidated_ledger as _cl
+            from rlvr import triples as _tr
+        rows = _cl.read(ws, "telemetry", schema_prefix="strategy-log")
+    except Exception:  # noqa: BLE001 — unreadable face -> no history
+        return []
+    return rows[-_tr.STRATEGY_LOG_MAX:]
+
+
 def _pq_dispatched_before(ws: Path, qid: str,
                           claim_question: dict[str, str]) -> bool:
     """#109 first-dispatch face: True when any dispatch-history row's claim
     answers `qid`. Two production row sources, both claim-keyed:
-      - runs/strategy-log.jsonl  event=dispatch rows (#496 writer / #120
-        priority_ratio read path);
+      - the strategy-log dispatch rows (event=dispatch; the issue-496
+        writer, the telemetry family read — see ``_strategy_log_rows``);
       - runs/roi-intents.jsonl   claim_id rows (#105 producer).
     Fail-open by direction: an unreadable/absent face reads as "no history",
     which can only make the gate check MORE (the admission itself then
     decides), never silently allow. A REJECTed dispatch writes no row
     (both faces sit on the ALLOW tail), so the REJECT->file-candidates->
     re-dispatch loop stays inside "first dispatch" until it passes."""
-    faces = (
-        (ws / STRATEGY_LOG, "event", "claim"),
-        (ws / ROI_INTENTS_LOG, None, "claim_id"),
-    )
-    for path, event_key, claim_key in faces:
-        try:
-            if not path.is_file():
-                continue
-            lines = path.read_text(
-                encoding="utf-8", errors="replace").splitlines()
-        except OSError:  # unreadable face -> no history from it
+    for row in _strategy_log_rows(ws):
+        if not isinstance(row, dict) or row.get("event") != "dispatch":
             continue
-        for ln in lines:
-            ln = ln.strip()
-            if not ln:
-                continue
-            try:
-                row = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(row, dict):
-                continue
-            if event_key is not None and row.get(event_key) != "dispatch":
-                continue
-            cid = str(row.get(claim_key) or "").strip()
-            if cid and claim_question.get(cid) == qid:
-                return True
+        cid = str(row.get("claim") or "").strip()
+        if cid and claim_question.get(cid) == qid:
+            return True
+    try:
+        lines = (ws / ROI_INTENTS_LOG).read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:  # unreadable face -> no history from it
+        return False
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            row = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        cid = str(row.get("claim_id") or "").strip()
+        if cid and claim_question.get(cid) == qid:
+            return True
     return False
 
 

@@ -4,11 +4,12 @@
  "fingerprints": [
   {
    "id": "rl-sampler-exit",
-   "face": "the sampled family reaches the dispatch decision (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl)",
-   "ledger": "runs/strategy-log.jsonl",
+   "face": "the sampled family reaches the dispatch decision (#691, wiring: #773 W2 — the family-gate reject carries the draw; the retry's usage row records sampled_family+propensity in runs/method-family-log.jsonl). Issue-1004 R2b: the dispatch rows live in the telemetry family file (the legacy runs/strategy-log.jsonl rel stops growing)",
+   "ledger": "runs/telemetry.jsonl",
    "check": {
     "kind": "jsonl_count",
     "all_of": {
+     "schema": "strategy-log/1",
      "event": "dispatch",
      "strategy": "sampled"
     },
