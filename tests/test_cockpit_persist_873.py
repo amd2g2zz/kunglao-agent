@@ -53,7 +53,7 @@ def test_cost_warning_appends_event(tmp_path):
     rc = cap.process_event(_payload(
         ws, "... COST WARNING: session total ~$12.34 ..."))
     assert rc == 0
-    p = ws / "cost_events.jsonl"
+    p = ws / "runs" / "settlement.jsonl"
     assert p.exists()
     row = json.loads(p.read_text(encoding="utf-8").splitlines()[0])
     assert row["amount"] == 12.34
@@ -66,7 +66,7 @@ def test_cost_critical_also_matched(tmp_path):
     ws = _ws_with_runs(tmp_path)
     cap.process_event(_payload(
         ws, "COST CRITICAL: session total ~$666.58 (over $50)"))
-    row = json.loads((ws / "cost_events.jsonl")
+    row = json.loads((ws / "runs" / "settlement.jsonl")
                      .read_text(encoding="utf-8").splitlines()[0])
     assert row["amount"] == 666.58
 
@@ -76,7 +76,7 @@ def test_no_match_no_write(tmp_path):
     ws = _ws_with_runs(tmp_path)
     rc = cap.process_event(_payload(ws, "normal tool output, no cost here"))
     assert rc == 0
-    assert not (ws / "cost_events.jsonl").exists()
+    assert not (ws / "runs" / "settlement.jsonl").exists()
 
 
 def test_bad_amount_fail_open(tmp_path):
@@ -84,7 +84,7 @@ def test_bad_amount_fail_open(tmp_path):
     ws = _ws_with_runs(tmp_path)
     rc = cap.process_event(_payload(ws, "COST WARNING: session total ~$abc"))
     assert rc == 0
-    assert not (ws / "cost_events.jsonl").exists()
+    assert not (ws / "runs" / "settlement.jsonl").exists()
 
 
 def test_accumulate_appends(tmp_path):
@@ -92,7 +92,7 @@ def test_accumulate_appends(tmp_path):
     ws = _ws_with_runs(tmp_path)
     cap.process_event(_payload(ws, "COST WARNING: session total ~$10.00"))
     cap.process_event(_payload(ws, "COST CRITICAL: session total ~$20.00"))
-    lines = (ws / "cost_events.jsonl").read_text(
+    lines = (ws / "runs" / "settlement.jsonl").read_text(
         encoding="utf-8").splitlines()
     assert len(lines) == 2
 
@@ -109,6 +109,8 @@ def _mk_mission_ws(tmp_path, with_cost=True, with_mission=True):
                 "history": [{"v_m": 0.5}, {"v_m": 0.75}],
             }}), encoding="utf-8")
     if with_cost:
+        # the historical UNSTAMPED face — the compat-window seed the
+        # family read must keep seeing (registry: cost_events.jsonl)
         (ws / "cost_events.jsonl").write_text(
             json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 12.5,
                         "source": "Agent"}) + "\n", encoding="utf-8")
@@ -176,6 +178,8 @@ def _rho_ws(tmp_path):
     (ws / "facts").mkdir(exist_ok=True)
     (ws / "facts" / "F001.md").write_text(
         "handler 0x14002abcd allocates 0x150 size gate", encoding="utf-8")
+    # the historical UNSTAMPED face — the compat-window seed the family
+    # read must keep seeing (registry: cost_events.jsonl)
     (ws / "cost_events.jsonl").write_text(
         json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 7.25,
                     "source": "Agent"}) + "\n", encoding="utf-8")

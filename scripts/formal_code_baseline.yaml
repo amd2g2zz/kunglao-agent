@@ -70,7 +70,7 @@ files:
   scripts/contracts.py: 12
   scripts/convergence_check.py: 185
   scripts/convergence_health.py: 14
-  scripts/cost_gate.py: 3
+  scripts/cost_gate.py: 2
   scripts/dead_letter.py: 5
   scripts/decision_lint.py: 1
   scripts/decision_pending.py: 10
@@ -316,7 +316,7 @@ files:
   scripts/toolchain_install.py: 63
   scripts/toolchain_negotiation.py: 30
   scripts/troubleshooting_gate.py: 1
-  scripts/tuition_curve.py: 8
+  scripts/tuition_curve.py: 5
   scripts/update_index.py: 6
   scripts/user_signal.py: 3
   scripts/value_replay.py: 5

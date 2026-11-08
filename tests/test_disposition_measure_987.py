@@ -582,6 +582,50 @@ def test_cost_events_skip_dirty_lines(tmp_path):
     assert cost["files"] == ["cost_events.jsonl"]
 
 
+def test_cost_events_read_the_settlement_family_face(tmp_path):
+    """The post-move production face: a stamped cost row in the
+    consolidated settlement family file reads identically."""
+    # Arrange
+    ws = _ws(tmp_path)
+    _surrender(ws, episode_id="ep-1", claim="C-1")
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": 1.25,
+        "source": "test"})
+
+    # Act
+    report = dm.measure(ws)
+
+    # Assert
+    cost = report["process"]["workspace"]["cost"]
+    assert cost["amount"] == 1.25
+    assert cost["events"] == 1
+    assert cost["files"] == ["runs/settlement.jsonl"]
+
+
+def test_cost_events_family_face_never_double_counts_legacy(tmp_path):
+    """The legacy rels and the family file are SEPARATE faces: the
+    family read runs with the legacy window off, so a workspace carrying
+    both counts each row exactly once."""
+    # Arrange
+    ws = _ws(tmp_path)
+    _surrender(ws, episode_id="ep-1", claim="C-1")
+    _cost_event(ws, 1.25)  # the legacy face
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": 2.0,
+        "source": "test"})  # the family face
+
+    # Act
+    report = dm.measure(ws)
+
+    # Assert
+    cost = report["process"]["workspace"]["cost"]
+    assert cost["amount"] == pytest.approx(3.25)
+    assert cost["events"] == 2
+    assert cost["files"] == ["cost_events.jsonl", "runs/settlement.jsonl"]
+
+
 # ---------- process metrics ----------
 
 def test_process_metrics_per_run_join_existing_sources(tmp_path):

@@ -74,7 +74,10 @@ LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
     "settlement": {
         "runs/rollout-ledger.jsonl": ("rollout-ledger/1",),
         "runs/attributed-waste.jsonl": ("attributed-waste/1",),
-        "cost_events.jsonl": (),  # historical {"ts","amount","source"} rows
+        # historical rows are UNSTAMPED {"ts","amount","source"}; the
+        # registration lets them survive a cost-prefixed family read via
+        # the pre-stamp rule and gives the migration its one-schema stamp
+        "cost_events.jsonl": ("cost-event/1",),
     },
     "telemetry": {
         "runs/interventions.jsonl": ("intervention/1",),
@@ -113,7 +116,11 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                    "strategic-action/1"),
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
-    "settlement": ("settlement-wire/1",),
+    "settlement": ("settlement-wire/1",
+                   # the cost-event rows (cost_gate + the capture hook)
+                   # write the settlement family directly — registered so
+                   # a dead writer reads 0, never absent
+                   "cost-event/1"),
     # the one evidence-gated disposition row per episode (rlvr.disposition
     # mirrors it here, so a dead writer must read 0, never be absent), its
     # bounded reward-face choice signal (rlvr.disposition_reward), and the

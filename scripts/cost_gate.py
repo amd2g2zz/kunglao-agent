@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""cost_gate.py - detect cost warnings and emit advisory or hard-pause.
+"""cost_gate.py - detect cost warnings and emit an advisory.
 
 User pain point: "PostToolUse hook cost warnings interrupt kunglao-agent workflow."
 
@@ -9,7 +9,10 @@ wants kunglao-agent to abort. But repeated warnings or single warning + high abs
 cost SHOULD trigger an advisory.
 
 This script:
-  - Reads cost_events.jsonl (written by PostToolUse hook when "COST WARNING" detected)
+  - Reads cost-event rows from the consolidated settlement family ledger
+    (runs/settlement.jsonl, schema_prefix "cost-event" — written by the
+    PostToolUse hook when "COST WARNING" detected; legacy cost_events.jsonl
+    rows still read through the compat window)
   - Counts warnings in last N minutes (sliding window)
   - Tiered response:
       * 1 warning: emit advisory "advisory: reduce dispatch verbosity"
@@ -17,19 +20,19 @@ This script:
       * cost is INFORMATIONAL only (user ruling): advisory output, never gates dispatch
         must complete current iteration then ask user before next"
   - Writes cost_advice.json with current tier (consumed by orchestrator)
-  - Exits 0 always (advisory is non-fatal); hard-pause is signaled via JSON + exit 2
+  - Exits 0 always (advisory is non-fatal; the advisory is informational —
+    it never blocks dispatch)
 
 Hook wire-up (NOT auto-installed by this script - kunglao-agent hooks are selective
 per F-10 / hook_activation.py):
   - PostToolUse on Edit|Write|MultiEdit|Agent: matches "COST WARNING" in tool_result
-  - Writes cost_events.jsonl line per warning
-  - This script reads cost_events.jsonl on heartbeat tick
+  - The hook appends one stamped cost-event row to the settlement family
+  - This script reads the family on heartbeat tick
 
 Usage:
   python cost_gate.py <workspace> [--window-min 10] [--hard-cap 50.0]
 Exit codes:
   0 = normal (no action)
-  1 = advisory emitted
   1 = ADVISORY (informational); never blocks dispatch (user ruling)
 """
 from __future__ import annotations
@@ -41,31 +44,23 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
-COST_EVENTS_FILE = "cost_events.jsonl"
+from rlvr import consolidated_ledger as cl  # noqa: E402 — the family IO
+
+COST_SCHEMA = "cost-event/1"
 COST_ADVICE_FILE = "cost_advice.json"
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
-def parse_event(line: str) -> dict | None:
-    """Parse a cost_events.jsonl line. Format: {"ts": ISO, "amount": float, "source": str}"""
-    return next(iter_jsonl([line]), None)
-
-
 def load_events(workspace: Path) -> list:
-    """Load all cost events from cost_events.jsonl."""
-    path = workspace / COST_EVENTS_FILE
-    if not path.exists():
-        return []
+    """Load all cost events: legacy cost_events.jsonl rows first (the
+    compat window), then the stamped family rows — one chronological
+    face."""
     out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.strip():
-            continue
-        ev = parse_event(line)
-        if ev is None or "ts" not in ev or "amount" not in ev:
+    for ev in cl.read(workspace, "settlement", schema_prefix="cost-event"):
+        if not isinstance(ev, dict) or "ts" not in ev or "amount" not in ev:
             continue
         try:
             ev["dt"] = datetime.fromisoformat(ev["ts"].replace("Z", "+00:00"))
@@ -123,20 +118,21 @@ def check(workspace: Path, window_min: int, hard_cap: float) -> int:
 
 
 def append_event(workspace: Path, amount: float, source: str = "hook") -> None:
-    """Helper for hook to append a new cost event. Used by PostToolUse hook."""
-    path = workspace / COST_EVENTS_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Append one stamped cost-event row to the settlement family
+    (runs/settlement.jsonl). Used by the PostToolUse hook and the CLI's
+    --append-event face. Fail-open: a refused append is ONE warn inside
+    the family core, never a raise into the caller."""
     ev = {
+        "schema": COST_SCHEMA,
         "ts": utc_now().isoformat().replace("+00:00", "Z"),
         "amount": amount,
         "source": source,
     }
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    cl.append(workspace, "settlement", ev)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Cost gate advisory + hard-pause")
+    parser = argparse.ArgumentParser(description="Cost gate advisory")
 
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("--window-min", type=int, default=10,

@@ -71,9 +71,12 @@ _TERMINAL_FAIL = frozenset({"negative", "refuted"})
 #: a mission is terminal when no claim is OPEN (or status-less)
 _OPEN_STATUSES = frozenset({"open", ""})
 
-#: the workspace's cost-event faces (cost_gate writes the root file,
-#: the loop runner writes runs/ — each owns its file)
+#: the workspace's cost-event faces: cost_gate/the capture hook write
+#: the consolidated settlement family file (``_FAMILY_COST_REL``); the
+#: two legacy rels are the compat window — each face owns its rows and
+#: its own idempotency mark
 _COST_FACES = ("cost_events.jsonl", "runs/cost_events.jsonl")
+_FAMILY_COST_REL = "runs/settlement.jsonl"
 
 #: committed rollout-row kind -> the six-commit action (episode/1's
 #: vocabulary); unmapped kinds ride the neutral persist
@@ -254,16 +257,12 @@ def _produce_dispositions(ws: Path) -> None:
 
 
 def _committed_rows(ws: Path) -> list[dict]:
-    """The trajectory's committed rows, read RAW (the episode document
-    folds history; the schema-complete settlement currency face stays
-    ledger.read's)."""
-    from rlvr import ledger  # noqa: PLC0415 — lazy
-    from kunglao_log import iter_jsonl  # noqa: PLC0415 — lazy
-    p = ws / ledger.LEDGER_REL
-    if not p.is_file():
-        return []
-    text = p.read_text(encoding="utf-8", errors="replace")
-    return [r for r in iter_jsonl(text.splitlines()) if isinstance(r, dict)]
+    """The trajectory's committed rows, via the settlement family's
+    rollout-ledger face (legacy rollout-ledger rows first, then live
+    family rows — the same raw dict face; the schema-complete settlement
+    currency face stays ledger.read's)."""
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415 — lazy
+    return cl.read(ws, "settlement", schema_prefix="rollout-ledger")
 
 
 def _amount_rows(p: Path) -> list[dict]:
@@ -295,13 +294,33 @@ def _consumed_cost_rows(ws: Path) -> dict[str, int]:
     return marks
 
 
+def _family_cost_rows(ws: Path) -> list[dict]:
+    """The settlement family file's OWN cost-event rows: the consolidated
+    read filtered to its stamp with the legacy window OFF (the legacy
+    rels are separate faces in ``_COST_FACES`` — mixing them here would
+    double-count their rows), so the multi-schema file's rollout/wire
+    rows never enter the spend window either."""
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415 — lazy
+    return [r for r in cl.read(ws, "settlement",
+                               schema_prefix="cost-event",
+                               include_legacy=False)
+            if isinstance(r.get("amount"), (int, float))
+            and not isinstance(r.get("amount"), bool)]
+
+
 def _spend_window(ws: Path) -> tuple[float, dict[str, int]]:
     """(spend_usd, per-face row counts) of THIS mission's window: the
     cost events since the previous settle mark for the workspace, a
-    first episode owning everything before it."""
+    first episode owning everything before it. The settlement family
+    face rides the consolidated read; the legacy rels stay raw file
+    reads (the compat window)."""
     consumed = _consumed_cost_rows(ws)
     total = 0.0
     counts: dict[str, int] = {}
+    family_rows = _family_cost_rows(ws)
+    start = min(consumed.get(_FAMILY_COST_REL, 0), len(family_rows))
+    counts[_FAMILY_COST_REL] = len(family_rows)
+    total += sum(float(r["amount"]) for r in family_rows[start:])
     for rel in _COST_FACES:
         rows = _amount_rows(ws / rel)
         start = min(consumed.get(rel, 0), len(rows))

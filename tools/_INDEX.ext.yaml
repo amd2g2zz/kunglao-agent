@@ -380,7 +380,7 @@ ext:
     consume: "invoke"
     source: "scripts/cost_gate.py"
     usage: "python cost_gate.py <workspace> [--window-min 10] [--hard-cap 50.0]"
-    description: "cost_gate.py - detect cost warnings and emit advisory or hard-pause."
+    description: "cost_gate.py - detect cost warnings and emit an advisory."
   - name: "cost_input_capture"
     capability: "unknown"
     type: "tool"

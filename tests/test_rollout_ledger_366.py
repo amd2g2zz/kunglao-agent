@@ -112,7 +112,7 @@ class TestAppendOnly:
                   settlement={"reward": 1.0, "band": "SETTLED_GREEN",
                               "rule_id": "task/oracle-green",
                               "evidence_refs": ["runs/oracle-status.json"]})
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         after_first = p.read_bytes()
         # a later activity on ANOTHER rollout must only append
         rl.record(ws, kind="task", anchor="C-2",
@@ -125,12 +125,12 @@ class TestAppendOnly:
         ws.mkdir()
         rl.record(ws, kind="self_distill", anchor="lesson-a",
                   signals=[_sig("lesson_written", "rollup", "sig-1")])
-        before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        before = (ws / "runs" / "settlement.jsonl").read_bytes()
         rl.settle(ws, "self_distill/lesson-a",
                   settlement={"reward": 0.0, "band": "NEUTRAL",
                               "rule_id": "self_distill/pending",
                               "evidence_refs": ["lesson_written"]})
-        data = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        data = (ws / "runs" / "settlement.jsonl").read_bytes()
         assert data.startswith(before)  # append-only: original row intact
         assert len(rl.read(ws)) == 2    # identity row + settlement amendment
 
@@ -155,9 +155,12 @@ class TestAppendOnly:
         assert len({r["rollout_id"] for r in rows}) == n
 
     def test_lock_file_pattern_used(self):
-        """The lock is a .lock file next to the ledger (the repo's pattern)."""
-        assert rl.LOCK_REL.endswith(".lock")
-        assert "runs" in rl.LOCK_REL
+        """The per-module lock rel is RETIRED: the consolidated
+        settlement family's flock (runs/.settlement.lock) is the one
+        writer guard."""
+        assert not hasattr(rl, "LOCK_REL")
+        assert not hasattr(rl, "_locked_append")
+        assert not hasattr(rl, "_lock_path")
 
 
 # ---------- record(): identity append + dedupe ----------
@@ -285,7 +288,7 @@ class TestPersistence:
         ws.mkdir()
         rl.record(ws, kind="task", anchor="C-1",
                   signals=[_sig("s", "src", 1)])
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         lines = p.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 1
         row = json.loads(lines[0])

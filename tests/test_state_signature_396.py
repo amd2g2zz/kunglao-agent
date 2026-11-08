@@ -504,6 +504,20 @@ class TestVAnchor:
         _cost(tmp_path, [50.0])  # spent everything, remaining 0
         assert ssig.v_anchor(ssig.snapshot(tmp_path)) == pytest.approx(0.0)
 
+    def test_budget_present_with_family_written_cost_row(self, tmp_path):
+        """A hook-written (settlement family) cost row keeps the budget
+        dim alive: present=True and the fraction readable from the SAME
+        snapshot — the V anchor never silently drops its 0.2-weight
+        budget term while spend is measured."""
+        import cost_gate as cg
+        cg.append_event(tmp_path, 12.5, "hook")
+        snap = ssig.snapshot(tmp_path)
+        assert snap["budget"]["fraction"] == pytest.approx(12.5 / 50.0)
+        assert snap["budget"]["present"] is True
+        # the anchor carries the budget term: remaining 0.75 at weight
+        # 0.2 — the ONLY dim here, so V = (0.2 * 0.75) / 0.2 = 0.75
+        assert ssig.v_anchor(snap) == pytest.approx(0.75)
+
     def test_bounds_and_determinism(self):
         import random
         rng = random.Random(396)

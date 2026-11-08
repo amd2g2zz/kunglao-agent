@@ -190,9 +190,9 @@ def test_branch_budget_overrun_lands_in_attributed_waste(tmp_path) -> None:
     settled = sg.settle_step(ws, "sess-9")
     assert settled is not None
     waste = [json.loads(ln) for ln in
-             (ws / "runs" / "attributed-waste.jsonl").read_text(
+             (ws / "runs" / "settlement.jsonl").read_text(
                  "utf-8").splitlines()]
-    assert waste, "a wall_s overrun must land in attributed-waste"
+    assert waste, "a wall_s overrun must land in the settlement family"
     row = waste[-1]
     assert row["schema"] == "attributed-waste/1"
     assert row["claim_ref"] == "C-5"
@@ -205,7 +205,7 @@ def test_branch_budget_overrun_lands_in_attributed_waste(tmp_path) -> None:
     settled = sg.settle_step(ws, "sess-9")
     assert settled is not None
     assert len([json.loads(ln) for ln in
-                (ws / "runs" / "attributed-waste.jsonl").read_text(
+                (ws / "runs" / "settlement.jsonl").read_text(
                     "utf-8").splitlines()]) == 1
 
 

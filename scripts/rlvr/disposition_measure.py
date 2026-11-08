@@ -101,8 +101,11 @@ DEAD_END_CREDIT_MAX = 0.0
 #: the two-sided normal quantile used for the delta interval
 Z_95 = 1.96
 
-#: cost-event rels (the workspace-level spend face; no run identity exists)
+#: cost-event rels (the workspace-level spend face; no run identity
+#: exists). The consolidated settlement family file carries the live
+#: rows (``FAMILY_COST_REL``); the two legacy rels are the compat window
 COST_EVENT_RELS = ("cost_events.jsonl", "runs/cost_events.jsonl")
+FAMILY_COST_REL = "runs/settlement.jsonl"
 
 
 class LearningClaimError(ValueError):
@@ -413,6 +416,19 @@ def _cost_workspace(ws) -> dict:
         if dirty:
             warn("rlvr.disposition_measure.cost",
                  f"{rel}: skipped {dirty} malformed line(s)")
+    # the live face: the settlement family's own cost-event rows (the
+    # consolidated read filtered to its stamp, legacy window OFF — the
+    # legacy rels above are separate faces; no double-count)
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415 — lazy
+    for row in cl.read(ws, "settlement", schema_prefix="cost-event",
+                       include_legacy=False):
+        amount = _float_or_none(row.get("amount"))
+        if amount is None:
+            continue
+        if FAMILY_COST_REL not in files:
+            files.append(FAMILY_COST_REL)
+        total += amount
+        events += 1
     coverage = ("workspace-total (no run identity)" if files else "absent")
     return {"amount": round(total, 6) if events else None,
             "events": events, "files": files, "coverage": coverage}

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""tuition_curve.py — #823-P4 学费曲线聚合器 + 座舱 V/D/ETA 数据面。
+"""tuition_curve.py — 学费曲线聚合器 + 座舱 V/D/ETA 数据面。
 
 全部离线：只消费 ledger（rho_pair 结算行）与 runs/mission_ledger.yaml。
-cost 口径（#873 起）：rho_pair 行携带真实 cost（cost_events 最新
+cost 口径：rho_pair 行携带真实 cost（cost-event family 行的最新
 amount，会话累计口径）；无 cost 字段的行不入样。stratum 暂固定 "default"。
 """
 from __future__ import annotations
@@ -14,36 +14,29 @@ from kunglao_log import warn
 import json
 from pathlib import Path
 
+from rlvr import consolidated_ledger as _cl
+
 _LEDGER = "runs/logs"
 _WINDOW = 5
 
 
-COST_EVENTS = "cost_events.jsonl"
 HARD_CAP_DEFAULT = 50.0
 
 
 def cost_state(ws, hard_cap: float = HARD_CAP_DEFAULT) -> dict:
-    """cost_events.jsonl → {"spent","remaining","latest"}（#873 缺口2/3）。
+    """cost-event rows (settlement family read: legacy cost_events.jsonl
+    first, then live family rows) → {"spent","remaining","latest"}.
 
     文件缺失/空 = 零花销；坏行跳过。remaining = hard_cap − spent（下限 0）。
     """
     ws = Path(ws)
     spent = 0.0
     latest = None
-    p = ws / COST_EVENTS
-    if p.exists():
-        for line in p.read_text(encoding="utf-8",
-                                errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            amt = row.get("amount")
-            if isinstance(amt, (int, float)):
-                spent += float(amt)
-                latest = float(amt)
+    for row in _cl.read(ws, "settlement", schema_prefix="cost-event"):
+        amt = row.get("amount")
+        if isinstance(amt, (int, float)):
+            spent += float(amt)
+            latest = float(amt)
     return {"spent": round(spent, 4),
             "remaining": round(max(hard_cap - spent, 0.0), 4),
             "latest": latest}
