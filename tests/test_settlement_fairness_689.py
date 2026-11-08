@@ -184,8 +184,8 @@ def test_infra_outcome_not_booked_as_strategy(tmp_path, monkeypatch):
         ws_a, method_family="frida", status="DISPATCHED", credit=1.0,
         outcome_class="strategy")["appended"]
     row = json.loads(
-        (root / store.STORE_REL).read_text(encoding="utf-8"
-                                           ).splitlines()[0])
+        (root / "knowledge-store.jsonl").read_text(encoding="utf-8"
+                                                   ).splitlines()[0])
     assert row["outcome_class"] == "infra"
     pools = store.warm_pools(tmp_path / "ws-b", ["frida"])
     # only the strategy row books mass; the infra refusal is invisible

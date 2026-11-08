@@ -28,10 +28,18 @@ from rlvr.signal_guard import (  # noqa: E402
 
 
 def _seed_store(ws: Path, credits: list[float]) -> None:
+    """Seed the ws-local legacy rel (the compat window's read face).
+    Rows carry workspace_id + credit_kind: post-R2c the credit series
+    lives in the cross-task knowledge family file, where the breaker's
+    read keeps exactly the credit-series face's rows (workspace-id +
+    credit_kind filtered — cross-task settlement rows are warm-pool
+    evidence, never the breaker's series)."""
     store = ws / "runs" / "posterior-store.jsonl"
     store.parent.mkdir(parents=True, exist_ok=True)
     store.write_text(
         "".join(json.dumps({"schema": "posterior-store/1",
+                            "workspace_id": ws.name,
+                            "credit_kind": "step",
                             "credit": c}) + "\n" for c in credits),
         encoding="utf-8")
 

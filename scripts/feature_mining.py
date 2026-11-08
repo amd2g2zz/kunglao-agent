@@ -3,10 +3,15 @@
 """feature_mining.py — #460 Part A: historical-run feature-table mining.
 
 Read-only, deterministic mining of (signature features → method/outcome)
-tuples that ALREADY EXIST in e2e run artifacts, into
-``runs/feature-table.jsonl`` rows (schema ``feature-table/1``) — the
-data floor under Part B's feature-conditioned prior (predict-before-try,
-the SATzilla move; NO prior math lives here).
+tuples that ALREADY EXIST in e2e run artifacts, into ``feature-table/1``
+rows (schema ``feature-table/1``) — the data floor under Part B's
+feature-conditioned prior (predict-before-try, the SATzilla move; NO
+prior math lives here). Since issue-1004 R2c the DEFAULT output is the
+knowledge family file (``knowledge-store.jsonl`` under the guarded
+cross-task root, idempotent dedupe-append); the operator ``--out``
+override keeps the deterministic single-file rebuild at any explicit
+path (the pre-move ``runs/feature-table.jsonl`` rel is the compat
+window's legacy read face).
 
 Sources joined per run (run-state.json is the anchor — see
 openspec/changes/issue-460-feature-mining/design.md):
@@ -73,6 +78,9 @@ def _warn(reason: str) -> None:
     print(f"[feature_mining] WARN (fail-open): {reason}", file=sys.stderr)
 
 SCHEMA = "feature-table/1"
+#: the legacy rel the miner wrote before the family move (issue-1004
+#: R2c) — the operator ``--out`` override face keeps it; the DEFAULT
+#: output is the knowledge family file (``default_out()``)
 OUT_DEFAULT = Path("runs") / "feature-table.jsonl"
 AUDIT_REL = Path("runs") / "logs" / "e2e-audit.jsonl"
 HASH_LEN = 12
@@ -591,12 +599,67 @@ def mine_run(root: Path, run_dir: Path) -> dict | None:
     return row
 
 
+def default_out() -> Path:
+    """The DEFAULT mining output: the knowledge family file under the
+    guarded cross-task root (issue-1004 R2c). The consolidated append
+    (flock, stamp contract) is the write wall; a re-run appends nothing
+    (idempotent dedupe-append — the append-only contract, never a
+    rewrite of a multi-schema file)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    return _cl.family_path(None, "knowledge")
+
+
+def _family_append(out: Path, rows: list[dict]) -> None:
+    """The family write face: append the mined rows the family file
+    does not already carry (canonical-JSON identity — the migrate
+    dedupe rule), in the miner's canonical order. Other schemas' rows
+    are never touched; a re-run appends nothing. A refused append is
+    the miner's loud stderr warn — the CLI reports, it never silently
+    loses a row."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+
+    existing: set[str] = set()
+    if Path(out).is_file():
+        for line in Path(out).read_text(
+                encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue  # corrupt lines dedupe nothing — never re-added
+            if isinstance(row, dict):
+                # canonical identity (the migrate dedupe rule): key
+                # ORDER is file-face noise, values are the truth
+                existing.add(json.dumps(row, ensure_ascii=False,
+                                        sort_keys=True))
+    for row in rows:
+        data = json.dumps(row, ensure_ascii=False, sort_keys=True)
+        if data in existing:
+            continue
+        if not _cl.append(None, "knowledge", row):
+            _warn(f"family append refused for run_id={row.get('run_id')!r}"
+                  f" — the row is not in the family file")
+        else:
+            existing.add(data)
+
+
 def mine(roots: list[Path], out: Path) -> dict:
     """Mine every root (deduped by resolved path); write the sorted
     feature table; return the summary. Never writes under any root.
     Rows are keyed (family, task_id, run_id, root) — the root term makes
     the bytes independent of argument order; the root itself rides the
-    row only as the side-table key ``_root`` and is never serialized."""
+    row only as the side-table key ``_root`` and is never serialized.
+
+    Write faces (issue-1004 R2c):
+      - ``out`` == the knowledge family file: the IDEMPOTENT
+        dedupe-append (rows the family already carries are not
+        re-appended; other schemas' rows untouched).
+      - any explicit other path (the operator/replay face): the
+        deterministic single-file rebuild — same input set →
+        byte-identical output (the pre-move contract, unchanged).
+    """
     seen: list[Path] = []
     for r in roots:
         resolved = r.resolve()
@@ -619,6 +682,11 @@ def mine(roots: list[Path], out: Path) -> dict:
     rows.sort(key=lambda r: (r["family"], r["task_id"], r["run_id"],
                              str(r["_root"])))
     out = Path(out)
+    if out.resolve() == default_out().resolve():
+        _family_append(out, [
+            {k: v for k, v in r.items() if k != "_root"} for r in rows])
+        return {"roots": len(seen), "runs": scanned, "rows": len(rows),
+                "skipped": skipped}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(
         json.dumps({k: v for k, v in r.items() if k != "_root"},
@@ -636,10 +704,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("roots", nargs="+",
                         help="worktree roots carrying runs/e2e/* "
                              "(explicit; nothing is discovered ambiently)")
-    parser.add_argument("--out", default=str(OUT_DEFAULT),
-                        help=f"output path (default {OUT_DEFAULT})")
+    parser.add_argument("--out", default=None,
+                        help="output path (default: the knowledge family "
+                             "file under the guarded cross-task root; an "
+                             "explicit path keeps the deterministic "
+                             "single-file rebuild)")
     args = parser.parse_args(argv)
-    summary = mine([Path(r) for r in args.roots], Path(args.out))
+    out = Path(args.out) if args.out else default_out()
+    summary = mine([Path(r) for r in args.roots], out)
     print(json.dumps(summary, ensure_ascii=False))
     return 0
 

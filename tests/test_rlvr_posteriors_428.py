@@ -113,7 +113,10 @@ class TestStoreFaces:
             ws = tmp_path / str(good)
             res = rp.record(ws, "s", "a", good, gamma=1.0, ts=TS)
             assert res["appended"] is True
-            row = rp.read(ws)[0]
+            # the four sub-workspaces share one family file; the read
+            # is per-workspace isolated (issue-1004 R2c review fix), so
+            # the row just appended is this ws's only row
+            row = rp.read(ws)[-1]
             assert (row["alpha_add"], row["beta_add"]) == (a_add, b_add)
         for bad in (0.5, 2, -1, "pass", None, [1]):
             res = rp.record(tmp_path, "s", "a", bad, gamma=1.0, ts=TS)
@@ -128,7 +131,10 @@ class TestStoreFaces:
         """The byte prefix is invariant across activity (wal posture):
         later appends never rewrite earlier bytes."""
         rp.record(tmp_path, "s", "a", 1, gamma=0.9, ts=TS)
-        p = tmp_path / rp.STORE_REL
+        # issue-1004 R2c: the live rel is the knowledge family file
+        import os
+        root = os.environ["KUNGLAO_POSTERIOR_STORE"]
+        p = Path(root) / "knowledge-store.jsonl"
         first = p.read_bytes()
         rp.record(tmp_path, "s", "a", 0, gamma=0.9, ts=TS)
         rp.record(tmp_path, "s", "b", 1, gamma=1.0, ts=TS)
@@ -205,7 +211,11 @@ class TestFoldMath:
 
     def test_input_order_changes_the_decayed_posterior(self, tmp_path):
         """(α,β) ← γ·(α,β)+obs is order-sensitive — pass-then-fail is NOT
-        fail-then-pass under γ < 1. Both directions hand-pinned."""
+        fail-then-pass under γ < 1. Both directions hand-pinned. The two
+        directions hold the SAME (state, arm) in two workspaces sharing
+        one guarded root: the fold must keep them ISOLATED (per-workspace
+        posteriors — the pre-move ws-local store contract, pinned by the
+        exact values)."""
         ws1 = tmp_path / "w1"
         ws2 = tmp_path / "w2"
         _seed_cell(ws1, "s", "a", [1, 0], gamma=0.5)
@@ -216,6 +226,29 @@ class TestFoldMath:
         _assert_hex("order1 beta", c1["beta"], "0x1.4000000000000p+0")
         _assert_hex("order2 alpha", c2["alpha"], "0x1.4000000000000p+0")
         _assert_hex("order2 beta", c2["beta"], "0x1.8000000000000p-1")
+
+    def test_same_cell_two_workspaces_never_fold_each_other(
+            self, tmp_path):
+        """THE isolation pin (issue-1004 R2c review fix): two workspaces
+        on the same target produce the SAME (state, arm) keys in the one
+        shared family file — neither workspace's γ-decayed posterior may
+        ingest the other's observations (pre-move the store was
+        ws-local; pooling would let a resumed workspace inherit a prior
+        run's posterior wholesale)."""
+        ws1 = tmp_path / "w1"
+        ws2 = tmp_path / "w2"
+        # ws1 alone: one obs at γ=0.5 → alpha = 0.5·1+1 = 1.5
+        _seed_cell(ws1, "shared", "shared", [1], gamma=0.5)
+        # ws2 alone: two obs at γ=0.5 → alpha = 0.5·(0.5·1+1)+0 = 1.25
+        _seed_cell(ws2, "shared", "shared", [1, 0], gamma=0.5)
+        c1 = rp.fold(ws1).cell("shared", "shared")
+        c2 = rp.fold(ws2).cell("shared", "shared")
+        _assert_hex("ws1 alpha unaffected by ws2", c1["alpha"],
+                    _fhex(1.5))
+        # γ=0.5, [pass, fail]: α = 0.5·1+1 → 0.5·1.5+0 = 0.75
+        _assert_hex("ws2 alpha unaffected by ws1", c2["alpha"],
+                    "0x1.8000000000000p-1")  # 0.75
+        assert rp.read(ws1) != rp.read(ws2)
 
     def test_fold_is_bit_reproducible(self, tmp_path):
         """Same store, two folds → bit-identical floats (replay
@@ -276,7 +309,9 @@ class TestFoldMath:
 
     def test_priors_are_the_learning_rate_knob(self, tmp_path):
         """Pseudo-count prior strength = how many observations a cell
-        carries at birth: a strong prior barely moves on one obs."""
+        carries at birth: a strong prior barely moves on one obs. (Same
+        (state, arm) in two workspaces — isolation keeps the folds
+        independent, issue-1004 R2c review fix.)"""
         weak = tmp_path / "weak"
         strong = tmp_path / "strong"
         _seed_cell(weak, "s", "a", [1], gamma=1.0)
@@ -328,7 +363,9 @@ class TestNumpyView:
     def test_width_shrinks_with_effective_count(self, tmp_path):
         """Cold-start width pin (owner: 冷启动偏向更大探索空间): the SAME
         observations leave a γ < 1 posterior wider (more uncertain →
-        wider exploration) than a γ = 1 posterior."""
+        wider exploration) than a γ = 1 posterior. (Same (state, arm) in
+        two workspaces — isolation keeps the folds independent,
+        issue-1004 R2c review fix.)"""
         wide_ws = tmp_path / "wide"
         narrow_ws = tmp_path / "narrow"
         outcomes = [1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0,
@@ -418,6 +455,9 @@ class TestSelfHeal:
     CONTRADICTING = [0] * 40
 
     def test_early_misattribution_decays_out_under_gamma(self, tmp_path):
+        """(The two schedules hold the same (state, arm) in two
+        workspaces — isolation keeps the folds independent, issue-1004
+        R2c review fix.)"""
         ws_heal = tmp_path / "heal"
         ws_stuck = tmp_path / "stuck"
         stream = self.MISATTRIBUTED + self.CONTRADICTING
@@ -548,15 +588,19 @@ class TestDefaults:
         at the default γ (no schedule decision threaded) fold to a DECAYED
         posterior under the default read — the γ = 1 no-forgetting write
         is no longer a default anywhere. Control: the same stream recorded
-        at explicit γ = 1 folds exact (the calibration face)."""
+        at explicit γ = 1 in a SECOND workspace at the SAME (state, arm)
+        folds exact — isolation keeps the folds independent (issue-1004
+        R2c review fix)."""
         outcomes = [1, 0, 1, 1, 0] * 4
+        ws = tmp_path / "default-gamma"
         for out in outcomes:
-            assert rp.record(tmp_path, "s", "a", out, ts=TS)["appended"]
-        decayed = rp.fold(tmp_path).cell("s", "a")
+            assert rp.record(ws, "s", "a", out, ts=TS)["appended"]
+        decayed = rp.fold(ws).cell("s", "a")
         assert decayed["n_effective"] < len(outcomes)
         unit_ws = tmp_path / "unit-control"
         for out in outcomes:
-            rp.record(unit_ws, "s", "a", out, gamma=1.0, ts=TS)
+            assert rp.record(unit_ws, "s", "a", out, gamma=1.0,
+                             ts=TS)["appended"]
         exact = rp.fold(unit_ws).cell("s", "a")
         assert exact["n_effective"] == float(len(outcomes))
         assert decayed["width"] > exact["width"]

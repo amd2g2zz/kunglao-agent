@@ -112,7 +112,11 @@ docs/superpowers/
 # #545 WS2: the cross-task posterior store is RUNTIME data (learned
 # posteriors across this machine's workspaces) — never committed; the
 # guarded prior_store_root scan covers whatever exists locally.
+# issue-1004 R2c: the knowledge family file (+ its consolidated lock)
+# is the same runtime-data class — same never-committed guard.
 scripts/rlvr/patterns/posterior-store.jsonl
+scripts/rlvr/patterns/knowledge-store.jsonl
+scripts/rlvr/patterns/.knowledge-store.lock
 
 # mutmut working artifacts (Gate 4, #663): the mutants/ copy tree and the
 # results cache are per-run scratch, never committed.

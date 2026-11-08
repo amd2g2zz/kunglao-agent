@@ -127,6 +127,9 @@ DEFAULT_OUT_REL = "runs/ws5-matrix"
 # reads the store root through, and the store file name inside it
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 STORE_FILE = "posterior-store.jsonl"
+#: the knowledge family file (issue-1004 R2c) — the live store rel; a
+#: warm source carries it beside the legacy rel post-move
+FAMILY_STORE_FILE = "knowledge-store.jsonl"
 # the operator-local corpus root env (the blocked-path measurement face)
 EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
 # hermeticity: stripped from the inherited env before arm env merges —
@@ -525,9 +528,26 @@ def warm_source_fault(plan: RunPlan, warm_source: Path | None) -> str | None:
         return (f"arm {plan.arm_id} declares store warm but the registry "
                 "names no warm_up.store_source (and no --warm-store "
                 "override) — the warm claim would be false, refusing")
-    if not (Path(warm_source) / STORE_FILE).is_file():
-        return f"warm store source has no {STORE_FILE}: {warm_source}"
+    if not (Path(warm_source) / STORE_FILE).is_file() \
+            and not (Path(warm_source) / FAMILY_STORE_FILE).is_file():
+        return (f"warm store source has no {STORE_FILE} or "
+                f"{FAMILY_STORE_FILE}: {warm_source}")
     return None
+
+
+def _copy_warm_store(warm_source: Path, store_dir: Path) -> None:
+    """One warm store copy: the legacy rel (when present) AND the
+    knowledge family file (when present — issue-1004 R2c; post-move
+    the live rows land there, so a warm arm without it would start
+    with a cold family file and silently lose the live store).
+    FILL-ONLY: a file already in the per-arm dir is never overwritten
+    — the within-sequence accumulated rows stay intact; only MISSING
+    files repair from the source (the torn-repair edge, review fix)."""
+    for name in (STORE_FILE, FAMILY_STORE_FILE):
+        src = Path(warm_source) / name
+        dst = store_dir / name
+        if src.is_file() and not dst.is_file():
+            shutil.copy2(src, dst)
 
 
 def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
@@ -539,18 +559,24 @@ def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
     first unit creates the dir (cold) or lands the source copy (warm),
     and later units reuse it with accumulated rows intact — a per-unit
     re-copy would wipe exactly the within-sequence learning the mode
-    exists for. A per-arm warm dir that exists without its store file
-    is a torn first materialization, repaired by the copy."""
+    exists for. A per-arm warm dir that exists without either store
+    file is a torn first materialization, repaired by the copy."""
     store_dir = store_dir_of(plan)
     if plan.store_mode == "per-arm":
         if plan.store_kind == "warm" \
-                and not (store_dir / STORE_FILE).is_file():
+                and (not (store_dir / STORE_FILE).is_file()
+                     or not (store_dir / FAMILY_STORE_FILE).is_file()):
+            # per-file torn repair (review fix): a warm dir holding only
+            # one of the two store rels repairs the MISSING one from a
+            # source that carries it — a family-only dir paired with a
+            # legacy-only source still gets its legacy history, and
+            # vice versa; the fault check keeps requiring at least one
+            # source file.
             fault = warm_source_fault(plan, warm_source)
             if fault:
                 raise ConfigError(fault)
             store_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(Path(warm_source) / STORE_FILE,
-                         store_dir / STORE_FILE)
+            _copy_warm_store(Path(warm_source), store_dir)
             return store_dir
         store_dir.mkdir(parents=True, exist_ok=True)
         return store_dir
@@ -560,8 +586,7 @@ def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
         if fault:
             shutil.rmtree(store_dir)
             raise ConfigError(fault)
-        shutil.copy2(Path(warm_source) / STORE_FILE,
-                     store_dir / STORE_FILE)
+        _copy_warm_store(Path(warm_source), store_dir)
     return store_dir
 
 
@@ -776,8 +801,8 @@ def main(argv: list[str] | None = None) -> int:
                          f"${EVAL_ROOT_ENV})")
     ap.add_argument("--warm-store", default=None,
                     help="dir holding the prepared warm "
-                         f"{STORE_FILE} (overrides "
-                         "warm_up.store_source)")
+                         f"{STORE_FILE} and/or {FAMILY_STORE_FILE} "
+                         "(overrides warm_up.store_source)")
     ap.add_argument("--warm-context-from", default=None,
                     help="train workspace for the cc-warm-context arm "
                          "(overrides warm_up.warm_context_source)")

@@ -43,11 +43,16 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from kunglao_log import iter_jsonl, warn
+from kunglao_log import warn
 
-from rlvr import q_cells
+from rlvr import consolidated_ledger as _cl
 
 NEG_SCHEMA = "marl-negative/1"
+#: the legacy rel the rows wrote before the family move (issue-1004
+#: R2c) — kept as the compat window's documented name (readers still
+#: see it; production no longer writes it; the schema-cutover slice
+#: retires the window). The live file is the knowledge family's
+#: ``knowledge-store.jsonl``.
 NEG_REL = "marl-negative.jsonl"
 
 #: the inert class — a workspace with no mined features degrades here,
@@ -56,14 +61,13 @@ UNKNOWN_CLASS = "unknown"
 
 
 def neg_store_path() -> Path:
-    """The SHARED negative-knowledge store — one file under the same
-    guarded root as the posterior store (env
-    ``KUNGLAO_POSTERIOR_STORE`` override, else the prior_store_root
-    patterns dir). Shared, not per-workspace: the whole point of
-    class-level negative knowledge is that workspace B inherits
-    workspace A's dead end for the SAME structural class."""
-    from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy
-    return _ss.store_root() / NEG_REL
+    """The SHARED negative-knowledge store — the knowledge family file
+    under the guarded root (issue-1004 R2c; the pre-move
+    ``marl-negative.jsonl`` rel is the compat window's legacy read
+    face). Shared, not per-workspace: the whole point of class-level
+    negative knowledge is that workspace B inherits workspace A's dead
+    end for the SAME structural class."""
+    return _cl.family_path(None, "knowledge")
 
 
 def _class_of(ws=None, *, features=None) -> str:
@@ -102,16 +106,12 @@ def signature_class(ws=None, *, features=None) -> str:
 
 
 def _read_neg_rows() -> list[dict]:
-    """Tolerant read: schema-filtered rows, oldest first. Missing file →
-    [], corrupt lines skip."""
-    p = neg_store_path()
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    return [r for r in iter_jsonl(text.splitlines())
-            if isinstance(r, dict)
-            and str(r.get("schema") or "") == NEG_SCHEMA]
+    """Tolerant read: schema-filtered rows, oldest first (the knowledge
+    family read — the guarded-root legacy rel first, then the family
+    file: chronology). Missing file → [], corrupt lines skip."""
+    return [r for r in _cl.read(None, "knowledge",
+                                schema_prefix="marl-negative")
+            if isinstance(r, dict)]
 
 
 def _tool_chain_token(tool_chain) -> str | None:
@@ -164,7 +164,7 @@ def record_negative(ws, *, method_family: str,
     for key, val in (("claim_ref", claim_ref), ("step_ref", step_ref)):
         if val:
             row[key] = str(val)
-    appended = q_cells._append_row(neg_store_path(), row)
+    appended = _cl.append(None, "knowledge", row)
     return {"appended": bool(appended), "reason": None if appended
             else "write-failed", "signature_class": cls, "row": row}
 

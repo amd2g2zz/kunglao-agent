@@ -393,7 +393,8 @@ def test_solution_broadcast_method_not_answer(tmp_path, monkeypatch):
                                   credit=1.0, answer=answer)
     assert out["appended"], out
 
-    blob = strategy_store.store_path().read_text(encoding="utf-8")
+    blob = (store_dir / "knowledge-store.jsonl").read_text(
+        encoding="utf-8")   # issue-1004 R2c: rows land in the family file
     assert FAM in blob                        # the method is shared
     assert answer not in blob                 # the answer is NOT
 

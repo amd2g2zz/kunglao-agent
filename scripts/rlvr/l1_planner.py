@@ -201,7 +201,13 @@ def _cross_task_face(ws: Path, claim: str) -> list[dict]:
     claim identity is THIS claim and whose settled credit is positive —
     another engagement solved it (the #705 solution-broadcast face
     carries the claim id). Never reads the ws's own rows (the store's
-    leave-one-out read)."""
+    leave-one-out read). POPULATION (issue-1004 R2c review fix): the
+    store read is the BANK face only — the ws credit series (the
+    breaker's ``credit_kind``-marked rows) is excluded by
+    ``strategy_store.load_rows``, so a foreign workspace's round credit
+    for ITS colliding claim id can never certify THIS claim (exact
+    pre-move visibility: the credit series never lived in the
+    cross-task store)."""
     from rlvr import strategy_store as _store  # noqa: PLC0415
     out = []
     for row in _store.load_rows(ws):

@@ -165,7 +165,7 @@ REJECT 时：`undo_dispatch_anchor`（#623 撤锚行）→ `reopen_claim_no_work
 
 ### 4.1 `rlvr/strategy_store.py`（家族池 + 采样出口）
 
-- 落盘：`store_root()` = `KUNGLAO_POSTERIOR_STORE` env 覆盖，否则 `scripts/rlvr/patterns/`；`PosteriorStrategyStore(ws)` 走 ws 级 `runs/posterior-store.jsonl`（`posteriors.STORE_REL`）+ 锁 `runs/.posterior-store.lock`。
+- 落盘：`store_root()` = `KUNGLAO_POSTERIOR_STORE` env 覆盖，否则 `scripts/rlvr/patterns/`（唯一根解析器）；issue-1004 R2c 起全部 knowledge IO 落 family 文件 `store_root()/knowledge-store.jsonl`（consolidated append 的 flock 是唯一写守卫；预移动的 `posterior-store.jsonl` 与 ws 级 `runs/posterior-store.jsonl` 是 compat window 的 legacy 读面）。
 - `append_store_row(...)` → posterior-store/1 行：workspace_id / arm_key=method_family / feature_key=feature_key_of(ws) / fingerprint / status / credit 0..1 截断 / #705 agent_type+claim+credit_kind / #689 outcome_class（infra 行不进 warm pools）。
 - `method_sample(fp)` receipt 真实形状：  
   `{"schema":"q-cell-sample/1","signature_hash":"aea12f53…","family":"static-decompile","gamma":0.9,"candidates":{"static-decompile":{"p_llm":1.0,"alpha":1.67,"beta":1.33,"theta":0.857,"weight":0.857}},"prior_source":"history"}`  
@@ -215,7 +215,7 @@ GATES 1-10 + `liveness_gate`（`--ledger`/`--smoke`）+ `escape_rate` + `verific
 | `runs/belief.jsonl`               | belief/1          | `{schema, ts, claim:"C-009", step_ref:"8e2e…", seen:[{id,status}], declared_unknown:[], open_status:"PROVEN"}`                                                   |
 | `runs/plan-receipts.jsonl`        | plan-receipt/1    | `{schema, ts, claim:"C-001", admitted:["dispatch/C-001"], chosen:"dispatch/C-001"}`                                                                              |
 | `runs/strategy-log.jsonl`         | strategy-log/1 (telemetry family since R2b; historical rows unstamped) | `{schema, ts, event:"dispatch", strategy, declared, claim, attempts_at_snapshot [, sampled_family, propensity, source:"gate"]}`                               |
-| `runs/posterior-store.jsonl`      | posterior-store/1 | `{schema, ts, workspace_id, arm_key, method_family, feature_key, fingerprint, status, credit 0..1, censoring, outcome_class [, agent_type, claim, credit_kind]}` |
+| `knowledge-store.jsonl`（guarded root；`runs/posterior-store.jsonl`/`posterior-store.jsonl` 为 R2c 前 legacy 读面） | posterior-store/1 | `{schema, ts, workspace_id, arm_key, method_family, feature_key, fingerprint, status, credit 0..1, censoring, outcome_class [, agent_type, claim, credit_kind]}` |
 | `runs/method-family-log.jsonl`    | usage 行           | `{cid, method_family, row_agent, tier, tools, propensity, sampled_family, prior_source}`                                                                         |
 | `runs/kunglao-*.jsonl`            | kunglao-event/1   | `{ts, action∈EMIT_ACTIONS ~150 词, actor, arm, channel, claim, detail, exit, tick, epoch, trace_id}`                                                              |
 | `runs/gate-telemetry.jsonl`       | —                 | 每 worker_budget REJECT 一行                                                                                                                                        |
@@ -821,7 +821,6 @@ flowchart TD
 | `runs/.hooks-selfcheck.json` | `scripts/statusline_snapshot.py` |
 | `runs/.init-report.json` | `scripts/kunglao_upgrade.py` |
 | `runs/.ladder-t1.json` | `scripts/verification_ladder.py` |
-| `runs/.posterior-store.lock` | `scripts/rlvr/posteriors.py` |
 | `runs/.retry-counter.yaml` | `hooks/worker_budget_core.py` |
 | `runs/.rotation-induction.json` | `hooks/worker_budget_gates.py` |
 | `runs/.settlement.lock` | `scripts/rlvr/consolidated_ledger.py` |
@@ -863,7 +862,7 @@ flowchart TD
 | `runs/plan-repair-state.json` | `scripts/plan_drift_detector.py` |
 | `runs/plan-stages.yaml` | `scripts/plan_stages.py` |
 | `runs/planning-actions.jsonl` | `scripts/planning_actions.py` |
-| `runs/posterior-store.jsonl` | `scripts/rlvr/posteriors.py` |
+| `runs/posterior-store.jsonl` | legacy（R2c 前写面；live = guarded root `knowledge-store.jsonl`） |
 | `runs/posteriors.yaml` | `scripts/posteriors_case.py` |
 | `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/q-cell-log.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |

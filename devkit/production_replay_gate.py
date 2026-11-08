@@ -40,15 +40,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Callable
 
 DEVKIT_ROOT = Path(__file__).resolve().parent
 DEFAULT_SHAPES = DEVKIT_ROOT / "production_shapes"
+STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 SCHEMA = "production-shape/1"
 REQUIRED_KEYS = ("id", "synthetic", "source", "shape", "events",
                  "expectations")
+#: the knowledge family file (issue-1004 R2c) — a fixture artifact rel
+#: allowed beside the runs/ layout; the inv003 staging face materializes
+#: it into an isolated knowledge root per replay
+KNOWLEDGE_ARTIFACT = "knowledge-store.jsonl"
 
 # name -> {"fn": callable(ws, fixture) -> (ok, detail), "applies": set|None}
 # applies=None means every fixture; a set of fixture ids restricts scope.
@@ -77,9 +84,11 @@ def load_fixture(path: Path | str) -> dict:
     if not isinstance(data["expectations"], dict):
         raise ValueError(f"{Path(path).name}: expectations must be an object")
     for art in (data.get("artifacts") or {}):
-        if not str(art).startswith("runs/"):
+        if not (str(art).startswith("runs/")
+                or str(art) == KNOWLEDGE_ARTIFACT):
             raise ValueError(
-                f"{Path(path).name}: artifact paths must stay under runs/")
+                f"{Path(path).name}: artifact paths must stay under runs/ "
+                f"(or be the knowledge family file {KNOWLEDGE_ARTIFACT})")
     return data
 
 
@@ -125,12 +134,34 @@ def applies_to(entry: dict, fixture: dict) -> bool:
 def _inv003_posterior_family_key(ws: Path, fixture: dict) -> tuple[bool, str]:
     """The rl-posterior-moved fingerprint must REJECT the production
     arm-NULL broadcast shape and ACCEPT the arm-keyed control — the
-    INV-003 family-level upgrade (#807), asserted both ways."""
+    INV-003 family-level upgrade (#807), asserted both ways.
+
+    issue-1004 R2c staging: the fingerprint reads the knowledge family
+    file under the guarded root (``@knowledge/`` resolution), so the
+    assertion stages an ISOLATED knowledge root per replay (env
+    override, restored afterwards) and materializes the fixture's
+    ``knowledge-store.jsonl`` artifact into it — a replay can never
+    touch the real guarded root."""
     import liveness_gate as lg  # devkit sibling, lazy import
 
     spec = next(f for f in lg.load_fingerprints()["fingerprints"]
                 if f["id"] == "rl-posterior-moved")
-    ok, detail = lg.evaluate_fingerprint(ws, spec)
+    rows = (fixture.get("artifacts") or {}).get(KNOWLEDGE_ARTIFACT) or []
+    ok = detail = None
+    with tempfile.TemporaryDirectory(prefix="inv003-root-") as kroot:
+        prev = os.environ.get(STORE_ENV)
+        os.environ[STORE_ENV] = kroot
+        try:
+            if rows:
+                (Path(kroot) / KNOWLEDGE_ARTIFACT).write_text(
+                    "".join(json.dumps(r, ensure_ascii=False) + "\n"
+                            for r in rows), encoding="utf-8")
+            ok, detail = lg.evaluate_fingerprint(ws, spec)
+        finally:
+            if prev is None:
+                os.environ.pop(STORE_ENV, None)
+            else:
+                os.environ[STORE_ENV] = prev
     expected = fixture.get("expectations", {}).get("rl-posterior-moved",
                                                    "PASS")
     want = expected == "PASS"
@@ -154,8 +185,6 @@ def run(directory: Path | str = DEFAULT_SHAPES,
         print("replay gate: no assertions registered — nothing to run",
               file=sys.stderr)
         return 2
-    import tempfile
-
     failed = 0
     ran = 0
     for fixture in fixtures(directory):

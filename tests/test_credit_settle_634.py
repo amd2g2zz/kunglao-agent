@@ -145,7 +145,11 @@ def test_bank_writes_the_cross_task_store_row(tmp_path):
 
 def test_unmatched_dispatch_writes_no_store_row(tmp_path):
     """No pending dispatch row -> no banked credit -> no store row: the
-    honest gap, never a fabricated bucket."""
+    honest gap, never a fabricated bucket. (issue-1004 R2c: the
+    credit-series row the bridge writes in this scenario is EXCLUDED
+    from ``load_rows`` — the breaker's face, not store knowledge — so
+    the pin holds at its original strength: the store read returns
+    exactly nothing.)"""
     import settle_round_credit as src
     from rlvr import strategy_store
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])

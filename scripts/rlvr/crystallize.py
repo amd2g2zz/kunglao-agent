@@ -72,7 +72,11 @@ def _broadcast_duplicate(claim: str, family: str) -> bool:
     """ONE broadcast per (claim, family) — the discriminant is the
     claim's method, so a later certified step on the same claim is a
     duplicate, never fresh prior mass (a per-step key would let an
-    N-step claim warm a sibling workspace N times over)."""
+    N-step claim warm a sibling workspace N times over). POPULATION
+    (issue-1004 R2c review fix): the store read is the BANK face only
+    (``load_rows`` excludes the breaker's credit-kind-marked ws credit
+    series), so a bridged round credit can never suppress the solution
+    broadcast — exactly what the pre-move guarded-root file held."""
     from rlvr import strategy_store as _ss
     for row in _ss.load_rows():
         if (str(row.get("claim") or "") == claim
@@ -194,22 +198,51 @@ def _rewrite_without(path: Path, drop) -> int:
 
 def revoke_claim(ws, claim: str) -> dict:
     """Drop every derived row attributed to the claim from BOTH derived
-    stores (negatives by ``claim_ref``, broadcasts by ``claim``). The
+    stores (negatives by ``claim_ref``, broadcasts by ``claim``), each
+    across its two compat faces: the knowledge family file (the live
+    rel since issue-1004 R2c) and the pre-move legacy rel (history
+    written before the move is still revocable during the window). The
+    rewrite is ROW-SELECTIVE and WORKSPACE-SCOPED: only THIS
+    workspace's rows drop (``workspace_id == ws.name``; rows WITHOUT
+    the column — the class-level marl negatives — were shared and
+    unscoped pre-move by design, so they stay revocable from any
+    workspace), and the broadcast predicate stays in the BANK
+    population (credit-kind-marked ws credit rows are never revocable
+    here — revoke's pre-move reach never touched the breaker's credit
+    series), so a revoke from workspace A never deletes workspace B's
+    rows under a per-workspace claim-id collision; and both
+    family-file rewrites run INSIDE the consolidated flock
+    (``consolidated_ledger.family_lock``), so a concurrent ``append``
+    between a rewrite's read and its atomic write is never lost. The
     discriminant dies with the settlement it was derived from; the
     evidence of record (steps, transitions, amendment rows) is
     untouched. An empty claim is refused at the boundary (it would
     match every unattributed row). Returns per-store removal counts."""
-    from rlvr import marl as _marl
+    from rlvr import consolidated_ledger as _cl
     from rlvr import strategy_store as _ss
     cid = str(claim or "").strip()
     if not cid:
         return {"negatives_removed": 0, "broadcasts_removed": 0}
-    removed_neg = _rewrite_without(
-        _marl.neg_store_path(),
-        lambda r: str(r.get("claim_ref") or "") == cid)
-    removed_bcast = _rewrite_without(
-        _ss.store_path(),
-        lambda r: str(r.get("claim") or "") == cid)
+    family = _cl.family_path(None, "knowledge")
+    mine = Path(ws).name if ws is not None else None
+
+    def _scoped(row: dict) -> bool:
+        rid = str(row.get("workspace_id") or "")
+        return rid == str(mine) if rid else True
+
+    with _cl.family_lock(None, "knowledge"):
+        removed_neg = sum(_rewrite_without(
+            path, lambda r: str(r.get("claim_ref") or "") == cid
+            and _scoped(r))
+            for path in dict.fromkeys((
+                family,
+                _cl.legacy_path(None, "knowledge",
+                                "marl-negative.jsonl"))))
+        removed_bcast = sum(_rewrite_without(
+            path, lambda r: str(r.get("claim") or "") == cid
+            and not r.get("credit_kind") and _scoped(r))
+            for path in dict.fromkeys((
+                family, _ss.store_path())))
     if removed_neg or removed_bcast:
         warn("crystallize.revoke",
              f"claim {cid}: {removed_neg} negative(s), "

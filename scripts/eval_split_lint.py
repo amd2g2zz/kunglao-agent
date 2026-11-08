@@ -100,12 +100,16 @@ def _scan_posterior_store(paths: list[Path],
     inside a ``posterior-store/1`` row is checked against the holdout
     unit-ids — a store row carrying a holdout unit-id means the
     write-face filter (rlvr.strategy_store.append_row, filter BEFORE
-    append) was bypassed, so the violation names the row. The generic
-    whole-file scan above still covers the raw bytes; this class exists
-    so the failure is attributable to the exact row."""
+    append) was bypassed, so the violation names the row. Since
+    issue-1004 R2c the live rows land in the knowledge family file
+    (``knowledge-store.jsonl``), so the face scans it beside the
+    pre-move rel. The generic whole-file scan above still covers the
+    raw bytes; this class exists so the failure is attributable to the
+    exact row."""
     out: list[str] = []
     for p in paths:
-        if p.name != "posterior-store.jsonl":
+        if p.name not in ("posterior-store.jsonl",
+                          "knowledge-store.jsonl"):
             continue
         try:
             lines = p.read_text(encoding="utf-8",
@@ -125,7 +129,7 @@ def _scan_posterior_store(paths: list[Path],
                 if unit.lower() in blob:
                     out.append(
                         f"LEAK[POSTERIOR_STORE_UNIT_ID] {unit}: "
-                        f"posterior-store.jsonl row {ln} carries the "
+                        f"{p.name} row {ln} carries the "
                         f"holdout unit-id — the write-face filter was "
                         f"bypassed (priors are feature-keyed, never "
                         f"identity-keyed, #518)")

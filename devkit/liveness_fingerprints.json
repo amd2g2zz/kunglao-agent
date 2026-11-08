@@ -40,8 +40,8 @@
   },
   {
    "id": "rl-posterior-moved",
-   "face": "posterior store rows update after settle — keyed by ARM (#807: case-level movement — key-less rows, dispatch-pending structural mass, or credits with no arm attribution — no longer satisfies the sentinel; INV-003 is a FAMILY-level live signal)",
-   "ledger": "runs/posterior-store.jsonl",
+   "face": "posterior store rows update after settle — keyed by ARM (#807: case-level movement — key-less rows, dispatch-pending structural mass, or credits with no arm attribution — no longer satisfies the sentinel; INV-003 is a FAMILY-level live signal). Issue-1004 R2c: the rows live in the knowledge family file under the guarded cross-task root (the ws-local legacy rel stops growing). GLOBAL-BY-DESIGN (review fix, honest caveat): since the move the family file is cross-task, so min 1 is satisfied by ANY live workspace's bank row — one live workspace greens this fingerprint on every workspace sharing the root; per-workspace movement is carried by that workspace's own breaker series (rlvr.signal_guard.recent_credits, workspace-scoped) instead. The check grammar cannot template a per-workspace contains-face into this static registry.",
+   "ledger": "@knowledge/knowledge-store.jsonl",
    "check": {
     "kind": "jsonl_count",
     "all_of": {
