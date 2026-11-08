@@ -347,7 +347,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: bcaf7c1b9afea93eb13bc95dc39bb1c7a457e6077520d7e7d41bb97ababca801
+    sha256: 77f841c224205fd4dacf35cecf45ceb3ca963f71b91fb72414cd115f86b22527
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -1407,7 +1407,7 @@ files:
   - src: scripts/rlvr/dispatch_reject.py
     dest: .claude/scripts/rlvr/dispatch_reject.py
     kind: scaffold
-    sha256: 2974a786ae30ddfc0bce7ed0b4dab10d58325ef3f02eefef06eae0b92f9974ff
+    sha256: a1484ac14a53cbcb531e6807c8c830ff426093f77794dca730545a353ce5fe34
   - src: scripts/rlvr/disposition.py
     dest: .claude/scripts/rlvr/disposition.py
     kind: scaffold
