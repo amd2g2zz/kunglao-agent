@@ -473,7 +473,7 @@ files:
   scripts/rlvr/step_grain.py:
     r1: 11
   scripts/rlvr/step_ledger.py:
-    r1: 11
+    r1: 9
   scripts/rlvr/strategy_store.py:
     r1: 19
   scripts/rlvr/triples.py:

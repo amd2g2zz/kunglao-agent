@@ -3,26 +3,25 @@
 """rlvr/step_ledger.py — the shadow experience substrate (the online
 off-policy controller's recording face, issue-667 design).
 
-Three append-only, hash-only ledgers (#721: two of the three rode the
+Three append-only, hash-only ledgers (#721: all three rode the
 consolidation — the row schemas are unchanged, only the home file):
 
-  runs/step-ledger.jsonl       step-record/1       one row per tool call
-                              step-record/2       one row per subagent
-                                                  completion (#690 — the
-                                                  settlement grain, carries
-                                                  claim_ref + step_id)
-  runs/evidence-credit.jsonl   evidence-item/1     evidence citing its
-                              credit-amendment/1   producing step + the
-                                                   escrow lifecycle
-  runs/interventions.jsonl     intervention/1      operator/controller
-                                                   interventions
+  runs/telemetry.jsonl        intervention/1     operator/controller
+                                                 interventions
+  runs/experience.jsonl       step-record/1      one row per tool call
+                            step-record/2       one row per subagent
+                                                completion (#690 — the
+                                                settlement grain, carries
+                                                claim_ref + step_id)
+  runs/experience.jsonl       evidence-item/1    evidence citing its
+                            credit-amendment/1   producing step + the
+                                                 escrow lifecycle
 
-Since #721 the step-record/1+2 and evidence-item/1+credit-amendment/1
-rows live in the consolidated ``runs/experience.jsonl`` (WHAT HAPPENED);
-the legacy rels above stay readable during the compat window and are
-bytes-archived by the one-time migration. interventions.jsonl is the
-telemetry family's — it switches whole in its own card, so it keeps its
-legacy path here.
+Since #721 the step-record/1+2 rows live in the consolidated
+``runs/experience.jsonl`` (WHAT HAPPENED), and since issue-1004 R2b the
+intervention/1 rows live in the consolidated ``runs/telemetry.jsonl``
+(WHAT WAS OBSERVED); the legacy rels stay readable during the compat
+window and are bytes-archived by the one-time migration.
 
 The trust boundary is HASH-ONLY: content-bearing fields (tool input,
 tool output, artifact bytes, subject text, notes) never land — the row
@@ -55,7 +54,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
@@ -68,9 +66,12 @@ EVIDENCE_SCHEMA = "evidence-item/1"
 AMENDMENT_SCHEMA = "credit-amendment/1"
 INTERVENTION_SCHEMA = "intervention/1"
 
+#: the legacy rels the rows wrote before the family moves — kept as the
+#: compat-window's documented names (readers still see them; production
+#: no longer writes them; the schema-cutover slice retires the window)
 STEP_LEDGER_REL = "runs/step-ledger.jsonl"        # legacy rel (pre-#721)
 CREDIT_LEDGER_REL = "runs/evidence-credit.jsonl"  # legacy rel (pre-#721)
-INTERVENTIONS_REL = "runs/interventions.jsonl"    # telemetry card's rel
+INTERVENTIONS_REL = "runs/interventions.jsonl"    # legacy rel (pre-R2b)
 
 # the escrow lifecycle: escrow opens, the three closures resolve it
 ACTIONS = ("escrow", "confirm", "revoke", "expire")
@@ -92,60 +93,45 @@ def sha_of(obj) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-#: #721 family routing: the step + credit rows ride the consolidated
-#: WHAT-HAPPENED file; interventions stay on the legacy path until the
-#: telemetry card switches its family whole.
+#: issue-721 + issue-1004 family routing: the step + credit rows ride
+#: the consolidated WHAT-HAPPENED file; the intervention rows ride the
+#: consolidated WHAT-WAS-OBSERVED file (issue-1004 R2b). The per-module
+#: raw-IO silo retired with the moves — the consolidated append is the
+#: single writer face.
 _FAMILY_OF_REL = {
     STEP_LEDGER_REL: "experience",
     CREDIT_LEDGER_REL: "experience",
+    INTERVENTIONS_REL: "telemetry",
 }
 
 
 def _append(rel: str, row: dict, ws) -> dict | None:
     family = _FAMILY_OF_REL.get(rel)
-    if family is not None:
-        # the consolidated face enforces the stamp contract + warns on
-        # refusal; a refused row is None (fail-open, never a raise)
-        return row if _cl.append(ws, family, row) else None
-    try:
-        p = Path(ws) / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        return row
-    except OSError as exc:
-        warn("rlvr.step_ledger", f"{rel}: {type(exc).__name__}: {exc}")
+    if family is None:
+        warn("rlvr.step_ledger",
+             f"unrouted rel {rel!r} — row not appended")
         return None
+    # the consolidated face enforces the stamp contract + warns on
+    # refusal; a refused row is None (fail-open, never a raise)
+    return row if _cl.append(ws, family, row) else None
 
 
-#: #721 read prefixes per rel: the consolidated file is multi-schema, so
-#: every read goes through its stamps ("step-record" catches /1 and /2).
+#: issue-721 + issue-1004 read prefixes per rel: the consolidated files
+#: are multi-schema, so every read goes through its stamps ("step-record"
+#: catches /1 and /2).
 _READ_PREFIXES = {
     STEP_LEDGER_REL: ("step-record",),
     CREDIT_LEDGER_REL: ("evidence-item", "credit-amendment"),
+    INTERVENTIONS_REL: ("intervention",),
 }
 
 
 def _read(rel: str, ws) -> list[dict]:
-    prefixes = _READ_PREFIXES.get(rel)
-    if prefixes is not None:
-        return _cl.read(ws, "experience", schema_prefix=prefixes)
-    p = Path(ws) / rel
-    if not p.is_file():
+    family = _FAMILY_OF_REL.get(rel)
+    if family is None:
+        warn("rlvr.step_ledger", f"unrouted rel {rel!r} — read as empty")
         return []
-    rows: list[dict] = []
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
+    return _cl.read(ws, family, schema_prefix=_READ_PREFIXES[rel])
 
 
 # ---------------------------------------------------------- step ledger

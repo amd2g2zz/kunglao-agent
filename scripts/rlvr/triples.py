@@ -33,8 +33,9 @@ Header (byte-pinned):
   a          strategy_arm + method_choices from the dispatch/eval faces:
              episode rows read the ledger signals (strategy_arm /
              method_choices) and the experience_tuple's a; round rows
-             join runs/strategy-log.jsonl (event=dispatch rows) by claim
-             id when the dispatch id IS a claim id
+             join the strategy-log dispatch rows (event=dispatch, the
+             telemetry family read) by claim id when the dispatch id IS
+             a claim id
   r          the settled scalar (never recomputed here)
 
 Regenerable: the ledger stays the system of record; extraction
@@ -60,10 +61,10 @@ scripts/experience_triples.py (which stays a thin re-export adapter).
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 
+from rlvr import consolidated_ledger as _cl  # the family read (issue-1004 R2b)
 from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
 
 TRIPLES_REL = "runs/triples.csv"
@@ -71,7 +72,18 @@ CSV_HEADER = ("grain", "rollout_id", "s_signature", "s_hash", "a_arm",
               "a_choices", "r", "r_source", "ts")
 Q_REPORT_SCHEMA = "q-report/1"
 
-_STRATEGY_LOG_REL = "runs/strategy-log.jsonl"
+#: THE strategy-log read window (the issue-496 F4 bound, single source):
+#: the family file is append-only (no rewrite path), so the bound lives
+#: on the READ faces — every consumer windows the strategy-log stream to
+#: the most recent STRATEGY_LOG_MAX rows (the window the old write-side
+#: truncate used to produce). Boundary note: the old steady state was
+#: MAX+1 rows per file (truncate then append), so a row sitting between
+#: MAX and MAX+1 is now windowed out where the old file read kept it —
+#: the dispatch gate's admission face reads that as "no history", which
+#: only makes it check MORE, never silently allow; the window retires at
+#: the schema cutover. hooks/dispatch_gate imports THIS constant at its
+#: read face — no second semantic value exists.
+STRATEGY_LOG_MAX = 200
 
 
 from _common import seq_sum as _seq_sum  # noqa: E402 — the canonical leaf (the per-module redeclaration is retired)
@@ -88,24 +100,17 @@ def _last_signal(signals: list[dict], type_: str):
 
 
 def _strategy_arm_by_claim(ws) -> dict:
-    """runs/strategy-log.jsonl event=dispatch rows: claim -> LAST strategy
-    id (the strategy-log dispatch-pass-path writer; the per-claim arm face)."""
-    p = Path(ws) / _STRATEGY_LOG_REL
-    if not p.is_file():
-        return {}
+    """strategy-log dispatch rows (event=dispatch): claim -> LAST
+    strategy id — the telemetry family read (legacy runs/strategy-log
+    rows first via the compat window, then the stamped family rows),
+    windowed to the most recent STRATEGY_LOG_MAX rows (the same window
+    the dispatch gate's first-dispatch face applies — one stream, one
+    bound, so a claim outside the window resolves NEITHER here nor
+    there; the dispatch-pass-path writer's per-claim arm face)."""
+    rows = _cl.read(ws, "telemetry", schema_prefix="strategy-log")
+    rows = rows[-STRATEGY_LOG_MAX:]
     out: dict[str, str] = {}
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return out
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in rows:
         if not isinstance(row, dict) or str(row.get("event")) != "dispatch":
             continue
         claim = str(row.get("claim") or "")

@@ -44,8 +44,11 @@ def _live_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True)
-    (ws / "runs" / "strategy-log.jsonl").write_text(
-        json.dumps({"event": "dispatch", "strategy": "sampled",
+    # issue-1004 R2b: the strategy-log rows live in the telemetry family
+    # file, stamped (the fingerprint's ledger retargeted with the move)
+    (ws / "runs" / "telemetry.jsonl").write_text(
+        json.dumps({"schema": "strategy-log/1", "event": "dispatch",
+                    "strategy": "sampled",
                     "claim": "C-001"}) + "\n", encoding="utf-8")
     (logs / "kunglao-2026-10-18.jsonl").write_text(
         json.dumps({"action": "dispatch", "admitted": ["dispatch/C-001"],
@@ -135,8 +138,9 @@ def test_liveness_ledger_red_on_decorative_workspace(lg, tmp_path):
     ws = tmp_path / "ws"
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True)
-    (ws / "runs" / "strategy-log.jsonl").write_text(
-        json.dumps({"event": "dispatch", "strategy": "default",
+    (ws / "runs" / "telemetry.jsonl").write_text(
+        json.dumps({"schema": "strategy-log/1", "event": "dispatch",
+                    "strategy": "default",
                     "claim": "C-001"}) + "\n", encoding="utf-8")
     (logs / "kunglao-2026-10-18.jsonl").write_text(
         json.dumps({"action": "tick"}) + "\n", encoding="utf-8")

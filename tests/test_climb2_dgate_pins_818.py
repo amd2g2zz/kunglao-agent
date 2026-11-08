@@ -327,11 +327,14 @@ class TestStrategyLog:
         ws = _mk_ws(tmp_path)
         dg._log_strategy_dispatch(ws, "C-1", _v1_prompt("C-1"))
         rows = [json.loads(ln) for ln in
-                (ws / "runs" / "strategy-log.jsonl")
+                (ws / "runs" / "telemetry.jsonl")
                 .read_text("utf-8").splitlines() if ln.strip()]
+        assert rows[-1]["schema"] == dg.STRATEGY_LOG_SCHEMA
         assert rows[-1]["strategy"] == "default"
         assert rows[-1]["declared"] is False
         assert rows[-1]["claim"] == "C-1"
+        # the legacy rel is not written by production anymore
+        assert not (ws / "runs" / "strategy-log.jsonl").exists()
 
     def test_marker_row_declares_strategy_and_snapshot(self, tmp_path) -> None:
         import dispatch_gate as dg
@@ -341,30 +344,51 @@ class TestStrategyLog:
                                      "promotion_attempts": 4})
         dg._log_strategy_dispatch(ws, "C-1", "[strategy exploit-chain-a] go")
         rows = [json.loads(ln) for ln in
-                (ws / "runs" / "strategy-log.jsonl")
+                (ws / "runs" / "telemetry.jsonl")
                 .read_text("utf-8").splitlines() if ln.strip()]
+        assert rows[-1]["schema"] == dg.STRATEGY_LOG_SCHEMA
         assert rows[-1]["strategy"] == "exploit-chain-a"
         assert rows[-1]["declared"] is True
         assert rows[-1]["attempts_at_snapshot"] == 4
 
-    def test_read_truncate_write_caps_the_ledger(self, tmp_path) -> None:
+    def test_family_append_is_append_only_and_the_read_window_bounds(
+            self, tmp_path) -> None:
+        """The issue-496 F4 bound moved from the write-side truncate to
+        the read faces (the family file is append-only — no rewrite path
+        exists): the writer appends (never truncates), and the PQ
+        first-dispatch face sees exactly the most recent rows, bounded
+        by the SINGLE source constant (rlvr.triples — dispatch_gate
+        imports it, no second semantic value)."""
         import dispatch_gate as dg
+        from rlvr import triples as _tr
+        assert not hasattr(dg, "STRATEGY_LOG_MAX")
         ws = _mk_ws(tmp_path)
-        log = ws / "runs" / "strategy-log.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        pre = "\n".join(
-            json.dumps({"event": "dispatch", "claim": f"C-{i}",
-                        "strategy": "s", "declared": True,
-                        "attempts_at_snapshot": 0})
-            for i in range(dg.STRATEGY_LOG_MAX + 5)) + "\n"
-        log.write_text(pre, encoding="utf-8")
+        # MAX+5 rows: the FIRST 3 are the only q1-answering dispatches
+        # (claim C-2); the rest ride C-9, deliberately absent from the
+        # question map. The last-MAX window drops all three C-2 rows.
+        rows = [{"schema": dg.STRATEGY_LOG_SCHEMA,
+                 "ts": "2026-11-08T00:00:00Z", "event": "dispatch",
+                 "strategy": "s", "declared": True,
+                 "claim": "C-2" if i < 3 else "C-9",
+                 "attempts_at_snapshot": 0}
+                for i in range(_tr.STRATEGY_LOG_MAX + 5)]
+        tel = ws / "runs" / "telemetry.jsonl"
+        tel.parent.mkdir(parents=True, exist_ok=True)
+        tel.write_text("".join(json.dumps(r) + "\n" for r in rows),
+                       encoding="utf-8")
+        qmap = {"C-1": "q1", "C-2": "q1"}
+        # the window bound: C-2 fell outside the last MAX rows -> the
+        # face reads no q1 dispatch history (without the window this
+        # would be True)
+        assert dg._pq_dispatched_before(ws, "q1", qmap) is False
+        # the append adds ONE row (append-only growth, never a truncate)
         dg._log_strategy_dispatch(ws, "C-1", "[strategy s1] x")
         kept = [ln for ln in
-                log.read_text("utf-8").splitlines() if ln.strip()]
-        # cap runs BEFORE the append: steady state is MAX+1 (read-truncate-
-        # write), never unbounded growth
-        assert len(kept) == dg.STRATEGY_LOG_MAX + 1
+                tel.read_text("utf-8").splitlines() if ln.strip()]
+        assert len(kept) == _tr.STRATEGY_LOG_MAX + 6
         assert json.loads(kept[-1])["strategy"] == "s1"
+        # the fresh row rides inside the window -> dispatched-before
+        assert dg._pq_dispatched_before(ws, "q1", qmap) is True
 
 
 # ---------------- 9. intent declaration + record (#105) ----------------
@@ -721,7 +745,6 @@ class TestMainArcs:
 
     def test_failure_blocked_claim_gets_corrective_injection(
             self, tmp_path, monkeypatch, capsys) -> None:
-        import sys as _sys
         ws = _mk_ws(tmp_path)
         monkeypatch.chdir(tmp_path)
         runs = ws / "runs"
@@ -752,14 +775,17 @@ class TestMainArcs:
         prompt = _v1_prompt(
             "C-1", agent="kunglao-worker", tools=["Read", "Write"],
             uncertainty="which mac scheme")
+        import dispatch_gate as dg
         rc = self._run_main(monkeypatch, _payload(prompt, "kunglao-worker"))
         assert rc == 0
-        # the ALLOW tail is the one face every dispatch passes: strategy log
-        strategy = ws / "runs" / "strategy-log.jsonl"
+        # the ALLOW tail is the one face every dispatch passes: strategy
+        # log (the telemetry family file since the R2b move)
+        strategy = ws / "runs" / "telemetry.jsonl"
         assert strategy.is_file()
         last = json.loads([ln for ln in
                            strategy.read_text("utf-8").splitlines()
                            if ln.strip()][-1])
+        assert last["schema"] == dg.STRATEGY_LOG_SCHEMA
         assert last["claim"] == "C-1"
         # the intent row is banked (named uncertainty in the envelope)
         intents = ws / "runs" / "roi-intents.jsonl"

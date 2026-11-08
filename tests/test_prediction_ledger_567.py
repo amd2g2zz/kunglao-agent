@@ -46,7 +46,9 @@ def _ws(tmp_path: Path) -> Path:
 
 
 def _ledger_rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "predictions.jsonl"
+    # issue-1004 R2b: the rows live in the consolidated telemetry
+    # family file (the legacy rel stays readable via the compat window)
+    p = ws / "runs" / "telemetry.jsonl"
     if not p.is_file():
         return []
     return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()
@@ -62,8 +64,9 @@ def _transitions(ws: Path) -> list[dict]:
 
 def _age_row(ws: Path, pred_id: str, hours: float) -> None:
     """Rewrite one prediction's registered_ts to `hours` ago (the only
-    way a pure-unit test can age a row — the read faces own the clock)."""
-    p = ws / "runs" / "predictions.jsonl"
+    way a pure-unit test can age a row — the read faces own the clock).
+    The rows live in the family file (issue-1004 R2b)."""
+    p = ws / "runs" / "telemetry.jsonl"
     rows = _ledger_rows(ws)
     stamp = (datetime.now(tz=timezone.utc)
              - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")

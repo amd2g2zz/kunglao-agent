@@ -83,7 +83,12 @@ LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
         "runs/interventions.jsonl": ("intervention/1",),
         "runs/predictions.jsonl": ("prediction-ledger/1",),
         "runs/situation-stream.jsonl": ("situation/1",),
-        "runs/strategy-log.jsonl": (),  # historical event= rows, unstamped
+        # historical rows are UNSTAMPED event=dispatch rows; the
+        # registration lets them survive a strategy-log-prefixed family
+        # read via the pre-stamp rule and gives the migration its
+        # one-schema stamp (issue-1004 R2b: the writer moved to the
+        # family, new rows carry the stamp at write)
+        "runs/strategy-log.jsonl": ("strategy-log/1",),
     },
     "knowledge": {
         "posterior-store.jsonl": ("posterior-store/1",),
@@ -136,7 +141,12 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                   # row (rlvr.orphan_resolver mirrors it here — the
                   # close-path audit face; pre-seeded at 0 so a dead
                   # resolver reads DEAD, never absent)
-                  "orphan-resolution/1"),
+                  "orphan-resolution/1",
+                  # issue-1004 R2b: the strategy-log dispatch rows (the
+                  # dispatch-gate writer) write the telemetry family
+                  # directly — registered so a dead writer reads 0,
+                  # never absent
+                  "strategy-log/1"),
 }
 
 REGISTERED: dict[str, tuple[str, ...]] = {
