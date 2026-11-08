@@ -1143,6 +1143,22 @@ class Event(str, Enum):
     # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
     # BEFORE convergence_check starts; the name exists for observability.
     JADX_INFEASIBLE = "JADX_INFEASIBLE"
+    # issue-1005 S8 dispatch-reject feedback: the gate's rc=2 tail writes
+    # a dispatch-reject row (rlvr.dispatch_reject) and the machine reads
+    # it back — a verdict whose dispatch the gate keeps refusing must
+    # never repeat forever. Two gradations of one condition (the
+    # ladder-flavor precedent: probe-ordered events, static targets):
+    #   REJECT_SEEN     — a live claim is 1..MAX-1 same-reason
+    #                           rejects deep: PARK backoff (the loop has
+    #                           no actionable move; the wake condition is
+    #                           the gate's fix path / re-anchor)
+    #   REJECT_RETRY_EXHAUSTED — a live claim hit REJECT_RETRY_MAX (same
+    #                           claim, same reason): terminal BLOCKED
+    #                           whose action carries the disposition
+    #                           algebra's route-ledger word (consumed,
+    #                           never a new vocabulary entry)
+    REJECT_SEEN = "REJECT_SEEN"
+    REJECT_RETRY_EXHAUSTED = "REJECT_RETRY_EXHAUSTED"
 
 
 # Terminal state -> (decision, exit_code). Single binding point: a new
@@ -1193,6 +1209,8 @@ class _DecideInputs:
     _goal_op: dict | None = field(default=None, repr=False)
     _debt_face: dict | None = field(default=None, repr=False)
     _debt_module: object | None = field(default=None, repr=False)
+    _reject_face: dict | None = field(default=None, repr=False)
+    _reject_module: object | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -1419,6 +1437,31 @@ class _DecideInputs:
             self._debt_face = face
         return self._debt_face
 
+    def reject_face(self) -> dict:
+        """issue-1005 S8 dispatch-reject feedback face (lazy + cached).
+
+        Pure read over the experience family's dispatch-reject rows via
+        the rlvr leaf (``rlvr.dispatch_reject.feedback_face``) — the
+        machine reads rows, never hooks. Fail-open to the EMPTY face on
+        any layer error: a broken ledger must never manufacture feedback
+        or sink decide(); the leaf degrades loudly (one warn) inside
+        itself. The module handle rides along so the terminal action's
+        disposition word stays single-sourced with the leaf's derivation
+        (the algebra's route-ledger gate word)."""
+        if self._reject_face is None:
+            face = {"rows": 0, "by_claim": {}, "active": [], "exhausted": [],
+                    "retry_max": None}
+            try:
+                from rlvr import dispatch_reject as _dr
+                face = _dr.feedback_face(self.workspace)
+                self._reject_module = _dr
+            except _GATE_INPUT_EXC as exc:
+                warn("reject_face",
+                     f"{type(exc).__name__}: {exc} (reading the empty "
+                     f"reject face)")
+            self._reject_face = face
+        return self._reject_face
+
     def ladder_exhausted_ids(self) -> list:
         """#497 ladder-exhaustion marker (ask_for_direction_gate.
         find_ladder_exhaustion): promotion_attempts >= 3 with an empty
@@ -1628,6 +1671,48 @@ def _ladder_required_blocker(s: _DecideInputs) -> bool:
     return _all_open_blocked(s) and not s.ladder_exhausted_ids()
 
 
+def _reject_other_moves(s: _DecideInputs, bounced: set) -> list:
+    # issue-1005 S8, the no-other-move guard: the BOUNCED claims are
+    # subtracted from the dispatchable set before "another move exists"
+    # is decided — a rejected dispatch's journal undo rolls its claim
+    # back to OPEN, so the bounced claim itself sits in unblocked_open
+    # and would mask the stuck face forever (one reject row per tick,
+    # nothing terminates) for the first-dispatch bounce class.
+    return [c for c in s.unblocked_open
+            if str(c.get("id")) not in bounced]
+
+
+def _reject_retry_exhausted(s: _DecideInputs) -> bool:
+    # issue-1005 S8, the terminal flavor: a live claim whose dispatch
+    # the gate rejected REJECT_RETRY_MAX times for the same reason, and
+    # the loop has no OTHER actionable move (nothing dispatchable once
+    # the bounced claims are subtracted, nothing in flight). The face
+    # is INDEPENDENT of the partial surface — an at-max OPEN claim with
+    # zero partial facts is just as unable to act as the audited
+    # partial-only shape; requiring partials here would strand the
+    # at-max claim on the pre-reject verdicts (or the unexpected tail).
+    face = s.reject_face()
+    if s.active != 0 or not face["exhausted"]:
+        return False
+    return not _reject_other_moves(
+        s, set(face["exhausted"]) | set(face["active"]))
+
+
+def _dispatch_rejected(s: _DecideInputs) -> bool:
+    # issue-1005 S8, the backoff flavor: a live claim is 1..MAX-1
+    # same-reason rejects deep AND the loop has no other move (nothing
+    # dispatchable once the bounced claims are subtracted, nothing in
+    # flight) — park with the fix path instead of re-emitting the
+    # verdict whose dispatch just bounced. A busy or otherwise-
+    # dispatchable loop is not stuck: the feedback stays silent there
+    # and the pre-reject verdicts stand.
+    face = s.reject_face()
+    if s.active != 0 or not face["active"]:
+        return False
+    return not _reject_other_moves(
+        s, set(face["active"]) | set(face["exhausted"]))
+
+
 def _unexpected_state(s: _DecideInputs) -> bool:
     return True  # SCHEDULE catch-all (tail invariant, see tests)
 
@@ -1655,6 +1740,8 @@ _EVENT_PREDICATES = {
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
     Event.LADDER_EXHAUSTED_BLOCKER: _ladder_exhausted_blocker,
+    Event.REJECT_SEEN: _dispatch_rejected,
+    Event.REJECT_RETRY_EXHAUSTED: _reject_retry_exhausted,
     Event.UNEXPECTED_STATE: _unexpected_state,
 }
 
@@ -2056,6 +2143,47 @@ def _act_all_blocked(s: _DecideInputs) -> str:
             f"Resolve blockers: {s.blockers or 'none on disk'}.")
 
 
+def _act_reject_backoff(s: _DecideInputs) -> str:
+    # issue-1005 S8 backoff flavor: PARK's wake condition IS the gate's
+    # fix path — name the claim, the reason face, and the count so the
+    # orchestrator re-anchors instead of re-emitting the bounced verdict.
+    face = s.reject_face()
+    parts = []
+    for claim in face["active"]:
+        slot = face["by_claim"].get(claim, {})
+        parts.append(f"{claim} x{slot.get('count')} "
+                     f"({slot.get('reason')})")
+    return ("Dispatch reject backoff: the gate rejected the dispatch "
+            f"for {', '.join(parts)}. PARK the loop here — fix the gate "
+            f"reason (or re-anchor the dispatch) and re-decide; the loop "
+            f"wakes on the next allowed dispatch or a changed claim face. "
+            f"Do NOT repeat the same dispatch.")
+
+
+def _act_reject_exhausted(s: _DecideInputs) -> str:
+    # issue-1005 S8 terminal flavor: the disposition word is the leaf's
+    # derivation (the algebra's route-ledger gate word, single-sourced;
+    # the module handle is always set when this event fires — the face
+    # produced it). The stuck-guard facts ride so the terminal decision
+    # is auditable in one read.
+    face = s.reject_face()
+    word = getattr(s._reject_module, "EXHAUSTED_DISPOSITION",
+                   "ATTEMPTED_EXHAUSTED")
+    parts = []
+    for claim in face["exhausted"]:
+        slot = face["by_claim"].get(claim, {})
+        parts.append(f"{claim} x{slot.get('count')} "
+                     f"({slot.get('reason')})")
+    return (f"DISPOSITION {word}: the gate rejected the dispatch for "
+            f"{', '.join(parts)} — REJECT_RETRY_MAX "
+            f"(={face['retry_max']}) same-claim same-reason rejects with "
+            f"partial_count={len(s.partials)}, open_count={len(s.opens)}, "
+            f"active_workers={s.active}. The loop cannot act on this "
+            f"claim: settle it through the disposition producer "
+            f"(rlvr.disposition, route-ledger gate) or intervene on the "
+            f"gate reason. Do NOT re-dispatch until the reason changes.")
+
+
 def _act_unexpected(s: _DecideInputs) -> str:
     return "Unexpected state - investigate manually."
 
@@ -2098,7 +2226,16 @@ STAGE_PROBES = {
     # the seven-round starved-verifier failure mode is this slot's old
     # order). WORK_AND_FREE_SLOT follows; verification landing consumes
     # the partials so the next tick returns to DISPATCH.
-    State.SCHEDULE: [Event.VERIFY_STALE, Event.DEBT_GATE,
+    # issue-1005 S8: the dispatch-reject feedback pair now sits at the
+    # FRONT (pushing the indexes above down — the prepend precedent, the
+    # insert-before-saturation shape): the verdict whose dispatch
+    # the gate keeps refusing must never mask the feedback, so
+    # escalation (REJECT_RETRY_EXHAUSTED, terminal BLOCKED) precedes the
+    # backoff (REJECT_SEEN, PARK) and both precede the
+    # verify-forcing flavors. When the feedback is silent the probe list
+    # reads exactly as before.
+    State.SCHEDULE: [Event.REJECT_RETRY_EXHAUSTED, Event.REJECT_SEEN,
+                     Event.VERIFY_STALE, Event.DEBT_GATE,
                      Event.PARTIALS_AND_FREE_SLOT, Event.WORK_AND_FREE_SLOT,
                      Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
                      Event.FAILURE_ARTIFACTS_DUE,
@@ -2137,6 +2274,13 @@ TRANSITIONS = {
     (State.SCHEDULE, Event.LADDER_REQUIRED_BLOCKER): (State.BLOCKED, _act_all_blocked),
     (State.SCHEDULE, Event.LADDER_EXHAUSTED_BLOCKER): (State.BLOCKED, _act_all_blocked),
     (State.SCHEDULE, Event.UNEXPECTED_STATE): (State.SATURATED, _act_unexpected),
+    # issue-1005 S8: the dispatch-reject feedback pair — the backoff
+    # PARKs (the legal-idle verdict face; the wake condition rides the
+    # action), the exhaustion goes terminal BLOCKED whose action names
+    # the disposition word (the algebra's route-ledger gate word; no new
+    # vocabulary entry). Rows, not branches — the STATE_TABLE pattern.
+    (State.SCHEDULE, Event.REJECT_RETRY_EXHAUSTED): (State.BLOCKED, _act_reject_exhausted),
+    (State.SCHEDULE, Event.REJECT_SEEN): (State.PARK, _act_reject_backoff),
 }
 
 # SCHEMA -> one stage -> verdict; the bound is a cycle guard, not a semantic.
@@ -2259,6 +2403,19 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     # for open_count in heartbeat reports). Without a verdict file the face
     # carries all-zero counts + an explicit absent marker.
     decision["oracle"] = snap.oracle_face()
+    # issue-1005 S8: the reject feedback face, attached ONLY when reject
+    # rows exist (the conditional-key precedent — the frozen anchor
+    # matrix has no reject-bearing case and stays byte-valid unchanged).
+    # The face rides every decision so consumers see the
+    # counts, the reason, and the exhausted set in one read.
+    _rej = snap.reject_face()
+    if _rej["by_claim"]:
+        decision["dispatch_rejects"] = {
+            "by_claim": _rej["by_claim"],
+            "active": _rej["active"],
+            "exhausted": _rej["exhausted"],
+            "retry_max": _rej["retry_max"],
+        }
     # #147: the declared-coverage face — the #128 generalization declaration
     # exactly as the gate read it. Attached ONLY when the workspace carries
     # a coverage contract (goal-operationalization.yaml or task-oracle.yaml);

@@ -93,6 +93,8 @@ def test_event_enum_declared_with_landed_vocabulary() -> None:
         "VERIFY_STALE",              # #342 SCHEDULE: stale-partial verification forcing
         "DEBT_GATE",                 # SCHEDULE: verification-debt forcing (the debt module's gate)
         "JADX_INFEASIBLE",           # #670 intake-level (NOT in DRAIN)
+        "REJECT_SEEN",         # issue-1005 S8: gate-reject backoff flavor (PARK)
+        "REJECT_RETRY_EXHAUSTED",    # issue-1005 S8: gate-reject terminal flavor (BLOCKED)
     }
     assert expected == set(Event.__members__), \
         f"Event vocabulary drift: missing={expected - set(Event.__members__)} " \

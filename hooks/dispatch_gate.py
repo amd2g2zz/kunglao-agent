@@ -400,6 +400,13 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
     _emit_trace(ws, "must_stop", claim_id,
                 f"matched_rule={rule_label}; excerpt={excerpt}", exit_code=2,
                 matched_rule=rule_label)
+    # issue-1005 S8: the refusal stamps its OWN reason class — an
+    # irreversible-action refusal is NOT a retryable dispatch failure,
+    # and the reject row it lands must never increment the per-claim
+    # retry counter (the feedback face excludes this class from the
+    # counts; the row stays for the audit).
+    _stamp_reject("must_stop",
+                  f"irreversible action refused (rule={rule_label})")
     return 2
 
 
@@ -432,6 +439,10 @@ def _reject_with_guidance(name: str, msg: str, fix: str,
     orchestrator corrects in-turn instead of burning a full context re-read
     per rc=2 loop (#741 shape). Hard classes (execution_surface here) keep
     exit 2 — pass gate_class= explicitly at such sites."""
+    # issue-1005 S8: the shared reject helpers are the reason face of the
+    # rc=2 tail's row — stamp regardless of the class (a demoted reject
+    # is bookkeeping only; the tail writes the row on rc=2 alone).
+    _stamp_reject(name, msg)
     print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
     print(json.dumps({
         "hookSpecificOutput": {
@@ -939,6 +950,10 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
             tail = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout else ""
         except Exception:
             tail = ""
+        # issue-1005 S8: the plan-first family stamps the reason face the
+        # rc=2 tail's row carries (this sink exits 2 without the shared
+        # reject helpers).
+        _stamp_reject("plan_drift", tail or "plan-drift drift-severe")
         print(f"dispatch_gate: plan-drift auto BLOCKED ({claim_id}): {tail}",
               file=sys.stderr, flush=True)
         return 2
@@ -1123,6 +1138,55 @@ def _log_strategic_declaration(ws: Path, claim_id: str, prompt_text: str,
         _sa.append_declaration(ws, row)
     except Exception as exc:  # noqa: BLE001 — never blocks dispatch
         print(f"dispatch_gate: strategic-action write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
+# ===================== the dispatch-reject feedback seam =====================
+
+# issue-1005 S8: the reason face of THIS process's single reject
+# decision. The hook process handles exactly ONE dispatch payload, the
+# stamping sinks fire at the reject decision, and the rc=2 tail reads
+# the face exactly once in the same process — so the last stamp IS
+# this dispatch's reject, and a stale reason can never ride a later
+# verdict (there are no later verdicts in a one-payload process).
+_LAST_REJECT: dict = {}
+
+
+def _stamp_reject(name: str, msg: str) -> None:
+    """Record the reject face identity (gate name + short message) for
+    the tail's row write. Bookkeeping only — never a verdict."""
+    _LAST_REJECT.clear()
+    _LAST_REJECT["name"] = str(name or "gate_reject").strip() or "gate_reject"
+    _LAST_REJECT["msg"] = str(msg or "")[:300]
+
+
+def _log_dispatch_reject(ws: Path, claim_id: str) -> None:
+    """issue-1005 S8: append the dispatch-reject row
+    (`dispatch-reject/1` in the unified experience ledger, via
+    rlvr.dispatch_reject) at THE reject tail — main()'s rc=2 face, the
+    one point every hard reject of this gate exits through. The row
+    mirrors the house transition-row vocabulary (claim_ref/dispatch_id,
+    action_type=dispatch, o.status=rejected with the gate reason in
+    o.class, identity ts) so the decision machine's feedback face
+    (convergence_check via rlvr.dispatch_reject.feedback_face) can stop
+    re-emitting a verdict whose dispatch the gate keeps refusing. The
+    reason face comes from the stamped sink identity (an un-stamped
+    structural face degrades to the named default — the row still lands,
+    never silent). Fail-open: print-on-error, never raise into the gate
+    (the strategic-declaration write posture)."""
+    try:
+        with scripts_on_path():  # scoped membership
+            from harness_common import utc_now_z
+            from rlvr import dispatch_reject as _dr
+        row = _dr.build_reject_row(
+            claim=claim_id,
+            reason=_LAST_REJECT.get("name") or "gate_reject",
+            detail=_LAST_REJECT.get("msg") or None,
+            trace_id=_ATTEMPT.get("trace"),
+            ts=utc_now_z())
+        _dr.append_reject(ws, row)
+    except Exception as exc:  # noqa: BLE001 — never blocks the reject
+        print(f"dispatch_gate: dispatch-reject write failed ({exc!r})",
               file=sys.stderr, flush=True)
 
 
@@ -2257,6 +2321,29 @@ def main() -> int:
     # -> cancel_step_open — is deleted), and an APPROVED dispatch confirms
     # the journal so its work stands.
     rc = _main_inner()
+    # issue-1005 S8: THE reject tail — every hard reject of this gate
+    # exits with rc=2 through here, so the durable dispatch-reject row
+    # is written HERE (one seam, every reason family; the reason face
+    # is whatever the rejecting sink last stamped). The row lands
+    # wherever a workspace is resolvable — including a lane-gate
+    # refusal of an UNPARSED dispatch, whose row is claim-scoped to the
+    # explicit marker the feedback face scopes out; only the
+    # workspace-unresolvable class lands no row (no ledger to write
+    # to, and it cannot feed a per-workspace retry loop — the skip is
+    # documented at the branch). Its own fail-open envelope: the row
+    # never changes the verdict, never competes with the journal undo
+    # below.
+    _row_ws = _ATTEMPT.get("ws") or _ATTEMPT.get("ws_seen")
+    if rc == 2 and _row_ws is not None:
+        try:
+            from _path_hygiene import ensure_scripts_path as _esp1005
+            _esp1005()
+            from rlvr import dispatch_reject as _dr1005
+            _log_dispatch_reject(
+                _row_ws, _ATTEMPT.get("cid") or _dr1005.UNPARSED_CLAIM)
+        except Exception as _exc:  # noqa: BLE001 — the row never blocks
+            print(f"dispatch_gate: dispatch-reject write failed "
+                  f"({_exc!r})", file=sys.stderr, flush=True)
     if _ATTEMPT.get("ws") is not None and _ATTEMPT.get("cid"):
         try:
             from _path_hygiene import ensure_scripts_path as _esp800
@@ -2279,10 +2366,21 @@ def _main_inner() -> int:
         return 0
 
     ws = _resolve_workspace(payload)
+    if ws is not None:
+        # issue-1005 S8: the reject tail needs the workspace even when
+        # the claim never parsed (a lane-gate refusal on an unparsed
+        # dispatch still lands its audit row, claim-scoped to the
+        # explicit marker the face scopes out) — stash the resolved
+        # workspace separately from the claim-scoped attempt face.
+        _ATTEMPT["ws_seen"] = ws
     if ws is None:
         # Even with no workspace resolution, MCP prefix gate must still
         # REJECT forbidden namespaces — the prefix is a structural policy,
         # not a workspace-bound concern. Issue #567.
+        # issue-1005 S8: this branch's rc=2 faces land NO reject row —
+        # with the workspace unresolvable there is genuinely no ledger
+        # to write to, and a workspace-less structural refusal cannot
+        # feed a per-workspace retry loop anyway.
         try:
             prompt_text = _extract_prompt_text(payload)
         except Exception:  # noqa: BLE001 — malformed payload -> no-op
@@ -2353,6 +2451,10 @@ def _main_inner() -> int:
     # (runs/.trace-state.json) so a REJECTed dispatch wastes nothing — the
     # next passing dispatch of the same mission reuses the id.
     trace_id, trace_allocated = _resolve_dispatch_trace(ws, prompt_text)
+    # issue-1005 S8: the reject tail attributes the row to the mission
+    # chain when this dispatch resolved one (structural faces that exit
+    # before this line carry the None face).
+    _ATTEMPT["trace"] = trace_id
 
     blocked = _failure_blocked_ids(ws)
     if claim_id in blocked:
