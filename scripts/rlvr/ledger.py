@@ -405,8 +405,30 @@ def pending_settlement(ws) -> list[dict]:
 
 # --- write faces ---------------------------------------------------------------
 
+def _sign_checked(sign, row: dict, rid: str, op: str) -> dict | None:
+    """Apply the producer-injected seal, then RE-VALIDATE: the signed row
+    must stay a schema-clean mapping (the lint is additive-key tolerant,
+    so the channel's additive seal passes untouched). A signer that
+    drops required fields or corrupts the shape gets ONE loud warn and a
+    refused write — the schema-invalid-rows-refused promise holds for
+    signed writes too, and the blast radius of a buggy signer is the
+    producer's own append, never the ledger."""
+    signed = sign(row)
+    if not isinstance(signed, dict):
+        warn(op, f"{rid}: sign callback returned "
+                 f"{type(signed).__name__} (not a mapping) — write refused")
+        return None
+    errors = row_schema_lint(signed)
+    if errors:
+        warn(op, f"{rid}: post-sign schema violations ({'; '.join(errors)}"
+                 f") — write refused")
+        return None
+    return signed
+
+
 def record(ws, kind: str, anchor: str, signals: list[dict],
-           rollout_id: str | None = None, ts: str | None = None) -> dict:
+           rollout_id: str | None = None, ts: str | None = None,
+           sign=None) -> dict:
     """Identity append (deduped) / signal amendment.
 
     - unseen rollout_id -> append the identity row (unsettled);
@@ -414,7 +436,17 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
     - seen rollout_id, grown/changed signals -> append an amendment row
       carrying the FULL current signal set (last-wins fold).
     Refuses unregistered kinds and schema-invalid rows (loud result, no
-    raise)."""
+    raise).
+
+    ``sign`` is the PRODUCER-INJECTED seal step (a row->row callable,
+    the learning channel's additive seal): the ledger core never seals
+    on its own — a producer that owes sealed rows passes its signer and
+    every row THIS call appends is sealed before the write; without it
+    the write stays byte-identical legacy. The seal rides the row as an
+    additive key, so the schema lint (which runs before the seal) and
+    every fold/read face are untouched; the signed row is RE-VALIDATED
+    after the callback (a signer that breaks the schema gets a loud
+    refusal, never an append)."""
     ws = Path(ws)
     kind = str(kind or "").strip()
     anchor = str(anchor or "").strip()
@@ -447,20 +479,34 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
         row["settlement"] = settlement  # an amendment never un-settles
         row["reward"] = None if settlement is None else settlement["reward"]
         row["ts"] = existing[0].get("ts") or row["ts"]  # identity ts stable
-    ok = _cl.append(ws, "settlement", _row(
-        rid, kind, anchor, row["ts"], signals, row["settlement"]))
+    out_row = _row(rid, kind, anchor, row["ts"], signals,
+                   row["settlement"])
+    if sign is not None:
+        out_row = _sign_checked(sign, out_row, rid, "ledger.record")
+        if out_row is None:
+            return {"appended": False,
+                    "reason": "sign: post-sign validation refused"}
+    ok = _cl.append(ws, "settlement", out_row)
     return {"appended": bool(ok),
             "reason": None if ok else "write failed",
             "rollout_id": rid}
 
 
 def settle(ws, rollout_id: str, settlement: dict,
-           ts: str | None = None) -> dict:
+           ts: str | None = None, sign=None) -> dict:
     """Append the settlement amendment for one rollout (the engine's only
     write path). Idempotent: refused only when the fold already carries the
     SAME settlement over the SAME signals (a signal-set change reopens the
     rollout — DEFERRED->wake->PROVEN upgrades its band). Carries signals=[]
-    so the fold keeps the identity signals. Loud result, no raise."""
+    so the fold keeps the identity signals. Loud result, no raise.
+
+    ``sign`` is the producer-injected seal step (same contract as
+    ``record``): the ledger core never seals on its own; the seal rides
+    the appended amendment row as an additive key and the settlement
+    dedupe compares the settlement BLOCK only — a sealed row dedupes
+    against its unsealed predecessor exactly like an unsealed one. The
+    signed row is re-validated after the callback (same refusal face as
+    ``record``)."""
     ws = Path(ws)
     if not isinstance(settlement, dict):
         return {"appended": False, "reason": "settlement: not a mapping"}
@@ -497,10 +543,16 @@ def settle(ws, rollout_id: str, settlement: dict,
     if errors:
         return {"appended": False,
                 "reason": "schema: " + "; ".join(errors)}
-    ok = _cl.append(ws, "settlement", _row(
-        rollout_id, str(identity.get("kind")),
-        str(identity.get("anchor")), str(identity.get("ts")),
-        [], st))
+    out_row = _row(rollout_id, str(identity.get("kind")),
+                   str(identity.get("anchor")), str(identity.get("ts")),
+                   [], st)
+    if sign is not None:
+        out_row = _sign_checked(sign, out_row, str(rollout_id),
+                                "ledger.settle")
+        if out_row is None:
+            return {"appended": False,
+                    "reason": "sign: post-sign validation refused"}
+    ok = _cl.append(ws, "settlement", out_row)
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

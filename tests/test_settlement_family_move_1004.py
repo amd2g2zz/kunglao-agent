@@ -86,8 +86,8 @@ class TestApiCompatibility:
     def test_public_signatures_unchanged(self):
         expect = {
             "record": ["ws", "kind", "anchor", "signals", "rollout_id",
-                       "ts"],
-            "settle": ["ws", "rollout_id", "settlement", "ts"],
+                       "ts", "sign"],
+            "settle": ["ws", "rollout_id", "settlement", "ts", "sign"],
             "fold": ["ws", "rollout_id"],
             "settled": ["ws", "kind", "window"],
             "pending_settlement": ["ws"],
@@ -96,6 +96,16 @@ class TestApiCompatibility:
         for name, params in expect.items():
             got = list(inspect.signature(getattr(rl, name)).parameters)
             assert got == params, f"{name}{got} != {params}"
+
+    def test_sign_is_an_additive_defaulted_seam(self):
+        """The producer-injected seal seam: a defaulted None parameter —
+        every caller that omits it keeps the byte-identical legacy
+        write, and the seal is the producer's choice, never the ledger
+        core's."""
+        for name in ("record", "settle"):
+            sig = inspect.signature(getattr(rl, name))
+            assert sig.parameters["sign"].default is None
+            assert list(sig.parameters)[-1] == "sign"
 
     def test_record_settle_land_in_family_file_with_existing_stamp(
             self, tmp_path):

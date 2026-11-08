@@ -305,6 +305,53 @@ def warn_once_stateful(op: str, reason: str, *, state_key: str,
     return True
 
 
+def warn_workspace():
+    """Read-only getter: the workspace the diagnostics faces resolve
+    (the explicit registration first, then the cwd walk-up). None means
+    no workspace is known — the faces stay stderr-only. Callers that
+    need the SAME workspace the ledger faces write into (the seal
+    status face's sealed-row count) read this instead of re-deriving
+    their own resolution — one resolution, one drift-free answer."""
+    return _warn_workspace()
+
+
+def reset_once_state(op: str, ws=None) -> None:
+    """Clear one op's persisted once-marker entry: the config state the
+    marker last warned about is no longer the live state (the channel
+    armed), so a RETURN to a warned state re-arms the notice instead of
+    riding a stale silence. Workspace resolution: the explicit ``ws``
+    argument first, then the pinned registration, then the same cwd
+    walk-up the ledger face already trusts for its rows — an UNPINNED
+    process must still clear a stale key a previously-pinned process
+    persisted (the mixed-pin sequence is exactly the silent-disarm hole
+    this face closes). No resolvable workspace, no marker file, or the
+    op absent from it: a no-op. Fail-open: an unwritable marker
+    degrades to the per-process face; never raises."""
+    if ws is not None:
+        marker = Path(ws) / _ONCE_STATE_REL
+    elif _WARN_WS_OVERRIDE:
+        marker = Path(_WARN_WS_OVERRIDE[0]) / _ONCE_STATE_REL
+    else:
+        discovered = _discover_warn_workspace()
+        if discovered is None:
+            return
+        marker = discovered / _ONCE_STATE_REL
+    state = dict(_load_once_state(marker))
+    if str(op) not in state:
+        return
+    state.pop(str(op))
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps(state, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8")
+    except OSError as exc:
+        warn("warn_once_stateful",
+             f"marker reset failed: {type(exc).__name__}: {exc}")
+    else:
+        _ONCE_MEMO.update(key=None, state={})  # next read re-stats
+
+
 def _log_level(level: str, op: str, reason: str, *,
                tag: str | None = None) -> None:
     """The shared severity tracer: per-(level, op) dedupe, the stderr
