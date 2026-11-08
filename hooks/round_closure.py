@@ -347,6 +347,17 @@ def _kernel_faces(ws: Path, session_id: str = "",
         warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
     if blind_receipt:
         receipt = dict(receipt or {}, blind_settlement=blind_receipt)
+    # the rollout timer's round-close face: cancel the finished
+    # rollout's one-shot deadline and learn its outcome from the run's
+    # actuals (a deadline-fired rollout is censored — cancel only,
+    # never learn). Runs after the step settlement so the outcome reads
+    # post-settlement state; its own fail-open cage like every face here.
+    try:
+        with scripts_on_path():
+            from rlvr import rollout_timer_host
+            rollout_timer_host.round_close_face(ws, receipt)
+    except Exception as exc:  # noqa: BLE001 — face, never blocks the stop
+        warn("round_closure_rollout_timer", f"{type(exc).__name__}: {exc}")
     # #769: the policy-state projection — ONE runs/policy-state.json per
     # round close, projected from the same plan receipts the dispatch
     # gate lands (candidates / admitted / chosen / posterior summary /
