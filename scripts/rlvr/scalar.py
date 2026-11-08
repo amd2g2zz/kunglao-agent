@@ -59,6 +59,7 @@ from pathlib import Path
 import numpy as np  # issue 420: ordered-float reductions only (see _seq_sum)
 
 from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
+from rlvr import learning_seal as _seal  # the row seal (additive at write)
 
 # the round-credit rollout kind — the ledger's OPEN ENUM registration API
 # (a new kind is one register_kind entry, never an ad-hoc string).
@@ -411,7 +412,8 @@ def settle_workspace_scalars(ws, rules_path: Path | str | None = None,
         amended["experience_tuple"] = extract_tuple(
             row.get("signals") or [], tier_doc)
         amended["tier_settled_ts"] = now or _now()
-        res = rl.settle(ws, str(row.get("rollout_id")), amended)
+        res = rl.settle(ws, str(row.get("rollout_id")), amended,
+                        sign=_seal.sign_row)  # seal before the ledger write
         if res.get("appended"):
             settled_n += 1
             by_tier[tier_doc["tier"]] = \
@@ -679,7 +681,8 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                     "ts": ts_row}]
         rec = rl.record(ws, kind=KIND_ROUND_CREDIT,
                         anchor=str(row["dispatch_id"]), signals=signals,
-                        ts=ts_row)  # identity ts == signal ts on first write
+                        ts=ts_row,  # identity ts == signal ts on first write
+                        sign=_seal.sign_row)  # seal before the ledger write
         if not rec.get("appended") and rec.get("reason") not in (
                 "duplicate: unchanged",):
             warn("settle_round_credit", f"{rid}: {rec.get('reason')}")
@@ -724,7 +727,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             if aid in prior_demoted and aid not in prior_late]
         if late_cited:
             settlement["late_cited"] = late_cited
-        res = rl.settle(ws, rid, settlement)
+        res = rl.settle(ws, rid, settlement, sign=_seal.sign_row)
         if res.get("appended"):
             settled_n += 1
             # issue 462 W5 — the settlement feed: the FIRST SUCCESSFUL
@@ -1411,7 +1414,8 @@ def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
         "evidence_refs": refs,
         "settled_ts": ts,
     })
-    res = rl.settle(ws, str(rollout_id), amended)
+    res = rl.settle(ws, str(rollout_id), amended,
+                    sign=_seal.sign_row)  # seal before the ledger write
     if res.get("appended"):
         return {"settled": True, "validation": validation,
                 "settlement": amended}

@@ -133,3 +133,9 @@ htmlcov/
 .subagent-review/
 coverage-*.json
 .coverage
+
+# Learning-seal keys — NEVER tracked. The learning channel's HMAC key is
+# host-local operator state (~/.claude/kunglao-learning.key by default);
+# a declared key path inside the repo must never enter git history.
+kunglao-learning.key
+*.learning.key

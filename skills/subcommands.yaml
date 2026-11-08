@@ -78,6 +78,10 @@ cli:
     usage: "kunglao check-stale <workspace> [--resolve]"
     summary: "stale-workspace gate (rc 0/5) - run before analysis/resume on a workspace whose template stamp may trail the skill"
     slash: "guards /kunglao-agent:analysis"
+  seal:
+    usage: "kunglao seal provision [--key-path P]"
+    summary: "learning-key provisioning (rc 0 armed / 1 unarmed) - atomic 0600 keygen, idempotent, never prints key material; arms the step-credit host"
+    slash: "operator face - not a slash command"
   upgrade:
     usage: "kunglao upgrade <workspace> [--dry-run]"
     summary: "workspace framework-scaffold migration (seven-step transaction: snapshot, prune, deploy, config, selfcheck, reload-prompt or rollback)"
