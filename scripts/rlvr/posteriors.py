@@ -11,7 +11,8 @@ literature). ONE engine: DTS everywhere, day one (owner ruling
 activation-pending shim anywhere on this surface). Samples always come
 from a GENUINE posterior, only the data behind it is discounted.
 
-Store — ``<ws>/runs/posterior-store.jsonl``, append-only JSONL,
+Store — the knowledge family file (``knowledge-store.jsonl`` under the
+guarded cross-task root, issue-1004 R2c), append-only JSONL,
 ledger-isomorphic with ``rlvr/ledger.py``. One row = one Bernoulli
 observation of one DTS cell ``(state, arm)``:
 
@@ -64,18 +65,22 @@ WARN); writes are loud-result dicts, never raises into the producer.
 """
 from __future__ import annotations
 
-import json
 import math
 from pathlib import Path
 
 import numpy as np
 
 from harness_common import utc_now_z as _utc_now
-from kunglao_log import iter_jsonl, warn
+from kunglao_log import warn
+
+from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "posterior-store/1"
+#: the legacy rel the rows wrote before the family move (issue-1004
+#: R2c) — kept as the compat window's documented name (readers still
+#: see it; production no longer writes it; the schema-cutover slice
+#: retires the window)
 STORE_REL = "runs/posterior-store.jsonl"
-LOCK_REL = "runs/.posterior-store.lock"
 
 # Pseudo-count priors = the learning-rate knob (prior strength = how many
 # observations a newborn cell carries). Beta(1, 1) uniform: every arm is
@@ -247,57 +252,13 @@ def row_schema_lint(row: dict) -> list[str]:
     return errors
 
 
-# --- IO (mirrors rollout_ledger: locked O_APPEND, fail-open reads) -----------
+# --- IO (the knowledge family face, issue-1004 R2c; the per-module
+# --- lock silo retired with the move — the consolidated append's flock
+# --- is the single guard) ---------------------------------------------
 
-def _path(ws) -> Path:
-    return Path(ws) / STORE_REL
-
-
-def _lock_path(ws) -> Path:
-    return Path(ws) / LOCK_REL
-
-
-def _locked_append(ws, data: bytes) -> bool:
-    """Append under the store lock. flock (POSIX) with an unlocked
-    O_APPEND fallback where fcntl is unavailable. Never raises."""
-    p = _path(ws)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        lock = _lock_path(ws)
-        lock.touch(exist_ok=True)
-        fd = None
-        try:
-            import fcntl
-            fd = lock.open("a", encoding="utf-8")
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        except ImportError:
-            fd = None  # Windows/CI: O_APPEND write stays atomic
-        except OSError:
-            fd = None
-        try:
-            import os
-            append_fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                                0o644)
-            try:
-                os.write(append_fd, data)
-            finally:
-                os.close(append_fd)
-            return True
-        finally:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except Exception as exc:  # noqa: BLE001 — unlock best-effort
-                    warn("lock_unlock", f"{type(exc).__name__}: {exc}")
-                fd.close()
-    except Exception as exc:  # noqa: BLE001 — never raise into the producer
-        warn("locked_append", f"{type(exc).__name__}: {exc}")
-        return False
-
-
-def _row_bytes(state: str, arm: str, ts: str, gamma: float, outcome,
-               adds: tuple[float, float]) -> bytes:
-    row = {
+def _row(state: str, arm: str, ts: str, gamma: float, outcome,
+         adds: tuple[float, float], workspace_id: str) -> dict:
+    return {
         "schema": SCHEMA,
         "state": state,
         "arm": arm,
@@ -306,26 +267,36 @@ def _row_bytes(state: str, arm: str, ts: str, gamma: float, outcome,
         "outcome": outcome,
         "alpha_add": adds[0],
         "beta_add": adds[1],
+        # PER-WORKSPACE ISOLATION (issue-1004 R2c review fix): the DTS
+        # store was ws-local pre-move (``<ws>/runs/posterior-store.jsonl``
+        # — never pooled across workspaces); the family file is
+        # cross-task, so every NEW row carries its owning workspace and
+        # ``read`` keeps only this workspace's rows (rows WITHOUT the
+        # column are the pre-move ws-local history — the ws-scoped
+        # legacy rel is per workspace by construction, so unattributed
+        # rows there are this workspace's own)
+        "workspace_id": workspace_id,
     }
-    return (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def read(ws) -> list[dict]:
     """Schema-enforced read: only rows passing row_schema_lint are signal
     (a learned state never half-reads a row, and a FOREIGN schema version
     is never merged — the version wall). Unparseable or schema-violating
-    lines are skipped with one rate-limited WARN. Missing store → []."""
-    p = _path(ws)
-    if not p.exists():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    lines are skipped with one rate-limited WARN. Missing store → [].
+    The read rides the knowledge family (issue-1004 R2c): legacy rels
+    first (chronology), then the family file — PER-WORKSPACE ISOLATED:
+    rows carrying another workspace's ``workspace_id`` are skipped, so
+    two workspaces sharing a guarded root never fold each other's
+    posteriors (the pre-move ws-local store contract)."""
+    mine = Path(ws).name
     out: list[dict] = []
-    for row in iter_jsonl(text.splitlines()):
+    for row in _cl.read(ws, "knowledge", schema_prefix="posterior-store"):
         if not isinstance(row, dict) or row_schema_lint(row):
             warn("read_dirty", "schema-violating row skipped")
+            continue
+        rid = str(row.get("workspace_id") or "")
+        if rid and rid != mine:
             continue
         out.append(row)
     return out
@@ -346,7 +317,10 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
       write default anywhere). The adaptive engine loop threads its own
       per-event γ (``next_gamma(outcome)``). The decay itself is applied
       at the fold/read face, never in the file.
-    Loud result dict, no raise."""
+    The row rides the knowledge family file (issue-1004 R2c) — the
+    consolidated append's stamp contract + flock are the write wall —
+    carrying its owning workspace (per-workspace posterior isolation at
+    the read face). Loud result dict, no raise."""
     ws = Path(ws)
     state = str(state or "").strip()
     arm = str(arm or "").strip()
@@ -361,8 +335,9 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
             "gamma", default_schedule().gamma() if gamma is None else gamma)
     except ValueError as exc:
         return {"appended": False, "reason": str(exc)}
-    ok = _locked_append(ws, _row_bytes(state, arm, ts or _utc_now(), g,
-                                       outcome, adds))
+    ok = _cl.append(ws, "knowledge",
+                    _row(state, arm, ts or _utc_now(), g, outcome, adds,
+                         ws.name))
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

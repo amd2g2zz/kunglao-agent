@@ -89,7 +89,9 @@ from typing import Iterable, Mapping
 # flag-on vs flag-off; default OFF — the inert-landing discipline)
 FLAG_ENV = "KUNGLAO_PREDICT_BEFORE_TRY"
 
-# where Part A's miner writes (and the A/B replay reads) the table
+# where Part A's miner wrote before the family move (issue-1004 R2c):
+# the compat window's legacy rel — the live table is the knowledge
+# family file (``default_table_path`` / ``family_table_rows``)
 FEATURE_TABLE_REL = Path("runs") / "feature-table.jsonl"
 
 
@@ -103,8 +105,28 @@ def enabled() -> bool:
 
 
 def default_table_path(ws) -> Path:
-    """The workspace's mined-table location (presence = Part A output)."""
-    return Path(ws) / FEATURE_TABLE_REL
+    """The mined-table location (presence = Part A output): the
+    knowledge family file under the guarded cross-task root
+    (issue-1004 R2c). ``ws`` is accepted and ignored — the family is
+    ws-insensitive by design."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    return _cl.family_path(ws, "knowledge")
+
+
+def family_table_rows(ws) -> list[dict]:
+    """The feature-table read face over the knowledge family
+    (issue-1004 R2c): legacy rels first (chronology — the ws-scoped
+    pre-move tables), then the family rows; every row must pass
+    feature_mining.validate_row (the substrate contract — reuse, never
+    a second validator); foreign-schema and invalid rows are skipped,
+    never fatal."""
+    import feature_mining  # noqa: PLC0415 — lazy (import-chain cost)
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+
+    return [row for row in
+            _cl.read(ws, "knowledge", schema_prefix="feature-table")
+            if isinstance(row, dict)
+            and not feature_mining.validate_row(row)]
 
 
 def load_table(path) -> list[dict]:

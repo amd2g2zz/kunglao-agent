@@ -128,9 +128,16 @@ def _family_mass(ws, family):
 
 
 def _store_rows(ws):
+    """The campaign's posterior-store rows post-issue-1004 R2c: the
+    knowledge family file under the guarded root (the bridge's credit
+    rows land there — the pre-move ws-local rel is the compat window's
+    legacy read face, never written by production)."""
+    import rlvr.consolidated_ledger as _cl
+    p = _cl.family_path(ws, "knowledge")
+    if not p.is_file():
+        return []
     return [json.loads(ln) for ln in
-            (ws / "runs" / "posterior-store.jsonl")
-            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+            p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
 def _log_sampled_exit(ws, cid: str) -> None:

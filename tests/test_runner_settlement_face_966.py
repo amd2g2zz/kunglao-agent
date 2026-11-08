@@ -79,8 +79,9 @@ def _ws(tmp: Path) -> Path:
 
 def _store_rows(tmp: Path) -> list[dict]:
     """The cross-task store's rows (tolerant JSONL read — the file may
-    not exist when the face settled nothing)."""
-    p = tmp / "store" / strategy_store.STORE_REL
+    not exist when the face settled nothing). issue-1004 R2c: rows land
+    in the knowledge family file under the guarded root."""
+    p = tmp / "store" / "knowledge-store.jsonl"
     if not p.is_file():
         return []
     return [r for r in (json.loads(line) for line in

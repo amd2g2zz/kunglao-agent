@@ -507,7 +507,7 @@ files:
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
-    sha256: 61f154bd6489a8f280bf3da8160947b81f1cd0f9145052fd5a3c91564a84a5fe
+    sha256: 5d15897122e773c95491fb704325d511a443e244f3e97198222f90ec72ddf8f2
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -531,7 +531,7 @@ files:
   - src: scripts/eval_split_lint.py
     dest: .claude/scripts/eval_split_lint.py
     kind: scaffold
-    sha256: c79ddb9774552de173dbec5c696fc74a55dbc959894ebe9fb22c0078e7d12ed5
+    sha256: 64c1ba37e515669c9042365da50683068062965b00b6bfa09d1a66bf4f96f948
   - src: scripts/eval_targets.py
     dest: .claude/scripts/eval_targets.py
     kind: scaffold
@@ -591,7 +591,7 @@ files:
   - src: scripts/feature_mining.py
     dest: .claude/scripts/feature_mining.py
     kind: scaffold
-    sha256: 86d35298717ccc27cb2d158dac800f5e3be7db692cfb5df5c20e8bd0a32bf907
+    sha256: 6290b7990980e337c66c96445786b1663f533889aa024a7e0b3843c0dc1ddc60
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -1147,7 +1147,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: e7080e6e46b6aa949f5f95365cde50283908265e160818022d360d186be7edd0
+    sha256: a7ded7527672c51de51a2b0c2f1d0573d29c55acb47719ecca2532c85bc003d5
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1395,7 +1395,7 @@ files:
   - src: scripts/rlvr/consolidated_ledger.py
     dest: .claude/scripts/rlvr/consolidated_ledger.py
     kind: scaffold
-    sha256: 9c890aab6ede228ae6f0d5416ca3b69fdde65582776565099f04b08c37822efa
+    sha256: 76d14c0fd36518315e9f95c98143b15495096dad2966794a0ad55b6d53951a09
   - src: scripts/rlvr/constants_ref.py
     dest: .claude/scripts/rlvr/constants_ref.py
     kind: scaffold
@@ -1403,7 +1403,7 @@ files:
   - src: scripts/rlvr/crystallize.py
     dest: .claude/scripts/rlvr/crystallize.py
     kind: scaffold
-    sha256: 8dd4e5f8596a7efdd9c2f31382f4d1c0e08cc154f9181fe7af09c36068159005
+    sha256: db36de9bb459d38027a290939f75d9b9def252ee618b5efb8d48072fb7731eac
   - src: scripts/rlvr/direction.py
     dest: .claude/scripts/rlvr/direction.py
     kind: scaffold
@@ -1463,7 +1463,7 @@ files:
   - src: scripts/rlvr/feature_prior.py
     dest: .claude/scripts/rlvr/feature_prior.py
     kind: scaffold
-    sha256: 84fa91802efa0c5ca8c50c0967a637bb0bfdf7397f589675ead33d89a4a39a9a
+    sha256: af73d48e93329e64d4ab63664b551ecd86252c3de2083fd43250568b9afb76f5
   - src: scripts/rlvr/hypotheses.py
     dest: .claude/scripts/rlvr/hypotheses.py
     kind: scaffold
@@ -1487,7 +1487,7 @@ files:
   - src: scripts/rlvr/l1_planner.py
     dest: .claude/scripts/rlvr/l1_planner.py
     kind: scaffold
-    sha256: becdf5710a6af61fc0a8cfa9eed1595b5e2ee10fd79026b88282c3352e99a16f
+    sha256: cd02ea3dbbe7fd5b4434804539a26074d730c77392738bf0323aa77c916c46df
   - src: scripts/rlvr/l1_value.py
     dest: .claude/scripts/rlvr/l1_value.py
     kind: scaffold
@@ -1507,7 +1507,7 @@ files:
   - src: scripts/rlvr/marl.py
     dest: .claude/scripts/rlvr/marl.py
     kind: scaffold
-    sha256: 49f98f6ef12d8d862ee907634f7108bc0675f9d5a23f8b53575c890f258afeb6
+    sha256: 6c30d5671841bb9e500d25ee1fb3632d784eb45b39578a5dc1af0606fc1f77e1
   - src: scripts/rlvr/memory_bridge.py
     dest: .claude/scripts/rlvr/memory_bridge.py
     kind: scaffold
@@ -1567,7 +1567,7 @@ files:
   - src: scripts/rlvr/posteriors.py
     dest: .claude/scripts/rlvr/posteriors.py
     kind: scaffold
-    sha256: 4c68e4f1eaf700592f4a5f73596910f31f0127539e2da82df24e72be7527ac64
+    sha256: b7e3675454b7f542cba1efd4d4c3d55b64e6beb7a335a2b24c04efb68061a362
   - src: scripts/rlvr/prediction_ledger.py
     dest: .claude/scripts/rlvr/prediction_ledger.py
     kind: scaffold
@@ -1635,7 +1635,7 @@ files:
   - src: scripts/rlvr/signal_guard.py
     dest: .claude/scripts/rlvr/signal_guard.py
     kind: scaffold
-    sha256: b3464eff85796a976f67d4382800bb8ee9e97203bfaa23abb2db9c86472acf98
+    sha256: 072ddd22e31a4a0144ae0257a29d325acbefb560f084fd7c1985c6d0dc974746
   - src: scripts/rlvr/source_reliability.py
     dest: .claude/scripts/rlvr/source_reliability.py
     kind: scaffold
@@ -1671,7 +1671,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: e00c0b2699be116d82674af47097986c4d15bb3998db333107d8ef91f111c505
+    sha256: d3d14919511783f3213d2648acf1e6e3d8d53bbc8d2bc96fc25d1e569a4dfda7
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold

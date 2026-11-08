@@ -57,9 +57,12 @@ scripts/rlvr/
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
 ├── posteriors.py        # DTS posterior store, Discounted Thompson
-#                        #   Sampling (issue 428) —
-│                        #   append-only runs/posterior-store.jsonl + fold/read
-│                        #   γ decay + pseudo-count priors + γ schedules
+#                        #   Sampling (issue 428) — append-only store
+#                        #   in the knowledge family file (issue-1004
+#                        #   R2c; the pre-move runs/posterior-store.jsonl
+#                        #   is the compat window's legacy read face)
+│                        #   + fold/read γ decay + pseudo-count priors
+│                        #   + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
 ├── orphan_resolver.py   # issue-1005 S7 the orphan launch-sweep resolver —
 │                        #   consumes sweep_orphan_launches' return at the

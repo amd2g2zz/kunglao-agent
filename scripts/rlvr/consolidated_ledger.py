@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
@@ -61,8 +62,11 @@ KNOWLEDGE_REL = CONSOLIDATED["knowledge"]
 #: The registry is documentation AND the migration/read source: read()
 #: keeps an UNSTAMPED legacy row only when a registered stamp of that
 #: rel matches the requested prefix (the pre-stamp transitions archive).
-#: Knowledge rels resolve under the guarded root except the historical
-#: ws-scoped runs/feature-table.jsonl (see the issue-721 follow-up card).
+#: Knowledge rels resolve under the guarded root EXCEPT the ws-scoped
+#: ``runs/`` rels — the historical ws-local posterior series and the
+#: mined feature table (issue-1004 R2c: their writers moved to the
+#: family file; the ws-local rels stay the compat window's read faces,
+#: so the guarded root remains the only cross-task root resolver).
 LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
     "experience": {
         "runs/transitions.jsonl": ("transition/1",),
@@ -93,7 +97,12 @@ LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
     "knowledge": {
         "posterior-store.jsonl": ("posterior-store/1",),
         "marl-negative.jsonl": ("marl-negative/1",),
+        # ws-scoped rels (legacy_path resolves them under the
+        # WORKSPACE, not the guarded root — see the LEGACY note)
         "runs/feature-table.jsonl": ("feature-table/1",),
+        # issue-1004 R2c: the ws-local credit/DTS series' pre-move
+        # file — the writer moved to the family file
+        "runs/posterior-store.jsonl": ("posterior-store/1",),
     },
 }
 
@@ -191,14 +200,70 @@ def family_path(ws, family: str) -> Path:
 
 def legacy_path(ws, family: str, rel: str) -> Path:
     """One legacy archive rel. Knowledge rels resolve under the guarded
-    root; every other family's rels are ws-relative."""
+    root EXCEPT the ws-scoped ``runs/`` rels (the historical ws-local
+    posterior series and the mined feature table — they lived per
+    workspace, so their compat faces stay per workspace); every other
+    family's rels are ws-relative. A ``None`` ws (the cross-task faces
+    — marl, the rootless store read) cannot name a workspace, so the
+    ws-scoped rels degrade to the guarded root's own sibling. THE ONLY
+    PROTECTION IS ABSENCE: that sibling does not exist under the real
+    guarded root, so the degraded rel reads empty. There is NO stamp
+    wall here — a degraded rel's rows carry exactly the stamps its own
+    prefix read admits — so pointing KUNGLAO_POSTERIOR_STORE at a
+    directory that happens to hold a workspace's ``runs/`` tree would
+    alias that workspace's live series into the rootless reads (an
+    operator misconfiguration, not a guarded state)."""
     if family == "knowledge":
+        if rel.startswith("runs/"):
+            return Path(ws if ws is not None else _knowledge_root()) / rel
         return _knowledge_root() / rel
     return Path(ws) / rel
 
 
 def _lock_path(p: Path) -> Path:
     return p.parent / f".{p.stem}.lock"
+
+
+@contextmanager
+def family_lock(ws, family: str):
+    """Exclusive hold of the family file's consolidated lock — the
+    mutating-but-not-appending faces (the revocation rewrite) run
+    INSIDE it so a concurrent ``append`` between their read and their
+    atomic write can never be lost (issue-1004 R2c review fix). The
+    same lock file and fallback posture as ``_locked_append``: flock
+    where available, unlocked where not (single writes stay atomic, CI
+    is single-tenant). Never raises on lock failure."""
+    p = family_path(ws, family)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    lock = _lock_path(p)
+    lock.touch(exist_ok=True)
+    fd = None
+    try:
+        try:
+            import fcntl
+            fd = lock.open("a", encoding="utf-8")
+            try:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+            except OSError as exc:
+                warn("rlvr.consolidated_ledger.lock",
+                     f"{type(exc).__name__}: {exc} — unlocked hold")
+                fd.close()
+                fd = None
+        except ImportError:
+            fd = None  # Windows/CI: single-writer posture, no flock
+        except OSError as exc:
+            warn("rlvr.consolidated_ledger.lock",
+                 f"{type(exc).__name__}: {exc} — unlocked hold")
+            fd = None
+        yield
+    finally:
+        if fd is not None:
+            try:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            except Exception as exc:  # noqa: BLE001 — best-effort unlock
+                warn("rlvr.consolidated_ledger.unlock",
+                     f"{type(exc).__name__}: {exc}")
+            fd.close()
 
 
 def _locked_append(p: Path, data: bytes) -> bool:
@@ -390,6 +455,23 @@ def _stamp_row(row: dict, schemas: tuple[str, ...]) -> dict:
     return row
 
 
+def _archive_dst(ws, archive_dir: str, family: str, rel: str,
+                 src: Path) -> Path:
+    """One rel's archive destination. Flat ``<archive>/<src.name>``
+    where the family's rel names are unique; when two registered rels
+    share a file name (the knowledge family's guarded-root
+    ``posterior-store.jsonl`` and ws-scoped ``runs/posterior-store.jsonl``
+    — issue-1004 R2c), the flat name would collide and the second
+    migration would land ``copied-unarchived`` (rows in the family file
+    AND the rel left on disk: a permanent double-count). Colliding rels
+    archive under a family-qualified, path-distinct name instead."""
+    name = src.name
+    others = [Path(r).name for r in LEGACY.get(family, {}) if r != rel]
+    if name in others:
+        name = f"{family}__{rel.replace('/', '__')}"
+    return Path(ws) / archive_dir / name
+
+
 def _append_verbatim(target: Path, row: dict) -> bool:
     """MIGRATION-ONLY bypass of the append() stamp gate: a row whose
     stamp cannot be inferred (its rel registers multiple schemas) is
@@ -461,7 +543,7 @@ def migrate(ws, families=None, *, dry_run: bool = False,
                             "appended": sum(1 for r in results if r),
                             "archived": None}
                 continue
-            dst = Path(ws) / archive_dir / src.name
+            dst = _archive_dst(ws, archive_dir, family, rel, src)
             if dst.exists():
                 warn("rlvr.consolidated_ledger.migrate",
                      f"{dst} already exists — never overwriting an "
