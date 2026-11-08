@@ -275,6 +275,47 @@ def _allow_ts_by_claim(ws, history_max: int = REJECT_HISTORY_MAX
     return allow
 
 
+def _same_reason_counts(rows: list) -> dict[tuple[str, str], dict]:
+    """Retryable per-(claim, reason) counts with the last ts (pure).
+
+    Non-dict rows and non-retryable reason classes are skipped — a
+    refusal is not a retry failure."""
+    counts: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        claim = _nonempty_str(row.get("claim_ref"))
+        o = row.get("o")
+        reason = _nonempty_str((o or {}).get("class")
+                               if isinstance(o, dict) else None)
+        ts = _nonempty_str(row.get("ts")) or ""
+        if not claim or not reason:
+            continue
+        if reason in NON_RETRYABLE_REASONS:
+            continue
+        slot = counts.setdefault(
+            (claim, reason), {"count": 0, "last_ts": ""})
+        slot["count"] += 1
+        if ts > slot["last_ts"]:
+            slot["last_ts"] = ts
+    return counts
+
+
+def _top_reason_by_claim(counts: dict[tuple[str, str], dict]) -> dict:
+    """Per claim: the max-count reason wins; ties resolve to the latest
+    ts (pure)."""
+    top: dict[str, dict] = {}
+    for (claim, reason), slot in counts.items():
+        cur = top.get(claim)
+        candidate = {"count": slot["count"], "reason": reason,
+                     "last_ts": slot["last_ts"]}
+        if cur is None or slot["count"] > cur["count"] or (
+                slot["count"] == cur["count"]
+                and slot["last_ts"] > cur["last_ts"]):
+            top[claim] = candidate
+    return top
+
+
 def feedback_face(ws, history_max: int = REJECT_HISTORY_MAX) -> dict:
     """The decision machine's reject feedback face (pure read).
 
@@ -305,32 +346,8 @@ def feedback_face(ws, history_max: int = REJECT_HISTORY_MAX) -> dict:
     try:
         rows = reject_rows(ws, history_max=None)
         face["rows"] = len(rows)
-        counts: dict[tuple[str, str], dict] = {}
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            claim = _nonempty_str(row.get("claim_ref"))
-            o = row.get("o")
-            reason = _nonempty_str((o or {}).get("class")
-                                   if isinstance(o, dict) else None)
-            ts = _nonempty_str(row.get("ts")) or ""
-            if not claim or not reason:
-                continue
-            if reason in NON_RETRYABLE_REASONS:
-                continue  # a refusal is not a retry failure
-            slot = counts.setdefault(
-                (claim, reason), {"count": 0, "last_ts": ""})
-            slot["count"] += 1
-            if ts > slot["last_ts"]:
-                slot["last_ts"] = ts
-        for (claim, reason), slot in counts.items():
-            cur = face["by_claim"].get(claim)
-            candidate = {"count": slot["count"], "reason": reason,
-                         "last_ts": slot["last_ts"]}
-            if cur is None or slot["count"] > cur["count"] or (
-                    slot["count"] == cur["count"]
-                    and slot["last_ts"] > cur["last_ts"]):
-                face["by_claim"][claim] = candidate
+        face["by_claim"] = _top_reason_by_claim(
+            _same_reason_counts(rows))
         live = _live_claim_ids(ws)
         allow = _allow_ts_by_claim(ws, history_max)
         for claim, slot in face["by_claim"].items():
