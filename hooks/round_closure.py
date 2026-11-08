@@ -248,6 +248,30 @@ def _distill_trigger_face(ws: Path) -> None:
         warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
 
 
+def emit_settle_event(ws: Path, receipt) -> bool:
+    """The scheduler-events producer seam for the settle path: the
+    settle receipt is already in hand, so the settle-completed event is
+    ONE derived append into the wake stream (runs/scheduler/
+    events.jsonl) — the event-driven wake path sees the round close
+    without polling. A receipt-less round (nothing pending) is quiet:
+    no synthetic row. Fail-open: a broken stream degrades to False +
+    one canonical warn — never the stop path."""
+    if not isinstance(receipt, dict) \
+            or not str(receipt.get("claim") or "").strip():
+        return False
+    try:
+        with scripts_on_path():
+            import scheduler_events
+        return scheduler_events.append(
+            Path(ws), scheduler_events.KIND_SETTLE_COMPLETED,
+            claim=receipt.get("claim"),
+            outcome=receipt.get("outcome"),
+            wall_s=receipt.get("wall_s"))
+    except Exception as exc:  # noqa: BLE001 — never blocks the stop path
+        warn("round_closure_scheduler_event", f"{type(exc).__name__}: {exc}")
+        return False
+
+
 def _kernel_faces(ws: Path, session_id: str = "",
                   agent_id: str = "") -> dict | None:
     """The production round-closure kernel faces (step settlement +
@@ -358,6 +382,12 @@ def _kernel_faces(ws: Path, session_id: str = "",
             rollout_timer_host.round_close_face(ws, receipt)
     except Exception as exc:  # noqa: BLE001 — face, never blocks the stop
         warn("round_closure_rollout_timer", f"{type(exc).__name__}: {exc}")
+    # the scheduler-events producer seam: the settle fact is already in
+    # hand — one append into the wake stream so the event-driven wake
+    # path sees the round close. The face is fully caged (a broken
+    # stream degrades to False + one canonical warn); a receipt-less
+    # round is quiet — no synthetic row.
+    emit_settle_event(ws, receipt)
     # #769: the policy-state projection — ONE runs/policy-state.json per
     # round close, projected from the same plan receipts the dispatch
     # gate lands (candidates / admitted / chosen / posterior summary /

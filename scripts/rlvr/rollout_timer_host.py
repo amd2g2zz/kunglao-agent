@@ -326,6 +326,29 @@ def deadline_wake_face(ws, rollout_id: str, *,
         contract = fired.get("contract") or {}
         _publish_wake(workspace, {**contract, "claim": stop.get("claim"),
                                   "stop": stop}, rid)
+        # the scheduler-events producer seam: the deadline FIRED — one
+        # append into the wake stream (runs/scheduler/events.jsonl),
+        # derived from the row already in hand. Exactly-once via the
+        # stream scan (the gate, not the fire's idempotent flag): the
+        # first fire lands the row, and an IDEMPOTENT REPLAY that finds
+        # no row (the loss window — a crash between the durable fire
+        # and the append) LANDS IT NOW, so the wake path never misses a
+        # deadline; a replay that finds its row is quiet. A broken
+        # stream must never sink the wake receipt — own cage.
+        try:
+            import scheduler_events
+            already = any(
+                r.get("kind") == scheduler_events.KIND_DEADLINE_FIRED
+                and str(r.get("rollout_id")) == rid
+                for r in scheduler_events.material_rows(workspace))
+            if not already:
+                scheduler_events.append(
+                    workspace, scheduler_events.KIND_DEADLINE_FIRED,
+                    claim=stop.get("claim"), rollout_id=rid,
+                    deadline_ts=row.get("deadline_ts"))
+        except Exception as exc:  # noqa: BLE001 — telemetry, never the wake
+            warn("rollout_timer_host.event_seam",
+                 f"{type(exc).__name__}: {exc}")
         return {
             "rollout_id": rid,
             "stop": stop,
