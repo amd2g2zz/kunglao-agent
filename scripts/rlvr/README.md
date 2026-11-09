@@ -433,6 +433,11 @@ the one-line pointer (name — the docstring's opening line):
   `rollout-budget/1` row. One global coefficient; the bucket key is recorded
   but a split waits for n>=5. A deadline stop carries `stop_reason: deadline`
   and is excluded from strategic learning without adding a disposition.
+  The host faces (rlvr/rollout_timer_host.py: arm-for-dispatch / round-close /
+  deadline-wake) additionally publish one `deadline-fired` row into the
+  scheduler events stream on the FIRST fire of a deadline (an idempotent
+  wake replay never re-lands the event; the stream is the wake channel —
+  the ledger rows stay the truth).
 - `route_ledger` — rlvr/route_ledger.py — the route-attempt ledger (#988):
   `runs/rt-tests/<claim>/routes.json` with the per-claim-kind `routes:`
   declaration from `references/schemas/machine_check_map.yaml`, per-attempt

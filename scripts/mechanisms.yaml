@@ -160,6 +160,45 @@ mechanisms:
       session_is_dead (heartbeat missing or both last_tick_ts + activity_ts
       stale). Out-of-session by definition — host=os, never tick-dispatched.
 
+  - name: scheduler_event_watch
+    entry: scripts/scheduler_watch.py
+    channel: os
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/.scheduler-wake.json (the staged wake contract) + stdout"
+    owner: scripts/scheduler_watch.py
+    description: >
+      The event-driven wake path's out-of-session watcher: a byte-tail
+      poll over runs/scheduler/events.jsonl; a material batch stages the
+      wake contract to runs/.scheduler-wake.json (consumed by the
+      scheduler_event_drain face) + prints it to stdout; a quiet stream
+      costs zero LLM tokens. One instance per workspace (lockfile).
+      Out-of-session by definition — host=os, never tick-dispatched.
+      One-time OS cron line (manual registration, the kicker's D5
+      precedent): */1 * * * * <python> scripts/scheduler_watch.py <ws>
+      --once
+
+  - name: scheduler_event_drain
+    entry: scripts/loop_scheduler.py
+    channel: cli
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "the --drain-events receipt JSON + runs/scheduler/drain-state.json cursor"
+    owner: scripts/loop_scheduler.py
+    description: >
+      The wake's session-side consumer: drains each unread material
+      event exactly once through the existing faces (worker reconcile /
+      verdict watch / reject feedback / timer state / RL digest) and
+      consumes the staged wake artifact (read into the receipt, then
+      cleared). Invoked as the wake contract's prompt names — the first
+      mechanical action of the woken session turn — or by hand.
+
   - name: wake_gate
     entry: scripts/heartbeat_tick.py
     channel: os
