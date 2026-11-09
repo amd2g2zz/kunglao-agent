@@ -6,8 +6,9 @@ Twelve-plus JSONL ledgers fragmented ONE logical stream (what happened /
 how it closed / what was observed / what is known) across 12+ physical
 files. The determinism wall never lived in file separation — it lives in
 the ROW contracts (append-only, ``<name>/N`` schema stamps, identity ts,
-flock), and ``runs/step-ledger.jsonl`` already hosted step-record/1 AND
-step-record/2 in one file (the precedent). This module is the core:
+flock), and the pre-consolidation step ledger already hosted
+step-record/1 AND step-record/2 in one file (the precedent). This module
+is the core:
 
     runs/experience.jsonl   WHAT HAPPENED    (the learning feed)
     runs/settlement.jsonl   HOW IT CLOSED    (the credit)
@@ -26,12 +27,14 @@ Row contracts (unchanged, now enforced HERE):
     is single-tenant);
   - identity ts lives on the rows — this module adds nothing to a row.
 
-Compat window (issue-721 migration): writers target the consolidated file;
-readers ride ``read()`` — legacy archive rows first (chronology: the
-archive predates the live file), then the consolidated rows, with an
-optional stamp filter. After ``migrate()`` moves a legacy rel into
-``runs/archive/``, its rows arrive through the consolidated file only —
-never double-counted.
+Post-cutover read contract (issue-1004 R3): the compat window is GONE.
+Every writer was moved onto the family files by R2a/R2b/R2c, so
+``read()`` returns exactly one consolidated file's rows — no legacy
+branch, no ``include_legacy`` flag, chronology IS file order. The one
+remaining legacy face is ``migrate()``: its per-rel SOURCE LIST is
+explicit (``sources``), owned by the R4 retire CLI
+(scripts/consolidate_ledgers.py), which appends the historical rows into
+the family files and deletes the legacy rels.
 
 Fail-open + warn, house style: reads tolerate absent/dirty files ([]);
 appends refuse loudly (ONE warn) but never raise into a producer.
@@ -58,65 +61,15 @@ CONSOLIDATED: dict[str, str] = {
 #: the knowledge family's rel (resolved under the guarded root, not ws/)
 KNOWLEDGE_REL = CONSOLIDATED["knowledge"]
 
-#: family -> {legacy rel: the schema stamps rows in that rel may carry}.
-#: The registry is documentation AND the migration/read source: read()
-#: keeps an UNSTAMPED legacy row only when a registered stamp of that
-#: rel matches the requested prefix (the pre-stamp transitions archive).
-#: Knowledge rels resolve under the guarded root EXCEPT the ws-scoped
-#: ``runs/`` rels — the historical ws-local posterior series and the
-#: mined feature table (issue-1004 R2c: their writers moved to the
-#: family file; the ws-local rels stay the compat window's read faces,
-#: so the guarded root remains the only cross-task root resolver).
-LEGACY: dict[str, dict[str, tuple[str, ...]]] = {
-    "experience": {
-        "runs/transitions.jsonl": ("transition/1",),
-        "runs/q-cell-log.jsonl": ("q-cell-obs/1",),
-        "runs/step-ledger.jsonl": ("step-record/1", "step-record/2"),
-        "runs/evidence-credit.jsonl": ("evidence-item/1",
-                                       "credit-amendment/1"),
-    },
-    "settlement": {
-        "runs/rollout-ledger.jsonl": ("rollout-ledger/1",),
-        "runs/attributed-waste.jsonl": ("attributed-waste/1",),
-        # historical rows are UNSTAMPED {"ts","amount","source"}; the
-        # registration lets them survive a cost-prefixed family read via
-        # the pre-stamp rule and gives the migration its one-schema stamp
-        "cost_events.jsonl": ("cost-event/1",),
-    },
-    "telemetry": {
-        "runs/interventions.jsonl": ("intervention/1",),
-        "runs/predictions.jsonl": ("prediction-ledger/1",),
-        "runs/situation-stream.jsonl": ("situation/1",),
-        # historical rows are UNSTAMPED event=dispatch rows; the
-        # registration lets them survive a strategy-log-prefixed family
-        # read via the pre-stamp rule and gives the migration its
-        # one-schema stamp (issue-1004 R2b: the writer moved to the
-        # family, new rows carry the stamp at write)
-        "runs/strategy-log.jsonl": ("strategy-log/1",),
-    },
-    "knowledge": {
-        "posterior-store.jsonl": ("posterior-store/1",),
-        "marl-negative.jsonl": ("marl-negative/1",),
-        # ws-scoped rels (legacy_path resolves them under the
-        # WORKSPACE, not the guarded root — see the LEGACY note)
-        "runs/feature-table.jsonl": ("feature-table/1",),
-        # issue-1004 R2c: the ws-local credit/DTS series' pre-move
-        # file — the writer moved to the family file
-        "runs/posterior-store.jsonl": ("posterior-store/1",),
-    },
-}
-
-#: the families whose prose/writers/readers are SWITCHED in this change.
-#: Settlement/telemetry/knowledge are registered here for migration and
-#: liveness but switch in their follow-up cards (issue-721 tasks.md).
-SWITCHED: tuple[str, ...] = ("experience",)
-
-#: family -> every registered stamp (liveness reports all of them; a dead
-#: schema reads 0 — visible, never silently absent)
-#: schemas born IN the consolidated file — no legacy rel to derive them
-#: from (the case-observation rows). Registered so ``liveness()``
-#: pre-seeds them at 0: a schema whose writer dies must read DEAD, never
-#: be absent (an unregistered stamp is invisible).
+#: family -> every registered stamp. Two origins, one contract:
+#:   - schemas BORN in a consolidated file (no pre-consolidation series);
+#:   - schemas whose writers were MOVED onto the family files by the
+#:     issue-1004 family moves (R2a settlement / R2b telemetry / R2c
+#:     knowledge) — their pre-move series land here through the R4
+#:     migration carrying their original stamp.
+#: ``liveness()`` pre-seeds every registered stamp at 0: a schema whose
+#: writer dies must read DEAD, never be absent (an unregistered stamp is
+#: invisible).
 NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
     "experience": ("case-observation/1", "case-amendment/1",
                    # issue-796: the Φ-tree economy rows (resolution /
@@ -132,14 +85,32 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                    # gate's rc=2 tail appends the row the decision
                    # machine's feedback reads — a dead writer must read
                    # 0, never be absent
-                   "dispatch-reject/1"),
+                   "dispatch-reject/1",
+                   # the moved writers' series (issue-1004 R2a/R2b/R2c
+                   # moved them onto this file; the stamps ride the
+                   # migrated rows)
+                   "transition/1", "q-cell-obs/1",
+                   "step-record/1", "step-record/2",
+                   "evidence-item/1", "credit-amendment/1",
+                   # the live family writers' stamps (registered so a
+                   # dead writer reads 0, never absent): the censored
+                   # row (q_cells, the #955 link-12 face) and the
+                   # q-cell action/result trajectory rows (q_cells'
+                   # _append_v2)
+                   "censored/1", "q-cell-action/1", "q-cell-result/1"),
     # issue-802: the blind settlement wire row (the settler-identity
     # liveness evidence) is born in the consolidated file
     "settlement": ("settlement-wire/1",
                    # the cost-event rows (cost_gate + the capture hook)
                    # write the settlement family directly — registered so
                    # a dead writer reads 0, never absent
-                   "cost-event/1"),
+                   "cost-event/1",
+                   # the moved writers' series (issue-1004 R2a)
+                   "rollout-ledger/1", "attributed-waste/1",
+                   # the distillation attempt row (rlvr.distill_rollout
+                   # — the self-distill trajectory credit feed; a dead
+                   # writer must read 0, never absent)
+                   "distill-rollout/1"),
     # the one evidence-gated disposition row per episode (rlvr.disposition
     # mirrors it here, so a dead writer must read 0, never be absent), its
     # bounded reward-face choice signal (rlvr.disposition_reward), and the
@@ -155,14 +126,25 @@ NATIVE_SCHEMAS: dict[str, tuple[str, ...]] = {
                   # dispatch-gate writer) write the telemetry family
                   # directly — registered so a dead writer reads 0,
                   # never absent
-                  "strategy-log/1"),
+                  "strategy-log/1",
+                  # the moved writers' series (issue-1004 R2b)
+                  "intervention/1", "prediction-ledger/1", "situation/1",
+                  # the pricing face's probe-price row (rlvr.pricing —
+                  # the issue-801-shaped probe-consumption account; a
+                  # dead writer must read 0, never absent)
+                  "probe-price/1"),
+    # issue-1004 R2c: the posterior store's three populations (the
+    # cross-task bank rows, the ws-local credit series, the DTS rows —
+    # one stamp), the negative-knowledge rows, and the mined feature
+    # table all live in the knowledge family file
+    "knowledge": ("posterior-store/1", "marl-negative/1",
+                  "feature-table/1"),
 }
 
+#: family -> every registered stamp (liveness reports all of them; a dead
+#: schema reads 0 — visible, never silently absent)
 REGISTERED: dict[str, tuple[str, ...]] = {
-    family: tuple(dict.fromkeys(
-        list(s for schemas in rels.values() for s in schemas)
-        + list(NATIVE_SCHEMAS.get(family, ()))))
-    for family, rels in LEGACY.items()
+    family: NATIVE_SCHEMAS.get(family, ()) for family in FAMILIES
 }
 
 NO_SCHEMA = "(no-schema)"
@@ -199,20 +181,20 @@ def family_path(ws, family: str) -> Path:
 
 
 def legacy_path(ws, family: str, rel: str) -> Path:
-    """One legacy archive rel. Knowledge rels resolve under the guarded
-    root EXCEPT the ws-scoped ``runs/`` rels (the historical ws-local
+    """One MIGRATION-SOURCE rel (the R4 retire CLI's resolution face —
+    the live read faces never touch these paths since the issue-1004 R3
+    schema cutover). Knowledge rels resolve under the guarded root
+    EXCEPT the ws-scoped ``runs/`` rels (the historical ws-local
     posterior series and the mined feature table — they lived per
-    workspace, so their compat faces stay per workspace); every other
-    family's rels are ws-relative. A ``None`` ws (the cross-task faces
-    — marl, the rootless store read) cannot name a workspace, so the
-    ws-scoped rels degrade to the guarded root's own sibling. THE ONLY
-    PROTECTION IS ABSENCE: that sibling does not exist under the real
-    guarded root, so the degraded rel reads empty. There is NO stamp
-    wall here — a degraded rel's rows carry exactly the stamps its own
-    prefix read admits — so pointing KUNGLAO_POSTERIOR_STORE at a
-    directory that happens to hold a workspace's ``runs/`` tree would
-    alias that workspace's live series into the rootless reads (an
-    operator misconfiguration, not a guarded state)."""
+    workspace, so they resolve per workspace); every other family's
+    rels are ws-relative. A ``None`` ws (the cross-task faces — marl,
+    the rootless store read) cannot name a workspace, so the ws-scoped
+    rels degrade to the guarded root's own sibling. That sibling does
+    not exist under the real guarded root, so the degraded rel reads
+    empty — pointing KUNGLAO_POSTERIOR_STORE at a directory that happens
+    to hold a workspace's ``runs/`` tree would alias that workspace's
+    series into the rootless resolution (an operator misconfiguration,
+    not a guarded state)."""
     if family == "knowledge":
         if rel.startswith("runs/"):
             return Path(ws if ws is not None else _knowledge_root()) / rel
@@ -370,49 +352,27 @@ def _stamp_kept(row: dict, prefixes: tuple[str, ...] | None) -> bool:
     return any(stamp.startswith(p) for p in prefixes)
 
 
-def _legacy_kept(row: dict, schemas: tuple[str, ...],
-                 prefixes: tuple[str, ...] | None) -> bool:
-    """A legacy (archive-window) row: a stamped row filters on its stamp;
-    an UNSTAMPED row (the pre-stamp transitions archive) passes only
-    when one of its rel's registered stamps matches a requested prefix —
-    never leaking into another schema's read."""
-    if prefixes is None:
-        return True
-    stamp = str(row.get("schema") or "")
-    if stamp:
-        return any(stamp.startswith(p) for p in prefixes)
-    return any(s.startswith(p) for s in schemas for p in prefixes)
-
-
 def read(ws, family: str, *,
-         schema_prefix: str | tuple[str, ...] | None = None,
-         include_legacy: bool = True) -> list[dict]:
-    """All rows of one family, oldest first: legacy archive rows (in
-    registry order — they predate the live file), then the consolidated
-    rows. ``schema_prefix`` keeps a multi-schema file readable through
-    its stamps (``"step-record"`` catches /1 and /2; a tuple is
-    any-of). An unknown family reads [] with ONE warn (the append()
-    refusal symmetry — fail-open on both faces)."""
+         schema_prefix: str | tuple[str, ...] | None = None) -> list[dict]:
+    """All rows of one family, oldest first (file order — since the
+    issue-1004 R3 schema cutover the consolidated file is the only
+    face, so append order IS chronology). ``schema_prefix`` keeps a
+    multi-schema file readable through its stamps (``"step-record"``
+    catches /1 and /2; a tuple is any-of). An unknown family reads []
+    with ONE warn (the append() refusal symmetry — fail-open on both
+    faces)."""
     if family not in CONSOLIDATED:
         warn("rlvr.consolidated_ledger.read",
              f"unknown family {family!r} — no rows read")
         return []
     prefixes = None if schema_prefix is None else _prefixes(schema_prefix)
-    rows: list[dict] = []
-    if include_legacy:
-        for rel, schemas in LEGACY.get(family, {}).items():
-            for row in _read_rows(legacy_path(ws, family, rel)):
-                if _legacy_kept(row, schemas, prefixes):
-                    rows.append(row)
-    for row in _read_rows(family_path(ws, family)):
-        if _stamp_kept(row, prefixes):
-            rows.append(row)
-    return rows
+    return [row for row in _read_rows(family_path(ws, family))
+            if _stamp_kept(row, prefixes)]
 
 
 def liveness(ws) -> dict[str, int]:
-    """Per-schema row counts across the consolidated files AND any
-    legacy rels still on disk (the compat window). Every registered
+    """Per-schema row counts across the four consolidated files — the
+    only faces since the issue-1004 R3 schema cutover. Every registered
     schema reports a count — a dead schema reads 0 (visible), never
     silently absent; foreign/unknown stamps and unstamped rows count
     under their own keys. Keys: ``"<family>:<schema>"``."""
@@ -421,7 +381,7 @@ def liveness(ws) -> dict[str, int]:
         for stamp in REGISTERED.get(family, ()):
             counts[f"{family}:{stamp}"] = 0
     for family in FAMILIES:
-        for row in read(ws, family, schema_prefix=None, include_legacy=True):
+        for row in read(ws, family):
             stamp = str(row.get("schema") or "") or NO_SCHEMA
             key = f"{family}:{stamp}"
             counts[key] = counts.get(key, 0) + 1
@@ -430,14 +390,6 @@ def liveness(ws) -> dict[str, int]:
 
 # --------------------------------------------------------- the migration
 
-#: the families whose migration is armed: a family is migrated only once
-#: its writers/readers are switched (its card landed) — migrating an
-#: unswitched family would strand its rows in a file nothing reads yet.
-DEFAULT_MIGRATION: tuple[str, ...] = SWITCHED
-
-ARCHIVE_DIR_REL = "runs/archive"
-
-
 def _canonical(row: dict) -> str:
     return json.dumps(row, sort_keys=True, ensure_ascii=False)
 
@@ -445,9 +397,8 @@ def _canonical(row: dict) -> str:
 def _stamp_row(row: dict, schemas: tuple[str, ...]) -> dict:
     """Migration stamping, deliberately timid: a row that already
     carries a schema copies verbatim; an unstamped row gets a stamp ONLY
-    when its rel registers exactly ONE schema (the pre-stamp transitions
-    archive) — a two-schema rel's unstamped row is copied verbatim,
-    never guessed."""
+    when its rel registers exactly ONE schema — a two-schema rel's
+    unstamped row is copied verbatim, never guessed."""
     if str(row.get("schema") or "").strip():
         return row
     if len(schemas) == 1:
@@ -456,17 +407,18 @@ def _stamp_row(row: dict, schemas: tuple[str, ...]) -> dict:
 
 
 def _archive_dst(ws, archive_dir: str, family: str, rel: str,
-                 src: Path) -> Path:
+                 src: Path, family_rels) -> Path:
     """One rel's archive destination. Flat ``<archive>/<src.name>``
     where the family's rel names are unique; when two registered rels
-    share a file name (the knowledge family's guarded-root
-    ``posterior-store.jsonl`` and ws-scoped ``runs/posterior-store.jsonl``
-    — issue-1004 R2c), the flat name would collide and the second
-    migration would land ``copied-unarchived`` (rows in the family file
-    AND the rel left on disk: a permanent double-count). Colliding rels
-    archive under a family-qualified, path-distinct name instead."""
+    share a file name (the knowledge family's guarded-root store rel
+    and its ws-scoped ``runs/`` sibling are ONE such colliding-basename
+    pair), the
+    flat name would collide and the second migration would land
+    ``copied-unarchived`` (rows in the family file AND the rel left on
+    disk: a permanent double-count). Colliding rels archive under a
+    family-qualified, path-distinct name instead."""
     name = src.name
-    others = [Path(r).name for r in LEGACY.get(family, {}) if r != rel]
+    others = [Path(r).name for r in family_rels if r != rel]
     if name in others:
         name = f"{family}__{rel.replace('/', '__')}"
     return Path(ws) / archive_dir / name
@@ -495,21 +447,29 @@ def _existing_counts(target: Path) -> dict[str, int]:
     return counts
 
 
-def migrate(ws, families=None, *, dry_run: bool = False,
-            archive_dir: str = ARCHIVE_DIR_REL) -> dict:
-    """The one-time issue-721 migration, per rel: every legacy row is
+def migrate(ws, families=None, *,
+            sources: dict[str, dict[str, tuple[str, ...]]],
+            dry_run: bool = False,
+            archive_dir: str = "runs/archive") -> dict:
+    """The one-time issue-721 migration, per rel: every source row is
     APPENDED into the family's consolidated file (values preserved; a
     missing stamp added per ``_stamp_row``), then the rel is MOVED into
     ``<ws>/runs/archive/`` — bytes intact, never deleted, and the live
     read face can never double-count it. Idempotent: rows the target
     already carries (canonical-JSON multiset) are not re-appended, so a
     re-run appends nothing. ``dry_run`` reports without writing.
+    ``sources`` is the EXPLICIT per-family source list (family ->
+    {rel: the stamps its rows may carry}) — the registry lives in the
+    R4 CLI surface (scripts/consolidate_ledgers.LEGACY_SOURCES) since
+    the issue-1004 R3 schema cutover deleted the in-core compat
+    window; ``families`` narrows the run (None = every family).
     Returns {family: {rel: {status, rows, appended, archived}}} with
     status in absent|dry-run|migrated|partial|copied-unarchived."""
     report: dict[str, dict] = {}
-    for family in (families or DEFAULT_MIGRATION):
+    for family in (families or FAMILIES):
         fam: dict[str, dict] = {}
-        for rel, schemas in LEGACY.get(family, {}).items():
+        family_rels = sources.get(family, {})
+        for rel, schemas in family_rels.items():
             src = legacy_path(ws, family, rel)
             if not src.is_file():
                 fam[rel] = {"status": "absent", "rows": 0, "appended": 0,
@@ -543,7 +503,8 @@ def migrate(ws, families=None, *, dry_run: bool = False,
                             "appended": sum(1 for r in results if r),
                             "archived": None}
                 continue
-            dst = _archive_dst(ws, archive_dir, family, rel, src)
+            dst = _archive_dst(ws, archive_dir, family, rel, src,
+                               family_rels)
             if dst.exists():
                 warn("rlvr.consolidated_ledger.migrate",
                      f"{dst} already exists — never overwriting an "
@@ -566,6 +527,7 @@ def migrate(ws, families=None, *, dry_run: bool = False,
                             "appended": len(to_append), "archived": None}
                 continue
             fam[rel] = {"status": "migrated", "rows": len(legacy_rows),
-                        "appended": len(to_append), "archived": str(dst)}
+                        "appended": len(to_append),
+                        "archived": str(dst)}
         report[family] = fam
     return report

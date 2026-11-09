@@ -197,34 +197,60 @@ def _rewrite_without(path: Path, drop) -> int:
 
 
 def revoke_claim(ws, claim: str) -> dict:
-    """Drop every derived row attributed to the claim from BOTH derived
-    stores (negatives by ``claim_ref``, broadcasts by ``claim``), each
-    across its two compat faces: the knowledge family file (the live
-    rel since issue-1004 R2c) and the pre-move legacy rel (history
-    written before the move is still revocable during the window). The
-    rewrite is ROW-SELECTIVE and WORKSPACE-SCOPED: only THIS
+    """Drop every derived row attributed to the claim from the knowledge
+    family store AND — while the R3→R4 migration window lasts — from
+    the pre-move files still on disk (negatives by ``claim_ref``,
+    broadcasts by ``claim``). The window sweep is what keeps revocation
+    TRANSITIVE over migration: without it, a revoke between the schema
+    cutover and the retire CLI leaves rows in a pre-move file, and the
+    R4 migration would append them right back into the live family read
+    (revoked knowledge resurrected). The sweep's path set comes from
+    the migration source list itself (``consolidate_ledgers.
+    LEGACY_SOURCES`` — R4-DELETES-THIS: the registry, the import and
+    the window all retire when the R4 CLI deletes the last pre-move
+    file), resolved through ``consolidated_ledger.legacy_path``; after
+    R4 the pre-move paths simply do not exist and the sweep no-ops.
+    The rewrite is ROW-SELECTIVE and WORKSPACE-SCOPED: only THIS
     workspace's rows drop (``workspace_id == ws.name``; rows WITHOUT
     the column — the class-level marl negatives — were shared and
     unscoped pre-move by design, so they stay revocable from any
     workspace), and the broadcast predicate stays in the BANK
     population (credit-kind-marked ws credit rows are never revocable
-    here — revoke's pre-move reach never touched the breaker's credit
+    here — the pre-move reach never touched the breaker's credit
     series), so a revoke from workspace A never deletes workspace B's
-    rows under a per-workspace claim-id collision; and both
-    family-file rewrites run INSIDE the consolidated flock
-    (``consolidated_ledger.family_lock``), so a concurrent ``append``
-    between a rewrite's read and its atomic write is never lost. The
-    discriminant dies with the settlement it was derived from; the
-    evidence of record (steps, transitions, amendment rows) is
-    untouched. An empty claim is refused at the boundary (it would
-    match every unattributed row). Returns per-store removal counts."""
+    rows under a per-workspace claim-id collision; and the rewrite runs
+    INSIDE the consolidated flock (``consolidated_ledger.family_lock``),
+    so a concurrent ``append`` between the rewrite's read and its
+    atomic write is never lost. The discriminant dies with the
+    settlement it was derived from; the evidence of record (steps,
+    transitions, amendment rows) is untouched. An empty claim is
+    refused at the boundary (it would match every unattributed row).
+    Returns per-store removal counts."""
     from rlvr import consolidated_ledger as _cl
-    from rlvr import strategy_store as _ss
     cid = str(claim or "").strip()
     if not cid:
         return {"negatives_removed": 0, "broadcasts_removed": 0}
     family = _cl.family_path(None, "knowledge")
     mine = Path(ws).name if ws is not None else None
+
+    # R4-DELETES-THIS window sweep: the pre-move knowledge rels, from
+    # the migration registry (guarded-root rels cross-task, ws-scoped
+    # rels per workspace — legacy_path owns both resolutions)
+    try:
+        import consolidate_ledgers as _migrate_cli  # noqa: PLC0415
+        window_rels = tuple(_migrate_cli.LEGACY_SOURCES.get("knowledge", {}))
+    except Exception as exc:  # noqa: BLE001 — the sweep degrades to the
+        # family file alone; the window faces are best-effort by design
+        warn("crystallize.revoke",
+             f"pre-move sweep unavailable ({type(exc).__name__}: {exc}) "
+             f"— revoking the family file only")
+        window_rels = ()
+    sweep = dict.fromkeys(
+        (family,)
+        + tuple(_cl.legacy_path(None, "knowledge", rel)
+                for rel in window_rels if not rel.startswith("runs/"))
+        + tuple(_cl.legacy_path(ws, "knowledge", rel)
+                for rel in window_rels if rel.startswith("runs/")))
 
     def _scoped(row: dict) -> bool:
         rid = str(row.get("workspace_id") or "")
@@ -234,15 +260,11 @@ def revoke_claim(ws, claim: str) -> dict:
         removed_neg = sum(_rewrite_without(
             path, lambda r: str(r.get("claim_ref") or "") == cid
             and _scoped(r))
-            for path in dict.fromkeys((
-                family,
-                _cl.legacy_path(None, "knowledge",
-                                "marl-negative.jsonl"))))
+            for path in sweep)
         removed_bcast = sum(_rewrite_without(
             path, lambda r: str(r.get("claim") or "") == cid
             and not r.get("credit_kind") and _scoped(r))
-            for path in dict.fromkeys((
-                family, _ss.store_path())))
+            for path in sweep)
     if removed_neg or removed_bcast:
         warn("crystallize.revoke",
              f"claim {cid}: {removed_neg} negative(s), "

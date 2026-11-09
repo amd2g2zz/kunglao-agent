@@ -38,6 +38,8 @@ if str(SCRIPTS) not in sys.path:
 import action_space as aspace  # noqa: E402
 import intelligent_scheduling as isch  # noqa: E402
 import signals_stream  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
+from rlvr import step_ledger  # noqa: E402
 
 SCHEDULING_FIVE = {"sleep", "wake_on", "probe", "close_loop", "none"}
 
@@ -261,14 +263,17 @@ class TestNullBaseline:
 class TestThreeBudgets:
 
     def _seed_budgets(self, ws: Path) -> None:
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-01-01T00:00:00Z", "amount": 2.5}) + "\n"
-            + json.dumps({"ts": "2026-01-01T00:01:00Z", "amount": 3.0}) + "\n",
-            encoding="utf-8")
-        rows = [{"schema": "step-record/1", "ts": "2026-01-01T00:00:00Z",
-                 "session_id": "s1", "call_id": f"c{i}"} for i in range(3)]
-        (ws / "runs" / "step-ledger.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                      "ts": "2026-01-01T00:00:00Z",
+                                      "amount": 2.5, "source": "test"})
+        _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                      "ts": "2026-01-01T00:01:00Z",
+                                      "amount": 3.0, "source": "test"})
+        for i in range(3):
+            _cl.append(ws, "experience", {
+                "schema": step_ledger.STEP_SCHEMA,
+                "ts": "2026-01-01T00:00:00Z", "session_id": "s1",
+                "call_id": f"c{i}"})
         with (ws / "runs" / "signals.jsonl").open("a",
                                                   encoding="utf-8") as fh:
             for i in range(2):

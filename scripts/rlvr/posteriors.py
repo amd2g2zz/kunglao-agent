@@ -76,11 +76,6 @@ from kunglao_log import warn
 from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "posterior-store/1"
-#: the legacy rel the rows wrote before the family move (issue-1004
-#: R2c) — kept as the compat window's documented name (readers still
-#: see it; production no longer writes it; the schema-cutover slice
-#: retires the window)
-STORE_REL = "runs/posterior-store.jsonl"
 
 # Pseudo-count priors = the learning-rate knob (prior strength = how many
 # observations a newborn cell carries). Beta(1, 1) uniform: every arm is
@@ -268,13 +263,12 @@ def _row(state: str, arm: str, ts: str, gamma: float, outcome,
         "alpha_add": adds[0],
         "beta_add": adds[1],
         # PER-WORKSPACE ISOLATION (issue-1004 R2c review fix): the DTS
-        # store was ws-local pre-move (``<ws>/runs/posterior-store.jsonl``
-        # — never pooled across workspaces); the family file is
+        # store's series was ws-local pre-move (per-workspace files —
+        # never pooled across workspaces); the family file is
         # cross-task, so every NEW row carries its owning workspace and
         # ``read`` keeps only this workspace's rows (rows WITHOUT the
-        # column are the pre-move ws-local history — the ws-scoped
-        # legacy rel is per workspace by construction, so unattributed
-        # rows there are this workspace's own)
+        # column are the pre-move ws-local history — migrated by the
+        # R4 CLI with its owning workspace named on the row)
         "workspace_id": workspace_id,
     }
 
@@ -284,11 +278,11 @@ def read(ws) -> list[dict]:
     (a learned state never half-reads a row, and a FOREIGN schema version
     is never merged — the version wall). Unparseable or schema-violating
     lines are skipped with one rate-limited WARN. Missing store → [].
-    The read rides the knowledge family (issue-1004 R2c): legacy rels
-    first (chronology), then the family file — PER-WORKSPACE ISOLATED:
-    rows carrying another workspace's ``workspace_id`` are skipped, so
-    two workspaces sharing a guarded root never fold each other's
-    posteriors (the pre-move ws-local store contract)."""
+    The read rides the knowledge family (issue-1004 R2c) — the only
+    face since the issue-1004 R3 schema cutover — PER-WORKSPACE
+    ISOLATED: rows carrying another workspace's ``workspace_id`` are
+    skipped, so two workspaces sharing a guarded root never fold each
+    other's posteriors (the pre-move ws-local store contract)."""
     mine = Path(ws).name
     out: list[dict] = []
     for row in _cl.read(ws, "knowledge", schema_prefix="posterior-store"):

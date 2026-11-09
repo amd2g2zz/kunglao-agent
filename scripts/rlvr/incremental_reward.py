@@ -33,13 +33,12 @@ coefficients are DOCUMENTED POLICY CONSTANTS (the state.py precedent:
 most three; ALPHA/LAMBDA ride at 1.0 until the offline comparison says
 otherwise.
 
-The transition ledger is append-only — runs/transitions.jsonl through
-v0.1.6, runs/experience.jsonl since #721 (the consolidated
-WHAT-HAPPENED file: transitions + q-cell observations + step records —
-one logical experience, one physical file). Rows carry the
-``transition/1`` stamp so the multi-schema file stays attributable;
-the legacy path stays readable during the compat window and is archived
-(bytes intact) by the one-time migration. The ledger is the s' face the
+The transition ledger is append-only — runs/experience.jsonl since #721
+(the consolidated WHAT-HAPPENED file: transitions + q-cell observations
++ step records — one logical experience, one physical file). Rows carry
+the ``transition/1`` stamp so the multi-schema file stays attributable;
+the consolidated file is the only face since the issue-1004 R3 schema
+cutover. The ledger is the s' face the
 2026-09-27 quadruple-rejection pin denied; the 2026-10-06 ruling
 (external SMDP, transition recording authorized) overturns that pin
 (see scripts/rlvr/triples.py's docstring pin block for the citation).
@@ -58,9 +57,9 @@ from rlvr import learning_seal as _seal  # #799: the learning-channel seal
 from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 from rlvr import phi_tree as _phi  # #796: the Φ-tree economy face
 
-# #721: the row stamp inside runs/experience.jsonl (the legacy
-# runs/transitions.jsonl rel lives in the consolidated_ledger LEGACY
-# registry — the single source). Transition rows carried no stamp
+# #721: the row stamp inside runs/experience.jsonl (the transition
+# series moved onto the consolidated file with the family moves; the
+# stamp is the single source). Transition rows carried no stamp
 # through v0.1.6; a multi-schema file makes the stamp mandatory
 # (attribution + per-schema liveness).
 TRANSITION_SCHEMA = "transition/1"
@@ -502,9 +501,9 @@ def sweep_orphan_launches(ws) -> list[dict]:
 
 def read_transitions(ws) -> list[dict]:
     """The ledger read face: all transition rows, oldest first; absent =
-    []. #721: backed by the consolidated experience file, with the
-    legacy archive (runs/transitions.jsonl) riding the compat window —
-    archive rows come first, they predate the live file."""
+    []. #721: backed by the consolidated experience file — the only
+    face since the issue-1004 R3 schema cutover (append order IS
+    chronology)."""
     return _seal.trusted_rows(
         _cl.read(ws, "experience", schema_prefix="transition"),
         op="incremental_reward.read_transitions")

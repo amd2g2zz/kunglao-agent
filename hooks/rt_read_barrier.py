@@ -35,9 +35,9 @@ THE BARRIER (two faces, one file — the orchestrator_tool_guard pattern):
     - runs/verification-*.md   (verifier records — the maker face)
     - runs/worker-status-*.md  (worker self-reports)
     - runs/*-verify-note.md    (the gate-conformant mirror of the above)
-    - runs/method-family-log.jsonl + runs/q-cell-log.jsonl
-                        (the policy learning faces — arm identity and
-                        arm values; closed for EVERY blind act)
+    - method-family-log.jsonl + q-cell-log.jsonl (basenames — the policy
+                        learning faces, arm identity and arm values;
+                        closed for EVERY blind act at any location)
     - runs/experience.jsonl
                         (the #721 consolidated learning feed — the
                         q-cell arm values ride it, and its transition

@@ -414,20 +414,16 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
 
 # ③ strategy dispatch marker: `[strategy <id>]` anywhere in the prompt.
 STRATEGY_MARKER_RE = re.compile(r"\[strategy\s+([A-Za-z0-9._-]+)\]")
-#: the legacy rel the rows wrote before the family move — kept as the
-#: compat-window's documented name (readers still see it; production
-#: no longer writes it; the schema-cutover slice retires the window)
-STRATEGY_LOG = "runs/strategy-log.jsonl"
 #: issue-1004 R2b: the dispatch rows write the telemetry family
-#: directly, stamped at write (historical rows are unstamped; the
-#: LEGACY registration + the pre-stamp rule keep them readable)
+#: directly, stamped at write — the family file is the only face since
+#: the issue-1004 R3 schema cutover
 STRATEGY_LOG_SCHEMA = "strategy-log/1"
 # issue-496 review F4: the ledger used to append unbounded (every marked
 # dispatch +1 row, and a reader re-read the whole file). The family file
 # is append-only (no rewrite path exists), so the bound lives on the
 # READ faces — windowed to the most recent STRATEGY_LOG_MAX rows, whose
 # SINGLE source is rlvr.triples (imported at the read face; no second
-# semantic value). The window retires at the schema cutover.
+# semantic value).
 
 
 def _reject_with_guidance(name: str, msg: str, fix: str,

@@ -5,10 +5,10 @@
 Input face for the cost-event rows: the tool_response carries
 "COST WARNING: session total ~$<float>" (COST CRITICAL isomorphic) ->
 one stamped cost-event/1 row {"ts","amount","source"} appended to the
-consolidated settlement family ledger (<ws>/runs/settlement.jsonl — the
-same family cost_gate reads; the legacy cost_events.jsonl rel survives
-only inside the compat window). No match / unresolvable ws / IO
-trouble → silent no-write (FAIL_OPEN, never interrupts the tool stream).
+consolidated settlement family ledger (<ws>/runs/settlement.jsonl —
+the only cost face since the issue-1004 R3 schema cutover). No match /
+unresolvable ws / IO trouble → silent no-write (FAIL_OPEN, never
+interrupts the tool stream).
 
 口径边界（proposal 声明）：Claude Code 不暴露 per-call 计费遥测——amount
 是会话累计 session total（PostToolUse 文本解析口径），非增量。

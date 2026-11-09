@@ -89,14 +89,18 @@ class TestSchemaLint:
     def test_dirty_rows_skipped_on_read(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         p.parent.mkdir(parents=True)
         p.write_text('{"rollout_id": "a"}\nnot json at all\n\n'
-                     '{"rollout_id": "b", "kind": "task", "anchor": "a", '
+                     '{"schema": "rollout-ledger/1", "rollout_id": "b", '
+                     '"kind": "task", "anchor": "a", '
                      '"ts": "2026-09-24T00:00:00Z", "signals": [], '
                      '"reward": null, "settlement": null}\n',
                      encoding="utf-8")
         rows = rl.read(ws)
+        # dirty and unstamped rows never surface (the family read is
+        # stamp-filtered — the pre-consolidation rel admitted unstamped
+        # rows via the pre-stamp rule; the cutover closed it)
         assert [r.get("rollout_id") for r in rows] == ["b"]
 
 

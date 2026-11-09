@@ -39,6 +39,7 @@ for p in (str(ROOT), str(SCRIPTS)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import feature_prior as fp  # noqa: E402
 from rlvr import meta_arms  # noqa: E402
 from rlvr import q_cells  # noqa: E402
@@ -560,10 +561,8 @@ def _plain_cell(tmp_path: Path, arm: str, unit: str, verdict: str,
                      "session": {"session_cost": {"total_cost_usd": 1.0},
                                  "wall_s": 90.0},
                      "workspace": str(ws)}}]}), encoding="utf-8")
-    p = ws / "runs" / "transitions.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("".join(json.dumps(r) + "\n" for r in mean_rows),
-                 encoding="utf-8")
+    for row in mean_rows:
+        _cl.append(ws, "experience", {**row, "schema": "transition/1"})
 
 
 def _spine(tmp_path: Path, tiers: dict[str, str],

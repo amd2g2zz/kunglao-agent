@@ -33,7 +33,8 @@ scripts/rlvr/
 ├── consolidated_ledger.py  # #721 the 4-file consolidation core —
 │                        #   experience/settlement/telemetry under runs/ +
 │                        #   knowledge under the guarded root; append()
-│                        #   (flock, stamp-refusing) / read() (legacy-first,
+│                        #   (flock, stamp-refusing) / read() (family-only
+│                        #   since the issue-1004 R3 schema cutover,
 │                        #   stamp filter) / liveness() / migrate()
 │                        #   (append-only, bytes-archived, idempotent)
 ├── reward.py            # reward_settlement (U2/U3) — band/reward engine
@@ -59,8 +60,8 @@ scripts/rlvr/
 ├── posteriors.py        # DTS posterior store, Discounted Thompson
 #                        #   Sampling (issue 428) — append-only store
 #                        #   in the knowledge family file (issue-1004
-#                        #   R2c; the pre-move runs/posterior-store.jsonl
-#                        #   is the compat window's legacy read face)
+#                        #   R2c — the only face since the R3 schema
+#                        #   cutover)
 │                        #   + fold/read γ decay + pseudo-count priors
 │                        #   + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
@@ -115,7 +116,7 @@ failure, not folklore.
 
 | face | home |
 |---|---|
-| `SCHEMA`, `STORE_REL`, `LOCK_REL`, `row_schema_lint()` | `rlvr.posteriors` (append-only store, ledger-isomorphic with rollout_ledger) |
+| `SCHEMA`, `row_schema_lint()` | `rlvr.posteriors` (append-only store, ledger-isomorphic with rollout_ledger) |
 | `record()`, `read()` | `rlvr.posteriors` (loud-result writes; schema-enforced fail-open reads) |
 | `fold()`, `PosteriorView` | `rlvr.posteriors` (THE γ decay face — replay `(α,β) ← γ·(α,β)+obs` in input order; raw counts never rewritten) |
 | `gamma_constant()`, `OutcomeAdaptiveGamma`, `default_schedule()` | `rlvr.posteriors` (declared schedules; defaults = EX-2-calibrated constants) |
@@ -136,7 +137,7 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 
 | current face | final home |
 |---|---|
-| `SCHEMA`, `LEDGER_REL`, `LOCK_REL` | `rlvr.ledger` (re-exported) |
+| `SCHEMA` | `rlvr.ledger` (re-exported) |
 | `KIND_TASK`, `KIND_SELF_DISTILL`, `KIND_HYBRID_DISTILL`, `ROLLOUT_KINDS` | `rlvr.ledger` |
 | `REWARD_RAIL_BOUNDED`, `REWARD_RAIL_PROVENANCE`, `REWARD_RANGE_BOUNDED`, `KIND_REWARD_RAILS`, `reward_rail_of()`, `reward_range_of()` | `rlvr.ledger` (the issue-1007 per-kind reward-unit declaration) |
 | `register_kind()`, `kinds()` | `rlvr.ledger` (the open-enum API; `register_kind(kind, note, rail)` records the unit) |

@@ -5,7 +5,7 @@ subagent completion.
 
 The measured defect: settlement fired only at claim-terminal / oracle-
 case-run, so a 4-hour claim moved no posterior and no sampling
-distribution until its very end, `runs/transitions.jsonl` stayed empty in
+distribution until its very end, the transition ledger stayed empty in
 production (append_transition had zero plugin-path callers), and
 promotion_attempts never accrued from dispatches. The grain fix, in three
 faces:

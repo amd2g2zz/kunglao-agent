@@ -31,7 +31,8 @@ has healed the signature. Never negative density: the multiplier is
 base/MULT_MAX, never below.
 
 Sources (both pure reads, zero model calls):
-  - the transition ledger (runs/transitions.jsonl): rows with
+  - the transition ledger (the consolidated experience feed's
+    transition rows): rows with
     action_type = verify and a settled credit — the refuted predicate is
     r_settle = 0, which per incremental_reward.verify_credit means
     refuted / unverified-with-gap / timeout (everything that decided

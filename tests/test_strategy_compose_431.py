@@ -742,14 +742,18 @@ def test_injection_changes_with_evidence_across_two_runs(tmp_path):
 
 def _store_root(tmp_path, monkeypatch, rows) -> Path:
     """An isolated posterior store holding the given rows (the conftest
-    autouse fixture already isolates the env; this points it at rows)."""
+    autouse fixture already isolates the env; this points it at rows).
+    The store file is the knowledge family path under the declared
+    root — the one face since the issue-1004 R2c family move."""
+    from rlvr import consolidated_ledger as _cl
     from rlvr import strategy_store
     root = tmp_path / "posterior-store"
     root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
-        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setenv(strategy_store.STORE_ENV, str(root))
-    return root
+    store_file = _cl.family_path(None, "knowledge")
+    store_file.write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    return store_file.parent
 
 
 def _store_row(ws_id, family, arm_key=None, credit=0.9):

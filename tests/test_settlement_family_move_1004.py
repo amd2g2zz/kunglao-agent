@@ -7,8 +7,10 @@ move their IO onto the consolidated settlement family
 (``consolidated_ledger.append/read``): ``runs/settlement.jsonl`` becomes
 the single live file, the per-module flock/lock rels retire (the
 consolidated append's lock is the ONE guard), public APIs stay
-byte-compatible, and the compat window stays (LEGACY entries remain
-until the schema-cutover slice).
+byte-compatible. (Issue-1004 R3, the schema cutover, deleted the
+compat window this slice's dual-read pins served: read() is family-only
+now, chronology IS file order, and the R4 migrate fixture pins the
+global order instead.)
 
 Pins defined here:
   1. API compatibility  record/settle/fold/settled/pending_settlement
@@ -18,12 +20,9 @@ Pins defined here:
   2. Lock pin           the per-module lock rel never appears on disk;
      the consolidated ``.settlement.lock`` is the single guard.
   3. Cost rows          new cost rows carry a registered ``cost-event/1``
-     stamp at write; the reader filters by stamp prefix so historical
-     UNSTAMPED rows and new stamped rows coexist under one read face.
-  4. Chronology         legacy ``runs/rollout-ledger.jsonl`` rows first,
-     then live rows — the dual-read order the future migration must
-     reproduce.
-  5. Seal interplay     a sealed row written through the family path is
+     stamp at write; the reader filters by stamp prefix so the
+     multi-schema file's other rows never enter a cost read.
+  4. Seal interplay     a sealed row written through the family path is
      still accepted by ``trusted_rows`` (an armed workspace must not
      refuse its own rows because the file name changed).
   6. Waste rows         ``attributed-waste/1`` rows land in the family
@@ -50,7 +49,6 @@ import rlvr.ledger as rl  # noqa: E402
 import rlvr.learning_seal as seal  # noqa: E402
 import rlvr.step_grain as sg  # noqa: E402
 import cost_gate as cg  # noqa: E402
-import tuition_curve as tc  # noqa: E402
 
 ROLL_STAMP = "rollout-ledger/1"
 COST_STAMP = "cost-event/1"
@@ -217,13 +215,11 @@ class TestSingleGuardLock:
 
 class TestCostRows:
     def test_native_stamp_is_registered(self):
+        # registered so a dead cost writer reads 0, never absent (the
+        # historical unstamped rows get the stamp at migration — the
+        # R4 retire-CLI's verified counts)
         assert COST_STAMP in cl.NATIVE_SCHEMAS["settlement"]
-        # the legacy rel registers the stamp too: the coexistence face —
-        # unstamped historical rows pass a cost-prefixed family read,
-        # and the migration stamps them (the retire-CLI's verified
-        # counts).
-        assert cl.LEGACY["settlement"]["cost_events.jsonl"] == \
-            (COST_STAMP,)
+        assert COST_STAMP in cl.REGISTERED["settlement"]
 
     def test_append_event_writes_stamped_family_row(self, tmp_path):
         ws = tmp_path / "ws"
@@ -294,104 +290,8 @@ class TestCostRows:
         assert rows[0]["amount"] == 9.99
         assert not (ws / "cost_events.jsonl").exists()
 
-    def test_reader_coexists_legacy_unstamped_and_new_stamped(
-            self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-11-01T00:00:00Z", "amount": 3.0,
-                        "source": "legacy"}) + "\n",
-            encoding="utf-8")
-        cg.append_event(ws, 4.0, "hook")
-        events = cg.load_events(ws)
-        assert [e["amount"] for e in events] == [3.0, 4.0]
-        # the legacy file was not appended to — the new row rode the family
-        assert len((ws / "cost_events.jsonl").read_text(
-            encoding="utf-8").splitlines()) == 1
 
-    def test_cost_single_source_reader_sees_both_faces(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-11-01T00:00:00Z", "amount": 3.0,
-                        "source": "legacy"}) + "\n",
-            encoding="utf-8")
-        cg.append_event(ws, 4.5, "hook")
-        state = tc.cost_state(ws)
-        assert state["spent"] == 7.5
-        assert state["latest"] == 4.5
-
-
-# ---------- 4. chronology (the dual-read order) ----------
-
-class TestChronology:
-    def test_legacy_rows_first_then_live(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy_rows = [
-            _rollout_row("task/A", "task", "A", "2026-10-01T00:00:00Z",
-                         [_sig("s", "src", "a")]),
-            _rollout_row("task/B", "task", "B", "2026-10-02T00:00:00Z",
-                         [_sig("s", "src", "b")]),
-        ]
-        p = ws / "runs" / "rollout-ledger.jsonl"
-        p.parent.mkdir(parents=True)
-        p.write_text(
-            "".join(json.dumps(r, ensure_ascii=False) + "\n"
-                    for r in legacy_rows), encoding="utf-8")
-        rl.record(ws, kind="task", anchor="C",
-                  signals=[_sig("s", "src", "c")])
-        ids = [r["rollout_id"] for r in rl.read(ws)]
-        assert ids == ["task/A", "task/B", "task/C"]
-        # the dual-read order the future migration must reproduce
-        family = cl.read(ws, "settlement", schema_prefix="rollout-ledger")
-        assert [r["rollout_id"] for r in family] == ids
-
-    def test_compat_window_stays_legacy_entries_registered(self):
-        # the schema cutover slice removes these — not this one.
-        assert "runs/rollout-ledger.jsonl" in cl.LEGACY["settlement"]
-        assert "runs/attributed-waste.jsonl" in cl.LEGACY["settlement"]
-        assert "cost_events.jsonl" in cl.LEGACY["settlement"]
-        assert inspect.signature(cl.read).parameters[
-            "include_legacy"].default is True
-
-    def test_fold_and_settled_ride_row_identity_across_the_boundary(
-            self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = _rollout_row(
-            "task/X", "task", "X", "2026-10-01T00:00:00Z",
-            [_sig("claim_terminal", "rollup", "DEFERRED")],
-            settlement={"reward": 0.0, "band": "NEUTRAL",
-                        "rule_id": "task/pending",
-                        "evidence_refs": [], "settled_ts":
-                        "2026-10-01T01:00:00Z"},
-            reward=0.0)
-        p = ws / "runs" / "rollout-ledger.jsonl"
-        p.parent.mkdir(parents=True)
-        p.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
-        # identity dedupe across the boundary (same signal set -> no-op)
-        dup = rl.record(ws, kind="task", anchor="X",
-                        signals=[_sig("claim_terminal", "rollup",
-                                      "DEFERRED")])
-        assert dup["appended"] is False
-        # the re-settlement amendment lands in the FAMILY file
-        st = rl.settle(ws, "task/X",
-                       settlement={"reward": 1.0, "band": "SETTLED_GREEN",
-                                   "rule_id": "task/oracle-green",
-                                   "evidence_refs": []})
-        assert st["appended"] is True
-        assert all(r["rollout_id"] == "task/X" for r in _family_rows(ws))
-        fold = rl.fold(ws, "task/X")
-        assert fold["ts"] == "2026-10-01T00:00:00Z"  # identity: FIRST row
-        assert fold["signals"][0]["value"] == "DEFERRED"
-        assert fold["settlement"]["reward"] == 1.0  # settlement: LAST
-        settled = rl.settled(ws, kind="task")
-        assert len(settled) == 1
-        assert settled[0]["band"] == "SETTLED_GREEN"
-
-
-# ---------- 5. the seal interplay ----------
+# ---------- 4. the seal interplay ----------
 
 class TestSealInterplay:
     def test_armed_workspace_accepts_its_own_family_rows(
@@ -416,7 +316,7 @@ class TestSealInterplay:
         kept = seal.trusted_rows(out, op="test.family-move")
         assert kept == out
 
-    def test_unarmed_rows_ride_legacy_with_notice(self, tmp_path,
+    def test_unarmed_rows_ride_with_notice(self, tmp_path,
                                                   monkeypatch):
         missing = tmp_path / "no-key.key"
         monkeypatch.setattr(seal, "KEY_PATH", missing)

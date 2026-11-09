@@ -398,6 +398,8 @@ files:
     r1: 1
   scripts/rlvr/compose.py:
     r1: 5
+  scripts/rlvr/consolidated_ledger.py:
+    r1: 1
   scripts/rlvr/crystallize.py:
     r1: 1
   scripts/rlvr/direction.py:
@@ -451,7 +453,7 @@ files:
   scripts/rlvr/priors.py:
     r1: 4
   scripts/rlvr/q_cells.py:
-    r1: 93
+    r1: 92
   scripts/rlvr/recipe_arms.py:
     r1: 8
   scripts/rlvr/refutation_fold.py:
@@ -463,7 +465,7 @@ files:
   scripts/rlvr/scalar.py:
     r1: 10
   scripts/rlvr/settlement_scorer.py:
-    r1: 2
+    r1: 1
   scripts/rlvr/signal_guard.py:
     r1: 1
   scripts/rlvr/state.py:
@@ -473,7 +475,7 @@ files:
   scripts/rlvr/step_grain.py:
     r1: 11
   scripts/rlvr/step_ledger.py:
-    r1: 9
+    r1: 7
   scripts/rlvr/strategy_store.py:
     r1: 19
   scripts/rlvr/triples.py:

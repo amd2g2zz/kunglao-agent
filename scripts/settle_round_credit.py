@@ -518,7 +518,8 @@ def _bridge_pool_admission(ws: Path, banked: list[str]) -> dict:
     terminal credit (the settled ladder value read back off the
     settlement ledger). Every processed claim appends one
     ``posterior-store/1`` credit row to the knowledge family file
-    (issue-1004 R2c; pre-move ``<ws>/runs/posterior-store.jsonl``) via
+    (issue-1004 R2c; the series' only face since the issue-1004 R3
+    schema cutover) via
     ``strategy_store.append_workspace_credit_row``: the degeneracy
     breaker's series (rlvr.signal_guard.recent_credits) and the
     rl-posterior-moved fingerprint count exactly these rows. Counts and

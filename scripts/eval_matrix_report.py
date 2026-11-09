@@ -163,12 +163,12 @@ def read_transitions(ws: Path) -> list[dict]:
     dirty rows are skipped, never invented (the ledger's own posture).
 
     #721: rides the consolidated read face (the ONE face since #804's
-    de-compat — the legacy runs/transitions.jsonl path-read fallback is
-    retired; a missing rlvr core is an ImportError LOUD)."""
-    # #804 de-compat: the legacy runs/transitions.jsonl path-read
+    de-compat and the issue-1004 R3 schema cutover; a missing rlvr
+    core is an ImportError LOUD)."""
+    # #804 de-compat + issue-1004 R3: the pre-consolidation path-read
     # fallback is retired — the consolidated read face is the ONE face
     # (a missing rlvr core is an ImportError LOUD, never a silent
-    # legacy read).
+    # stale read).
     from rlvr import incremental_reward as _ir  # noqa: PLC0415
     return _ir.read_transitions(ws)
 

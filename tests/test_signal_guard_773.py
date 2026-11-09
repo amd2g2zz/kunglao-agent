@@ -12,7 +12,6 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -27,21 +26,20 @@ from rlvr.signal_guard import (  # noqa: E402
 )
 
 
-def _seed_store(ws: Path, credits: list[float]) -> None:
-    """Seed the ws-local legacy rel (the compat window's read face).
-    Rows carry workspace_id + credit_kind: post-R2c the credit series
-    lives in the cross-task knowledge family file, where the breaker's
-    read keeps exactly the credit-series face's rows (workspace-id +
-    credit_kind filtered — cross-task settlement rows are warm-pool
-    evidence, never the breaker's series)."""
-    store = ws / "runs" / "posterior-store.jsonl"
-    store.parent.mkdir(parents=True, exist_ok=True)
-    store.write_text(
-        "".join(json.dumps({"schema": "posterior-store/1",
-                            "workspace_id": ws.name,
-                            "credit_kind": "step",
-                            "credit": c}) + "\n" for c in credits),
-        encoding="utf-8")
+def _seed_store(ws: Path, credits: list[float], monkeypatch) -> None:
+    """Seed the breaker's credit series into the knowledge family file
+    (the only face since the issue-1004 R3 schema cutover), under an
+    ISOLATED guarded root. Rows carry workspace_id + credit_kind: the
+    breaker's read keeps exactly the credit-series face's rows
+    (workspace-id + credit_kind filtered — cross-task settlement rows
+    are warm-pool evidence, never the breaker's series)."""
+    root = ws.parent / f"store-{ws.name}"
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    for c in credits:
+        assert cl.append(ws, "knowledge", {
+            "schema": "posterior-store/1", "workspace_id": ws.name,
+            "credit_kind": "step", "credit": c})
 
 
 def test_check_degeneracy_flags_five_identical():
@@ -63,9 +61,9 @@ def test_check_degeneracy_ignores_non_numeric():
     assert v["degenerate"]
 
 
-def test_recent_credits_reads_the_store(tmp_path):
+def test_recent_credits_reads_the_store(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
-    _seed_store(ws, [0.3, 1.0])
+    _seed_store(ws, [0.3, 1.0], monkeypatch)
     assert recent_credits(ws, 5) == [0.3, 1.0]
 
 
@@ -73,9 +71,9 @@ def test_recent_credits_absent_store_is_empty(tmp_path):
     assert recent_credits(tmp_path / "nope", 5) == []
 
 
-def test_freeze_emits_blocker_and_returns_true(tmp_path):
+def test_freeze_emits_blocker_and_returns_true(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
-    _seed_store(ws, [1.0] * 5)
+    _seed_store(ws, [1.0] * 5, monkeypatch)
     logs = ws / "runs" / "logs"
     logs.mkdir(parents=True)
     (logs / "kunglao-2026-10-19.jsonl").write_text("", encoding="utf-8")
@@ -88,13 +86,13 @@ def test_freeze_emits_blocker_and_returns_true(tmp_path):
     assert any(r.get("action") == "signal_degenerate" for r in rows)
 
 
-def test_freeze_varied_returns_false(tmp_path):
+def test_freeze_varied_returns_false(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
-    _seed_store(ws, [1.0, 0.3])
+    _seed_store(ws, [1.0, 0.3], monkeypatch)
     assert freeze_if_degenerate(ws, [1.0, 0.3]) is False
 
 
-def test_settle_freezes_on_degenerate_series(tmp_path):
+def test_settle_freezes_on_degenerate_series(tmp_path, monkeypatch):
     import settle_round_credit as src
     from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
@@ -102,13 +100,13 @@ def test_settle_freezes_on_degenerate_series(tmp_path):
     (ws / "facts").mkdir()
     mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
                           "verification": {"method": "reproduction"}}])
-    _seed_store(ws, [1.0] * 5)
+    _seed_store(ws, [1.0] * 5, monkeypatch)
     out = src.run(ws)
     assert out.get("signal_frozen") is True, out
     assert out.get("case_observations") == 0
 
 
-def test_settle_unfrozen_when_signal_varied(tmp_path):
+def test_settle_unfrozen_when_signal_varied(tmp_path, monkeypatch):
     import settle_round_credit as src
     from _dispatch_fixture import mint_dispatches
     ws = tmp_path / "ws"
@@ -116,6 +114,6 @@ def test_settle_unfrozen_when_signal_varied(tmp_path):
     (ws / "facts").mkdir()
     mint_dispatches(ws, [{"id": "C-1", "status": "PROVEN",
                           "verification": {"method": "reproduction"}}])
-    _seed_store(ws, [1.0, 0.3, 1.0])
+    _seed_store(ws, [1.0, 0.3, 1.0], monkeypatch)
     out = src.run(ws)
     assert out.get("signal_frozen") is None

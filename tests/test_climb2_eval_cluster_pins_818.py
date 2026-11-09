@@ -322,9 +322,9 @@ class TestRotationVerdictFace:
             {"kind": "rotation-verdict"},
             _write_verdict(tmp_path, doc), gt, {})
         assert verdict == md.VERDICT_EXHAUSTED
+        broken = tmp_path / "broken.json"
+        broken.write_text("[]", encoding="utf-8")
         with pytest.raises(ec.Refusal, match="verdict artifact invalid"):
-            broken = tmp_path / "broken.json"
-            broken.write_text("[]", encoding="utf-8")
             ec._verdict_face({"kind": "rotation-verdict"}, broken, gt, {})
 
 
@@ -408,7 +408,7 @@ class TestSplitLint:
     def test_posterior_store_row_attribution(self, tmp_path, monkeypatch,
                                              capsys) -> None:
         repo = self._fake_repo(tmp_path, ["unit-a"], {}, {})
-        store = repo / "priors" / "posterior-store.jsonl"
+        store = repo / "priors" / "knowledge-store.jsonl"
         store.write_text(json.dumps(
             {"schema": "posterior-store/1", "feature": "x",
              "unit": "unit-a"}) + "\n", encoding="utf-8")

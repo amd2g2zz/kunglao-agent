@@ -28,15 +28,17 @@ tests/test_compute_priors_137.py):
     alpha, NEGATIVE -> +1 beta, NEUTRAL / UNRESOLVED -> nothing. Rows are
     read tolerantly (kunglao_log.iter_jsonl); pre-#137 rows without the
     `schema` stamp are legacy and sum like any other row.
-  - runs/rollout-ledger.jsonl settled rows (unified reward, U4) contribute per
+  - the settlement family's rollout-ledger rows (unified reward, U4)
+    contribute per
     polarity: SETTLED_GREEN/HELPED -> +1 alpha, SETTLED_RED/ADVERSE ->
     +1 beta, NEUTRAL/pending -> nothing. Read through the ONE interface
     (reward.bounded_prior_observations over ledger.settled).
     Rows on a non-[0,1] reward rail (round_credit provenance sums) are
     EXCLUDED and reported under sources.rollout_ledger.excluded — the
     aggregate never reads 2.01 as a reward.
-  - runs/rollout-ledger.jsonl settled EPISODE TIER SCALARS (issue 379,
-    reward-rules v2) contribute a separate Normal-Gamma posterior under
+  - the settlement family's rollout-ledger EPISODE TIER SCALARS
+    (issue 379, reward-rules v2) contribute a separate Normal-Gamma
+    posterior under
     sources.scalar_ledger (n / mean / posterior) — the exponential-family
     form for a continuous scalar, NOT folded into the Beta counts.
   - runs/posteriors.yaml contributes the observations ON TOP of its own

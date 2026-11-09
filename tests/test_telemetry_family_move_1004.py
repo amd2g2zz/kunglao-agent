@@ -7,7 +7,10 @@ stream, and the strategy-log dispatch face move their IO onto the
 consolidated telemetry family (``consolidated_ledger.append/read``):
 ``runs/telemetry.jsonl`` becomes the single live file, the per-module
 IO silos retire (the consolidated append's lock is the ONE guard),
-public APIs stay byte-compatible, and the compat window stays (LEGACY
+public APIs stay byte-compatible. (Issue-1004 R3, the schema cutover,
+deleted the compat window this slice's dual-read pins served: read() is
+family-only now, chronology IS file order, and the R4 migrate fixture
+pins the global order instead. The
 entries remain until the schema-cutover slice).
 
 Pins defined here:
@@ -23,7 +26,8 @@ Pins defined here:
      prefix so historical UNSTAMPED rows and new stamped rows coexist
      under one read face (the pre-stamp rule), never leaking across
      schemas.
-  4. Chronology         legacy rows first, then live rows — the
+  4. Stamp discipline   the multi-schema family file leaks nothing
+     across prefix reads.
      dual-read order the future migration must reproduce.
   5. Seal interplay     no telemetry producer signs; a sealed row
      through the telemetry family path still passes trusted_rows (an
@@ -32,7 +36,7 @@ Pins defined here:
   6. Read faces ride    the strategy-log join (triples), the issue-109
      first-dispatch face (dispatch_gate), and the rl-sampler-exit
      liveness fingerprint all read the family.
-  7. Writer tripwire    no production writer names a telemetry legacy
+  7. Writer tripwire    no production writer names a telemetry
      rel LITERAL inside a write-method call (a literal tripwire, not a
      full data-flow wall: a variable-mediated writer would pass — the
      sanctioned faces define the legacy rels as documented compat-window
@@ -222,35 +226,11 @@ class TestSingleGuardLock:
 
 class TestStrategyStamp:
     def test_native_stamp_is_registered(self):
+        # registered so a dead dispatch writer reads 0, never absent
+        # (the historical unstamped rows get the stamp at migration —
+        # the R4 retire-CLI's verified counts)
         assert STRATEGY_STAMP in cl.NATIVE_SCHEMAS["telemetry"]
-        # the legacy rel registers the stamp too: the coexistence face —
-        # unstamped historical rows pass a strategy-log-prefixed family
-        # read, and the migration stamps them (the retire-CLI's verified
-        # counts).
-        assert cl.LEGACY["telemetry"]["runs/strategy-log.jsonl"] == \
-            (STRATEGY_STAMP,)
-
-    def test_reader_coexists_legacy_unstamped_and_new_stamped(
-            self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = [
-            {"ts": "2026-11-01T00:00:00Z", "event": "dispatch",
-             "strategy": "static-first", "declared": True,
-             "claim": "C-9", "attempts_at_snapshot": 0},
-            {"ts": "2026-11-02T00:00:00Z", "event": "dispatch",
-             "strategy": "default", "declared": False,
-             "claim": "C-8", "attempts_at_snapshot": 1},
-        ]
-        _write_rows(ws, "runs/strategy-log.jsonl", legacy)
-        dg._log_strategy_dispatch(ws, "C-7", "go [strategy s-new]")
-        rows = cl.read(ws, "telemetry", schema_prefix="strategy-log")
-        assert [r["claim"] for r in rows] == ["C-9", "C-8", "C-7"]
-        assert rows[0] == legacy[0]  # unstamped rows byte-preserved
-        assert rows[-1]["schema"] == STRATEGY_STAMP
-        # the legacy file was not appended to — the new row rode the family
-        assert len((ws / "runs" / "strategy-log.jsonl")
-                   .read_text(encoding="utf-8").splitlines()) == 2
+        assert STRATEGY_STAMP in cl.REGISTERED["telemetry"]
 
     def test_prefix_discipline_no_cross_schema_leak(self, tmp_path):
         ws = tmp_path / "ws"
@@ -266,66 +246,6 @@ class TestStrategyStamp:
         assert [r["schema"] for r in strategies] == [STRATEGY_STAMP]
         assert [r["schema"] for r in situations] == [SITUATION_STAMP]
         assert [r["schema"] for r in interventions] == [INTERVENTION_STAMP]
-
-
-# ---------- 4. chronology (the dual-read order) ----------
-
-class TestChronology:
-    def test_prediction_legacy_first_then_live(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = [
-            {"schema": PREDICTION_STAMP, "id": "P-1", "claim_id": "C-1",
-             "statement": "s", "discriminator": "d",
-             "registered_by": "rig", "registered_ts":
-                 "2026-11-01T00:00:00Z", "status": pl.STATUS_PENDING},
-        ]
-        _write_rows(ws, "runs/predictions.jsonl", legacy)
-        row = pl.register(ws, "C-2", "statement two", "discriminator two",
-                          actor="rig")
-        assert row is not None
-        rows = pl.read_ledger(ws)
-        assert [r["id"] for r in rows] == ["P-1", "P-2"]
-        family = cl.read(ws, "telemetry",
-                         schema_prefix="prediction-ledger")
-        assert [r["id"] for r in family] == ["P-1", "P-2"]
-
-    def test_situation_legacy_first_then_live(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = [{"schema": SITUATION_STAMP,
-                   "ts": "2026-11-01T00:00:00Z", "trigger": "terminal",
-                   "tick": 1, "state": {}, "signature": "",
-                   "signature_hash": ""}]
-        _write_rows(ws, "runs/situation-stream.jsonl", legacy)
-        rstate.append_snapshot(ws, trigger="worker_return")
-        rows = rstate.read_situations(ws)
-        assert [r["trigger"] for r in rows] == ["terminal", "worker_return"]
-        family = cl.read(ws, "telemetry", schema_prefix="situation")
-        assert [r["trigger"] for r in family] == \
-            ["terminal", "worker_return"]
-
-    def test_strategy_join_legacy_first_then_live(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        _write_rows(ws, "runs/strategy-log.jsonl", [
-            {"ts": "2026-11-01T00:00:00Z", "event": "dispatch",
-             "strategy": "static-first", "declared": True,
-             "claim": "C-5", "attempts_at_snapshot": 0},
-        ])
-        dg._log_strategy_dispatch(ws, "C-6", "go [strategy exploit-a]")
-        arms = tr._strategy_arm_by_claim(ws)
-        assert arms == {"C-5": "static-first", "C-6": "exploit-a"}
-        # the dual-read order the future migration must reproduce
-        family = cl.read(ws, "telemetry", schema_prefix="strategy-log")
-        assert [r["claim"] for r in family] == ["C-5", "C-6"]
-
-    def test_compat_window_stays_legacy_entries_registered(self):
-        # the schema cutover slice removes these — not this one.
-        for rel in TELEMETRY_LEGACY_RELS:
-            assert rel in cl.LEGACY["telemetry"], rel
-        assert inspect.signature(cl.read).parameters[
-            "include_legacy"].default is True
 
 
 # ---------- 5. the seal interplay ----------

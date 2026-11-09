@@ -71,11 +71,11 @@ def _register(ws: Path, claims: list[dict]) -> None:
 
 
 def _cost(ws: Path, amounts: list[float]) -> None:
-    p = ws / "cost_events.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
-        for a in amounts:
-            fh.write(json.dumps({"amount": a}) + "\n")
+    """Stamp the cost rows into the settlement family file (the only
+    cost face since the issue-1004 R3 schema cutover)."""
+    import cost_gate as cg
+    for a in amounts:
+        cg.append_event(ws, a, "hook")
 
 
 # ---------- fact face ----------
@@ -499,7 +499,7 @@ class TestVAnchor:
         assert ssig.v_anchor(snap) == pytest.approx(0.7)
 
     def test_budget_present_only_with_cost_face(self, tmp_path):
-        # no cost_events.jsonl -> budget dim absent; no facts/chain -> V 0
+        # no cost face on disk -> budget dim absent; no facts/chain -> V 0
         assert ssig.v_anchor(ssig.snapshot(tmp_path)) == 0.0
         _cost(tmp_path, [50.0])  # spent everything, remaining 0
         assert ssig.v_anchor(ssig.snapshot(tmp_path)) == pytest.approx(0.0)

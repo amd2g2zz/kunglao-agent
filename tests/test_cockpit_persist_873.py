@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import tuition_curve as tc  # noqa: E402
 import rho_verifier as rv  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 
 
 # ---------- 缺口0：cost writer ----------
@@ -109,11 +110,10 @@ def _mk_mission_ws(tmp_path, with_cost=True, with_mission=True):
                 "history": [{"v_m": 0.5}, {"v_m": 0.75}],
             }}), encoding="utf-8")
     if with_cost:
-        # the historical UNSTAMPED face — the compat-window seed the
-        # family read must keep seeing (registry: cost_events.jsonl)
-        (ws / "cost_events.jsonl").write_text(
-            json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 12.5,
-                        "source": "Agent"}) + "\n", encoding="utf-8")
+        # the settlement family's cost-event row (the ONE cost face)
+        _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                      "ts": "2026-09-01T00:00:00Z",
+                                      "amount": 12.5, "source": "Agent"})
     return ws
 
 
@@ -178,11 +178,10 @@ def _rho_ws(tmp_path):
     (ws / "facts").mkdir(exist_ok=True)
     (ws / "facts" / "F001.md").write_text(
         "handler 0x14002abcd allocates 0x150 size gate", encoding="utf-8")
-    # the historical UNSTAMPED face — the compat-window seed the family
-    # read must keep seeing (registry: cost_events.jsonl)
-    (ws / "cost_events.jsonl").write_text(
-        json.dumps({"ts": "2026-09-01T00:00:00Z", "amount": 7.25,
-                    "source": "Agent"}) + "\n", encoding="utf-8")
+    # the settlement family's cost-event row (the ONE cost face)
+    _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                  "ts": "2026-09-01T00:00:00Z",
+                                  "amount": 7.25, "source": "Agent"})
     return ws
 
 

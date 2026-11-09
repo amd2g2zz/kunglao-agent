@@ -269,8 +269,8 @@ class TestLaunchShape:
             warm, None)
         empty = tmp_path / "empty-store"
         empty.mkdir()
-        assert "posterior-store.jsonl" in emr.warm_source_fault(warm, empty)
-        (empty / emr.STORE_FILE).write_text("", encoding="utf-8")
+        assert "knowledge-store.jsonl" in emr.warm_source_fault(warm, empty)
+        (empty / emr.FAMILY_STORE_FILE).write_text("", encoding="utf-8")
         assert emr.warm_source_fault(warm, empty) is None
 
     def test_materialize_cold_and_warm(self, tmp_path) -> None:
@@ -280,31 +280,31 @@ class TestLaunchShape:
         assert out.is_dir() and list(out.iterdir()) == []
         src = tmp_path / "warm-src"
         src.mkdir()
-        (src / emr.STORE_FILE).write_text('{"row": 1}\n', encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text('{"row": 1}\n', encoding="utf-8")
         warm = self._plan(run_dir=tmp_path / "cell-warm", store_kind="warm")
         out = emr.materialize_store(warm, src)
-        assert (out / emr.STORE_FILE).read_text("utf-8") == '{"row": 1}\n'
+        assert (out / emr.FAMILY_STORE_FILE).read_text("utf-8") == '{"row": 1}\n'
         # a warm arm with a bad source refuses and cleans up
         broken = self._plan(run_dir=tmp_path / "cell-broken",
                             store_kind="warm")
         with pytest.raises(emr.ConfigError):
             emr.materialize_store(broken, None)
         assert not broken.run_dir.exists() or \
-            not (emr.store_dir_of(broken) / emr.STORE_FILE).exists()
+            not (emr.store_dir_of(broken) / emr.FAMILY_STORE_FILE).exists()
         shutil.rmtree(tmp_path / "cell-warm", ignore_errors=True)
 
     def test_per_arm_materializes_once(self, tmp_path) -> None:
         src = tmp_path / "warm-src"
         src.mkdir()
-        (src / emr.STORE_FILE).write_text("v1\n", encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text("v1\n", encoding="utf-8")
         plan = self._plan(run_dir=tmp_path / "arm/u1", store_kind="warm",
                           store_mode="per-arm")
         first = emr.materialize_store(plan, src)
-        (src / emr.STORE_FILE).write_text("v2\n", encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text("v2\n", encoding="utf-8")
         second = emr.materialize_store(plan, src)
         assert first == second
         # the within-sequence copy is NOT re-landed: accumulated state stays
-        assert (second / emr.STORE_FILE).read_text("utf-8") == "v1\n"
+        assert (second / emr.FAMILY_STORE_FILE).read_text("utf-8") == "v1\n"
 
     def test_run_row_and_progress_faces(self, tmp_path) -> None:
         plan = self._plan()

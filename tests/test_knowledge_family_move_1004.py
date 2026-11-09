@@ -9,12 +9,13 @@ CLI), and the MARL negative-knowledge store (marl) move their IO onto
 the consolidated knowledge family (``consolidated_ledger.append/read``):
 ``knowledge-store.jsonl`` under the guarded cross-task root becomes the
 single live file, the per-module IO silos retire (the consolidated
-append's lock is the ONE guard), public APIs stay byte-compatible, and
-the compat window stays (LEGACY entries remain until the
-schema-cutover slice).
+append's lock is the ONE guard) and public APIs stay byte-compatible.
+(Issue-1004 R3, the schema cutover, deleted the compat window this
+slice's dual-read pins served: read() is family-only now, chronology IS
+file order, and the R4 migrate fixture pins the global order instead.)
 
 Pins defined here:
-  1. API compatibility  store_root / store_path / append_row /
+  1. API compatibility  store_root / append_row /
      append_store_row / append_workspace_credit_row / load_rows /
      warm_pools / record / read / fold / check_degeneracy /
      recent_credits / freeze_if_degenerate / default_table_path /
@@ -37,34 +38,31 @@ Pins defined here:
      the sealed rows read back from the family file — an armed
      workspace must not start refusing its own rows because the file
      name changed (R5's workspace migration depends on this).
-  5. Chronology         legacy rows first, then live rows — the
-     dual-read order the future migration must reproduce (list
-     equality on every moved reader).
-  6. Stamp coexistence  the multi-schema family file keeps its reads
+  5. Stamp coexistence  the multi-schema family file keeps its reads
      prefix-disciplined: a posterior-store-prefixed read admits only
      posterior-store history (the R2b-verified pre-stamp rule), never
      a marl-negative or feature-table row.
-  7. Legacy resolution  knowledge rels resolve under the guarded root
+  5. Legacy resolution  the MIGRATION-ONLY resolution: knowledge
+     source rels resolve under the guarded root
      EXCEPT the ws-scoped runs/ rels (the historical ws-local
      posterior-store series and the mined feature table) — the
      documented exception legacy_path implements; store_root stays the
      ONLY root resolver (consolidated_ledger._knowledge_root delegates,
      no second resolver appears).
-  8. Miner family face  the feature_mining CLI's default output is the
+  7. Miner family face  the feature_mining CLI's default output is the
      family file with an idempotent dedupe-append (append-only — a
      re-run appends nothing and never touches other schemas' rows);
      an explicit --out keeps the deterministic single-file rebuild.
-  9. Read faces ride    the degeneracy breaker, the rl-posterior-moved
+  8. Read faces ride    the degeneracy breaker, the rl-posterior-moved
      liveness fingerprint, and the eval_split_lint schema-aware
      firewall face all read the family file (a dependent face left on
      the legacy path would go permanently stale post-move — the R2b
      lesson).
- 10. Writer tripwire    no production writer names a knowledge legacy
+  9. Writer tripwire    no production writer names a knowledge legacy
      rel LITERAL inside a write-method call (a literal tripwire, not a
      full data-flow wall: a variable-mediated writer would pass — the
-     sanctioned faces define the legacy rels as documented
-     compat-window constants and touch no write call with them).
- 11. Population pins    the family file co-locates three
+     sanctioned faces are the migration core + the R4 retire CLI).
+ 10. Population pins    the family file co-locates three
      formerly-isolated posterior-store/1 populations (bank rows =
      cross-task; credit series = ws-local; DTS rows = ws-local) — every
      consumer sees exactly its pre-move population (review round 2):
@@ -162,7 +160,6 @@ class TestApiCompatibility:
     def test_public_signatures_unchanged(self):
         expect = {
             (ss.__name__, "store_root"): [],
-            (ss.__name__, "store_path"): [],
             (ss.__name__, "append_row"): ["row"],
             (ss.__name__, "append_workspace_credit_row"): ["ws"],
             (ss.__name__, "load_rows"): ["ws"],
@@ -431,101 +428,7 @@ class TestSealInterplay:
         assert len(kept) == 1 and kept[0]["workspace_id"] != "evil"
 
 
-# ---------- 5. chronology (the dual-read order) ----------
-
-class TestChronology:
-    def test_posterior_store_legacy_first_then_live(
-            self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        # guarded-root history (the cross-task store's pre-move file)
-        _write_rows(root / "posterior-store.jsonl", [
-            _credit_row("ws-old", 0.9, "C-0")])
-        # ws-local history (the credit series' pre-move file)
-        _write_rows(ws / "runs" / "posterior-store.jsonl", [
-            _credit_row("ws", 0.5, "C-1")])
-        ss.append_workspace_credit_row(ws, method_family="graph",
-                                       status="ROUND_CREDIT", credit=0.5,
-                                       claim="C-2", credit_kind="step")
-        rows = cl.read(ws, "knowledge", schema_prefix="posterior-store")
-        assert [r.get("claim") for r in rows] == ["C-0", "C-1", "C-2"]
-        assert rows[-1]["schema"] == POSTERIOR_STAMP
-        # the legacy files were not appended to — the new row rode the
-        # family file
-        assert len((root / "posterior-store.jsonl")
-                   .read_text(encoding="utf-8").splitlines()) == 1
-        assert len((ws / "runs" / "posterior-store.jsonl")
-                   .read_text(encoding="utf-8").splitlines()) == 1
-
-    def test_dts_fold_legacy_first_then_live(self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = {"schema": POSTERIOR_STAMP, "state": "sig", "arm": "old",
-                  "ts": "2026-11-01T00:00:00Z", "gamma": 0.9,
-                  "outcome": 1, "alpha_add": 1.0, "beta_add": 0.0}
-        _write_rows(ws / "runs" / "posterior-store.jsonl", [legacy])
-        dts.record(ws, "sig", "new", 0)
-        rows = dts.read(ws)
-        assert [r["arm"] for r in rows] == ["old", "new"]
-        view = dts.fold(ws)
-        assert ("sig", "old") in view.cells
-        assert ("sig", "new") in view.cells
-
-    def test_marl_legacy_first_then_live(self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        legacy = {"schema": MARL_STAMP, "ts": "2026-11-01T00:00:00Z",
-                  "signature_class": "abc123def456",
-                  "agent_type": "worker", "method_family": "old",
-                  "tool_chain": None, "fails": 1}
-        _write_rows(root / "marl-negative.jsonl", [legacy])
-        marl.record_negative(ws, method_family="new",
-                             features={"lane": "apk"})
-        rows = marl.read_negatives()
-        assert [r["method_family"] for r in rows] == ["old", "new"]
-        assert len((root / "marl-negative.jsonl")
-                   .read_text(encoding="utf-8").splitlines()) == 1
-
-    def test_feature_table_legacy_first_then_live(
-            self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        # two mining roots over the SAME ws: the pre-move table rode the
-        # ws-local rel, the post-move table rides the family file
-        legacy_src = _mine_root(tmp_path / "legacy-src")
-        live_src = _mine_root(tmp_path / "live-src")
-        legacy = fm.mine_run(legacy_src, legacy_src / "runs" / "e2e"
-                             / "run-1")
-        assert legacy is not None
-        live = dict(legacy, run_id="run-2", task_id="t-2")
-        _write_rows(ws / "runs" / "feature-table.jsonl", [legacy])
-        fp.default_table_path(ws).parent.mkdir(parents=True,
-                                               exist_ok=True)
-        _write_rows(fp.default_table_path(ws), [live])
-        rows = fp.family_table_rows(ws)
-        assert [r["run_id"] for r in rows] == ["run-1", "run-2"]
-        # the ws-local legacy rel was not appended to
-        assert len((ws / "runs" / "feature-table.jsonl")
-                   .read_text(encoding="utf-8").splitlines()) == 1
-
-    def test_compat_window_stays_legacy_entries_registered(self):
-        # the schema cutover slice removes these — not this one.
-        for rel in KNOWLEDGE_LEGACY_RELS:
-            assert rel in cl.LEGACY["knowledge"], rel
-            assert cl.LEGACY["knowledge"][rel] == \
-                ({"posterior-store.jsonl": POSTERIOR_STAMP,
-                  "marl-negative.jsonl": MARL_STAMP,
-                  "runs/posterior-store.jsonl": POSTERIOR_STAMP,
-                  "runs/feature-table.jsonl": FEATURE_STAMP}[rel],)
-        assert inspect.signature(cl.read).parameters[
-            "include_legacy"].default is True
-
-
-# ---------- 6. stamp coexistence + no cross-rel leak ----------
+# ---------- 5. stamp coexistence + no cross-rel leak ----------
 
 class TestPrefixDiscipline:
     def test_family_file_multi_schema_reads_stay_disciplined(
@@ -554,7 +457,7 @@ class TestPrefixDiscipline:
         assert counts["knowledge:feature-table/1"] == 0
 
 
-# ---------- 7. the guarded-root resolution ----------
+# ---------- 6. the guarded-root resolution ----------
 
 class TestGuardedRootSingleSource:
     def test_knowledge_root_delegates_to_store_root(
@@ -588,7 +491,7 @@ class TestGuardedRootSingleSource:
             == ws / "runs" / "feature-table.jsonl"
 
 
-# ---------- 8. the miner family face ----------
+# ---------- 7. the miner family face ----------
 
 def _mine_root(tmp: Path) -> Path:
     """A minimal mining root: one e2e run dir with a run-state.json and
@@ -652,7 +555,7 @@ class TestMinerFamilyFace:
         assert len(rows) == 1  # rewritten, not duplicated
 
 
-# ---------- 9. the read faces ride the family ----------
+# ---------- 8. the read faces ride the family ----------
 
 class TestReadFacesRide:
     def test_rl_posterior_moved_fingerprint_reads_the_family(
@@ -691,7 +594,7 @@ def _synthetic_family_file() -> Path:
     return p
 
 
-# ---------- 10. production writers never touch the legacy rels ----------
+# ---------- 9. production writers never touch the legacy rels ----------
 
 _WRITE_METHODS = {"open", "write_text", "write_bytes", "unlink",
                   "replace", "rename", "touch", "mkdir"}
@@ -745,7 +648,7 @@ class TestNoLegacyWrites:
             + "\n".join(offenders))
 
 
-# ---------- 11. the review-fix pins (population + isolation + revoke) ----------
+# ---------- 10. the review-fix pins (population + isolation + revoke) ----------
 
 class TestPopulationContract:
     """The family file co-locates three formerly-isolated posterior-store
@@ -978,7 +881,9 @@ class TestMigrateArchiveNaming:
              "provenance": {"dispatch_id": ""}}])
         _write_rows(ws / "runs" / "posterior-store.jsonl", [
             _credit_row("ws", 0.9, "C-0")])
-        report = cl.migrate(ws, ["knowledge"])
+        import consolidate_ledgers as _cli  # noqa: PLC0415 — the registry
+        report = cl.migrate(ws, ["knowledge"],
+                            sources=_cli.LEGACY_SOURCES)
         statuses = {rel: entry["status"]
                     for rel, entry in report["knowledge"].items()}
         assert statuses == {

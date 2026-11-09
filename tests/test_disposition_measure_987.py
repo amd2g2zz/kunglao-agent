@@ -176,10 +176,12 @@ def _settle_rollout(ws, claim: str) -> None:
 
 
 def _cost_event(ws, amount: float) -> None:
-    path = Path(ws) / "cost_events.jsonl"
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"ts": TS, "amount": amount,
-                             "source": "test"}) + "\n")
+    """One stamped cost row in the settlement family file (the only
+    cost face since the issue-1004 R3 schema cutover)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415
+    assert _cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": amount,
+        "source": "test"})
 
 
 def _routes(ws, claim: str, declared: int, attempted: int) -> str:
@@ -562,15 +564,18 @@ def test_missing_route_ledger_file_is_an_explicit_none(tmp_path):
 
 
 def test_cost_events_skip_dirty_lines(tmp_path):
+    """The fail-open posture on the family face: an unparseable line and
+    a non-numeric amount are skipped, the usable row counts."""
     # Arrange
     ws = _ws(tmp_path)
     _surrender(ws, episode_id="ep-1", claim="C-1")
-    path = Path(ws) / "cost_events.jsonl"
-    path.write_text(
-        "not json\n"
-        '{"ts": "2026-11-05T00:00:00Z", "amount": "nope"}\n'
-        '{"ts": "2026-11-05T00:00:00Z", "amount": 1.25}\n',
-        encoding="utf-8")
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": "nope",
+        "source": "test"})
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": 1.25,
+        "source": "test"})
 
     # Act
     report = dm.measure(ws)
@@ -579,7 +584,7 @@ def test_cost_events_skip_dirty_lines(tmp_path):
     cost = report["process"]["workspace"]["cost"]
     assert cost["amount"] == 1.25
     assert cost["events"] == 1
-    assert cost["files"] == ["cost_events.jsonl"]
+    assert cost["files"] == ["runs/settlement.jsonl"]
 
 
 def test_cost_events_read_the_settlement_family_face(tmp_path):
@@ -601,29 +606,6 @@ def test_cost_events_read_the_settlement_family_face(tmp_path):
     assert cost["amount"] == 1.25
     assert cost["events"] == 1
     assert cost["files"] == ["runs/settlement.jsonl"]
-
-
-def test_cost_events_family_face_never_double_counts_legacy(tmp_path):
-    """The legacy rels and the family file are SEPARATE faces: the
-    family read runs with the legacy window off, so a workspace carrying
-    both counts each row exactly once."""
-    # Arrange
-    ws = _ws(tmp_path)
-    _surrender(ws, episode_id="ep-1", claim="C-1")
-    _cost_event(ws, 1.25)  # the legacy face
-    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
-    assert cl.append(ws, "settlement", {
-        "schema": "cost-event/1", "ts": TS, "amount": 2.0,
-        "source": "test"})  # the family face
-
-    # Act
-    report = dm.measure(ws)
-
-    # Assert
-    cost = report["process"]["workspace"]["cost"]
-    assert cost["amount"] == pytest.approx(3.25)
-    assert cost["events"] == 2
-    assert cost["files"] == ["cost_events.jsonl", "runs/settlement.jsonl"]
 
 
 # ---------- process metrics ----------
@@ -837,14 +819,15 @@ def test_route_ledger_outside_the_workspace_is_ignored(tmp_path):
 
 
 def test_huge_integer_cost_amount_is_a_dirty_line(tmp_path):
-    # Arrange: one amount above float range plus one valid amount
+    # Arrange: one amount above float range plus one valid amount — the
+    # family face absorbs the dirty row, the report still measures
     ws = _ws(tmp_path)
     _surrender(ws, episode_id="ep-1", claim="C-1")
-    path = Path(ws) / "cost_events.jsonl"
-    path.write_text(
-        json.dumps({"ts": TS, "amount": 10 ** 400}) + "\n"
-        + json.dumps({"ts": TS, "amount": 1.25}) + "\n",
-        encoding="utf-8")
+    from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": 10 ** 400})
+    assert cl.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": TS, "amount": 1.25})
 
     # Act
     report = dm.measure(ws)

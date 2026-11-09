@@ -64,6 +64,7 @@ for p in (SCRIPTS, ROOT / "tests"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import l1_planner as lp  # noqa: E402
 from rlvr import l1_value as lv  # noqa: E402
 from rlvr import q_cells as qc  # noqa: E402
@@ -112,9 +113,7 @@ def _transition(ws: Path, claim: str, *, r_incr: float,
            "phi_delta": round(phi_delta, 6), "claim_ref": claim,
            "action_key": FAM, "r_incr": r_incr, "r_settle": None,
            "done": False}
-    p = ws / "runs" / "transitions.jsonl"
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row) + "\n")
+    _cl.append(ws, "experience", {**row, "schema": "transition/1"})
 
 
 def _index_row(ws: Path, fact_id: str, status: str, claim: str) -> None:

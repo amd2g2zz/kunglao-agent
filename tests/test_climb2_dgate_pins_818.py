@@ -581,14 +581,16 @@ class TestPqHistoryFaces:
     def test_dispatched_before_reads_both_history_faces(
             self, tmp_path) -> None:
         import dispatch_gate as dg
+        from rlvr import consolidated_ledger as _cl
         ws = _mk_ws(tmp_path)
         qmap = {"C-1": "q1", "C-2": "q1"}
         assert dg._pq_dispatched_before(ws, "q1", qmap) is False
-        strategy = ws / "runs" / "strategy-log.jsonl"
-        strategy.write_text(json.dumps(
-            {"event": "dispatch", "claim": "C-2"}) + "\n", encoding="utf-8")
+        _cl.append(ws, "telemetry", {
+            "schema": "strategy-log/1", "ts": "2026-01-01T00:00:00Z",
+            "event": "dispatch", "strategy": "static-symbolic",
+            "claim": "C-2", "attempts_at_snapshot": 1})
         assert dg._pq_dispatched_before(ws, "q1", qmap) is True
-        strategy.unlink()
+        (ws / "runs" / "telemetry.jsonl").unlink()  # drop the first face
         intents = ws / "runs" / "roi-intents.jsonl"
         intents.write_text(json.dumps({"claim_id": "C-1"}) + "\n",
                            encoding="utf-8")
