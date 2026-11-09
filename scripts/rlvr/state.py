@@ -89,9 +89,9 @@ honest absence drops a dim, it never fabricates a 0):
   chain   (w=0.5)  k/N
   facts   (w=0.3)  verified / max(count, 1)
   budget  (w=0.2)  remaining fraction (1 - spent/cap); present iff the
-                   cost face has content (the settlement family file, or
-                   measured spend; the legacy cost_events rel counts
-                   inside the compat window) — a fresh workspace with no
+                   cost face has content (the settlement family file's
+                   stamped cost-event rows — the ONE face since the
+                   issue-1004 R3 cutover) — a fresh workspace with no
                    cost telemetry has no budget dim
   sides   (w=0.0)  RESERVED v0.2 (side completion rate)
 

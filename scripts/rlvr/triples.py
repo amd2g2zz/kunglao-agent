@@ -101,8 +101,8 @@ def _last_signal(signals: list[dict], type_: str):
 
 def _strategy_arm_by_claim(ws) -> dict:
     """strategy-log dispatch rows (event=dispatch): claim -> LAST
-    strategy id — the telemetry family read (legacy runs/strategy-log
-    rows first via the compat window, then the stamped family rows),
+    strategy id — the telemetry family read (the ONE face since the
+    issue-1004 R3 cutover; the pre-move rel retires with the R4 CLI),
     windowed to the most recent STRATEGY_LOG_MAX rows (the same window
     the dispatch gate's first-dispatch face applies — one stream, one
     bound, so a claim outside the window resolves NEITHER here nor

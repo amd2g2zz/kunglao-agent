@@ -28,6 +28,7 @@ if str(SCRIPTS) not in sys.path:
 
 import mission_ledger as ml  # noqa: E402
 import signals_stream as ss  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 
 TASK_SPEC = {
     "primary_questions": [
@@ -136,9 +137,12 @@ def test_vector_survives_dirty_signal_stream(ws):
 
 
 def test_cost_tokens_reads_cost_events(ws):
-    (ws / "runs").mkdir(exist_ok=True)
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 1.5}\n{"amount": 2.5}\n', encoding="utf-8")
+    _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                  "ts": "2026-01-01T00:00:00Z",
+                                  "amount": 1.5, "source": "test"})
+    _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                  "ts": "2026-01-01T00:01:00Z",
+                                  "amount": 2.5, "source": "test"})
     ml.value_m(ws)
     row = ml.load(ws)["mission"]["history"][-1]
     assert row["cost_tokens"] == 4.0

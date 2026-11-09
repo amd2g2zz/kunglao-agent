@@ -47,6 +47,7 @@ for p in (str(ROOT), str(SCRIPTS)):
 
 import eval_matrix_report as mr  # noqa: E402
 from e2e import audit as e2e_audit  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 
 
 # ---- fixture builders (synthetic audit trails) ----------------------------
@@ -59,10 +60,8 @@ def _write_audit(ws: Path, rows: list[dict]) -> None:
 
 
 def _write_transitions(ws: Path, rows: list[dict]) -> None:
-    p = ws / "runs" / "transitions.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows),
-                 encoding="utf-8")
+    for row in rows:
+        _cl.append(ws, "experience", {**row, "schema": "transition/1"})
 
 
 def _write_results(run_dir: Path, unit: str, ws: Path,

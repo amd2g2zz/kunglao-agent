@@ -90,9 +90,8 @@ from typing import Iterable, Mapping
 FLAG_ENV = "KUNGLAO_PREDICT_BEFORE_TRY"
 
 # where Part A's miner wrote before the family move (issue-1004 R2c):
-# the compat window's legacy rel — the live table is the knowledge
-# family file (``default_table_path`` / ``family_table_rows``)
-FEATURE_TABLE_REL = Path("runs") / "feature-table.jsonl"
+# the live table is the knowledge family file (``default_table_path`` /
+# ``family_table_rows``); the pre-move rel retires with the R4 CLI
 
 
 def enabled() -> bool:

@@ -324,11 +324,11 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
 
 def load_rows(ws=None) -> list[dict]:
     """The tolerant read: schema-filtered rows, oldest first (the
-    knowledge family read — the guarded-root and ws-local legacy rels
-    first, then the family file: chronology); when ``ws`` is given,
-    rows from THAT workspace are excluded (the leave-one-out shape — a
-    workspace never warm-starts from its own rows). Missing store = [],
-    corrupt lines skip, unknown schemas skip.
+    knowledge family read — the ONE face since the issue-1004 R3
+    cutover; the pre-move rels retire with the R4 CLI); when ``ws`` is
+    given, rows from THAT workspace are excluded (the leave-one-out
+    shape — a workspace never warm-starts from its own rows). Missing
+    store = [], corrupt lines skip, unknown schemas skip.
 
     POPULATION CONTRACT (issue-1004 R2c review fix): the family file
     co-locates the CROSS-TASK bank rows (this face's pre-move
