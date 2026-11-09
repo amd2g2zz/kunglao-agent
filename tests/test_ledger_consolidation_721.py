@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """tests/test_ledger_consolidation_721.py — the 4-file ledger
 consolidation (issue #721): one consolidation core — append-only, row
-schema stamps, flock; the append-only migration; the compat read window;
-per-schema liveness counters.
+schema stamps, flock; the append-only migration; per-schema liveness
+counters.
 
 The card's pins:
 
@@ -12,11 +12,12 @@ The card's pins:
   2. Migration APPENDS, never rewrites — the originals land in
      runs/archive/ byte-identical; every historical row survives (values
      preserved; a schema stamp is the only structural addition, and only
-     where a pre-stamp row lacked it); a re-run appends nothing.
-  3. Readers accept both paths during the compat window — legacy archive
-     rows first, then the consolidated file; the stamp filter keeps
-     foreign schemas out of a family read.
-  4. Per-schema liveness counters are visible — every registered schema
+     where a pre-stamp row lacked it); a re-run appends nothing. The
+     migration source list is EXPLICIT (the R4 CLI's LEGACY_SOURCES
+     registry — the issue-1004 R3 schema cutover deleted the in-core
+     compat window, so no dual-read pins remain: the family read is the
+     ONE read; issue-1004 R3 pins that in test_schema_cutover_1004).
+  3. Per-schema liveness counters are visible — every registered schema
      reports a count (a dead schema reads 0, never silently absent).
 
 The knowledge family rides the guarded cross-task root
@@ -39,6 +40,11 @@ for p in (SCRIPTS, SCRIPTS.parent / "tests", ROOT / "hooks"):
 from rlvr import consolidated_ledger as cl  # noqa: E402
 
 TS = "2026-10-16T00:00:00Z"
+
+#: the migration source list — single-sourced from the R4 CLI surface
+#: (the issue-1004 R3 schema cutover moved the registry there)
+import consolidate_ledgers as _cli  # noqa: E402
+SOURCES = _cli.LEGACY_SOURCES
 
 
 def _ws(tmp_path: Path) -> Path:
@@ -96,40 +102,6 @@ def test_appends_stay_well_formed_under_concurrency(tmp_path):
     assert all(r["schema"] == "step-record/1" for r in rows)
 
 
-# ------------------------------- pin 3: the compat read window
-
-def test_readers_accept_both_paths_during_compat(tmp_path, monkeypatch):
-    monkeypatch.delenv(cl.STORE_ENV, raising=False)
-    ws = _ws(tmp_path)
-    runs = ws / "runs"
-    # (a) legacy-only workspace: the unstamped archive still reads
-    legacy = {"ts": TS, "dispatch_id": "C-1"}  # the pre-stamp archive row
-    (runs / "transitions.jsonl").write_text(json.dumps(legacy) + "\n",
-                                            "utf-8")
-    assert cl.read(ws, "experience", schema_prefix="transition") == [legacy]
-    # ...and never leaks into another schema's read
-    assert cl.read(ws, "experience", schema_prefix="q-cell-obs") == []
-
-    # (b) live writes land in the consolidated file and read back with
-    # the legacy rows first (chronology); the stamp filter keeps foreign
-    # schemas out of a family read
-    live = {"schema": "transition/1", "ts": TS, "dispatch_id": "C-2"}
-    assert cl.append(ws, "experience", live) is True
-    assert cl.append(ws, "experience", {"schema": "step-record/1",
-                                        "ts": TS}) is True
-    got = cl.read(ws, "experience", schema_prefix="transition")
-    assert got == [legacy, live]
-    assert len(cl.read(ws, "experience")) == 3       # unfiltered = all
-    # a stamped legacy row filters on ITS stamp (exact archive window)
-    (runs / "q-cell-log.jsonl").write_text(json.dumps(
-        {"schema": "q-cell-obs/1", "ts": TS}) + "\n", "utf-8")
-    assert [r["schema"] for r in
-            cl.read(ws, "experience", schema_prefix="step-record")] == \
-        ["step-record/1"]
-    assert cl.read(ws, "experience", schema_prefix="q-cell-obs") == \
-        [{"schema": "q-cell-obs/1", "ts": TS}]
-
-
 # ------------------------------------------- pin 2: append-only migration
 
 def test_migration_appends_never_rewrites_history(tmp_path, monkeypatch):
@@ -156,7 +128,7 @@ def test_migration_appends_never_rewrites_history(tmp_path, monkeypatch):
         "transitions.jsonl", "q-cell-log.jsonl", "step-ledger.jsonl",
         "evidence-credit.jsonl")}
 
-    report = cl.migrate(ws)
+    report = cl.migrate(ws, sources=SOURCES)
     # originals archived byte-identical (never rewritten, never deleted)
     # and MOVED — the read face can never double-count them
     for name, raw in before.items():
@@ -177,7 +149,7 @@ def test_migration_appends_never_rewrites_history(tmp_path, monkeypatch):
     assert report["experience"]["runs/transitions.jsonl"]["appended"] == 2
 
     # a re-run appends NOTHING (idempotent — never a duplicated history)
-    again = cl.migrate(ws)
+    again = cl.migrate(ws, sources=SOURCES)
     assert _lines(runs / "experience.jsonl") == rows
     assert again["experience"]["runs/transitions.jsonl"]["status"] \
         == "absent"
@@ -186,7 +158,7 @@ def test_migration_appends_never_rewrites_history(tmp_path, monkeypatch):
     dry_ws = _ws(tmp_path / "d")
     (dry_ws / "runs" / "transitions.jsonl").write_text(
         json.dumps({"ts": TS, "dispatch_id": "C-9"}) + "\n", "utf-8")
-    dry = cl.migrate(dry_ws, dry_run=True)
+    dry = cl.migrate(dry_ws, sources=SOURCES, dry_run=True)
     assert dry["experience"]["runs/transitions.jsonl"]["status"] \
         == "dry-run"
     assert not (dry_ws / "runs" / "experience.jsonl").exists()
@@ -201,7 +173,7 @@ def test_migration_never_guesses_a_second_schema_stamp(tmp_path,
     ws = _ws(tmp_path)
     (ws / "runs" / "step-ledger.jsonl").write_text(
         json.dumps({"ts": TS, "session_id": "s1"}) + "\n", "utf-8")
-    cl.migrate(ws)
+    cl.migrate(ws, sources=SOURCES)
     rows = _lines(ws / "runs" / "experience.jsonl")
     assert rows == [{"ts": TS, "session_id": "s1"}]  # verbatim, no guess
 
@@ -226,10 +198,12 @@ def test_per_schema_liveness_counters_visible(tmp_path, monkeypatch):
     assert live["experience:step-record/2"] == 2
     assert live["experience:step-record/1"] == 0  # dead schema = alarm
     assert live["experience:claim-ref/9"] == 1
-    # legacy rels count during the compat window (unstamped bucket)
+    # a legacy rel on disk adds no bucket (the schema cutover deleted
+    # the compat window — issue-1004 R3; the retired file's rows are
+    # invisible to every live read)
     (ws / "runs" / "transitions.jsonl").write_text(
         json.dumps({"ts": TS}) + "\n", "utf-8")
-    assert cl.liveness(ws)["experience:(no-schema)"] == 1
+    assert "experience:(no-schema)" not in cl.liveness(ws)
 
 
 def test_append_refuses_unserializable_and_malformed_stamps(tmp_path):
@@ -304,4 +278,4 @@ def test_knowledge_family_rides_the_guarded_root(tmp_path, monkeypatch):
     p = cl.family_path(tmp_path / "ws", "knowledge")
     assert p == tmp_path / "root" / "knowledge-store.jsonl"
     from rlvr import strategy_store as ss  # noqa: PLC0415 — the pin
-    assert p == ss.store_path().parent / "knowledge-store.jsonl"
+    assert p == ss.store_root() / "knowledge-store.jsonl"

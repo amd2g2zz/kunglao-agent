@@ -102,14 +102,13 @@ def _scan_posterior_store(paths: list[Path],
     write-face filter (rlvr.strategy_store.append_row, filter BEFORE
     append) was bypassed, so the violation names the row. Since
     issue-1004 R2c the live rows land in the knowledge family file
-    (``knowledge-store.jsonl``), so the face scans it beside the
-    pre-move rel. The generic whole-file scan above still covers the
-    raw bytes; this class exists so the failure is attributable to the
-    exact row."""
+    (``knowledge-store.jsonl``) — the only scanned face since the
+    issue-1004 R3 schema cutover. The generic whole-file scan above
+    still covers the raw bytes; this class exists so the failure is
+    attributable to the exact row."""
     out: list[str] = []
     for p in paths:
-        if p.name not in ("posterior-store.jsonl",
-                          "knowledge-store.jsonl"):
+        if p.name != "knowledge-store.jsonl":
             continue
         try:
             lines = p.read_text(encoding="utf-8",

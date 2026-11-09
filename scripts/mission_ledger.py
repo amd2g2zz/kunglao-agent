@@ -358,8 +358,8 @@ def _round_index_safe(ws) -> int:
 
 
 def _cost_tokens_safe(ws) -> float:
-    """Cumulative token spend (runs/cost_events.jsonl, tuition_curve single
-    source). Fail-open to 0.0."""
+    """Cumulative token spend (the settlement family's cost-event rows,
+    tuition_curve single source). Fail-open to 0.0."""
     try:
         from tuition_curve import cost_state
         return float(cost_state(Path(ws))["spent"])
@@ -387,7 +387,7 @@ def factor_vector(ws, v_norm: float, pqs: list[dict]) -> dict:
                          cursor (machine-independent, no wall clock); toss
                          is DERIVED (a dispatch whose claim never sees a
                          later deliver row — delivery not yet reconciled);
-      cost_tokens      — cumulative spend (cost_events.jsonl);
+      cost_tokens      — cumulative spend (cost-event rows);
       cost_rounds      — 1 (the unit semantic: one value_m call = one round);
       signals_rows     — the stream cursor at sample time (additive
                          bookkeeping for the next window).

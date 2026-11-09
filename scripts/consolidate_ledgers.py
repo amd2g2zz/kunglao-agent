@@ -12,13 +12,16 @@ is the ONE-TIME migration face plus the per-schema liveness readout:
     python scripts/consolidate_ledgers.py <ws> --liveness   # per-schema counts
     python scripts/consolidate_ledgers.py <ws> --families experience
 
-Migration APPENDS (never rewrites): every legacy row is appended into
+Migration APPENDS (never rewrites): every source row is appended into
 the family's consolidated file (values preserved; a missing stamp added
-only where a single schema is registered), then the legacy file is
+only where a single schema is registered), then the source file is
 MOVED to <ws>/runs/archive/ — bytes intact, never deleted. Idempotent:
-re-running appends nothing already copied. Only switched families
-migrate by default (``experience``); settlement/telemetry/knowledge
-migrate when their own cards switch them.
+re-running appends nothing already copied. Since the issue-1004 R3
+schema cutover every family's writers live on the consolidated files,
+so all four families migrate by default (``--families`` narrows); the
+migration SOURCE LIST below is this CLI's own registry (the in-core
+compat registry was deleted by R3) and is what the R4 retire slice
+consumes to verify + delete the legacy rels.
 
 Exit: 0 ok; 2 bad args; 3 a rel ended partial/copied-unarchived
 (append refusal or archive conflict — nothing was rewritten or deleted;
@@ -34,6 +37,47 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from rlvr import consolidated_ledger as cl  # noqa: E402
+
+#: family -> {legacy rel: the schema stamps rows in that rel may carry}.
+#: THE migration source list (issue-1004 R3 moved it here from the
+#: consolidated core — the R4 retire slice consumes the same registry).
+#: Knowledge rels resolve under the guarded root EXCEPT the ws-scoped
+#: ``runs/`` rels (the historical ws-local posterior series and the
+#: mined feature table — see rlvr.consolidated_ledger.legacy_path).
+LEGACY_SOURCES: dict[str, dict[str, tuple[str, ...]]] = {
+    "experience": {
+        "runs/transitions.jsonl": ("transition/1",),
+        "runs/q-cell-log.jsonl": ("q-cell-obs/1",),
+        "runs/step-ledger.jsonl": ("step-record/1", "step-record/2"),
+        "runs/evidence-credit.jsonl": ("evidence-item/1",
+                                       "credit-amendment/1"),
+    },
+    "settlement": {
+        "runs/rollout-ledger.jsonl": ("rollout-ledger/1",),
+        "runs/attributed-waste.jsonl": ("attributed-waste/1",),
+        # historical rows are UNSTAMPED {"ts","amount","source"}; the
+        # registration gives the migration its one-schema stamp
+        "cost_events.jsonl": ("cost-event/1",),
+    },
+    "telemetry": {
+        "runs/interventions.jsonl": ("intervention/1",),
+        "runs/predictions.jsonl": ("prediction-ledger/1",),
+        "runs/situation-stream.jsonl": ("situation/1",),
+        # historical rows are UNSTAMPED event=dispatch rows; the
+        # registration gives the migration its one-schema stamp
+        # (issue-1004 R2b: the writer moved to the family, new rows
+        # carry the stamp at write)
+        "runs/strategy-log.jsonl": ("strategy-log/1",),
+    },
+    "knowledge": {
+        "posterior-store.jsonl": ("posterior-store/1",),
+        "marl-negative.jsonl": ("marl-negative/1",),
+        "runs/feature-table.jsonl": ("feature-table/1",),
+        # issue-1004 R2c: the ws-local credit/DTS series' pre-move
+        # file — the writer moved to the family file
+        "runs/posterior-store.jsonl": ("posterior-store/1",),
+    },
+}
 
 
 def _print_migration(report: dict) -> int:
@@ -63,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
                          "exit — includes registered-but-dead schemas at 0")
     ap.add_argument("--families", default=None,
                     help="comma-separated families to migrate "
-                         "(default: the switched families)")
+                         "(default: every family with registered sources)")
     ap.add_argument("--json", dest="json_out", default=None,
                     help="also write the report (or liveness counts) here")
     args = ap.parse_args(argv)
@@ -92,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: unknown families {sorted(unknown)} — known: "
                   f"{list(cl.FAMILIES)}", file=sys.stderr)
             return 2
-    report = cl.migrate(ws, families, dry_run=args.dry_run)
+    report = cl.migrate(ws, families, sources=LEGACY_SOURCES,
+                        dry_run=args.dry_run)
     refused = _print_migration(report)
     if args.json_out:
         Path(args.json_out).write_text(

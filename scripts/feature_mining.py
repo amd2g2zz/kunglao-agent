@@ -10,8 +10,8 @@ prior math lives here). Since issue-1004 R2c the DEFAULT output is the
 knowledge family file (``knowledge-store.jsonl`` under the guarded
 cross-task root, idempotent dedupe-append); the operator ``--out``
 override keeps the deterministic single-file rebuild at any explicit
-path (the pre-move ``runs/feature-table.jsonl`` rel is the compat
-window's legacy read face).
+path (the family file is the only live face since the issue-1004 R3
+schema cutover).
 
 Sources joined per run (run-state.json is the anchor — see
 openspec/changes/issue-460-feature-mining/design.md):
@@ -22,8 +22,9 @@ openspec/changes/issue-460-feature-mining/design.md):
   <ws>/evidence/{die,apkid,difficulty}.json probe outputs (usable rules reused
                                             from difficulty_calibration)
   <ws>/runs/logs/e2e-audit.jsonl            dispatch attempt/result rows
-  <ws>/runs/rollout-ledger.jsonl            task/<claim> settlements (via
-                                            rlvr.ledger.settled — the U4 fold)
+  <ws>/runs/                                task/<claim> settlements (via
+                                            rlvr.ledger.settled — the U4
+                                            fold, the settlement family)
   <task_dir>/task.yaml                      workspace_scaffold (language/entry)
 
 Contract highlights (spec scenarios are the tests):
@@ -78,10 +79,6 @@ def _warn(reason: str) -> None:
     print(f"[feature_mining] WARN (fail-open): {reason}", file=sys.stderr)
 
 SCHEMA = "feature-table/1"
-#: the legacy rel the miner wrote before the family move (issue-1004
-#: R2c) — the operator ``--out`` override face keeps it; the DEFAULT
-#: output is the knowledge family file (``default_out()``)
-OUT_DEFAULT = Path("runs") / "feature-table.jsonl"
 AUDIT_REL = Path("runs") / "logs" / "e2e-audit.jsonl"
 HASH_LEN = 12
 

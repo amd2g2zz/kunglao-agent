@@ -24,8 +24,9 @@ HARD_CAP_DEFAULT = 50.0
 
 
 def cost_state(ws, hard_cap: float = HARD_CAP_DEFAULT) -> dict:
-    """cost-event rows (settlement family read: legacy cost_events.jsonl
-    first, then live family rows) → {"spent","remaining","latest"}.
+    """cost-event rows (the settlement family read — the only cost face
+    since the issue-1004 R3 schema cutover) →
+    {"spent","remaining","latest"}.
 
     文件缺失/空 = 零花销；坏行跳过。remaining = hard_cap − spent（下限 0）。
     """

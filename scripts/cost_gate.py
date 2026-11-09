@@ -11,8 +11,8 @@ cost SHOULD trigger an advisory.
 This script:
   - Reads cost-event rows from the consolidated settlement family ledger
     (runs/settlement.jsonl, schema_prefix "cost-event" — written by the
-    PostToolUse hook when "COST WARNING" detected; legacy cost_events.jsonl
-    rows still read through the compat window)
+    PostToolUse hook when "COST WARNING" detected; the only cost face
+    since the issue-1004 R3 schema cutover)
   - Counts warnings in last N minutes (sliding window)
   - Tiered response:
       * 1 warning: emit advisory "advisory: reduce dispatch verbosity"
@@ -55,9 +55,9 @@ from harness_common import utc_now  # #863 Family F: single source (was a local 
 
 
 def load_events(workspace: Path) -> list:
-    """Load all cost events: legacy cost_events.jsonl rows first (the
-    compat window), then the stamped family rows — one chronological
-    face."""
+    """Load all cost events from the settlement family file — one
+    chronological face (the only face since the issue-1004 R3 schema
+    cutover)."""
     out = []
     for ev in cl.read(workspace, "settlement", schema_prefix="cost-event"):
         if not isinstance(ev, dict) or "ts" not in ev or "amount" not in ev:

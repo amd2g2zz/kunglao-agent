@@ -148,8 +148,10 @@ class TestStoreFaces:
         assert len(view.cells) == 0
         assert view.cell("sig-a", "static-first") is None
 
-    def test_dirty_rows_skipped_fail_open(self, tmp_path):
-        p = tmp_path / rp.STORE_REL
+    def test_dirty_rows_skipped_fail_open(self, tmp_path, monkeypatch):
+        root = tmp_path / "root"
+        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+        p = root / "knowledge-store.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         good = json.dumps({"schema": rp.SCHEMA, "state": "s", "arm": "a",
                            "ts": TS, "gamma": 1.0, "outcome": 1,
@@ -158,10 +160,13 @@ class TestStoreFaces:
         rows = rp.read(tmp_path)
         assert len(rows) == 1 and rows[0]["state"] == "s"
 
-    def test_unknown_schema_version_never_half_read(self, tmp_path):
+    def test_unknown_schema_version_never_half_read(self, tmp_path,
+                                                    monkeypatch):
         """The version wall: a row from a FOREIGN schema version is
         skipped loudly, never merged into the fold (no-backcompat)."""
-        p = tmp_path / rp.STORE_REL
+        root = tmp_path / "root"
+        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+        p = root / "knowledge-store.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(
             {"schema": "posterior-store/9", "state": "s", "arm": "a",

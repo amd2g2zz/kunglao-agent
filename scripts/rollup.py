@@ -321,9 +321,10 @@ def _outcome_rows_summary(workspace: Path, claim_id: str) -> str:
 
 def _q_cell_obs_rows(workspace: Path) -> list[dict]:
     """#721 q-cell observation rows: the consolidated runs/experience.jsonl
-    (stamp-filtered) — the ONE home. #804 de-compat: the legacy
-    runs/q-cell-log.jsonl archive fallback is retired; a missing rlvr
-    core is an ImportError LOUD, never a silent legacy read."""
+    (stamp-filtered) — the ONE home. #804 de-compat + issue-1004 R3: the
+    pre-consolidation file is gone from every live face (the R4 CLI
+    migrates + deletes it); a missing rlvr core is an ImportError LOUD,
+    never a silent stale read."""
     from rlvr import q_cells  # noqa: PLC0415
     return q_cells.JSONLQStore(workspace).observations()
 

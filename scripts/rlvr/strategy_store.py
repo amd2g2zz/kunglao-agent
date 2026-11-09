@@ -67,9 +67,7 @@ from rlvr.compose import method_family_of_row  # the settled-row face
 # (family, arm_key, feature_key, fingerprint), living in the knowledge
 # family file (``knowledge-store.jsonl``, issue-1004 R2c) under the
 # guarded prior_store_root (eval/v1/split.yaml prior_store_roots →
-# scripts/rlvr/patterns; the pre-move ``posterior-store.jsonl`` rel and
-# the ws-local ``runs/posterior-store.jsonl`` are the compat window's
-# legacy read faces). The store is repo-code territory: the OWNER
+# scripts/rlvr/patterns). The store is repo-code territory: the OWNER
 # RULING (2026-10-07) keeps everything under eval/ WRITE-FORBIDDEN — this
 # module only ever READS split.yaml (the holdout firewall's filter face),
 # never writes anything under eval/.
@@ -88,13 +86,8 @@ from rlvr.compose import method_family_of_row  # the settled-row face
 # family file).
 
 STORE_SCHEMA = "posterior-store/1"
-#: the legacy rel the cross-task store wrote before the family move —
-#: kept as the compat window's documented name (readers still see it;
-#: production no longer writes it; the schema-cutover slice retires the
-#: window). The family file is ``store_root()/knowledge-store.jsonl``
-#: (consolidated_ledger.KNOWLEDGE_REL — the root single source is THIS
-#: module's ``store_root``).
-STORE_REL = "posterior-store.jsonl"
+#: the knowledge family file (``consolidated_ledger.family_path``) under
+#: THIS module's guarded root — the root single source is ``store_root``
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 
 #: the refutation fold's store arm (its rows ride the same keyed store —
@@ -113,14 +106,6 @@ def store_root() -> Path:
     if env:
         return Path(env)
     return Path(__file__).resolve().parent / "patterns"
-
-
-def store_path() -> Path:
-    """The LEGACY store rel (the compat window's documented name —
-    history still readable there until the schema-cutover slice's
-    migration). The live file is the knowledge family's
-    ``knowledge-store.jsonl`` (``consolidated_ledger.family_path``)."""
-    return store_root() / STORE_REL
 
 
 def workspace_id_of(ws) -> str:
@@ -307,9 +292,9 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
                                 ts: str | None = None) -> dict:
     """The workspace credit-series face (the learning→decision bridge's
     breaker contract): append one credit row to the knowledge family
-    file (issue-1004 R2c — the pre-move ws-local
-    ``runs/posterior-store.jsonl`` is the compat window's legacy rel),
-    where ``rlvr.signal_guard.recent_credits`` reads the degeneracy
+    file (issue-1004 R2c; the ws-local series' only face since the
+    issue-1004 R3 schema cutover), where
+    ``rlvr.signal_guard.recent_credits`` reads the degeneracy
     series (workspace-id filtered) and the rl-posterior-moved
     fingerprint counts. The row is the SAME ``posterior-store/1`` shape
     as the cross-task store's (one builder, ``_build_store_row``), so a

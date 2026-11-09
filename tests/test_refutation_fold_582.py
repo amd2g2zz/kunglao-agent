@@ -74,9 +74,13 @@ def _verify_row(sig: str, *, refuted: bool, boundary: str = "verify",
 
 
 def _write_ledger(ws: Path, rows: list[dict]) -> None:
-    (ws / "runs" / "transitions.jsonl").write_text(
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
-        encoding="utf-8")
+    """Seed the consolidated experience file with stamped transition
+    rows (the family file is the only face since the issue-1004 R3
+    schema cutover)."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415
+    for r in rows:
+        assert _cl.append(ws, "experience",
+                          dict(r, schema="transition/1"))
 
 
 def _sig_patch(monkeypatch, sig: str) -> None:
@@ -537,7 +541,7 @@ def test_corrupt_ledger_lands_zero_face(tmp_path: Path,
                                         monkeypatch) -> None:
     _sig_patch(monkeypatch, "K1")
     ws = _ws(tmp_path)
-    (ws / "runs" / "transitions.jsonl").write_text(
+    (ws / "runs" / "experience.jsonl").write_text(
         "{not json}\n", encoding="utf-8")
     face = rf.fold(ws)
     assert face["multiplier"] == 1.0
@@ -552,7 +556,7 @@ def test_store_failure_fails_open_loud(tmp_path: Path,
                        str(tmp_path / "store-root"))
     store_root = tmp_path / "store-root"
     store_root.mkdir(parents=True)
-    (store_root / "posterior-store.jsonl").write_text(
+    (store_root / "knowledge-store.jsonl").write_text(
         "garbage line\n", encoding="utf-8")
     # the append lands past the corrupt line; the schema-enforced read
     # skips the garbage and keeps the one well-formed row

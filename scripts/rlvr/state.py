@@ -113,9 +113,8 @@ mainline situation snapshot sequence the owner separates from tuple
 columns (feeds v0.2 ΔV attribution and stall detection; flat V
 trajectory = the rigorous "no progress"). Since issue-1004 R2b the rows
 live in the consolidated telemetry family file
-``runs/telemetry.jsonl`` (the legacy ``runs/situation-stream.jsonl``
-rel stays readable through the compat window — legacy rows first, then
-the live family rows; the migration archives it bytes-intact). Written
+``runs/telemetry.jsonl`` — the only face since the issue-1004 R3
+schema cutover (the pre-move file retires with the R4 CLI). Written
 by the loop runner's worker-return / terminal faces. Fail-open
 everywhere: recording never breaks the producer.
 
@@ -133,7 +132,6 @@ from pathlib import Path
 from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "state-sig/2"
-SITUATIONS_REL = "runs/situation-stream.jsonl"
 SITUATION_SCHEMA = "situation/1"
 
 # the settlement currency's fact credit terminals (scalar_settlement
@@ -185,7 +183,6 @@ W_FACTS = 0.3
 W_BUDGET = 0.2
 W_SIDES = 0.0  # RESERVED v0.2: side completion rate (weight 0 = absent)
 
-COST_EVENTS_REL = "cost_events.jsonl"  # the legacy cost face (compat window)
 SETTLEMENT_REL = "runs/settlement.jsonl"  # the consolidated cost face
 
 
@@ -515,12 +512,11 @@ def _cost_face_present(ws, frac: float) -> bool:
     """The cost face exists: spend was measured this snapshot (the
     budget dim is never dropped while a fraction is readable — the
     snapshot stays self-consistent), or a cost face is on disk (the
-    consolidated settlement family file, or the legacy rel inside the
-    compat window)."""
+    consolidated settlement family file — the only cost face since the
+    issue-1004 R3 schema cutover)."""
     if frac > 0.0:
         return True
-    return ((Path(ws) / SETTLEMENT_REL).is_file()
-            or (Path(ws) / COST_EVENTS_REL).is_file())
+    return (Path(ws) / SETTLEMENT_REL).is_file()
 
 
 def snapshot(ws) -> dict:
@@ -657,9 +653,9 @@ def append_snapshot(ws, trigger: str, tick=None, ts=None) -> dict:
 
 
 def read_situations(ws) -> list[dict]:
-    """Tolerant read of the snapshot stream (missing -> []): legacy
-    runs/situation-stream.jsonl rows first (the compat window — they
-    predate the live file), then the stamped family rows."""
+    """Tolerant read of the snapshot stream (missing -> []): the
+    telemetry family file's situation rows (the only face since the
+    issue-1004 R3 schema cutover)."""
     return [row for row in
             _cl.read(ws, "telemetry", schema_prefix="situation")
             if isinstance(row, dict)]

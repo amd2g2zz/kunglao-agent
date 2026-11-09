@@ -48,12 +48,6 @@ from kunglao_log import warn
 from rlvr import consolidated_ledger as _cl
 
 NEG_SCHEMA = "marl-negative/1"
-#: the legacy rel the rows wrote before the family move (issue-1004
-#: R2c) — kept as the compat window's documented name (readers still
-#: see it; production no longer writes it; the schema-cutover slice
-#: retires the window). The live file is the knowledge family's
-#: ``knowledge-store.jsonl``.
-NEG_REL = "marl-negative.jsonl"
 
 #: the inert class — a workspace with no mined features degrades here,
 #: never a fabricated bucket (fail-open).
@@ -62,11 +56,10 @@ UNKNOWN_CLASS = "unknown"
 
 def neg_store_path() -> Path:
     """The SHARED negative-knowledge store — the knowledge family file
-    under the guarded root (issue-1004 R2c; the pre-move
-    ``marl-negative.jsonl`` rel is the compat window's legacy read
-    face). Shared, not per-workspace: the whole point of class-level
-    negative knowledge is that workspace B inherits workspace A's dead
-    end for the SAME structural class."""
+    under the guarded root (issue-1004 R2c; the only face since the
+    issue-1004 R3 schema cutover). Shared, not per-workspace: the whole
+    point of class-level negative knowledge is that workspace B
+    inherits workspace A's dead end for the SAME structural class."""
     return _cl.family_path(None, "knowledge")
 
 

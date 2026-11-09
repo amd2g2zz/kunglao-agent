@@ -72,10 +72,6 @@ from harness_common import utc_now_z as _utc_now
 from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "rollout-ledger/1"
-#: the legacy rel the rows wrote before the family move — kept as the
-#: compat-window's documented name (readers still see it; production
-#: no longer writes it; the schema-cutover slice retires the window)
-LEDGER_REL = "runs/rollout-ledger.jsonl"
 
 # --- kinds registry (open enum, registered centrally) ----------------------
 KIND_TASK = "task"

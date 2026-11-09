@@ -37,8 +37,6 @@ from rlvr import crystallize  # noqa: E402
 from rlvr import marl  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
 
-import method_families  # noqa: E402
-
 FAM = "upx-unpack"
 TOOLS = ["upx", "strings"]
 

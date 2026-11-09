@@ -86,7 +86,7 @@ files:
   scripts/e2e/audit.py: 10
   scripts/e2e/checkpoints.py: 110
   scripts/e2e/evidence.py: 1
-  scripts/e2e/llm_faces.py: 17
+  scripts/e2e/llm_faces.py: 16
   scripts/e2e/model.py: 7
   scripts/e2e/runtime.py: 13
   scripts/emit_gate.py: 12
@@ -155,10 +155,10 @@ files:
   scripts/install_reference.py: 4
   scripts/instrument_menu.py: 15
   scripts/intake_battery.py: 6
-  scripts/intake_promise.py: 15
+  scripts/intake_promise.py: 14
   scripts/jadx_exec.py: 21
   scripts/kunglao-decide.py: 11
-  scripts/kunglao-init.py: 302
+  scripts/kunglao-init.py: 300
   scripts/kunglao-monitor.py: 13
   scripts/kunglao-status.py: 1
   scripts/kunglao.py: 27
@@ -237,14 +237,15 @@ files:
   scripts/rlvr/censoring.py: 21
   scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
+  scripts/rlvr/consolidated_ledger.py: 1
   scripts/rlvr/crystallize.py: 1
   scripts/rlvr/direction.py: 22
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
   scripts/rlvr/expansion.py: 4
   scripts/rlvr/family_playbook.py: 6
-  scripts/rlvr/feature_prior.py: 5
-  scripts/rlvr/incremental_reward.py: 42
+  scripts/rlvr/feature_prior.py: 4
+  scripts/rlvr/incremental_reward.py: 41
   scripts/rlvr/interruption.py: 8
   scripts/rlvr/key_freeze.py: 2
   scripts/rlvr/l1_planner.py: 2
@@ -266,18 +267,18 @@ files:
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 172
+  scripts/rlvr/q_cells.py: 171
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/refutation_fold.py: 1
   scripts/rlvr/reward.py: 10
   scripts/rlvr/reward_signal.py: 2
   scripts/rlvr/scalar.py: 38
-  scripts/rlvr/settlement_scorer.py: 2
+  scripts/rlvr/settlement_scorer.py: 1
   scripts/rlvr/signal_guard.py: 1
   scripts/rlvr/state.py: 24
   scripts/rlvr/step_credit.py: 5
   scripts/rlvr/step_grain.py: 19
-  scripts/rlvr/step_ledger.py: 15
+  scripts/rlvr/step_ledger.py: 11
   scripts/rlvr/strategy_store.py: 32
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15

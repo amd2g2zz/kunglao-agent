@@ -82,10 +82,6 @@ from rlvr import consolidated_ledger as _cl
 from rlvr import incremental_reward as ir
 
 SCHEMA = "prediction-ledger/1"
-#: the legacy rel the rows wrote before the family move — kept as the
-#: compat-window's documented name (readers still see it; production
-#: no longer writes it; the schema-cutover slice retires the window)
-LEDGER_REL = "runs/predictions.jsonl"
 
 STATUS_PENDING = "pending"
 STATUS_CONFIRMED = "confirmed"
@@ -156,10 +152,10 @@ def _append_row(ws: Path, row: dict) -> None:
 
 
 def read_ledger(ws) -> list[dict]:
-    """All ledger rows, oldest first; the family read (legacy
-    runs/predictions.jsonl rows first via the compat window, then the
-    stamped family rows — chronology); tolerant (blank/malformed
-    lines skipped; absent ledger = empty)."""
+    """All ledger rows, oldest first; the family read (the telemetry
+    family file is the only face since the issue-1004 R3 schema
+    cutover); tolerant (blank/malformed lines skipped; absent ledger =
+    empty)."""
     return [row for row in
             _cl.read(ws, "telemetry", schema_prefix="prediction-ledger")
             if isinstance(row, dict)]

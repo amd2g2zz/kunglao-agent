@@ -228,10 +228,10 @@ def _zero_counts() -> dict:
 
 
 def arm_fold(ws, agent: str | None = None) -> dict[str, dict]:
-    """Per-recipe solve-credit counts from the settlement rows of
-    ``runs/q-cell-log.jsonl`` (the #678 trusted chain — the fold reads
-    MECHANICALLY recorded rows, never a worker narrative). A row
-    carrying ``credit_kind: verification`` is recorded but never
+    """Per-recipe solve-credit counts from the q-cell observation rows
+    (the consolidated experience feed — the #678 trusted chain; the
+    fold reads MECHANICALLY recorded rows, never a worker narrative).
+    A row carrying ``credit_kind: verification`` is recorded but never
     learned from (#705). Keys: every registered arm (zeros
     when unseen — arms are never absent from the table); with ``agent``
     the agent-local split rides along (``agent_success`` /

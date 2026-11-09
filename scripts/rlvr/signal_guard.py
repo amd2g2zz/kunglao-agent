@@ -17,10 +17,6 @@ from pathlib import Path
 from rlvr import consolidated_ledger as _cl
 
 DEGENERATE_WINDOW = 5
-#: the legacy rel the credit series wrote before the family move
-#: (issue-1004 R2c) — the compat window's documented name; the series
-#: lives in the knowledge family file now
-STORE_REL = Path("runs") / "posterior-store.jsonl"
 
 
 def check_degeneracy(credits: list[float],
@@ -39,9 +35,9 @@ def recent_credits(ws: Path, n: int = DEGENERATE_WINDOW) -> list[float]:
     """The most recent settled credits from THIS workspace's credit
     series (chronologic, oldest first), for the degeneracy check.
 
-    The series rides the knowledge family file (issue-1004 R2c): legacy
-    rels first (chronology), then the family rows. Two filters keep the
-    series exactly what the pre-move ws-local file held — the
+    The series rides the knowledge family file (issue-1004 R2c) — the
+    only face since the issue-1004 R3 schema cutover. Two filters keep
+    the series exactly what the pre-move ws-local file held — the
     credit-series face's rows (``append_workspace_credit_row``, whose
     ``credit_kind`` column is the face's marker) of THIS workspace:
 

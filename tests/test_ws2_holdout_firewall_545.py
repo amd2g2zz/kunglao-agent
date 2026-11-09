@@ -31,6 +31,7 @@ for p in (str(ROOT), str(SCRIPTS)):
         sys.path.insert(0, p)
 
 import eval_split_lint  # noqa: E402
+import rlvr.consolidated_ledger as consolidated_ledger  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
 
 
@@ -64,7 +65,7 @@ def test_write_face_refuses_holdout_workspace_rows(tmp_path, monkeypatch):
     assert out["appended"] is False
     assert "holdout" in str(out.get("reason")), \
         "a holdout unit-id must never reach the store (filter BEFORE append)"
-    path = strategy_store.store_path()
+    path = consolidated_ledger.family_path(None, "knowledge")
     assert not path.exists() or \
         path.read_text(encoding="utf-8").strip() == "", \
         "the refused row must not be on disk"

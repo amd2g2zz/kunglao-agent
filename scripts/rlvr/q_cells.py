@@ -151,9 +151,9 @@ from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
 # #721: the consolidated experience rel (the ONE observation home).
-# #804 de-compat: the legacy runs/q-cell-log.jsonl rel is retired — the
-# archive is a READ-registry entry in rlvr.consolidated_ledger.LEGACY
-# (the #721 migration source), never a write or scan target.
+# #804 de-compat + issue-1004 R3: the pre-consolidation file is gone
+# from every live face — the family file is the only face (the R4 CLI
+# migrates + deletes the historical file).
 EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
