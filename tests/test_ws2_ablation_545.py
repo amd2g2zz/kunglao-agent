@@ -92,7 +92,8 @@ def test_corrupt_store_rows_skip_and_count(tmp_path, monkeypatch, caplog):
     root = tmp_path / "store-corrupt"
     root.mkdir()
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-    (root / strategy_store.STORE_REL).write_text(
-        "{broken json}\n", encoding="utf-8")
+    from rlvr import consolidated_ledger as _cl
+    store_file = _cl.family_path(None, "knowledge")
+    store_file.write_text("{broken json}\n", encoding="utf-8")
     assert strategy_store.load_rows(ws=None) == [], \
         "a corrupt store is an honest empty, never an exception"

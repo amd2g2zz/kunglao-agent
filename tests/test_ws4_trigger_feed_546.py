@@ -40,7 +40,7 @@ def test_the_evidence_carries_probe_markers():
 
 def test_functional_first_fail_feeds_nothing_second_fail_feeds():
     import tempfile
-    import json
+    from rlvr import consolidated_ledger as _cl
     from rlvr import obstacles as obs
     from rlvr import q_cells
     with tempfile.TemporaryDirectory() as td:
@@ -65,8 +65,8 @@ def test_functional_first_fail_feeds_nothing_second_fail_feeds():
              "method_family": "static-decompile", "agent": None,
              "credit": 0.0},
         ]
-        (ws / "runs" / "q-cell-log.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+        _cl.append(ws, "experience", rows[0])
+        _cl.append(ws, "experience", rows[1])
         # the count face: prior fails >= 1 -> repeat condition holds
         prior = sum(
             1 for r in q_cells.default_store(str(ws)).observations()

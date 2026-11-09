@@ -23,13 +23,12 @@ from rlvr import policy_compare as pc  # noqa: E402
 
 def _ws(tmp_path, decisions: list[dict]) -> Path:
     """decisions: [{claim, family, weights, propensity, reward}]"""
+    from rlvr import consolidated_ledger as _cl
     ws = tmp_path / "ws"
     (ws / "runs" / "logs").mkdir(parents=True)
     (ws / "runs").mkdir(exist_ok=True)
     audit = ws / "runs" / "logs" / "e2e-audit.jsonl"
-    trans = ws / "runs" / "transitions.jsonl"
-    with audit.open("w", encoding="utf-8") as fa, \
-            trans.open("w", encoding="utf-8") as ft:
+    with audit.open("w", encoding="utf-8") as fa:
         for i, d in enumerate(decisions):
             fa.write(json.dumps({
                 "event": "method_family_recorded", "claim": d["claim"],
@@ -40,9 +39,9 @@ def _ws(tmp_path, decisions: list[dict]) -> Path:
                                "candidates": {
                                    k: {"weight": w}
                                    for k, w in d["weights"].items()}}}}) + "\n")
-            ft.write(json.dumps({
-                "dispatch_id": d["claim"], "a": d["family"],
-                "r_incr": d["reward"], "r_settle": 0.0}) + "\n")
+            _cl.append(ws, "experience", {
+                "schema": "transition/1", "dispatch_id": d["claim"],
+                "a": d["family"], "r_incr": d["reward"], "r_settle": 0.0})
     return ws
 
 

@@ -19,6 +19,7 @@ for p in (ROOT / "scripts", ROOT / "scripts" / "e2e"):
         sys.path.insert(0, str(p))
 
 import checkpoints as cp  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import expansion as ex  # noqa: E402
 
 SRC = (ROOT / "scripts" / "e2e" / "checkpoints.py").read_text(
@@ -156,9 +157,9 @@ def test_slow_grind_wiring_fires_via_the_loop_stall_arm(tmp_path):
                    evidence_path="runs/ev.md",
                    method_family="static-decompile", claim=f"C-{tag}")
     # the settlement stream's potential column, flat at the grind scale
-    rows = [{"s_prime_phi": v} for v in (0.10, 0.102, 0.104, 0.105)]
-    (ws / "runs" / "transitions.jsonl").write_text(
-        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    for v in (0.10, 0.102, 0.104, 0.105):
+        _cl.append(ws, "experience", {"schema": "transition/1",
+                                      "s_prime_phi": v})
     (ws / "runs" / "expansion-hypotheses.json").write_text(
         json.dumps({"hypotheses": [
             {"id": "h-1", "family": "unicorn-emu", "p_llm": 0.3,

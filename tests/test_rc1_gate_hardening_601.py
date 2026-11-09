@@ -17,7 +17,6 @@ old->new zero-claims drop on every adjudicated write.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -58,11 +57,13 @@ def _waiver_text(cid: str, justify: str) -> str:
 
 
 def _seed_ledger(ws, cids=("C-001", "C-002")) -> None:
-    """Prior sanctioned state: the transition ledger's dispatch_id column."""
-    lines = "".join(
-        json.dumps({"ts": "2026-10-09T00:00:00Z", "dispatch_id": c,
-                    "action_type": "verify"}) + "\n" for c in cids)
-    (ws / "runs" / "transitions.jsonl").write_text(lines, encoding="utf-8")
+    """Prior sanctioned state: the transition ledger's dispatch_id column
+    (the experience family's transition rows — the one face)."""
+    from rlvr import consolidated_ledger
+    for c in cids:
+        consolidated_ledger.append(ws, "experience", {
+            "schema": "transition/1", "ts": "2026-10-09T00:00:00Z",
+            "dispatch_id": c, "action_type": "verify"})
 
 
 # ---------- Fix 1 (5-F6): the waiver skip needs the orchestrator stamp ------

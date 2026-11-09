@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from rlvr import memory_bridge as mb  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 import rlvr.episode_settle as es  # noqa: E402
 import rlvr.pool_indexer as pi  # noqa: E402
 import rlvr.pool_scheduler as ps  # noqa: E402
@@ -55,19 +56,20 @@ def _mk_ws(tmp_path: Path, *, family: str = "tf-snake") -> Path:
         yaml.safe_dump(claims), encoding="utf-8")
     runs = ws / "runs"
     runs.mkdir()
-    rows = [
-        {"schema": "rollout-ledger/1",
-         "rollout_id": "mainline_decision/t1", "kind": "mainline_decision",
-         "ts": "t1", "signals": [], "reward": None},
-        {"schema": "rollout-ledger/1",
-         "rollout_id": "mainline_decision/t2", "kind": "mainline_decision",
-         "ts": "t2", "signals": [], "reward": None},
-    ]
-    (runs / "rollout-ledger.jsonl").write_text(
-        "\n".join(str(__import__("json").dumps(r)) for r in rows) + "\n",
-        encoding="utf-8")
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 0.4}\n{"amount": 0.25}\n', encoding="utf-8")
+    _cl.append(ws, "settlement", {
+        "schema": "rollout-ledger/1", "rollout_id": "mainline_decision/t1",
+        "kind": "mainline_decision", "ts": "t1", "signals": [],
+        "reward": None})
+    _cl.append(ws, "settlement", {
+        "schema": "rollout-ledger/1", "rollout_id": "mainline_decision/t2",
+        "kind": "mainline_decision", "ts": "t2", "signals": [],
+        "reward": None})
+    _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                  "ts": "2026-09-01T00:00:00Z",
+                                  "amount": 0.4, "source": "test"})
+    _cl.append(ws, "settlement", {"schema": "cost-event/1",
+                                  "ts": "2026-09-01T00:01:00Z",
+                                  "amount": 0.25, "source": "test"})
     spec = f"family: {family}\nprimary_questions:\n- id: pq1\n  q: win\n"
     (ws / "task_spec.yaml").write_text(spec, encoding="utf-8")
     return ws

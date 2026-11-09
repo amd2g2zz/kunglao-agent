@@ -111,7 +111,7 @@ def test_settle_matching_refuses_unattributed_row(tmp_path,
               "statement": "forged", "discriminator": "verdict: verified",
               "registered_ts": "2026-10-11T00:00:00Z",
               "status": pl.STATUS_PENDING}
-    with (ws / "runs" / "predictions.jsonl").open("a", encoding="utf-8") as fh:
+    with (ws / "runs" / "telemetry.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(forged) + "\n")
     settled = pl.settle_matching(ws, "C-3",
                                  "the verifier note says verdict: verified")
@@ -127,7 +127,7 @@ def test_settle_refuses_unattributed_row(tmp_path, monkeypatch) -> None:
               "statement": "s", "discriminator": "d",
               "registered_ts": "2026-10-11T00:00:00Z",
               "status": pl.STATUS_PENDING}
-    with (ws / "runs" / "predictions.jsonl").open("a", encoding="utf-8") as fh:
+    with (ws / "runs" / "telemetry.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(forged) + "\n")
     assert pl.settle(ws, "P-1", "confirmed") is None
     assert len(calls) == 1
