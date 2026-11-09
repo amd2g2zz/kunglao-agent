@@ -71,6 +71,261 @@ ENTRY_KEYS = ("jobs", "tasks")
 
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
+from kunglao_log import warn
+
+import scheduler_events  # the drain face's stream source (scripts sibling)
+
+
+# ==================== the scheduler events drain face ====================
+
+# The event-driven wake path's session-side half — the CONSUMER of the
+# watcher's staged wake artifact (runs/.scheduler-wake.json; the
+# external kicker's staged-prompt shape) and the executor of the wake
+# contract's single step. Each unread event is drained exactly once
+# (an idempotent row-count cursor over the material row list,
+# machine-independent append order) and acted per type through the
+# faces that already own each fact. The materiality gate ran BEFORE any
+# LLM turn (the watcher is mechanical); a quiet stream drains to a zero
+# no-op without calling any face.
+
+#: the drain's cursor state (a runs/scheduler/ sibling of the stream —
+#: separate from the watcher's byte cursor; each consumer owns its own).
+#: It is THE consumption truth: the watcher seeds its byte cursor from
+#: this file on a restart so an already-drained batch is never
+#: re-emitted.
+DRAIN_STATE_REL = Path("runs") / "scheduler" / "drain-state.json"
+
+#: the mutual-exclusion lock (two concurrent drains must not double-act
+#: a batch: the second skips, mirroring the external kicker's lock
+#: semantics — a skip is not an error, rc 0)
+DRAIN_LOCK_NAME = ".drain.lock"
+
+#: consecutive blocked drains a kind may cause before its rows advance
+#: despite the failing face (the poison-row policy: a permanently
+#: broken face must not wedge the wake path; the streak clears on the
+#: face's first success, so a healed face resumes blocking)
+POISON_SKIP_AFTER = 3
+
+#: the per-type action table — kind -> the existing face that acts on
+#: that fact (resolved lazily inside each action; one fail-open cage
+#: per dispatched type, so one broken face is one warn and the drain
+#: never breaks). The mapping targets:
+#:   worker-exit       -> the worker reconcile face (ground-truth rebuild)
+#:   verdict-landed    -> the verdict-status watch face (diff + emit)
+#:   gate-reject       -> the dispatch-reject feedback face (decision feed)
+#:   deadline-fired    -> the timer-state read face (per fired rollout)
+#:   settle-completed  -> the RL digest emit face (the per-decision line)
+def _act_worker_exit(ws, rows) -> dict:
+    from reconcile_workers import reconcile_workers
+    return {"active": reconcile_workers(ws)}
+
+
+def _act_verdict_landed(ws, rows) -> dict:
+    from verify_status_watch import reconcile
+    return reconcile(ws)
+
+
+def _act_gate_reject(ws, rows) -> dict:
+    from rlvr.dispatch_reject import feedback_face
+    return feedback_face(ws)
+
+
+def _act_deadline_fired(ws, rows) -> dict:
+    from rlvr import rollout_timer
+    states: dict = {}
+    for row in rows:
+        rid = str(row.get("rollout_id") or "").strip()
+        if rid and rid not in states:
+            states[rid] = rollout_timer.timer_state(ws, rid)
+    return {"rollouts": states}
+
+
+def _act_settle_completed(ws, rows) -> dict:
+    from rl_digest import emit
+    return {"digest": emit(ws)}
+
+
+DRAIN_ACTIONS = {
+    "worker-exit": _act_worker_exit,
+    "verdict-landed": _act_verdict_landed,
+    "gate-reject": _act_gate_reject,
+    "deadline-fired": _act_deadline_fired,
+    "settle-completed": _act_settle_completed,
+}
+
+
+def _read_drain_state(ws: Path) -> dict:
+    """The drain state (cursor + per-kind failure streaks); absent or
+    dirty reads the zero face."""
+    try:
+        doc = json.loads((Path(ws) / DRAIN_STATE_REL)
+                         .read_text(encoding="utf-8"))
+        rows = max(0, int(doc.get("rows") or 0))
+        streaks = {str(k): max(0, int(v))
+                   for k, v in (doc.get("fail_streaks") or {}).items()
+                   if isinstance(v, (int, float))}
+        return {"rows": rows, "fail_streaks": streaks}
+    except (OSError, ValueError, TypeError):
+        return {"rows": 0, "fail_streaks": {}}
+
+
+def _write_drain_state(ws: Path, state: dict) -> None:
+    """Atomic state write; best-effort — a failed write only re-drains
+    (the actions are read/idempotent faces, never a double charge)."""
+    p = Path(ws) / DRAIN_STATE_REL
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False),
+                       encoding="utf-8")
+        tmp.replace(p)
+    except OSError as exc:
+        warn("loop_scheduler.drain_cursor", f"{type(exc).__name__}: {exc}")
+
+
+def _consume_wake_artifact(ws: Path) -> dict | None:
+    """Read-and-clear the staged wake artifact (the delivery consumer's
+    exactly-once face): the contract rides the receipt's ``wake`` key,
+    the file is unlinked. Absent -> None (quiet — no wake was staged)."""
+    p = Path(ws) / "runs" / ".scheduler-wake.json"
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    try:
+        p.unlink()
+    except OSError as exc:
+        warn("loop_scheduler.wake_consume", f"{type(exc).__name__}: {exc}")
+    return doc if isinstance(doc, dict) else None
+
+
+def _acquire_drain_lock(ws: Path):
+    """Non-blocking single-instance lock (the watcher's lock shape):
+    the fd when acquired, None when another drain holds it — the second
+    drain SKIPS (never double-acts), a skip is not an error."""
+    import os
+    lock_path = Path(ws) / DRAIN_STATE_REL.parent / DRAIN_LOCK_NAME
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    except OSError:
+        return None  # uncreatable -> report the skip face, never crash
+    try:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except ImportError:
+        return fd  # no fcntl: single-writer posture, no lock
+    except OSError:
+        os.close(fd)
+        return None
+    try:
+        os.write(fd, f"{os.getpid()}\n".encode("utf-8"))
+    except OSError as exc:  # noqa: BLE001 — pid stamp is cosmetic
+        warn("loop_scheduler.drain_lock", f"pid stamp: {exc}")
+    return fd
+
+
+def _release_drain_lock(fd) -> None:
+    import os
+    if not isinstance(fd, int):
+        return
+    try:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except (ImportError, OSError) as exc:  # noqa: BLE001 — best-effort unlock
+        warn("loop_scheduler.drain_lock", f"unlock: {exc}")
+    try:
+        os.close(fd)
+    except OSError as exc:  # noqa: BLE001 — best-effort close
+        warn("loop_scheduler.drain_lock", f"close: {exc}")
+
+
+def drain_events(ws) -> dict:
+    """Drain the scheduler events stream once: every MATERIAL event past
+    the persisted cursor is dispatched per type through DRAIN_ACTIONS
+    (the existing faces), then the cursor advances — a second drain over
+    the same stream is a zero no-op. Non-material rows are never
+    drained (the reader-side closed-vocabulary gate).
+
+    Cursor discipline: the cursor advances only past rows whose kinds
+    acted SUCCESSFULLY — a failed kind's earliest row stays below the
+    cursor (a prefix advance), so the failed batch retries on the next
+    drain instead of being consumed with the action failed. A kind that
+    blocks POISON_SKIP_AFTER consecutive drains advances anyway
+    (the receipt marks it poisoned) — a permanently broken face must
+    not wedge the wake path; the streak clears on the face's first
+    success, so a healed face resumes blocking.
+
+    Truncation guard (mirrors the watcher's offset>size reset): a
+    rebuilt/pruned stream shorter than the persisted cursor resets the
+    cursor to 0 — events are never skipped forever.
+
+    Delivery: the staged wake artifact (runs/.scheduler-wake.json) is
+    CONSUMED on every drain-face run — read into the receipt's
+    ``wake`` key and unlinked (exactly-once delivery; an unconsumed
+    artifact survives a quiet drain for the next one). Mutual
+    exclusion: a second concurrent drain skips (``skipped`` receipt)
+    without touching cursor or artifact.
+
+    Returns ``{"drained", "attempted", "by_type", "actions", "cursor",
+    "wake"}`` (or the skip receipt)."""
+    root = Path(ws)  # the CLI's argparse workspace is a plain str:
+    lock = _acquire_drain_lock(root)  # coerce ONCE at this boundary
+    if lock is None:
+        return {"skipped": "lock-held", "drained": 0, "attempted": 0,
+                "by_type": {}, "actions": {}, "cursor": None,
+                "wake": None}
+    try:
+        rows_all = scheduler_events.material_rows(root)
+        state = _read_drain_state(root)
+        cursor = state["rows"]
+        if cursor > len(rows_all):
+            cursor = 0  # truncation guard: the stream shrank below it
+        streaks = dict(state["fail_streaks"])
+        pending = rows_all[cursor:]
+        wake = _consume_wake_artifact(root)
+        if not pending:
+            _write_drain_state(root, {"rows": len(rows_all),
+                                      "fail_streaks": streaks})
+            return {"drained": 0, "attempted": 0, "by_type": {},
+                    "actions": {}, "cursor": len(rows_all), "wake": wake}
+        by_type: dict[str, list] = {}
+        for row in pending:
+            by_type.setdefault(str(row.get("kind")), []).append(row)
+        actions: dict = {}
+        failed_kinds: set[str] = set()
+        for kind, rows in sorted(by_type.items()):
+            act = DRAIN_ACTIONS.get(kind)
+            if act is None:
+                continue  # cannot happen (material gate) — belt+braces
+            poisoned = streaks.get(kind, 0) >= POISON_SKIP_AFTER
+            try:
+                actions[kind] = act(root, rows)
+                streaks.pop(kind, None)
+            except Exception as exc:  # noqa: BLE001 — one face down, drain lives
+                warn("loop_scheduler.drain",
+                     f"{kind}: {type(exc).__name__}: {exc}")
+                entry: dict = {"error": f"{type(exc).__name__}: {exc}"}
+                streaks[kind] = streaks.get(kind, 0) + 1
+                if poisoned:
+                    # the poison policy: advance despite the failure
+                    entry["poisoned"] = True
+                else:
+                    failed_kinds.add(kind)
+                actions[kind] = entry
+        if failed_kinds:
+            first_failed = next(i for i, r in enumerate(pending)
+                                if str(r.get("kind")) in failed_kinds)
+            new_cursor = cursor + first_failed
+        else:
+            new_cursor = len(rows_all)
+        _write_drain_state(root, {"rows": new_cursor,
+                                  "fail_streaks": streaks})
+        return {"drained": new_cursor - cursor, "attempted": len(pending),
+                "by_type": {k: len(v) for k, v in by_type.items()},
+                "actions": actions, "cursor": new_cursor, "wake": wake}
+    finally:
+        _release_drain_lock(lock)
 
 
 def interval_to_cron(interval: str = "5m") -> str:
@@ -287,11 +542,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--remove", action="store_true",
                     help="#638: remove OUR durable entry (idempotent; "
                          "foreign entries untouched)")
+    ap.add_argument("--drain-events", action="store_true",
+                    help="drain the scheduler events stream once (the "
+                         "event-driven wake path's session-side half): "
+                         "each unread material event is dispatched per "
+                         "type through the existing faces; prints the "
+                         "drain receipt JSON")
     args = ap.parse_args(argv)
     if args.check:
         return 0 if loop_entry_exists(args.workspace) else 2
     if args.remove:
         return remove_durable_loop(args.workspace)
+    if args.drain_events:
+        import json as _json
+        print(_json.dumps(drain_events(args.workspace), ensure_ascii=False,
+                          indent=2))
+        return 0
     return upsert_durable_loop(args.workspace, args.interval)
 
 

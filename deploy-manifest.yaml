@@ -27,7 +27,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: b786bb084f03ae89da95be0b6da32a9db2005d92a627f3644d8761f25b509d6c
+    sha256: 3d86363df24ca78258301e11e8e53e679efa8c3862e19f043f822f36dd462073
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -59,7 +59,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: 365bda87585b8d1f907aa90006b4d7fc8e8e71c276fdecbe9f9826f2b880639f
+    sha256: 6f342f07f08447b9f66a89f19630aa84928b1516f9e0ec699e2aaff8de88896f
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -843,7 +843,7 @@ files:
   - src: scripts/loop_scheduler.py
     dest: .claude/scripts/loop_scheduler.py
     kind: scaffold
-    sha256: cb44c6023916b399b8a74389f1c61f5b1e49d43708cdf983ff256cb35508773e
+    sha256: 03f14ac4d35267eb8392ec4ceaba029bb37a04e20960c078127e23774e4b729d
   - src: scripts/loop_state.py
     dest: .claude/scripts/loop_state.py
     kind: scaffold
@@ -1132,6 +1132,14 @@ files:
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
     sha256: 96b3b410be5559d45e347a259b485f8fba717502d413f0426fe4dd112835f879
+  - src: scripts/scheduler_events.py
+    dest: .claude/scripts/scheduler_events.py
+    kind: scaffold
+    sha256: 5a5bdbd50df4ce0fcf82f8754234c614399f38ab543d6fee2b99b3900a39cc63
+  - src: scripts/scheduler_watch.py
+    dest: .claude/scripts/scheduler_watch.py
+    kind: scaffold
+    sha256: 61052db17d4954d977d5cd5785aaf02e87c9f8262c20e948ad7ac65a97818019
   - src: scripts/scheduling_selection.py
     dest: .claude/scripts/scheduling_selection.py
     kind: scaffold
@@ -1615,7 +1623,7 @@ files:
   - src: scripts/rlvr/rollout_timer_host.py
     dest: .claude/scripts/rlvr/rollout_timer_host.py
     kind: scaffold
-    sha256: 8875a582f07c2e73aee29e14c87ced5eddb36693ff95be0924cbe4521a1b3390
+    sha256: d6af47d06cc8f8be99b9ac9ddfbf52714bc7b31a54d8e5b8c38ea72bc50c8e91
   - src: scripts/rlvr/route_ledger.py
     dest: .claude/scripts/rlvr/route_ledger.py
     kind: scaffold
@@ -1707,7 +1715,7 @@ files:
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 03704c09cc698bcabd0316ab3429cb1fa4724bcda80aaa61982ded4656006f0d
+    sha256: 178ffb4332a7ee1634d68fc84fd2df1a4e46268f6d740d480bce405fdd0a6801
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
@@ -2319,7 +2327,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3cc4968409b3d1af1de851e7bdb459ce838a227c2e328ecf0f69052d77a3d55e
+    sha256: 3b5112a5580eec31bea879cc9e132c628d29dbbe25143b9cb8eb8426f9445bdd
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

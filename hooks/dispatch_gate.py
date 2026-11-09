@@ -1195,6 +1195,21 @@ def _log_dispatch_reject(ws: Path, claim_id: str) -> None:
     except Exception as exc:  # noqa: BLE001 — never blocks the reject
         print(f"dispatch_gate: dispatch-reject write failed ({exc!r})",
               file=sys.stderr, flush=True)
+    # the scheduler-events producer seam: the SAME fact, one append into
+    # the wake stream (derived from the data already in hand; the stream
+    # is a wake channel — the ledger row above stays the durable truth).
+    # NESTED cage, AFTER the durable row: a broken/incomplete deploy of
+    # the stream module must never abort the ledger write above, and a
+    # stream failure must never read as a dispatch-reject write failure.
+    try:
+        with scripts_on_path():  # scoped membership
+            import scheduler_events as _se
+        _se.append(ws, _se.KIND_GATE_REJECT, claim=claim_id,
+                   reason=_LAST_REJECT.get("name") or "gate_reject",
+                   trace_id=_ATTEMPT.get("trace"))
+    except Exception as exc:  # noqa: BLE001 — wake telemetry, never the row
+        print(f"dispatch_gate: scheduler-event append failed ({exc!r})",
+              file=sys.stderr, flush=True)
 
 
 # ===================== #105 dispatch intent record =====================
