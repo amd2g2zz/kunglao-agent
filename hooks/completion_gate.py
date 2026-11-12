@@ -523,6 +523,7 @@ def process_event(payload: dict) -> int:
             _first_stop_seal(ws, oracle)
         except Exception as exc:  # noqa: BLE001 — sealing never moves the verdict
             warn("sanction_seal", f"{type(exc).__name__}: {exc}")
+        settlement_checks_passed = True
         # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
         # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;
         # mid-run Blocks are never caused by notes), refuse closure while the
@@ -534,6 +535,7 @@ def process_event(payload: dict) -> int:
             owed = cg.notes_due(ws)
         except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on the queue
             owed = []
+            settlement_checks_passed = False
         if owed:
             reason = ("NOTES_DUE: durable result notes owed (#628/#762) - "
                       "write notes/<claim-id>.md per worker contract "
@@ -552,6 +554,7 @@ def process_event(payload: dict) -> int:
             verdict = nd.check(ws / "notes", ws / "facts")
         except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on notes
             verdict = None
+            settlement_checks_passed = False
         if verdict is not None and not verdict.get("ok", True):
             detail = "; ".join(verdict.get("violations", []))
             reason = ("NOTES_FAKE: notes fail structural discrimination "
@@ -570,6 +573,7 @@ def process_event(payload: dict) -> int:
             verdict = sd.check(ws / "summary.md", ws / "facts")
         except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on summary
             verdict = None
+            settlement_checks_passed = False
         if verdict is not None and not verdict.get("ok", True):
             detail = "; ".join(verdict.get("violations", []))
             reason = ("SUMMARY_FAKE: summary fails structural contract "
@@ -597,6 +601,22 @@ def process_event(payload: dict) -> int:
                     warn("process_event", f"{type(exc).__name__}: {exc}")
         except Exception as exc:  # noqa: BLE001 — coverage bookkeeping must never deadlock
             warn("process_event_2", f"{type(exc).__name__}: {exc}")
+        # #1005: only this post-check boundary is terminal evidence. A
+        # sanctioned second Stop and fail-open exits never enter this face.
+        try:
+            with scripts_on_path():
+                from rlvr import production_terminal
+            if settlement_checks_passed:
+                terminal_result = production_terminal.settle_stop(ws)
+                if terminal_result.get("status") == "retry":
+                    raise RuntimeError(terminal_result.get("reason") or
+                                       "terminal settlement incomplete")
+        except Exception as exc:  # noqa: BLE001 — durable retry, never certify failure as success
+            warn("production_terminal", f"{type(exc).__name__}: {exc}")
+            print(json.dumps({"decision": "block", "reason":
+                "TERMINAL_SETTLEMENT_RETRY: settlement incomplete; retry Stop "
+                f"after repair ({type(exc).__name__})"}))
+            return 2
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

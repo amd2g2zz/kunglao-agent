@@ -578,3 +578,12 @@ on `sys.path` by the harness instead.
   means — each landing green against `tests/test_rlvr_bitexact.py`.
 - The D1 TF-IDF/k-means clustering named in issue #420 has no home in
   v0.1.6's surface; it joins the package only if/when its face lands.
+
+`production_terminal` is called by the final eligible production completion
+Stop. It validates anchored checker evidence and distinct maker identity,
+serializes mission/credit settlement with actual POSIX or Windows process locks,
+and replays durable intent on the next eligible Stop. The read-only operator face
+is `PYTHONPATH=scripts python -m rlvr.production_terminal <workspace>`; it reports
+the checkpoint, episodes, pending ledger rows and terminal-only spans separately.
+Windows runtime locking and durability have not been exercised in this change.
+Dispatch/worker/checker spans and the paired development evaluator remain pending.
