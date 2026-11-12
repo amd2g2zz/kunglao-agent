@@ -60,6 +60,14 @@
       "fingerprint": null,
       "check": "uv run pytest tests/ -k upgrade_transaction -q",
       "tier": "release"
+    },
+    {
+      "id": "INV-009",
+      "name": "mcp-registration-scope-and-capability",
+      "statement": "MCP registration discovery reads workspace .mcp.json and plugin-carried declarations only, not user-global Claude configuration; desktop decompiler supply based only on registration is reported as capability unverified.",
+      "fingerprint": null,
+      "check": "uv run python -m pytest -q tests/test_mcp_scope_408.py::test_registered_names_reads_workspace_and_plugin_only tests/test_envcheck_modern_757.py::TestT2McpRegistered::test_desktop_either_decompiler_mcp_warn_unverified tests/test_mcp_supply.py::test_toolchain_decompiler_mcp_first_ghidra",
+      "tier": "per-PR"
     }
   ]
 }
