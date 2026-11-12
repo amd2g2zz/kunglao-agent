@@ -95,6 +95,9 @@ def test_second_workspace_starts_warm_nonflat_and_traceable(
     receipt block names the exact store rows (traceable)."""
     ws = tmp_path / "ws-second"
     ws.mkdir()
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAM_WARM, FAM_COLD])
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     assert receipt is not None, "the first dispatch must sample"
     cands = receipt["candidates"]

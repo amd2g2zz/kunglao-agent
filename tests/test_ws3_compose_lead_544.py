@@ -142,16 +142,19 @@ def test_below_nmin_seeded_compose_is_deterministic(tmp_path):
 
 
 def test_warm_path_lead_still_comes_from_the_store(tmp_path):
-    """At or above n_min the seeded prior is out of the picture: the
-    store's lead wins (the seed is a cold-start face only)."""
+    """#1033: warm history reweights intake without deleting alternatives."""
     ws = _ws(tmp_path)
     _seed(ws)
     _ok_row(ws, "task/ok-1", "static-decompile")
     _ok_row(ws, "task/ok-2", "static-decompile")
     store = compose.load_store(ws)
     obj = compose.compose(ws, tick=1, store=store)
-    assert obj["dispatch"]["method_lead"] == "static-decompile"
-    assert obj["dispatch"]["method_lead"] != LEAD_FAMILY
+    fp = sigmod.signature_hash(sigmod.snapshot(ws))
+    assert obj["dispatch"]["method_lead"] == store.method_lead(fp)
+    receipt = store.method_sample(fp)
+    assert set(receipt["candidates"]) == set(FAMILIES)
+    assert receipt["candidates"][LEAD_FAMILY]["weight"] > 0
+    assert "history_weight" in receipt["candidate_sources"]["static-decompile"]
 
 
 def test_seam_renders_the_seeded_lead(tmp_path):

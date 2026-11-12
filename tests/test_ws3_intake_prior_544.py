@@ -275,11 +275,12 @@ def test_fresh_dispatch_carries_the_seeded_nonuniform_prior(tmp_path):
     fam, receipt = _envelope_receipt(ws)
     assert receipt is not None
     candidates = receipt["candidates"]
-    assert set(candidates) == set(method_families.registered_tokens())
-    # the seeded families ride the doc's exact means (value-level
-    # traceability: llm-prior.json -> envelope candidates)
-    for token, mean in means.items():
-        assert candidates[token]["p_llm"] == pytest.approx(mean, abs=1e-9)
+    eligible = set(method_families.registered_tokens()) - {"dynamic-trace"}
+    assert set(candidates) == eligible  # this fixture grants no dynamic authorization
+    # Current authorization filters support, then preserves the seed ratios.
+    total = sum(means[token] for token in eligible)
+    for token in eligible:
+        assert candidates[token]["p_llm"] == pytest.approx(means[token] / total, abs=1e-9)
     # non-uniform: at least two distinct proposal weights
     weights = {t: c["p_llm"] for t, c in candidates.items()}
     assert len(set(weights.values())) > 1
@@ -295,13 +296,10 @@ def test_fresh_dispatch_carries_the_seeded_nonuniform_prior(tmp_path):
 
 
 def test_fresh_dispatch_without_prior_file_stays_uniform(tmp_path):
-    """Fail-open the other way: no llm-prior.json => the historical
-    uniform proposal face (every registered family at 1.0)."""
+    """#1033: no evidence means a real gap, rather than registry mass."""
     ws = _ws(tmp_path, spec=SPEC)  # declared features, NO seed written
     fam, receipt = _envelope_receipt(ws)
-    assert receipt is not None
-    weights = {t: c["p_llm"] for t, c in receipt["candidates"].items()}
-    assert set(weights.values()) == {1.0}
+    assert fam == "" and receipt is None
 
 
 def test_fresh_dispatch_with_corrupt_prior_file_stays_uniform(tmp_path):
@@ -309,18 +307,18 @@ def test_fresh_dispatch_with_corrupt_prior_file_stays_uniform(tmp_path):
     rl_priors.seed_intake_prior(ws)
     (ws / "runs" / "llm-prior.json").write_text("]]] broken", encoding="utf-8")
     fam, receipt = _envelope_receipt(ws)
-    weights = {t: c["p_llm"] for t, c in receipt["candidates"].items()}
-    assert set(weights.values()) == {1.0}
+    assert fam == "" and receipt is None
 
 
 def test_fresh_dispatch_partial_seed_coverage_fails_open_to_uniform(
         tmp_path):
-    """A doc that predates a registry change (partial coverage of the
-    registered vocabulary) cannot rank coherently — the host falls back
-    to the uniform face instead of mixing seeded means with 1.0s."""
+    """#1033: a partial seed supports its named families without fill-ins."""
     ws = _ws(tmp_path)
     rl_priors.seed_intake_prior(ws, families=[
         "replay-harness-verification", "static-decompile"])
     fam, receipt = _envelope_receipt(ws)
     weights = {t: c["p_llm"] for t, c in receipt["candidates"].items()}
-    assert set(weights.values()) == {1.0}
+    assert set(weights) == {"replay-harness-verification", "static-decompile"}
+    assert all(weight > 0 for weight in weights.values())
+    assert sum(weights.values()) == pytest.approx(1.0)
+    assert weights["replay-harness-verification"] > weights["static-decompile"]

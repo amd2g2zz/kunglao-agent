@@ -276,6 +276,18 @@ SEED_SOURCES = ("heuristic-fallback", "llm-self-assessment")
 _SEED_CALIBRATION = {"method": "exp-ws3-a", "rho": -0.3714, "n": 6}
 _SEED_PROVENANCE = {"experiment": "experiments/exp-ws3-calibration.md"}
 SEED_REL = "runs/llm-prior.json"
+SUPPORT_MODE_REL = "runs/.candidate-support-mode"
+
+
+def record_support_mode(ws) -> None:
+    """Persist entry into evidence-backed support before publishing a source.
+
+    Failure is loud to the writer: a source must never be published while
+    its later removal could silently reactivate legacy history support.
+    """
+    marker = Path(ws) / SUPPORT_MODE_REL
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch(exist_ok=True)
 
 
 def _spec_text(spec: dict) -> str:
@@ -367,6 +379,7 @@ def seed_intake_prior(ws, *, families=None,
     try:
         path = ws / SEED_REL
         path.parent.mkdir(parents=True, exist_ok=True)
+        record_support_mode(ws)
         path.write_text(
             json.dumps(doc, ensure_ascii=False,
                                      sort_keys=True, indent=2) + "\n",

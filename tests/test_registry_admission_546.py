@@ -320,7 +320,8 @@ def test_cold_start_candidates_include_discovered_arms(tmp_path,
     assert receipt is not None
     assert DISCOVERED in receipt["candidates"], \
         "the admitted novel arm must enter the cold-start candidate set"
-    assert set(receipt["candidates"]) == _mined() | {DISCOVERED}
+    assert set(receipt["candidates"]) == {DISCOVERED}
+    assert receipt["candidate_sources"][DISCOVERED]
 
 
 def test_cold_start_candidates_without_overlay_are_the_closed_set(
@@ -330,7 +331,7 @@ def test_cold_start_candidates_without_overlay_are_the_closed_set(
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     _fam, receipt = _sample_envelope_family(ws)
-    assert set(receipt["candidates"]) == _mined()
+    assert _fam == "" and receipt is None  # #1033: no current support
 
 
 def _min_paths(ws: Path) -> dict:

@@ -972,7 +972,7 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             "alpha": alpha,
             "beta": beta,
             "theta": round(theta, 6),
-            "weight": round(weights[family], 6),
+            "weight": weights[family],  # decision data must retain positive support
         }
         if ak is not None:
             # additive field — no arm_context, no field (byte identity)
@@ -1220,6 +1220,14 @@ def _usage_cols(tier, tools, view: dict | None) -> tuple:
         triple = {"propensity": propensity,
                   "sampled_family": str(sampled).strip() if sampled else None,
                   "prior_source": str(prior).strip() if prior else None}
+        if "probability_source" in view:
+            triple["probability_source"] = view["probability_source"]
+            triple["conditional_sampler_weight"] = _valid_propensity(
+                view.get("conditional_sampler_weight"))
+            triple["sampled_conditional_weight"] = _valid_propensity(
+                view.get("sampled_conditional_weight"))
+            triple["candidates"] = view.get("candidates", {})
+            triple["candidate_sources"] = view.get("candidate_sources", {})
     return tier_out, tools_out, triple
 
 
@@ -1245,6 +1253,10 @@ def _attribution_cols(family: str, view: dict | None,
     lead names a different family than the dispatched one, the row
     records ``lead_override`` with the same recorded reason.
 
+    New reconciliation views label conditional weights separately and
+    leave external behavior probabilities unknown. Legacy adapters retain
+    their explicitly named propensity fields.
+
     A coherent row (draw == family, no differing lead) returns {} — its
     row stays byte-identical to the pre-change shape."""
     if not isinstance(view, dict):
@@ -1261,10 +1273,12 @@ def _attribution_cols(family: str, view: dict | None,
         # explicit even when absent: the override is recorded with its
         # reason slot, so the missing decision line stays visible.
         out["override_reason"] = reason_txt
-        prop = _valid_propensity(view.get("propensity"))
+        prop = (_valid_propensity(view.get("propensity"))
+                if "probability_source" not in view else None)
         if prop is not None:
             out["override_propensity"] = prop
-        sprop = _valid_propensity(view.get("sampled_propensity"))
+        sprop = (_valid_propensity(view.get("sampled_propensity"))
+                 if "probability_source" not in view else None)
         if sprop is not None:
             out["sampled_propensity"] = sprop
     lead = view.get("round_lead")
