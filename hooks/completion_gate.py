@@ -601,7 +601,7 @@ def process_event(payload: dict) -> int:
                     warn("process_event", f"{type(exc).__name__}: {exc}")
         except Exception as exc:  # noqa: BLE001 — coverage bookkeeping must never deadlock
             warn("process_event_2", f"{type(exc).__name__}: {exc}")
-        # #1005: only this post-check boundary is terminal evidence. A
+        # Only this post-check boundary is terminal evidence. A
         # sanctioned second Stop and fail-open exits never enter this face.
         try:
             with scripts_on_path():
