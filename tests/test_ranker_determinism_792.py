@@ -386,7 +386,7 @@ def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
 
 def test_in_support_declaration_propensity_unchanged(tmp_path):
     """A supported declaration keeps its conditional weight; the external
-    behavior probability remains unknown (#1033)."""
+    behavior probability remains unknown."""
     from rlvr import strategy_store as ss
     from rlvr import state as rlvr_state
     ws = _deviation_ws(tmp_path)

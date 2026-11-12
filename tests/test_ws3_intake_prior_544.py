@@ -296,7 +296,7 @@ def test_fresh_dispatch_carries_the_seeded_nonuniform_prior(tmp_path):
 
 
 def test_fresh_dispatch_without_prior_file_stays_uniform(tmp_path):
-    """#1033: no evidence means a real gap, rather than registry mass."""
+    """No evidence means a real gap, rather than registry mass."""
     ws = _ws(tmp_path, spec=SPEC)  # declared features, NO seed written
     fam, receipt = _envelope_receipt(ws)
     assert fam == "" and receipt is None
@@ -312,7 +312,7 @@ def test_fresh_dispatch_with_corrupt_prior_file_stays_uniform(tmp_path):
 
 def test_fresh_dispatch_partial_seed_coverage_fails_open_to_uniform(
         tmp_path):
-    """#1033: a partial seed supports its named families without fill-ins."""
+    """A partial seed supports its named families without fill-ins."""
     ws = _ws(tmp_path)
     rl_priors.seed_intake_prior(ws, families=[
         "replay-harness-verification", "static-decompile"])

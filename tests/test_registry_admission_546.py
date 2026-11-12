@@ -331,7 +331,7 @@ def test_cold_start_candidates_without_overlay_are_the_closed_set(
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     _fam, receipt = _sample_envelope_family(ws)
-    assert _fam == "" and receipt is None  # #1033: no current support
+    assert _fam == "" and receipt is None  # no current support
 
 
 def _min_paths(ws: Path) -> dict:

@@ -142,7 +142,7 @@ def test_below_nmin_seeded_compose_is_deterministic(tmp_path):
 
 
 def test_warm_path_lead_still_comes_from_the_store(tmp_path):
-    """#1033: warm history reweights intake without deleting alternatives."""
+    """Warm history reweights intake without deleting alternatives."""
     ws = _ws(tmp_path)
     _seed(ws)
     _ok_row(ws, "task/ok-1", "static-decompile")
