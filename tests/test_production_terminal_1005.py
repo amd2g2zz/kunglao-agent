@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Production Stop-to-settlement contract using only synthetic workspace data."""
 from __future__ import annotations
 
