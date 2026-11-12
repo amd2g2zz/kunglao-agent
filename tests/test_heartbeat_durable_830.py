@@ -12,6 +12,7 @@ Tests:
 from __future__ import annotations
 
 import json
+import pytest
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,7 +22,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import heartbeat  # noqa: E402
 
-NOW = datetime.now(timezone.utc)
+@pytest.fixture
+def now():
+    return datetime.now(timezone.utc)
 
 
 def _ts(dt):
@@ -45,24 +48,24 @@ def _append_log(ws, stamps, actor="test"):
     return log
 
 
-def _cache(ws, history):
+def _cache(ws, history, now):
     hb = ws / "runs" / ".heartbeat.json"
     state = {
-        "started_ts": _ts(NOW - timedelta(minutes=40)),
+        "started_ts": _ts(now - timedelta(minutes=40)),
         "interval_min": 5,
         "loop_registered": True,
-        "last_tick_ts": _ts(NOW),
+        "last_tick_ts": _ts(now),
         "tick_history": history,
     }
     hb.write_text(json.dumps(state), encoding="utf-8")
     return hb
 
 
-def test_delete_cache_still_judged_from_durable_log(tmp_path):
+def test_delete_cache_still_judged_from_durable_log(tmp_path, now):
     ws = _mk_ws(tmp_path)
-    recent = [NOW - timedelta(minutes=5 * i) for i in (3, 2, 1)]
+    recent = [now - timedelta(minutes=5 * i) for i in (3, 2, 1)]
     _append_log(ws, recent)
-    _cache(ws, history=[])
+    _cache(ws, history=[], now=now)
     alive, detail = heartbeat.evaluate_tick_continuity(
         json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8")),
         log_path=ws / "runs" / ".heartbeat.log")
@@ -70,12 +73,12 @@ def test_delete_cache_still_judged_from_durable_log(tmp_path):
     assert "durable" in detail.lower()
 
 
-def test_tampered_cache_log_wins(tmp_path):
+def test_tampered_cache_log_wins(tmp_path, now):
     ws = _mk_ws(tmp_path)
-    stale_ticks = [NOW - timedelta(minutes=m) for m in (50, 45, 40)]
+    stale_ticks = [now - timedelta(minutes=m) for m in (50, 45, 40)]
     _append_log(ws, stale_ticks)
-    _cache(ws, history=[_ts(NOW - timedelta(minutes=2)),
-                        _ts(NOW - timedelta(minutes=1))])
+    _cache(ws, history=[_ts(now - timedelta(minutes=2)),
+                        _ts(now - timedelta(minutes=1))], now=now)
     state = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
     alive, detail = heartbeat.evaluate_tick_continuity(
         state, log_path=ws / "runs" / ".heartbeat.log")
@@ -83,9 +86,9 @@ def test_tampered_cache_log_wins(tmp_path):
     assert "durable" in detail.lower() and "stale" in detail.lower()
 
 
-def test_register_cannot_reset_history(tmp_path):
+def test_register_cannot_reset_history(tmp_path, now):
     ws = _mk_ws(tmp_path)
-    old = [NOW - timedelta(minutes=50, seconds=s) for s in (2, 1, 0)]
+    old = [now - timedelta(minutes=50, seconds=s) for s in (2, 1, 0)]
     _append_log(ws, old)
     (ws / "runs" / ".heartbeat.json").unlink(missing_ok=True)
     rc = heartbeat.heartbeat_register(ws)
@@ -102,10 +105,10 @@ def test_register_cannot_reset_history(tmp_path):
     assert alive is False, detail
 
 
-def test_no_log_legacy_compat(tmp_path):
+def test_no_log_legacy_compat(tmp_path, now):
     ws = _mk_ws(tmp_path)
-    hist = [_ts(NOW - timedelta(minutes=5)), _ts(NOW - timedelta(minutes=2))]
-    _cache(ws, history=hist)
+    hist = [_ts(now - timedelta(minutes=5)), _ts(now - timedelta(minutes=2))]
+    _cache(ws, history=hist, now=now)
     state = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
     alive_a, detail_a = heartbeat.evaluate_tick_continuity(state)
     alive_b, detail_b = heartbeat.evaluate_tick_continuity(
@@ -135,11 +138,11 @@ def test_writers_append_sidecar(tmp_path):
     assert lines2[1]["actor"] == "touch"
 
 
-def test_gate_consumer_passes_log_path(tmp_path):
+def test_gate_consumer_passes_log_path(tmp_path, now):
     ws = _mk_ws(tmp_path)
-    recent = [NOW - timedelta(minutes=5 * i) for i in (3, 2, 1)]
+    recent = [now - timedelta(minutes=5 * i) for i in (3, 2, 1)]
     _append_log(ws, recent)
-    _cache(ws, history=[])
+    _cache(ws, history=[], now=now)
     import importlib.util
     saved = list(sys.path)
     sys.path.insert(0, str(ROOT / "hooks"))
