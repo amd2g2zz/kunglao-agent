@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -170,40 +171,67 @@ def _pi(policy: str, family: str, weights: dict[str, float]) -> float:
         return (1.0 - EPSILON) * (1.0 if family == greedy else 0.0) \
             + EPSILON / len(weights)
     if policy == "thompson":
-        total = sum(weights.values())
-        return weights.get(family, 0.0) / total if total > 0 else 0.0
+        scale = max(weights.values())
+        if scale <= 0:
+            return 0.0
+        total = math.fsum(w / scale for w in weights.values())
+        return (weights.get(family, 0.0) / scale) / total
     raise ValueError(f"unknown policy {policy!r}")
 
 
 def snips(decisions: list[dict], policy: str) -> dict:
     """SNIPS value estimate over the logged decisions + the effective
     sample size (Σw)²/Σw² — the diagnostics the small-N honesty needs."""
-    ws: list[float] = []
+    if policy not in POLICIES:
+        raise ValueError(f"unknown policy {policy!r}")
+    weighted_rewards: list[tuple[float, float]] = []
     for d in decisions:
-        p = float(d["propensity"])
-        pa = _pi(policy, d["family"], d["weights"])
-        if p > 0.0 and pa > 0.0:
-            ws.append(pa / p)
-    if not ws:
+        try:
+            p = float(d["propensity"])
+            reward = float(d["reward"])
+            weights = d["weights"]
+            if (not math.isfinite(p) or not 0.0 < p <= 1.0
+                    or not math.isfinite(reward)
+                    or not isinstance(weights, dict)
+                    or d["family"] not in weights
+                    or not all(math.isfinite(float(w)) and float(w) >= 0
+                               for w in weights.values())):
+                continue
+            pa = _pi(policy, d["family"], weights)
+            if not math.isfinite(pa) or not 0.0 < pa <= 1.0:
+                continue
+            weight = pa / p
+            if math.isfinite(weight):
+                weighted_rewards.append((weight, reward))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    if not weighted_rewards:
         return {"value": None, "ess": 0.0}
-    s = sum(ws)
-    ess = (s * s) / sum(w * w for w in ws)
-    num = sum(w * d["reward"] for w, d in zip(ws, decisions))
-    return {"value": num / s, "ess": ess}
+    scale = max(w for w, _ in weighted_rewards)
+    normalized = [(w / scale, reward) for w, reward in weighted_rewards]
+    s = sum(w for w, _ in normalized)
+    ess = (s * s) / sum(w * w for w, _ in normalized)
+    reward_scale = max(abs(reward) for _, reward in normalized)
+    if reward_scale == 0:
+        value = 0.0
+    else:
+        value = math.fsum((w / s) * (reward / reward_scale)
+                          for w, reward in normalized) * reward_scale
+    return {"value": value if math.isfinite(value) else None, "ess": ess}
 
 
 def _bootstrap_ci(decisions: list[dict], policy: str, draws: int,
-                  seed: int = 7) -> list[float]:
+                  seed: int = 7) -> list[float] | None:
     rng = random.Random(seed)
     vals = []
     n = len(decisions)
-    for _ in range(draws):
+    for _ in range(draws if n else 0):
         sample = [decisions[rng.randrange(n)] for _ in range(n)]
         est = snips(sample, policy)
         if est["value"] is not None:
             vals.append(est["value"])
     if not vals:
-        return [0.0, 0.0]
+        return None
     vals.sort()
     return [vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1]]
 
@@ -284,15 +312,21 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
         report["verdict"] = "underpowered"
         report["min_decisions"] = MIN_DECISIONS
         return report
+    missing_interval = False
     for pol in POLICIES:
         est = snips(decisions, pol)
         entry = {"snips": (round(est["value"], 6)
                            if est["value"] is not None else None),
                  "ess": round(est["ess"], 2)}
         if bootstrap and est["value"] is not None:
-            lo, hi = _bootstrap_ci(decisions, pol, bootstrap)
-            entry["ci95"] = [round(lo, 6), round(hi, 6)]
+            interval = _bootstrap_ci(decisions, pol, bootstrap)
+            entry["ci95"] = ([round(value, 6) for value in interval]
+                             if interval is not None else None)
+            missing_interval |= interval is None
         report["policies"][pol] = entry
+    if missing_interval:
+        report["verdict"] = "underpowered"
+        return report
     ranked = sorted(
         ((p, v["snips"]) for p, v in report["policies"].items()
          if v["snips"] is not None),
