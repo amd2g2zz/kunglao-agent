@@ -5,4 +5,4 @@
 - [x] Keep real heartbeat positive and negative threshold cases.
 - [x] Run targeted, delay-control, and adjacent heartbeat tests.
 - [x] Run `openspec validate issue-1037-heartbeat-test-clock` and report coverage/diff hash.
-- [ ] Complete independent specification and code review.
+- [x] Complete independent specification and code review.
