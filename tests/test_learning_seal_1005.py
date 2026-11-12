@@ -63,6 +63,7 @@ def key(tmp_path, monkeypatch):
     one) and reset every per-process face gate so each test starts a
     fresh process-equivalent."""
     k = tmp_path / "learning.key"
+    monkeypatch.setattr(kunglao_log, "_WARN_WS_OVERRIDE", [])
     monkeypatch.setattr(seal, "KEY_PATH", k, raising=False)
     monkeypatch.setattr(seal, "_ANCHOR", {"build": None}, raising=False)
     monkeypatch.setattr(seal, "_NOTICE", {"shown": False}, raising=False)
