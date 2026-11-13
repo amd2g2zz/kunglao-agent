@@ -351,9 +351,10 @@ def test_out_of_support_declaration_is_never_a_recorded_deviation(tmp_path):
     view = ss.reconcile_declaration(ws, FAM_B)
     assert view["deviates"] is True
     assert view["sampled_family"] in {FAM_A, FAM_C}
-    assert view["propensity"] == 0.0, (
-        "the store stays honest: an out-of-support arm has draw "
-        "probability 0 — #794's coherence gate consumes this face")
+    assert view["conditional_sampler_weight"] == 0.0, (
+        "an out-of-support arm has zero conditional sampler weight")
+    assert view["propensity"] is None
+    assert view["supported"] is False
 
 
 def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
@@ -375,15 +376,17 @@ def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
     other = next(f for f in (FAM_A, FAM_C) if f != sampled)
     view = ss.reconcile_declaration(ws, other)
     assert view["deviates"] is True
-    assert view["propensity"] is not None and view["propensity"] > 0.0, (
-        f"recorded deviation with propensity {view['propensity']!r}")
-    assert view["propensity"] == pytest.approx(
+    assert view["propensity"] is None
+    assert view["supported"] is True
+    assert view["conditional_sampler_weight"] is not None and view["conditional_sampler_weight"] > 0.0, (
+        f"recorded deviation with propensity {view['conditional_sampler_weight']!r}")
+    assert view["conditional_sampler_weight"] == pytest.approx(
         weights[other] / total, abs=1e-6)
 
 
 def test_in_support_declaration_propensity_unchanged(tmp_path):
-    """The healthy face is byte-identical: a declared family inside the
-    sampler's support keeps its exact share."""
+    """A supported declaration keeps its conditional weight; the external
+    behavior probability remains unknown."""
     from rlvr import strategy_store as ss
     from rlvr import state as rlvr_state
     ws = _deviation_ws(tmp_path)
@@ -395,8 +398,9 @@ def test_in_support_declaration_propensity_unchanged(tmp_path):
     total = sum(weights.values())
     view = ss.reconcile_declaration(ws, sampled)
     assert view["deviates"] is False
-    assert view["propensity"] > 0.0
-    assert view["propensity"] == pytest.approx(
+    assert view["propensity"] is None
+    assert view["conditional_sampler_weight"] > 0.0
+    assert view["conditional_sampler_weight"] == pytest.approx(
         weights[sampled] / total, abs=1e-6)
 
 
@@ -466,7 +470,9 @@ def test_fixture_deviation_face_replays_propensity_positive(tmp_path):
                     if f != sampled)
     view = ss.reconcile_declaration(ws, declared)
     assert view["deviates"] is True
-    assert view["propensity"] is not None and view["propensity"] > 0.0
+    assert view["propensity"] is None
+    assert view["supported"] is True
+    assert view["conditional_sampler_weight"] > 0.0
     assert fx["expectations"].get("deviation-propensity-positive") == "PASS"
 
 

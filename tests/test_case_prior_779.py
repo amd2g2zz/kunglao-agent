@@ -281,7 +281,10 @@ def test_reconcile_declaration_gains_the_case_draw(tmp_path):
     view = ss.reconcile_declaration(ws, FAM_A)
     assert view["sampled_family"] == FAM_A
     assert view["prior_source"] == "history"
-    assert view["propensity"] is not None and view["propensity"] > 0.0
+    assert view["propensity"] is None
+    assert view["probability_source"] == "unknown"
+    assert view["conditional_sampler_weight"] > 0.0
+    assert view["sampled_conditional_weight"] > 0.0
 
 
 def test_dispatch_row_records_nonempty_sampled_family(tmp_path):

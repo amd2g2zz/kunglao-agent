@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 05beb42d6741d87cdc14897ce0ca0f365b767d5b05d39e4a6331b1f51140ac69
+    sha256: bbc3ff17dd4b58aa3097e65b102eaec3268c40940e8b9465f0c05d7299954afe
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1463,7 +1463,7 @@ files:
   - src: scripts/rlvr/expansion.py
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
-    sha256: 0bb04d566fe6ab0485dec7629764ebb38946dc36091e95f67c7bd91ab509c4f2
+    sha256: a9a152e7047d07e162b76dd8e9936b4163a9e4b18f35a4f9659ba6af6d2b0294
   - src: scripts/rlvr/family_playbook.py
     dest: .claude/scripts/rlvr/family_playbook.py
     kind: scaffold
@@ -1587,7 +1587,7 @@ files:
   - src: scripts/rlvr/priors.py
     dest: .claude/scripts/rlvr/priors.py
     kind: scaffold
-    sha256: ee053cc232ede8fedb934ea2f9dd1d25970048e4492bfbe9dfa0fef0aae8099f
+    sha256: df468f8f2b6fe28da23e97183bcc2f70d2deccd093840387709145a0eeb46a66
   - src: scripts/rlvr/probe_face.py
     dest: .claude/scripts/rlvr/probe_face.py
     kind: scaffold
@@ -1595,7 +1595,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: f0a8959f78ef8ce4eec6e682de8b95d32c55a0833740ea9e91ae5e68827c1750
+    sha256: fdba198def143e54ebf8eede97545794bf6bf6c02084c9459e2f8797aa123a77
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1679,7 +1679,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 814d84163509675d102f62c78a9104b32b34d709a2cbc63635c012844411b1b2
+    sha256: 9162d71eb9f504f1221e4ee2717b5aae72639c6c69c36fe2d2296034a17f28a4
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1711,7 +1711,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: c8269c1110258b1fc3336e1238db9bc6e487719f9108cf95b2322651bc8805de
+    sha256: f50e574d49672dfef1b0ef0e1d039b66796caf7a823b879f91363c4db7082df9
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
