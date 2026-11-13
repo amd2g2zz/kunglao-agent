@@ -19,7 +19,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 5ad26b5df97722e05213eda8bbea94fe78d589a393cb3606202464852c11ed3a
+    sha256: fd43790afd37d931fb3187691c51eaaa3770a3266ad4d6d3b7bfd96927eeeb66
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: bbc3ff17dd4b58aa3097e65b102eaec3268c40940e8b9465f0c05d7299954afe
+    sha256: dd14c556d4af0753bb5fb3fa3ef7c3210dd4ae01cccf9a2b2b7b16ff09d24d18
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1367,7 +1367,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 35e6eac9d8a005f0ce326bacf335368d527e70dd184a684327c46db8c39847a2
+    sha256: 561e4d61712d144944822e30787a591ab91e97db000c3d3f5c8eafacf59b4055
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1592,6 +1592,10 @@ files:
     dest: .claude/scripts/rlvr/probe_face.py
     kind: scaffold
     sha256: 6accb9a99bbf763d0d2e90daad35a8178d2155a78ddf99b812e8d983447072ca
+  - src: scripts/rlvr/production_terminal.py
+    dest: .claude/scripts/rlvr/production_terminal.py
+    kind: scaffold
+    sha256: bba750f453053e4f4745c6243545bed77a85c1e5a54871c5d897f00826f1fb2b
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold

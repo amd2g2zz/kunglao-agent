@@ -808,6 +808,8 @@ def _strategic_declared_face(ws) -> dict | None:
             return None
         return {"declared_route": row.get("route"),
                 "declared_propensity": row.get("propensity"),
+                "declared_propensity_interpretation":
+                    "historical_smoothed_frequency" if row.get("declared") is True else None,
                 "declared_source": _sa.SCHEMA}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('strategic_declaration.face', f'{type(exc).__name__}: {exc}')

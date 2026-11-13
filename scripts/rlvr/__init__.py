@@ -36,6 +36,7 @@ from . import distill_score
 from . import episode_pool
 from . import episode_schema
 from . import episode_settle
+from . import production_terminal
 from . import expansion
 from . import family_playbook
 from . import feature_prior
@@ -119,7 +120,7 @@ __all__ = [
     "distill_score",
     "episode_pool",
     "episode_schema",
-    "episode_settle",
+    "episode_settle", "production_terminal", "disposition_producer", "pool_indexer",
     "expansion",
     "family_playbook",
     "feature_prior",
