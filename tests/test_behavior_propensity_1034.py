@@ -31,13 +31,28 @@ def test_historical_numeric_probability_is_not_behavior_probability(tmp_path):
     assert report['verdict'] == 'underpowered'
 
 
-def test_default_and_uniform_stamps_are_unknown(tmp_path):
-    for scheduler in ('learned', 'uniform'):
-        receipt = {'family': 'a', 'scheduler': scheduler,
+def test_dispatch_source_labels_never_authorize_ope(tmp_path):
+    ctx = SimpleNamespace(repo=tmp_path, ws=tmp_path)
+    stamps = []
+    for declared, scheduler in ((True, None), (False, 'uniform'), (False, 'learned')):
+        receipt = {'family': 'a',
                    'candidates': {'a': {'weight': 1}, 'b': {'weight': 1}}}
-        _stamp_ope_propensity(SimpleNamespace(repo=tmp_path, ws=tmp_path), receipt, False, 'a', None)
-        assert receipt['propensity'] is None
-        assert receipt['probability_source'] == 'unknown'
+        if scheduler:
+            receipt['scheduler'] = scheduler
+        _stamp_ope_propensity(ctx, receipt, declared, 'a', None)
+        stamps.append(receipt)
+    assert stamps[0]['propensity'] is None
+    assert stamps[0]['probability_source'] == 'unknown'
+    assert stamps[1]['propensity'] == 0.5
+    assert stamps[1]['probability_source'] == 'uniform_exact'
+    assert stamps[2]['propensity'] == 1.0
+    assert stamps[2]['probability_source'] == 'legacy_mc_estimate'
+    ws = tmp_path / 'ws'
+    for i, source in enumerate(('unknown', 'uniform_exact', 'legacy_mc_estimate')):
+        _record(ws, f'C{i}', 'a', probability_source=source)
+    report = pc.compare(ws, bootstrap=0)
+    assert report['decisions'] == 0
+    assert report['skipped_unknown_probability'] == 3
 
 
 def test_repeated_claim_family_never_joins_last_receipt(tmp_path):

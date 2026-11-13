@@ -63,6 +63,9 @@ def test_cutting_the_store_degrades_to_uniform(tmp_path, monkeypatch):
     exact pre-WS2 flat face."""
     ws = tmp_path / "ws"
     ws.mkdir()
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAM])
     warm_root = tmp_path / "store-warm"
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(warm_root))
     _seed_store(warm_root, "ws-donor", 4)
@@ -82,6 +85,9 @@ def test_cutting_the_store_degrades_to_uniform(tmp_path, monkeypatch):
 def test_missing_store_root_reads_as_empty(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     ws.mkdir()
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAM])
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "never-created"))
     _fam, receipt = checkpoints._sample_envelope_family(ws)

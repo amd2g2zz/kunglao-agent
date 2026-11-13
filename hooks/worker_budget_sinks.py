@@ -914,6 +914,16 @@ def _gate_sample(ws) -> dict:
         return gap
 
 
+def _coherent_method_support(view: dict) -> bool:
+    """Support is independent of an unknown behavior propensity."""
+    supported = view.get('supported')
+    if supported is not None:
+        return supported is True
+    prop = view.get('propensity')  # legacy reconciliation adapters
+    return (isinstance(prop, (int, float)) and not isinstance(prop, bool)
+            and float(prop) > 0.0)
+
+
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
                         tools: list) -> tuple[int | None, str | None,
@@ -944,11 +954,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     reconciliation triple (propensity + sampled_family + prior_source)
     rides the dispatch observation row since the #804 usage merge, and
     a deviation emits the recorded-decision ``sample_deviation`` event.
-    The reconciliation NEVER rejects for a DECLARED family (fail-open
-    + warn: deviation = recorded decision, 2026-10-14 amendment) — the
-    one #773 W2 exception is the UNDECLARED case: with sampler material
-    the gate rejects once so the sampled family becomes the exit
-    (silence is not an override; owner directive 2026-10-18)."""
+    Under #794/#1033, a declaration differing from the sample requires
+    a reason and current support. An unknown external behavior propensity
+    does not erase conditional sampler support. With sampler material,
+    an undeclared dispatch receives the sampled family as its exit."""
     if cid is None:
         return (None, None, None)
     if _mf432 is None:
@@ -992,33 +1001,22 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
         return (_reject('methodfamily', mf_msg, paths), None, None)
+    from rlvr.strategy_store import method_constraint_violation  # noqa: PLC0415
+    restriction = method_constraint_violation(paths.get('workspace'), mf_value)
+    if restriction:
+        return (_reject('methodfamily', restriction + '; sampler propensity cannot authorize it', paths), None, None)
     # #691: the declaration reconciliation view (fail-open gap on any
     # miss) rides the usage row — the recorded sample-vs-declared pair
     # the issue measured absent from runs/method-family-log.jsonl.
     view = _sample_reconciliation(paths.get('workspace'), mf_value)
     # Sampled-binds-to-dispatch (owner directive, the logs-panel card):
-    # the sampler's draw is the dispatch CONTRACT. The logs panel
-    # measured the failure shape in production — 17/17 deviation rows
-    # joined to dispatches that ran the DECLARED family, never the
-    # sampled one, and 6/16 carried propensity 0.0 (a probability-0 draw
-    # is invalid for IPS; the propensity-coherence family). So a
-    # deviation is an EXPLICIT RECORDED decision with a COHERENT
-    # propensity: silent deviation -> REJECT with the sampled family as
-    # the exit (deterministic compliance in one retry, the undeclared
-    # exit's shape); reasoned deviation with propensity <= 0 -> REJECT
-    # (the declared family was never in the policy's support). This
-    # narrows the older "recorded, never rejected" amendment: the record
-    # RIDES the pass (reason + propensity on the row), it no longer
-    # substitutes for a decision. The off-registry other(...) escape
-    # keeps its quarantine face (triage, not a bind-contract
-    # declaration). A rejected dispatch writes no usage row — the
-    # gate-rejections ledger is the audit face.
-    if (view.get('deviates')
+    # A deviation needs both current support and a recorded reason.
+    # Conditional sampler support is not the probability of the external
+    # decision; unknown behavior propensity does not erase valid support.
+    # other(...) retains its existing validation and quarantine route.
+    if ((view.get('deviates') or view.get('supported') is False)
             and _mf432.parse_other_detail(mf_value) is None):
-        prop = view.get('propensity')
-        coherent = (isinstance(prop, (int, float))
-                    and not isinstance(prop, bool)
-                    and float(prop) > 0.0)
+        coherent = _coherent_method_support(view)
         if not _override_reason(prompt) or not coherent:
             return (_reject(
                 'methodfamily',
@@ -1028,7 +1026,7 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                 "decision — sampling binds the dispatch (#794 R2): declare "
                 "the sampled family, or record the override with an "
                 "`agent-reasoning:` line AND declare a family the current "
-                "policy actually supports (propensity > 0).",
+                "policy actually supports.",
                 paths), None, None)
     # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
     # #691 reconciliation view rides the dispatch observation row (the
